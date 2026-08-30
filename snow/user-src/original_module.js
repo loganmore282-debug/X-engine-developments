@@ -104,14 +104,6 @@ function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-
 // input that visibly still reads "30,000". Strips thousands separators
 // before parsing.
 function parseMoneyInput(v){ return parseInt(String(v||'').replace(/,/g,''), 10); }
-// Matches server.js's nowStr().date exactly (Kampala/EAT, UTC+3) -- used
-// client-side only to show "claimed today" state without an extra round
-// trip; the server is still the real source of truth on submit.
-function eatTodayStr(){
-  const d = new Date(Date.now() + 3 * 3600000);
-  const pad = n => String(n).padStart(2, '0');
-  return pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()) + '/' + d.getUTCFullYear();
-}
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 // Every phone field is now local-number-only -- the "+256" country code is
 // a static chip next to the input (see .phone-field/.phone-prefix), not
@@ -1567,20 +1559,62 @@ window.openAboutSheet = async function(){
   wrap.querySelectorAll('.scroll-reveal').forEach(el => _aboutScrollObserver.observe(el));
 };
 
+// Owner: "checkin will be resetting 24hrs not midnight" -- the cooldown is
+// now a genuine rolling 24h window from the exact moment of the previous
+// check-in (STATE.account.lastCheckinAt, a real epoch-ms timestamp server.js
+// now returns), not a fixed midnight boundary. Since the reset time is a
+// moving target rather than a fixed clock time, the button shows a live
+// "Available in HH:MM:SS" countdown instead of a static "resets at
+// midnight" label -- same live-ticking pattern startPlanCountdowns() already
+// uses on My Products, just scoped to this sheet.
 window.openCheckinSheet = function(){
   const a = STATE.account || {};
   const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
   const streak = Number(a.checkinStreak) || 0;
-  const claimedToday = a.lastCheckin === eatTodayStr();
+  const nextAt = a.lastCheckinAt ? Number(a.lastCheckinAt) + 24 * 3600000 : 0;
+  const onCooldown = nextAt > Date.now();
   openSheet('Daily Check-in', `<div class="reveal-in">
     <div class="app-card" style="padding:24px 20px;text-align:center;">
       <div style="font-size:12.5px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.5px;">Current streak</div>
       <div class="mono" style="font-size:36px;font-weight:800;margin-top:6px;color:var(--snow-green);">${streak}<span style="font-size:15px;font-weight:600;color:var(--snow-muted);"> day${streak===1?'':'s'}</span></div>
-      <div style="font-size:13px;color:var(--snow-muted);margin-top:12px;line-height:1.5;">Check in daily to keep your streak and earn ${fmtUGX(bonus)} every day.</div>
-      <button class="primary-button" id="checkinBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:20px;" ${claimedToday?'disabled':''} onclick="submitCheckin()">${claimedToday?'Claimed today':'Check In &middot; '+fmtUGX(bonus)}</button>
+      <div style="font-size:13px;color:var(--snow-muted);margin-top:12px;line-height:1.5;">Check in every 24 hours to keep your streak and earn ${fmtUGX(bonus)} each time.</div>
+      <button class="primary-button" id="checkinBtn" data-checkin-next="${nextAt}" style="width:100%;padding:15px 0;font-size:15px;margin-top:20px;" ${onCooldown?'disabled':''} onclick="submitCheckin()">${onCooldown?'Available in <span class="countdown-val">--:--:--</span>':'Check In &middot; '+fmtUGX(bonus)}</button>
     </div>
   </div>`);
+  if (onCooldown) startCheckinCountdown();
 };
+// Self-terminating, same idiom as startPlanCountdowns(): the tick just stops
+// itself once #checkinBtn's countdown attribute is gone (sheet closed or
+// re-rendered), no separate close-hook needed. Once the cooldown genuinely
+// reaches zero, flips the button live to its claimable state -- no manual
+// refresh/reopen needed to see the app catch up.
+var _checkinCountdownTimer = null;
+function startCheckinCountdown(){
+  if (_checkinCountdownTimer) clearInterval(_checkinCountdownTimer);
+  const tick = () => {
+    const btn = document.querySelector('[data-checkin-next]');
+    if (!btn) { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; return; }
+    const remaining = Number(btn.dataset.checkinNext) - Date.now();
+    if (remaining <= 0) {
+      clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null;
+      btn.removeAttribute('data-checkin-next');
+      btn.disabled = false;
+      const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
+      btn.innerHTML = 'Check In &middot; ' + fmtUGX(bonus);
+      return;
+    }
+    const val = btn.querySelector('.countdown-val');
+    if (val) {
+      const h = Math.floor(remaining / 3600000);
+      const m = Math.floor((remaining % 3600000) / 60000);
+      const s = Math.floor((remaining % 60000) / 1000);
+      const pad = n => String(n).padStart(2, '0');
+      val.textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+  };
+  tick();
+  _checkinCountdownTimer = setInterval(tick, 1000);
+}
 window.submitCheckin = async function(){
   const btn = $('checkinBtn');
   if (!btn || btn.disabled) return;

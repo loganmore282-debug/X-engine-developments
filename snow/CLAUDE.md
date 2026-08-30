@@ -4998,6 +4998,87 @@ already prevents this through the real admin UI) still falls back safely to Bodo
 Moda rather than rendering with no font-family. Cache bumped `v62`→`v63` (user),
 `v17`→`v18` (admin). **`server.js` changed, Render should auto-deploy this push.**
 
+## Round 87 (2026-08-30) — check-in switched from a calendar-midnight (EAT) reset to a genuine rolling 24h cooldown
+
+Owner: "checkin will be resetting 24hrs not midnight." Since the feature was first
+built, `/checkin`'s "already checked in" gate and streak math both worked off calendar
+dates (`nowStr().date`, an EAT/UTC+3 date string) — a member checking in at 23:59 could
+check in again at 00:01 (2 minutes later, a new calendar day) while another checking in
+at 00:01 had to wait until the FOLLOWING midnight (nearly 24 hours). This round replaces
+that with a genuine rolling 24h cooldown measured from the exact moment of the previous
+check-in, so every member always gets the same, predictable ~24h wait regardless of what
+time of day they check in.
+
+**`computeCheckinStreak()` rewritten from calendar day-keys to raw timestamps.**
+Previously took a `Set` of `eatDayKey()`-derived date strings and a streak continued
+only if two day-keys were exactly one calendar day apart. Now takes a `Set`/`Array` of
+raw check-in millisecond timestamps (still pulled from the same `checkin`-type ledger
+rows, just via `tsMillis()` instead of `eatDayKey()`) and continues the streak only if
+consecutive check-ins are `>=24h` apart (couldn't have double-claimed) and `<48h` apart
+(a fully skipped day still breaks it) — the rolling-window analog of the old "was it
+exactly yesterday" check. Returns `{streak, lastCheckinAt}` (a real epoch-ms number)
+instead of `{streak, lastCheckin}` (a date string). The now-dead `dayKeyToLastCheckinFormat()`
+helper was removed; `eatDayKey()` itself is untouched and still used elsewhere (the
+admin "Processed per day" deposit/withdrawal charts) — this only touches check-in's own
+usage of it.
+
+**Field renamed platform-wide: `lastCheckin` (date string) → `lastCheckinAt` (epoch-ms
+number).** Updated everywhere it existed: `defaultProfileDoc()`, `GET /account`'s
+response, `/checkin` itself, `/admin/user/reconcile-checkin`, and both
+`computeRealTotals()`/`recountAllTotals()`'s freshness-recheck copy (renamed
+`checkinDayKeys` → `checkinTimestamps` to match). Confirmed via grep that `lastCheckin`
+was never read anywhere in `admin-src/index.html` (only `checkinStreak`/`before`/`after`/
+`changed` from the reconcile tool's response) or anywhere else in `user-src/` besides the
+one spot fixed below — no other surface needed touching. A pre-existing account with no
+`lastCheckinAt` yet (every account that predates this round) is treated as never having
+checked in, same low-stakes one-time transition cost any schema change here would carry
+given the flat, small bonus amount — not worth a migration script.
+
+**`/checkin`'s gate + streak logic.** Fetches the same 5,000-row ledger window as
+before, derives `stamps` (raw ms) instead of `dayKeys`, and rejects with `You can check
+in again in {formatCooldown(...)}.` (new helper, "Xh Ym" or "Ym") if fewer than 24h have
+passed since the last check-in — the response also carries `nextCheckinAt` so the
+client always has a real timestamp to work from even on a rejection. A successful
+check-in writes `lastCheckinAt: now` (a plain epoch-ms number, not
+`FieldValue.serverTimestamp()` — avoids any round-trip ambiguity between the value
+written and the value returned to the client in the same response) and returns
+`nextCheckinAt` too.
+
+**Frontend: a live countdown instead of a static "resets at midnight" label.** Since the
+reset time is now a moving target per-member rather than a fixed clock time, a static
+label can't describe it honestly. `openCheckinSheet()` computes `nextAt =
+lastCheckinAt + 24h` and, while still on cooldown, renders "Available in
+<span class="countdown-val">HH:MM:SS</span>" with the button disabled; a new
+`startCheckinCountdown()` (mirroring `startPlanCountdowns()`'s own established
+self-terminating-interval pattern from My Products almost exactly) ticks it down every
+second and, once it reaches zero, flips the button live to its claimable
+"Check In · UGX X" state with zero manual refresh needed. The now-dead `eatTodayStr()`
+helper (only ever used for the old date-string comparison) was removed.
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`,
+`node build-core.js` round-trip clean, `git diff --check` clean, a boot smoke test
+(real self-signed RSA dummy Firebase service-account PEM + unreachable `MONGODB_URI`)
+fails only at the Mongo-connect step, `test-admin-obfuscated-build.js` (unaffected by
+this round but re-run as a regression check since `/admin/user/reconcile-checkin`'s
+response shape changed slightly) — 0 errors across all 12 tabs. A standalone isolated
+logic test (not committed — throwaway, exact copy of the fixed `computeCheckinStreak()`
++ the gate/streak logic) — 18/18 checks: a brand-new user's first check-in always
+succeeds at streak 1; a repeat attempt just 1 hour after the last one is correctly
+rejected (the actual behavior change from the old midnight system, which would have
+allowed a check-in 2 minutes after a previous one if it crossed a calendar boundary);
+success exactly at the 24h mark continues the streak; a request 1 second short of 24h
+is still rejected (no off-by-one); a request just under 48h still continues the streak,
+exactly at 48h resets it to 1; a genuine 7-day unbroken streak accumulates correctly
+day by day; a 3-day gap resets an existing streak back to 1. Playwright, against the
+real built app, 11 checks across 5 scenarios: a never-checked-in account shows an
+enabled claimable button; an account checked in 1 hour ago shows a disabled button with
+a live countdown reading ~22-23 hours remaining and the real streak number; an account
+checked in 25 hours ago shows the button already re-enabled with no countdown; a
+successful `/checkin` call fires the correct success toast; a server-side rejection
+(simulating a client/server clock-skew race) shows the server's own real cooldown
+message with no dash and correctly re-enables the button afterward. Cache bumped
+`v63`→`v64`. **`server.js` changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

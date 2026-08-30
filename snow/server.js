@@ -352,22 +352,33 @@ function eatDayKey(ts) {
   const d = new Date(tsMillis(ts) + 3 * 3600000);
   return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
 }
-function dayKeyToLastCheckinFormat(key) {
-  const [y, m, d] = key.split('-');
-  return `${m}/${d}/${y}`;
-}
-// Recomputed from real check-in history on every call — a stale/corrupted
-// stored streak can never keep silently breaking a real one.
-function computeCheckinStreak(dayKeysSet) {
-  if (!dayKeysSet.size) return { streak: 0, lastCheckin: null };
-  const sorted = [...dayKeysSet].sort();
+// Owner: "checkin will be resetting 24hrs not midnight" -- Round 87 switched
+// check-in from a calendar-midnight (EAT) daily boundary to a genuine
+// rolling 24h cooldown measured from the exact moment of the previous
+// check-in. Recomputed from real check-in history (raw millisecond
+// timestamps, not calendar day-keys) on every call -- a stale/corrupted
+// stored streak/timestamp can never keep silently breaking a real one.
+// Accepts a Set or Array of timestamps in any order; sorts internally.
+function computeCheckinStreak(timestampsMs) {
+  const sorted = [...timestampsMs].sort((a, b) => a - b);
+  if (!sorted.length) return { streak: 0, lastCheckinAt: null };
   let streak = 1;
   for (let i = sorted.length - 1; i > 0; i--) {
-    const cur = Date.parse(sorted[i] + 'T00:00:00Z');
-    const prev = Date.parse(sorted[i - 1] + 'T00:00:00Z');
-    if (cur - prev === 86400000) streak++; else break;
+    const gap = sorted[i] - sorted[i - 1];
+    // Continues the streak only if the next check-in landed inside the
+    // single 24h window right after the previous cooldown lifted (>=24h so
+    // it couldn't have double-claimed within the cooldown, <48h so a fully
+    // skipped day still breaks it) -- the rolling-window analog of the old
+    // "was it exactly yesterday's calendar date" check.
+    if (gap >= 24 * 3600000 && gap < 48 * 3600000) streak++; else break;
   }
-  return { streak, lastCheckin: dayKeyToLastCheckinFormat(sorted[sorted.length - 1]) };
+  return { streak, lastCheckinAt: sorted[sorted.length - 1] };
+}
+function formatCooldown(ms) {
+  const totalMin = Math.max(1, Math.ceil(ms / 60000));
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  if (h <= 0) return `${m}m`;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 function eatParts(ts) {
   const ms = tsMillis(ts) || Date.now();
@@ -519,9 +530,13 @@ async function activeL1Count(userId) {
 // "one has to claim it manually"):
 //  1. Referral "daily salary" — RECURRING, resets every day at 00:00 EAT
 //     (owner: "just like every day ie resets at 00:00"). Unclaimed on a
-//     given day is forfeited, not banked/stacked — same one-shot-per-day
-//     shape /checkin already uses (lastCheckin/today comparison), reused
-//     here as missionSalaryLastClaim/nowStr().date. Amount is a flat
+//     given day is forfeited, not banked/stacked — a calendar-midnight
+//     one-shot-per-day gate (missionSalaryLastClaim/nowStr().date), same
+//     shape /checkin itself used before Round 87 switched check-in to a
+//     rolling 24h cooldown instead (owner: "checkin will be resetting
+//     24hrs not midnight") — Mission Center's own salary was never asked
+//     to change and stays midnight-based, per the owner's own explicit
+//     "resets at 00:00" spec quoted above. Amount is a flat
 //     MISSION_SALARY_RATE per active L1 referral, scaling continuously with
 //     the live count, capped at MISSION_SALARY_REFERRAL_CAP referrals (owner:
 //     "Maximum eligible cap for referral tiers scales up to 1,000 total
@@ -1438,7 +1453,7 @@ function isWeakPin(pin) { return /^(\d)\1{4}$/.test(String(pin || '')); }
 function defaultProfileDoc(phone) {
   return {
     phone: phone || '', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
-    checkinStreak: 0, lastCheckin: null,
+    checkinStreak: 0, lastCheckinAt: null,
     teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, teamCommission: 0,
     referredBy: null, referralCode: null, registrationDone: false, status: 'active',
     createdAt: FieldValue.serverTimestamp()
@@ -1589,7 +1604,7 @@ app.get('/account', async (req, res) => {
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: u.walletBalance || 0, totalDeposited: u.totalDeposited || 0,
       totalEarned: u.totalEarned || 0, totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
-      checkinStreak: u.checkinStreak || 0, lastCheckin: u.lastCheckin || null,
+      checkinStreak: u.checkinStreak || 0, lastCheckinAt: u.lastCheckinAt || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     } });
@@ -1610,8 +1625,6 @@ app.post('/checkin', async (req, res) => {
       if (!snap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
       const u = snap.data();
       if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      const today = nowStr().date;
-      if (u.lastCheckin === today) { result = { code: 400, body: { status: 'error', message: 'Already checked in today' } }; return; }
       // Codex-caught real bug (2nd money-flow audit): computeCheckinStreak()
       // walks this ledger window and, if every row in it turns out to be
       // contiguous (no real gap), simply runs out of rows to walk -- it has
@@ -1631,22 +1644,27 @@ app.post('/checkin', async (req, res) => {
       // disagree about what "the real streak" is.
       const ledgerSnap = await db.collection('transactions')
         .where('userId', '==', uid).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
-      const dayKeys = new Set();
-      ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
-      const real = computeCheckinStreak(dayKeys);
-      const yesterday = new Date(eatNow().getTime() - 86400000);
-      const yPad = n => String(n).padStart(2, '0');
-      const yStr = yPad(yesterday.getUTCMonth() + 1) + '/' + yPad(yesterday.getUTCDate()) + '/' + yesterday.getUTCFullYear();
-      const streak = real.lastCheckin === yStr ? real.streak + 1 : 1;
+      const stamps = ledgerSnap.docs.map(d => tsMillis(d.data().createdAt)).filter(Boolean);
+      const real = computeCheckinStreak(stamps);
+      const now = Date.now();
+      const gap = real.lastCheckinAt ? now - real.lastCheckinAt : Infinity;
+      // Owner: "checkin will be resetting 24hrs not midnight" -- a genuine
+      // rolling 24h cooldown from the exact moment of the previous
+      // check-in, not a calendar-midnight (EAT) boundary.
+      if (real.lastCheckinAt && gap < 24 * 3600000) {
+        result = { code: 400, body: { status: 'error', message: `You can check in again in ${formatCooldown(24 * 3600000 - gap)}.`, nextCheckinAt: real.lastCheckinAt + 24 * 3600000 } };
+        return;
+      }
+      const streak = (real.lastCheckinAt && gap < 48 * 3600000) ? real.streak + 1 : 1;
       const bonus = Number(sett.dailyCheckin) || 0;
       // Nested under bal:<uid> -- see settleInvestmentIfDue's own comment.
-      await withLock('bal:' + uid, () => ref.update({ walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckin: today, checkinStreak: streak }));
+      await withLock('bal:' + uid, () => ref.update({ walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckinAt: now, checkinStreak: streak }));
       const { date, time } = nowStr();
       await db.collection('transactions').add({
         userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
         amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
-      result = { code: 200, body: { status: 'success', bonus, streak } };
+      result = { code: 200, body: { status: 'success', bonus, streak, nextCheckinAt: now + 24 * 3600000 } };
     });
     res.status(result.code).json(result.body);
   } catch (e) {
@@ -3666,17 +3684,17 @@ app.post('/admin/user/reconcile-checkin', async (req, res) => {
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    // Codex-caught real bug: this recomputed lastCheckin purely from the
+    // Codex-caught real bug: this recomputed lastCheckinAt purely from the
     // transaction ledger and wrote it with a bare .update(), completely
     // unguarded by the checkin:<uid> lock /checkin itself holds. /checkin
-    // sets lastCheckin=today BEFORE writing today's own ledger row (a
-    // deliberate claim-before-credit ordering so a crash there can only
+    // sets lastCheckinAt=now BEFORE writing this check-in's own ledger row
+    // (a deliberate claim-before-credit ordering so a crash there can only
     // under-count, never double-pay) -- if this reconcile tool runs in that
-    // exact gap, it would see "no ledger row for today yet" and overwrite
-    // lastCheckin back to yesterday, erasing the claim marker the user's
-    // own request just set. The member could then call /checkin again the
-    // same day and get credited a second time. Wrapped in the same lock so
-    // the two can never interleave.
+    // exact gap, it would see "no ledger row for this check-in yet" and
+    // overwrite lastCheckinAt back to the previous one, erasing the claim
+    // marker the user's own request just set. The member could then call
+    // /checkin again inside the still-active cooldown and get credited a
+    // second time. Wrapped in the same lock so the two can never interleave.
     let result = null;
     await withLock('checkin:' + userId, async () => {
       const uSnap = await db.collection('users').doc(userId).get();
@@ -3685,13 +3703,12 @@ app.post('/admin/user/reconcile-checkin', async (req, res) => {
       // Same limit bump as /checkin's own copy of this query -- see its comment.
       const ledgerSnap = await db.collection('transactions')
         .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
-      const dayKeys = new Set();
-      ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
-      const real = computeCheckinStreak(dayKeys);
+      const stamps = ledgerSnap.docs.map(d => tsMillis(d.data().createdAt)).filter(Boolean);
+      const real = computeCheckinStreak(stamps);
       const after = { checkinStreak: real.streak };
-      await db.collection('users').doc(userId).update({ checkinStreak: real.streak, lastCheckin: real.lastCheckin });
+      await db.collection('users').doc(userId).update({ checkinStreak: real.streak, lastCheckinAt: real.lastCheckinAt });
       logAdminAction(req, 'checkin_reconciled', { userId, streak: real.streak });
-      result = { code: 200, body: { status: 'success', before, after, changed: before.checkinStreak !== after.checkinStreak, lastCheckin: real.lastCheckin } };
+      result = { code: 200, body: { status: 'success', before, after, changed: before.checkinStreak !== after.checkinStreak, lastCheckinAt: real.lastCheckinAt } };
     });
     res.status(result.code).json(result.body);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -4307,7 +4324,7 @@ async function computeRealTotals() {
     db.collection('withdrawals').where('status', 'in', ['processing', 'processed']).limit(200000).get(),
   ]);
   const totals = {};
-  const checkinDayKeys = {};
+  const checkinTimestamps = {};
   txSnap.forEach(d => {
     const t = d.data();
     if (!t.userId) return;
@@ -4318,7 +4335,7 @@ async function computeRealTotals() {
     // zero — cashback/commission/team_reward (Task Center)/promocode
     // (gift codes)/checkin.
     if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) row.earned += finiteMoney(t.amount);
-    if (t.type === 'checkin') (checkinDayKeys[t.userId] || (checkinDayKeys[t.userId] = new Set())).add(eatDayKey(t.createdAt));
+    if (t.type === 'checkin') (checkinTimestamps[t.userId] || (checkinTimestamps[t.userId] = new Set())).add(tsMillis(t.createdAt));
   });
   const invested = {};
   invSnap.forEach(d => {
@@ -4332,7 +4349,7 @@ async function computeRealTotals() {
     if (!w.userId) return;
     withdrawn[w.userId] = (withdrawn[w.userId] || 0) + finiteMoney(w.net);
   });
-  return { totals, invested, checkinDayKeys, withdrawn };
+  return { totals, invested, checkinTimestamps, withdrawn };
 }
 // Rebuilds totalDeposited/totalEarned/totalInvested and each user's
 // check-in streak from the real ledger/investments/check-in history --
@@ -4341,14 +4358,14 @@ async function computeRealTotals() {
 // this used to only actually rebuild the first two (Codex-caught, round 19).
 async function recountAllTotals() {
   return withLock('totals-recount', async () => {
-    const { totals, invested, checkinDayKeys, withdrawn } = await computeRealTotals();
+    const { totals, invested, checkinTimestamps, withdrawn } = await computeRealTotals();
     let updated = 0, investedFixed = 0, streaksFixed = 0;
     const usersSnap = await db.collection('users').limit(10000).get();
     for (const doc of usersSnap.docs) {
       const row = totals[doc.id] || { deposited: 0, earned: 0 };
       const realInvestedSnapshot = invested[doc.id] || 0;
       const realWithdrawnSnapshot = withdrawn[doc.id] || 0;
-      const snapshotStreak = computeCheckinStreak(checkinDayKeys[doc.id] || new Set());
+      const snapshotStreak = computeCheckinStreak(checkinTimestamps[doc.id] || new Set());
       const u = doc.data();
 
       // subagent-audit-caught HIGH bug (Finding #4): this used to write the
@@ -4360,7 +4377,7 @@ async function recountAllTotals() {
       // 10,000 users. A live cashback/commission/deposit/withdrawal/
       // mission/gift-code credit in that window got silently baked over by
       // the stale value. Mirrors the exact fix already applied to
-      // checkinStreak/lastCheckin below (Round 35): use the snapshot only
+      // checkinStreak/lastCheckinAt below (Round 35): use the snapshot only
       // as a cheap pre-filter for whether this user might need touching,
       // then re-derive the real figures fresh via computeUserRealTotals()
       // and re-read the doc fresh, both INSIDE the bal:<userId> lock,
@@ -4395,33 +4412,32 @@ async function recountAllTotals() {
       }
 
       // subagent-audit-caught HIGH bug: this used to write the SNAPSHOT-
-      // computed checkinStreak/lastCheckin straight into the user doc,
+      // computed checkinStreak/lastCheckinAt straight into the user doc,
       // guarded only by the bal:<userId> lock -- not checkin:<userId>, the
       // lock /checkin's own claim-before-credit write holds. A live
       // /checkin landing anywhere between computeRealTotals()'s upfront
       // snapshot and THIS user's turn in a loop that can span up to 10,000
-      // users would get its lastCheckin=today overwritten back to
-      // yesterday by this stale snapshot, letting the member /checkin
-      // again the same day for a second bonus. Mirrors
+      // users would get its lastCheckinAt overwritten back to the previous
+      // one by this stale snapshot, letting the member /checkin again
+      // inside their still-active cooldown for a second bonus. Mirrors
       // /admin/user/reconcile-checkin's own fix for the identical race
       // (Round 35): re-read the ledger fresh, inside the checkin: lock,
       // immediately before writing, instead of trusting a snapshot taken
       // before this whole run began.
-      const streakLooksStale = (u.checkinStreak || 0) !== snapshotStreak.streak || (u.lastCheckin || null) !== snapshotStreak.lastCheckin;
+      const streakLooksStale = (u.checkinStreak || 0) !== snapshotStreak.streak || (u.lastCheckinAt || null) !== snapshotStreak.lastCheckinAt;
       let wroteStreak = false;
       if (streakLooksStale) {
         await withLock('checkin:' + doc.id, async () => {
           // Same limit bump as /checkin's own copy of this query -- see its comment.
           const ledgerSnap = await db.collection('transactions')
             .where('userId', '==', doc.id).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
-          const dayKeys = new Set();
-          ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
-          const fresh = computeCheckinStreak(dayKeys);
+          const stamps = ledgerSnap.docs.map(d => tsMillis(d.data().createdAt)).filter(Boolean);
+          const fresh = computeCheckinStreak(stamps);
           const freshDoc = await doc.ref.get();
           const fd = freshDoc.exists ? freshDoc.data() : {};
-          const stillStale = (fd.checkinStreak || 0) !== fresh.streak || (fd.lastCheckin || null) !== fresh.lastCheckin;
+          const stillStale = (fd.checkinStreak || 0) !== fresh.streak || (fd.lastCheckinAt || null) !== fresh.lastCheckinAt;
           if (stillStale) {
-            await withLock('bal:' + doc.id, () => doc.ref.update({ checkinStreak: fresh.streak, lastCheckin: fresh.lastCheckin }));
+            await withLock('bal:' + doc.id, () => doc.ref.update({ checkinStreak: fresh.streak, lastCheckinAt: fresh.lastCheckinAt }));
             wroteStreak = true;
           }
         });
