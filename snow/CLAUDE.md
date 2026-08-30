@@ -5367,6 +5367,76 @@ so the app's URL cannot be inferred from the repo — ask the owner before hardc
 **No `server.js`, `user-src/` or `admin-src/` changes this round** — Android app and CI
 workflow only, so no cache bumps and no Render redeploy needed.
 
+## Round 90 (2026-08-30) — a question about updating exposed a real defect: every CI build was signed with a different key; plus the forwarder now tells you when a new version exists
+
+Owner asked a plain question — *"still update automatically or l re-download new version"* —
+and answering it honestly turned up a genuine defect in what Round 89 had just shipped.
+
+**The answer, and the bug behind it.** A sideloaded APK has no store behind it, so nothing
+updates on its own; each phone must install a newer APK by hand. Fine. But checking *how*
+that would actually go revealed the workflow had no keystore handling at all, relying on
+the debug keystore Gradle auto-generates. A fresh ephemeral CI runner has no
+`~/.android/debug.keystore`, so AGP creates a brand-new one **per run** — the alias and
+password are fixed and public, but the key material is random. Every build was therefore
+signed by a different key, and Android flatly refuses to install an update whose signature
+differs from the installed app. The very next update would have failed with *"App not
+installed"* on every phone, and the only way through would be uninstalling first — wiping
+that phone's configured numbers and shared secret. Every single time.
+
+Fixed by generating a fixed debug keystore (RSA 2048, 30-year validity) committed
+alongside the app, with `signingConfigs.shared` wired into BOTH build types, so every
+build is signed identically and future APKs install straight over the top keeping their
+settings. Documented in-file that this is a debug key with the standard public password —
+not a secret, and grants nothing by itself, since installing a malicious "update" would
+already require access to the admin phone — and that wider distribution (Play Store)
+should switch to a real release key held in Actions secrets rather than in the repo.
+Confirmed `.gitignore` had no rule that would have silently excluded the keystore and
+broken the build. **One-time cost, flagged to the owner: any APK already installed from
+runs 1–3 was signed with a throwaway key and must be uninstalled once before the new one
+will install; every update after that goes over the top cleanly.**
+
+**Then, on the owner's "yeah l want it": the app now reports its own updates.** Verified
+first that the release assets are fetchable with **no authentication** (unauthenticated
+`curl` of the APK returned HTTP 200 / 19,963 bytes), which is what makes this possible
+from a phone with no token.
+- The workflow now generates `version.json` (`{"versionCode":N,"versionName":"..."}`)
+  by grepping the values straight out of `app/build.gradle`, so they can never drift from
+  what was actually built, and publishes it as a second asset in the same release. The
+  grep was run locally against the real file first to confirm it parses.
+- New `UpdateChecker` fetches that JSON on a background thread and compares against the
+  installed `versionCode` (handling both `getLongVersionCode()` on API 28+ and the
+  deprecated field below it, since minSdk is 24). It follows redirects, because release
+  assets bounce to a CDN host.
+- `MainActivity` checks quietly on open and only speaks up when there IS a newer build,
+  offering a Download button; plus a manual "Check for updates" button and the installed
+  version shown at the bottom.
+- `ForwardService` re-checks every 6 hours and, when an update exists, rewrites its
+  **existing ongoing notification** to "Snow SMS update available (1.3)". This is the
+  design point worth keeping: these phones sit untouched in a drawer forwarding SMS and
+  nobody opens the app, so the permanent foreground notification the service already
+  posts is the only surface an admin actually sees. Reusing it costs no new channel, no
+  new permission, and no extra notification. Tapping it opens the app. The handler is
+  cancelled in `onDestroy()`, and the notification is only re-posted when the state
+  genuinely changes rather than on every poll.
+
+**Nothing installs itself.** The app only ever reports; Download opens the release URL in
+the browser and Android's own installer takes over. That deliberately avoids
+`REQUEST_INSTALL_PACKAGES` and a FileProvider, and matches the flow admins already use to
+install the app in the first place — the more automated DownloadManager-plus-install-intent
+route was considered and rejected as more moving parts to go wrong given none of this can
+be tested on a real device from here. Forwarding continues normally whether or not an
+update is taken.
+
+**Standing rule for future changes to this app: bump BOTH `versionCode` and `versionName`
+in `app/build.gradle`**, or phones will never be offered the new build. A comment to that
+effect sits directly above those two lines. This round went to versionCode 3 / 1.2.
+
+**Verified**: workflow YAML parses; the version-parsing grep run locally produces exactly
+`{"versionCode":3,"versionName":"1.2"}`; balanced-brace/paren structure checks on all 7
+Java files; and the real proof, a green GitHub Actions build. Same honest limitation as
+Round 89 — CI proves compilation, not runtime behaviour on a handset. Neither the
+multi-SIM attribution nor the update prompt has been exercised on a real phone.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
