@@ -54,16 +54,28 @@ jobs:
           tag_name: snow-sms-app
           name: Snow SMS Forwarder
           body: |
-            Snow's manual-deposit SMS forwarder. Install ONE copy per admin payment phone.
+            Snow's manual-deposit SMS forwarder. Install one copy per admin payment phone.
+            A dual/triple-SIM phone can cover several payment numbers from a single
+            install: one number per SIM slot.
 
             Download `snow-sms-forwarder.apk` below, allow "unknown sources" in phone
-            settings, then install and open **Snow SMS** and fill in:
+            settings, then install and open **Snow SMS**, grant the SMS and phone
+            permissions, and fill in:
             - Server webhook URL (pre-filled with Snow's own endpoint)
             - Shared secret: the MANUAL_SMS_SECRET set on the snow-server Render service
-            - This phone's receiving number: must match the number saved for this phone
-              in the admin panel under Settings -> Manual payments -> Payment numbers
+            - SIM slot 1 / SIM slot 2 / ...: the payment number each SIM in this phone
+              actually uses, exactly as saved in the admin panel under
+              Settings -> Manual payments -> Payment numbers. Each slot is labelled with
+              the carrier the phone detects. Leave a slot blank if that SIM is not a
+              Snow payment number.
 
             Then tap Save settings, START forwarding, and Send test ping (expect HTTP 200).
+
+            Put a number in the wrong slot and messages get attributed to the wrong
+            payment number, so double-check the carrier label on each slot. If the app
+            cannot tell which SIM received a message and more than one number is
+            configured, it deliberately drops that message rather than risk crediting
+            the wrong member.
           files: snow/sms-forwarder-app/snow-sms-forwarder.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
