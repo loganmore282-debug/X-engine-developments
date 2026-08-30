@@ -1898,11 +1898,11 @@ function openManualDepositWaitSheet(depositId, assignedNumber, holderName, netwo
       <ol>
         <li>Open your mobile money menu on the phone number you entered.</li>
         <li>Send exactly ${fmtUGX(amount)} to ${esc(assignedNumber)}.</li>
-        <li>We match your wallet automatically once your payment confirmation SMS is detected.</li>
-        <li>If it's taking a while, paste the confirmation SMS your phone received below.</li>
+        <li>We match your wallet automatically once your payment is confirmed.</li>
+        <li>If it's taking a while, paste the message your phone got after sending, below.</li>
       </ol>
     </div>
-    <div class="form-field" style="margin-top:16px;"><label>Paste your confirmation SMS (optional)</label><textarea id="manDepPastedSms" rows="3" placeholder="You have received UGX ..."></textarea></div>
+    <div class="form-field" style="margin-top:16px;"><label>Paste the message you got after sending (optional)</label><textarea id="manDepPastedSms" rows="3" placeholder="You have sent UGX ..."></textarea></div>
     <button class="secondary-button" id="manDepPasteBtn" style="width:100%;padding:13px 0;" onclick="submitManualPasteSms('${depositId}')">Submit confirmation text</button>
   </div>`);
   startManualDepositCountdown(expiresAt);

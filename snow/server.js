@@ -2180,28 +2180,65 @@ function manualSmsConfigured() { return MANUAL_SMS_SECRET.length >= 16; }
 // proven Nexus implementation (root server.js) -- same regex, same
 // field shape. Returns { amount, txId, sender, raw } or null if it isn't a
 // genuine incoming-money message.
+// Shared bits, verified against real MTN and Airtel Uganda messages.
+// Amount: always the FIRST UGX figure -- both operators put the transacted
+// amount before the running balance ("Bal UGX ..." / "New balance: UGX ...").
+function _smsAmount(t) {
+  const m = t.match(/(?:ugx|ush|shs?)\s*([\d,]+(?:\.\d+)?)/i) ||
+            t.match(/([\d,]+(?:\.\d+)?)\s*(?:ugx|ush|shs?)/i);
+  if (!m) return NaN;
+  return parseFloat(m[1].replace(/,/g, ''));
+}
+// Operator transaction id. Airtel labels it "TID 155198427834."; MTN's newer
+// format ends with "ID: 43140073868" (older ones said "Transaction ID ...").
+function _smsTxId(t) {
+  const idm = t.match(/(?:txn\s*id|transaction\s*id|trans\.?\s*id|\btid\b|ref(?:erence)?|financial transaction id)[:\s#]*([A-Za-z0-9.\-]{6,})/i)
+           || t.match(/\bid[:\s#]+(\d{6,})/i);
+  return idm ? idm[1].replace(/\.$/, '') : '';
+}
+// The counterparty's number can sit right after the keyword (Airtel: "from
+// 741234567, JOHN") or after a name and comma (MTN: "from UMAR KIZITO,
+// 256764628233") -- so take the first 9-13 digit run after it rather than
+// assuming the very next token. \b stops a name ending in "to" (KIZITO)
+// from being mistaken for the keyword.
+function _smsCounterparty(t, keyword) {
+  const m = t.match(new RegExp('\\b' + keyword + '\\s+.*?([+]?\\d{9,13})', 'i'));
+  return m ? m[1].replace(/[\s\-]/g, '') : '';
+}
+
+// An INCOMING "you have received" message, as it lands on an admin payment
+// phone. This is what the SMS forwarder posts.
 function parseMoMoSms(text) {
   if (!text) return null;
   const t = String(text).replace(/\s+/g, ' ').trim();
   const isReceive  = /(received|you have received|received from|deposit of)/i.test(t);
   const isOutgoing = /(sent to|you have sent|withdrawn|paid to|airtime|bundle|data)/i.test(t);
   if (!isReceive || isOutgoing) return null;
-  const m = t.match(/(?:ugx|ush|shs?)\s*([\d,]+(?:\.\d+)?)/i) ||
-            t.match(/([\d,]+(?:\.\d+)?)\s*(?:ugx|ush|shs?)/i);
-  if (!m) return null;
-  const amount = parseFloat(m[1].replace(/,/g, ''));
+  const amount = _smsAmount(t);
   if (!amount || isNaN(amount)) return null;
-  let txId = '';
-  const idm = t.match(/(?:txn\s*id|transaction\s*id|trans\.?\s*id|\btid\b|ref(?:erence)?|financial transaction id)[:\s#]*([A-Za-z0-9.\-]{6,})/i);
-  if (idm) txId = idm[1].replace(/\.$/, '');
-  let sender = '';
-  // The sender's phone number can sit right after "from" (Airtel: "from
-  // 741234567, JOHN") or after a name/comma (MTN: "from JOHN DOE,
-  // 256771234567") -- match the first 9-13 digit run following "from"
-  // rather than assuming it's the very next token.
-  const sm = t.match(/from\s+.*?([+]?\d{9,13})/i);
-  if (sm) sender = sm[1].replace(/[\s\-]/g, '');
-  return { amount, txId, sender, raw: t };
+  return { amount, txId: _smsTxId(t), sender: _smsCounterparty(t, 'from'), raw: t };
+}
+
+// An OUTGOING "you have sent" message, as it lands on the MEMBER's own phone.
+//
+// Owner, correcting a real bug: "I sending message, it says sent not sender
+// one to receive... so sender doesn't receive, sender has sent message."
+// Exactly right -- the member never gets a "received" SMS, so the paste-SMS
+// fallback was validating their text with parseMoMoSms() above, which
+// explicitly REJECTS outgoing wording. Every paste attempt failed. This
+// parses the direction the member actually has.
+//
+// Returns { amount, txId, recipient, raw } or null. `recipient` is the
+// number they paid TO, which should be the admin number we assigned them.
+function parseSentMoMoSms(text) {
+  if (!text) return null;
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  const isSent = /(you have sent|\bsent\b|transferred|payment of|paid to)/i.test(t);
+  if (!isSent) return null;
+  if (/(airtime|bundle|data\b)/i.test(t)) return null;   // not a money transfer
+  const amount = _smsAmount(t);
+  if (!amount || isNaN(amount)) return null;
+  return { amount, txId: _smsTxId(t), recipient: _smsCounterparty(t, 'to'), raw: t };
 }
 
 // Picks the next number in this network's round-robin pool, skipping any
@@ -2423,11 +2460,41 @@ app.post('/deposit/manual/paste-sms', async (req, res) => {
     if (dep.status !== 'pending' && dep.status !== 'review')
       return res.status(400).json({ status: 'error', message: 'This deposit is no longer waiting for payment.' });
     const text = String(req.body.text || '').slice(0, 2000);
-    const info = parseMoMoSms(text);
-    if (!info) return res.status(400).json({ status: 'error', message: "That doesn't look like a money-received message. Paste the exact text your phone received." });
+    // The member's own phone gets a SENT message, so that's the normal case.
+    // A received message is still accepted in case they somehow relay the
+    // admin phone's copy instead.
+    const sent = parseSentMoMoSms(text);
+    const received = sent ? null : parseMoMoSms(text);
+    const info = sent || received;
+    if (!info) return res.status(400).json({ status: 'error', message: "That doesn't look like a mobile-money message. Paste the whole confirmation text you got after sending, exactly as it came." });
+
+    // Cross-checks for whoever reviews this. None of them credit anything --
+    // this endpoint never calls creditDeposit(); it only ever queues the
+    // order for a human, per this codebase's own "never trust user input for
+    // a balance change" rule.
+    const counterparty = sent ? sent.recipient : received.sender;
+    const amountMatches = Number(info.amount) === Number(dep.amount);
+    const cleanCounterparty = counterparty ? (cleanPhone(counterparty) || counterparty) : '';
+    const cleanAssigned = dep.assignedNumber ? (cleanPhone(dep.assignedNumber) || dep.assignedNumber) : '';
+    const paidRightNumber = sent && cleanCounterparty && cleanAssigned
+      ? cleanCounterparty === cleanAssigned
+      : null;   // null = could not be checked
+
+    const notes = [sent ? 'Member pasted their own sent-money SMS' : 'Member pasted a received-money SMS'];
+    if (!amountMatches) notes.push(`amount says ${fmtUGX(info.amount)} but the order is ${fmtUGX(dep.amount)}`);
+    if (paidRightNumber === false) notes.push(`paid ${counterparty} but was assigned ${dep.assignedNumber}`);
+
     await depSnap.ref.update({
-      status: 'review', reviewReason: 'Member pasted a confirmation SMS',
-      pastedSms: info.raw, pastedSmsAmount: info.amount, pastedSmsTxId: info.txId || '', pastedAt: FieldValue.serverTimestamp()
+      status: 'review',
+      reviewReason: notes.join('; '),
+      pastedSms: info.raw,
+      pastedSmsAmount: info.amount,
+      pastedSmsTxId: info.txId || '',
+      pastedSmsCounterparty: counterparty || '',
+      pastedSmsDirection: sent ? 'sent' : 'received',
+      pastedSmsAmountMatches: amountMatches,
+      pastedSmsNumberMatches: paidRightNumber,
+      pastedAt: FieldValue.serverTimestamp()
     });
     res.json({ status: 'success', message: "Thanks, we're checking this and will credit your wallet shortly if it's genuine." });
   } catch (e) {
