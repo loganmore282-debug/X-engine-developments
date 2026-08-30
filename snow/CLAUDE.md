@@ -5437,6 +5437,72 @@ Java files; and the real proof, a green GitHub Actions build. Same honest limita
 Round 89 — CI proves compilation, not runtime behaviour on a handset. Neither the
 multi-SIM attribution nor the update prompt has been exercised on a real phone.
 
+## Round 91 (2026-08-30) — owner-caught real bug: the paste-SMS fallback could never have worked, because the payer gets a "sent" message, not a "received" one. Real operator formats now captured and locked into a committed test.
+
+**Owner, in their own words**: *"I sending message, it says sent not sender one to
+receive, so on payment page of manual fix it... so l wanted to tell you that sender
+doesn't receive, sender has sent message, so those screen shots shows receiver sms."*
+Exactly right, and it exposed a feature that was dead on arrival.
+
+**The bug.** `/deposit/manual/paste-sms` validated the member's pasted text with
+`parseMoMoSms()` — the parser written for the ADMIN phone's incoming message, which
+explicitly rejects outgoing wording (`isOutgoing` matches "you have sent"/"sent to").
+But the member who pays never receives an incoming message; their phone gets a **sent**
+one. So every single paste attempt failed with "that doesn't look like a money-received
+message", and the whole fallback — the thing that's supposed to rescue a deposit when
+the forwarder is down — could never have succeeded once. The member-facing copy made it
+worse by instructing them to paste "the confirmation SMS your phone received" and
+placeholder-ing "You have received UGX ...", i.e. asking for a message that does not
+exist on their device.
+
+**Fixed** with a second parser for the opposite direction, `parseSentMoMoSms()`, and
+shared `_smsAmount()` / `_smsTxId()` / `_smsCounterparty()` helpers so both directions
+stay consistent. `/deposit/manual/paste-sms` now accepts a sent message (the normal
+case) or a received one (in case they relay the admin phone's copy), and records
+cross-checks for whoever reviews it: whether the pasted amount matches the order, and
+whether they paid the number actually assigned to them (`pastedSmsAmountMatches`,
+`pastedSmsNumberMatches`, `pastedSmsDirection`, `pastedSmsCounterparty`), folded into
+`reviewReason`. It still NEVER calls `creditDeposit()` — review queue only, unchanged.
+Member-facing label and placeholder corrected to the message they actually get.
+
+**Real operator formats, now known rather than guessed** (owner supplied 4 screenshots
+plus one copied message — this is the ground truth for anything touching these parsers):
+- Airtel incoming: `RECEIVED. TID 155198427834. UGX 663,850 from 759926715, JOHN BUYUNGO. Bal UGX 667,111.`
+- MTN incoming: `You have received UGX 3400 from UMAR KIZITO, 256764628233 on 2026-08-30 16:45:11. fee:0. Reason: 2094058808912928768. New balance: UGX 35922. ID: 43140073868. Download MoMo App http://bit.ly/3KGlEJJ to get 500MBs.`
+- Airtel outgoing, cross-network to MTN: `SENT UGX 500 to MANGALITA NAMUGABWE on 256769968158. Fee UGX 100.0 Bal UGX 3,149. TID 155265255805.`
+
+Three things these revealed that guessing had got wrong or would have:
+1. **MTN's transaction id was never being captured.** Their newer format ends
+   `ID: 43140073868`, which matched none of the `txn id`/`transaction id`/`TID`/`ref`
+   alternatives, so every MTN deposit silently fell back to a content hash for dedup.
+   Working, but weaker than the operator's own id. Added an `\bid[:\s#]+(\d{6,})` fallback.
+2. **Airtel's outgoing format puts the number after "on", not after "to"** —
+   `to NAME on NUMBER`, with the TID trailing at the end and a `Fee UGX 100.0` sitting
+   between the amount and the balance. The lazy `.*?` counterparty match handles this
+   naturally, but only because it doesn't assume the number is the next token.
+3. **A recipient name ending in "to" would have broken the outgoing parser** — real
+   example `UMAR KIZITO`. Added `\b` to the keyword match; covered by its own test case.
+
+Also confirmed the amount regex correctly takes the transacted figure in every real
+message and never the trailing balance (`Bal UGX 667,111` / `New balance: UGX 35922`) or
+the fee (`Fee UGX 100.0`), because both operators put the real amount first.
+
+**New committed test: `snow/test-momo-sms-parsers.js`** (45 checks, all passing). It
+extracts both parsers out of `server.js` at runtime rather than copying them, so it can
+never drift from what actually ships. Run it after touching either parser or the `_sms*`
+helpers. Every real message above is in it verbatim, each asserted for amount, txId and
+counterparty, plus a cross-check that neither parser ever claims a message belonging to
+the other direction, plus junk rejections (airtime, data bundle, OTP, MTN's marketing
+tail, empty). **This is the first committed test for Snow's money-matching logic** — prior
+rounds used throwaway scripts. These formats were expensive to learn and are exactly the
+kind of thing a well-meaning regex tidy-up would silently break.
+
+**Verified**: `node --check` on `server.js` and `original_module.js`; the 45-check parser
+suite; Round 88's 22-check money-safety suite re-run green (matching/assignment logic
+untouched); boot smoke test still fails only at Mongo-connect; `build-core.js` clean
+round-trip. User cache bumped `v65`→`v66`. **`server.js` changed — Render should
+auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
