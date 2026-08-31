@@ -2993,6 +2993,49 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
     const wit = witSnap.data();
     if (wit.status !== 'pending') return { code: 400, body: { status: 'error', message: `Cannot send, the status is '${wit.status}'` } };
 
+    // Owner: "when/if manual payment is switched also withdrawals are
+    // manual, so it is approved manually when manual payment is toggled."
+    // The same Settings toggle that puts DEPOSITS on admin payment numbers
+    // also takes MarzPay out of the payout path: the admin sends the money
+    // by hand from their own mobile-money account and then records that
+    // here. So this call must never contact MarzPay -- it only writes down
+    // a payment that has ALREADY happened outside the system.
+    //
+    // Everything after the status flip is identical to the sandbox path
+    // just below (straight to 'processed', totalWithdrawn incremented once,
+    // ledger row finalised), because the shape is the same: a payout that
+    // is already final by the time we hear about it, with no 'processing'
+    // stage to wait on and nothing for the reconcilers to poll.
+    const settNow = await getSettings();
+    if (settNow.depositMethod === 'manual') {
+      // Atomic conditional flip, not read-then-write: this is the one place
+      // a repeat call could double-count totalWithdrawn, and the status
+      // check above ran outside any lock. updateIf only matches while the
+      // withdrawal is still 'pending', so a second call writes nothing and
+      // is told the status changed instead of incrementing again.
+      const claimed = await witRef.updateIf({ status: 'pending' }, {
+        status: 'processed', payoutMethod: 'manual',
+        processedBy, processedAt: FieldValue.serverTimestamp(),
+      });
+      if (!claimed) {
+        const now = await witRef.get();
+        return { code: 400, body: { status: 'error', message: `Cannot mark paid, the status is '${now.exists ? now.data().status : 'missing'}'` } };
+      }
+      await withLock('bal:' + wit.userId, async () => {
+        try {
+          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
+        } catch (twErr) {
+          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER manual withdrawal ${withdrawalId} was marked paid — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
+        }
+      });
+      await finalizeWithdrawalTransactionRecord(withdrawalId, 'processed');
+      return {
+        code: 200,
+        body: { status: 'success', manual: true, message: `Recorded as paid by hand: ${fmtUGX(wit.net)} to ${wit.phone}` },
+        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId, payoutMethod: 'manual' },
+      };
+    }
+
     const sendingMarker = crypto.randomUUID();
     // Codex-caught real bug (2nd money-flow audit): marzReference -- the
     // field /withdraw/callback actually looks withdrawals up by -- used to
@@ -3086,6 +3129,17 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     const snap = await db.collection('withdrawals').doc(withdrawalId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
+    // A payout the admin sent by hand (manual mode) has no MarzPay record at
+    // all, by design. Without this branch it falls into "no gateway
+    // reference, nothing was sent" below -- which reads as though the member
+    // was never paid and invites rejecting a withdrawal that WAS paid,
+    // refunding them on top of real money that already left an admin phone.
+    if (w.payoutMethod === 'manual') {
+      return res.json({
+        status: 'success', ourStatus: w.status, marzStatus: 'manual',
+        message: `This payout was sent by hand, not through MarzPay, so there is nothing to verify here${w.processedBy ? ' (recorded by ' + w.processedBy + ')' : ''}. Check the mobile-money record on the admin phone that sent it. Do NOT reject it unless you have confirmed there that no money went out.`,
+      });
+    }
     if (!w.marzTxUuid) {
       // Codex-caught real bug (2nd money-flow audit): this used to claim
       // "nothing was sent" from a bare missing marzTxUuid alone -- but
@@ -4499,10 +4553,11 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
 app.post('/admin/withdrawals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [snap, unresolvedSnap, usersSnap] = await Promise.all([
+    const [snap, unresolvedSnap, usersSnap, sett] = await Promise.all([
       db.collection('withdrawals').orderBy('createdAt', 'desc').limit(5000).get(),
       db.collection('withdrawals').where('status', 'in', ['pending', 'sending', 'processing']).limit(5000).get(),
       db.collection('users').get(),
+      getSettings(),
     ]);
     const phones = {}; const refCodes = {};
     usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; refCodes[u.id] = u.data().referralCode || ''; });
@@ -4513,7 +4568,11 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     const rows = Array.from(byId.values());
     rows.forEach(w => { w.accountPhone = phones[w.userId] || ''; w.referralCode = refCodes[w.userId] || ''; counts[w.status] = (counts[w.status] || 0) + 1; });
     const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(w => w.status === 'processed'), 'processedAt', 'net');
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount });
+    // The tab needs to know whether payouts currently go through MarzPay or
+    // are sent by hand -- it changes what the approve button does and what
+    // it must warn the admin about. Sent with the list so the tab doesn't
+    // need a second round trip just to label a button.
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: sett.depositMethod === 'manual' ? 'manual' : 'automatic' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {
@@ -5178,6 +5237,13 @@ async function autoApproveWithdrawalsTick() {
   try {
     const sett = await getSettings();
     if (!sett.autoApproveWithdrawalsEnabled) return;
+    // In manual mode a payout only exists once a human has actually sent the
+    // money from an admin phone. Auto-approving here would mark withdrawals
+    // paid, credit totalWithdrawn and close their ledger rows when nobody
+    // sent anything -- a member would see "Success" for money that never
+    // left. The toggle stays where the owner set it and simply does nothing
+    // while manual mode is on, rather than being silently rewritten.
+    if (sett.depositMethod === 'manual') return;
     const cutoff = new Date(Date.now() - (Number(sett.autoApproveIntervalSec) || 10) * 1000);
     const snap = await db.collection('withdrawals').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {

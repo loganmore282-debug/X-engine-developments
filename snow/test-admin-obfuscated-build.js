@@ -45,7 +45,9 @@ const routes = {
   'POST /admin/manual-numbers/save': { status: 'success' },
   'POST /admin/manual-numbers/delete': { status: 'success' },
   'POST /admin/settings/update': { status: 'success' },
-  'POST /admin/withdrawals/list': { status: 'success', withdrawals: [], counts: {} },
+  'POST /admin/withdrawals/list': { status: 'success', counts: { pending: 1 }, payoutMode: 'automatic',
+    withdrawals: [{ id: 'w1', userId: 'u1', amount: 20000, net: 17000, status: 'pending',
+      phone: '+256770000000', network: 'MTN', holder: 'JOHN DOE', createdAt: new Date().toISOString() }] },
   'GET /admin/products': { status: 'success', products: [
     { key: 'qing-shuang', name: 'Snow Qing Shuang', price: 30000, cycle: 150, expectedReturn: 900000, active: true },
   ] },
@@ -388,6 +390,25 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     mnDelBtn.click();
     await sleep(250);
   }
+
+  // Manual payouts: the same tab must stop offering to send through MarzPay
+  // and start asking the admin to record a payment they already made.
+  doc.querySelector('.tab[data-tab="withdrawals"]').click();
+  await sleep(250);
+  const witAuto = doc.getElementById('content').innerHTML;
+  if (!witAuto.includes('Send via MarzPay')) errors.push('Withdrawals: automatic mode should offer "Send via MarzPay"');
+  if (!doc.getElementById('witSync')) errors.push('Withdrawals: automatic mode should show the Sync MarzPay button');
+
+  routes['POST /admin/withdrawals/list'] = Object.assign({}, routes['POST /admin/withdrawals/list'], { payoutMode: 'manual' });
+  doc.querySelector('.tab[data-tab="dashboard"]').click();
+  await sleep(200);
+  doc.querySelector('.tab[data-tab="withdrawals"]').click();
+  await sleep(250);
+  const witManual = doc.getElementById('content').innerHTML;
+  if (!witManual.includes('Mark as paid')) errors.push('Withdrawals: manual mode should offer "Mark as paid"');
+  if (witManual.includes('Send via MarzPay')) errors.push('Withdrawals: manual mode still offers "Send via MarzPay"');
+  if (!witManual.includes('Payments are set to Manual')) errors.push('Withdrawals: manual-mode explanation missing');
+  if (doc.getElementById('witSync')) errors.push('Withdrawals: manual mode should not show the Sync MarzPay button');
 
   console.log('\n=== ERRORS (' + errors.length + ') ===');
   errors.forEach(e => console.log(' -', e));

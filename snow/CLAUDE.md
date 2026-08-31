@@ -5736,6 +5736,88 @@ Firebase ESM stub missing exports the app imports (`createUserWithEmailAndPasswo
 Cache bumped `v66`→`v67`. `user-src/`-only change — no Render redeploy needed for the
 backend.
 
+## Round 94 (2026-08-31) — the Manual payments toggle now governs withdrawals too: payouts leave MarzPay entirely and are recorded by hand
+
+Owner: *"also when/if manual payment is switched also withdrawals are manual, so it is
+approved manually when manual payment is toggled."*
+
+**One setting, both directions.** `depositMethod` (Settings → Manual payments) stays the
+single field — no new `withdrawMethod`, no migration — but it now decides the payout path
+as well. Deliberately tied, exactly as asked; if the owner ever wants manual deposits with
+automatic payouts, that needs a second field and is a real change, not a config tweak.
+
+**`processWithdrawalCore()` gained a manual branch**, taken before `marzSendMoney()` is
+ever reached: the admin has already sent the money from their own phone, so this call only
+writes down a payment that happened outside the system. Shape mirrors the existing sandbox
+path (straight to `processed`, `totalWithdrawn` incremented once, ledger row finalised)
+because the situation is the same: a payout already final by the time we hear about it,
+with no `processing` stage to wait on and nothing for the reconcilers to poll. Tagged
+`payoutMethod: 'manual'`.
+
+**The status flip is `updateIf({status:'pending'}, ...)`, not read-then-write.** The
+`wit.status !== 'pending'` guard above it runs outside any lock, and this is the one place
+a repeat call could double-count `totalWithdrawn` — the atomic conditional update means a
+second "Mark as paid" writes nothing and is told the status changed. (`_withdrawInFlight`
+only guards same-process concurrency.)
+
+**Auto-approve is inert in manual mode.** `autoApproveWithdrawalsTick()` returns early —
+auto-approving here would mark payouts paid, credit `totalWithdrawn` and close ledger rows
+when *nobody sent any money*, showing a member "Success" for funds that never left. The
+toggle keeps whatever the owner set rather than being silently rewritten; it just does
+nothing while Manual is on.
+
+**`/admin/withdraw/verify` gained a manual branch, and this one matters.** A hand-sent
+payout has no MarzPay record at all, so it previously fell into *"no gateway reference,
+nothing was sent"* — which reads as though the member was never paid and invites rejecting
+a withdrawal that WAS paid, refunding them on top of real money that already left an admin
+phone. It now says the payout was sent by hand, names who recorded it, and points at the
+admin phone's own mobile-money record.
+
+**Reconcilers and the member's own poll needed no changes** (verified, not assumed):
+`reconcilePendingWithdrawals()` filters on `marzTxUuid`, which a manual payout never has;
+`/withdraw/marzpay/status` returns early for any status that isn't `processing`, and a
+manual withdrawal goes `pending` → `processed` without passing through it.
+
+**Admin UI**: `/admin/withdrawals/list` now returns `payoutMode` (sent with the list so the
+tab needs no second round trip). In manual mode the button reads **Mark as paid** instead
+of "Send via MarzPay", its confirm says *only do this after you have actually sent the
+money* and that the button records rather than sends, the Sync MarzPay button is hidden,
+and the tab explains the mode. Both `renderWithdrawals()` and its live-refresh counterpart
+`quietRefreshWithdrawals()` pick the flag up, so flipping the setting elsewhere lands
+without a reload. Settings copy now states the toggle covers withdrawals, and the button
+is "Save payment method", not "Save deposit method".
+
+**Member-facing**: the Withdraw sheet's last instruction line becomes "Our team reviews the
+request and sends the money to your mobile-money number by hand, so allow a little time"
+in manual mode — the automatic wording would promise a speed a human payout cannot keep.
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`, `build-core.js`
+and `build-admin.js` both clean round-trips, `git diff --check` clean. A new harness boots
+the **real `server.js`** against an in-memory Mongo-compatible stub (`./db` swapped in
+`require.cache`) and drives the actual `/admin/withdraw/*` handlers over HTTP — 14 checks
+in manual mode, 3 in automatic:
+approving succeeds and answers "recorded as paid by hand"; the withdrawal goes straight to
+`processed` with `payoutMethod:'manual'` and **no gateway reference of any kind written**;
+`totalWithdrawn` credited exactly the net **once**; ledger row finalised to Success; a
+**second Mark as paid is refused and does not double-count**; Verify does not claim nothing
+was sent; a still-pending manual withdrawal can still be rejected and the member is
+refunded; **auto-approve left switched ON does not touch a pending payout across a real
+tick** (a genuine 12-second wait, not a mocked one); and in automatic mode nothing is
+marked paid without the gateway, `totalWithdrawn` is untouched, and no manual tag is
+written. `test-admin-obfuscated-build.js` extended against the real obfuscated admin build
+with a pending-withdrawal fixture and both modes asserted in both directions (automatic
+must offer "Send via MarzPay" and show Sync; manual must offer "Mark as paid", must NOT
+offer "Send via MarzPay", and must hide Sync) — 0 errors across all 12 tabs. Playwright
+against the real built user app confirms the automatic payout line is unchanged and the
+manual one appears when the platform is switched, with the fee and PIN steps intact.
+
+One harness note worth keeping: `getSettings()` caches for 60 seconds and reads
+`settings/main`, so a test cannot flip modes mid-run — the two modes are separate
+processes, seeded before boot.
+
+Cache bumped `v67`→`v68` (user), `v19`→`v20` (admin). **`server.js` changed — Render should
+auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
