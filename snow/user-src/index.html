@@ -218,6 +218,13 @@ a{color:inherit;}
    and centered scale-in, with its own close (X) button and left-aligned
    multi-line body text since this holds a real paragraph, not a one-line
    caption. */
+/* Owner: blur the page behind the announcement. Scoped to #announceBg on
+   purpose -- the gift-code chest and the recharge-status modal share
+   .chest-modal-bg but are opened by a deliberate tap, where obscuring the
+   page the member was reading is unhelpful. This one interrupts, so pushing
+   the background back is what makes it read as a separate layer. Browsers
+   without backdrop-filter simply keep the existing dim. */
+#announceBg.show{-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .announce-modal{position:relative;text-align:left;max-height:70vh;display:flex;flex-direction:column;}
 .announce-modal h3{font-size:16.5px;font-weight:800;margin:0 0 8px;padding-right:24px;flex-shrink:0;}
 .announce-scroll{overflow-y:auto;flex:1;min-height:0;}

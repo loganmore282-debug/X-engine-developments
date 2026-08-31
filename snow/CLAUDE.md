@@ -6106,6 +6106,29 @@ is what the owner should use if v1.9 itself will not download.
 App v1.9. No server, admin or user-app change this round, so no redeploy and no cache
 bumps.
 
+## Round 99 (2026-08-31) — the page behind the announcement dialog is now blurred
+
+Owner: *"let the background page be blury when announcement dialog pops."*
+
+One rule: `#announceBg.show{backdrop-filter:blur(6px)}` (with the `-webkit-`
+prefix, which older Android WebViews still need).
+
+**Deliberately scoped to the announcement alone**, even though the gift-code
+chest and the recharge-status modal share the same `.chest-modal-bg` backdrop.
+Those two are opened by a deliberate tap, so obscuring the page the member was
+just reading is unhelpful. The announcement interrupts, so pushing the
+background back is exactly what makes it read as a separate layer.
+
+A browser without `backdrop-filter` keeps the existing dim and loses nothing.
+
+**Verified** with Playwright against the real built (obfuscated) app: the
+announcement's computed backdrop filter contains `blur`; the gift-code popup's
+does NOT (proving the scoping, not just the rule); the announcement still
+appears after closing Recharge, so Round 93's behaviour is intact; zero page
+errors.
+
+Cache bumped `v69`→`v70`. `user-src/`-only change, no redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
