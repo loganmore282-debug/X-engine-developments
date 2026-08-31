@@ -5536,6 +5536,26 @@ The confirmed matrix, all in the committed test:
 | Airtel -> MTN | `You have received` | in `Reason:`, `from` is the OPERATOR | `ID: x` at end |
 | MTN -> Airtel | `RECEIVED` | right after `from` | `TID:x` at end |
 
+**Real MTN outgoing message too** (`Y'ello. You have sent UGX 5,000 to 256731880221,
+IBRAHIMNANKOOLA. Fee:UGX 100.00.  Transaction ID:43151281521. Your Mobile Money balance
+is now UGX 1,203,257.5....`). Parsed correctly with no change, and it **corrected a wrong
+guess**: the fabricated MTN-sent example previously in the test had the NAME before the
+number, whereas real MTN puts the NUMBER FIRST -- the opposite of Airtel's outgoing
+format. Both parse only because `_smsCounterparty()` scans rather than assuming a
+position; a position-based implementation would have picked a name as the number for one
+operator or the other. The invented example has been replaced with the real one, and the
+single remaining fabricated case is now explicitly labelled `SYNTHETIC:` so nobody
+mistakes it for a captured format. This is also the second independent case justifying
+the Ugandan-mobile preference: the transaction id is an 11-digit run in the same tail as
+the recipient number.
+
+**Ground-truth coverage, so future sessions know what is verified vs assumed.** All four
+INCOMING directions (the forwarder path, which is what actually credits wallets) are
+confirmed against real messages. On the OUTGOING side (the paste-SMS fallback), both
+cross-network directions are real; the two same-network sent formats have not been
+captured yet, though MTN's outgoing text does not reference the destination network at
+all, so they are likely identical. Do not invent examples for them -- ask the owner.
+
 **Verified**: `node --check` on `server.js` and `original_module.js`; the 60-check parser
 suite; Round 88's 22-check money-safety suite re-run green (matching/assignment logic
 untouched); boot smoke test still fails only at Mongo-connect; `build-core.js` clean

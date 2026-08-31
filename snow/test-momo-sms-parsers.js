@@ -105,11 +105,21 @@ const SENT = [
     // after the real amount.
     sms: 'SENT UGX 500 to MANGALITA NAMUGABWE on 256769968158. Fee UGX 100.0 Bal UGX 3,149. TID 155265255805.',
     amount: 500, txId: '155265255805', recipient: '256769968158' },
-  { name: 'MTN sent',
-    sms: 'You have sent UGX 30,000 to SNOW MTN 1, 256770000001 on 2026-08-30 17:04:02. fee:330. New balance: UGX 1200. ID: 43140999111.',
-    amount: 30000, txId: '43140999111', recipient: '256770000001' },
-  { name: 'MTN sent, recipient name ends in TO',
-    // Guards the word-boundary fix: KIZITO must not be read as the "to" keyword.
+  { name: 'MTN to Airtel, real cross-network',
+    // Real MTN outgoing. Note it puts the NUMBER BEFORE the name -- the
+    // opposite of Airtel's outgoing above, and the opposite of what was
+    // originally guessed here. Also "Fee:UGX 100.00" with no space, the id
+    // as "Transaction ID:43151281521" with no space after the colon, a
+    // decimal balance, a "Y'ello." greeting and a marketing tail.
+    //
+    // Second case justifying the Ugandan-mobile preference: that
+    // transaction id is an 11-digit run in the same tail as the recipient
+    // number, so it is a genuine candidate until cleanPhone() rejects it.
+    sms: "Y'ello. You have sent UGX 5,000 to 256731880221, IBRAHIMNANKOOLA. Fee:UGX 100.00.  Transaction ID:43151281521. Your Mobile Money balance is now UGX 1,203,257.5.Thank you for using MTN Mobile Money.",
+    amount: 5000, txId: '43151281521', recipient: '256731880221' },
+  { name: 'SYNTHETIC: recipient name ends in TO',
+    // Not a real captured message -- a deliberate edge case guarding the
+    // word-boundary fix, so KIZITO is never read as the "to" keyword.
     sms: 'You have sent UGX 3400 to UMAR KIZITO, 256764628233 on 2026-08-30 16:45:11. fee:0. ID: 43140073868.',
     amount: 3400, txId: '43140073868', recipient: '256764628233' },
 ];
