@@ -26,7 +26,11 @@ if (start < 0 || end < 0 || end <= start) {
 }
 const { parseMoMoSms, parseSentMoMoSms } = (function () {
   const module = { exports: {} };
-  eval(src.slice(start, end) + '\nmodule.exports = { parseMoMoSms, parseSentMoMoSms };');
+  // _smsCounterparty() consults cleanPhone() to prefer a Ugandan mobile
+  // among candidates, so pull that in from server.js too.
+  const cpStart = src.indexOf('function cleanPhone');
+  const cpEnd = src.indexOf('\n}', cpStart) + 2;
+  eval(src.slice(cpStart, cpEnd) + src.slice(start, end) + '\nmodule.exports = { parseMoMoSms, parseSentMoMoSms };');
   return module.exports;
 })();
 
@@ -51,6 +55,18 @@ const RECEIVED = [
   { name: 'MTN received (zero balance left)',
     sms: 'You have received UGX 9435 from VICENT KANAMWANGI, 256769723708 on 2026-08-30 17:01:43. fee:0. Reason: 2094062959868796929. New balance: UGX 0. ID: 43140463902. Download MoMo App http://bit.ly/3KGlEJJ to get 500MBs.',
     amount: 9435, txId: '43140463902', sender: '256769723708' },
+  { name: 'MTN received, CROSS-NETWORK from an Airtel payer',
+    // The important one. "from" is the OPERATOR ("Airtel Money"), not the
+    // payer -- the payer's actual name and number are in the Reason field.
+    // Anything that assumes the number sits near "from" breaks here.
+    sms: 'You have received UGX 500 from Airtel Money on 2026-08-31 01:10:24. fee:0. Reason: IBRAHIM NANKOOLA , 0731880221. New balance: UGX 1205258. ID: 43151361165. Dial *165# or use the MoMo app to pay, borrow, invest and more.',
+    amount: 500, txId: '43151361165', sender: '0731880221' },
+  { name: 'cross-network with a long numeric Reason before the payer number',
+    // Guards the (?<!\d)...(?!\d) boundary: MTN puts a 19-digit value in
+    // Reason on same-network transfers, and without the boundary a 13-digit
+    // slice of it gets returned as the payer's number.
+    sms: 'You have received UGX 500 from Airtel Money on 2026-08-31 01:10:24. fee:0. Reason: 2094058808912928768 , 0731880221. New balance: UGX 1205258. ID: 43151361165.',
+    amount: 500, txId: '43151361165', sender: '0731880221' },
 ];
 
 console.log('== incoming (admin phone) ==');

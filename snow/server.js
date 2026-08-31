@@ -2196,14 +2196,34 @@ function _smsTxId(t) {
            || t.match(/\bid[:\s#]+(\d{6,})/i);
   return idm ? idm[1].replace(/\.$/, '') : '';
 }
-// The counterparty's number can sit right after the keyword (Airtel: "from
-// 741234567, JOHN") or after a name and comma (MTN: "from UMAR KIZITO,
-// 256764628233") -- so take the first 9-13 digit run after it rather than
-// assuming the very next token. \b stops a name ending in "to" (KIZITO)
-// from being mistaken for the keyword.
+// The counterparty's number moves around a lot between operators and between
+// same-network and cross-network transfers, so this scans for candidates
+// after the keyword rather than assuming a position. Real observed shapes:
+//   Airtel in   "from 741234567, JOHN"            -- number first
+//   MTN in      "from UMAR KIZITO, 256764628233"  -- name first
+//   Airtel out  "to NAME on 256769968158"         -- number after "on"
+//   MTN in x-net"from Airtel Money ... Reason: IBRAHIM NANKOOLA , 0731880221"
+//               -- "from" is the OPERATOR, the payer's number is in Reason
+//
+// Two guards matter here:
+//  - \b on the keyword, so a name ending in "to" (KIZITO) is not read as it.
+//  - (?<!\d)...(?!\d), so a 9-13 digit window is never sliced out of a
+//    LONGER number. MTN puts a 19-digit value in "Reason:" on same-network
+//    transfers; without this, a cross-network message carrying one before
+//    the payer's number yields 13 junk digits instead of the real number.
+// Among valid candidates, prefer one that looks like a Ugandan mobile
+// (+2567...), since Reason is a free-text field that can hold anything.
 function _smsCounterparty(t, keyword) {
-  const m = t.match(new RegExp('\\b' + keyword + '\\s+.*?([+]?\\d{9,13})', 'i'));
-  return m ? m[1].replace(/[\s\-]/g, '') : '';
+  const re = new RegExp('\\b' + keyword + '\\s+([\\s\\S]*)', 'i');
+  const tail = t.match(re);
+  if (!tail) return '';
+  const candidates = tail[1].match(/(?<!\d)\+?\d{9,13}(?!\d)/g);
+  if (!candidates || !candidates.length) return '';
+  for (const c of candidates) {
+    const cleaned = cleanPhone(c);
+    if (cleaned && /^\+2567/.test(cleaned)) return c.replace(/[\s\-]/g, '');
+  }
+  return candidates[0].replace(/[\s\-]/g, '');
 }
 
 // An INCOMING "you have received" message, as it lands on an admin payment

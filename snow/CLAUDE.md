@@ -5497,7 +5497,25 @@ tail, empty). **This is the first committed test for Snow's money-matching logic
 rounds used throwaway scripts. These formats were expensive to learn and are exactly the
 kind of thing a well-meaning regex tidy-up would silently break.
 
-**Verified**: `node --check` on `server.js` and `original_module.js`; the 45-check parser
+**Follow-up the same round, from a real cross-network RECEIVE the owner then sent**:
+`You have received UGX 500 from Airtel Money on 2026-08-31 01:10:24. fee:0. Reason:
+IBRAHIM NANKOOLA , 0731880221. New balance: UGX 1205258. ID: 43151361165. Dial *165#...`
+When an Airtel user pays an MTN admin number, **MTN puts the OPERATOR after "from"
+("Airtel Money"), not the payer** -- the payer's real name and number land in the
+free-text `Reason:` field instead. The lazy scan already handled it (verified: amount
+500, id 43151361165, sender 0731880221), but testing it exposed a genuine latent bug:
+the digit match could slice a 9-13 digit window out of a LONGER number, and MTN puts a
+19-digit value in `Reason:` on same-network transfers. A cross-network message carrying
+one before the payer's number returned `2094058808912` as the sender. Consequence would
+have been a bogus sender failing the cross-check and sending a legitimate deposit to the
+review queue -- safe (never a wrong credit, since the primary key is
+(receivingNumber, amount)) but real manual work. Fixed with `(?<!\d)...(?!\d)`
+boundaries, plus a preference for the candidate that looks like a Ugandan mobile
+(`+2567...`) since `Reason:` can hold anything. Both messages added to the test (now 55
+checks). **Standing note: `from` is not reliably the payer on cross-network MTN
+receives -- never tighten `_smsCounterparty()` back to a position-based match.**
+
+**Verified**: `node --check` on `server.js` and `original_module.js`; the 55-check parser
 suite; Round 88's 22-check money-safety suite re-run green (matching/assignment logic
 untouched); boot smoke test still fails only at Mongo-connect; `build-core.js` clean
 round-trip. User cache bumped `v65`→`v66`. **`server.js` changed — Render should
