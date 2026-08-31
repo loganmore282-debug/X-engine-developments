@@ -5560,11 +5560,33 @@ This kills the reasonable-sounding assumption recorded a moment earlier -- that 
 sender's own operator phrases things identically whichever network it goes to -- so
 **never extrapolate one direction's format from another; get the real message.**
 
-**Ground-truth coverage, so future sessions know what is verified vs assumed.** All four
-INCOMING directions (the forwarder path, which is what actually credits wallets) are
-confirmed against real messages. On the OUTGOING side (the paste-SMS fallback), three of
-four are real: Airtel->MTN, MTN->Airtel and Airtel->Airtel. **Only MTN->MTN same-network
-remains uncaptured** -- do not invent an example for it, ask the owner.
+MTN turned out to flip the same way, in the opposite direction: its CROSS-network sent
+message puts the NUMBER before the name, its SAME-network one puts the NAME first
+(`You have sent UGX 500 to IBRAHIM NANKOOLA, 256765528401 on ... ID :43152579067 ...`),
+plus `ID :` with a SPACE BEFORE THE COLON, and `fee: 100` / `New balance: 1204658`
+carrying no `UGX` prefix at all. Parsed correctly with no change.
+
+**GROUND TRUTH COMPLETE — all 8 formats are real captured messages, none assumed:**
+
+| payer -> admin | incoming (forwarder, auto-credits) | outgoing (member pastes) |
+|---|---|---|
+| Airtel -> Airtel | real | real |
+| Airtel -> MTN | real | real |
+| MTN -> Airtel | real | real |
+| MTN -> MTN | real | real |
+
+Every one is a distinct layout. Across the eight, the amount, the transaction id and the
+counterparty number each move position, change delimiter, gain or lose the `UGX` prefix,
+and swap order with the counterparty NAME. The single design decision that makes one
+pair of parsers cover all eight is that `_smsAmount`/`_smsTxId`/`_smsCounterparty` SCAN
+for their field instead of assuming a position. **Do not "simplify" any of them into a
+positional match** -- each one would break at least two of the eight.
+
+Also worth recording: **three separate real messages contain a transaction id that is
+itself a 9-13 digit run sitting in the same tail as the counterparty number**, i.e. a
+genuine competing candidate for "the payer's phone number". The `cleanPhone()`-based
+preference for a Ugandan mobile (`+2567...`) is the only thing stopping a transaction id
+being reported as somebody's phone number. That preference is load-bearing, not a nicety.
 
 **Verified**: `node --check` on `server.js` and `original_module.js`; the 60-check parser
 suite; Round 88's 22-check money-safety suite re-run green (matching/assignment logic

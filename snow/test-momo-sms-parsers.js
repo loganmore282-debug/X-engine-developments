@@ -126,6 +126,18 @@ const SENT = [
     // number, so it is a genuine candidate until cleanPhone() rejects it.
     sms: "Y'ello. You have sent UGX 5,000 to 256731880221, IBRAHIMNANKOOLA. Fee:UGX 100.00.  Transaction ID:43151281521. Your Mobile Money balance is now UGX 1,203,257.5.Thank you for using MTN Mobile Money.",
     amount: 5000, txId: '43151281521', recipient: '256731880221' },
+  { name: 'MTN to MTN, real same-network',
+    // Like Airtel, MTN also phrases its outgoing message differently by
+    // destination -- and flips the opposite way: cross-network puts the
+    // NUMBER before the name, same-network puts the NAME first. Also
+    // "ID :43152579067" with a SPACE BEFORE the colon (handled by [:\s#]+),
+    // "fee: 100" and "New balance: 1204658" carrying no UGX prefix at all,
+    // and a free-text "Reason: y".
+    //
+    // Third case where the id is a long digit run competing with the real
+    // number; cleanPhone() is what keeps it from winning.
+    sms: 'You have sent UGX 500 to IBRAHIM NANKOOLA, 256765528401 on 2026-08-31 07:55:47, fee: 100. Reason: y. New balance: 1204658. ID :43152579067. Download MoMo App http://bit.ly/3KGlEJJ to get 500MBs.',
+    amount: 500, txId: '43152579067', recipient: '256765528401' },
   { name: 'SYNTHETIC: recipient name ends in TO',
     // Not a real captured message -- a deliberate edge case guarding the
     // word-boundary fix, so KIZITO is never read as the "to" keyword.
