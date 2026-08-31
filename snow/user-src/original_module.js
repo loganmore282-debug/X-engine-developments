@@ -1440,7 +1440,34 @@ var _openSheetTitle = null;
 function isAnyOverlayOpen(){
   return !!(_openSheetTitle
     || ($('chestModalBg') && $('chestModalBg').classList.contains('show'))
-    || ($('confirmBg') && $('confirmBg').classList.contains('show')));
+    || ($('confirmBg') && $('confirmBg').classList.contains('show'))
+    // The recharge result modal (Round 82) came after this guard was first
+    // written and was never added to it -- it is exactly the kind of thing
+    // the announcement must never land on top of, since it carries the
+    // outcome of a payment the member is waiting on.
+    || ($('depStatusBg') && $('depStatusBg').classList.contains('show')));
+}
+
+// Owner: "make when the announcement dialog message appears when one is from
+// deposit page, and from withdrawal page back to home."
+//
+// showPage('home') is the only thing that fires the announcement, and
+// Recharge/Withdraw are OVERLAYS, not page navigations -- STATE.page stays
+// 'home' the whole time one is open, so closing one never went through
+// showPage() and never re-announced. Closing these specific sheets now does.
+//
+// Deliberately scoped to the recharge/withdrawal flow rather than every
+// sheet: firing it after Records, About, Help Centre or Daily Check-in would
+// put the dialog in front of the member several times a session for no
+// reason. Withdrawal Accounts is included because it is part of the same
+// flow (Withdraw's own empty state opens it), and the STATE.page check below
+// means it stays silent when it was reached from the Account tab instead.
+var ANNOUNCE_AFTER_SHEETS = ['Recharge', 'Complete Payment', 'Withdraw', 'Withdrawal Accounts'];
+function maybeAnnounceAfterSheet(closedTitle){
+  if (!closedTitle || ANNOUNCE_AFTER_SHEETS.indexOf(closedTitle) === -1) return;
+  if (STATE.page !== 'home') return;      // closed back to Account, not Home
+  if (isAnyOverlayOpen()) return;         // something else is already in front
+  maybeShowAnnouncement();
 }
 function openSheet(title, bodyHtml){
   $('sheetTitle').textContent = title;
@@ -1462,18 +1489,32 @@ function openSheet(title, bodyHtml){
   else history.pushState({ sheet: title }, '', '');
   lockBodyScroll();
 }
-window.closeSheet = function(){
+// opts.fromAction marks a close the CODE performed after something the
+// member just did (a submitted withdrawal, a recharge handing over to the
+// result modal) rather than the member navigating back. Those must not
+// announce: the dialog would land on top of the confirmation toast or the
+// recharge result the member is actually waiting to read. The back button in
+// index.html calls closeSheet() with no arguments, so a real back-tap is
+// always treated as navigation.
+window.closeSheet = function(opts){
+  const closed = _openSheetTitle;
   $('sheetBg').classList.remove('show');
   unlockBodyScroll();
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
   if (history.state && history.state.sheet) history.back();
+  if (!(opts && opts.fromAction)) maybeAnnounceAfterSheet(closed);
 };
 window.addEventListener('popstate', () => {
+  // The phone's own Back button, which never goes through closeSheet(). When
+  // closeSheet() ran first its own history.back() lands here too, but it has
+  // already cleared the title, so this can't announce a second time.
+  const closed = _openSheetTitle;
   $('sheetBg').classList.remove('show');
   unlockBodyScroll();
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
+  maybeAnnounceAfterSheet(closed);
 });
 
 window.openInfoSheet = function(kind){
@@ -1633,7 +1674,7 @@ window.submitCheckin = async function(){
   // without this, Records' Income tab could sit stale for a reload or two
   // (owner: "some records are created or reflect after reloading").
   await refreshTransactionsCache();
-  closeSheet();
+  closeSheet({ fromAction: true });
   if (STATE.page === 'home') renderHome();
 };
 
@@ -1935,9 +1976,9 @@ async function pollManualDepositStatus(depositId){
     if (_openSheetTitle !== 'Complete Payment') return;
     const r = await post('/deposit/manual/status', { depositId });
     if (r.status !== 'success') continue;
-    if (r.state === 'matched') { closeSheet(); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
-    if (r.state === 'failed') { closeSheet(); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return; }
-    if (r.state === 'review') { closeSheet(); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return; }
+    if (r.state === 'matched') { closeSheet({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
+    if (r.state === 'failed') { closeSheet({ fromAction: true }); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return; }
+    if (r.state === 'review') { closeSheet({ fromAction: true }); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return; }
   }
 }
 window.pickDepositAmount = function(amt){
@@ -2010,7 +2051,7 @@ window.submitDeposit = async function(){
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
   await refreshTransactionsCache();
-  closeSheet();
+  closeSheet({ fromAction: true });
   openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
 };
@@ -2109,7 +2150,7 @@ window.submitWithdraw = async function(){
   if (r.status !== 'success') return toast(r.message || 'Could not request withdrawal', true);
   toast(r.message || 'Cash-out requested');
   await refreshTransactionsCache();
-  closeSheet();
+  closeSheet({ fromAction: true });
   if (STATE.page==='home') renderHome();
 };
 

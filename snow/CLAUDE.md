@@ -5682,6 +5682,60 @@ None has been exercised on a handset.
 **Owner-side, not mine**: set `FORWARDER_PASSWORD` on Render (Key and Value in separate
 boxes) — leaving it unset keeps the lock switched off — then install v1.5 on each phone.
 
+## Round 93 (2026-08-31) — announcement dialog now also fires on returning to Home from Recharge or Withdraw
+
+Owner: *"make when the announcement dialog message appears when one is from deposit
+page, and from withdrawal page back to home."*
+
+**Why it wasn't already happening.** `showPage('home')` is the only thing that fires
+`maybeShowAnnouncement()` (Rounds 62/63), but Recharge and Withdraw are **overlays, not
+page navigations** — `STATE.page` stays `'home'` the entire time one is open, so closing
+one never went through `showPage()` and never re-announced. Nothing was broken; the hook
+simply never existed for this path.
+
+`closeSheet()` and the `popstate` handler now capture the closing sheet's title and call
+a new `maybeAnnounceAfterSheet(title)`, gated three ways: the title must be in
+`ANNOUNCE_AFTER_SHEETS` (`Recharge`, `Complete Payment`, `Withdraw`, `Withdrawal
+Accounts`), `STATE.page` must be `'home'`, and `isAnyOverlayOpen()` must be false.
+
+**Deliberately scoped to the recharge/withdrawal flow**, not every sheet — firing it
+after Records, About, Help Centre or Daily Check-in would put the dialog in front of the
+member several times a session for no reason. `Withdrawal Accounts` is included because
+Withdraw's own empty state opens it, and the `STATE.page` check keeps it silent when that
+screen was reached from the Account tab instead (verified).
+
+**A close the code performs is not the member navigating back.** `closeSheet()` gained an
+optional `{ fromAction: true }`, passed at the six programmatic call sites (submitWithdraw,
+submitDeposit, the three deposit-poll outcomes, check-in). Without it the announcement
+would land on top of the "Cash-out requested" toast, or on top of the recharge result
+modal the member is actually waiting to read — the same "shows up while you are in
+another area" complaint Round 62 fixed, reintroduced through a new door. The back button
+in `index.html` calls `closeSheet()` with no arguments, so a real back-tap is always
+treated as navigation.
+
+**Pre-existing gap closed while here**: `isAnyOverlayOpen()` (written in Round 62) never
+knew about `#depStatusBg`, the recharge result modal added later in Round 82 — so the
+guard it exists to provide had a hole in it regardless of this round's change. Added.
+
+**Double-fire avoided by construction**: `closeSheet()` ends with `history.back()`, which
+lands in the `popstate` handler too — but the title is already cleared by then, so the
+second pass matches nothing.
+
+**Verified**: `node --check` clean, `build-core.js` clean round-trip, `git diff --check`
+clean. Playwright against the real built (obfuscated) `user/index.html`, 14 checks, 0 page
+errors: the announcement shows after closing Recharge with the real on-screen back button
+and after closing Withdraw; it shows when the **phone Back button** closes Recharge
+(the `popstate` path, not `closeSheet`); it does NOT show while a sheet is still open;
+closing Records does NOT announce; a successful withdrawal does NOT announce (its own
+toast is what the member sees); closing Withdrawal Accounts back to the Account tab does
+NOT announce; and Round 63's own behaviour still holds (tabbing Products → Home still
+announces). One test-harness detour worth noting: three failures during this pass were my
+Firebase ESM stub missing exports the app imports (`createUserWithEmailAndPassword`,
+`getApps`), not app bugs — widened the stub rather than leaving an unexplained red.
+
+Cache bumped `v66`→`v67`. `user-src/`-only change — no Render redeploy needed for the
+backend.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
