@@ -49,6 +49,14 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+      # A brace count cannot see a method that is called but no longer
+      # defined -- an edit that deletes one leaves the file balanced. That
+      # exact mistake failed the v1.8 build 30 seconds in, as a Gradle stack
+      # trace. This says which name is missing, in about a second.
+      - name: Check Java symbols
+        working-directory: snow/sms-forwarder-app
+        run: python3 check-java-symbols.py
+
       - name: Build debug APK
         working-directory: snow/sms-forwarder-app
         run: gradle assembleDebug --no-daemon --stacktrace

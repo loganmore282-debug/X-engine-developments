@@ -6039,6 +6039,25 @@ number space gets throttled.
 No admin-panel or user-app change this round, so no cache bumps. **`server.js` changed --
 Render should auto-deploy this push.** App v1.8 lands in the `snow-sms-app` release.
 
+**The first v1.8 build FAILED, and the cause is worth keeping.** Removing the old list
+code was done by slicing the file between two anchors, and the second slice reached
+further than intended -- it swallowed `detectSimNumbers()` and `detectCarriers()`, which
+happened to sit between them. **The brace/paren check still passed**, because deleting a
+whole method leaves a file perfectly balanced, so nothing local caught it; it surfaced 30
+seconds into CI as a Gradle stack trace whose actual message ("cannot find symbol",
+2 errors) was buried under 150 lines of Gradle internals. Both methods were restored from
+the previous commit rather than retyped.
+
+Added `snow/sms-forwarder-app/check-java-symbols.py` and a CI step ahead of the Gradle
+build: it flags any bare `name(...)` call with no matching definition in the same file,
+allowlisting inherited Activity/Context methods and interface declarations. Runs in about
+a second and names the missing symbol. **The checker had a bug of its own on the first
+run** -- it stripped `//` comments before string literals, so a string containing
+`https://...` lost its closing quote and every quote pair after it misaligned, producing
+three phantom findings. Strings must be stripped first; that ordering is now commented in
+the file. Lesson for edits to this app: prefer anchored replacements over index slicing,
+and never treat a balanced brace count as evidence that a file still compiles.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

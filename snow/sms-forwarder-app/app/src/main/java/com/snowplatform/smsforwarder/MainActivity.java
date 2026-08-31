@@ -505,6 +505,56 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * Each SIM's own number, per slot, when the phone will tell us.
+     *
+     * Many Ugandan SIMs simply do not carry it -- getNumber() returns empty
+     * far more often than not -- so this is only ever used to PREFILL a blank
+     * field as a convenience. It is never trusted on its own and never
+     * overwrites something already typed; the check against the admin
+     * panel's saved list is what actually makes a number correct.
+     */
+    private String[] detectSimNumbers() {
+        String[] out = new String[MAX_SLOT_ROWS];
+        try {
+            if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED)
+                return out;
+            SubscriptionManager sm = (SubscriptionManager) getSystemService(TELEPHONY_SUBSCRIPTION_SERVICE);
+            if (sm == null) return out;
+            List<SubscriptionInfo> list = sm.getActiveSubscriptionInfoList();
+            if (list == null) return out;
+            for (SubscriptionInfo si : list) {
+                int slot = si.getSimSlotIndex();
+                if (slot < 0 || slot >= out.length) continue;
+                String num = null;
+                try { num = si.getNumber(); } catch (Exception ignored) {}
+                if (num != null && !num.trim().isEmpty()) out[slot] = num.trim();
+            }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
+    /** Carrier name per slot index, or nulls when unreadable (permission not yet granted). */
+    private String[] detectCarriers() {
+        String[] out = new String[MAX_SLOT_ROWS];
+        try {
+            if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED)
+                return out;
+            SubscriptionManager sm = (SubscriptionManager) getSystemService(TELEPHONY_SUBSCRIPTION_SERVICE);
+            if (sm == null) return out;
+            List<SubscriptionInfo> list = sm.getActiveSubscriptionInfoList();
+            if (list == null) return out;
+            for (SubscriptionInfo si : list) {
+                int slot = si.getSimSlotIndex();
+                if (slot >= 0 && slot < out.length) {
+                    CharSequence name = si.getCarrierName();
+                    out[slot] = (name == null || name.length() == 0) ? "SIM present" : name.toString();
+                }
+            }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
     private void saveSettings() {
         prefs.save(urlField.getText().toString(), secretField.getText().toString());
         JSONObject numbers = new JSONObject();
