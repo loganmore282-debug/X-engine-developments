@@ -105,6 +105,15 @@ const SENT = [
     // after the real amount.
     sms: 'SENT UGX 500 to MANGALITA NAMUGABWE on 256769968158. Fee UGX 100.0 Bal UGX 3,149. TID 155265255805.',
     amount: 500, txId: '155265255805', recipient: '256769968158' },
+  { name: 'Airtel to Airtel, real same-network',
+    // Proof that an operator does NOT write the same outgoing text
+    // regardless of destination. Compare with the Airtel cross-network
+    // message above: there the TID trails at the end and the number follows
+    // "on"; here the TID leads (run straight into the word as "SENT.TID"),
+    // there is no "on", the number follows the name after a double space,
+    // and a Date field is appended.
+    sms: 'SENT.TID 155269048165. UGX 500 to ABU MAGUMBA  0742730382. Fee UGX 100. Bal UGX 2,549. Date 31-August-2026 07:44.',
+    amount: 500, txId: '155269048165', recipient: '0742730382' },
   { name: 'MTN to Airtel, real cross-network',
     // Real MTN outgoing. Note it puts the NUMBER BEFORE the name -- the
     // opposite of Airtel's outgoing above, and the opposite of what was

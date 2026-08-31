@@ -5549,12 +5549,22 @@ mistakes it for a captured format. This is also the second independent case just
 the Ugandan-mobile preference: the transaction id is an 11-digit run in the same tail as
 the recipient number.
 
+**An operator does NOT write the same outgoing text regardless of destination.** The
+owner then supplied the real Airtel same-network sent message
+(`SENT.TID 155269048165. UGX 500 to ABU MAGUMBA  0742730382. Fee UGX 100. Bal UGX 2,549.
+Date 31-August-2026 07:44.`) and it differs materially from Airtel's own CROSS-network
+sent message: the TID leads here (run straight into the word as `SENT.TID`) instead of
+trailing at the end, there is no `on` before the number, the number follows the name
+after a DOUBLE space, and a `Date` field is appended. Parsed correctly with no change.
+This kills the reasonable-sounding assumption recorded a moment earlier -- that a
+sender's own operator phrases things identically whichever network it goes to -- so
+**never extrapolate one direction's format from another; get the real message.**
+
 **Ground-truth coverage, so future sessions know what is verified vs assumed.** All four
 INCOMING directions (the forwarder path, which is what actually credits wallets) are
-confirmed against real messages. On the OUTGOING side (the paste-SMS fallback), both
-cross-network directions are real; the two same-network sent formats have not been
-captured yet, though MTN's outgoing text does not reference the destination network at
-all, so they are likely identical. Do not invent examples for them -- ask the owner.
+confirmed against real messages. On the OUTGOING side (the paste-SMS fallback), three of
+four are real: Airtel->MTN, MTN->Airtel and Airtel->Airtel. **Only MTN->MTN same-network
+remains uncaptured** -- do not invent an example for it, ask the owner.
 
 **Verified**: `node --check` on `server.js` and `original_module.js`; the 60-check parser
 suite; Round 88's 22-check money-safety suite re-run green (matching/assignment logic
