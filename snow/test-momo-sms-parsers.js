@@ -61,6 +61,19 @@ const RECEIVED = [
     // Anything that assumes the number sits near "from" breaks here.
     sms: 'You have received UGX 500 from Airtel Money on 2026-08-31 01:10:24. fee:0. Reason: IBRAHIM NANKOOLA , 0731880221. New balance: UGX 1205258. ID: 43151361165. Dial *165# or use the MoMo app to pay, borrow, invest and more.',
     amount: 500, txId: '43151361165', sender: '0731880221' },
+  { name: 'Airtel received, CROSS-NETWORK from an MTN payer',
+    // Fourth and final direction. Different again from the same-network
+    // Airtel format above: no "." after RECEIVED, TID at the END with a
+    // colon ("TID:155264867827") rather than spaced at the start, "Balance"
+    // spelled out instead of "Bal", no space after the comma, and a
+    // free-text note ("testcomv") the payer typed.
+    //
+    // Also the case that justifies preferring a Ugandan-looking mobile among
+    // candidates: that TID is itself a 12-digit run sitting in the same tail
+    // as the payer's number, so it is a genuine candidate. cleanPhone()
+    // rejects it, so it can never be mistaken for the payer.
+    sms: 'RECEIVED UGX 5,000 from 256769968158,MANGALITA NAMUGABWE,testcomv. Balance UGX 5,549. TID:155264867827.',
+    amount: 5000, txId: '155264867827', sender: '256769968158' },
   { name: 'cross-network with a long numeric Reason before the payer number',
     // Guards the (?<!\d)...(?!\d) boundary: MTN puts a 19-digit value in
     // Reason on same-network transfers, and without the boundary a 13-digit

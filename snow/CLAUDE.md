@@ -5515,7 +5515,28 @@ boundaries, plus a preference for the candidate that looks like a Ugandan mobile
 checks). **Standing note: `from` is not reliably the payer on cross-network MTN
 receives -- never tighten `_smsCounterparty()` back to a position-based match.**
 
-**Verified**: `node --check` on `server.js` and `original_module.js`; the 55-check parser
+**All four network directions now confirmed against real messages.** The owner then sent
+the last one, an MTN payer to an Airtel admin number:
+`RECEIVED UGX 5,000 from 256769968158,MANGALITA NAMUGABWE,testcomv. Balance UGX 5,549.
+TID:155264867827.` Different again from same-network Airtel: no "." after RECEIVED, TID
+at the END with a colon rather than spaced at the start, "Balance" spelled out instead of
+"Bal", no space after the comma, and a free-text note the payer typed ("testcomv").
+Parsed correctly with no further change. Notably it independently justifies the
+Ugandan-mobile preference added minutes earlier: that TID is ITSELF a 12-digit run
+sitting in the same tail as the payer's number, so it is a genuine candidate --
+`cleanPhone()` rejects it (no 256/0 prefix, not 9 digits), so it can never be mistaken
+for the payer. A naive "first long number wins" would have been one message-layout change
+away from returning a transaction id as somebody's phone number.
+
+The confirmed matrix, all in the committed test:
+| payer -> admin | opening | payer number sits | txn id |
+|---|---|---|---|
+| Airtel -> Airtel | `RECEIVED. TID x.` | right after `from` | `TID x` at start |
+| MTN -> MTN | `You have received` | after the name, `from NAME, NUM` | `ID: x` at end |
+| Airtel -> MTN | `You have received` | in `Reason:`, `from` is the OPERATOR | `ID: x` at end |
+| MTN -> Airtel | `RECEIVED` | right after `from` | `TID:x` at end |
+
+**Verified**: `node --check` on `server.js` and `original_module.js`; the 60-check parser
 suite; Round 88's 22-check money-safety suite re-run green (matching/assignment logic
 untouched); boot smoke test still fails only at Mongo-connect; `build-core.js` clean
 round-trip. User cache bumped `v65`→`v66`. **`server.js` changed — Render should
