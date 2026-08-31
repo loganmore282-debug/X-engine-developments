@@ -12,6 +12,18 @@ several Snow payment numbers from a single install** — one number per SIM
 slot — so you need fewer phones as the number pool grows. Never edit the
 root `sms-forwarder-app/` from here; it's Nexus's own live deployment.
 
+## Which messages get forwarded
+
+Mobile-money SMS arrive from exactly two sender IDs, for money in and money out alike:
+**MTNMobMoney** and **AirtelMoney**. The app forwards only those, and this is **fixed in
+code, not a setting** — there is nothing to mistype or accidentally clear on one phone.
+
+The match is deliberately loose (does the sender ID contain "mtn" or "airtel") rather
+than an exact string, because an operator can change its sender ID without warning and
+an exact match would silently forward nothing at all. Being slightly generous costs
+nothing: the server decides what is actually a deposit, so any unrelated operator
+message is simply ignored there.
+
 ## Multi-SIM: how a message gets attributed, and why it can refuse
 
 Android tells the app which SIM subscription received each SMS; the app maps
@@ -69,7 +81,6 @@ cd snow/sms-forwarder-app
      Payment numbers list (e.g. `0770000001`). The app labels each slot with the carrier
      it detects, so slot 1 might read "SIM slot 1 (MTN)" and slot 2 "SIM slot 2 (Airtel)".
      Leave a slot blank if that SIM is not a Snow payment number.
-   - **Forward SMS from**: e.g. `MTN,MTNMoMo,Airtel,AirtelMoney` — or leave blank to forward all
 4. Tap **Save settings**, then **START forwarding**
 5. Tap **Send test ping** — you should see `Test result: HTTP 200` if the server is reachable
 

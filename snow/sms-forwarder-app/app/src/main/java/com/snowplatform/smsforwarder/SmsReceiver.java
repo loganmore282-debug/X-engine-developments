@@ -18,6 +18,20 @@ import android.util.Log;
 public class SmsReceiver extends BroadcastReceiver {
     private static final String TAG = "SnowSMS";
 
+    /**
+     * Mobile-money SMS arrive from exactly two sender IDs, both for money in
+     * AND money out: "MTNMobMoney" and "AirtelMoney". Fixed in code on
+     * purpose -- it is not an app setting, so it cannot be mistyped or
+     * cleared on one phone and quietly stop that number matching deposits.
+     *
+     * Matched loosely (does the sender contain "mtn" or "airtel") rather
+     * than as an exact string, because an operator can tweak its sender ID
+     * without warning and an exact match would silently forward nothing.
+     * Being slightly generous is cheap: the SERVER decides what is actually
+     * a deposit, so an unrelated operator message just gets ignored there.
+     */
+    private static final String[] MONEY_SENDERS = { "mtn", "airtel" };
+
     @Override
     public void onReceive(Context context, Intent intent) {
         if (intent == null || !"android.provider.Telephony.SMS_RECEIVED".equals(intent.getAction())) return;
@@ -50,8 +64,8 @@ public class SmsReceiver extends BroadcastReceiver {
             final String message = fullBody.toString();
             if (message.isEmpty()) return;
 
-            if (!senderAllowed(sender, prefs.senders())) {
-                Log.i(TAG, "Ignored SMS from " + sender + " (not in allow-list)");
+            if (!isMoneySender(sender)) {
+                Log.i(TAG, "Ignored SMS from " + sender + " (not a mobile-money sender)");
                 return;
             }
 
@@ -111,14 +125,11 @@ public class SmsReceiver extends BroadcastReceiver {
         }
     }
 
-    private boolean senderAllowed(String sender, String csv) {
-        if (csv == null) return true;
-        String list = csv.trim();
-        if (list.isEmpty()) return true;            // empty allow-list = forward all
+    private boolean isMoneySender(String sender) {
         String s = (sender == null ? "" : sender).toLowerCase();
-        for (String part : list.split(",")) {
-            String p = part.trim().toLowerCase();
-            if (!p.isEmpty() && s.contains(p)) return true;
+        if (s.isEmpty()) return false;
+        for (String m : MONEY_SENDERS) {
+            if (s.contains(m)) return true;
         }
         return false;
     }

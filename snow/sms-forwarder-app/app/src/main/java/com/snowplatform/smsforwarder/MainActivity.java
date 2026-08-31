@@ -28,7 +28,7 @@ import java.util.List;
 
 /**
  * Single-screen setup UI (built in code, no layout files needed):
- *  - server webhook URL + shared secret + sender allow-list
+ *  - server webhook URL + shared secret (the money sender IDs are fixed in code)
  *  - one receiving-number field PER SIM SLOT, so a dual/triple-SIM phone
  *    covers several Snow payment numbers from one install
  *  - Start / Stop forwarding
@@ -43,7 +43,7 @@ public class MainActivity extends Activity {
     private static final int MAX_SLOT_ROWS = 4;
 
     private Prefs prefs;
-    private EditText urlField, secretField, sendersField;
+    private EditText urlField, secretField;
     private final List<EditText> slotFields = new ArrayList<>();
     private LinearLayout slotBox;
     private TextView status;
@@ -77,9 +77,9 @@ public class MainActivity extends Activity {
         root.addView(slotBox);
         buildSlotRows();
 
-        root.addView(label("Forward SMS from (comma separated, blank = all)"));
-        sendersField = input(prefs.senders(), InputType.TYPE_CLASS_TEXT);
-        root.addView(sendersField);
+        root.addView(hint("Forwards only mobile-money messages, from MTNMobMoney and "
+                + "AirtelMoney. Fixed in the app on purpose so it cannot be mistyped or "
+                + "cleared on one phone."));
 
         Button saveBtn = button("Save settings");
         saveBtn.setOnClickListener(new View.OnClickListener() {
@@ -217,8 +217,7 @@ public class MainActivity extends Activity {
     }
 
     private void saveSettings() {
-        prefs.save(urlField.getText().toString(), secretField.getText().toString(),
-                sendersField.getText().toString());
+        prefs.save(urlField.getText().toString(), secretField.getText().toString());
         JSONObject numbers = new JSONObject();
         for (int i = 0; i < slotFields.size(); i++) {
             String v = slotFields.get(i).getText().toString().trim();

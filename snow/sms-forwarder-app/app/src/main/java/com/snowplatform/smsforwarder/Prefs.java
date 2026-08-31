@@ -13,7 +13,6 @@ public final class Prefs {
     private static final String K_URL = "url";
     private static final String K_SECRET = "secret";
     private static final String K_ACTIVE = "active";
-    private static final String K_SENDERS = "senders";
     // Legacy single-number key (v1). Still read once, for migration only.
     private static final String K_RECEIVING_NUMBER = "receivingNumber";
     // v2: JSON object mapping SIM slot index -> that SIM's receiving number,
@@ -31,8 +30,6 @@ public final class Prefs {
     public String url() { return sp.getString(K_URL, ""); }
     public String secret() { return sp.getString(K_SECRET, ""); }
     public boolean active() { return sp.getBoolean(K_ACTIVE, false); }
-    // Comma-separated list of sender names/numbers to forward. Empty = forward all.
-    public String senders() { return sp.getString(K_SENDERS, "MTN,MTNMoMo,m-money,MoMo,Airtel,AirtelMoney,Airtel Money"); }
 
     /**
      * The configured receiving numbers, keyed by SIM slot index as a string.
@@ -106,10 +103,9 @@ public final class Prefs {
         return numberForSlot(simSlot);
     }
 
-    public void save(String url, String secret, String senders) {
+    public void save(String url, String secret) {
         sp.edit().putString(K_URL, url.trim())
                  .putString(K_SECRET, secret.trim())
-                 .putString(K_SENDERS, senders.trim())
                  .apply();
     }
 

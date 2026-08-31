@@ -2228,11 +2228,23 @@ function _smsCounterparty(t, keyword) {
 
 // An INCOMING "you have received" message, as it lands on an admin payment
 // phone. This is what the SMS forwarder posts.
+// Operators reword these templates without notice, so direction is decided
+// on a spread of phrasings rather than one exact sentence. Kept deliberately
+// wide: the (receivingNumber, amount) match plus the sender cross-check are
+// what actually protect the money, so a generous reading here costs nothing
+// while a narrow one silently stops matching the day a template changes.
+const RE_INCOMING = /(received|credited|credit of|deposit of|you've received)/i;
+const RE_OUTGOING = /(sent to|you have sent|you've sent|\bsent\b|withdrawn|debited|paid to|transferred|transfer of|payment of)/i;
+const RE_NOT_MONEY = /(airtime|bundle|\bdata\b|megabytes|\bMBs?\b)/i;
+
 function parseMoMoSms(text) {
   if (!text) return null;
   const t = String(text).replace(/\s+/g, ' ').trim();
-  const isReceive  = /(received|you have received|received from|deposit of)/i.test(t);
-  const isOutgoing = /(sent to|you have sent|withdrawn|paid to|airtime|bundle|data)/i.test(t);
+  // "Download MoMo App ... to get 500MBs" rides along on real MTN deposit
+  // messages, so the not-money check must not veto an otherwise valid one --
+  // it only decides between the two directions when both could read true.
+  const isReceive  = RE_INCOMING.test(t);
+  const isOutgoing = /(sent to|you have sent|you've sent|withdrawn|debited|paid to)/i.test(t);
   if (!isReceive || isOutgoing) return null;
   const amount = _smsAmount(t);
   if (!amount || isNaN(amount)) return null;
@@ -2253,9 +2265,15 @@ function parseMoMoSms(text) {
 function parseSentMoMoSms(text) {
   if (!text) return null;
   const t = String(text).replace(/\s+/g, ' ').trim();
-  const isSent = /(you have sent|\bsent\b|transferred|payment of|paid to)/i.test(t);
+  const isSent = RE_OUTGOING.test(t);
   if (!isSent) return null;
-  if (/(airtime|bundle|data\b)/i.test(t)) return null;   // not a money transfer
+  // Direction must be unambiguous. A message that reads as incoming is never
+  // treated as outgoing, so the two parsers can never both claim one message
+  // (the paste endpoint tries this one first).
+  if (RE_INCOMING.test(t)) return null;
+  // Airtime/bundle purchases are outgoing money but not deposits. Only vetoed
+  // here, where no legitimate transfer message carries these words.
+  if (RE_NOT_MONEY.test(t)) return null;
   const amount = _smsAmount(t);
   if (!amount || isNaN(amount)) return null;
   return { amount, txId: _smsTxId(t), recipient: _smsCounterparty(t, 'to'), raw: t };
@@ -2405,7 +2423,25 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
   const receivingNumberRaw = String((req.body && req.body.receivingNumber) || '').trim();
   const receivingNumber = cleanPhone(receivingNumberRaw) || receivingNumberRaw;
   const info = parseMoMoSms(text);
-  if (!info) return res.json({ status: 'ignored', reason: 'not an incoming-money SMS' });
+  if (!info) {
+    // Operators reword these templates without notice. If a message LOOKS
+    // like money (mentions a currency and carries a phone-length number) but
+    // no parser claimed it, that is the signature of a template change --
+    // and the failure mode is silent: deposits simply stop auto-crediting
+    // and nobody knows why until members complain. So record it, loudly.
+    // Grep Render logs for MANUAL_SMS_UNPARSED to find them.
+    try {
+      const looksLikeMoney = /(ugx|ush|shs?)\s*[\d,]/i.test(text) && /(?<!\d)\d{9,13}(?!\d)/.test(text);
+      if (looksLikeMoney) {
+        console.warn('MANUAL_SMS_UNPARSED (possible operator template change):', text.slice(0, 300));
+        await db.collection('manualSmsLog').add({
+          unparsed: true, raw: String(text).slice(0, 2000), receivingNumber,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      }
+    } catch (_) { /* diagnostics must never break the webhook */ }
+    return res.json({ status: 'ignored', reason: 'not an incoming-money SMS' });
+  }
   if (!receivingNumber) return res.json({ status: 'ignored', reason: 'no receivingNumber configured on this device' });
 
   try {
