@@ -26,12 +26,14 @@ public class ForwardService extends Service {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String updateBanner = null;   // non-null once a newer version exists
     private Runnable updateTick;
+    private Runnable heartbeatTick;
 
     @Override
     public void onCreate() {
         super.onCreate();
         startForeground(NOTIF_ID, buildNotification());
         startUpdateChecks();
+        startHeartbeats();
     }
 
     @Override
@@ -43,7 +45,27 @@ public class ForwardService extends Service {
     @Override
     public void onDestroy() {
         if (updateTick != null) handler.removeCallbacks(updateTick);
+        if (heartbeatTick != null) handler.removeCallbacks(heartbeatTick);
         super.onDestroy();
+    }
+
+    /**
+     * Tells the server this phone is still alive, every 15 minutes.
+     *
+     * Silence is otherwise ambiguous: a number with no SMS coming in looks
+     * identical whether it is simply idle or the phone is dead, out of
+     * credit, or has had the app killed. The admin panel marks a number
+     * healthy only while these keep arriving, so a phone that quietly stops
+     * working becomes visible instead of being mistaken for a slow day.
+     */
+    private void startHeartbeats() {
+        heartbeatTick = new Runnable() {
+            @Override public void run() {
+                Heartbeat.sendAsync(ForwardService.this);
+                handler.postDelayed(this, Heartbeat.INTERVAL_MS);
+            }
+        };
+        handler.post(heartbeatTick);
     }
 
     /**

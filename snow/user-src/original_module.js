@@ -2101,8 +2101,8 @@ function paintWithdrawSheet(s){
         <li>Enter an amount (min ${fmtUGX(s.minWithdraw)}). A ${s.withdrawFeePct||15}% fee applies.</li>
         <li>Select a saved withdrawal account.</li>
         <li>Enter your Transaction PIN and tap Request Withdrawal.</li>
-        <li>${s.depositMethod === 'manual'
-              ? 'Our team reviews the request and sends the money to your mobile-money number by hand, so allow a little time.'
+        <li>${s.payoutManual
+              ? 'We have received your withdrawal request, it will be processed as soon as possible.'
               : 'Funds are sent to your mobile-money number once processed.'}</li>
       </ol>
     </div>

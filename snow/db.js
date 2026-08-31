@@ -89,6 +89,10 @@ async function ensureIndexes() {
     // is specific to assignManualNumber()'s own collision-check query.
     ['pendingDeposits', { method: 1, assignedNumber: 1, amount: 1, status: 1 }],
     ['manualPaymentNumbers', { network: 1, active: 1, order: 1 }],
+    // Per-number activity tracking (owner: "l can track every number").
+    ['manualPaymentNumbers', { number: 1 }],
+    ['manualNumberDaily', { number: 1, day: 1 }],
+    ['manualNumberDaily', { day: 1 }],
   ];
   // ONE AT A TIME -- M0's free tier has very little real concurrency headroom.
   let failed = 0;

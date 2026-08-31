@@ -228,6 +228,14 @@ const DEFAULT_SETTINGS = {
   // today's live behavior exactly, so this ships with zero change for
   // members until the owner explicitly flips it in Settings.
   depositMethod: 'automatic',
+  // Owner, after the first version tied payouts to depositMethod: "yeah it
+  // can also work and vice versa" -- so the two directions are separable.
+  // 'follow' keeps the original behaviour (payouts do whatever deposits do,
+  // which is what most setups want and what everyone is already on);
+  // 'automatic'/'manual' pin the payout side independently, allowing manual
+  // deposits with MarzPay payouts and the reverse. Resolved by
+  // payoutIsManual() -- never read this field raw.
+  withdrawMethod: 'follow',
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
 // user-src/original_module.js (the client-side fallback-stack lookup) and
@@ -260,6 +268,16 @@ async function getSettings() {
   _settingsCacheTs = Date.now();
   return _settingsCache;
 }
+// The single place that decides whether a payout goes through MarzPay or is
+// sent by hand. Reading depositMethod or withdrawMethod directly anywhere
+// else is a bug waiting to happen -- 'follow' only means anything here.
+function payoutIsManual(sett) {
+  const w = (sett && sett.withdrawMethod) || 'follow';
+  if (w === 'manual') return true;
+  if (w === 'automatic') return false;
+  return (sett && sett.depositMethod) === 'manual';
+}
+
 let _productsCache = null, _productsCacheTs = 0;
 async function getProducts() {
   if (Date.now() - _productsCacheTs < 60 * 1000 && _productsCache) return _productsCache;
@@ -1361,7 +1379,7 @@ app.get('/public/settings', async (_req, res) => {
   try {
     const s = await getSettings();
     const { maintenanceMsg, ...rest } = s;
-    res.json({ status: 'success', settings: { ...rest, maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '' } });
+    res.json({ status: 'success', settings: { ...rest, maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '', payoutManual: payoutIsManual(s) } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/public/products', async (_req, res) => {
@@ -2173,6 +2191,80 @@ const MANUAL_DEPOSIT_WINDOW_MS = 15 * 60 * 1000; // owner: "deposit payment time
 // per-device signed requests/replay protection is real, worthwhile
 // hardening but deliberately deferred to a later round, not blocking a
 // correct, safe V1.
+// ── Per-number activity tracking ──────────────────────────────────────
+// Owner: "make sure l can track number activity in analytics ie success
+// rates, whether their Forwarder sends/forwards messages, success rates,
+// total transactions, messages forwarded, dates time and much more so that
+// l can track every number... daily number transactions, deposits received,
+// sms forwarded, health, duration of sms forwarding delivery to server."
+//
+// Two documents get touched per event, both by atomic $inc so concurrent
+// SMS from several phones can never lose a count:
+//   manualNumberDaily/<number>_<YYYY-MM-DD>  one row per number per EAT day
+//   manualPaymentNumbers/<id>                lifetime rollup + last-seen
+// Recording is always best-effort and wrapped by the caller: a stats write
+// must NEVER be able to fail a deposit. Money first, bookkeeping second.
+const MANUAL_EVENT_FIELDS = {
+  forwarded: 'smsForwarded',      // a message arrived from a phone, whatever it was
+  credited: 'credited',           // matched an order and the wallet was credited
+  unmatched: 'unmatched',         // real money SMS, no order waiting for it
+  ambiguous: 'ambiguous',         // more than one candidate, credited nothing
+  mismatch: 'mismatch',           // sender disagreed with the order, sent to review
+  duplicate: 'duplicate',         // same transaction id seen before
+  unparsed: 'unparsed',           // looked like money but no parser claimed it
+  ignored: 'ignored',             // not a money message at all
+  assigned: 'assigned',           // an order was pointed at this number
+  expired: 'expired',             // an order on this number ran out of time
+};
+async function recordManualNumberEvent(number, event, opts) {
+  if (!number) return;
+  const o = opts || {};
+  const field = MANUAL_EVENT_FIELDS[event];
+  if (!field) return;
+  const day = eatDayKey(new Date());
+  const inc = { [field]: FieldValue.increment(1) };
+  if (o.amount) inc.amount = FieldValue.increment(Number(o.amount) || 0);
+  // Latency is measured ON THE PHONE (SMS arrival -> POST), so it is immune
+  // to clock skew between a handset and the server. Kept as a sum plus a
+  // count so an average survives without storing every sample, alongside
+  // the worst case, which is what actually tells you a phone is struggling.
+  const lat = Number(o.deliveryMs);
+  if (Number.isFinite(lat) && lat >= 0 && lat < 24 * 3600000) {
+    inc.deliveryMsSum = FieldValue.increment(lat);
+    inc.deliverySamples = FieldValue.increment(1);
+  }
+  const dailyRef = db.collection('manualNumberDaily').doc(number + '_' + day);
+  await dailyRef.set({ number, day, ...inc, lastEventAt: FieldValue.serverTimestamp() }, { merge: true });
+  if (Number.isFinite(lat) && lat >= 0) {
+    const cur = await dailyRef.get();
+    const worst = cur.exists ? Number(cur.data().deliveryMsMax || 0) : 0;
+    if (lat > worst) await dailyRef.set({ deliveryMsMax: lat }, { merge: true });
+  }
+  // Lifetime rollup on the number's own record, so the list can show totals
+  // without summing every day ever recorded.
+  try {
+    const numSnap = await db.collection('manualPaymentNumbers').where('number', '==', number).limit(1).get();
+    if (!numSnap.empty) {
+      const patch = { ['total_' + field]: FieldValue.increment(1), lastEventAt: FieldValue.serverTimestamp() };
+      if (o.amount) patch.totalAmount = FieldValue.increment(Number(o.amount) || 0);
+      if (event === 'forwarded') {
+        patch.lastSmsAt = FieldValue.serverTimestamp();
+        // A phone forwarding messages but not yet heartbeating (an older
+        // build, or one just installed) would otherwise show no device at
+        // all in the panel, even though every message it sends carries one.
+        if (o.device) patch.device = o.device;
+        if (o.appVersion) patch.appVersion = o.appVersion;
+      }
+      await numSnap.docs[0].ref.set(patch, { merge: true });
+    }
+  } catch (_) { /* rollup is a convenience, the daily row is the record */ }
+}
+// Never let bookkeeping break a payment path.
+function trackManual(number, event, opts) {
+  recordManualNumberEvent(number, event, opts).catch(e =>
+    console.warn('Manual number stats (non-critical):', e.message));
+}
+
 const MANUAL_SMS_SECRET = process.env.MANUAL_SMS_SECRET || '';
 function manualSmsConfigured() { return MANUAL_SMS_SECRET.length >= 16; }
 
@@ -2370,6 +2462,7 @@ app.post('/deposit/manual/init', async (req, res) => {
       method: 'manual', assignedNumberId: assigned.id, assignedNumber: assigned.number, holderName: assigned.holderName,
       expiresAt, date, time, createdAt: FieldValue.serverTimestamp()
     });
+    trackManual(assigned.number, 'assigned', { amount: amt });
     // Same "recorded immediately, not eventually" reasoning as
     // /deposit/marzpay's own ledger-row-up-front comment.
     await db.collection('transactions').add({
@@ -2478,6 +2571,13 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
   const text = String((req.body && (req.body.message || req.body.text)) || '');
   const receivingNumberRaw = String((req.body && req.body.receivingNumber) || '').trim();
   const receivingNumber = cleanPhone(receivingNumberRaw) || receivingNumberRaw;
+  // How long the phone took between the SMS landing and this POST going out,
+  // measured by the phone against its own clock so it can't be poisoned by
+  // clock skew. Older app builds don't send it; that just means no sample.
+  const deliveryMs = Number((req.body && req.body.forwardDelayMs));
+  const device = String((req.body && req.body.device) || '').slice(0, 60);
+  const appVersion = String((req.body && req.body.appVersion) || '').slice(0, 20);
+  if (receivingNumber) trackManual(receivingNumber, 'forwarded', { deliveryMs, device, appVersion });
   const info = parseMoMoSms(text);
   if (!info) {
     // Operators reword these templates without notice. If a message LOOKS
@@ -2492,10 +2592,13 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
         console.warn('MANUAL_SMS_UNPARSED (possible operator template change):', text.slice(0, 300));
         await db.collection('manualSmsLog').add({
           unparsed: true, raw: String(text).slice(0, 2000), receivingNumber,
+          device, appVersion, deliveryMs: Number.isFinite(deliveryMs) ? deliveryMs : null,
           createdAt: FieldValue.serverTimestamp()
         });
+        trackManual(receivingNumber, 'unparsed');
       }
     } catch (_) { /* diagnostics must never break the webhook */ }
+    trackManual(receivingNumber, 'ignored');
     return res.json({ status: 'ignored', reason: 'not an incoming-money SMS' });
   }
   if (!receivingNumber) return res.json({ status: 'ignored', reason: 'no receivingNumber configured on this device' });
@@ -2505,8 +2608,15 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
     // number) as a fallback for a message with no extractable TID.
     const tid = info.txId || crypto.createHash('sha256').update(info.raw + '|' + receivingNumber).digest('hex').slice(0, 24);
     const seenRef = db.collection('manualSmsLog').doc(tid);
-    if ((await seenRef.get()).exists) return res.json({ status: 'duplicate' });
-    await seenRef.set({ amount: info.amount, sender: info.sender || '', receivingNumber, raw: info.raw, createdAt: FieldValue.serverTimestamp() });
+    if ((await seenRef.get()).exists) {
+      trackManual(receivingNumber, 'duplicate');
+      return res.json({ status: 'duplicate' });
+    }
+    await seenRef.set({
+      amount: info.amount, sender: info.sender || '', receivingNumber, raw: info.raw,
+      device, appVersion, deliveryMs: Number.isFinite(deliveryMs) ? deliveryMs : null,
+      createdAt: FieldValue.serverTimestamp()
+    });
 
     const now = Date.now();
     const snap = await db.collection('pendingDeposits')
@@ -2517,6 +2627,7 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
     if (!candidates.length) {
       await seenRef.update({ matched: false }).catch(() => {});
       console.warn(`Manual deposit SMS unmatched: ${fmtUGX(info.amount)} to ${receivingNumber}`);
+      trackManual(receivingNumber, 'unmatched', { amount: info.amount });
       return res.json({ status: 'unmatched', amount: info.amount });
     }
     if (candidates.length > 1) {
@@ -2527,6 +2638,7 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
       await Promise.all(candidates.map(d => d.ref.update({ status: 'review', reviewReason: 'Multiple pending orders matched this SMS (same number + amount)' }).catch(() => {})));
       await seenRef.update({ matched: false, ambiguous: true }).catch(() => {});
       console.warn(`Manual deposit SMS AMBIGUOUS: ${fmtUGX(info.amount)} to ${receivingNumber} -- ${candidates.length} candidates flagged for review`);
+      trackManual(receivingNumber, 'ambiguous', { amount: info.amount });
       return res.json({ status: 'ambiguous', amount: info.amount });
     }
     const match = candidates[0];
@@ -2542,11 +2654,13 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
     if (smsSenderClean && orderSenderClean && smsSenderClean !== orderSenderClean) {
       await match.ref.update({ status: 'review', reviewReason: `Sender number mismatch: SMS said ${info.sender}, order was placed with ${md.senderPhone}` }).catch(() => {});
       await seenRef.update({ matched: false, mismatch: true }).catch(() => {});
+      trackManual(receivingNumber, 'mismatch', { amount: info.amount });
       return res.json({ status: 'mismatch', amount: info.amount });
     }
     await match.ref.update({ matchedSmsId: tid, smsTxId: info.txId || '', smsSender: info.sender || '' }).catch(() => {});
     await creditDeposit(match);
     await seenRef.update({ matched: true, matchedOrderId: match.id }).catch(() => {});
+    trackManual(receivingNumber, 'credited', { amount: info.amount });
     return res.json({ status: 'credited', depositId: match.id });
   } catch (e) {
     console.error('Manual deposit SMS error:', e.message);
@@ -2627,10 +2741,162 @@ async function reconcileManualDeposits() {
       const d = doc.data();
       if ((d.expiresAt || 0) <= now) {
         await markDepositFailed(doc.ref, d.userId, 'Payment window expired.').catch(e => console.error('Manual deposit expiry error:', e.message));
+        trackManual(d.assignedNumber, 'expired', { amount: d.amount });
       }
     }
   } catch (e) { console.error('Reconcile manual deposits error:', e.message); }
 }
+
+// Forwarder heartbeat. Without this, a phone that has simply stopped
+// working is indistinguishable from a quiet one -- no SMS arriving looks
+// exactly the same whether the number is idle or the app was killed, the
+// SIM removed, or the phone left on a dead battery. Every install checks in
+// on a timer, so "healthy" is something the panel can actually assert
+// rather than infer from silence.
+app.post('/deposit/manual/forwarder-heartbeat', async (req, res) => {
+  if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
+  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
+  const expected = MANUAL_SMS_SECRET;
+  const ok = provided.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  if (!ok) return res.status(403).json({ status: 'error', message: 'Forbidden' });
+  try {
+    const raw = (req.body && req.body.numbers) || [];
+    const numbers = (Array.isArray(raw) ? raw : [raw])
+      .map(n => cleanPhone(String(n || '').trim()) || String(n || '').trim())
+      .filter(Boolean).slice(0, 10);
+    const patch = {
+      lastHeartbeatAt: FieldValue.serverTimestamp(),
+      device: String((req.body && req.body.device) || '').slice(0, 60),
+      appVersion: String((req.body && req.body.appVersion) || '').slice(0, 20),
+      forwardingActive: !!(req.body && req.body.forwarding),
+    };
+    const bat = Number(req.body && req.body.battery);
+    if (Number.isFinite(bat) && bat >= 0 && bat <= 100) patch.battery = Math.round(bat);
+    let updated = 0;
+    for (const num of numbers) {
+      const snap = await db.collection('manualPaymentNumbers').where('number', '==', num).limit(1).get();
+      if (!snap.empty) { await snap.docs[0].ref.set(patch, { merge: true }); updated++; }
+    }
+    res.json({ status: 'success', matched: updated, seen: numbers.length });
+  } catch (e) {
+    console.error('Forwarder heartbeat error:', e.message);
+    res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// A phone is called healthy only while it is actively checking in. The
+// thresholds are generous on purpose: the app heartbeats every 15 minutes,
+// so one missed check-in is normal (a tunnel, a flaky tower) and should not
+// raise an alarm, while several hours of silence genuinely means somebody
+// needs to go and look at that handset.
+const MANUAL_HEALTH_OK_MS = 45 * 60 * 1000;
+const MANUAL_HEALTH_WARN_MS = 3 * 60 * 60 * 1000;
+function manualNumberHealth(lastHeartbeatMs, lastSmsMs) {
+  const seen = Math.max(Number(lastHeartbeatMs) || 0, Number(lastSmsMs) || 0);
+  if (!seen) return { state: 'unknown', label: 'Never checked in', lastSeenAt: null };
+  const age = Date.now() - seen;
+  if (age <= MANUAL_HEALTH_OK_MS) return { state: 'healthy', label: 'Online', lastSeenAt: seen };
+  if (age <= MANUAL_HEALTH_WARN_MS) return { state: 'stale', label: 'Not checked in recently', lastSeenAt: seen };
+  return { state: 'offline', label: 'Offline', lastSeenAt: seen };
+}
+
+// Everything the owner asked to be able to see per number: how many messages
+// each phone forwarded, how many became real deposits, the success rate,
+// how long forwarding actually takes, whether the phone is alive, and the
+// same broken out day by day.
+app.post('/admin/manual-numbers/analytics', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const days = Math.min(90, Math.max(1, parseInt(req.body && req.body.days, 10) || 14));
+    const cutoffDay = eatDayKey(new Date(Date.now() - (days - 1) * 86400000));
+    const [numsSnap, dailySnap] = await Promise.all([
+      db.collection('manualPaymentNumbers').orderBy('network', 'asc').orderBy('order', 'asc').get(),
+      db.collection('manualNumberDaily').where('day', '>=', cutoffDay).limit(20000).get(),
+    ]);
+
+    const byNumber = new Map();
+    dailySnap.forEach(d => {
+      const row = d.data();
+      if (!byNumber.has(row.number)) byNumber.set(row.number, []);
+      byNumber.get(row.number).push(row);
+    });
+
+    const blank = () => ({
+      smsForwarded: 0, credited: 0, unmatched: 0, ambiguous: 0, mismatch: 0,
+      duplicate: 0, unparsed: 0, ignored: 0, assigned: 0, expired: 0,
+      amount: 0, deliveryMsSum: 0, deliverySamples: 0, deliveryMsMax: 0,
+    });
+    const sumInto = (acc, row) => {
+      for (const k of Object.keys(acc)) {
+        if (k === 'deliveryMsMax') acc[k] = Math.max(acc[k], Number(row[k]) || 0);
+        else acc[k] += Number(row[k]) || 0;
+      }
+      return acc;
+    };
+
+    const numbers = numsSnap.docs.map(doc => {
+      const n = doc.data();
+      const rows = (byNumber.get(n.number) || []).slice().sort((a, b) => (a.day < b.day ? -1 : 1));
+      const totals = rows.reduce((acc, r) => sumInto(acc, r), blank());
+      // Success rate is measured against messages that were REAL money
+      // arriving, not against every text the phone forwarded -- an operator
+      // advert or a duplicate is not a failure of this number, and counting
+      // it as one would make a perfectly healthy phone look broken.
+      const realMoney = totals.credited + totals.unmatched + totals.ambiguous + totals.mismatch;
+      const health = manualNumberHealth(tsMillis(n.lastHeartbeatAt), tsMillis(n.lastSmsAt));
+      return {
+        id: doc.id, number: n.number, holderName: n.holderName || '', network: n.network || '',
+        active: n.active !== false,
+        health: health.state, healthLabel: health.label, lastSeenAt: health.lastSeenAt,
+        lastHeartbeatAt: tsMillis(n.lastHeartbeatAt) || null,
+        lastSmsAt: tsMillis(n.lastSmsAt) || null,
+        device: n.device || '', appVersion: n.appVersion || '',
+        forwardingActive: n.forwardingActive === true,
+        battery: Number.isFinite(Number(n.battery)) ? Number(n.battery) : null,
+        ...totals,
+        realMoneySms: realMoney,
+        successRate: realMoney ? Math.round((totals.credited / realMoney) * 1000) / 10 : null,
+        // How much of what this number was ASKED to collect actually landed.
+        fillRate: totals.assigned ? Math.round((totals.credited / totals.assigned) * 1000) / 10 : null,
+        avgDeliveryMs: totals.deliverySamples ? Math.round(totals.deliveryMsSum / totals.deliverySamples) : null,
+        maxDeliveryMs: totals.deliveryMsMax || null,
+        daily: rows.map(r => ({
+          day: r.day,
+          smsForwarded: Number(r.smsForwarded) || 0,
+          credited: Number(r.credited) || 0,
+          unmatched: Number(r.unmatched) || 0,
+          ambiguous: Number(r.ambiguous) || 0,
+          mismatch: Number(r.mismatch) || 0,
+          duplicate: Number(r.duplicate) || 0,
+          unparsed: Number(r.unparsed) || 0,
+          assigned: Number(r.assigned) || 0,
+          expired: Number(r.expired) || 0,
+          amount: Number(r.amount) || 0,
+          avgDeliveryMs: Number(r.deliverySamples) ? Math.round(Number(r.deliveryMsSum) / Number(r.deliverySamples)) : null,
+          maxDeliveryMs: Number(r.deliveryMsMax) || null,
+        })),
+      };
+    });
+
+    const platform = numbers.reduce((acc, n) => sumInto(acc, n), blank());
+    const platformReal = platform.credited + platform.unmatched + platform.ambiguous + platform.mismatch;
+    res.json({
+      status: 'success', days, numbers,
+      totals: {
+        ...platform,
+        realMoneySms: platformReal,
+        successRate: platformReal ? Math.round((platform.credited / platformReal) * 1000) / 10 : null,
+        avgDeliveryMs: platform.deliverySamples ? Math.round(platform.deliveryMsSum / platform.deliverySamples) : null,
+        numbersOnline: numbers.filter(n => n.health === 'healthy').length,
+        numbersTotal: numbers.length,
+      },
+    });
+  } catch (e) {
+    console.error('Manual numbers analytics error:', e.message);
+    res.status(500).json({ status: 'error', message: e.message });
+  }
+});
 
 // ── ADMIN: manual payment numbers (5 MTN + 5 Airtel, or however many the
 // owner wants) ──
@@ -3007,7 +3273,7 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
     // is already final by the time we hear about it, with no 'processing'
     // stage to wait on and nothing for the reconcilers to poll.
     const settNow = await getSettings();
-    if (settNow.depositMethod === 'manual') {
+    if (payoutIsManual(settNow)) {
       // Atomic conditional flip, not read-then-write: this is the one place
       // a repeat call could double-count totalWithdrawn, and the status
       // check above ran outside any lock. updateIf only matches while the
@@ -3739,6 +4005,8 @@ app.post('/admin/settings/update', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });
     if ('depositMethod' in updates && !['automatic', 'manual'].includes(updates.depositMethod))
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'automatic' or 'manual'` });
+    if ('withdrawMethod' in updates && !['follow', 'automatic', 'manual'].includes(updates.withdrawMethod))
+      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'automatic' or 'manual'` });
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
     logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });
@@ -4572,7 +4840,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     // are sent by hand -- it changes what the approve button does and what
     // it must warn the admin about. Sent with the list so the tab doesn't
     // need a second round trip just to label a button.
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: sett.depositMethod === 'manual' ? 'manual' : 'automatic' });
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: payoutIsManual(sett) ? 'manual' : 'automatic' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {
@@ -5243,7 +5511,7 @@ async function autoApproveWithdrawalsTick() {
     // sent anything -- a member would see "Success" for money that never
     // left. The toggle stays where the owner set it and simply does nothing
     // while manual mode is on, rather than being silently rewritten.
-    if (sett.depositMethod === 'manual') return;
+    if (payoutIsManual(sett)) return;
     const cutoff = new Date(Date.now() - (Number(sett.autoApproveIntervalSec) || 10) * 1000);
     const snap = await db.collection('withdrawals').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {

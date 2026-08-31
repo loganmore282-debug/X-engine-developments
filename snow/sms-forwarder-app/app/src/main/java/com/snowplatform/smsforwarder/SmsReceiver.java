@@ -84,7 +84,10 @@ public class SmsReceiver extends BroadcastReceiver {
             }
 
             Log.i(TAG, "Forwarding SMS from " + sender + " received on slot " + slot);
-            Poster.post(prefs.url(), prefs.secret(), message, sender, receivingNumber, null);
+            // Stamped here, the instant the broadcast fired, so the server can
+            // be told how long forwarding actually took on this phone.
+            Poster.post(prefs.url(), prefs.secret(), message, sender, receivingNumber,
+                    System.currentTimeMillis(), null);
         } catch (Exception e) {
             Log.e(TAG, "onReceive error", e);
         }

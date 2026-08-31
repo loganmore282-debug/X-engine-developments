@@ -131,6 +131,28 @@ than leaving it blank: messages get attributed to the wrong number.
 | `FORWARDER_PASSWORD` | Optional. Access password for the forwarder app's settings screen (see above). Leave unset to switch the lock off |
 | `MARZPAY_KEY` | Base64-encoded MarzPay credentials (for the automatic deposit method + withdrawals) |
 
+## What the admin panel can see about each phone
+
+The app checks in every 15 minutes and every forwarded message carries a little
+diagnostic detail, so **Analytics → Payment number activity** can show, per number:
+
+- **Health** — Online (checked in within 45 minutes), Quiet, Offline, or Never seen.
+  This is why the heartbeat exists: without it a phone that has been killed, run out
+  of battery, or had its SIM pulled looks exactly like a number nobody sent money to.
+- **Messages forwarded**, and what became of each — credited, unmatched, ambiguous,
+  sender mismatch, duplicate, unreadable, or ignored (an advert).
+- **Success rate**, measured only against messages that were real money arriving —
+  an operator advert or a duplicate is not a failure of that number.
+- **Orders assigned and completed**, deposits credited, and the amount received.
+- **Forwarding delay** — how long the phone took between the SMS landing and the POST
+  reaching the server, average and worst. Measured on the phone against its own clock,
+  so it is not distorted by any difference between handset and server time.
+- **Device model, app version, battery level**, and whether forwarding is switched on.
+- A **day-by-day breakdown** of all of the above.
+
+Nothing here identifies a member. The heartbeat carries only the numbers this install
+already forwards for, the app version, the battery level, and whether forwarding is on.
+
 ## Updates
 
 A sideloaded APK has no app store behind it, so nothing updates on its own. The app

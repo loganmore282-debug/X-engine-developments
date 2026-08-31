@@ -599,9 +599,10 @@ async function renderAnalytics(silent){
   // Suspicious-activity data is owner-only end to end (server refuses it to
   // staff outright) -- only even requested when the session is the owner's,
   // so a staff session never sees the request in its own network tab either.
-  const [a, ab] = await Promise.all([
+  const [a, ab, mn] = await Promise.all([
     api('/admin/analytics', {}),
-    isOwner ? api('/admin/analytics/abuse', {}) : Promise.resolve(null)
+    isOwner ? api('/admin/analytics/abuse', {}) : Promise.resolve(null),
+    api('/admin/manual-numbers/analytics', { days: _numDays })
   ]);
   if(staleTab('analytics')) return;
   if(a.status!=='success'){ if(!silent) $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
@@ -625,7 +626,121 @@ async function renderAnalytics(silent){
     </div>
     <h2 class="sec">Deposits by time of day</h2>
     <div class="cards">${bandCard('morning','Morning')}${bandCard('afternoon','Afternoon')}${bandCard('evening','Evening')}${bandCard('night','Night')}</div>
+    ${numbersSection(mn)}
     ${abuseSection}`;
+  wireNumbersSection();
+}
+
+// ── PAYMENT-NUMBER ACTIVITY ──
+// Owner: "make sure l can track number activity in analytics ie success
+// rates, whether their Forwarder sends/forwards messages... total
+// transactions, messages forwarded, dates time... daily number
+// transactions, deposits received, sms forwarded, health, duration of sms
+// forwarding delivery to server."
+var _numDays = 14;
+var _numAnalytics = null;
+var _numOpen = {};        // which numbers have their day-by-day table expanded
+
+function healthPill(n){
+  const map = {
+    healthy: ['t-ok', 'Online'],
+    stale:   ['t-warn', 'Quiet'],
+    offline: ['t-bad', 'Offline'],
+    unknown: ['t-warn', 'Never seen'],
+  };
+  const [cls, label] = map[n.health] || map.unknown;
+  return `<span class="pill-tag ${cls}" title="${esc(n.healthLabel||'')}">${label}</span>`;
+}
+function ms(v){
+  if(v===null||v===undefined) return 'No data';
+  if(v < 1000) return v + ' ms';
+  if(v < 60000) return (v/1000).toFixed(1) + ' s';
+  return Math.round(v/60000) + ' min';
+}
+function pct(v){ return v===null||v===undefined ? 'No data' : v + '%'; }
+function ago(msTs){
+  if(!msTs) return 'Never';
+  const d = Date.now() - msTs;
+  if(d < 60000) return 'Just now';
+  if(d < 3600000) return Math.round(d/60000) + ' min ago';
+  if(d < 86400000) return Math.round(d/3600000) + ' h ago';
+  return Math.round(d/86400000) + ' d ago';
+}
+function numbersSection(mn){
+  if(!mn || mn.status!=='success') return '';
+  _numAnalytics = mn;
+  const t = mn.totals || {};
+  const nums = mn.numbers || [];
+  if(!nums.length) return `<h2 class="sec">Payment numbers</h2>
+    <div class="panel-card"><p class="muted" style="margin:0">No payment numbers saved yet. Add them under Settings, Manual payments.</p></div>`;
+  const dayOpts = [7,14,30,60,90].map(d=>`<option value="${d}" ${_numDays===d?'selected':''}>Last ${d} days</option>`).join('');
+  return `
+    <div class="row" style="align-items:center;margin:18px 0 8px">
+      <h2 class="sec" style="flex:1;margin:0">Payment number activity</h2>
+      <select id="numDays" style="width:auto">${dayOpts}</select>
+    </div>
+    <p class="muted" style="margin:0 0 10px">Every message each phone forwarded, what became of it, and whether the phone is still checking in. A number counts as <b>Online</b> while its forwarder has pinged in the last 45 minutes.</p>
+    <div class="cards">
+      <div class="stat"><div class="n">${t.numbersOnline||0} / ${t.numbersTotal||0}</div><div class="l">Phones online</div></div>
+      <div class="stat"><div class="n">${t.smsForwarded||0}</div><div class="l">Messages forwarded</div></div>
+      <div class="stat"><div class="n" style="color:var(--ok)">${t.credited||0}</div><div class="l">Deposits credited</div></div>
+      <div class="stat"><div class="n">${pct(t.successRate)}</div><div class="l">Success rate</div></div>
+      <div class="stat"><div class="n">${ugx(t.amount)}</div><div class="l">Received via SMS match</div></div>
+      <div class="stat"><div class="n">${ms(t.avgDeliveryMs)}</div><div class="l">Average forwarding delay</div></div>
+    </div>
+    ${nums.map(n=>numberCard(n)).join('')}`;
+}
+function numberCard(n){
+  const open = !!_numOpen[n.number];
+  // Anything that reached the server as real money but did NOT get credited
+  // is worth an admin's attention, so it is called out rather than buried.
+  const needsLook = (n.unmatched||0) + (n.ambiguous||0) + (n.mismatch||0) + (n.unparsed||0);
+  return `<div class="panel-card" style="margin-bottom:10px">
+    <div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
+      <div style="flex:1">
+        <b>${esc(n.holderName||'Unnamed')}</b> <span class="muted">${esc(n.number)}</span>
+        <div class="muted" style="font-size:11px">${esc(n.network||'')}${n.active?'':' · disabled'}${n.device?' · '+esc(n.device):''}${n.appVersion?' · app '+esc(n.appVersion):''}${n.battery!==null&&n.battery!==undefined?' · battery '+n.battery+'%':''}</div>
+      </div>
+      ${healthPill(n)}
+    </div>
+    <div class="muted" style="font-size:11px;margin-bottom:8px">
+      Last check-in ${ago(n.lastHeartbeatAt)} · last message ${ago(n.lastSmsAt)}${n.forwardingActive?'':' · forwarding is switched OFF on the phone'}
+    </div>
+    <div class="cards" style="margin-bottom:6px">
+      <div class="stat"><div class="n">${n.smsForwarded||0}</div><div class="l">Forwarded</div></div>
+      <div class="stat"><div class="n" style="color:var(--ok)">${n.credited||0}</div><div class="l">Credited</div></div>
+      <div class="stat"><div class="n">${pct(n.successRate)}</div><div class="l">Success rate</div></div>
+      <div class="stat"><div class="n">${ugx(n.amount)}</div><div class="l">Amount received</div></div>
+      <div class="stat"><div class="n">${n.assigned||0}</div><div class="l">Orders assigned</div></div>
+      <div class="stat"><div class="n">${pct(n.fillRate)}</div><div class="l">Orders completed</div></div>
+      <div class="stat"><div class="n">${ms(n.avgDeliveryMs)}</div><div class="l">Average delay</div></div>
+      <div class="stat"><div class="n">${ms(n.maxDeliveryMs)}</div><div class="l">Slowest delay</div></div>
+    </div>
+    ${needsLook?`<p class="muted" style="margin:0 0 6px">Needs a look: ${n.unmatched||0} unmatched, ${n.ambiguous||0} ambiguous, ${n.mismatch||0} sender mismatch, ${n.unparsed||0} unreadable, ${n.expired||0} orders expired, ${n.duplicate||0} duplicates.</p>`:''}
+    <button class="btn sm ghost" data-numtoggle="${esc(n.number)}">${open?'Hide daily breakdown':'Show daily breakdown'}</button>
+    ${open?dailyTable(n):''}
+  </div>`;
+}
+function dailyTable(n){
+  const rows = (n.daily||[]).slice().reverse();
+  if(!rows.length) return '<p class="muted" style="margin:10px 0 0">Nothing recorded in this period.</p>';
+  return `<div class="table-scroll" style="max-height:320px;margin-top:10px"><table>
+    <thead><tr><th>Day</th><th>Forwarded</th><th>Credited</th><th>Amount</th><th>Assigned</th><th>Expired</th><th>Unmatched</th><th>Avg delay</th></tr></thead>
+    <tbody>${rows.map(d=>`<tr>
+      <td>${dayLabel(d.day)}</td><td>${d.smsForwarded}</td>
+      <td><b>${d.credited}</b></td><td>${d.amount?ugx(d.amount):'0'}</td>
+      <td>${d.assigned}</td><td>${d.expired}</td>
+      <td>${d.unmatched + d.ambiguous + d.mismatch}</td><td>${ms(d.avgDeliveryMs)}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function wireNumbersSection(){
+  const sel = $('numDays');
+  if(sel) sel.addEventListener('change', ()=>{ _numDays = parseInt(sel.value,10)||14; renderAnalytics(); });
+  document.querySelectorAll('[data-numtoggle]').forEach(b=>b.addEventListener('click', ()=>{
+    const k = b.dataset.numtoggle;
+    _numOpen[k] = !_numOpen[k];
+    renderAnalytics(true);
+  }));
 }
 
 // ── USERS ──
@@ -1551,9 +1666,14 @@ async function renderSettings(){
     <h2 class="sec">Manual payments</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Automatic uses MarzPay -- instant, no admin numbers needed. Manual assigns each member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
-      <p class="muted" style="margin-top:0"><b>This setting covers withdrawals too.</b> On Manual, MarzPay is out of the payout path as well: you send each cash-out yourself from an admin phone and then tap <b>Mark as paid</b> on the Withdrawals tab to record it. Auto-approve is ignored while Manual is on, since nothing should be marked paid without a person actually sending the money.</p>
+      <p class="muted" style="margin-top:0"><b>By default this covers withdrawals too.</b> On Manual, MarzPay is out of the payout path as well: you send each cash-out yourself from an admin phone and then tap <b>Mark as paid</b> on the Withdrawals tab to record it. Auto-approve is ignored whenever payouts are manual, since nothing should be marked paid without a person actually sending the money. Use the Withdrawals setting below to split the two directions.</p>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="depMethod" id="depMethodAuto" value="automatic" ${v('depositMethod','automatic')==='automatic'?'checked':''} style="width:auto"> Automatic (MarzPay)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depMethod" id="depMethodManual" value="manual" ${v('depositMethod','automatic')==='manual'?'checked':''} style="width:auto"> Manual (admin numbers below)</label>
+      <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
+      <p class="muted" style="margin:0 0 8px">By default payouts follow the setting above. Pin them here if you want the two directions to differ, for example manual recharges with MarzPay payouts, or the reverse.</p>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the payment method above</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodAuto" value="automatic" ${v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
     </div>
     <div class="panel-card">
@@ -1655,8 +1775,12 @@ async function renderSettings(){
   renderManualNumbersEditor();
   $('saveDepMethod').addEventListener('click', async()=>{
     const method = document.querySelector('input[name="depMethod"]:checked').value;
-    const d = await api('/admin/settings/update', { settings: { depositMethod: method } });
-    toast(d.status==='success'?(method==='manual'?'Manual payments on: recharges and payouts are both by hand now':'Automatic payments on: MarzPay handles recharges and payouts'):(d.message||'Failed'), d.status==='success'?'ok':'err');
+    const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
+    const d = await api('/admin/settings/update', { settings: { depositMethod: method, withdrawMethod: witMethod } });
+    const payoutManual = witMethod==='manual' || (witMethod==='follow' && method==='manual');
+    toast(d.status==='success'
+      ? `Saved. Recharges: ${method==='manual'?'by hand':'MarzPay'}. Payouts: ${payoutManual?'by hand':'MarzPay'}.`
+      : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('mnAddBtn').addEventListener('click', ()=>{
     _manualNumbers.push({ id:'', network:'MTN Mobile Money', number:'', holderName:'', active:true, order:(_manualNumbers.length?Math.max(...(_manualNumbers.map(n=>n.order||0)))+1:1), _new:true });

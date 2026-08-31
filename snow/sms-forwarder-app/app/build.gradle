@@ -13,8 +13,15 @@ android {
         // Bump BOTH on every change you want phones to be offered. The build
         // publishes these as version.json next to the APK, and installed apps
         // compare versionCode against it to decide whether to prompt.
-        versionCode 6
-        versionName "1.5"
+        versionCode 7
+        versionName "1.6"
+    }
+
+    // AGP 8 stops generating BuildConfig unless asked. The forwarder reports
+    // its own versionName to the server with every message and heartbeat, so
+    // the panel can show which phones are running an old build.
+    buildFeatures {
+        buildConfig true
     }
 
     // Sign with a keystore committed alongside the app, NOT the one Gradle

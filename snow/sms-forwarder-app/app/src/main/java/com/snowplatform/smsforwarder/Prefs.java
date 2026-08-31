@@ -63,6 +63,17 @@ public final class Prefs {
         return n;
     }
 
+    /** Every configured number, in no particular order. Used by the heartbeat. */
+    public java.util.List<String> allNumbers() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        JSONObject o = numbersBySlot();
+        for (Iterator<String> it = o.keys(); it.hasNext(); ) {
+            String v = o.optString(it.next(), "").trim();
+            if (!v.isEmpty()) out.add(v);
+        }
+        return out;
+    }
+
     public String numberForSlot(int slot) {
         if (slot < 0) return "";
         return numbersBySlot().optString(String.valueOf(slot), "").trim();

@@ -45,6 +45,30 @@ const routes = {
   'POST /admin/manual-numbers/save': { status: 'success' },
   'POST /admin/manual-numbers/delete': { status: 'success' },
   'POST /admin/settings/update': { status: 'success' },
+  'POST /admin/manual-numbers/analytics': { status: 'success', days: 14,
+    totals: { smsForwarded: 12, credited: 9, unmatched: 2, ambiguous: 0, mismatch: 1, duplicate: 0,
+      unparsed: 0, ignored: 0, assigned: 11, expired: 2, amount: 450000, deliveryMsSum: 9000,
+      deliverySamples: 12, deliveryMsMax: 4200, realMoneySms: 12, successRate: 75,
+      avgDeliveryMs: 750, numbersOnline: 1, numbersTotal: 2 },
+    numbers: [
+      { id: 'm1', number: '+256770000001', holderName: 'Snow MTN 1', network: 'MTN Mobile Money',
+        active: true, health: 'healthy', healthLabel: 'Online', lastSeenAt: Date.now(),
+        lastHeartbeatAt: Date.now(), lastSmsAt: Date.now(), device: 'Samsung SM-A047F',
+        appVersion: '1.6', forwardingActive: true, battery: 73,
+        smsForwarded: 12, credited: 9, unmatched: 2, ambiguous: 0, mismatch: 1, duplicate: 0,
+        unparsed: 0, ignored: 0, assigned: 11, expired: 2, amount: 450000,
+        realMoneySms: 12, successRate: 75, fillRate: 81.8, avgDeliveryMs: 750, maxDeliveryMs: 4200,
+        daily: [{ day: '2026-08-31', smsForwarded: 12, credited: 9, unmatched: 2, ambiguous: 0,
+          mismatch: 1, duplicate: 0, unparsed: 0, assigned: 11, expired: 2, amount: 450000,
+          avgDeliveryMs: 750, maxDeliveryMs: 4200 }] },
+      { id: 'm2', number: '+256750000001', holderName: 'Snow Airtel 1', network: 'Airtel Money',
+        active: true, health: 'offline', healthLabel: 'Offline', lastSeenAt: null,
+        lastHeartbeatAt: null, lastSmsAt: null, device: '', appVersion: '', forwardingActive: false,
+        battery: null, smsForwarded: 0, credited: 0, unmatched: 0, ambiguous: 0, mismatch: 0,
+        duplicate: 0, unparsed: 0, ignored: 0, assigned: 0, expired: 0, amount: 0,
+        realMoneySms: 0, successRate: null, fillRate: null, avgDeliveryMs: null, maxDeliveryMs: null,
+        daily: [] },
+    ] },
   'POST /admin/withdrawals/list': { status: 'success', counts: { pending: 1 }, payoutMode: 'automatic',
     withdrawals: [{ id: 'w1', userId: 'u1', amount: 20000, net: 17000, status: 'pending',
       phone: '+256770000000', network: 'MTN', holder: 'JOHN DOE', createdAt: new Date().toISOString() }] },
@@ -409,6 +433,35 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (witManual.includes('Send via MarzPay')) errors.push('Withdrawals: manual mode still offers "Send via MarzPay"');
   if (!witManual.includes('Payments are set to Manual')) errors.push('Withdrawals: manual-mode explanation missing');
   if (doc.getElementById('witSync')) errors.push('Withdrawals: manual mode should not show the Sync MarzPay button');
+
+  // Payment-number activity lives on the Analytics tab.
+  doc.querySelector('.tab[data-tab="analytics"]').click();
+  await sleep(400);
+  const an = doc.getElementById('content').innerHTML;
+  if (!an.includes('Payment number activity')) errors.push('Analytics: payment-number section missing');
+  if (!an.includes('Snow MTN 1')) errors.push('Analytics: number holder name missing');
+  if (!an.includes('Samsung SM-A047F')) errors.push('Analytics: device name missing');
+  if (!an.includes('75%')) errors.push('Analytics: success rate missing');
+  if (!an.includes('Online')) errors.push('Analytics: health pill missing');
+  if (!an.includes('Offline')) errors.push('Analytics: offline number not shown');
+  if (an.includes('NaN') || an.includes('undefined')) errors.push('Analytics: NaN/undefined leaked into the numbers section');
+  const dayToggle = doc.querySelector('[data-numtoggle]');
+  if (!dayToggle) errors.push('Analytics: daily-breakdown toggle missing');
+  else {
+    dayToggle.click();
+    await sleep(400);
+    const opened = doc.getElementById('content').innerHTML;
+    if (!opened.includes('Hide daily breakdown')) errors.push('Analytics: daily breakdown did not expand');
+  }
+  if (!doc.getElementById('numDays')) errors.push('Analytics: day-range selector missing');
+
+  // Withdrawals can be pinned independently of deposits.
+  doc.querySelector('.tab[data-tab="settings"]').click();
+  await sleep(300);
+  const setHtml = doc.getElementById('content').innerHTML;
+  if (!doc.getElementById('witMethodManual') || !doc.getElementById('witMethodAuto') || !doc.getElementById('witMethodFollow'))
+    errors.push('Settings: withdrawal-method radios missing');
+  if (!setHtml.includes('Follow the payment method above')) errors.push('Settings: follow option label missing');
 
   console.log('\n=== ERRORS (' + errors.length + ') ===');
   errors.forEach(e => console.log(' -', e));

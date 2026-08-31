@@ -5818,6 +5818,112 @@ processes, seeded before boot.
 Cache bumped `v67`→`v68` (user), `v19`→`v20` (admin). **`server.js` changed — Render should
 auto-deploy this push.**
 
+## Round 95 (2026-08-31) — payout method separated from deposit method, new withdrawal copy, and full per-number forwarder analytics (app v1.6)
+
+Three owner asks in one message.
+
+**1. "yeah it can also work and vice versa"** -- confirming the offer at the end of Round
+94. Payouts are no longer welded to `depositMethod`. New `withdrawMethod` setting:
+`follow` (default, and what everyone is already on -- payouts do whatever deposits do),
+`automatic`, or `manual`. All four combinations now work, including manual recharges with
+MarzPay payouts and the reverse. **One resolver, `payoutIsManual(sett)`, is the only thing
+allowed to decide** -- reading `depositMethod` or `withdrawMethod` raw anywhere else is a
+bug waiting to happen, since `follow` means nothing on its own. `/public/settings` sends
+the client the RESOLVED `payoutManual` boolean rather than the raw fields, so the app never
+has to reimplement that rule.
+
+**2. Withdrawal copy**, replaced with the owner's exact wording: "We have received your
+withdrawal request, it will be processed as soon as possible." Shown when payouts are
+manual; the automatic line is unchanged.
+
+**3. Per-number forwarder analytics** -- owner: *"make sure l can track number activity in
+analytics ie success rates, whether their Forwarder sends/forwards messages... total
+transactions, messages forwarded, dates time and much more so that l can track every
+number, and l can see daily number transactions, deposits received, sms forwarded, health,
+duration of sms forwarding delivery to server."*
+
+- **`manualNumberDaily`** -- one row per number per EAT day, every counter written by
+  atomic `$inc` so SMS arriving on several phones at once can never lose a count. Events:
+  forwarded, credited, unmatched, ambiguous, mismatch, duplicate, unparsed, ignored,
+  assigned, expired, plus amount and delivery-latency samples. A lifetime rollup and
+  last-seen timestamps go on the number's own record.
+- **Stats are always best-effort** (`trackManual()` swallows and logs). A bookkeeping
+  write must never be able to fail a deposit. Money first.
+- **Latency is measured on the phone**, not by comparing clocks. The app stamps the moment
+  the SMS broadcast fires and sends the elapsed time at POST, so the figure survives any
+  handset/server clock skew and a retry honestly reports the longer delay.
+- **Heartbeat** (`POST /deposit/manual/forwarder-heartbeat`, every 15 min from
+  `ForwardService`, same shared-secret check as the webhook). This is the point of the
+  whole health feature: without it a phone that was killed, ran flat, or had its SIM
+  pulled is **indistinguishable from a number nobody sent money to** -- both are silence.
+  Carries the numbers this install covers, app version, battery, and whether forwarding is
+  on. Online = seen within 45 min (one missed beat is normal), Quiet to 3 h, then Offline.
+  Recent SMS counts as evidence of life too, and rightly outranks a heartbeat.
+- **`POST /admin/manual-numbers/analytics`** returns per-number totals, health, device,
+  battery, average and worst delay, and the daily series, plus platform totals.
+  **Success rate is measured against messages that were real money arriving**, not against
+  every text forwarded -- counting an operator advert or a duplicate as a failure would
+  make a perfectly healthy phone look broken.
+- **Admin panel**: a "Payment number activity" section on the Analytics tab -- phones
+  online, messages forwarded, deposits credited, success rate, amount received, average
+  delay; then a card per number with health pill, device/app/battery, last check-in and
+  last message, eight stat tiles, a "needs a look" line (unmatched, ambiguous, mismatch,
+  unreadable, expired, duplicates) and an expandable day-by-day table. Day range
+  selectable 7 to 90.
+
+**Real bug the analytics harness caught, which inspection would not have.**
+`eatDayKey(Date.now())` returns **1970-01-01**: `tsMillis()` understands a `Date` or a
+Firestore `Timestamp` and falls through to `0` for a raw millisecond number. Every daily
+row would have been filed under one bogus day, making the entire day-by-day feature
+useless while looking like it worked. Fixed at both call sites by passing real `Date`
+objects. `tsMillis()` itself was deliberately NOT widened -- it sits on money paths and
+this round is not the place to change a shared helper's contract.
+
+Second, smaller gap found the same way: a phone that forwards messages but has not
+heartbeated yet (older build, or just installed) showed no device at all, even though
+every message it sends carries one. The forwarded event now records it.
+
+**App v1.6** (`versionCode 7`): `forwardDelayMs`/`device`/`appVersion` on every forwarded
+message, `Heartbeat.java`, `Prefs.allNumbers()`, heartbeat scheduling in `ForwardService`
+(cancelled in `onDestroy` alongside the update tick). `buildFeatures { buildConfig true }`
+added -- AGP 8 stops generating `BuildConfig` unless asked, and the app reports its own
+`versionName`.
+
+**Verified**: `node --check` clean on `server.js`/`db.js`/`original_module.js`,
+`build-core.js` and `build-admin.js` clean round-trips, `git diff --check` clean, XML and
+brace/paren structure clean across all 9 Java files.
+A new harness boots the **real `server.js`** against an in-memory Mongo-compatible stub and
+drives the real endpoints over HTTP -- **27 checks**: a real captured MTN receive is
+counted as unmatched, the same transaction id as a duplicate, an advert as ignored; all
+three counted as forwarded; latency averaged and the worst kept; device and version
+recorded; success rate excludes adverts and duplicates; the daily row is **filed under
+today, not 1970**; a number with no activity reads "never seen" with no last-seen time; a
+phone that just delivered a message reads online; a heartbeat marks a phone online with
+its battery and forwarding state; a heartbeat without the shared secret is refused (403);
+analytics without an admin key is refused (401).
+The payout harness now takes both methods and was run across **all four combinations** --
+14 checks each where payouts resolve to manual, 3 where they resolve to automatic, all
+green, including deposits-manual-payouts-automatic and its reverse.
+`test-admin-obfuscated-build.js` extended against the real obfuscated build: the analytics
+section renders holder name, device, success rate and both health states, contains no
+`NaN`/`undefined`, expands its daily breakdown on click, and the three withdrawal-method
+radios exist -- 0 errors across all 12 tabs. Playwright against the real built user app
+confirms the owner's exact new wording appears when payouts are manual and the automatic
+line is untouched.
+
+Two harness-fidelity fixes worth remembering for the next round that reuses these stubs:
+Mongo applies `$inc` on an **upsert** (starting from zero) -- the naive stub stored the raw
+operator object on first write and silently lost the first event of every counter; and
+`JSON.parse(JSON.stringify(doc))` turns a `Date` into a string, which `tsMillis()` reads as
+`0`, so health always came back "unknown". Both were stub bugs, not server bugs, but they
+masked and mimicked real ones.
+
+Cache bumped `v68`→`v69` (user), `v20`→`v21` (admin). **`server.js` and `db.js` changed --
+Render should auto-deploy this push.** New app build lands as v1.6 in the `snow-sms-app`
+release; **the analytics only fill in once phones are running it** -- an older build sends
+no latency, no device and no heartbeat, so those numbers stay empty until each phone
+updates.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
