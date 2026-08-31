@@ -54,6 +54,13 @@ public class MainActivity extends Activity {
     private Prefs prefs;
     private long downloadId = -1;
     private BroadcastReceiver downloadWatcher;
+    private Runnable downloadPoll;
+    private long downloadStartedAt = 0;
+    private long lastBytes = -1, lastProgressAt = 0;
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    /** Give up and offer the browser rather than sitting on "Downloading" forever. */
+    private static final long DOWNLOAD_STALL_MS = 90 * 1000L;
+    private static final long DOWNLOAD_TOTAL_MS = 10 * 60 * 1000L;
     private EditText urlField, secretField;
     private final List<EditText> slotFields = new ArrayList<>();
     private LinearLayout slotBox;
@@ -135,6 +142,18 @@ public class MainActivity extends Activity {
 
         requestPerms();
         refreshUi();
+        // An update may still be running from before this activity was
+        // recreated. Re-adopt it, or the completion broadcast is discarded as
+        // "not mine" and the screen never moves off Downloading.
+        long pending = prefs.pendingDownloadId();
+        if (pending != -1) {
+            downloadId = pending;
+            downloadStartedAt = System.currentTimeMillis();
+            lastBytes = -1;
+            lastProgressAt = downloadStartedAt;
+            registerDownloadWatcher();
+            startDownloadPolling();
+        }
         checkForUpdate(false);   // quiet on open: only speaks up if there IS one
         verifyEnteredNumbers(true);   // so each slot can say whether its number is real
         maybeAskForPassword(root);
@@ -292,6 +311,13 @@ public class MainActivity extends Activity {
                 .setPositiveButton("Update now", new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface d, int which) { startInAppUpdate(); }
                 })
+                // Always reachable, not only after the in-app path has failed.
+                // Android's download service behaves differently across ROMs,
+                // and an admin standing in front of a phone should never need
+                // to wait for a timeout to find the way that works.
+                .setNeutralButton("Use browser", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int which) { openInBrowser(); }
+                })
                 .setNegativeButton("Later", null)
                 .show();
     }
@@ -333,8 +359,12 @@ public class MainActivity extends Activity {
         try {
             DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             if (dm == null) { openInBrowser(); return; }
-            // Clear any previous copy so a stale download can never be installed.
-            if (downloadId != -1) dm.remove(downloadId);
+            // Clear any previous copy so a stale download can never be
+            // installed -- including one left by an earlier run of the app,
+            // which the in-memory field alone would not know about.
+            long stale = prefs.pendingDownloadId();
+            if (stale != -1) { try { dm.remove(stale); } catch (Exception ignored) {} }
+            if (downloadId != -1 && downloadId != stale) { try { dm.remove(downloadId); } catch (Exception ignored) {} }
 
             DownloadManager.Request req = new DownloadManager.Request(Uri.parse(UpdateChecker.APK_URL));
             req.setTitle("Snow SMS update");
@@ -343,12 +373,136 @@ public class MainActivity extends Activity {
             req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
             req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, APK_FILENAME);
             downloadId = dm.enqueue(req);
+            prefs.setPendingDownloadId(downloadId);
+            downloadStartedAt = System.currentTimeMillis();
+            lastBytes = -1;
+            lastProgressAt = downloadStartedAt;
 
             registerDownloadWatcher();
-            status.setText("Downloading update...");
+            startDownloadPolling();
+            status.setText("Starting download...");
         } catch (Exception e) {
             openInBrowser();
         }
+    }
+
+    /**
+     * Watches the download directly instead of trusting the completion
+     * broadcast alone.
+     *
+     * The broadcast is a single event that can simply never arrive: the
+     * receiver dies with the activity, a download can sit in PENDING or
+     * PAUSED indefinitely (no network, waiting for Wi-Fi, no space), and a
+     * FAILED download reports a reason nobody was reading. Any of those left
+     * the screen showing "Downloading" forever with nothing to act on, which
+     * is exactly what happened. Polling means the app either finishes, or
+     * says why it cannot.
+     */
+    private void startDownloadPolling() {
+        stopDownloadPolling();
+        downloadPoll = new Runnable() {
+            @Override public void run() {
+                if (!pollDownloadOnce()) return;    // finished or gave up
+                ui.postDelayed(this, 1000);
+            }
+        };
+        ui.post(downloadPoll);
+    }
+
+    private void stopDownloadPolling() {
+        if (downloadPoll != null) { ui.removeCallbacks(downloadPoll); downloadPoll = null; }
+    }
+
+    /** @return true to keep polling. */
+    private boolean pollDownloadOnce() {
+        if (downloadId == -1) return false;
+        DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+        if (dm == null) { downloadGaveUp("The download service is unavailable."); return false; }
+        android.database.Cursor c = null;
+        try {
+            c = dm.query(new DownloadManager.Query().setFilterById(downloadId));
+            if (c == null || !c.moveToFirst()) {
+                downloadGaveUp("The download disappeared before it finished.");
+                return false;
+            }
+            int st = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+            long got = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+            long total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+            int reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON));
+            long now = System.currentTimeMillis();
+
+            if (got != lastBytes) { lastBytes = got; lastProgressAt = now; }
+
+            switch (st) {
+                case DownloadManager.STATUS_SUCCESSFUL:
+                    launchInstaller();
+                    return false;
+                case DownloadManager.STATUS_FAILED:
+                    downloadGaveUp("Download failed (code " + reason + ").");
+                    return false;
+                case DownloadManager.STATUS_PAUSED:
+                    status.setText("Paused: " + pausedReason(reason) + ". " + kb(got, total));
+                    break;
+                case DownloadManager.STATUS_PENDING:
+                    status.setText("Waiting to start...");
+                    break;
+                default:
+                    status.setText("Downloading " + kb(got, total));
+            }
+
+            if (now - lastProgressAt > DOWNLOAD_STALL_MS) {
+                downloadGaveUp("The download stopped making progress.");
+                return false;
+            }
+            if (now - downloadStartedAt > DOWNLOAD_TOTAL_MS) {
+                downloadGaveUp("The download is taking too long.");
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            downloadGaveUp("Could not read the download's progress.");
+            return false;
+        } finally {
+            if (c != null) try { c.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    private String kb(long got, long total) {
+        if (total > 0) return (got * 100 / total) + "%";
+        return (got / 1024) + " KB";
+    }
+
+    private String pausedReason(int reason) {
+        switch (reason) {
+            case DownloadManager.PAUSED_WAITING_FOR_NETWORK: return "no network";
+            case DownloadManager.PAUSED_QUEUED_FOR_WIFI:     return "waiting for Wi-Fi";
+            case DownloadManager.PAUSED_WAITING_TO_RETRY:    return "retrying";
+            default: return "paused by Android";
+        }
+    }
+
+    /** Always leaves the admin with a way forward, never a stuck screen. */
+    private void downloadGaveUp(final String why) {
+        stopDownloadPolling();
+        clearPendingDownload();
+        status.setText(why);
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle("Update did not download")
+                    .setMessage(why + "\n\nOpen it in your browser instead? The file installs the same way.")
+                    .setNegativeButton("Not now", null)
+                    .setPositiveButton("Open browser", new DialogInterface.OnClickListener() {
+                        @Override public void onClick(DialogInterface d, int w) { openInBrowser(); }
+                    })
+                    .show();
+        } catch (Exception ignored) {
+            openInBrowser();
+        }
+    }
+
+    private void clearPendingDownload() {
+        downloadId = -1;
+        prefs.setPendingDownloadId(-1);
     }
 
     private void registerDownloadWatcher() {
@@ -371,15 +525,16 @@ public class MainActivity extends Activity {
             DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             if (dm == null) { openInBrowser(); return; }
             Uri uri = dm.getUriForDownloadedFile(downloadId);
-            if (uri == null) { status.setText("Download failed."); openInBrowser(); return; }
+            if (uri == null) { downloadGaveUp("The downloaded file could not be opened."); return; }
+            stopDownloadPolling();
+            clearPendingDownload();
             Intent install = new Intent(Intent.ACTION_VIEW);
             install.setDataAndType(uri, APK_MIME);
             install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(install);
             status.setText("Confirm the install when Android asks.");
         } catch (Exception e) {
-            status.setText("Could not open the installer.");
-            openInBrowser();
+            downloadGaveUp("Could not open the installer.");
         }
     }
 
@@ -393,6 +548,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        stopDownloadPolling();
         if (downloadWatcher != null) {
             try { unregisterReceiver(downloadWatcher); } catch (Exception ignored) {}
             downloadWatcher = null;

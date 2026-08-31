@@ -27,6 +27,18 @@ public final class Prefs {
         sp = ctx.getApplicationContext().getSharedPreferences(FILE, Context.MODE_PRIVATE);
     }
 
+    /**
+     * The DownloadManager id of an update currently being fetched.
+     *
+     * Persisted because the activity can be recreated mid-download (a
+     * rotation, or Android reclaiming memory on a cheap handset). Held only
+     * in a field, the id resets to -1 and the completion broadcast is then
+     * ignored as "not mine" -- the download finishes and the screen sits on
+     * "Downloading" forever.
+     */
+    public long pendingDownloadId() { return sp.getLong("pendingDownloadId", -1); }
+    public void setPendingDownloadId(long id) { sp.edit().putLong("pendingDownloadId", id).apply(); }
+
     public String url() { return sp.getString(K_URL, ""); }
     public String secret() { return sp.getString(K_SECRET, ""); }
     public boolean active() { return sp.getBoolean(K_ACTIVE, false); }

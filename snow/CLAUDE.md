@@ -6058,6 +6058,54 @@ three phantom findings. Strings must be stripped first; that ordering is now com
 the file. Lesson for edits to this app: prefer anchored replacements over index slicing,
 and never treat a balanced brace count as evidence that a file still compiles.
 
+## Round 98 (2026-08-31) — in-app update could hang on "Downloading" with nothing to act on (app v1.9)
+
+Owner, on a real phone: *"update failed to download, it is just stuck on downloading in
+app."* Reported against v1.8, but the defect has been there since the in-app download
+landed in v1.4 -- it just needed the right conditions.
+
+**Why it hangs.** `startInAppUpdate()` enqueued a `DownloadManager` request, set the label
+to "Downloading update...", and then relied on **one** thing to ever move it again: the
+`ACTION_DOWNLOAD_COMPLETE` broadcast. Every way that broadcast can fail to arrive leaves
+the screen frozen with no explanation and no way forward:
+- The download sits in `STATUS_PENDING` or `STATUS_PAUSED` (no network, queued for Wi-Fi,
+  retry backoff). No broadcast is due, possibly for a long time.
+- The activity is recreated (rotation, or Android reclaiming memory on a cheap handset).
+  `downloadId` resets to `-1`, so when the broadcast does arrive the receiver discards it
+  as `id != downloadId` -- the download finished and the app never noticed.
+- The receiver is unregistered in `onDestroy`, so leaving and reopening the app orphans a
+  running download entirely.
+- A `STATUS_FAILED` download's `COLUMN_REASON` was never read, so the reason was thrown
+  away even when it was available.
+
+**Fixed by not trusting a single event.** The app now polls the download every second
+(`pollDownloadOnce()`), so it either finishes or says why it cannot:
+- Real progress -- a percentage, or KB when the server sends no length.
+- `PAUSED` shows the actual reason in plain words ("no network", "waiting for Wi-Fi").
+- `FAILED` reports the code and offers the browser.
+- A row that has vanished from `DownloadManager` is reported instead of waited on.
+- **Stall and total timeouts** (90s with no new bytes, 10 minutes overall) end it with a
+  dialog offering the browser. A stuck screen is never a resting state.
+- `downloadId` is persisted in `Prefs`, and re-adopted in `onCreate`, so an activity
+  restart mid-download reconnects instead of orphaning it. Stale downloads from a previous
+  run are now cleared too, which the in-memory field alone could not know about.
+
+**"Use browser" is now always on the update dialog**, not just after a failure. Android's
+download service behaves differently across ROMs, and an admin standing in front of a
+phone should not have to wait out a timeout to find the path that works. The direct
+release URL is in the README for the same reason.
+
+The polling replaces nothing about how the update is *installed* -- Android still shows
+its own confirmation, and the per-app "install unknown apps" toggle still applies.
+
+**Verified**: XML, brace/paren and the new symbol check all clean; CI build green.
+**Not verified on hardware** -- the stall path in particular is timing-dependent and this
+sandbox has no handset. The browser link is the guaranteed route in the meantime, and it
+is what the owner should use if v1.9 itself will not download.
+
+App v1.9. No server, admin or user-app change this round, so no redeploy and no cache
+bumps.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

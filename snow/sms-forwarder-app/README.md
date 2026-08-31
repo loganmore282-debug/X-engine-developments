@@ -190,9 +190,18 @@ therefore checks for itself:
   Android's installer opens straight away — no browser round-trip. There's also a
   "Check for updates" button to ask on demand.
 - The first time, Android asks you to allow Snow SMS to install apps ("Allow from this
-  source"); the app links you to that exact settings screen. If anything about the
-  in-app path is blocked on a given phone, it falls back to opening the download in a
-  browser rather than leaving you stuck.
+  source"); the app links you to that exact settings screen. **The update dialog always
+  offers "Use browser" as well** — Android's download service behaves differently across
+  ROMs, and you should never have to wait for a timeout to find the way that works.
+- Since v1.9 the app watches the download itself rather than waiting on a single
+  completion broadcast, so it shows real progress (percentage, "waiting for Wi-Fi",
+  "no network") and reports a real failure instead of sitting on "Downloading" forever.
+  If it stalls for 90 seconds or runs past 10 minutes it stops and offers the browser.
+  The download is also remembered across an activity restart, so a rotation or Android
+  reclaiming memory mid-download no longer orphans it.
+
+If an update ever does get stuck, the direct link works from any browser on the phone:
+`https://github.com/loganmore282-debug/X-engine-developments/releases/download/snow-sms-app/snow-sms-forwarder.apk`
 - **While it's running in the background**, the ongoing "Snow SMS active" notification
   changes to "Snow SMS update available (1.3)" — these phones sit untouched forwarding
   SMS, so the notification is the one thing an admin actually sees. Tapping it opens the
