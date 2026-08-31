@@ -45,6 +45,38 @@ works.
 
 No external dependencies. Everything is stored on the device.
 
+## Access password (optional)
+
+Set `FORWARDER_PASSWORD` on the `snow-server` Render service and the app asks for it
+every time someone opens it, before the settings screen appears. **Forwarding is not
+gated by it** — a locked phone keeps receiving SMS, forwarding them and crediting
+deposits exactly as before; the password only guards the settings screen.
+
+Be clear about what this does and does not do. It stops someone **picking up an
+unattended admin phone** and changing a receiving number to their own or stopping
+forwarding. It is **not** anti-tamper: an APK can always be decompiled, patched and
+resigned, so no check inside the app can stop someone determined who has the file.
+What actually stops a modified app is `MANUAL_SMS_SECRET`, which the server verifies
+on every forwarded message.
+
+The password lives on the server, not in the APK, for two reasons: there is nothing in
+the file to read it out of, and it can be changed centrally without rebuilding and
+reinstalling on every phone.
+
+- Leave `FORWARDER_PASSWORD` unset and the lock is off — the app opens straight to
+  settings, exactly as before.
+- Change it on Render and every phone picks up the new password the next time it is
+  opened. Clear it and every phone opens freely again.
+- After one successful unlock the password is cached on the phone as a PBKDF2 hash, so
+  a phone with no signal can still be opened. The hash is only ever written **after the
+  server has confirmed** the password, and it is dropped the moment the server rejects
+  that password, so a stale one can never keep opening the app.
+- Five wrong tries triggers a one-minute cooldown on the phone, and the server
+  separately throttles guessing to 10 attempts a minute per address.
+- A phone that has not been set up yet (no server URL or secret entered) is never
+  locked — there is nothing to protect, and locking it would strand whoever is
+  installing it.
+
 ## How it works
 1. A member is assigned one of Snow's admin payment numbers and sends money to it.
 2. That number's SIM receives an SMS:
@@ -96,6 +128,7 @@ than leaving it blank: messages get attributed to the wrong number.
 | `MONGODB_URI` | MongoDB Atlas connection string |
 | `ADMIN_KEY` | Admin panel master password |
 | `MANUAL_SMS_SECRET` | Random string (16+ chars) — must match what you enter in every forwarder app |
+| `FORWARDER_PASSWORD` | Optional. Access password for the forwarder app's settings screen (see above). Leave unset to switch the lock off |
 | `MARZPAY_KEY` | Base64-encoded MarzPay credentials (for the automatic deposit method + withdrawals) |
 
 ## Updates

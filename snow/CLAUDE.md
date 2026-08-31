@@ -5594,6 +5594,94 @@ untouched); boot smoke test still fails only at Mongo-connect; `build-core.js` c
 round-trip. User cache bumped `v65`→`v66`. **`server.js` changed — Render should
 auto-deploy this push.**
 
+## Round 92 (2026-08-31) — forwarder hardening: sender IDs fixed in code, in-app update download, and a server-held access password on the settings screen (v1.3 → v1.5)
+
+Three owner asks in sequence, all on the SMS forwarder app. The first two shipped as
+v1.3/v1.4 without their own entry here; recorded now alongside v1.5.
+
+**v1.3 — the two money sender IDs are fixed in code, not a setting.** Owner, after
+sending screenshots of both operators' sender IDs: *"the Forwarder should forward sms
+from those 2, dont make it editable in app of forwarder."* `MONEY_SENDERS` in
+`SmsReceiver` is a hardcoded `{ "mtn", "airtel" }`, matched loosely (does the sender ID
+CONTAIN one of them) rather than exactly — an operator can change its sender ID without
+warning, and an exact match would then silently forward nothing at all, which is the
+worst possible failure mode for this app. Being generous costs nothing: the server
+decides what is actually a deposit, so an unrelated operator message is simply ignored
+there. Nothing in the app's UI can mistype or clear this on one phone. The server's own
+parsers were widened at the same time (see Round 91 for the eight real formats).
+
+**v1.4 — the update downloads inside the app.** Owner: *"can't we make when it downloads
+within the app."* Round 90's update check only ever opened the release URL in a browser.
+`UpdateChecker` now downloads the APK via `DownloadManager` and hands it straight to
+Android's package installer, using `getUriForDownloadedFile()` so no FileProvider is
+needed. Requires `REQUEST_INSTALL_PACKAGES`; Android still shows its own confirmation
+screen and the per-app "install unknown apps" toggle still applies, so nothing installs
+silently, and the app links to that exact settings screen the first time. If anything
+about the in-app path is blocked on a given phone it falls back to the browser rather
+than leaving the admin stuck.
+
+**A correction worth keeping: I said v1.4 was built and pushed when it was not.** That
+run had failed, and I had not checked before saying so. The cause was my own `--`
+inside an XML comment in `AndroidManifest.xml` — illegal in XML, and Gradle only
+surfaces it 25 seconds in as a manifest-merger stack trace. Fixed, and the workflow
+gained a **Validate XML** step that fails in two seconds naming the file and line.
+**Never report a CI build as green without reading the run.**
+
+**v1.5 — access password on the settings screen, held on the server.** Owner: *"let us
+put access password in the Forwarder, so no cracking or modding it, put access password
+or it will be hardcoded or backend on environment, l think also environment."*
+
+Told the owner plainly what this does and does not do before building it, because the
+framing mattered: a password **will not stop cracking or modding** — an APK can always
+be decompiled, patched and resigned, so no check inside the app can stop someone
+determined who has the file. What it does stop is someone **picking up an unattended
+admin phone** and changing a receiving number to their own or stopping forwarding. What
+actually stops a modified app is `MANUAL_SMS_SECRET`, which the server verifies on every
+forwarded message. Their instinct to put it in the environment was right: hardcoding it
+in the APK would make it extractable AND would need a new APK on every phone to change
+it.
+
+- `server.js`: `FORWARDER_PASSWORD` env var (new, optional) and `POST /deposit/manual/
+  forwarder-unlock`. Gated behind the **same timing-safe `MANUAL_SMS_SECRET` check as
+  the webhook**, so it is not a password oracle anyone on the internet can hammer — a
+  caller must already hold the shared secret to get so much as a yes/no. Constant-time
+  password comparison, plus per-IP throttling (10 attempts a minute) that a correct
+  password does not bypass. Answers `required:false` when no password is set.
+- `Lock.java` (new): PBKDF2WithHmacSHA1, 60k iterations, `javax.crypto` only (no new
+  dependency, API 24+). The hash is cached on the phone **only after the server has
+  confirmed** the password, so an offline phone still opens but the cache can never
+  establish a password the server never agreed to; it is dropped the moment the server
+  rejects that password, so a stale one cannot keep opening the app. Five wrong tries
+  triggers a 60s device cooldown. Constant-time comparison of the cached hash too.
+- `MainActivity`: lock screen shown on open. **The server is the authority on whether a
+  lock exists at all** — if the owner clears `FORWARDER_PASSWORD` on Render, the app
+  drops any cached hash and opens, rather than keeping a phone asking for a password
+  that no longer exists anywhere. Skipped entirely on a phone with no URL/secret entered
+  yet: a fresh install holds nothing worth protecting and locking it would strand
+  whoever is installing it.
+- **Forwarding is deliberately NOT gated by any of this.** `SmsReceiver` and
+  `ForwardService` never consult `Lock`, so a locked phone keeps matching and crediting
+  deposits exactly as before. A lock that could stop deposits landing would be a worse
+  bug than the one it defends against.
+
+**Verified**: `node --check server.js` clean; the committed 70-check parser suite green;
+XML validation and brace/paren structure checks clean on all 8 Java files. The unlock
+endpoint was exercised **against the real running handler**, not a copy — a harness
+boots the actual `server.js` with `./db` stubbed in `require.cache` (no Mongo in this
+sandbox) and hits the endpoint over real HTTP: 7/7 with a password set (no secret →
+403, wrong secret → 403, wrong password → 401, right password → 200, blank password
+does not report `required:false` while a lock exists, repeated guesses → 429, and a
+correct password while throttled is still refused) and 3/3 with the password unset
+(reports `required:false`, still refuses a caller without the shared secret). Then the
+real proof for the app itself: a green GitHub Actions build.
+
+**Untested on real hardware, same honest limitation as Rounds 89/90**: the lock screen,
+the in-app update flow and multi-SIM attribution have all only been proven to compile.
+None has been exercised on a handset.
+
+**Owner-side, not mine**: set `FORWARDER_PASSWORD` on Render (Key and Value in separate
+boxes) — leaving it unset keeps the lock switched off — then install v1.5 on each phone.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
@@ -5644,3 +5732,9 @@ gates the whole `/deposit/manual/sms-forwarder` webhook on it being set; until i
 manual deposits' SMS-matching path stays inert (the rest of the feature — number CRUD,
 member-facing flow, paste-SMS fallback — works regardless, only automated forwarder
 matching needs this).
+
+`FORWARDER_PASSWORD` (added Round 92) is optional, not a fourth required secret — set it
+on `snow-server` to lock the forwarder app's settings screen on the admin phones, leave
+it unset to switch the lock off. It is not a substitute for `MANUAL_SMS_SECRET`: the
+password guards a screen, the secret is what the server actually verifies on every
+forwarded message. Never commit either.

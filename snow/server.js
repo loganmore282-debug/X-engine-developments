@@ -2176,6 +2176,21 @@ const MANUAL_DEPOSIT_WINDOW_MS = 15 * 60 * 1000; // owner: "deposit payment time
 const MANUAL_SMS_SECRET = process.env.MANUAL_SMS_SECRET || '';
 function manualSmsConfigured() { return MANUAL_SMS_SECRET.length >= 16; }
 
+// Screen-lock password for the forwarder app on the admin phones. Held here
+// rather than in the APK so it can be changed centrally without rebuilding
+// and reinstalling on every phone, and so it is not sitting in a file
+// anyone holding the APK can read.
+//
+// Be clear about what this defends: someone PICKING UP an unattended admin
+// phone and changing a receiving number to their own, or stopping
+// forwarding. It is not anti-tamper -- an APK can always be patched and
+// resigned. What actually stops a modified app is MANUAL_SMS_SECRET, which
+// the server checks on every forwarded message.
+//
+// Leave unset to disable the lock entirely; the app asks the server whether
+// a password is required at all.
+const FORWARDER_PASSWORD = process.env.FORWARDER_PASSWORD || '';
+
 // Parse an MTN / Airtel Uganda "you have received" SMS. Ported from the
 // proven Nexus implementation (root server.js) -- same regex, same
 // field shape. Returns { amount, txId, sender, raw } or null if it isn't a
@@ -2411,6 +2426,47 @@ app.post('/deposit/manual/status', async (req, res) => {
 // (2) finding EXACTLY one live candidate order for this receiving number +
 // amount. Zero or more-than-one candidates never guess -- see the "never
 // silently credit on ambiguity" comment below.
+// Unlock check for the forwarder app's own screen lock. Sits behind the SAME
+// shared secret as the webhook, so it is not a password oracle anyone on the
+// internet can hammer -- a caller must already hold MANUAL_SMS_SECRET to get
+// so much as a yes/no. Deliberately returns no detail beyond that.
+//
+// The app caches a hash after a successful unlock so a phone with no
+// connectivity can still be opened by whoever knows the password; this
+// endpoint is what establishes it in the first place and what picks up a
+// password change made on Render.
+const _forwarderUnlockAttempts = new Map();   // ip -> { n, first }
+app.post('/deposit/manual/forwarder-unlock', async (req, res) => {
+  if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
+  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
+  const expected = MANUAL_SMS_SECRET;
+  const secretOk = provided.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  if (!secretOk) return res.status(403).json({ status: 'error', message: 'Forbidden' });
+
+  // No password configured on the server: the lock is off, say so plainly
+  // so a fresh install does not sit at a screen nobody can get past.
+  if (!FORWARDER_PASSWORD) return res.json({ status: 'success', required: false });
+
+  // Even behind the shared secret, throttle guessing.
+  const ip = String(req.ip || 'unknown');
+  const now = Date.now();
+  const rec = _forwarderUnlockAttempts.get(ip);
+  if (rec && now - rec.first < 60000 && rec.n >= 10)
+    return res.status(429).json({ status: 'error', required: true, message: 'Too many attempts. Wait a minute.' });
+
+  const pw = String((req.body && req.body.password) || '');
+  const ok = pw.length === FORWARDER_PASSWORD.length &&
+    crypto.timingSafeEqual(Buffer.from(pw), Buffer.from(FORWARDER_PASSWORD));
+  if (!ok) {
+    if (!rec || now - rec.first >= 60000) _forwarderUnlockAttempts.set(ip, { n: 1, first: now });
+    else rec.n++;
+    return res.status(401).json({ status: 'error', required: true, message: 'Wrong password' });
+  }
+  _forwarderUnlockAttempts.delete(ip);
+  res.json({ status: 'success', required: true });
+});
+
 app.post('/deposit/manual/sms-forwarder', async (req, res) => {
   if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
   const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');

@@ -103,6 +103,11 @@ jobs:
 
             Then tap Save settings, START forwarding, and Send test ping (expect HTTP 200).
 
+            If `FORWARDER_PASSWORD` is set on the snow-server Render service, the app asks
+            for it every time it is opened, before the settings screen appears. Forwarding
+            is never gated by it: a locked phone keeps forwarding SMS and crediting
+            deposits. Leave that variable unset to switch the lock off.
+
             Put a number in the wrong slot and messages get attributed to the wrong
             payment number, so double-check the carrier label on each slot. If the app
             cannot tell which SIM received a message and more than one number is

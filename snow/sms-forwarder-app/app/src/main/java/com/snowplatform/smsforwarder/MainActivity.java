@@ -135,6 +135,128 @@ public class MainActivity extends Activity {
         requestPerms();
         refreshUi();
         checkForUpdate(false);   // quiet on open: only speaks up if there IS one
+        maybeAskForPassword(root);
+    }
+
+    /**
+     * Screen lock. Only guards THIS settings screen -- SmsReceiver and
+     * ForwardService never consult it, so a locked phone keeps forwarding and
+     * crediting deposits exactly as before.
+     *
+     * Skipped entirely on a phone that has not been configured yet: a fresh
+     * install holds nothing worth protecting, and it avoids stranding someone
+     * behind a lock before the server URL and secret are even entered.
+     */
+    private void maybeAskForPassword(final View content) {
+        if (Lock.isUnlockedThisRun()) return;
+        if (prefs.url().isEmpty() || prefs.secret().isEmpty()) return;   // not set up yet
+        showLockScreen(content);
+    }
+
+    private void showLockScreen(final View content) {
+        content.setVisibility(View.GONE);
+
+        final LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(24);
+        box.setPadding(pad, dp(80), pad, pad);
+        box.setBackgroundColor(Color.parseColor("#111111"));
+
+        box.addView(title("Snow SMS"));
+        final TextView msg = new TextView(this);
+        msg.setTextColor(Color.parseColor("#9A9A9A"));
+        msg.setText("Enter the access password to change settings. Forwarding keeps running either way.");
+        msg.setPadding(0, 0, 0, dp(16));
+        box.addView(msg);
+
+        final EditText pwField = input("", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        box.addView(pwField);
+
+        final Button unlockBtn = button("Unlock");
+        box.addView(unlockBtn);
+
+        final ScrollView lockScroll = new ScrollView(this);
+        lockScroll.setBackgroundColor(Color.parseColor("#111111"));
+        lockScroll.addView(box);
+        addContentView(lockScroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
+
+        final Lock lock = new Lock(this);
+
+        // The server is the authority on whether a password is required at all.
+        // If the owner clears FORWARDER_PASSWORD on Render, every phone must
+        // open again -- including one still holding a hash of the old password,
+        // so the cache is dropped here rather than left to keep asking for a
+        // password that no longer exists anywhere.
+        Lock.requiredAsync(prefs.url(), prefs.secret(), new Lock.Callback() {
+            @Override public void onResult(final Lock.Result r) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (isFinishing()) return;
+                        if (r == Lock.Result.NOT_REQUIRED) {
+                            lock.clearCache();
+                            lock.clearFailures();
+                            Lock.markUnlocked();
+                            lockScroll.setVisibility(View.GONE);
+                            content.setVisibility(View.VISIBLE);
+                        }
+                    }
+                });
+            }
+        });
+
+        unlockBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                long wait = lock.cooldownRemaining();
+                if (wait > 0) {
+                    msg.setText("Too many wrong tries. Wait " + ((wait / 1000) + 1) + "s.");
+                    return;
+                }
+                final String pw = pwField.getText().toString();
+                if (pw.isEmpty()) { msg.setText("Enter the password."); return; }
+
+                // Cached hash first, so a phone with no signal still opens.
+                if (lock.matchesCached(pw)) {
+                    lock.clearFailures();
+                    Lock.markUnlocked();
+                    lockScroll.setVisibility(View.GONE);
+                    content.setVisibility(View.VISIBLE);
+                    return;
+                }
+
+                unlockBtn.setEnabled(false);
+                msg.setText("Checking...");
+                Lock.verifyAsync(prefs.url(), prefs.secret(), pw, new Lock.Callback() {
+                    @Override public void onResult(final Lock.Result r) {
+                        runOnUiThread(new Runnable() {
+                            @Override public void run() {
+                                if (isFinishing()) return;
+                                unlockBtn.setEnabled(true);
+                                if (r == Lock.Result.OK || r == Lock.Result.NOT_REQUIRED) {
+                                    lock.cachePassword(pw);   // only ever after the server agreed
+                                    lock.clearFailures();
+                                    Lock.markUnlocked();
+                                    lockScroll.setVisibility(View.GONE);
+                                    content.setVisibility(View.VISIBLE);
+                                } else if (r == Lock.Result.WRONG) {
+                                    // The password may have been changed on the
+                                    // server; a stale cached hash must not keep
+                                    // opening the app.
+                                    lock.clearCache();
+                                    lock.recordFailure();
+                                    msg.setText("Wrong password.");
+                                } else {
+                                    msg.setText(lock.hasCachedPassword()
+                                            ? "Wrong password (offline)."
+                                            : "No connection, and no password saved on this phone yet.");
+                                    lock.recordFailure();
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        });
     }
 
     /** A sideloaded APK never updates itself, so the app asks. */
