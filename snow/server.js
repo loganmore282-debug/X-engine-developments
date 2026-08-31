@@ -2215,6 +2215,7 @@ const MANUAL_EVENT_FIELDS = {
   ignored: 'ignored',             // not a money message at all
   assigned: 'assigned',           // an order was pointed at this number
   expired: 'expired',             // an order on this number ran out of time
+  unknownNumber: 'unknownNumber', // a phone reported a number nobody has saved
 };
 async function recordManualNumberEvent(number, event, opts) {
   if (!number) return;
@@ -2604,6 +2605,28 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
   if (!receivingNumber) return res.json({ status: 'ignored', reason: 'no receivingNumber configured on this device' });
 
   try {
+    // A phone can only be right about which number it is if that number is
+    // actually one of ours. If it is not -- a typo during setup, or a number
+    // deleted from the panel afterwards -- then no order was ever assigned
+    // to it and nothing here could ever match, no matter how many real
+    // payments arrive. Left alone this is completely silent: the phone looks
+    // healthy, the member's money is gone, and the deposit just never lands.
+    // So say so, loudly, instead of letting it fall through to "unmatched".
+    const knownSnap = await db.collection('manualPaymentNumbers').where('number', '==', receivingNumber).limit(1).get();
+    if (knownSnap.empty) {
+      console.error(`MANUAL_SMS_UNKNOWN_NUMBER: a forwarder reported receivingNumber ${receivingNumber}, which is not saved in the admin panel. Deposits on this phone can NEVER match. Check the number configured on device "${device || 'unknown'}".`);
+      trackManual(receivingNumber, 'unknownNumber', { amount: info.amount, device, appVersion });
+      await db.collection('manualSmsLog').add({
+        unknownNumber: true, receivingNumber, amount: info.amount,
+        raw: String(info.raw).slice(0, 2000), device, appVersion,
+        createdAt: FieldValue.serverTimestamp(),
+      }).catch(() => {});
+      return res.json({
+        status: 'unknown-number', receivingNumber,
+        message: 'This number is not saved in the admin panel, so nothing can match it.',
+      });
+    }
+
     // Idempotency: MoMo transaction id, or a hash of (raw text + receiving
     // number) as a fallback for a message with no extractable TID.
     const tid = info.txId || crypto.createHash('sha256').update(info.raw + '|' + receivingNumber).digest('hex').slice(0, 24);
@@ -2747,6 +2770,39 @@ async function reconcileManualDeposits() {
   } catch (e) { console.error('Reconcile manual deposits error:', e.message); }
 }
 
+// The saved payment numbers, for the forwarder app to check what was typed
+// into it against. Owner: "what if one fills in the number in sms Forwarder
+// but not existing in admin panel" -- today a typo there fails in total
+// silence: orders are only ever assigned to real saved numbers, so an SMS
+// reporting a number nobody was told to pay can never match anything, and
+// the phone looks like it is working perfectly.
+//
+// These are not secret -- every member is shown one to pay into -- so
+// handing them to a device that already holds MANUAL_SMS_SECRET gives away
+// nothing, and it lets the app refuse a wrong number at the moment it is
+// entered instead of failing quietly forever afterwards.
+app.post('/deposit/manual/payment-numbers', async (req, res) => {
+  if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
+  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
+  const expected = MANUAL_SMS_SECRET;
+  const ok = provided.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  if (!ok) return res.status(403).json({ status: 'error', message: 'Forbidden' });
+  try {
+    const snap = await db.collection('manualPaymentNumbers').orderBy('network', 'asc').orderBy('order', 'asc').get();
+    const numbers = snap.docs.map(d => {
+      const n = d.data();
+      return {
+        number: n.number || '', holderName: n.holderName || '',
+        network: n.network || '', active: n.active !== false,
+      };
+    }).filter(n => n.number);
+    res.json({ status: 'success', numbers });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
 // Forwarder heartbeat. Without this, a phone that has simply stopped
 // working is indistinguishable from a quiet one -- no SMS arriving looks
 // exactly the same whether the number is idle or the app was killed, the
@@ -2825,6 +2881,7 @@ app.post('/admin/manual-numbers/analytics', async (req, res) => {
     const blank = () => ({
       smsForwarded: 0, credited: 0, unmatched: 0, ambiguous: 0, mismatch: 0,
       duplicate: 0, unparsed: 0, ignored: 0, assigned: 0, expired: 0,
+      unknownNumber: 0,
       amount: 0, deliveryMsSum: 0, deliverySamples: 0, deliveryMsMax: 0,
     });
     const sumInto = (acc, row) => {
@@ -2879,10 +2936,26 @@ app.post('/admin/manual-numbers/analytics', async (req, res) => {
       };
     });
 
+    // Any daily row whose number is NOT in the saved list came from a phone
+    // configured with a number nobody set up -- the silent-failure case. It
+    // would otherwise be invisible here, since this list is built from the
+    // saved numbers only, which is exactly how it stayed hidden before.
+    const savedSet = new Set(numsSnap.docs.map(d => d.data().number).filter(Boolean));
+    const unknownNumbers = [];
+    for (const [num, rows] of byNumber.entries()) {
+      if (savedSet.has(num)) continue;
+      const totals = rows.reduce((acc, r) => sumInto(acc, r), blank());
+      unknownNumbers.push({
+        number: num, ...totals,
+        lastSeenAt: Math.max(...rows.map(r => tsMillis(r.lastEventAt) || 0), 0) || null,
+      });
+    }
+    unknownNumbers.sort((a, b) => (b.smsForwarded || 0) - (a.smsForwarded || 0));
+
     const platform = numbers.reduce((acc, n) => sumInto(acc, n), blank());
     const platformReal = platform.credited + platform.unmatched + platform.ambiguous + platform.mismatch;
     res.json({
-      status: 'success', days, numbers,
+      status: 'success', days, numbers, unknownNumbers,
       totals: {
         ...platform,
         realMoneySms: platformReal,

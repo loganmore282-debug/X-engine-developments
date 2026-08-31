@@ -68,6 +68,11 @@ const routes = {
         duplicate: 0, unparsed: 0, ignored: 0, assigned: 0, expired: 0, amount: 0,
         realMoneySms: 0, successRate: null, fillRate: null, avgDeliveryMs: null, maxDeliveryMs: null,
         daily: [] },
+    ],
+    unknownNumbers: [
+      { number: '+256770000009', smsForwarded: 3, credited: 0, unmatched: 0, ambiguous: 0,
+        mismatch: 0, duplicate: 0, unparsed: 0, ignored: 0, assigned: 0, expired: 0,
+        amount: 15000, lastSeenAt: Date.now() },
     ] },
   'POST /admin/withdrawals/list': { status: 'success', counts: { pending: 1 }, payoutMode: 'automatic',
     withdrawals: [{ id: 'w1', userId: 'u1', amount: 20000, net: 17000, status: 'pending',
@@ -454,6 +459,9 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     if (!opened.includes('Hide daily breakdown')) errors.push('Analytics: daily breakdown did not expand');
   }
   if (!doc.getElementById('numDays')) errors.push('Analytics: day-range selector missing');
+  // A number a phone reports but nobody saved must be impossible to miss.
+  if (!an.includes('Messages from numbers you have not saved')) errors.push('Analytics: unknown-number warning missing');
+  if (!an.includes('+256770000009')) errors.push('Analytics: unknown number itself not listed');
 
   // Withdrawals can be pinned independently of deposits.
   doc.querySelector('.tab[data-tab="settings"]').click();

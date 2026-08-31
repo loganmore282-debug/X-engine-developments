@@ -7,6 +7,10 @@
          phone, so a message is never attributed to the wrong Snow payment
          number. Only required when this install covers 2+ numbers. -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Lets the app read a SIM's own number, where the carrier stored one, to
+         prefill a blank slot. Convenience only: what makes a number correct is
+         the check against the payment numbers saved in the admin panel. -->
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

@@ -59,6 +59,7 @@ public class MainActivity extends Activity {
     private LinearLayout slotBox;
     private TextView status;
     private Button toggleBtn;
+    private final List<TextView> slotStatuses = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -135,6 +136,7 @@ public class MainActivity extends Activity {
         requestPerms();
         refreshUi();
         checkForUpdate(false);   // quiet on open: only speaks up if there IS one
+        refreshDirectory(true);  // so each slot can say whether its number is real
         maybeAskForPassword(root);
     }
 
@@ -411,14 +413,145 @@ public class MainActivity extends Activity {
             if (i < carriers.length && carriers[i] != null) rows = Math.max(rows, i + 1);
         }
 
+        String[] simNumbers = detectSimNumbers();
+        slotStatuses.clear();
+
         for (int i = 0; i < rows; i++) {
             String carrier = (i < carriers.length && carriers[i] != null) ? carriers[i] : null;
             slotBox.addView(label("SIM slot " + (i + 1)
                     + (carrier != null ? " (" + carrier + ")" : " (no SIM detected)")));
-            EditText f = input(saved.optString(String.valueOf(i), ""), InputType.TYPE_CLASS_PHONE);
+
+            String value = saved.optString(String.valueOf(i), "");
+            // Only ever fills a BLANK field. A number already entered is the
+            // admin's decision and must not be quietly overwritten by whatever
+            // the SIM happens to claim.
+            if (value.isEmpty() && i < simNumbers.length && simNumbers[i] != null) value = simNumbers[i];
+
+            final EditText f = input(value, InputType.TYPE_CLASS_PHONE);
             slotBox.addView(f);
             slotFields.add(f);
+
+            final TextView st = hint("");
+            slotBox.addView(st);
+            slotStatuses.add(st);
+
+            final int idx = i;
+            Button pick = button("Choose from saved numbers");
+            pick.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { pickNumberForSlot(idx); }
+            });
+            slotBox.addView(pick);
         }
+        updateSlotStatuses();
+    }
+
+    /**
+     * Says, per slot, whether what is typed is actually one of the payment
+     * numbers saved in the admin panel.
+     *
+     * This is the whole point: a number that is not in that list can never
+     * match a deposit, because orders are only ever assigned to real saved
+     * numbers. Without this the app forwards happily, looks perfectly
+     * healthy, and every payment to that phone is quietly lost.
+     */
+    private void updateSlotStatuses() {
+        Directory dir = new Directory(this);
+        boolean haveList = dir.hasCache();
+        for (int i = 0; i < slotFields.size() && i < slotStatuses.size(); i++) {
+            String typed = slotFields.get(i).getText().toString().trim();
+            TextView st = slotStatuses.get(i);
+            if (typed.isEmpty()) {
+                st.setText("Not used for Snow payments.");
+                st.setTextColor(Color.parseColor("#6E6E6E"));
+            } else if (!haveList) {
+                st.setText("Not checked yet. Tap Save settings while online to check this "
+                        + "against the admin panel.");
+                st.setTextColor(Color.parseColor("#E8C468"));
+            } else {
+                Directory.Entry e = dir.find(typed);
+                if (e == null) {
+                    st.setText("NOT a saved payment number. Deposits to this number can never "
+                            + "match. Fix it or add it in the admin panel.");
+                    st.setTextColor(Color.parseColor("#FF6B6B"));
+                } else if (!e.active) {
+                    st.setText("Matches " + e.holderName + ", but that number is disabled in the "
+                            + "admin panel, so no orders are sent to it.");
+                    st.setTextColor(Color.parseColor("#E8C468"));
+                } else {
+                    st.setText("Matches " + e.holderName + " (" + e.network + ").");
+                    st.setTextColor(Color.parseColor("#5BD08A"));
+                }
+            }
+        }
+    }
+
+    /** Pick a slot's number from the real list instead of typing it. */
+    private void pickNumberForSlot(final int slot) {
+        final Directory dir = new Directory(this);
+        final List<Directory.Entry> list = dir.cached();
+        if (list.isEmpty()) {
+            toast("No list yet. Tap Save settings while online first.");
+            refreshDirectory(false);
+            return;
+        }
+        final String[] labels = new String[list.size()];
+        for (int i = 0; i < list.size(); i++) labels[i] = list.get(i).label();
+        new AlertDialog.Builder(this)
+                .setTitle("Payment numbers in the admin panel")
+                .setItems(labels, new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int which) {
+                        if (slot < slotFields.size()) {
+                            slotFields.get(slot).setText(list.get(which).number);
+                            updateSlotStatuses();
+                        }
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    /** Pulls the saved payment numbers so entries can be checked against them. */
+    private void refreshDirectory(final boolean quiet) {
+        Directory.refreshAsync(this, new Directory.Callback() {
+            @Override public void onResult(final boolean ok, final List<Directory.Entry> nums, final String error) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (isFinishing()) return;
+                        if (!ok && !quiet) toast("Could not check numbers: " + error);
+                        updateSlotStatuses();
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * Each SIM's own number, per slot, when the phone will tell us.
+     *
+     * Many Ugandan SIMs simply do not carry it -- getNumber() returns empty
+     * far more often than not -- so this is only ever used to PREFILL a blank
+     * field as a convenience. It is never trusted on its own and never
+     * overwrites something already typed; the check against the admin
+     * panel's saved list is what actually makes a number correct.
+     */
+    private String[] detectSimNumbers() {
+        String[] out = new String[MAX_SLOT_ROWS];
+        try {
+            if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED)
+                return out;
+            SubscriptionManager sm = (SubscriptionManager) getSystemService(TELEPHONY_SUBSCRIPTION_SERVICE);
+            if (sm == null) return out;
+            List<SubscriptionInfo> list = sm.getActiveSubscriptionInfoList();
+            if (list == null) return out;
+            for (SubscriptionInfo si : list) {
+                int slot = si.getSimSlotIndex();
+                if (slot < 0 || slot >= out.length) continue;
+                String num = null;
+                try { num = si.getNumber(); } catch (Exception ignored) {}
+                if (num != null && !num.trim().isEmpty()) out[slot] = num.trim();
+            }
+        } catch (Exception ignored) {}
+        return out;
     }
 
     /** Carrier name per slot index, or nulls when unreadable (permission not yet granted). */
@@ -454,6 +587,9 @@ public class MainActivity extends Activity {
         prefs.saveNumbers(numbers);
         toast("Saved");
         refreshUi();
+        // Re-pull the saved list on every save, so a number added in the panel
+        // a moment ago is recognised without reinstalling anything.
+        refreshDirectory(true);
     }
 
     private void toggleActive() {
@@ -476,6 +612,14 @@ public class MainActivity extends Activity {
                 requestPerms();
                 return;
             }
+            // A number that is not saved in the panel can never match a
+            // deposit. Warn rather than block: the admin may be about to add
+            // it, and refusing outright would strand a legitimate setup.
+            String bad = unknownConfiguredNumber();
+            if (bad != null) {
+                confirmStartAnyway(bad);
+                return;
+            }
             prefs.setActive(true);
             ForwardService.start(this);
         } else {
@@ -483,6 +627,34 @@ public class MainActivity extends Activity {
             ForwardService.stop(this);
         }
         refreshUi();
+    }
+
+    /** The first configured number that is NOT in the panel's list, if any. */
+    private String unknownConfiguredNumber() {
+        Directory dir = new Directory(this);
+        if (!dir.hasCache()) return null;   // nothing to check against, say nothing
+        for (String n : prefs.allNumbers()) {
+            if (dir.find(n) == null) return n;
+        }
+        return null;
+    }
+
+    private void confirmStartAnyway(final String bad) {
+        new AlertDialog.Builder(this)
+                .setTitle("That number is not in the admin panel")
+                .setMessage(bad + " is not one of the saved payment numbers.\n\n"
+                        + "Members are never told to pay it, so deposits on this SIM can never "
+                        + "match and would be lost. Fix the number here, or add it in the admin "
+                        + "panel first.\n\nStart forwarding anyway?")
+                .setNegativeButton("Go back", null)
+                .setPositiveButton("Start anyway", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) {
+                        prefs.setActive(true);
+                        ForwardService.start(MainActivity.this);
+                        refreshUi();
+                    }
+                })
+                .show();
     }
 
     private void sendTest() {
@@ -532,6 +704,12 @@ public class MainActivity extends Activity {
             need.add(Manifest.permission.READ_SMS);
         if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED)
             need.add(Manifest.permission.READ_PHONE_STATE);
+        // Only this one exposes a SIM's own number on API 30+, and only when
+        // the carrier bothered to write it there -- which many do not. Used
+        // purely to prefill a blank field; nothing depends on it.
+        if (Build.VERSION.SDK_INT >= 30
+                && checkSelfPermission(Manifest.permission.READ_PHONE_NUMBERS) != PackageManager.PERMISSION_GRANTED)
+            need.add(Manifest.permission.READ_PHONE_NUMBERS);
         if (Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             need.add(Manifest.permission.POST_NOTIFICATIONS);

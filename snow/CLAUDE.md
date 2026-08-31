@@ -5924,6 +5924,71 @@ release; **the analytics only fill in once phones are running it** -- an older b
 no latency, no device and no heartbeat, so those numbers stay empty until each phone
 updates.
 
+## Round 96 (2026-08-31) — a payment number typed into the forwarder is now checked against the admin panel (app v1.7)
+
+Owner: *"so what if one fills in the number in sms Forwarder but not existing in admin
+panel, so please fix it, so the app detects a phone number in phone and matches and
+verifies against it existing in admin saved payment numbers."*
+
+**The failure this closes is total and silent.** Orders are only ever assigned to numbers
+saved in the panel, so an SMS reporting any other number can never match anything --
+no matter how many real payments arrive. Before this round the phone forwarded happily,
+reported HTTP 200, showed no error anywhere, and every deposit to that SIM was simply
+lost. It did not even show up in the Round 95 analytics, because that list is built from
+the saved numbers only. A single typo during setup was unrecoverable-by-inspection.
+
+Fixed at three points, deliberately, because each one alone leaves a hole.
+
+**At entry (app v1.7)** -- `Directory.java` fetches the saved payment numbers from the new
+`POST /deposit/manual/payment-numbers` (same shared-secret gate as the webhook) and caches
+them, so a second phone can still be checked with no signal.
+- Each slot gets a **Choose from saved numbers** picker, so the number can be selected
+  rather than typed at all.
+- A live status line under each slot: "Matches Snow MTN 1 (MTN Mobile Money)" in green,
+  "NOT a saved payment number" in red, or a warning when the number is saved but disabled.
+  **Matching is on the last 9 digits**, so `0770000001` and `+256770000001` are the same
+  number -- the server normalises both anyway, and rejecting a correct number over its
+  formatting would be its own bug.
+- Starting forwarding with an unknown number asks for confirmation first. **Warn, not
+  block**: the admin may be about to add it in the panel, and refusing outright would
+  strand a legitimate setup.
+- The list refreshes on open and on every Save, so a number added in the panel a minute
+  ago is recognised without touching the phone again.
+
+**SIM auto-detect, honestly scoped.** `SubscriptionInfo.getNumber()` (plus
+`READ_PHONE_NUMBERS`, which is what actually exposes it on API 30+) prefills a **blank**
+slot. It never overwrites something already typed. Many Ugandan SIMs simply do not carry
+the number, so this is a convenience only -- the check against the panel is what makes a
+number correct. Treating detection as the fix would have quietly failed on most handsets.
+
+**At the server** -- the webhook now looks the reported number up before attempting any
+match. Unknown means: log `MANUAL_SMS_UNKNOWN_NUMBER` at error level naming the device,
+record it, and answer `unknown-number` rather than letting it fall through to the
+indistinguishable "unmatched". These numbers are not secret (every member is shown one to
+pay into), so serving the list to a device that already holds `MANUAL_SMS_SECRET` gives
+away nothing.
+
+**In the panel** -- a red "Messages from numbers you have not saved" card at the top of
+the payment-number analytics, listing each unrecognised number with message count, money
+seen and last-seen time. Built from the daily rows whose number is not in the saved set,
+which is precisely the data that was being written and never shown.
+
+**Verified**: `node --check server.js` clean, `build-admin.js` clean round-trip, XML and
+brace/paren structure clean across all 10 Java files. The analytics harness (real
+`server.js`, in-memory Mongo stub, real HTTP) grew to **35 checks**, adding: an SMS for an
+unsaved number is refused as `unknown-number` and names the number back; it is surfaced in
+analytics with its counts; it is **not** mixed in with the real saved numbers; a phone can
+fetch the payment-number list and it carries the holder names the app displays; that list
+is refused without the shared secret. `test-admin-obfuscated-build.js` extended against the
+real obfuscated build with an `unknownNumbers` fixture, asserting the warning card and the
+offending number both render -- 0 errors across all 12 tabs.
+
+Still only proven to compile, not run on hardware: the picker, the status lines and SIM
+auto-detect. The server-side backstop and the panel card are covered by the harness above.
+
+Admin cache bumped `v21`→`v22`. No user-app change this round. **`server.js` changed --
+Render should auto-deploy this push.** App v1.7 lands in the `snow-sms-app` release.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -121,6 +121,28 @@ to a pending order by (receiving number, amount), so a wrong or blank value mean
 deposits on that number will never match. Putting a number in the wrong slot is worse
 than leaving it blank: messages get attributed to the wrong number.
 
+Since v1.7 the app checks this for you instead of leaving it to be discovered later:
+
+- Each slot has a **Choose from saved numbers** button that lists the real payment
+  numbers from the admin panel, so the number can be picked rather than typed.
+- Under each slot the app says whether what is entered actually matches — *"Matches Snow
+  MTN 1 (MTN Mobile Money)"*, or in red *"NOT a saved payment number"*. Matching ignores
+  formatting, so `0770000001` and `+256770000001` are treated as the same number.
+- If the carrier stored the SIM's own number, a blank slot is prefilled with it. Many
+  Ugandan SIMs do not carry it, which is exactly why this is only a convenience and the
+  check above is what decides.
+- Starting forwarding with a number that is not in the list asks you to confirm first,
+  explaining that deposits to it can never match. It warns rather than blocks, in case
+  you are about to add the number in the panel.
+- The list is cached after one successful fetch, so a second phone can still be checked
+  somewhere with no signal. Tap **Save settings** while online to refresh it after adding
+  a number in the panel.
+
+The server is the backstop. If a message still arrives for a number that is not saved, it
+is refused with `unknown-number` rather than being quietly treated as unmatched, logged as
+`MANUAL_SMS_UNKNOWN_NUMBER`, and listed in **Analytics → Messages from numbers you have not
+saved** so it cannot go unnoticed.
+
 ## Required Render environment variables (on the `snow-server` service)
 | Variable | Value |
 |----------|-------|

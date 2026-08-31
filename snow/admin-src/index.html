@@ -688,7 +688,21 @@ function numbersSection(mn){
       <div class="stat"><div class="n">${ugx(t.amount)}</div><div class="l">Received via SMS match</div></div>
       <div class="stat"><div class="n">${ms(t.avgDeliveryMs)}</div><div class="l">Average forwarding delay</div></div>
     </div>
+    ${unknownCard(mn.unknownNumbers)}
     ${nums.map(n=>numberCard(n)).join('')}`;
+}
+// A phone configured with a number that is not in the saved list forwards
+// perfectly happily while every payment to it is lost, and it would never
+// appear above, because that list is built from the saved numbers only.
+// This is the one place it becomes visible.
+function unknownCard(unknown){
+  if(!unknown || !unknown.length) return '';
+  return `<div class="panel-card" style="margin-bottom:10px;border:1px solid var(--danger)">
+    <h2 class="sec" style="margin:0 0 4px;color:var(--danger)">Messages from numbers you have not saved</h2>
+    <p class="muted" style="margin:0 0 8px">A forwarder is reporting these numbers, but they are not in your payment numbers list. Members are never told to pay them, so <b>nothing sent to them can ever be matched or credited</b>. Either correct the number on that phone, or add it under Settings, Manual payments.</p>
+    <div class="table-scroll"><table><thead><tr><th>Number reported</th><th>Messages</th><th>Money seen</th><th>Last seen</th></tr></thead>
+    <tbody>${unknown.map(u=>`<tr><td><b>${esc(u.number)}</b></td><td>${u.smsForwarded||0}</td><td>${u.amount?ugx(u.amount):'0'}</td><td>${ago(u.lastSeenAt)}</td></tr>`).join('')}</tbody></table></div>
+  </div>`;
 }
 function numberCard(n){
   const open = !!_numOpen[n.number];
