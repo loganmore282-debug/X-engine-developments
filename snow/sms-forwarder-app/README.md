@@ -106,8 +106,13 @@ therefore checks for itself:
 - Every build publishes a small `version.json` next to the APK in the same release. The
   installed app reads it and compares `versionCode`.
 - **When you open the app**, it checks quietly and only speaks up if there's a newer
-  version, offering a Download button (that opens the release in your browser; install
-  it over the top). There's also a "Check for updates" button to ask on demand.
+  version, offering an "Update now" button. The APK downloads **inside the app** and
+  Android's installer opens straight away — no browser round-trip. There's also a
+  "Check for updates" button to ask on demand.
+- The first time, Android asks you to allow Snow SMS to install apps ("Allow from this
+  source"); the app links you to that exact settings screen. If anything about the
+  in-app path is blocked on a given phone, it falls back to opening the download in a
+  browser rather than leaving you stuck.
 - **While it's running in the background**, the ongoing "Snow SMS active" notification
   changes to "Snow SMS update available (1.3)" — these phones sit untouched forwarding
   SMS, so the notification is the one thing an admin actually sees. Tapping it opens the

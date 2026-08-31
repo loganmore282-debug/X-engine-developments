@@ -3,13 +3,19 @@ package com.snowplatform.smsforwarder;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.Settings;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.text.InputType;
@@ -42,7 +48,12 @@ public class MainActivity extends Activity {
     private static final int MIN_SLOT_ROWS = 2;
     private static final int MAX_SLOT_ROWS = 4;
 
+    private static final String APK_MIME = "application/vnd.android.package-archive";
+    private static final String APK_FILENAME = "snow-sms-forwarder.apk";
+
     private Prefs prefs;
+    private long downloadId = -1;
+    private BroadcastReceiver downloadWatcher;
     private EditText urlField, secretField;
     private final List<EditText> slotFields = new ArrayList<>();
     private LinearLayout slotBox;
@@ -126,12 +137,7 @@ public class MainActivity extends Activity {
         checkForUpdate(false);   // quiet on open: only speaks up if there IS one
     }
 
-    /**
-     * A sideloaded APK never updates itself, so the app asks. Opening the
-     * download in the browser is deliberate: Android's own installer then
-     * handles it, with no extra install permission or FileProvider needed,
-     * and it's the same flow used to install the app in the first place.
-     */
+    /** A sideloaded APK never updates itself, so the app asks. */
     private void checkForUpdate(final boolean announceWhenUpToDate) {
         if (announceWhenUpToDate) status.setText("Checking for updates...");
         UpdateChecker.checkAsync(this, new UpdateChecker.Callback() {
@@ -157,19 +163,117 @@ public class MainActivity extends Activity {
                 .setTitle("Update available")
                 .setMessage("Version " + latestName + " is out. You have "
                         + UpdateChecker.installedVersionName(this) + ".\n\n"
-                        + "Downloading opens your browser. Install it over the top -- your "
-                        + "numbers and secret are kept.")
-                .setPositiveButton("Download", new DialogInterface.OnClickListener() {
-                    @Override public void onClick(DialogInterface d, int which) {
-                        try {
-                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UpdateChecker.APK_URL)));
-                        } catch (Exception e) {
-                            toast("No browser to open the download");
-                        }
-                    }
+                        + "It downloads here in the app, then Android asks you to confirm "
+                        + "the install. Your numbers and secret are kept.")
+                .setPositiveButton("Update now", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int which) { startInAppUpdate(); }
                 })
                 .setNegativeButton("Later", null)
                 .show();
+    }
+
+    /**
+     * Downloads the new APK inside the app and hands it straight to Android's
+     * installer, instead of bouncing the admin out to a browser.
+     *
+     * Uses DownloadManager plus getUriForDownloadedFile(), which hands back a
+     * content:// URI the installer can already read -- so this needs no
+     * FileProvider and keeps the app's zero-dependency build. Android still
+     * shows its own confirmation screen; nothing installs silently.
+     *
+     * Every failure path falls back to opening the download in a browser, so
+     * a phone that blocks any part of this is never left with no way to update.
+     */
+    private void startInAppUpdate() {
+        // Android 8+ requires per-app permission to install APKs. Send the
+        // admin to the exact settings screen rather than failing quietly.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Allow installing updates")
+                    .setMessage("Android needs permission for Snow SMS to install its own updates. "
+                            + "Turn on \"Allow from this source\", then tap Update again.")
+                    .setPositiveButton("Open settings", new DialogInterface.OnClickListener() {
+                        @Override public void onClick(DialogInterface d, int w) {
+                            try {
+                                startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                        Uri.parse("package:" + getPackageName())));
+                            } catch (Exception e) { openInBrowser(); }
+                        }
+                    })
+                    .setNegativeButton("Use browser instead", new DialogInterface.OnClickListener() {
+                        @Override public void onClick(DialogInterface d, int w) { openInBrowser(); }
+                    })
+                    .show();
+            return;
+        }
+        try {
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (dm == null) { openInBrowser(); return; }
+            // Clear any previous copy so a stale download can never be installed.
+            if (downloadId != -1) dm.remove(downloadId);
+
+            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(UpdateChecker.APK_URL));
+            req.setTitle("Snow SMS update");
+            req.setDescription("Downloading the new version");
+            req.setMimeType(APK_MIME);
+            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
+            req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, APK_FILENAME);
+            downloadId = dm.enqueue(req);
+
+            registerDownloadWatcher();
+            status.setText("Downloading update...");
+        } catch (Exception e) {
+            openInBrowser();
+        }
+    }
+
+    private void registerDownloadWatcher() {
+        if (downloadWatcher != null) return;
+        downloadWatcher = new BroadcastReceiver() {
+            @Override public void onReceive(Context ctx, Intent intent) {
+                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                if (id != downloadId) return;
+                launchInstaller();
+            }
+        };
+        IntentFilter f = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+        // Android 14 requires an explicit export flag on runtime receivers.
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(downloadWatcher, f, Context.RECEIVER_EXPORTED);
+        else registerReceiver(downloadWatcher, f);
+    }
+
+    private void launchInstaller() {
+        try {
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (dm == null) { openInBrowser(); return; }
+            Uri uri = dm.getUriForDownloadedFile(downloadId);
+            if (uri == null) { status.setText("Download failed."); openInBrowser(); return; }
+            Intent install = new Intent(Intent.ACTION_VIEW);
+            install.setDataAndType(uri, APK_MIME);
+            install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(install);
+            status.setText("Confirm the install when Android asks.");
+        } catch (Exception e) {
+            status.setText("Could not open the installer.");
+            openInBrowser();
+        }
+    }
+
+    private void openInBrowser() {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UpdateChecker.APK_URL)));
+        } catch (Exception e) {
+            toast("No browser to open the download");
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (downloadWatcher != null) {
+            try { unregisterReceiver(downloadWatcher); } catch (Exception ignored) {}
+            downloadWatcher = null;
+        }
+        super.onDestroy();
     }
 
     /** One labelled number field per SIM slot, naming the carrier when the phone tells us. */
