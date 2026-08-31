@@ -2770,34 +2770,48 @@ async function reconcileManualDeposits() {
   } catch (e) { console.error('Reconcile manual deposits error:', e.message); }
 }
 
-// The saved payment numbers, for the forwarder app to check what was typed
-// into it against. Owner: "what if one fills in the number in sms Forwarder
-// but not existing in admin panel" -- today a typo there fails in total
-// silence: orders are only ever assigned to real saved numbers, so an SMS
-// reporting a number nobody was told to pay can never match anything, and
-// the phone looks like it is working perfectly.
+// Checks ONE number a person typed into the forwarder. Owner: "this should
+// be a backend secret, so one has to put the number not to select available
+// in admin panel, so no choosing saved numbers, one has to type, system
+// checks and verifies."
 //
-// These are not secret -- every member is shown one to pay into -- so
-// handing them to a device that already holds MANUAL_SMS_SECRET gives away
-// nothing, and it lets the app refuse a wrong number at the moment it is
-// entered instead of failing quietly forever afterwards.
-app.post('/deposit/manual/payment-numbers', async (req, res) => {
+// So this deliberately never returns the list, or a holder name, or anything
+// else about a number that was not already known to the caller. It answers
+// only: is this exact number one of ours, and is it switched on. Nothing here
+// can be used to discover a number.
+//
+// Why it needs to exist at all: orders are only ever assigned to saved
+// numbers, so a phone configured with any other number can never match a
+// deposit -- yet it forwards happily and looks perfectly healthy while every
+// payment to that SIM is lost. Checking at the moment the number is typed
+// turns a silent, permanent failure into an error on screen.
+const _verifyNumberAttempts = new Map();   // ip -> { n, first }
+app.post('/deposit/manual/verify-number', async (req, res) => {
   if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
   const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
   const expected = MANUAL_SMS_SECRET;
   const ok = provided.length === expected.length &&
     crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
   if (!ok) return res.status(403).json({ status: 'error', message: 'Forbidden' });
+
+  // A yes/no oracle is still an oracle. Setting up a phone means a handful of
+  // checks; anything beyond that is somebody walking the number space, so it
+  // gets throttled hard even though the caller already holds the secret.
+  const ip = String(req.ip || 'unknown');
+  const now = Date.now();
+  const rec = _verifyNumberAttempts.get(ip);
+  if (rec && now - rec.first < 60000 && rec.n >= 30)
+    return res.status(429).json({ status: 'error', message: 'Too many checks. Wait a minute.' });
+  if (!rec || now - rec.first >= 60000) _verifyNumberAttempts.set(ip, { n: 1, first: now });
+  else rec.n++;
+
   try {
-    const snap = await db.collection('manualPaymentNumbers').orderBy('network', 'asc').orderBy('order', 'asc').get();
-    const numbers = snap.docs.map(d => {
-      const n = d.data();
-      return {
-        number: n.number || '', holderName: n.holderName || '',
-        network: n.network || '', active: n.active !== false,
-      };
-    }).filter(n => n.number);
-    res.json({ status: 'success', numbers });
+    const raw = String((req.body && req.body.number) || '').trim();
+    const num = cleanPhone(raw) || raw;
+    if (!num) return res.json({ status: 'success', known: false, active: false });
+    const snap = await db.collection('manualPaymentNumbers').where('number', '==', num).limit(1).get();
+    if (snap.empty) return res.json({ status: 'success', known: false, active: false });
+    return res.json({ status: 'success', known: true, active: snap.docs[0].data().active !== false });
   } catch (e) {
     res.status(500).json({ status: 'error', message: e.message });
   }

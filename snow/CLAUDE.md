@@ -5989,6 +5989,56 @@ auto-detect. The server-side backstop and the panel card are covered by the harn
 Admin cache bumped `v21`→`v22`. No user-app change this round. **`server.js` changed --
 Render should auto-deploy this push.** App v1.7 lands in the `snow-sms-app` release.
 
+## Round 97 (2026-08-31) — the saved payment numbers stay on the backend: type-and-verify, no list, no picker (app v1.8)
+
+Owner, correcting Round 96: *"remove saying of saved from admin panel, this should be a
+backend secret, so one has to put the number not to select available in admin panel, so no
+choosing saved numbers, one has to type, system checks and verifies."*
+
+Round 96 solved the silent-typo problem by shipping the list to the phone. That works, but
+it puts every payment number inside an APK sitting on ten handsets — the exact thing the
+owner does not want. The check survives; the disclosure does not.
+
+**`POST /deposit/manual/payment-numbers` deleted outright.** There is now no endpoint that
+returns the list, and the harness asserts that (a call to it must 404). Replaced by
+**`POST /deposit/manual/verify-number`**, which takes one number and answers **only**
+`{known, active}` — no holder name, no network, no id, nothing that was not already known
+to whoever asked. A caller can confirm a number they already have; they cannot discover one.
+
+**A yes/no oracle is still an oracle**, so it is throttled to 30 checks a minute per
+address even though the caller already holds `MANUAL_SMS_SECRET`. Setting up a phone is a
+handful of checks; anything past that is somebody walking the number space. Verified by
+actually walking it in the harness until it cut off.
+
+**App v1.8**: `Directory.java` (which cached the whole list) deleted, replaced by
+`NumberCheck.java`, which caches only a per-number verdict — numbers somebody typed on
+that phone, never any others. The "Choose from saved numbers" picker is gone from every
+slot. The status line now reads the verdict: "Verified: this is a Snow payment number",
+"NOT a Snow payment number", or a note that it is saved but switched off. Matching is
+still on the last 9 digits, and the server normalises both sides, so `0770000001` and
+`+256770000001` verify identically.
+
+**One judgement worth recording**: the start-forwarding guard blocks only on a definite
+NO. A number that has not been checked yet — no signal, first setup — must never be
+treated as wrong, because an unanswered question is not a wrong answer, and treating it as
+one would strand a legitimate phone. Same warn-not-block posture as Round 96.
+
+Everything else from Round 96 stands unchanged: the server still refuses an SMS for an
+unsaved number as `unknown-number` rather than letting it look like an ordinary unmatched
+payment, and the admin panel still lists those numbers under "Messages from numbers you
+have not saved". Those are the backstops for a phone that was never verified at all.
+
+**Verified**: `node --check server.js` clean, XML and brace/paren structure clean across
+all 10 Java files. The analytics harness (real `server.js`, in-memory Mongo stub, real
+HTTP) is now **39 checks**, adding: a real number verifies known and active; the reply
+carries no holderName/network/list field; an unsaved number verifies as not known; the
+same number in local format still verifies; verification is refused without the shared
+secret; **the list endpoint returns 404 because it no longer exists**; and walking the
+number space gets throttled.
+
+No admin-panel or user-app change this round, so no cache bumps. **`server.js` changed --
+Render should auto-deploy this push.** App v1.8 lands in the `snow-sms-app` release.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
