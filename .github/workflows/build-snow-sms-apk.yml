@@ -31,6 +31,24 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      # Gradle does catch malformed XML, but only 25s in and only as a Java
+      # stack trace out of the manifest merger. This fails in two seconds
+      # naming the file and line. (A literal "--" inside an XML comment is
+      # illegal and broke a build exactly this way.)
+      - name: Validate XML
+        working-directory: snow/sms-forwarder-app
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.dom.minidom as m
+          bad = 0
+          for f in glob.glob('app/src/main/**/*.xml', recursive=True):
+              try:
+                  m.parse(f); print('ok   ', f)
+              except Exception as e:
+                  print('BROKEN', f, '->', e); bad += 1
+          sys.exit(1 if bad else 0)
+          PY
+
       - name: Build debug APK
         working-directory: snow/sms-forwarder-app
         run: gradle assembleDebug --no-daemon --stacktrace
