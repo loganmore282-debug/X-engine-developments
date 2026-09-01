@@ -6722,6 +6722,64 @@ own content changed — the Credit/Debit confirm dialogs and the esc() hygiene f
 matching `sw.js`'s own standing rule to bump on every deploy that changes index.html).
 **`server.js` and `db.js` changed — Render should auto-deploy this push.**
 
+## Round 105 (2026-09-01) — owner: "once again check again": 6-agent audit hit a session rate limit before returning anything; continued manually, 1 small consistency fix found and applied
+
+Owner asked for another audit pass right after Round 104. Launched the same 6-agent
+parallel pattern (server.js money-flow focused on the LipaPay/manual surfaces, db.js,
+admin-src, user-src, the Android forwarder, a general cross-cutting sweep) — all 6 were
+killed by a session-wide API rate limit before any returned a single finding (`HTTP 429,
+"You've hit your session limit"`). Rather than wait out the reset, continued the audit
+directly by hand against the newest, least-previously-audited surfaces (the LipaPay
+webhooks, the manual-deposit SMS-matching path, the 4 shared-secret-gated forwarder
+endpoints, `db.js`'s query-operator translation for the exclusion filters Round 104's own
+index fixes depend on).
+
+**Found and fixed — Low severity, a real deviation from this file's own stated
+invariant.** `/deposit/manual/init` checked `sett.depositMethod !== 'manual'` directly
+instead of going through `depositProvider(sett)` — the one function this codebase's own
+comment says is "the single place that decides which real payment path a DEPOSIT uses...
+reading depositMethod raw anywhere else is a bug waiting to happen." Traced whether this
+was live-exploitable: `normalizeProviderValue()` only remaps the legacy `'automatic'`
+literal to `'marzpay'` and passes `'manual'` through completely unchanged, so a raw
+`!== 'manual'` check happens to be functionally identical to the resolved check TODAY —
+not a live bug, but a real landmine: if `normalizeProviderValue()`'s own logic ever grows
+a new case (another alias, a typo-correction, case-insensitivity), this one call site
+would silently stop tracking it. Fixed to call `depositProvider(sett)` like every other
+site correctly does.
+
+**Everything else checked directly and found already correctly hardened, no changes
+needed**: both LipaPay webhooks (`/deposit/lipapay/callback`, `/withdraw/lipapay/callback`)
+correctly ignore their own claimed status and always independently re-verify via
+`lipaOrderQuery()` before crediting/processing/declining anything, exactly mirroring
+Round 81's MarzPay-webhook hardening; the manual-deposit SMS-matching path
+(`/deposit/manual/sms-forwarder`) correctly rejects an unsaved/unknown receiving number
+loudly rather than falling through to a silent "unmatched," correctly flags 2+ candidates
+or a sender mismatch for human review rather than guessing, and correctly never lets the
+member-facing paste-SMS fallback (`/deposit/manual/paste-sms`) credit anything itself;
+all 4 shared-secret-gated forwarder endpoints (`sms-forwarder`, `forwarder-unlock`,
+`verify-number`, `forwarder-heartbeat`) use the same length-check-then-`timingSafeEqual`
+pattern as this file's own `safeEqual()` helper, each additionally throttled per-IP where
+guessing risk exists (`verify-number`'s "a yes/no oracle is still an oracle" comment is
+accurate and the throttle backs it); `db.js`'s `where(field,'>',value)` correctly
+compiles to Mongo's `$gt`, which — unlike `$ne`/`$nin` — genuinely excludes documents
+where the field is missing, confirming Round 104's own `marzTxUuid>''`/
+`lipaTransactionId>''` starvation-avoidance exclusions and their matching new indexes
+behave exactly as documented.
+
+**Verified**: `node --check server.js` clean; the Round 104 concurrency harness
+(`round104-manual-race-test.js`, boots the real server against the in-memory mock DB)
+re-run after this fix — still 11/11 checks green, confirming no regression from the
+one-line change. `git diff --check` clean. This round is server.js-only, a single-line
+fix — no cache bump, no rebuild needed. **`server.js` changed — Render should
+auto-deploy this push.**
+
+**Left open**: the 6-agent parallel audit itself never actually ran — it was blocked
+entirely by the rate limit, not completed with clean results. A genuinely fresh set of
+independent eyes on this codebase (especially the LipaPay and manual-deposit surfaces,
+which remain the newest and least externally-reviewed code in this file) is still worth
+doing once the session limit resets; this round's manual pass is real but narrower than
+a proper 6-way parallel sweep would have covered.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

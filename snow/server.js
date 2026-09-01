@@ -2854,7 +2854,7 @@ app.post('/deposit/manual/init', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (sett.depositMethod !== 'manual') return res.status(400).json({ status: 'error', message: 'Manual deposits are not enabled right now.' });
+    if (depositProvider(sett) !== 'manual') return res.status(400).json({ status: 'error', message: 'Manual deposits are not enabled right now.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
     // Same validate-before-touching-abuse-counters ordering as
     // /deposit/marzpay -- see its own comment for why this order matters.
