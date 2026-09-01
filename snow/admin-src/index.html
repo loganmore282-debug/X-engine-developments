@@ -844,9 +844,9 @@ async function renderUsers(){
         <div class="muted" style="margin-bottom:10px">${d.checked} user(s) checked</div>
         ${!total?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance/total matches its real records, no duplicate credits, no negative balances, no stuck registrations.</div>`
         :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${total} issue(s) found.${walletMismatches.length?` ${walletMismatches.length} wallet-balance mismatch(es) can't be auto-closed. Credit/Debit move both sides together, so open the user and diagnose by hand.`:''}${recountableMismatches.length?` ${recountableMismatches.length} deposited/earned/invested mismatch(es) will be fixed by "Recalculate totals" above.`:''}</div>`+
-          mismatches.map(m=>`<div class="kv"><span class="k">${FIELD_LABEL[m.field]||m.field} ≠ real${m.phone?' · '+esc(m.phone):''}</span>
+          mismatches.map(m=>`<div class="kv"><span class="k">${esc(FIELD_LABEL[m.field]||m.field)} ≠ real${m.phone?' · '+esc(m.phone):''}</span>
             <span>stored ${ugx(m.stored)} vs real ${ugx(m.real)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-openuser="${esc(m.userId)}">Open user</button></span></div>`).join('')+
-          alerts.map(a=>`<div class="kv"><span class="k">${ALERT_LABEL[a.kind]||a.kind}${a.phone?' · '+esc(a.phone):''}</span>
+          alerts.map(a=>`<div class="kv"><span class="k">${esc(ALERT_LABEL[a.kind]||a.kind)}${a.phone?' · '+esc(a.phone):''}</span>
             ${alertRow(a)}</div>`).join('')}
         <button class="btn block" data-close>Close</button>`);
       document.querySelectorAll('[data-openuser]').forEach(b=>b.addEventListener('click', ()=>{ closeModal(); openUser(b.dataset.openuser); }));
@@ -1005,6 +1005,7 @@ async function openUser(uid){
   // in the first place.
   $('creditBtn')?.addEventListener('click', async()=>{
     if(!amt())return toast('Enter an amount','err');
+    if(!confirm(`Credit ${ugx(amt())} to ${u.phone}'s wallet? This immediately increases their real balance.`)) return;
     const b=$('creditBtn'); if(b.disabled)return; b.disabled=true; const lbl=b.textContent; b.innerHTML=btnBusyHtml('Please wait…');
     const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()});
     toast(d.message||d.status, d.status==='success'?'ok':'err');
@@ -1012,6 +1013,7 @@ async function openUser(uid){
   });
   $('debitBtn')?.addEventListener('click', async()=>{
     if(!amt())return toast('Enter an amount','err');
+    if(!confirm(`Debit ${ugx(amt())} from ${u.phone}'s wallet? This immediately reduces their real balance.`)) return;
     const b=$('debitBtn'); if(b.disabled)return; b.disabled=true; const lbl=b.textContent; b.innerHTML=btnBusyHtml('Please wait…');
     const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()});
     toast(d.message||d.status, d.status==='success'?'ok':'err');
@@ -1136,7 +1138,7 @@ async function renderDeposits(){
   const depProcChart = dpbd.length ? `<div class="panel-card">
     <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
     <div class="muted"><b>${grp('matched')}</b> processed all-time · ${ugx(r.processedAmount||0)} received</div></div>
-    <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${dayLabel(d.day)}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
+    <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
     <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Deposits processed</th><th>Amount received</th></tr></thead>
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
@@ -1244,7 +1246,7 @@ async function renderWithdrawals(){
   const procChart = pbd.length ? `<div class="panel-card">
     <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
     <div class="muted"><b>${counts.processed||0}</b> processed all-time · ${ugx(r.processedAmount||0)} paid out</div></div>
-    <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${dayLabel(d.day)}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
+    <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
     <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Withdrawals processed</th><th>Amount paid</th></tr></thead>
     <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `

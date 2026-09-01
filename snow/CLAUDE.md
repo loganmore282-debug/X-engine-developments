@@ -6572,6 +6572,156 @@ specific assumption remains doc-verified, not live-verified, exactly as flagged 
 102. Once real credentials are set, an admin switching Settings → Manual payments to
 "Automatic (LipaPay)" is the only step needed to go live — no further code changes.
 
+## Round 104 (2026-09-01) — 6-agent parallel audit ("check again in the code and run agent for fixing all bugs, vulnerabilities and leaks"): 4 real bugs fixed, 3 hardening fixes applied, 2 structural findings deferred with reasoning
+
+Owner, after Round 103's LipaPay wiring landed: *"ohk, that is enough for this, can you
+check again in the code and run agent for fixing all bugs, vulnerabilities and leaks."*
+Ran 6 parallel read-only `general-purpose` subagents (mirroring the Round 59/60 pattern
+— each scoped to a distinct domain, briefed with pointers into this file's own prior-
+round history so nothing already-fixed got re-reported, each required to report a
+concrete file:line + failure scenario, not a vague "looks risky" note): (1) `server.js`
+money-flow logic focused on the new LipaPay/manual-deposit surfaces from Rounds 88–103,
+(2) `db.js` data-integrity semantics, (3) `admin-src/index.html` UI correctness, (4)
+`user-src/original_module.js` frontend logic, (5) the `sms-forwarder-app/` Android
+sources, (6) a general cross-cutting sweep. Every finding was independently re-derived
+against the actual current code before being touched — several agent-reported items
+turned out to already be handled or were narrower/broader than reported once traced by
+hand, matching this file's own long-standing "never fix a review's findings on its say-
+so alone" discipline.
+
+**Fixed — HIGH, a genuine TOCTOU race in `assignManualNumber()`.** The function used to
+only PICK a number (under a lock) and return it — the caller then wrote the actual
+`pendingDeposits` doc separately, after an awaited `uniqueRef()` round trip, OUTSIDE that
+lock entirely. Two members requesting the same network + exact same amount concurrently
+could both run their own clash-check in that gap, before either doc existed to be seen,
+and get assigned the SAME number for the SAME amount — safe most of the time (the
+ambiguous-match logic already flags 2+ live candidates and credits neither), but if one
+order later expired while the other stayed live, a genuinely late real payment for the
+first (now-expired) order would match and silently credit the SECOND member's account
+instead — a real wrong-member credit. Restructured into
+`assignManualNumberAndCreateDeposit(network, amount, depositFields)`: the deposit-doc
+WRITE now happens inside the SAME `withLock('manual-number-assign:'+network, ...)`
+critical section as the clash-check, so a concurrent call's own clash-check can never run
+in the gap between "picked" and "written" — there is no longer a gap. The one call site
+(`/deposit/manual/init`) updated to match. **Verified empirically, not just by
+reasoning**: a new harness boots the real `server.js` against an in-memory
+Firestore-compatible mock DB (reusing the `mock-db.js`/`firebase-admin`-stub technique
+this file's own Round 102/103 harnesses established) and fires two genuinely-concurrent
+`/deposit/manual/init` calls for the same network+amount — confirmed both succeed with
+DIFFERENT assigned numbers, exactly 2 `pendingDeposits` docs exist (no lost/duplicated
+write), and a third concurrent request against the now-exhausted pool is correctly
+refused (503) rather than double-assigned. 11/11 checks passed (this test also covers
+Fix 4 below).
+
+**Fixed — Medium, LipaPay-deposit reconciler starvation.** Mirroring the exact bug class
+Round 60 already fixed once for MarzPay (a fixed-`.limit(50)` reconciler query with no
+exclusion for "rows that can never resolve" re-selects the same dead rows forever once
+50+ accumulate, starving genuinely-actionable newer rows out of the query window) — the
+MarzPay loop already excludes rows lacking a real provider transaction id
+(`marzTxUuid>''`), but the LipaPay loop added in Round 103 never got the same exclusion.
+Added `.where('lipaTransactionId', '>', '')` to `reconcilePendingDeposits()`'s LipaPay
+query, matching the MarzPay loop's own shape exactly.
+
+**Fixed — Medium, two status-poll routes silently never checked LipaPay.** Both
+`/deposit/marzpay/status` and `/withdraw/marzpay/status` only ever branched on
+`dep.marzTxUuid`/`wit.marzTxUuid` — a LipaPay-routed deposit/withdrawal has
+`lipaTransactionId`/`lipaOutTradeNo` instead, so a member polling either route mid-
+LipaPay-transaction would just see "still pending" forever regardless of the real
+status, until the 30s reconciler eventually caught up (a real UX gap, not a money-safety
+one, since the reconciler already covers this). Added a `lipaTransactionId`/
+`lipaOutTradeNo` branch to each route calling `lipaOrderQuery()` and applying the same
+credit/fail (deposit) or processed/decline (withdrawal) logic MarzPay's own branch
+already has. `/withdraw/marzpay/status` specifically was confirmed by the frontend audit
+agent to have no current call site in `user-src/` (a pre-existing dead path) — fixed
+anyway for correctness/consistency with its sibling deposit route, matching this file's
+own established practice of not leaving a known-inconsistent code path in place just
+because nothing calls it today.
+
+**Fixed — Medium, a maintenance-mode webhook-exemption gap.** `GUARD_EXEMPT` (the set of
+paths `MAINTENANCE_BLOCK` never blocks) listed the 4 payment-gateway callbacks
+(`/deposit/callback`, `/withdraw/callback`, `/deposit/lipapay/callback`,
+`/withdraw/lipapay/callback`) but not `/deposit/manual/sms-forwarder` — under
+maintenance mode, `MAINTENANCE_BLOCK`'s `/deposit`-prefix match would have silently
+swallowed the manual-deposit SMS-forwarder webhook, which reports money that has ALREADY
+left a payer's account (the Android forwarder makes one attempt with no retry — see
+Round 90's own README). A dropped SMS during maintenance would have been genuine,
+unrecoverable-except-by-hand money loss with no error surfaced anywhere. Added the path
+to `GUARD_EXEMPT`.
+
+**Fixed — Medium (this session), admin Credit/Debit buttons had no confirm() dialog.**
+Every sibling destructive button in the user-detail modal (Ban, Reset password, Delete
+account, Complete registration, Attach referrer, Reset payout PIN) already has a
+`confirm()` before firing; Credit/Debit — which move real wallet money — only had a
+disabled-state double-tap guard. Added a `confirm()` to both, describing the exact
+amount and account, matching the file's own established confirmation-dialog convention.
+
+**Fixed — Low, 4 esc()-less interpolations in `admin-src/index.html`.** The Integrity
+Audit modal's field/alert labels (`FIELD_LABEL[m.field]`, `ALERT_LABEL[a.kind]`) and the
+"Processed per day" chart bars' `title` attributes (`dayLabel(d.day)`) were fed only by
+fixed server-side enums/date strings — not attacker-reachable today — but were
+inconsistent with this file's own established "esc() everywhere a value reaches
+`innerHTML`/an attribute" discipline. Wrapped all 4 in `esc()` for defense-in-depth.
+
+**Fixed — Medium, `/admin/manual-numbers/delete` could orphan a live pending order.**
+Deleting a payment number had no check for an in-flight `pendingDeposits` row still
+assigned to it — a member mid-payment against that number would have their real
+incoming SMS unable to find any matching order once the number's own document was gone
+(the SMS-matching path looks up the number by its `assignedNumber` field against a live
+`pendingDeposits` row, not the `manualPaymentNumbers` collection itself, but deleting the
+number mid-order is still a real operational footgun the admin panel should refuse
+rather than silently allow). Added a guard: refuses (409) if a `status:'pending'` order
+is still assigned to that number, with a message explaining it will free up within 15
+minutes on its own. Verified in the same harness as Fix 1: deleting a number with a live
+order is refused; deleting an idle one (no live order) still succeeds normally.
+
+**Added — 3 missing `db.js` indexes**, none of which were fully covered by the existing
+spec list: `pendingDeposits.{status,marzTxUuid,createdAt}` (the reconciler's real
+MarzPay-loop query shape), `pendingDeposits.{provider,status,lipaTransactionId,
+createdAt}` (its LipaPay sibling, including this round's own Fix 2 exclusion clause),
+and `investments.{commissionPending,commissionBanBlocked,createdAt}`
+(`reconcileCommissions()`'s real query shape, per Round 80's own ban-starvation fix —
+the existing `commissionPending+createdAt` index didn't cover the added
+`commissionBanBlocked` filter).
+
+**Deferred, with reasoning — `db.js`'s `updateIf()` "ambiguous false" contract.** The
+db.js audit agent flagged that `updateIf()` returning `false` conflates "already applied"
+with "the document doesn't exist at all," and suggested changing the core contract to
+throw on a genuinely-missing document. Traced this against the actual code and found
+Round 81 (this project's own prior Codex-review round) already closed the practical gap
+at the ONLY two call sites that matter (`creditDeposit()`'s wallet credit,
+`completeWithdrawalRefund()`'s wallet refund) — both already re-read the document after a
+`false` and explicitly distinguish "idempotency token present" (safe, already applied)
+from "token absent" (loud failure, `needsManualCredit`/`refundPending` stays set) before
+trusting anything. Changing `updateIf()`'s own return contract now would touch a
+money-critical primitive with no live bug behind it, purely for internal tidiness —
+deferred, consistent with this file's own practice of not restructuring already-correct,
+already-verified code under audit-round time pressure (see Round 17's Integrity Audit
+deferral for the same reasoning shape).
+
+**Deferred, with reasoning — `db.js`'s `resolveFieldValues()` not handling
+`arrayUnion`/`arrayRemove`/nested `FieldValue` when reached via a non-merge `.set()`.**
+Confirmed via grep: every `arrayUnion`/`arrayRemove` call site in `server.js` goes
+through `.update()` or `.updateIf()` (both correctly handled by `buildMongoUpdate()`) or
+`.set(data, {merge:true})` (which calls `buildMergeUpdate()` → `buildMongoUpdate()`,
+also correct) — never a bare, non-merge `.set()`. This is a genuinely dormant, currently
+unreachable gap, not a live bug. Left unfixed rather than rushed: a full-document
+`replaceOne()` has no well-defined semantics for "union onto a field that isn't there
+yet" the way an atomic `$addToSet` update does, so a correct fix needs real design
+thought, not a quick patch under this round's own time budget.
+
+**Verified**: `node --check` clean on `server.js`/`db.js`; `git diff --check` clean; a
+boot smoke test (a real self-signed RSA dummy Firebase service-account PEM + an
+unreachable `MONGODB_URI`) fails only at the expected Mongo-connect step, no earlier
+syntax/runtime error from any edit this round; `node build-admin.js` — clean round-trip;
+`node test-admin-obfuscated-build.js` (the real obfuscated admin build, not just the
+source) — 0 errors across all 12 tabs. The standalone concurrency harness described in
+Fix 1 above — 11/11 checks, covering Fixes 1 and 7 together. No `user-src/`/`user/`
+changes this round (every fix was `server.js`/`db.js`/`admin-src/index.html`-only), so
+no user-app cache bump needed. Admin cache bumped `v24`→`v25` (`admin-src/index.html`'s
+own content changed — the Credit/Debit confirm dialogs and the esc() hygiene fixes —
+matching `sw.js`'s own standing rule to bump on every deploy that changes index.html).
+**`server.js` and `db.js` changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

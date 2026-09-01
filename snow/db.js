@@ -49,6 +49,10 @@ async function ensureIndexes() {
     ['investments',     { status: 1, createdAt: 1 }],
     ['investments',     { commissionPending: 1 }],
     ['investments',     { commissionPending: 1, createdAt: 1 }],
+    // Round 104 -- reconcileCommissions()'s real query filters on
+    // commissionBanBlocked too (Round 80's ban-starvation fix), not covered
+    // by the plain commissionPending+createdAt index above.
+    ['investments',     { commissionPending: 1, commissionBanBlocked: 1, createdAt: 1 }],
     ['investments',     { userId: 1, createdAt: -1 }],
     ['transactions',    { userId: 1 }],
     ['transactions',    { withdrawalId: 1 }],
@@ -71,6 +75,12 @@ async function ensureIndexes() {
     ['pendingDeposits', { userId: 1, createdAt: -1 }],
     ['pendingDeposits', { status: 1, createdAt: 1 }],
     ['pendingDeposits', { needsManualCredit: 1 }],
+    // Round 104 -- reconcilePendingDeposits()'s actual MarzPay query shape
+    // (status in [...], marzTxUuid>'', orderBy createdAt) and its LipaPay
+    // sibling (status in [...], provider=='lipapay', lipaTransactionId>'',
+    // orderBy createdAt) -- neither was fully covered by the specs above.
+    ['pendingDeposits', { status: 1, marzTxUuid: 1, createdAt: 1 }],
+    ['pendingDeposits', { provider: 1, status: 1, lipaTransactionId: 1, createdAt: 1 }],
     ['withdrawals',     { refundPending: 1 }],
     ['products',        { key: 1 }],
     ['bankAccounts',    { userId: 1 }],

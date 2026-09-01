@@ -197,7 +197,18 @@ function proxyFetch(url, opts) {
 
 // ── MAINTENANCE GATE ──
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team'];
-const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/deposit/lipapay/callback', '/withdraw/lipapay/callback']);
+// Subagent-audit-caught real gap (Round 104): '/deposit/manual/sms-forwarder'
+// starts with '/deposit', so MAINTENANCE_BLOCK's prefix match already swept
+// it up -- unlike the 4 gateway webhooks above, it was never exempted. That
+// webhook reports money that has ALREADY LEFT a payer's account onto an
+// admin's phone; blocking it doesn't stop the deposit from happening, it
+// just stops the SERVER from ever finding out, and the Android forwarder
+// (Poster.java) makes exactly one attempt with no retry/queue -- a 503
+// during maintenance is logged on the phone and dropped forever, so the
+// order simply expires unmatched with no recovery. Same "money already
+// moved externally, must never be blocked" reasoning as the 4 payment
+// webhooks, just missed when this route was originally added.
+const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/deposit/lipapay/callback', '/withdraw/lipapay/callback', '/deposit/manual/sms-forwarder']);
 app.use(async (req, res, next) => {
   if (GUARD_EXEMPT.has(req.path)) return next();
   if (!MAINTENANCE_BLOCK.some(p => req.path.startsWith(p))) return next();
@@ -2426,6 +2437,28 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: 'matched' });
     }
     if (dep.status === 'failed')  return res.json({ status: 'success', state: 'failed', message: dep.failureReason });
+    // Subagent-audit-caught real gap (Round 104): this route only ever
+    // checked marzTxUuid -- a LipaPay deposit never sets that field (it sets
+    // lipaTransactionId instead), so the member's own status poll silently
+    // fell through to a bare "still pending" for every LipaPay deposit,
+    // contradicting this codebase's own stated design (the webhook and
+    // reconciler both independently re-check via lipaOrderQuery(); the
+    // member's poll should too, so a slow/lost webhook self-heals the
+    // moment the member reopens the status screen, same as it already does
+    // for MarzPay). Mirrors the marzTxUuid branch below exactly.
+    if (dep.provider === 'lipapay') {
+      if (!dep.lipaTransactionId) return res.json({ status: 'success', state: 'pending' });
+      const q = await lipaOrderQuery(depSnap.id);
+      if (q.providerDown || !q.Data) return res.json({ status: 'success', state: 'pending' });
+      const realStatus = lipaStatusLabel(q.Data.PayStatus);
+      if (realStatus === 'success') { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
+      if (realStatus === 'failed') {
+        const reallyFailed = await markDepositFailed(depSnap.ref, userId, DEPOSIT_FAILED_MSG);
+        if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
+        return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
+      }
+      return res.json({ status: 'success', state: 'pending' });
+    }
     if (!dep.marzTxUuid) return res.json({ status: 'success', state: 'pending' });
     const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
     if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
@@ -2759,7 +2792,26 @@ function parseSentMoMoSms(text) {
 // the amount" trick, which would fight the whole point of wanting several
 // clean, round-number-friendly destinations). Locked per network so two
 // concurrent inits can never both claim the same "next" slot.
-async function assignManualNumber(network, amount) {
+// Subagent-audit-caught HIGH-severity real bug: this used to only PICK a
+// number under the lock and return it -- the caller then wrote the actual
+// pendingDeposits doc separately, after an awaited uniqueRef() call (a real
+// DB round trip), outside this lock entirely. Two members requesting the
+// same network + exact same amount concurrently could both run their own
+// clash-check in that gap, before either doc existed to be seen, and get
+// assigned the SAME number for the SAME amount. Two such orders degrade
+// safely at match time (the ambiguous-match logic below already flags 2+
+// non-expired candidates and credits neither) -- UNLESS one order later
+// expires (a payer being slow is entirely outside server control) while the
+// other is still live: at that point the survivor is the only remaining
+// candidate, so a genuinely late real payment for the FIRST (now-expired)
+// order matches and silently credits the SECOND member instead -- a real
+// wrong-member credit, produced by this assignment race plus ordinary
+// 15-minute expiry, not by any failure of the ambiguous-detection code
+// itself. Closed by moving the deposit-doc WRITE itself inside the SAME
+// lock as the clash-check (via depositFields, supplied by the one caller),
+// so a concurrent call's own clash-check can never run in the gap between
+// "picked" and "written" -- there no longer is one.
+async function assignManualNumberAndCreateDeposit(network, amount, depositFields) {
   return withLock('manual-number-assign:' + network, async () => {
     const numsSnap = await db.collection('manualPaymentNumbers')
       .where('network', '==', network).where('active', '==', true).orderBy('order', 'asc').get();
@@ -2778,7 +2830,12 @@ async function assignManualNumber(network, amount) {
       const stillActive = clash.docs.some(d => (d.data().expiresAt || 0) > now);
       if (!stillActive) {
         await rotRef.set({ lastIndex: idx, network, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-        return candidate;
+        const depRef = db.collection('pendingDeposits').doc();
+        await depRef.set({
+          ...depositFields,
+          assignedNumberId: candidate.id, assignedNumber: candidate.number, holderName: candidate.holderName,
+        });
+        return { assigned: candidate, depRef };
       }
     }
     return null; // every number on this network currently clashes on this exact amount
@@ -2815,18 +2872,20 @@ app.post('/deposit/manual/init', async (req, res) => {
     }
     _depCreateDebounce.set(userId, Date.now());
 
-    const assigned = await assignManualNumber(network, amt);
-    if (!assigned) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
-
+    // uniqueRef() is a real DB round trip -- deliberately run BEFORE
+    // acquiring assignManualNumberAndCreateDeposit()'s lock (it doesn't need
+    // to be inside it, self-contained), so the lock is held for the
+    // shortest window that still needs it: pick-a-number-and-write, and
+    // nothing else.
     const ref = await uniqueRef('M');
     const { date, time } = nowStr();
     const expiresAt = Date.now() + MANUAL_DEPOSIT_WINDOW_MS;
-    const depRef = db.collection('pendingDeposits').doc();
-    await depRef.set({
+    const result = await assignManualNumberAndCreateDeposit(network, amt, {
       userId, phone: senderPhone, senderPhone, network, amount: amt, ref, status: 'pending',
-      method: 'manual', assignedNumberId: assigned.id, assignedNumber: assigned.number, holderName: assigned.holderName,
-      expiresAt, date, time, createdAt: FieldValue.serverTimestamp()
+      method: 'manual', expiresAt, date, time, createdAt: FieldValue.serverTimestamp(),
     });
+    if (!result) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
+    const { assigned, depRef } = result;
     trackManual(assigned.number, 'assigned', { amount: amt });
     // Same "recorded immediately, not eventually" reasoning as
     // /deposit/marzpay's own ledger-row-up-front comment.
@@ -3435,6 +3494,24 @@ app.post('/admin/manual-numbers/delete', async (req, res) => {
   try {
     const id = String(req.body.id || '');
     if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+    const numDoc = await db.collection('manualPaymentNumbers').doc(id).get();
+    // Refuse to delete a number a member is actively mid-payment against --
+    // the assigned-number is the only thing letting a later SMS find its way
+    // back to the right pending deposit; deleting it out from under a live
+    // order would strand a real payment the member is about to make. The
+    // order self-resolves within 15 minutes either way (expiry sweep), so
+    // this is a short wait, not a permanent block.
+    if (numDoc.exists) {
+      const number = numDoc.data().number;
+      if (number) {
+        const activeSnap = await db.collection('pendingDeposits')
+          .where('method', '==', 'manual').where('assignedNumber', '==', number)
+          .where('status', '==', 'pending').limit(1).get();
+        if (!activeSnap.empty) {
+          return res.status(409).json({ status: 'error', message: 'This number has a live pending deposit assigned to it right now -- it will free up on its own within 15 minutes, or once that deposit resolves.' });
+        }
+      }
+    }
     await db.collection('manualPaymentNumbers').doc(id).delete();
     logAdminAction(req, 'manual_number_deleted', { id });
     res.json({ status: 'success' });
@@ -4034,6 +4111,32 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
       return res.status(404).json({ status: 'error', message: 'Cash-out not found' });
     const wit = witSnap.data();
     if (wit.status !== 'processing') return res.json({ status: 'success', state: wit.status });
+    // Subagent-audit-caught real gap (Round 104): same shape as the deposit
+    // status route's own fix above -- this only ever checked marzTxUuid, so
+    // a LipaPay withdrawal's own poll never independently re-verified via
+    // lipaOrderQuery(), unlike its webhook and the reconciler. Note: this
+    // route is not currently called anywhere in user-src/ (a dead
+    // code path today per the frontend audit), but fixed for correctness/
+    // consistency regardless, matching every other LipaPay-aware branch.
+    if (wit.lipaOutTradeNo) {
+      const q = await lipaOrderQuery(wit.lipaOutTradeNo);
+      if (q.providerDown || !q.Data) return res.json({ status: 'success', state: 'processing' });
+      const realStatus = lipaStatusLabel(q.Data.PayStatus);
+      if (realStatus === 'success') {
+        if (await markWithdrawalProcessed(witSnap.ref, userId)) {
+          await finalizeWithdrawalTransactionRecord(witSnap.id, 'processed');
+          return res.json({ status: 'success', state: 'processed' });
+        }
+        const nowSnap = await witSnap.ref.get();
+        return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
+      }
+      if (realStatus === 'failed') {
+        const { declined, refunded } = await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the payment provider', ['processing']);
+        if (declined) await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined', refunded);
+        return res.json({ status: 'success', state: 'declined' });
+      }
+      return res.json({ status: 'success', state: 'processing' });
+    }
     if (!wit.marzTxUuid) return res.json({ status: 'success', state: 'processing' });
     const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
     if (SUCCESS_STATUSES.has(marzStatus)) {
@@ -6017,7 +6120,25 @@ async function reconcilePendingDeposits() {
     // re-checks via lipaOrderQuery() using the deposit's own doc id as
     // OutTradeNo, same "never trust anything but our own live re-check"
     // posture as the MarzPay loop just above.
-    const lpSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'lipapay').orderBy('createdAt', 'asc').limit(50).get();
+    // Subagent-audit-caught real gap (Round 104): if lipaCollect() itself
+    // never succeeded (a network/proxy error creating the order -- see
+    // /deposit/marzpay's LipaPay branch, which logs and returns on that
+    // exception, leaving the row 'initiating' forever), OutTradeNo was never
+    // registered with LipaPay at all -- lipaOrderQuery() then returns
+    // "not found"/providerDown FOREVER for that row, and it can never
+    // transition out (no expiry exists for automatic deposits the way
+    // manual ones have one). Without an exclusion, once >=50 such
+    // permanently-dead rows accumulate (e.g. during a LipaPay/QuotaGuard
+    // outage), this fixed-limit(50) query would reselect the SAME dead rows
+    // every tick forever, starving out genuinely-pending NEWER LipaPay
+    // deposits from ever being reconciled -- the exact starvation bug class
+    // the MarzPay loop's own `marzTxUuid>''` exclusion above already exists
+    // to prevent, just not yet extended to this provider. lipaTransactionId
+    // is only ever set once lipaCollect() has genuinely returned a real
+    // TransactionId, so excluding rows without it removes only rows that
+    // were never actionable here anyway -- nothing lost, matching the exact
+    // same tradeoff already accepted for marzTxUuid-less MarzPay rows.
+    const lpSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'lipapay').where('lipaTransactionId', '>', '').orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of lpSnap.docs) {
       const dep = doc.data();
       const q = await lipaOrderQuery(doc.id);
