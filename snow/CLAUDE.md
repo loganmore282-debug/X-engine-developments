@@ -6303,6 +6303,129 @@ existing `depositMethod`/`withdrawMethod` settings are currently `'automatic'` =
 or `'manual'` = admin-recorded by hand — a 3-way payment-provider choice would be new
 shape, not a drop-in), or something else? Not assumed here.
 
+## Round 102 (2026-09-01) — LipaPay client module built and verified against LipaPay's own real API reference doc (v3.0); not yet wired into any deposit/withdraw route
+
+Owner supplied LipaPay's real API Reference (`.docx`, v3.0, April 2026) — read in full
+(pandoc/python-docx weren't available in this sandbox; extracted via `unzip` +
+`xml.etree` against `word/document.xml` directly, cross-checked the embedded image was
+just the LipaPay logo, nothing else). Owner also answered the two open questions from
+Round 101: LipaPay runs **alongside** MarzPay as a 3rd payout-provider option (not a
+replacement), and real production `MchID`/private key are available (not yet supplied —
+owner will set them as Render env vars once given the names, matching how `MARZPAY_KEY`
+already works).
+
+**What the real spec actually says, differs from Round 101's guess in one real way.**
+LipaPay uses **ONE endpoint for both directions** (`/api/pay/unifiedorder`,
+`TransactionType`: 1=Collection/2=Disbursement) — not MarzPay's separate collect-money/
+send-money routes. Auth is MD5 request signing (a `Sign` field over the request's own
+fields, in the DOCUMENTED TABLE ORDER — not alphabetical, not JSON key order — joined
+`Key=Value&...` with null/empty fields omitted, `&privateKey=<key>` appended, MD5 hex),
+not a Bearer/Basic header the way MarzPay uses. Two base URLs
+(`http://dev.pay.lipapayug.com` / `https://pay.lipapayug.com`), a status-query endpoint,
+a prepaid-bill-enquiry endpoint (fee preview + optional account-holder-name check before
+placing a real order), a balance endpoint, and a statement endpoint (max 3-day query
+window). A webhook (`NotifyUrl`, provided per-request) delivers the final result, retried
+by LipaPay for up to 24h on anything other than us returning the literal plain-text
+`SUCCESS`.
+
+**A real, money-critical ambiguity found in LipaPay's own docs, resolved by hand-checking
+their own example arithmetic (not tested live — see why below).** The Request `Amount`
+field is unambiguous: UGX cents, minimum 50000 (=500 UGX), stated in plain text. Every
+RESPONSE `Amount`/`ActualPaymentAmount`/`ActualCollectAmount`/fee field across all 6
+endpoints is labelled "(UGX)" with zero mention of cents — and the Order Query response
+example's own numbers PROVE this is genuinely plain UGX, not a labelling slip:
+`Amount(10000) + PayerCharge(101) = ActualPaymentAmount(10101)` and
+`Amount(10000) - PayeeCharge(100) = ActualCollectAmount(9900)`, both exact. The ONE
+outlier — Prepaid Bill Enquiry's own example, which echoes `"Amount": 50000` unconverted
+in its response — is very likely a documentation copy-paste artifact: its own
+`ServiceCharge: 15` at a stated `3%` rate only makes arithmetic sense against 500 UGX
+(3% × 500 = 15 exactly), not 50000. **Conclusion, applied throughout the client: send
+cents, receive plain UGX everywhere**, with the conversion centralized in exactly one
+function (`ugxToLipaCents()`) specifically so a future correction, if this reading is
+ever proven wrong, touches one place, not several scattered multiplications.
+
+**This has NOT been tested against a live LipaPay server, and could not be from this
+session.** Confirmed via `curl` and the sandbox's own `__agentproxy/status` endpoint:
+this environment's network policy returns a hard `403` to
+`dev.pay.lipapayug.com:443` — not a QuotaGuard issue, a blanket outbound-host policy in
+this development sandbox. **Before this touches real money, someone needs to run one
+real Prepaid Bill Enquiry or Unified Order call against LipaPay's dev sandbox
+(`LIPAPAY_SANDBOX=true`, the published sandbox `MchID=2`/`privateKey=
+db761034110c45058490c6772a99b4ab`) and check the raw response JSON against this round's
+assumption** — that's the one thing standing between "verified by careful reading" and
+"verified for real," and it's a single side-effect-free API call.
+
+**`server.js`**: a new "LIPAPAY" section, deliberately positioned right after the
+existing MARZPAY section (parallel gateway integrations, same shape). `lipaSign(fields,
+order, privateKey)` — generic signer/verifier, reused both to sign an outgoing request
+and to independently recompute a received Data object's own Sign for an ADVISORY
+sanity check only (documented explicitly in-code why: exact decimal-string formatting
+of a received value is unverified against a live server, so a false negative here must
+never block a legitimate credit — the real trust boundary for any money decision stays
+an independent `lipaOrderQuery()` call, mirroring exactly how Round 81 hardened the
+MarzPay webhook to never trust an unauthenticated body alone). `LIPA_FIELDS` — the
+signature field order per endpoint, copied verbatim from each of the doc's own tables
+(and correctly excludes `PayMessage`, which the doc explicitly calls out as "excluded
+from signature" everywhere it appears). `lipaCollect()`/`lipaDisburse()` (thin
+TransactionType=1/2 wrappers over `lipaUnifiedOrder()`, single-attempt, matching
+`marzCollect()`/`marzSendMoney()`'s own shape — retry safety comes from the caller
+reusing the same `outTradeNo`, which LipaPay's own 403 duplicate-order-number rejection
+then dedups, not an internal retry loop), `lipaOrderQuery()` (the one function with an
+internal 2-attempt-plus-backoff retry, mirroring `_marzFetchTxStatus()`'s own shape
+exactly — this IS the "find out what really happened" fallback), `lipaBillEnquiry()`,
+`lipaGetBalance()`, `lipaGetStatement()`. Every outbound call goes through Round 101's
+`proxyFetch()`, so once `LIPAPAY_MCHID`/`LIPAPAY_PRIVATE_KEY`/`QUOTAGUARDSTATIC_URL` are
+all set, LipaPay's calls automatically route through the whitelisted QuotaGuard IPs with
+no further wiring needed for that part. `lipaConfigured()` gates every function — missing
+either credential returns a `providerDown` result with **zero network call attempted**
+(verified, not assumed — see below), matching how the codebase already treats an unset
+`MARZPAY_KEY`.
+
+**Deliberately NOT done this round, on purpose**: `depositMethod`/`withdrawMethod`
+widened to a real 3-way provider choice, `/deposit`/`/withdraw` routes calling any of
+this, a LipaPay webhook receiver (`NotifyUrl` target) with its own money-safety
+independent-reverify posture, or admin UI for any of it. Nothing in `server.js` calls a
+single one of these new functions yet — this round is client-only, verified in
+isolation, exactly like Round 101's `proxyFetch()` shipped unused. Wiring a 3rd
+automatic payment provider into the actual money paths is comparable in scope to the
+whole Round 88 manual-deposits build and deserves its own dedicated, equally-verified
+round rather than being rushed in alongside "does the client even work" — especially
+with the amount-units question still only doc-verified, not live-verified.
+
+**Verified**: `node --check server.js` clean; the doc's own §3 worked signature example
+reproduced byte-for-byte (`fc92ceeaa10d8efb2783feecc6aae395`) as a durable, re-runnable
+check, not just a one-off terminal command. A standalone harness (not committed —
+throwaway, same practice this file already uses for money-path testing without a live
+dependency available; extracts the LipaPay section out of `server.js` at runtime, the
+exact same technique `test-momo-sms-parsers.js` already established for the SMS
+parsers, so this can never silently drift from what's actually shipped) drives every
+function against a real local mock HTTP server standing in for LipaPay — **44/44
+checks**: the cents-conversion is exactly right on both request-shaped endpoints
+(Unified Order, Prepaid Bill Enquiry); every request's `Sign` matches an independent
+recomputation by the test itself (not just "no error was thrown"); `Channel` defaults
+to `0`/Auto and `TraderFullName` defaults to `"NONEEDMATCHNAMES"` exactly when omitted,
+and are correctly NOT overridden when supplied; `lipaOrderQuery()`'s retry genuinely
+recovers from a garbage first response and genuinely gives up cleanly (returns
+`providerDown:true`, never throws) after 2 failures; `lipaGetStatement()`'s optional
+date-range fields are correctly omitted from the signature string when null; the
+not-configured guard was checked by literally counting requests the mock server
+received (0, for all 3 functions tried) rather than trusting the return shape alone.
+`git diff --check` clean; `render.yaml` documents the 2 new required env vars +
+`LIPAPAY_SANDBOX` (all `sync: false`, matching every other secret's placeholder
+pattern). No admin-src/user-src changes, so no cache bumps. **`server.js` changed —
+Render should auto-deploy this push**, though nothing behaviorally changes for any
+existing user since none of this is called yet.
+
+**Still needed before the next round can wire this in**: the real production `MchID`
+and private key (owner has these, not yet supplied — set as `LIPAPAY_MCHID`/
+`LIPAPAY_PRIVATE_KEY` on the `snow-server` Render environment, same as every other
+secret), and ideally one real sandbox test run confirming the amount-units reading
+above. Once both exist, the next round wires `lipaCollect()`/`lipaDisburse()` into
+`/deposit`/`/withdraw` behind a 3-way provider setting, builds the `NotifyUrl` webhook
+receiver (independently re-verifying via `lipaOrderQuery()` before crediting anything,
+never trusting the callback body alone — same posture as every other webhook in this
+codebase), and adds the admin UI to choose MarzPay vs. LipaPay vs. Manual.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
@@ -6366,3 +6489,17 @@ outbound call through one of 2 fixed IPs instead of Render's own dynamic egress,
 provider (LipaPay) that whitelists an IP rather than authenticating every request. Never
 commit it. Optional and inert until LipaPay's own client code is built (Round 101) — see
 that round for what it does and does not affect.
+
+`LIPAPAY_MCHID` / `LIPAPAY_PRIVATE_KEY` (added Round 102) are the merchant id and MD5
+signing key LipaPay issues per merchant — both required together for `lipaConfigured()`
+to return true; every LipaPay client function short-circuits to a `providerDown` result
+with zero network call when either is missing (verified — see Round 102). The private
+key signs every request and must never be committed or logged; LipaPay's own docs warn
+to rotate it immediately if it's ever suspected leaked. `LIPAPAY_SANDBOX` (optional,
+`"true"`/unset) switches the base URL to LipaPay's dev endpoint
+(`http://dev.pay.lipapayug.com`) instead of production (`https://pay.lipapayug.com`) —
+**defaults to production when unset**, a deliberate money-safety choice (an admin who
+forgets to set this explicitly gets the real endpoint, not silently-inert test traffic).
+The sandbox credentials published in LipaPay's own API reference doc (`MchID=2`,
+`privateKey=db761034110c45058490c6772a99b4ab`) are fine for `LIPAPAY_SANDBOX=true`
+testing but must never be used with `LIPAPAY_SANDBOX` unset/false.

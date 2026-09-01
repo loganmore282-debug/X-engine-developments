@@ -1005,6 +1005,203 @@ function marzEventTypeFallback(eventType) {
   return '';
 }
 
+// ── LIPAPAY (mobile money collect/disburse -- a 2nd, independent automatic
+// payout provider alongside MarzPay; see CLAUDE.md Round 102) ──
+// CLIENT ONLY as of this commit -- nothing in server.js calls any of these
+// functions yet. depositMethod/withdrawMethod, /deposit, /withdraw, the
+// admin payment-method UI, and a LipaPay webhook receiver are all a
+// deliberately separate follow-up round once this module itself is settled
+// and, ideally, exercised against LipaPay's real dev sandbox at least once
+// (this sandbox's own network policy blocks reaching dev.pay.lipapayug.com,
+// so this has only been verified against a local mock server standing in
+// for LipaPay -- see the money-unit note on ugxToLipaCents() below).
+const LIPA_SANDBOX = String(process.env.LIPAPAY_SANDBOX || '').trim().toLowerCase() === 'true';
+const LIPA_BASE = LIPA_SANDBOX ? 'http://dev.pay.lipapayug.com' : 'https://pay.lipapayug.com';
+const LIPA_MCHID = (process.env.LIPAPAY_MCHID || '').trim();
+const LIPA_PRIVATE_KEY = process.env.LIPAPAY_PRIVATE_KEY || '';
+const LIPA_TIMEOUT = 20000;
+function lipaConfigured() { return !!(LIPA_MCHID && LIPA_PRIVATE_KEY); }
+
+// LipaPay's own API reference (Version 3.0) §5.1's Request table documents
+// Amount as "Transaction amount in UGX cents (1 UGX = 100 cents)". Every
+// OTHER Amount-shaped field in every RESPONSE across every endpoint in the
+// same document is labelled "(UGX)" with no cents mention -- confirmed by
+// hand-checking the Order Query response example's own arithmetic
+// (Amount=10000, PayerCharge=101, ActualPaymentAmount=10101 -- only exact
+// if these are plain UGX, not cents: 10000+101=10101). One example (5.4
+// Prepaid Bill Enquiry) echoes the raw request cents value unconverted in
+// its own response example, which reads as a documentation copy-paste
+// artifact given its own ServiceCharge (15 at a stated 3% rate) only makes
+// sense against 500 UGX, not 50000 -- but this has NOT been confirmed
+// against a live response, only inferred from the document's internal
+// consistency. Money-unit conversion is deliberately centralized in this
+// ONE function for exactly this reason: if a live sandbox test ever proves
+// this wrong, there is exactly one place to fix, not several scattered
+// multiplications.
+function ugxToLipaCents(amountUgx) { return Math.round(Number(amountUgx) * 100); }
+
+// Per §3 of the doc: sign over the given fields IN THE DOCUMENTED TABLE
+// ORDER for that endpoint (never alphabetical, and never JSON key order,
+// which is not guaranteed to match it), Key=Value joined with '&', any
+// field that is null/undefined/'' OMITTED entirely, values NOT
+// URL-encoded (confirmed against the doc's own worked example -- a literal
+// space in "Sand Box" appears unescaped in their signature string, verified
+// byte-for-byte against their example hash before this shipped), then
+// '&privateKey=<key>' appended, MD5 hex lowercase. Reused both to SIGN an
+// outgoing request and to independently recompute a received Data object's
+// own Sign for a first-pass sanity check.
+function lipaSign(fields, order, privateKey) {
+  const parts = [];
+  for (const key of order) {
+    const v = fields[key];
+    if (v === null || v === undefined || v === '') continue;
+    parts.push(`${key}=${v}`);
+  }
+  parts.push(`privateKey=${privateKey}`);
+  return crypto.createHash('md5').update(parts.join('&'), 'utf8').digest('hex');
+}
+// Signature field order per endpoint, exactly as each table in the doc
+// lists it (Sign itself is never included; PayMessage is explicitly called
+// out by the doc as "excluded from signature" everywhere it appears).
+const LIPA_FIELDS = {
+  unifiedOrderReq:     ['Version', 'MchID', 'TimeStamp', 'Channel', 'OutTradeNo', 'Amount', 'TransactionType', 'TraderID', 'TraderFullName', 'Description', 'NotifyUrl'],
+  unifiedOrderRespData:['OutTradeNo', 'TransactionId', 'ActualPaymentAmount', 'ActualCollectAmount', 'PayerCharge', 'PayeeCharge', 'ChannelCharge'],
+  orderQueryReq:       ['Version', 'MchID', 'TimeStamp', 'OutTradeNo'],
+  orderQueryRespData:  ['PayStatus', 'PayTime', 'OutTradeNo', 'TransactionId', 'Amount', 'ActualPaymentAmount', 'ActualCollectAmount', 'PayerCharge', 'PayeeCharge'],
+  callbackBody:        ['PayStatus', 'PayTime', 'OutTradeNo', 'TransactionId', 'Amount', 'ActualPaymentAmount', 'ActualCollectAmount', 'PayerCharge', 'PayeeCharge'],
+  billReq:             ['Version', 'MchID', 'TimeStamp', 'Channel', 'TransactionType', 'TraderID', 'Amount'],
+  billRespData:        ['TraderID', 'GivenName', 'FamilyName', 'FullName', 'Amount', 'ServiceCharge', 'ServiceChargeRate'],
+  balanceReq:          ['Version', 'MchID', 'TimeStamp'],
+  balanceRespData:      ['Balance'],
+  statementReq:        ['Version', 'MchID', 'TimeStamp', 'StartTime', 'EndTime'],
+};
+// Best-effort, ADVISORY sanity check only -- never the trust boundary for
+// crediting money. Exact decimal-string formatting of a value we RECEIVE
+// (e.g. is a fee genuinely "15" or "15.00" in LipaPay's own signing input)
+// is unverified against a real server from this sandbox, so a false
+// negative here is expected and must never block a legitimate credit or
+// stand in for real verification. The actual trust boundary for any money
+// decision is always an independent lipaOrderQuery() call against LipaPay's
+// own API using our own credentials -- mirrors exactly how Round 81
+// hardened the MarzPay webhook to never trust an unauthenticated body
+// alone. Returns null ("couldn't check"), never a false "failed", when
+// there's nothing to check against.
+function lipaVerifyDataSign(data, order) {
+  if (!data || !data.Sign || !LIPA_PRIVATE_KEY) return null;
+  return lipaSign(data, order, LIPA_PRIVATE_KEY) === data.Sign;
+}
+const LIPA_PAY_STATUS = { 0: 'processing', 1: 'success', 2: 'failed' };
+function lipaStatusLabel(payStatus) { return LIPA_PAY_STATUS[payStatus] || ''; }
+function lipaUserMsg(resp, fallback) {
+  if (!resp) return fallback || PROVIDER_BUSY_MSG;
+  if (Array.isArray(resp.Errors)) return resp.Errors.join('; ') || fallback || PROVIDER_BUSY_MSG;
+  return resp.Errors || fallback || PROVIDER_BUSY_MSG;
+}
+async function _lipaParse(resp) {
+  let data;
+  try { data = await resp.json(); }
+  catch (_) { return { StatusCode: 0, Succeeded: false, Errors: 'Invalid response from payment gateway', Data: null, providerDown: true }; }
+  if (!resp.ok && data.StatusCode == null) data.StatusCode = resp.status;
+  return data;
+}
+async function _lipaPost(path, body) {
+  const resp = await proxyFetch(`${LIPA_BASE}${path}`, {
+    method: 'POST', signal: AbortSignal.timeout(LIPA_TIMEOUT),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return _lipaParse(resp);
+}
+function _lipaNotConfigured() {
+  return { StatusCode: 0, Succeeded: false, Errors: 'LipaPay is not configured', Data: null, providerDown: true };
+}
+// TransactionType 1 = Collection (deposit), 2 = Disbursement (withdrawal) --
+// LipaPay uses ONE endpoint for both, unlike MarzPay's separate
+// collect-money/send-money routes. outTradeNo, notifyUrl and channel are
+// all caller-supplied (matching marzCollect()/marzSendMoney()'s own
+// caller-supplies-the-reference shape) -- this module deliberately does not
+// generate order numbers itself; the calling deposit/withdrawal code is
+// what owns that idempotency guarantee.
+async function lipaUnifiedOrder({ transactionType, amountUgx, channel, traderId, traderFullName, description, outTradeNo, notifyUrl }) {
+  if (!lipaConfigured()) return _lipaNotConfigured();
+  const fields = {
+    Version: 'v1.0',
+    MchID: Number(LIPA_MCHID),
+    TimeStamp: Math.floor(Date.now() / 1000),
+    Channel: channel != null ? Number(channel) : 0,
+    OutTradeNo: outTradeNo,
+    Amount: ugxToLipaCents(amountUgx),
+    TransactionType: Number(transactionType),
+    TraderID: traderId,
+    TraderFullName: traderFullName || 'NONEEDMATCHNAMES',
+    Description: description || 'Mobile Money',
+    NotifyUrl: notifyUrl,
+  };
+  const Sign = lipaSign(fields, LIPA_FIELDS.unifiedOrderReq, LIPA_PRIVATE_KEY);
+  return _lipaPost('/api/pay/unifiedorder', { ...fields, Sign });
+}
+async function lipaCollect(opts)  { return lipaUnifiedOrder({ ...opts, transactionType: 1 }); }
+async function lipaDisburse(opts) { return lipaUnifiedOrder({ ...opts, transactionType: 2 }); }
+// The one LipaPay call worth an internal retry -- this IS the "find out
+// what really happened" fallback, mirroring _marzFetchTxStatus()'s own
+// 2-attempt-plus-backoff shape exactly. lipaCollect()/lipaDisburse() stay
+// single-attempt like marzCollect()/marzSendMoney() -- retry safety there
+// comes from the caller reusing the same outTradeNo (LipaPay's own 403
+// duplicate-order-number rejection is the dedup guard), not an internal loop.
+async function lipaOrderQuery(outTradeNo) {
+  if (!lipaConfigured()) return _lipaNotConfigured();
+  const fields = { Version: 'v1.0', MchID: Number(LIPA_MCHID), TimeStamp: Math.floor(Date.now() / 1000), OutTradeNo: outTradeNo };
+  const Sign = lipaSign(fields, LIPA_FIELDS.orderQueryReq, LIPA_PRIVATE_KEY);
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const resp = await _lipaPost('/api/pay/orderquery', { ...fields, Sign });
+      if (resp && !resp.providerDown) return resp;
+      lastErr = new Error(resp && resp.Errors ? String(resp.Errors) : 'providerDown');
+    } catch (e) { lastErr = e; console.error(`lipaOrderQuery(${outTradeNo}) attempt ${attempt} failed:`, e.message); }
+    if (attempt < 2) await new Promise(r => setTimeout(r, 350));
+  }
+  console.error(`lipaOrderQuery(${outTradeNo}): gave up after 2 attempts, last error:`, lastErr && lastErr.message);
+  return { StatusCode: 0, Succeeded: false, Errors: lastErr ? lastErr.message : 'unreachable', Data: null, providerDown: true };
+}
+// Fee preview + optional name-match verification before placing a real
+// order. TraderFullName is intentionally not a parameter here the way it
+// is on lipaUnifiedOrder() -- the doc doesn't list it as a Bill Enquiry
+// request field at all (only Unified Order accepts the
+// "NONEEDMATCHNAMES"-skips-verification value); a Bill Enquiry only ever
+// echoes back whatever name LipaPay itself already has on file for TraderID.
+async function lipaBillEnquiry({ amountUgx, channel, transactionType, traderId }) {
+  if (!lipaConfigured()) return _lipaNotConfigured();
+  const fields = {
+    Version: 'v1.0',
+    MchID: Number(LIPA_MCHID),
+    TimeStamp: Math.floor(Date.now() / 1000),
+    Channel: channel != null ? Number(channel) : 0,
+    TransactionType: Number(transactionType),
+    TraderID: traderId,
+    Amount: ugxToLipaCents(amountUgx),
+  };
+  const Sign = lipaSign(fields, LIPA_FIELDS.billReq, LIPA_PRIVATE_KEY);
+  return _lipaPost('/api/pay/bill', { ...fields, Sign });
+}
+async function lipaGetBalance() {
+  if (!lipaConfigured()) return _lipaNotConfigured();
+  const fields = { Version: 'v1.0', MchID: Number(LIPA_MCHID), TimeStamp: Math.floor(Date.now() / 1000) };
+  const Sign = lipaSign(fields, LIPA_FIELDS.balanceReq, LIPA_PRIVATE_KEY);
+  return _lipaPost('/api/pay/balance', { ...fields, Sign });
+}
+// startDate/endDate: 'yyyyMMdd' strings, both optional (defaults to "today"
+// per the doc). The doc caps the query window at 3 calendar days -- not
+// enforced client-side, left for LipaPay's own 400 to surface if violated,
+// matching this codebase's general "the provider is the source of truth for
+// validity" posture already used for MarzPay's own error messages.
+async function lipaGetStatement(startDate, endDate) {
+  if (!lipaConfigured()) return _lipaNotConfigured();
+  const fields = { Version: 'v1.0', MchID: Number(LIPA_MCHID), TimeStamp: Math.floor(Date.now() / 1000), StartTime: startDate || null, EndTime: endDate || null };
+  const Sign = lipaSign(fields, LIPA_FIELDS.statementReq, LIPA_PRIVATE_KEY);
+  return _lipaPost('/api/pay/statement', { ...fields, Sign });
+}
+
 // ── DAILY CASHBACK (settle-on-read + a 1s background sweep) ──
 // Each tier pays expectedReturn/cycleDays per elapsed day, using cumulative-
 // target allocation (round(expectedReturn * daysDue / total)) so the running

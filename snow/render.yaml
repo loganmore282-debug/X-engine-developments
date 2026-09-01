@@ -17,6 +17,12 @@ services:
         sync: false
       - key: QUOTAGUARDSTATIC_URL
         sync: false
+      - key: LIPAPAY_MCHID
+        sync: false
+      - key: LIPAPAY_PRIVATE_KEY
+        sync: false
+      - key: LIPAPAY_SANDBOX
+        sync: false
 
   - type: web
     name: snow-app
