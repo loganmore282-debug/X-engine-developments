@@ -93,6 +93,10 @@ async function ensureIndexes() {
     ['manualPaymentNumbers', { number: 1 }],
     ['manualNumberDaily', { number: 1, day: 1 }],
     ['manualNumberDaily', { day: 1 }],
+    // Owner: "server should have a review list" for genuine money that
+    // arrived with nowhere to go -- unmatched, unknown-number and unparsed
+    // SMS. Queried by recency in the admin panel.
+    ['manualSmsLog', { createdAt: -1 }],
   ];
   // ONE AT A TIME -- M0's free tier has very little real concurrency headroom.
   let failed = 0;

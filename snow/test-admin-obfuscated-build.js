@@ -45,6 +45,12 @@ const routes = {
   'POST /admin/manual-numbers/save': { status: 'success' },
   'POST /admin/manual-numbers/delete': { status: 'success' },
   'POST /admin/settings/update': { status: 'success' },
+  'POST /admin/manual-sms-log/list': { status: 'success', rows: [
+    { id: 'sms1', reason: 'unmatched', receivingNumber: '+256770000001', amount: 30000,
+      sender: '+256701234567', raw: 'RECEIVED. TID 999. UGX 30,000 from 701234567, JANE.',
+      device: 'Samsung SM-A047F', appVersion: '1.9', createdAt: new Date().toISOString() },
+  ] },
+  'POST /admin/manual-sms-log/resolve': { status: 'success' },
   'POST /admin/manual-numbers/analytics': { status: 'success', days: 14,
     totals: { smsForwarded: 12, credited: 9, unmatched: 2, ambiguous: 0, mismatch: 1, duplicate: 0,
       unparsed: 0, ignored: 0, assigned: 11, expired: 2, amount: 450000, deliveryMsSum: 9000,
@@ -119,7 +125,7 @@ const routes = {
     depositsByTimeOfDay: { morning: 100000, afternoon: 200000, evening: 300000, night: 50000 },
   } },
   'POST /admin/analytics/abuse': { status: 'success', events: [] },
-  'GET /admin/badges': { status: 'success', pendingWithdrawals: 2 },
+  'GET /admin/badges': { status: 'success', pendingWithdrawals: 2, unmatchedSms: 1 },
   'GET /admin/users/recount': { status: 'success', updated: 0 },
   'GET /admin/integrity': { status: 'success', checked: 1, mismatches: [
     { userId: 'u1', phone: '+256700000001', walletBalance: 10000, ledgerSum: 5000, diff: 5000 },
@@ -470,6 +476,23 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (!doc.getElementById('witMethodManual') || !doc.getElementById('witMethodAuto') || !doc.getElementById('witMethodFollow'))
     errors.push('Settings: withdrawal-method radios missing');
   if (!setHtml.includes('Follow the payment method above')) errors.push('Settings: follow option label missing');
+
+  // The unmatched-SMS review list lives on the Deposits tab.
+  doc.querySelector('.tab[data-tab="deposits"]').click();
+  await sleep(400);
+  const depHtml2 = doc.getElementById('content').innerHTML;
+  if (!depHtml2.includes('Unmatched SMS')) errors.push('Deposits: Unmatched SMS card missing');
+  if (!depHtml2.includes('+256701234567')) errors.push('Deposits: sender from the fixture not rendered');
+  if (!depHtml2.includes('No pending order was waiting')) errors.push('Deposits: reason label not rendered');
+  const smsResolveBtn = doc.querySelector('[data-smsresolve]');
+  if (!smsResolveBtn) errors.push('Deposits: Mark resolved button missing');
+  else {
+    window.confirm = () => true;
+    smsResolveBtn.click();
+    await sleep(300);
+  }
+  const smsBadge = doc.getElementById('smsBadge');
+  if (!smsBadge || smsBadge.classList.contains('hidden')) errors.push('Nav: Deposits unmatched-SMS badge not shown for the fixture');
 
   console.log('\n=== ERRORS (' + errors.length + ') ===');
   errors.forEach(e => console.log(' -', e));

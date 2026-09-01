@@ -2770,6 +2770,62 @@ async function reconcileManualDeposits() {
   } catch (e) { console.error('Reconcile manual deposits error:', e.message); }
 }
 
+// Owner: "if one receives a deposit message but no order created, what can
+// server do?" -- genuine money can arrive on an admin number with nowhere to
+// go: no order was waiting (wrong amount, a typo, an order that already
+// expired), the receiving number itself was never saved
+// (MANUAL_SMS_UNKNOWN_NUMBER), or an operator reworded a template so no
+// parser claimed the message (MANUAL_SMS_UNPARSED). Every one of these was
+// already being written to manualSmsLog and counted in the per-number
+// analytics -- but nothing ever SHOWED the admin the actual message, so the
+// only way to notice was watching Render logs. This is that missing view.
+//
+// Shared by the list route and /admin/badges so the two can never quietly
+// disagree about what counts as "still needs a look".
+async function unresolvedManualSmsLog(limit) {
+  const snap = await db.collection('manualSmsLog').orderBy('createdAt', 'desc').limit(limit || 500).get();
+  const rows = [];
+  snap.forEach(d => {
+    const v = d.data();
+    if (v.matched === true) return;   // a normal successful credit, nothing to review
+    if (v.resolved) return;           // an admin already looked at this one
+    rows.push({
+      id: d.id,
+      reason: v.unparsed ? 'unparsed' : v.unknownNumber ? 'unknown-number'
+        : v.ambiguous ? 'ambiguous' : v.mismatch ? 'mismatch' : 'unmatched',
+      receivingNumber: v.receivingNumber || '',
+      amount: v.amount != null ? v.amount : null,
+      sender: v.sender || '',
+      raw: v.raw || '',
+      device: v.device || '', appVersion: v.appVersion || '',
+      createdAt: v.createdAt || null,
+    });
+  });
+  return rows;
+}
+app.post('/admin/manual-sms-log/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const rows = await unresolvedManualSmsLog(500);
+    res.json({ status: 'success', rows });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Owner-only, same posture as /admin/deposit/manual/reject just above --
+// deciding a piece of unaccounted-for money needs no further action is a
+// real judgement call, not a routine dismiss. This never moves money on its
+// own; crediting the right member still goes through the existing
+// /admin/deposit tool once the admin has identified who it belongs to.
+app.post('/admin/manual-sms-log/resolve', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const id = String(req.body.id || '');
+  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+  try {
+    await db.collection('manualSmsLog').doc(id).update({ resolved: true, resolvedBy: req.adminUser?.username || 'owner', resolvedAt: FieldValue.serverTimestamp() });
+    logAdminAction(req, 'manual_sms_log_resolved', { id });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // Checks ONE number a person typed into the forwarder. Owner: "this should
 // be a backend secret, so one has to put the number not to select available
 // in admin panel, so no choosing saved numbers, one has to type, system
@@ -5121,11 +5177,12 @@ app.post('/admin/user/referral-chain', async (req, res) => {
 app.get('/admin/badges', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [pendingDep, pendingWit] = await Promise.all([
+    const [pendingDep, pendingWit, unresolvedSms] = await Promise.all([
       db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get(),
       db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get(),
+      unresolvedManualSmsLog(500),
     ]);
-    res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size });
+    res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size, unmatchedSms: unresolvedSms.length });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 function bandOf(h) { return h < 6 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; }

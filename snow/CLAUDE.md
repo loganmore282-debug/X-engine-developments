@@ -6129,6 +6129,94 @@ errors.
 
 Cache bumped `v69`→`v70`. `user-src/`-only change, no redeploy needed.
 
+## Round 100 (2026-09-01) — admin review list for genuine money that arrived with nowhere to go (unmatched/unknown-number/unparsed SMS)
+
+Owner, after an attempted Codex audit of the whole platform failed to run (*"codex
+failed to audit, let's leave it"* — no further action taken on that front, per the
+owner's own instruction): *"if one receives a deposit message but no order created,
+what can server do? what if one deposits but forwarding off, what happens after
+15minutes."* Answered from the actual code, not assumption, then acted on the one gap
+that answer surfaced.
+
+**The three questions, answered against real code:**
+1. **SMS arrives with no matching order** — `manualSmsLog` already recorded it
+   (`matched:false`, or `unparsed`/`unknownNumber` flags — Rounds 88/96/97's own
+   logging), already counted in the Round 95 analytics — but **invisible in the admin
+   panel** outside Render's own console logs. Genuine money can land on an admin phone
+   with nobody ever finding out unless someone happens to be watching server output at
+   that exact moment.
+2. **Forwarding is off, or the SMS never arrives** — the order stays `pending` until its
+   15-minute `expiresAt`, then `markDepositFailed()` (locked, idempotent, Round 81's own
+   hardening) flips it to `failed` and frees the number back to the pool. The member sees
+   "Payment window expired."
+3. **What happens after 15 minutes, precisely** — checked lazily on the member's own poll
+   AND swept every 60s by `reconcileManualDeposits()`, so expiry is never far off even if
+   nobody is looking at the app. One genuine gap surfaced here: `paste-sms` only accepts
+   `pending`/`review` status, so a member who pays for real but pastes their confirmation
+   SMS just after the window closes has already lost their own human-review fallback —
+   asked the owner whether to fix this specifically (allow a short late-paste grace
+   period after expiry); **owner's answer: "Leave it as-is"** — not built, not a gap
+   silently missed, an explicit no.
+
+**What the owner did ask for, and what got built**: *"Should the admin panel show the
+raw unmatched/unknown-number SMS (amount, sender, timestamp, which admin number) so you
+can manually credit a genuine payment that didn't auto-match?"* → **"Yes, add a review
+list (Recommended)."**
+
+**`db.js`**: `manualSmsLog` given a `{createdAt:-1}` index — queried by recency, not
+previously indexed since nothing had ever read it back before this round.
+
+**`server.js`**: `unresolvedManualSmsLog(limit)` reads the most recent 500 rows,
+excludes `matched:true` (a normal successful credit — nothing to review) and anything
+already `resolved` (an admin already looked at it), and labels each row's reason
+(`unparsed`/`unknown-number`/`ambiguous`/`mismatch`/`unmatched`) for display.
+`POST /admin/manual-sms-log/list` (staff-readable — this is diagnostic information, not
+a money-moving action) and `POST /admin/manual-sms-log/resolve` (**owner-only** — marking
+something resolved is a judgement call about real money, same `verifyOwner()` gating
+this file already applies to every other judgement-call action, e.g. Round 15's Reset
+Payout PIN). `/admin/badges` extended to run the same unresolved-count query in parallel
+and report `unmatchedSms`, so the nav badge doesn't need its own round trip.
+
+**Real bug fixed in passing, found while wiring the badge count**: `eatDayKey(Date.now())`
+returns `1970-01-01` — `tsMillis()` only understands a `Date`/Firestore `Timestamp` and
+silently returns 0 for a raw millisecond number, the exact same bug class Round 95 already
+found and fixed at two OTHER call sites in the per-number analytics. This was a third,
+previously-undiscovered call site with the identical defect. Fixed by passing `new
+Date(...)` instead of the bare number at both remaining bad call sites.
+
+**`admin-src/index.html`**: a red "Unmatched SMS (N)" card at the top of the Deposits
+tab (only rendered when N > 0) — when, reason in plain words, receiving number, amount,
+sender, and up to 220 characters of the raw message, plus a "Mark resolved" button
+(owner-only, confirmed before firing — matches this file's own established pattern for
+every irreversible admin action). Explicitly tells the admin what this is and is not:
+*"money may genuinely be sitting on that number with nobody credited for it... credit
+them by hand from their profile, then mark this resolved. Nothing here credits anyone
+automatically"* — this list surfaces, it never auto-fixes, matching `/admin/integrity`'s
+own long-standing design posture (see Round 17's own deferral of exactly this kind of
+auto-fix temptation). A new `smsBadge` nav chip on the Deposits tab button, driven by
+`/admin/badges`' new field, same shape as the existing withdrawal badge.
+`AUDIT_LABELS` gained `manual_sms_log_resolved`.
+
+**Verified**: a standalone Node harness (real `server.js` booted against an in-memory
+Mongo-compatible stub via `require.cache`, real HTTP calls against the real handlers —
+this file's own established pattern for rounds with no live Mongo in this sandbox) —
+16/16 checks: a genuinely matched deposit never appears in the review list; unparsed/
+unknown-number/mismatch/ambiguous rows all appear with the correct reason label; an
+already-resolved row disappears from the list; resolving actually persists
+`resolved:true` with `resolvedBy`/`resolvedAt`; `/admin/badges`' `unmatchedSms` count
+drops by exactly 1 after a resolve; the list endpoint is readable by staff, resolve is
+refused to non-owner staff. `test-admin-obfuscated-build.js` (the real obfuscated admin
+build, not just the source) extended with fixtures for both new endpoints and an
+`unmatchedSms` count in the `/admin/badges` fixture, plus new interaction steps opening
+the Deposits tab and confirming the card renders the fixture's sender/reason/amount,
+clicking "Mark resolved," and confirming the nav badge shows — 0 errors across all 12
+tabs (one self-caught issue during this: a duplicate `const depHtml` collided with an
+existing declaration further up the same test file for the pre-existing "Needs Review"
+subtab check; renamed the new one to `depHtml2`). `node --check` clean on `server.js`,
+`build-admin.js` round-trip clean, `git diff --check` clean. Admin cache bumped
+`v22`→`v23`. No user-app change this round. **`server.js` and `admin-src/index.html`
+changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
