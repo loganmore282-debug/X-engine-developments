@@ -56,6 +56,12 @@ async function ensureIndexes() {
     ['investments',     { userId: 1, createdAt: -1 }],
     ['transactions',    { userId: 1 }],
     ['transactions',    { withdrawalId: 1 }],
+    // Round 106 -- markDepositFailed()/creditDeposit() both look up the
+    // up-front "Processing" ledger row by depositId on EVERY deposit
+    // resolution (success or failure) -- transactions is the busiest,
+    // fastest-growing, unbounded collection in the schema, so this was a
+    // full COLLSCAN on the hot money-crediting path.
+    ['transactions',    { depositId: 1 }],
     ['transactions',    { marzReference: 1 }],
     ['transactions',    { ref: 1 }],
     ['transactions',    { userId: 1, createdAt: -1 }],
@@ -67,6 +73,12 @@ async function ensureIndexes() {
     ['withdrawals',     { ref: 1 }],
     ['withdrawals',     { userId: 1, createdAt: -1 }],
     ['withdrawals',     { status: 1, createdAt: 1 }],
+    // Round 106 -- reconcilePendingWithdrawals()'s real query shape (status
+    // + marzTxUuid/lipaOutTradeNo + createdAt), mirroring the exact compound
+    // indexes pendingDeposits already got in Round 104 for the identical
+    // starvation-avoidance fix on the deposit side.
+    ['withdrawals',     { status: 1, marzTxUuid: 1, createdAt: 1 }],
+    ['withdrawals',     { status: 1, lipaOutTradeNo: 1, createdAt: 1 }],
     ['pendingDeposits', { userId: 1 }],
     ['pendingDeposits', { marzReference: 1 }],
     ['pendingDeposits', { status: 1 }],
@@ -109,6 +121,9 @@ async function ensureIndexes() {
     // arrived with nowhere to go -- unmatched, unknown-number and unparsed
     // SMS. Queried by recency in the admin panel.
     ['manualSmsLog', { createdAt: -1 }],
+    // Round 106 -- unresolvedManualSmsLog()'s real query shape after the
+    // matched/resolved exclusion was pushed into the query itself.
+    ['manualSmsLog', { matched: 1, resolved: 1, createdAt: -1 }],
   ];
   // ONE AT A TIME -- M0's free tier has very little real concurrency headroom.
   let failed = 0;

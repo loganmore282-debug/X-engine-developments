@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.telephony.SmsMessage;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 /**
@@ -70,7 +71,7 @@ public class SmsReceiver extends BroadcastReceiver {
             }
 
             int slot = resolveSimSlot(context, bundle);
-            String receivingNumber = prefs.resolveReceivingNumber(slot);
+            String receivingNumber = prefs.resolveReceivingNumber(slot, isSingleSimHardware(context));
 
             // See Prefs.resolveReceivingNumber() for why this refuses rather
             // than falling back to "probably the first number" -- guessing
@@ -86,7 +87,7 @@ public class SmsReceiver extends BroadcastReceiver {
             Log.i(TAG, "Forwarding SMS from " + sender + " received on slot " + slot);
             // Stamped here, the instant the broadcast fired, so the server can
             // be told how long forwarding actually took on this phone.
-            Poster.post(prefs.url(), prefs.secret(), message, sender, receivingNumber,
+            Poster.post(context, prefs.url(), prefs.secret(), message, sender, receivingNumber,
                     System.currentTimeMillis(), null);
         } catch (Exception e) {
             Log.e(TAG, "onReceive error", e);
@@ -125,6 +126,32 @@ public class SmsReceiver extends BroadcastReceiver {
             return -1;
         } catch (Exception e) {
             return -1;
+        }
+    }
+
+    /**
+     * Whether this DEVICE physically has only one SIM slot -- a hardware
+     * capability query (getPhoneCount(), deprecated in favor of
+     * getActiveModemCount() on API 30+ but still fully functional, kept for
+     * simplicity across this app's supported API range), NOT how many
+     * numbers are configured in the app and NOT which SIMs currently have a
+     * card inserted. Needs no runtime permission. See
+     * Prefs.resolveReceivingNumber()'s own comment for why this distinction
+     * is the actual money-safety fix: a dual-SIM phone with only one Snow
+     * number configured must still require the SIM slot to be known, not be
+     * treated the same as a phone that only HAS one SIM slot to begin with.
+     * Unknown (null manager, or any exception) fails toward "not single-SIM"
+     * -- i.e. toward requiring slot resolution -- matching this file's own
+     * "never guess, drop rather than misattribute" posture throughout.
+     */
+    @SuppressWarnings("deprecation")
+    private boolean isSingleSimHardware(Context context) {
+        try {
+            TelephonyManager tm = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+            if (tm == null) return false;
+            return tm.getPhoneCount() <= 1;
+        } catch (Exception e) {
+            return false;
         }
     }
 

@@ -322,6 +322,11 @@ window.doRegister = async function(){
 };
 window.doLogout = async function(){
   stopLiveRefresh();
+  // Defense in depth alongside the _openSheetTitle fix on the checkin
+  // countdown's own tick: a sign-out that happens to land while Daily
+  // Check-in is still open shouldn't leave this ticking into a signed-out
+  // session either.
+  if (_checkinCountdownTimer) { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; }
   STATE.authEpoch++;
   Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, mission: null });
   clearCachedState();
@@ -907,12 +912,20 @@ function patchHomeBalances(){
 }
 
 // ── MY PRODUCTS ──
+// Subagent-audit-caught: a genuine fetch failure on first-ever visit (no
+// cache yet to fall back to) used to be rendered byte-for-byte identically
+// to a real "you have no products" empty state -- a member with real active
+// investments who hits this during, say, a Render cold-start could see "No
+// products yet" for money that is actually invested. This flag lets
+// paintProducts() tell the two apart without reworking the whole cache-first
+// pipeline; cleared the moment a real fetch (success or a retry) resolves.
+var _investmentsLoadFailed = false;
 async function renderProducts(){
   const hadCache = Array.isArray(STATE.investments);
   if (hadCache) paintProducts(true);
   const r = await api('/investments');
-  if (r.status === 'success') STATE.investments = r.investments;
-  else if (!hadCache) STATE.investments = [];
+  if (r.status === 'success') { STATE.investments = r.investments; _investmentsLoadFailed = false; }
+  else if (!hadCache) { STATE.investments = []; _investmentsLoadFailed = true; }
   if (STATE.page !== 'products') return; // navigated away while awaiting
   paintProducts(!hadCache);
 }
@@ -943,7 +956,9 @@ function paintProducts(animate){
 </div>
 <div class="section-title" style="margin:26px 20px 12px;">Active Plans</div>
 <div style="display:flex;flex-direction:column;gap:14px;margin:0 20px;">`;
-  if (!investments.length) {
+  if (!investments.length && _investmentsLoadFailed) {
+    html += `<div class="list-empty"><div class="empty-icon">${ICONS.box}</div>Could not load your plans. <button style="background:none;border:none;color:var(--snow-wine);font-weight:700;cursor:pointer;padding:0;font-size:inherit;" onclick="renderProducts()">Tap to retry</button></div>`;
+  } else if (!investments.length) {
     html += `<div class="list-empty"><div class="empty-icon">${ICONS.box}</div>No products yet. Browse plans on Home to get started.</div>`;
   } else {
     investments.forEach(inv => {
@@ -1633,6 +1648,17 @@ var _checkinCountdownTimer = null;
 function startCheckinCountdown(){
   if (_checkinCountdownTimer) clearInterval(_checkinCountdownTimer);
   const tick = () => {
+    // Subagent-audit-caught real bug: this only ever checked whether the
+    // button node still exists in the DOM -- but closeSheet()/popstate never
+    // clear #sheetBody's innerHTML (only toggle the overlay's .show class),
+    // so the button stays findable by a document-wide querySelector long
+    // after the Daily Check-in sheet is visually closed. Without the
+    // _openSheetTitle check every other countdown timer in this file already
+    // uses (see _manDepCountdownTimer's own tick), this kept ticking on a
+    // now-invisible, detached-from-view node for up to ~24h after the
+    // member navigated away -- a real battery/CPU drain, not just a style
+    // inconsistency.
+    if (_openSheetTitle !== 'Daily Check-in') { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; return; }
     const btn = document.querySelector('[data-checkin-next]');
     if (!btn) { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; return; }
     const remaining = Number(btn.dataset.checkinNext) - Date.now();
@@ -1975,6 +2001,15 @@ async function pollManualDepositStatus(depositId){
     await new Promise(r => setTimeout(r, 5000));
     if (_openSheetTitle !== 'Complete Payment') return;
     const r = await post('/deposit/manual/status', { depositId });
+    // Subagent-audit-caught real bug: _openSheetTitle was only checked
+    // BEFORE this await, not after -- if the member closed "Complete
+    // Payment" and opened a different sheet (e.g. Withdraw, mid-typing)
+    // while this request was in flight, the code below would unconditionally
+    // closeSheet() whatever sheet is now open the instant this poll
+    // resolved, discarding whatever they'd started entering. Re-checking
+    // here matches every other cache-first/background-poll guard in this
+    // file (e.g. switchTeamLevel()'s own post-await re-check).
+    if (_openSheetTitle !== 'Complete Payment') return;
     if (r.status !== 'success') continue;
     if (r.state === 'matched') { closeSheet({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
     if (r.state === 'failed') { closeSheet({ fromAction: true }); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return; }
@@ -2006,6 +2041,16 @@ window.openDepositStatusModal = function(amount, phone){
 window.closeDepositStatusModal = function(){
   $('depStatusBg').classList.remove('show');
   unlockBodyScroll();
+  // Subagent-audit-caught real bug: submitDeposit()/pollDepositStatus()/
+  // pollManualDepositStatus() all close the Recharge/Complete Payment sheet
+  // with {fromAction:true} specifically to SUPPRESS the announcement while
+  // handing off to this modal (so it can't land on top of the pending/result
+  // screen) -- but nothing ever un-suppressed it once the member actually
+  // taps Close here, which is the real "back to Home" moment for the most
+  // common real path (submit a recharge -> see the result -> tap Close).
+  // maybeAnnounceAfterSheet() already no-ops correctly when STATE.page isn't
+  // 'home' or another overlay is open, so this is safe to call unconditionally.
+  maybeAnnounceAfterSheet('Recharge');
 };
 function setDepositStatusPending(amount, phone){
   $('depStatusIcon').className = 'dep-status-icon';

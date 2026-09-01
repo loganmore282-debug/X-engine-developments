@@ -6780,6 +6780,228 @@ which remain the newest and least externally-reviewed code in this file) is stil
 doing once the session limit resets; this round's manual pass is real but narrower than
 a proper 6-way parallel sweep would have covered.
 
+## Round 106 (2026-09-01) — owner: "again": full 6-agent audit actually completed this time, 15 real findings fixed across server.js/db.js/admin/user-src/the Android app/render.yaml
+
+Owner asked again right after Round 105's rate-limited attempt. Relaunched the same
+6-agent parallel pattern (server.js money-flow, db.js, admin-src+routes, user-src
+frontend, the Android SMS forwarder, a general cross-cutting sweep) — this time all 6
+completed. Every finding was independently re-derived against the actual current code
+before being touched, same discipline as every review round in this file; several
+findings were verified with new, purpose-built concurrency harnesses rather than taken
+on the agent's word.
+
+**Fixed — HIGH, `/admin/user/delete` had a real race letting a new registration
+permanently attach to a referrer mid-deletion.** Reparenting the deleted account's own
+children (`withLock('referrer-guard:'+userId, ...)`) and the actual `users.doc(userId)
+.delete()` used to be two SEPARATE steps, with several unlocked round trips (bank/promo/
+security/deposit cleanup) in between — during that gap, a brand-new registration using
+the still-live referral code could look it up, acquire the SAME lock key
+(`completeRegistrationCore()`'s own `withLock('referrer-guard:'+referrerId, commit)`),
+see the referrer's doc still existing/not banned, and permanently write `referredBy` to
+an account about to vanish. The new member's referral chain then points at nothing
+forever — no future purchase of theirs ever pays commission to anyone, including the
+legitimate upline above the deleted account. Fixed by moving the reparent query AND the
+doc delete inside one single lock scope: either a concurrent registration's commit runs
+entirely first (the reparent query, now running fresh AFTER that commit, correctly
+sweeps the newly-attached member up too) or entirely after (its own refCheck sees the
+now-deleted doc and correctly declines to attach). **Verified with a dedicated
+concurrency harness** (boots the real server against the in-memory mock DB, fires 15
+trials of a real concurrent delete+registration with staggered timing to force both
+possible orderings): the core money-safety property — a new member's `referredBy` never
+points at a deleted user — held across all 15 trials, and both real outcomes (7 swept
+into the surviving parent, 8 correctly left unattached) were actually observed, proving
+both halves of the fix, not just one. 17/17 checks.
+
+**Fixed — Low, `transactions.depositId` had no index at all.** Hit on the hot path of
+every single deposit resolution (`markDepositFailed()`, `creditDeposit()`'s success
+path) — `transactions` is the busiest, fastest-growing, unbounded collection in the
+whole schema (every cashback payout, commission, check-in, gift-code redemption, and
+withdrawal writes a row too), so this was a full collection scan on every deposit,
+success or failure. Added the missing index.
+
+**Fixed — Low, the withdrawal reconciler's real query shape lacked the compound indexes
+its deposit-side twin already got.** `reconcilePendingWithdrawals()`'s `status +
+marzTxUuid/lipaOutTradeNo + createdAt` queries had no matching compound index, unlike
+`pendingDeposits`' identical Round 104 fix for the same starvation-avoidance pattern.
+Added both.
+
+**Fixed — Medium, the "Unmatched SMS" admin review list could silently drop genuinely
+unresolved money reports once normal deposit volume passed ~500 messages.**
+`unresolvedManualSmsLog()` took the 500 most recent rows of the WHOLE `manualSmsLog`
+collection — including every ordinary successful match, which vastly outnumbers
+genuinely-unresolved rows on any platform with real volume — and only filtered
+matched/resolved rows out afterward, in memory. An older genuinely-unresolved row (real
+money with nowhere to go) could age out of the 500-row window entirely once 500+ OTHER
+events happened since, with zero signal it was ever dropped — exactly the failure mode
+Round 100 built this feature to prevent. Fixed by pushing the `matched`/`resolved`
+exclusion into the query itself (Mongo's `$ne` correctly matches a document where the
+field is simply absent, same as every other `$ne`-based exclusion in this file), so the
+500-row limit only ever bounds rows that actually still need a look. Added the matching
+compound index.
+
+**Fixed — Medium, `/admin/deposits/list`/`/admin/withdrawals/list` capped at 5,000 rows
+each with no `truncated` signal**, inconsistent with the same fix this file already
+applied to `/admin/referrals/list`/`/admin/transactions/list` (Rounds 80/81) — the "All"
+tab and its derived counts could silently be an incomplete picture on any platform with
+meaningful history. Added a `truncated` flag (checked against either underlying source
+query hitting its own limit, not just the merged/deduped row count) to both routes, and
+a matching notice card to both admin tabs.
+
+**Fixed — Medium, the Reject prompt for a `sending` withdrawal never warned the admin to
+verify with the provider first — a real double-payout risk.** `processWithdrawalCore()`'s
+own comment already explains `sending` (network-errored mid-payout) is genuinely
+ambiguous and must never be rejected without first confirming on the provider's own
+dashboard that it did NOT actually send — but the admin UI fired the exact same generic
+"funds are refunded" prompt for a `sending` row as for an ordinary pending one, with none
+of that critical precaution reaching the person about to click it. Fixed the prompt text
+specifically for that one status.
+
+**Fixed — Low, the "Delete payment number" confirm dialog described the pre-Round-104
+behavior** ("unaffected... no longer handed out") instead of what the route actually does
+now (refuses outright with a 409 if a live order is assigned). Corrected the copy.
+
+**Fixed — Medium, `render.yaml` didn't document `MANUAL_SMS_SECRET`/`FORWARDER_PASSWORD`**,
+both live config knobs `server.js` actually reads — recreating the service from
+render.yaml alone would silently disable automated manual-deposit crediting with zero
+signal anything was missing. Added both as documented (undocumented-value) env vars.
+
+**Fixed — Medium, `snow-app`/`snow-admin` (the browser-facing origins) were missing
+HSTS + Cross-Origin-Resource-Policy headers that `snow-server`'s own helmet config
+already sets** — a real oversight (5 of 6 header categories were already present on both
+static sites) rather than a deliberate difference, and it matters most on exactly the
+panel that moves money. Added both headers to both static sites.
+
+**Fixed — Low, two IP-keyed throttle maps (`_forwarderUnlockAttempts`,
+`_verifyNumberAttempts`) were never swept in `sweepEphemeralState()`**, unlike every
+sibling ephemeral map — growth is already bounded (both sit behind the shared-secret
+check, so only devices that already hold `MANUAL_SMS_SECRET` can grow them), but a real
+inconsistency worth closing for defense-in-depth. Added.
+
+**Not fixed, correctly investigated as a low-value CORS finding**: the agent flagged
+that the CORS allowlist trusts any `*.onrender.com` origin, not just Snow's own 2
+services. Real, but Bearer-token auth (not cookies) means this can't be used to ride an
+existing session — only to read `/public/*` responses that are already meant to be
+public. Left as-is rather than narrowing to a guessed hostname; this project's own
+history (Round 89) already flags that the real deployed `snow-app`/`snow-admin`
+hostnames were never confirmed against `render.yaml`'s own `snow-platform.com`
+assumption — narrowing the allowlist on an unconfirmed guess risks breaking legitimate
+access, a worse outcome than the low-severity gap it would close.
+
+**Fixed — HIGH (Android), the single-configured-number shortcut could misattribute a
+completely unrelated SMS on a genuinely dual-SIM phone.** `Prefs.resolveReceivingNumber()`
+used to trust the ONE configured number for ANY qualifying SMS whenever exactly one
+number was configured in the app — but `MainActivity`'s own setup screen always shows
+2+ slot rows and its own hint text explicitly invites leaving one blank ("Leave a slot
+blank if that SIM is not a Snow payment number"). A genuinely dual-SIM phone with only
+one Snow number configured (the other slot is the admin's own personal line) would
+forward ANY qualifying money SMS — including a real payment landing on the admin's own
+unrelated personal SIM — tagged with the one Snow number regardless of which physical
+SIM actually received it. If that mis-tagged amount happened to match a live order on
+the real Snow number, a member would be credited for money the platform never actually
+received. Fixed by gating the shortcut on `TelephonyManager.getPhoneCount()` (a hardware
+capability query needing no runtime permission, unrelated to how many numbers are
+configured) — a genuinely single-SIM phone keeps the exact same zero-permission
+convenience as before; a dual/multi-SIM-capable phone with only one number configured
+now correctly falls through to requiring the SIM slot to be known, same as the
+2+-configured case.
+
+**Fixed — Medium-High (Android), the background SMS-forwarding POST had nothing keeping
+the process/CPU alive for its duration.** `SmsReceiver`'s `onReceive()` fires a bare
+background `Thread` and returns almost immediately, relying entirely on
+`ForwardService`'s foreground status to protect the process — but there are real windows
+where that service isn't actually alive at the exact moment an SMS arrives (a crash
+before `START_STICKY` restarts it, the narrow window right after boot). Since this app
+makes exactly ONE forwarding attempt by design with nothing persisted for retry, any SMS
+caught in that gap is silently and permanently lost, with no log even surviving since
+the process itself is gone. Fixed with a short, self-timing-out `PARTIAL_WAKE_LOCK` held
+for the duration of the POST (the already-declared but previously-unused `WAKE_LOCK`
+permission).
+
+**Fixed — Medium (Android), `Lock.forget()` existed but was never called anywhere**,
+so the settings-screen password only ever prompted once per process lifetime — and since
+`ForwardService` is a persistent foreground service keeping the process alive
+indefinitely, that meant essentially once ever per phone until reboot, defeating the
+exact "someone picking up an unattended admin phone" threat model `Lock.java`'s own
+header comment describes. Fixed by moving the lock-prompt trigger from `onCreate()` to
+`onResume()` (still covers first launch, since `onResume()` always follows `onCreate()`)
+and calling `Lock.forget()` in `onStop()`, so leaving this screen (Home button, switching
+apps, the phone locking) now always requires the password again on return.
+
+**Fixed — Medium (Android), a plain Save while forwarding was already active never
+re-validated the URL/secret, so accidentally blanking either silently broke forwarding
+with the UI still confidently showing "ACTIVE."** `toggleActive()`'s own blank-field
+guard only ever ran on the transition TO active. Fixed `saveSettings()` to re-check and
+auto-stop forwarding (with a loud toast) if it was on and the URL/secret is now blank,
+plus a defense-in-depth check in `refreshUi()` itself so it can never claim ACTIVE while
+genuinely broken, regardless of how that state was reached.
+
+**Fixed — Low-Medium (Android), `allowBackup="true"` with no exclusion rules could leak
+the shared secret and lock-password hash into Android's Auto Backup.** Set
+`allowBackup="false"` outright — simpler and more robust than maintaining a
+`dataExtractionRules` exclusion file that would need to stay in sync with every future
+SharedPreferences file this app adds, for an app with no legitimate need to preserve its
+settings across a device wipe (re-entering the URL/secret/numbers on a replacement phone
+is a small one-time task, and doing so deliberately also forces the admin to type the
+CURRENT shared secret rather than silently restore a possibly-rotated stale one).
+
+App version bumped to `versionCode 11` / `"1.10"` per this app's own standing rule.
+
+**Fixed — HIGH (frontend), `pollManualDepositStatus()` could forcibly close a DIFFERENT
+sheet the member had since opened, discarding unsaved input.** The `_openSheetTitle`
+guard was only checked BEFORE the `await post(...)` call, not after it resolved — if the
+member closed "Complete Payment" and opened Withdraw (or any other sheet) while that
+request was still in flight, the code unconditionally called `closeSheet()` on
+whatever sheet was now open the instant the poll resolved. Fixed by re-checking
+`_openSheetTitle` again immediately after the await, matching the pattern every other
+background-poll guard in this file already uses (e.g. `switchTeamLevel()`'s own
+post-await re-check).
+
+**Fixed — Medium (frontend), closing the deposit result modal never re-fired the
+Round-93 "announcement after returning from Recharge" feature** — `submitDeposit()`/
+`pollDepositStatus()`/`pollManualDepositStatus()` all deliberately suppress the
+announcement while handing off to the result modal (so it can't land on top of the
+pending/result screen), but nothing ever un-suppressed it once the member actually
+tapped Close — the real "back to Home" moment for the most common real path. Fixed
+`closeDepositStatusModal()` to call `maybeAnnounceAfterSheet('Recharge')`.
+
+**Fixed — Low (frontend), the Daily Check-in countdown timer wasn't cleared by
+`closeSheet()`/`popstate`/`doLogout()`, and could tick for up to 24h after the member
+navigated away.** Its only stop condition was whether the button node still existed
+anywhere in the document — but `closeSheet()`/`popstate` never clear `#sheetBody`'s
+innerHTML (only toggle the overlay's `.show` class), so the node stayed
+document-wide-findable long after the sheet was visually closed. Added the same
+`_openSheetTitle` check every other countdown timer in this file already uses (e.g.
+`_manDepCountdownTimer`'s own tick), plus an explicit clear in `doLogout()` for defense
+in depth.
+
+**Fixed — Medium (frontend), a genuine `/investments` fetch failure on first-ever visit
+rendered byte-for-byte identically to a real "you have no products" empty state** —
+`renderProducts()` blanked `STATE.investments` to `[]` on a failure with no cache to
+fall back to, so a member with real active investments hitting this during (for example)
+a Render cold-start could see "No products yet" for money that is actually invested.
+Fixed the most impactful instance: a `_investmentsLoadFailed` flag now lets
+`paintProducts()` show a distinct "Could not load your plans — Tap to retry" message
+instead. **Deliberately not fixed the same round**: the identical pattern in `boot()`
+(a failed `/public/settings` silently blanks to `{}`) and `renderTeam()` (fabricates a
+zero-everything team-stats object, including blanking the referral code) — both are
+real, but fixing all three consistently is a larger, more invasive change spanning
+multiple render functions; rushing it under this round's own time budget risked
+introducing inconsistency across the three fixes. Worth a dedicated round.
+
+**Verified**: `node --check` clean on `server.js`/`db.js`/`original_module.js`;
+`node build-core.js` and `node build-admin.js` both clean round-trips;
+`node test-admin-obfuscated-build.js` — 0 errors across all 12 tabs; a boot smoke test
+(real self-signed RSA dummy Firebase service-account PEM + unreachable `MONGODB_URI`)
+fails only at the expected Mongo-connect step; `git diff --check` clean. The Round 104
+manual-deposit concurrency harness re-run clean (11/11) confirming no regression from
+this round's server.js changes. The new dedicated delete-vs-registration race harness
+described above (17/17). Android: the project's own `check-java-symbols.py` clean, XML
+manifest parses, balanced braces/parens across all 10 Java files — the real proof (a
+green GitHub Actions build) has not yet run as of this commit; push and check the
+Actions tab before relying on this build. Cache bumped `v70`→`v71` (user),
+`v25`→`v26` (admin). **`server.js`/`db.js`/`render.yaml` changed — Render should
+auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

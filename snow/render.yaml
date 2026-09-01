@@ -23,6 +23,15 @@ services:
         sync: false
       - key: LIPAPAY_SANDBOX
         sync: false
+      # Round 106 -- subagent-audit-caught: server.js reads both of these
+      # (manual-deposit SMS-forwarder auth + the forwarder app's optional
+      # settings-screen lock) but neither was documented here, so recreating
+      # this service from render.yaml alone silently disabled automated
+      # manual-deposit crediting with no signal anything was missing.
+      - key: MANUAL_SMS_SECRET
+        sync: false
+      - key: FORWARDER_PASSWORD
+        sync: false
 
   - type: web
     name: snow-app
@@ -56,6 +65,17 @@ services:
       - path: /*
         name: Content-Security-Policy
         value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+      # Round 106 -- subagent-audit-caught: snow-server's helmet config sets
+      # HSTS + Cross-Origin-Resource-Policy, but neither static site (the
+      # browser-facing origins members and admins actually navigate to) had
+      # them documented here -- a real oversight, not a deliberate
+      # difference, since 5 of the 6 header categories were already present.
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=63072000; includeSubDomains
+      - path: /*
+        name: Cross-Origin-Resource-Policy
+        value: same-site
     routes:
       - type: rewrite
         source: /*
@@ -86,6 +106,12 @@ services:
       - path: /*
         name: Content-Security-Policy
         value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=63072000; includeSubDomains
+      - path: /*
+        name: Cross-Origin-Resource-Policy
+        value: same-site
     routes:
       - type: rewrite
         source: /*

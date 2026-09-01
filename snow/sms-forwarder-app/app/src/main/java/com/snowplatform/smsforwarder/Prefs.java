@@ -102,9 +102,32 @@ public final class Prefs {
      * belonging to a DIFFERENT member and credit them for someone else's
      * money.
      *
-     * So this never guesses:
-     *   - Exactly one number configured  -> single-SIM install, use it.
-     *   - Two or more configured         -> the SIM slot MUST be known. If it
+     * Subagent-audit-caught real bug: this used to shortcut straight to the
+     * lone configured number whenever exactly ONE number was configured in
+     * the app, on the assumption that meant a single-SIM install -- but
+     * MainActivity's own setup screen always shows 2+ slot rows and its own
+     * hint text explicitly invites leaving one blank ("Leave a slot blank if
+     * that SIM is not a Snow payment number"). A genuinely dual-SIM phone
+     * with only ONE Snow number configured (the other slot is the admin's
+     * own personal line) would have configuredCount()==1 and so forward ANY
+     * qualifying money SMS -- including a real payment landing on the
+     * admin's own unrelated personal SIM -- tagged with the one Snow number
+     * regardless of which physical SIM actually received it. If that
+     * mis-tagged amount happens to match a live order on the real Snow
+     * number, a member gets credited for money the platform never actually
+     * received.
+     *
+     * Fixed: the shortcut is now gated on `singleSimHardware` -- whether
+     * this DEVICE physically has only one SIM slot at all (a hardware
+     * capability query, TelephonyManager.getPhoneCount(), which needs no
+     * runtime permission and is unrelated to how many numbers are
+     * configured). A genuinely single-SIM phone still gets the exact same
+     * zero-permission-needed convenience as before; a dual/multi-SIM-capable
+     * phone with only one number configured now correctly falls through to
+     * requiring the SIM slot to be known, same as the 2+-configured case.
+     *
+     *   - Device is single-SIM hardware -> use the lone configured number.
+     *   - Otherwise                     -> the SIM slot MUST be known. If it
      *                                       could not be resolved, return ""
      *                                       and the caller drops the SMS.
      *
@@ -112,11 +135,11 @@ public final class Prefs {
      * fallback and the admin review queue both still catch it). Crediting the
      * wrong member is not.
      */
-    public String resolveReceivingNumber(int simSlot) {
+    public String resolveReceivingNumber(int simSlot, boolean singleSimHardware) {
         JSONObject o = numbersBySlot();
         int count = configuredCount();
         if (count == 0) return "";
-        if (count == 1) {
+        if (count == 1 && singleSimHardware) {
             for (Iterator<String> it = o.keys(); it.hasNext(); ) {
                 String v = o.optString(it.next(), "").trim();
                 if (!v.isEmpty()) return v;

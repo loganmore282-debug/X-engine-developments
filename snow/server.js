@@ -3206,12 +3206,25 @@ async function reconcileManualDeposits() {
 // Shared by the list route and /admin/badges so the two can never quietly
 // disagree about what counts as "still needs a look".
 async function unresolvedManualSmsLog(limit) {
-  const snap = await db.collection('manualSmsLog').orderBy('createdAt', 'desc').limit(limit || 500).get();
+  // Subagent-audit-caught real bug: this used to take the 500 most recent
+  // rows of the WHOLE manualSmsLog collection -- including every ordinary
+  // successful match, which vastly outnumbers genuinely-unresolved rows on
+  // any platform with real deposit volume -- and only filtered matched/
+  // resolved OUT afterward, in memory. A genuinely-unresolved row (real
+  // money with nowhere to go) could silently age out of the 500-row window
+  // entirely once 500+ OTHER events (mostly normal successful credits)
+  // happened since it was logged, with no signal anywhere that it was ever
+  // dropped -- exactly the failure mode this whole feature exists to
+  // prevent. Fixed by excluding matched/resolved rows in the QUERY itself
+  // (Mongo's $ne correctly matches a document where the field is simply
+  // absent, same as every other $ne-based exclusion in this file), so the
+  // 500-row limit only ever bounds rows that actually still need a look.
+  const snap = await db.collection('manualSmsLog')
+    .where('matched', '!=', true).where('resolved', '!=', true)
+    .orderBy('createdAt', 'desc').limit(limit || 500).get();
   const rows = [];
   snap.forEach(d => {
     const v = d.data();
-    if (v.matched === true) return;   // a normal successful credit, nothing to review
-    if (v.resolved) return;           // an admin already looked at this one
     rows.push({
       id: d.id,
       reason: v.unparsed ? 'unparsed' : v.unknownNumber ? 'unknown-number'
@@ -5375,10 +5388,36 @@ app.post('/admin/user/delete', async (req, res) => {
     if (!inFlightDepSnap.empty) return res.status(409).json({ status: 'error', message: 'This account has a deposit still being confirmed with the payment provider. Wait a moment for it to settle, then try deleting again.' });
     // Reparent this account's own direct referrals up to ITS referrer, so a
     // deleted account never leaves a permanently orphaned downline.
+    //
+    // Subagent-audit-caught real bug: reparenting and the actual user-doc
+    // delete used to be two SEPARATE steps -- reparent inside this
+    // 'referrer-guard:'+userId lock, then several more unlocked round trips
+    // (the bank/promo/security/deposit cleanup below) before finally
+    // deleting the doc. completeRegistrationCore()'s own commit() acquires
+    // this EXACT SAME lock key ('referrer-guard:'+referrerId) when resolving
+    // a NEW registration's referrer -- but only re-checks whether that
+    // referrer still exists AT COMMIT TIME. With the lock released early
+    // here, a registration using this account's still-live referral code
+    // could look the code up (unlocked, before this route even starts),
+    // acquire 'referrer-guard:'+userId in the gap between reparent and
+    // delete, see the referrer doc still exists and isn't banned, and
+    // permanently attach the new member to it -- moments before this route
+    // deletes that same document. The new member's referredBy then points
+    // at nothing forever (never swept by the reparent step above, which
+    // already ran before this new member existed), and every future
+    // purchase they make pays zero commission to anyone, including the
+    // legitimate upline above the deleted account. Fixed by holding the
+    // SAME lock across BOTH the reparent query and the actual doc delete,
+    // so the two operations can never interleave: either a concurrent
+    // registration's commit() runs entirely first (attaches the new member,
+    // then THIS reparent query -- which runs fresh, after that commit --
+    // correctly sweeps the new member up too), or entirely after (its own
+    // refCheck sees the now-deleted doc and correctly declines to attach).
     const parentId = uSnap.data().referredBy || null;
     await withLock('referrer-guard:' + userId, async () => {
       const childSnap = await db.collection('users').where('referredBy', '==', userId).get();
       await Promise.all(childSnap.docs.map(d => d.ref.update({ referredBy: parentId })));
+      await db.collection('users').doc(userId).delete();
     });
     // Deletes the login + this user's non-financial personal data. Deliberately
     // does NOT touch investments/transactions/withdrawals -- those are the
@@ -5534,7 +5573,16 @@ app.post('/admin/deposits/list', async (req, res) => {
     const rows = Array.from(byId.values());
     rows.forEach(r => { r.accountPhone = phones[r.userId] || ''; r.referralCode = refCodes[r.userId] || ''; counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1; });
     const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(r => r.status === 'matched'), 'creditedAt');
-    res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount });
+    // Subagent-audit-caught: this had a real 5000-row cap on each underlying
+    // query with no truncated flag, unlike /admin/referrals/list and
+    // /admin/transactions/list, which this file already fixed the same way
+    // (Rounds 80/81) -- silently showing a partial "All" view/counts as if
+    // complete once history genuinely exceeds the cap. Checked against
+    // EITHER source query hitting its own limit, not just the merged/deduped
+    // row count, since de-duplication can make the merged total look under
+    // the cap even when one of the two source queries was truncated.
+    const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
+    res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount, truncated });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/deposit/force-credit', async (req, res) => {
@@ -5574,7 +5622,10 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     // about. Sent with the list so the tab doesn't need a second round trip
     // just to label a button. 'marzpay' | 'lipapay' | 'manual' (Round 102
     // widened this from a plain 'automatic'/'manual' 2-way string).
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett) });
+    // Subagent-audit-caught: same missing-truncated-flag gap as the deposits
+    // list above, fixed the same way.
+    const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett), truncated });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {
@@ -6336,6 +6387,16 @@ function sweepEphemeralState() {
       const locked = f.lockedUntil && f.lockedUntil > now;
       if (!locked && now - (f.ts || 0) > 15 * 60 * 1000) _loginFails.delete(k);
     }
+    // Subagent-audit-caught: these 2 IP-keyed throttle maps were never swept
+    // here, unlike every sibling ephemeral map above -- both are behind a
+    // timingSafeEqual check against MANUAL_SMS_SECRET (so growth is already
+    // bounded by how many distinct IPs hold the shared secret, i.e. admin
+    // phones, not attacker-triggerable by an outsider), but a genuine
+    // inconsistency worth closing for defense-in-depth if the secret is ever
+    // rotated across many more devices. `{n, first}` shape, not a bare
+    // timestamp, so this can't reuse dropStale() directly.
+    for (const [k, f] of _forwarderUnlockAttempts) { if (now - (f.first || 0) > 10 * 60 * 1000) _forwarderUnlockAttempts.delete(k); }
+    for (const [k, f] of _verifyNumberAttempts) { if (now - (f.first || 0) > 10 * 60 * 1000) _verifyNumberAttempts.delete(k); }
   } catch (e) { console.error('State sweep error:', e.message); }
 }
 

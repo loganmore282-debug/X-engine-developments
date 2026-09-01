@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
     private static final String APK_FILENAME = "snow-sms-forwarder.apk";
 
     private Prefs prefs;
+    private View contentRoot;
     private long downloadId = -1;
     private BroadcastReceiver downloadWatcher;
     private Runnable downloadPoll;
@@ -156,7 +157,37 @@ public class MainActivity extends Activity {
         }
         checkForUpdate(false);   // quiet on open: only speaks up if there IS one
         verifyEnteredNumbers(true);   // so each slot can say whether its number is real
-        maybeAskForPassword(root);
+        // Subagent-audit-caught real bug, see onStop()/onResume() below: the
+        // lock-screen prompt is now driven from onResume(), not onCreate(),
+        // so it actually re-fires every time this screen returns to the
+        // foreground, not just once per process lifetime.
+        contentRoot = root;
+    }
+
+    /**
+     * Subagent-audit-caught real bug: Lock.forget() (which resets the
+     * "unlocked this run" flag so reopening asks again) existed but was
+     * never called anywhere -- and because ForwardService is a persistent
+     * foreground service whose whole purpose is to keep this app's process
+     * alive indefinitely, the process essentially never dies except on
+     * reboot or a manual force-stop. So once unlocked, the settings screen
+     * would never ask for the password again for as long as the phone kept
+     * running -- defeating the exact threat model Lock.java's own header
+     * comment states it exists for ("someone picking up an unattended admin
+     * phone"). Re-locking on every backgrounding (not just process death)
+     * closes that gap directly: leaving this screen (Home button, switching
+     * apps, the phone locking) always requires the password again on return.
+     */
+    @Override
+    protected void onStop() {
+        super.onStop();
+        Lock.forget();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (contentRoot != null) maybeAskForPassword(contentRoot);
     }
 
     /**
@@ -721,7 +752,27 @@ public class MainActivity extends Activity {
             }
         }
         prefs.saveNumbers(numbers);
-        toast("Saved");
+        // Subagent-audit-caught real bug: this used to save whatever was in
+        // the fields unconditionally, with no re-check against forwarding
+        // already being on. toggleActive()'s own URL/secret-blank guard only
+        // ever runs on the transition TO active -- an admin who accidentally
+        // cleared the URL field and tapped plain Save (without stopping and
+        // restarting) kept `active` set to true, refreshUi() kept confidently
+        // showing "Status: ACTIVE", and every subsequent forwarded SMS
+        // silently failed with "No server URL set" (Poster.postSync's own
+        // early return) -- forwarding stops indefinitely with zero visible
+        // error anywhere in the UI. Fixed by re-validating right here, same
+        // "refuse rather than silently break" posture as every other guard
+        // in this app: if forwarding was on and the URL or secret is now
+        // blank, turn it off and say so loudly instead of leaving a broken
+        // ACTIVE state on screen.
+        if (prefs.active() && (prefs.url().isEmpty() || prefs.secret().isEmpty())) {
+            prefs.setActive(false);
+            ForwardService.stop(this);
+            toast("Server URL/secret is blank -- forwarding has been stopped");
+        } else {
+            toast("Saved");
+        }
         refreshUi();
         // Re-check on every save, so a number added in the panel a moment ago
         // is recognised without touching the phone again.
@@ -800,11 +851,14 @@ public class MainActivity extends Activity {
         final String url = prefs.url();
         final String secret = prefs.secret();
         // Test ping goes out as the first configured number -- it only proves
-        // the server is reachable and the secret matches.
-        final String receivingNumber = prefs.resolveReceivingNumber(0).isEmpty()
-                ? firstConfiguredNumber() : prefs.resolveReceivingNumber(0);
+        // the server is reachable and the secret matches, so the SIM-safety
+        // gate resolveReceivingNumber() applies to real forwarded SMS
+        // (Prefs.java) doesn't need to apply here -- pass true to always
+        // resolve to the lone/first configured number for this test-only call.
+        final String receivingNumber = prefs.resolveReceivingNumber(0, true).isEmpty()
+                ? firstConfiguredNumber() : prefs.resolveReceivingNumber(0, true);
         status.setText("Testing...");
-        Poster.post(url, secret,
+        Poster.post(this, url, secret,
                 "TEST: You have received UGX 1 from SNOW TEST. Transaction ID TEST000001.",
                 "TEST", receivingNumber,
                 new Poster.Callback() {
@@ -829,9 +883,16 @@ public class MainActivity extends Activity {
         boolean on = prefs.active();
         int n = prefs.configuredCount();
         toggleBtn.setText(on ? "STOP forwarding" : "START forwarding");
-        status.setText(on
-                ? "Status: ACTIVE — listening on " + n + (n == 1 ? " number." : " numbers.")
-                : "Status: stopped.");
+        // Defense in depth alongside the saveSettings() fix above: never
+        // claim ACTIVE if the URL/secret is blank, regardless of how that
+        // state was reached -- Poster.postSync() cannot actually forward
+        // anything without both, so showing ACTIVE here would be a lie.
+        boolean brokenConfig = on && (prefs.url().isEmpty() || prefs.secret().isEmpty());
+        status.setText(brokenConfig
+                ? "Status: ACTIVE but broken -- server URL/secret is blank. Fix and Save."
+                : on
+                    ? "Status: ACTIVE — listening on " + n + (n == 1 ? " number." : " numbers.")
+                    : "Status: stopped.");
     }
 
     private void requestPerms() {
