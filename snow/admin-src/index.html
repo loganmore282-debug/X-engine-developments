@@ -253,6 +253,12 @@ async function copyText(str, btn){
 function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
 function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text); }
 function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+// Mirrors server.js's own normalizeProviderValue() -- 'automatic' is the
+// pre-LipaPay literal a value could still be if this database predates
+// Round 102; treated as a permanent alias for 'marzpay' everywhere a
+// depositMethod/payoutMode string is compared or labelled in this panel.
+function normalizeProv(v){ return (v==='lipapay'||v==='manual') ? v : 'marzpay'; }
+const PROVIDER_LABEL = { marzpay:'MarzPay', lipapay:'LipaPay', manual:'by hand' };
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
 const TX_LABELS = {
@@ -1135,8 +1141,8 @@ async function renderDeposits(){
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
-      <button class="btn sm ghost" id="depSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time -- automatic (MarzPay) or manual (admin numbers, SMS-matched). Needs Review covers a manual order the SMS matcher couldn't safely resolve on its own (ambiguous match, sender mismatch, or a member-pasted confirmation) -- approve it once you've verified the money genuinely landed, or reject it if it didn't.</p>
+      <button class="btn sm ghost" id="depSync">Sync payments</button></div>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time -- automatic (MarzPay or LipaPay) or manual (admin numbers, SMS-matched). Needs Review covers a manual order the SMS matcher couldn't safely resolve on its own (ambiguous match, sender mismatch, or a member-pasted confirmation) -- approve it once you've verified the money genuinely landed, or reject it if it didn't.</p>
     ${depProcChart}
     ${smsLogCard(_smsLog)}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
@@ -1176,7 +1182,10 @@ function drawDeps(){
     }
     const methodLabel = isManual
       ? `Manual<br><span class="muted" style="font-size:11px">${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
-      : 'Automatic';
+      // provider is only set on deposits created since Round 102 -- an
+      // older row with none falls back to the same plain "Automatic" label
+      // it always had (it can only ever have gone through MarzPay).
+      : (d.provider==='lipapay'?'LipaPay':d.provider==='marzpay'?'MarzPay':'Automatic');
     const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
     return `<tr><td>${fdate(d.createdAt)}</td>
       <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
@@ -1222,7 +1231,8 @@ async function renderWithdrawals(){
   const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals')) return;
   _wits = r.withdrawals||[];
-  _witManualPayouts = r.payoutMode === 'manual';
+  _witProvider = r.payoutMode || 'marzpay';
+  _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
   // admin could only ever find one via "All" -- added alongside the fix
@@ -1239,8 +1249,8 @@ async function renderWithdrawals(){
     <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
-      ${_witManualPayouts?'':`<button class="btn sm ghost" id="witSync">Sync MarzPay</button>`}</div>
-    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through MarzPay. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own. Members withdraw to a bound mobile money number (see each row's destination).</p>`}
+      ${_witManualPayouts?'':`<button class="btn sm ghost" id="witSync">Sync payments</button>`}</div>
+    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through MarzPay or LipaPay. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own. Members withdraw to a bound mobile money number (see each row's destination).</p>`}
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
@@ -1251,10 +1261,12 @@ async function renderWithdrawals(){
   drawWits();
 }
 // True while Settings has payments on Manual: payouts do not go through
-// MarzPay at all, an admin sends the money from their own phone and then
-// records it here. Turns the approve button from an action the system
-// performs into a record of one a person already performed.
+// MarzPay or LipaPay at all, an admin sends the money from their own phone
+// and then records it here. Turns the approve button from an action the
+// system performs into a record of one a person already performed.
 var _witManualPayouts = false;
+// Raw payoutMode from the server -- 'marzpay' | 'lipapay' | 'manual'.
+var _witProvider = 'marzpay';
 function witStatusPill(w){
   if(w.status==='pending') return `<span class="pill-tag t-warn">Awaiting approval</span>`;
   // subagent-audit-caught: 'sending' (MarzPay network-errored mid-request,
@@ -1262,7 +1274,7 @@ function witStatusPill(w){
   // gray default label with no explanation and, until the fix below, no
   // action button either -- an admin had no way to tell this apart from a
   // normal in-progress state.
-  if(w.status==='sending') return `<span class="pill-tag t-bad">Stuck sending, check MarzPay</span>`;
+  if(w.status==='sending') return `<span class="pill-tag t-bad">Stuck sending, check the provider</span>`;
   return statusPill(w.status);
 }
 function drawWits(){
@@ -1280,7 +1292,7 @@ function drawWits(){
     return `<tr class="clickable" data-uid="${esc(w.userId)}"><td>${fdate(w.createdAt)}</td><td>${who}${code?`<br><span class="muted">${esc(code)}</span>`:''}</td>
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.net)}</b></td><td>${dest}</td>
     <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
-    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">${_witManualPayouts?'Mark as paid':'Send via MarzPay'}</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
+    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">${_witManualPayouts?'Mark as paid':'Send via '+PROVIDER_LABEL[normalizeProv(_witProvider)]}</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       // subagent-audit-caught: 'sending' (MarzPay network-errored mid-send,
       // see server.js's processWithdrawalCore -- deliberately never
@@ -1303,16 +1315,17 @@ function drawWits(){
     if(e.target.closest('button')) return;
     openUser(tr.dataset.uid);
   }));
-  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm(_witManualPayouts?'Only do this AFTER you have actually sent the money from an admin phone to the number on this row.\n\nThis records the payout as paid and closes it. It does not send anything.':'Send this payout through MarzPay now?'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm(_witManualPayouts?'Only do this AFTER you have actually sent the money from an admin phone to the number on this row.\n\nThis records the payout as paid and closes it. It does not send anything.':`Send this payout through ${PROVIDER_LABEL[normalizeProv(_witProvider)]} now?`))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); const reason=prompt('Reason for rejection? (funds are refunded to the user)','Rejected by admin'); if(reason===null)return; const d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
-  document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ alert(`MarzPay verify\n\nOur record: ${d.ourStatus}\nMarzPay says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));
+  document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ alert(`Payout verify\n\nOur record: ${d.ourStatus}\nProvider says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));
 }
 // Live-refresh counterpart to renderWithdrawals() -- see quietRefreshUsers().
 async function quietRefreshWithdrawals(){
   const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals') || !$('witRows')) return;
   _wits = r.withdrawals||[];
-  _witManualPayouts = r.payoutMode === 'manual';
+  _witProvider = r.payoutMode || 'marzpay';
+  _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
   // admin could only ever find one via "All" -- added alongside the fix
@@ -1546,7 +1559,7 @@ const AUDIT_LABELS = {
   admin_created:'Admin account created', admin_deactivated:'Admin deactivated', admin_reactivated:'Admin reactivated',
   admin_password_reset:'Admin password reset', admin_deleted:'Admin account deleted',
   manual_sms_log_resolved:'Unmatched SMS marked resolved',
-  withdrawal_rejected:'Withdrawal declined', withdrawal_processed:'Withdrawal sent via MarzPay',
+  withdrawal_rejected:'Withdrawal declined', withdrawal_processed:'Withdrawal sent',
   manual_credit:'Manual credit', manual_debit:'Manual debit', user_banned:'User banned', user_unbanned:'User unbanned',
   user_password_reset:'User password reset', user_phone_set:'User phone corrected',
   user_ledger_repaired:'User ledger repaired', user_registration_completed:'Registration completed',
@@ -1714,14 +1727,16 @@ async function renderSettings(){
 
     <h2 class="sec">Manual payments</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Automatic uses MarzPay -- instant, no admin numbers needed. Manual assigns each member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
-      <p class="muted" style="margin-top:0"><b>By default this covers withdrawals too.</b> On Manual, MarzPay is out of the payout path as well: you send each cash-out yourself from an admin phone and then tap <b>Mark as paid</b> on the Withdrawals tab to record it. Auto-approve is ignored whenever payouts are manual, since nothing should be marked paid without a person actually sending the money. Use the Withdrawals setting below to split the two directions.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="depMethod" id="depMethodAuto" value="automatic" ${v('depositMethod','automatic')==='automatic'?'checked':''} style="width:auto"> Automatic (MarzPay)</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depMethod" id="depMethodManual" value="manual" ${v('depositMethod','automatic')==='manual'?'checked':''} style="width:auto"> Manual (admin numbers below)</label>
+      <p class="muted" style="margin-top:0">MarzPay and LipaPay are both instant, no admin numbers needed. Manual assigns each member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
+      <p class="muted" style="margin-top:0"><b>By default this covers withdrawals too.</b> On Manual, neither MarzPay nor LipaPay is in the payout path: you send each cash-out yourself from an admin phone and then tap <b>Mark as paid</b> on the Withdrawals tab to record it. Auto-approve is ignored whenever payouts are manual, since nothing should be marked paid without a person actually sending the money. Use the Withdrawals setting below to split the two directions.</p>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="depMethod" id="depMethodMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> Automatic (MarzPay)</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="depMethod" id="depMethodLipa" value="lipapay" ${normalizeProv(v('depositMethod','marzpay'))==='lipapay'?'checked':''} style="width:auto"> Automatic (LipaPay)</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depMethod" id="depMethodManual" value="manual" ${normalizeProv(v('depositMethod','marzpay'))==='manual'?'checked':''} style="width:auto"> Manual (admin numbers below)</label>
       <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
-      <p class="muted" style="margin:0 0 8px">By default payouts follow the setting above. Pin them here if you want the two directions to differ, for example manual recharges with MarzPay payouts, or the reverse.</p>
+      <p class="muted" style="margin:0 0 8px">By default payouts follow the setting above. Pin them here if you want the two directions to differ, for example manual recharges with LipaPay payouts, or the reverse.</p>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the payment method above</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodAuto" value="automatic" ${v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodLipa" value="lipapay" ${v('withdrawMethod','follow')==='lipapay'?'checked':''} style="width:auto"> Always automatic (LipaPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
     </div>
@@ -1741,7 +1756,7 @@ async function renderSettings(){
 
     <h2 class="sec">Auto-approve withdrawals</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested, even a single request always waits the full interval, it's never approved instantly) before the server approves and sends it. It checks every few seconds, and every request that's old enough at that moment is approved and sent back-to-back in the same pass, not spaced apart from each other. No tap needed per request. It reuses the exact same send logic as the "Send via MarzPay" button on the Withdrawals tab, so it can never double-pay a request or act on one that isn't still genuinely pending.</p>
+      <p class="muted" style="margin-top:0">Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested, even a single request always waits the full interval, it's never approved instantly) before the server approves and sends it. It checks every few seconds, and every request that's old enough at that moment is approved and sent back-to-back in the same pass, not spaced apart from each other. No tap needed per request. It reuses the exact same send logic as the approve button on the Withdrawals tab (whichever provider that currently sends through), so it can never double-pay a request or act on one that isn't still genuinely pending.</p>
       <div class="switch-row"><span><b>Enable auto-approve</b> <span class="muted">(server keeps running even if you close this panel)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAutoApproveOn" ${s.autoApproveWithdrawalsEnabled?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">
@@ -1826,9 +1841,9 @@ async function renderSettings(){
     const method = document.querySelector('input[name="depMethod"]:checked').value;
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: { depositMethod: method, withdrawMethod: witMethod } });
-    const payoutManual = witMethod==='manual' || (witMethod==='follow' && method==='manual');
+    const payoutProv = witMethod==='follow' ? method : witMethod;
     toast(d.status==='success'
-      ? `Saved. Recharges: ${method==='manual'?'by hand':'MarzPay'}. Payouts: ${payoutManual?'by hand':'MarzPay'}.`
+      ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(method)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('mnAddBtn').addEventListener('click', ()=>{

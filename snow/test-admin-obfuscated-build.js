@@ -445,6 +445,17 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (!witManual.includes('Payments are set to Manual')) errors.push('Withdrawals: manual-mode explanation missing');
   if (doc.getElementById('witSync')) errors.push('Withdrawals: manual mode should not show the Sync MarzPay button');
 
+  // Round 102: LipaPay as a 2nd real automatic provider.
+  routes['POST /admin/withdrawals/list'] = Object.assign({}, routes['POST /admin/withdrawals/list'], { payoutMode: 'lipapay' });
+  doc.querySelector('.tab[data-tab="dashboard"]').click();
+  await sleep(200);
+  doc.querySelector('.tab[data-tab="withdrawals"]').click();
+  await sleep(250);
+  const witLipa = doc.getElementById('content').innerHTML;
+  if (!witLipa.includes('Send via LipaPay')) errors.push('Withdrawals: lipapay mode should offer "Send via LipaPay"');
+  if (witLipa.includes('Send via MarzPay')) errors.push('Withdrawals: lipapay mode should not offer "Send via MarzPay"');
+  if (!doc.getElementById('witSync')) errors.push('Withdrawals: lipapay mode should still show the Sync button (it is an automatic provider too)');
+
   // Payment-number activity lives on the Analytics tab.
   doc.querySelector('.tab[data-tab="analytics"]').click();
   await sleep(400);
@@ -473,8 +484,10 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   doc.querySelector('.tab[data-tab="settings"]').click();
   await sleep(300);
   const setHtml = doc.getElementById('content').innerHTML;
-  if (!doc.getElementById('witMethodManual') || !doc.getElementById('witMethodAuto') || !doc.getElementById('witMethodFollow'))
+  if (!doc.getElementById('witMethodManual') || !doc.getElementById('witMethodMarz') || !doc.getElementById('witMethodLipa') || !doc.getElementById('witMethodFollow'))
     errors.push('Settings: withdrawal-method radios missing');
+  if (!doc.getElementById('depMethodMarz') || !doc.getElementById('depMethodLipa') || !doc.getElementById('depMethodManual'))
+    errors.push('Settings: deposit-method (3-way) radios missing');
   if (!setHtml.includes('Follow the payment method above')) errors.push('Settings: follow option label missing');
 
   // The unmatched-SMS review list lives on the Deposits tab.

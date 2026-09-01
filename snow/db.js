@@ -59,12 +59,14 @@ async function ensureIndexes() {
     ['withdrawals',     { status: 1 }],
     ['withdrawals',     { marzReference: 1 }],
     ['withdrawals',     { marzTxUuid: 1 }],
+    ['withdrawals',     { lipaOutTradeNo: 1 }], // Round 102 -- LipaPay's own OutTradeNo lookup, mirrors marzTxUuid/marzReference above
     ['withdrawals',     { ref: 1 }],
     ['withdrawals',     { userId: 1, createdAt: -1 }],
     ['withdrawals',     { status: 1, createdAt: 1 }],
     ['pendingDeposits', { userId: 1 }],
     ['pendingDeposits', { marzReference: 1 }],
     ['pendingDeposits', { status: 1 }],
+    ['pendingDeposits', { provider: 1, status: 1, createdAt: 1 }], // Round 102 -- reconcilePendingDeposits()'s LipaPay sweep
     ['pendingDeposits', { ref: 1 }],
     ['pendingDeposits', { userId: 1, createdAt: -1 }],
     ['pendingDeposits', { status: 1, createdAt: 1 }],

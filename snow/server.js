@@ -197,7 +197,7 @@ function proxyFetch(url, opts) {
 
 // ── MAINTENANCE GATE ──
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team'];
-const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback']);
+const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/deposit/lipapay/callback', '/withdraw/lipapay/callback']);
 app.use(async (req, res, next) => {
   if (GUARD_EXEMPT.has(req.path)) return next();
   if (!MAINTENANCE_BLOCK.some(p => req.path.startsWith(p))) return next();
@@ -259,17 +259,22 @@ const DEFAULT_SETTINGS = {
   // payment method to manual or automatic (marzpay), current one." Only
   // one method is ever live at a time -- MarzPay's own code is completely
   // untouched, just gated behind this flag alongside the new manual-deposit
-  // path (see the "MANUAL DEPOSITS" section below). 'automatic' matches
-  // today's live behavior exactly, so this ships with zero change for
-  // members until the owner explicitly flips it in Settings.
-  depositMethod: 'automatic',
+  // path (see the "MANUAL DEPOSITS" section below). Values are
+  // 'marzpay' | 'lipapay' | 'manual' (Round 102 widened this from a plain
+  // 'automatic'/'manual' 2-way toggle once LipaPay became a real 2nd
+  // automatic provider -- 'automatic' is still recognized as a legacy
+  // alias for 'marzpay' by depositProvider()/withdrawProvider() below, so
+  // an already-deployed database with the old value keeps working exactly
+  // as before with zero migration). Never read this field raw -- always go
+  // through depositProvider()/payoutIsManual().
+  depositMethod: 'marzpay',
   // Owner, after the first version tied payouts to depositMethod: "yeah it
   // can also work and vice versa" -- so the two directions are separable.
   // 'follow' keeps the original behaviour (payouts do whatever deposits do,
   // which is what most setups want and what everyone is already on);
-  // 'automatic'/'manual' pin the payout side independently, allowing manual
-  // deposits with MarzPay payouts and the reverse. Resolved by
-  // payoutIsManual() -- never read this field raw.
+  // 'marzpay'/'lipapay'/'manual' pin the payout side independently,
+  // allowing e.g. manual deposits with LipaPay payouts. Resolved by
+  // withdrawProvider()/payoutIsManual() -- never read this field raw.
   withdrawMethod: 'follow',
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
@@ -303,15 +308,32 @@ async function getSettings() {
   _settingsCacheTs = Date.now();
   return _settingsCache;
 }
-// The single place that decides whether a payout goes through MarzPay or is
-// sent by hand. Reading depositMethod or withdrawMethod directly anywhere
-// else is a bug waiting to happen -- 'follow' only means anything here.
-function payoutIsManual(sett) {
-  const w = (sett && sett.withdrawMethod) || 'follow';
-  if (w === 'manual') return true;
-  if (w === 'automatic') return false;
-  return (sett && sett.depositMethod) === 'manual';
+// Normalizes a raw stored depositMethod/withdrawMethod value to one of
+// 'marzpay' | 'lipapay' | 'manual'. 'automatic' is the pre-LipaPay literal
+// (still possibly sitting in an already-deployed database) and is treated
+// as a permanent alias for 'marzpay', so nothing needs to migrate. Anything
+// unrecognized (a stale/corrupted value) also falls back to 'marzpay' --
+// the historical default -- rather than silently landing on 'manual',
+// which would divert real money to admin-managed numbers nobody expects.
+function normalizeProviderValue(v) {
+  if (v === 'lipapay' || v === 'manual') return v;
+  return 'marzpay';
 }
+// The single place that decides which real payment path a DEPOSIT uses.
+// Reading depositMethod raw anywhere else is a bug waiting to happen.
+function depositProvider(sett) {
+  return normalizeProviderValue(sett && sett.depositMethod);
+}
+// The single place that decides which real payment path a WITHDRAWAL
+// (payout) uses. 'follow' defers to depositProvider() -- everything else
+// ('marzpay'/'lipapay'/'manual', or the legacy 'automatic' alias) pins the
+// payout side independently of the deposit side.
+function withdrawProvider(sett) {
+  const w = (sett && sett.withdrawMethod) || 'follow';
+  if (w === 'follow') return depositProvider(sett);
+  return normalizeProviderValue(w);
+}
+function payoutIsManual(sett) { return withdrawProvider(sett) === 'manual'; }
 
 let _productsCache = null, _productsCacheTs = 0;
 async function getProducts() {
@@ -1201,6 +1223,26 @@ async function lipaGetStatement(startDate, endDate) {
   const Sign = lipaSign(fields, LIPA_FIELDS.statementReq, LIPA_PRIVATE_KEY);
   return _lipaPost('/api/pay/statement', { ...fields, Sign });
 }
+// Snow always stores a phone as cleanPhone()'s own canonical
+// "+256XXXXXXXXX" form. LipaPay's own doc (Appendix A) wants the LOCAL
+// 10-digit form with a leading 0 instead ("0750000000") -- straightforward
+// since the input is already validated/canonical, not re-parsing raw user
+// input a second time.
+function lipaTraderId(canonicalPhone) {
+  const digits = String(canonicalPhone || '').replace(/\D/g, '');
+  if (digits.startsWith('256') && digits.length === 12) return '0' + digits.slice(3);
+  return digits; // already local, or an unexpected shape -- let LipaPay's own validation catch it
+}
+// Snow's own NETWORK_NAMES ('MTN Mobile Money'/'Airtel Money', already
+// stored on both deposits and withdrawals) mapped to LipaPay's Channel enum.
+// Anything else (not yet chosen, or a network LipaPay doesn't carry) falls
+// through to 0/Auto, which the doc documents as "auto-detect by TraderID
+// prefix" -- always a safe default, never a hard failure.
+function lipaChannel(network) {
+  if (network === 'MTN Mobile Money') return 1;
+  if (network === 'Airtel Money') return 2;
+  return 0;
+}
 
 // ── DAILY CASHBACK (settle-on-read + a 1s background sweep) ──
 // Each tier pays expectedReturn/cycleDays per elapsed day, using cumulative-
@@ -2047,6 +2089,15 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    // Real gap found while adding LipaPay as a 2nd automatic provider (Round
+    // 102): this route never actually checked depositMethod at all -- with
+    // Manual active, the frontend correctly diverts to /deposit/manual/init,
+    // but nothing server-side stopped a direct call here from still going
+    // straight through the automatic provider, silently bypassing the
+    // admin's own "route deposits through admin numbers" intent. Mirrors
+    // /deposit/manual/init's own symmetric guard below.
+    const provider = depositProvider(sett);
+    if (provider === 'manual') return res.status(400).json({ status: 'error', message: 'Automatic recharges are not enabled right now.' });
 
     // Validate BEFORE touching the debounce/abuse-attempt counters below --
     // a below-minimum amount or a missing phone number must never consume a
@@ -2093,7 +2144,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     const depRef = db.collection('pendingDeposits').doc();
     const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
     await depRef.set({
-      userId, phone, network, amount: amt, ref, marzReference, status: 'initiating',
+      userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider,
       date, time, createdAt: FieldValue.serverTimestamp()
     });
     // Owner: "deposits are not recorded why" -- withdrawals have always
@@ -2118,9 +2169,51 @@ app.post('/deposit/marzpay', async (req, res) => {
       userId, type: 'deposit', description: `Deposit: Processing (${fmtUGX(amt)})`,
       amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
     }).catch(e => console.error(`Deposit ledger row create failed for dep=${depRef.id}:`, e.message));
-    // Respond the instant our own write lands — do not wait on MarzPay's own
-    // round-trip. The status screen's own polling picks up the resolution.
+    // Respond the instant our own write lands — do not wait on the provider's
+    // own round-trip. The status screen's own polling picks up the resolution.
     res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
+
+    if (provider === 'lipapay') {
+      // LipaPay branch -- same "claim as pending, wait for the webhook/
+      // reconciler to resolve it" shape as MarzPay just below, via
+      // lipaCollect() instead of marzCollect(). OutTradeNo is the deposit's
+      // OWN doc id (a crypto.randomUUID(), already exactly LipaPay's
+      // required 6-36-char allowed-charset shape) rather than a freshly
+      // generated value, so a genuine retry of this same deposit reuses the
+      // identical OutTradeNo and LipaPay's own duplicate-order rejection
+      // (StatusCode 403) is what guards against a double submission, not an
+      // internal retry loop.
+      let lpData;
+      try {
+        lpData = await lipaCollect({
+          amountUgx: amt, traderId: lipaTraderId(phone), channel: lipaChannel(network),
+          description: 'Mobile Money', outTradeNo: depRef.id,
+          notifyUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/lipapay/callback' : undefined,
+        });
+      } catch (netErr) {
+        console.error('LipaPay unified-order network error (dep ' + depRef.id + '):', netErr.message);
+        return;
+      }
+      if (!lpData.Succeeded) {
+        console.error('LipaPay unified-order rejected:', JSON.stringify(lpData));
+        await markDepositFailed(depRef, userId, lipaUserMsg(lpData, 'Could not start the payment'));
+        return;
+      }
+      const lipaTransactionId = lpData.Data?.TransactionId || null;
+      // Same claim-race protection as the MarzPay branch below -- a webhook
+      // racing ahead and already crediting this exact deposit must never be
+      // silently reverted back to 'pending' by this later write.
+      await withLock('dep:' + depRef.id, async () => {
+        const fresh = await depRef.get();
+        if (fresh.exists && fresh.data().status === 'initiating') {
+          await depRef.update({ status: 'pending', lipaTransactionId });
+        } else {
+          await depRef.update({ lipaTransactionId }).catch(() => {});
+        }
+      });
+      return;
+    }
+
     let mpData;
     try {
       mpData = await marzCollect({
@@ -2394,6 +2487,45 @@ app.post('/deposit/callback', async (req, res) => {
       await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
   } catch (e) { console.error('Deposit callback error:', e.message); }
+});
+// LipaPay's NotifyUrl target. Per §5.3 of their API reference, the ONLY
+// correct acknowledgement is the literal plain-text body "SUCCESS" with a
+// 200 -- anything else (including a JSON body) is treated as a failed
+// delivery and retried for up to 24h at 1s/30s/30s/30s intervals. This
+// route always acks SUCCESS once it has looked the order up (whether or not
+// it could act on it yet), because acting is never gated on THIS webhook
+// specifically -- the periodic reconciler and the member's own status poll
+// both independently re-check via lipaOrderQuery() regardless, so there is
+// no reason to make LipaPay's own retry timer our source of truth.
+//
+// Money-safety posture matches /deposit/callback above exactly, and Round
+// 81's own hardening of it: the webhook BODY's own PayStatus/Amount are
+// NEVER trusted directly. OutTradeNo (== this deposit's own doc id, chosen
+// at creation specifically so no separate lookup field is needed) is used
+// only to find WHICH deposit this claims to be about; the actual decision
+// to credit or fail always comes from an independent lipaOrderQuery() call
+// using our own credentials, exactly mirroring how the MarzPay webhook
+// above never credits off an unauthenticated body's own claimed status.
+app.post('/deposit/lipapay/callback', async (req, res) => {
+  try {
+    const outTradeNo = String(req.body?.OutTradeNo || '');
+    if (!outTradeNo) return res.status(200).send('SUCCESS');
+    const doc = await db.collection('pendingDeposits').doc(outTradeNo).get();
+    if (!doc.exists) return res.status(200).send('SUCCESS');
+    const dep = doc.data();
+    if (dep.provider !== 'lipapay') return res.status(200).send('SUCCESS'); // not ours -- ignore, ack anyway so LipaPay stops retrying
+    if (dep.status !== 'pending' && dep.status !== 'initiating') return res.status(200).send('SUCCESS');
+    const q = await lipaOrderQuery(outTradeNo);
+    if (q.providerDown || !q.Data) return res.status(200).send('SUCCESS'); // couldn't independently confirm -- leave for the reconciler/next retry, ack regardless
+    const realStatus = lipaStatusLabel(q.Data.PayStatus);
+    if (realStatus === 'success') await creditDeposit(doc);
+    else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
+    // realStatus === 'processing' -- genuinely not done yet, nothing to do
+    res.status(200).send('SUCCESS');
+  } catch (e) {
+    console.error('LipaPay deposit callback error:', e.message);
+    res.status(200).send('SUCCESS'); // still ack -- the reconciler covers whatever this failed to do
+  }
 });
 
 // ═══════════════════════════════════════════
@@ -3677,6 +3809,64 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
       };
     }
 
+    if (withdrawProvider(settNow) === 'lipapay') {
+      // LipaPay branch (Round 102) -- mirrors the MarzPay send-money branch
+      // below function-for-function: write the outbound identifier BEFORE
+      // ever calling the provider (so a later write failure can never leave
+      // it unrecorded, the exact class of bug this file's own comment on
+      // marzReference already documents once), a network exception is
+      // ambiguous (never revert to 'pending' -- that invites a double-pay
+      // retry), and a genuinely successful SUBMISSION only means
+      // 'processing', not done -- LipaPay's own doc says every Unified
+      // Order (collection OR disbursement) resolves asynchronously via the
+      // callback, so this never treats acceptance as completion the way
+      // MarzPay's sandbox shortcut does (LipaPay has no such shortcut).
+      // outTradeNo = this withdrawal's own doc id -- already a
+      // crypto.randomUUID(), exactly LipaPay's required 6-36-char
+      // allowed-charset shape, so a genuine retry of the same withdrawal
+      // reuses the identical OutTradeNo and LipaPay's own duplicate-order
+      // rejection is the dedup guard, not an internal retry loop.
+      const outTradeNo = withdrawalId;
+      await witRef.update({ status: 'sending', sendingReference: outTradeNo, lipaOutTradeNo: outTradeNo, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+      let lpData, ambiguousLipa = false;
+      try {
+        lpData = await lipaDisburse({
+          amountUgx: wit.net, traderId: lipaTraderId(wit.phone), channel: lipaChannel(wit.network),
+          description: 'Withdrawal', outTradeNo,
+          notifyUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/lipapay/callback' : undefined,
+        });
+      } catch (netErr) {
+        console.error('LipaPay unified-order (disbursement) network error (ambiguous, NOT reverting to pending):', netErr.message);
+        ambiguousLipa = true;
+        lpData = { Succeeded: false, providerDown: true, Errors: netErr.message };
+      }
+      if (ambiguousLipa) {
+        return { code: 500, body: { status: 'error', message: 'Lost contact with LipaPay mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: outTradeNo } };
+      }
+      if (!lpData.Succeeded) {
+        await witRef.update({ status: 'pending', sendingReference: null, lipaOutTradeNo: null, sendingBy: null, sendingAt: null }).catch(() => {});
+        return { code: 400, body: { status: 'error', message: lipaUserMsg(lpData, 'LipaPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
+      }
+      const lipaTransactionId = lpData.Data?.TransactionId || null;
+      await withLock('bal:' + wit.userId, async () => {
+        await witRef.update({ status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), lipaOutTradeNo: outTradeNo, lipaTransactionId });
+        try {
+          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
+        } catch (twErr) {
+          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent via LipaPay — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
+        }
+      });
+      try {
+        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing' });
+      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+      return {
+        code: 200,
+        body: { status: 'success', sandbox: false, message: `Sending ${fmtUGX(wit.net)} to ${wit.phone}` },
+        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
+      };
+    }
+
     const sendingMarker = crypto.randomUUID();
     // Codex-caught real bug (2nd money-flow audit): marzReference -- the
     // field /withdraw/callback actually looks withdrawals up by -- used to
@@ -3780,6 +3970,26 @@ app.post('/admin/withdraw/verify', async (req, res) => {
         status: 'success', ourStatus: w.status, marzStatus: 'manual',
         message: `This payout was sent by hand, not through MarzPay, so there is nothing to verify here${w.processedBy ? ' (recorded by ' + w.processedBy + ')' : ''}. Check the mobile-money record on the admin phone that sent it. Do NOT reject it unless you have confirmed there that no money went out.`,
       });
+    }
+    // Round 102: a LipaPay-routed withdrawal has neither marzReference nor
+    // marzTxUuid at all -- without this branch it would fall straight into
+    // the "no gateway reference, nothing was sent" case below, which is
+    // FALSE for a LipaPay payout and would invite rejecting (and refunding)
+    // a withdrawal that genuinely already went out via LipaPay. Mirrors the
+    // MarzPay branch below exactly: an independent live re-check via
+    // lipaOrderQuery(), never trusting our own stored status alone.
+    if (w.lipaOutTradeNo) {
+      const q = await lipaOrderQuery(w.lipaOutTradeNo);
+      if (q.providerDown || !q.Data) {
+        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via LipaPay (OutTradeNo: ${w.lipaOutTradeNo}) but LipaPay did not respond just now. Try Verify again in a moment -- this does NOT mean nothing was sent.` });
+      }
+      const realStatus = lipaStatusLabel(q.Data.PayStatus);
+      let lpMessage;
+      if (realStatus === 'success' && w.status !== 'processed') lpMessage = `LipaPay says this payout was SENT, but our record is "${w.status}". Check the recipient before doing anything else.`;
+      else if (realStatus === 'success') lpMessage = 'LipaPay confirms the payout was SENT and our record already shows it processed.';
+      else if (realStatus === 'failed') lpMessage = 'LipaPay says this payout FAILED.';
+      else lpMessage = 'LipaPay reports the payout is still processing.';
+      return res.json({ status: 'success', ourStatus: w.status, marzStatus: realStatus || 'unknown', message: lpMessage });
     }
     if (!w.marzTxUuid) {
       // Codex-caught real bug (2nd money-flow audit): this used to claim
@@ -3942,6 +4152,47 @@ app.post('/withdraw/callback', async (req, res) => {
       if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
     }
   } catch (e) { console.error('Withdraw callback error:', e.message); }
+});
+// LipaPay's NotifyUrl target for disbursements. Same "always ack literal
+// SUCCESS text, never trust the webhook body's own PayStatus, always
+// independently re-verify via lipaOrderQuery() first" posture as
+// /deposit/lipapay/callback above -- see that route's own comment for the
+// full reasoning. markWithdrawalProcessed()/declineWithdrawalAndRefund()
+// are the SAME provider-agnostic functions the MarzPay callback already
+// uses, so there is zero new crediting/refunding logic here, only new
+// matching/verification logic around unchanged money functions.
+app.post('/withdraw/lipapay/callback', async (req, res) => {
+  try {
+    const outTradeNo = String(req.body?.OutTradeNo || '');
+    if (!outTradeNo) return res.status(200).send('SUCCESS');
+    const doc = await db.collection('withdrawals').doc(outTradeNo).get();
+    if (!doc.exists) return res.status(200).send('SUCCESS');
+    const wit = doc.data();
+    if (wit.lipaOutTradeNo !== outTradeNo) return res.status(200).send('SUCCESS'); // not a LipaPay-routed withdrawal -- ignore, ack anyway
+    // A 'sending' withdrawal is genuinely ambiguous (network error mid-send,
+    // see processWithdrawalCore's own comment) -- mirrors MarzPay's own
+    // callback exactly: safe to recognize a SUCCESS from 'sending' (a
+    // genuine success is always safe), but never auto-decline/refund one
+    // from this unauthenticated, automated path -- only /admin/withdraw/
+    // reject (a human, after checking LipaPay's own dashboard) may resolve
+    // a 'sending' row as failed.
+    if (wit.status !== 'processing' && wit.status !== 'sending') return res.status(200).send('SUCCESS');
+    const q = await lipaOrderQuery(outTradeNo);
+    if (q.providerDown || !q.Data) return res.status(200).send('SUCCESS');
+    const realStatus = lipaStatusLabel(q.Data.PayStatus);
+    if (realStatus === 'success') {
+      if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+    } else if (realStatus === 'failed') {
+      if (wit.status === 'sending') return res.status(200).send('SUCCESS'); // ambiguous -- admin-only resolution, see the comment above
+      const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
+      if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+    }
+    // realStatus === 'processing' -- genuinely not done yet, nothing to do
+    res.status(200).send('SUCCESS');
+  } catch (e) {
+    console.error('LipaPay withdraw callback error:', e.message);
+    res.status(200).send('SUCCESS');
+  }
 });
 
 // ═══════════════════════════════════════════
@@ -4378,10 +4629,14 @@ app.post('/admin/settings/update', async (req, res) => {
     }
     if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
       return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });
-    if ('depositMethod' in updates && !['automatic', 'manual'].includes(updates.depositMethod))
-      return res.status(400).json({ status: 'error', message: `depositMethod must be 'automatic' or 'manual'` });
-    if ('withdrawMethod' in updates && !['follow', 'automatic', 'manual'].includes(updates.withdrawMethod))
-      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'automatic' or 'manual'` });
+    // 'automatic' is deliberately NOT accepted here anymore (Round 102) --
+    // it's still recognized when READING an already-stored legacy value
+    // (normalizeProviderValue()), but nothing should ever WRITE it again
+    // now that 'marzpay'/'lipapay' are the real, distinct canonical values.
+    if ('depositMethod' in updates && !['marzpay', 'lipapay', 'manual'].includes(updates.depositMethod))
+      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'lipapay' or 'manual'` });
+    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'lipapay', 'manual'].includes(updates.withdrawMethod))
+      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'lipapay' or 'manual'` });
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
     logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });
@@ -5211,11 +5466,12 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     const rows = Array.from(byId.values());
     rows.forEach(w => { w.accountPhone = phones[w.userId] || ''; w.referralCode = refCodes[w.userId] || ''; counts[w.status] = (counts[w.status] || 0) + 1; });
     const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(w => w.status === 'processed'), 'processedAt', 'net');
-    // The tab needs to know whether payouts currently go through MarzPay or
-    // are sent by hand -- it changes what the approve button does and what
-    // it must warn the admin about. Sent with the list so the tab doesn't
-    // need a second round trip just to label a button.
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: payoutIsManual(sett) ? 'manual' : 'automatic' });
+    // The tab needs to know which real payout path is active -- it changes
+    // what the approve button does/says and what it must warn the admin
+    // about. Sent with the list so the tab doesn't need a second round trip
+    // just to label a button. 'marzpay' | 'lipapay' | 'manual' (Round 102
+    // widened this from a plain 'automatic'/'manual' 2-way string).
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {
@@ -5756,6 +6012,20 @@ async function reconcilePendingDeposits() {
       if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(doc); settled++; }
       else if (FAILED_STATUSES.has(marzStatus)) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
+    // LipaPay's own pending/initiating deposits (Round 102) -- a lost or
+    // delayed webhook is exactly why this sweep exists; it independently
+    // re-checks via lipaOrderQuery() using the deposit's own doc id as
+    // OutTradeNo, same "never trust anything but our own live re-check"
+    // posture as the MarzPay loop just above.
+    const lpSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'lipapay').orderBy('createdAt', 'asc').limit(50).get();
+    for (const doc of lpSnap.docs) {
+      const dep = doc.data();
+      const q = await lipaOrderQuery(doc.id);
+      if (q.providerDown || !q.Data) continue;
+      const realStatus = lipaStatusLabel(q.Data.PayStatus);
+      if (realStatus === 'success') { await creditDeposit(doc); settled++; }
+      else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
+    }
     // Deposits stuck 'matched' with needsManualCredit:true (the wallet write
     // itself failed after status already claimed the credit) never show up
     // in the 'pending' scan above -- retry them here every tick regardless
@@ -5788,6 +6058,26 @@ async function reconcilePendingWithdrawals() {
         // reconciler tick is exactly the kind of independent live-status
         // check that can race the webhook or a client poll.
         const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
+        if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+        settled++;
+      }
+    }
+    // LipaPay's own outstanding disbursements (Round 102) -- same
+    // starvation-avoiding `.where(field,'>','')` shape as the MarzPay loop
+    // above, and same independent lipaOrderQuery() re-check the webhook
+    // route uses, so a lost/delayed webhook still resolves on its own.
+    const lpSnap = await db.collection('withdrawals').where('status', '==', 'processing').where('lipaOutTradeNo', '>', '').orderBy('createdAt', 'asc').limit(50).get();
+    for (const doc of lpSnap.docs) {
+      const wit = doc.data();
+      if (!wit.lipaOutTradeNo) continue;
+      const q = await lipaOrderQuery(wit.lipaOutTradeNo);
+      if (q.providerDown || !q.Data) continue;
+      const realStatus = lipaStatusLabel(q.Data.PayStatus);
+      if (realStatus === 'success') {
+        if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+        settled++;
+      } else if (realStatus === 'failed') {
+        const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
         if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
         settled++;
       }

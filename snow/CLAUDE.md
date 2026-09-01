@@ -6426,6 +6426,152 @@ receiver (independently re-verifying via `lipaOrderQuery()` before crediting any
 never trusting the callback body alone — same posture as every other webhook in this
 codebase), and adds the admin UI to choose MarzPay vs. LipaPay vs. Manual.
 
+## Round 103 (2026-09-01) — LipaPay wired into real money paths: settings widened to a 3-way provider choice, deposit/withdraw routes branch on it, both webhooks built, reconcilers extended, admin UI updated — plus 2 real pre-existing gaps found and closed along the way
+
+Owner, after seeing the admin panel still only offering MarzPay/Manual: *"where is
+lipapay option?"* — the right prompt to finish what Round 102 deliberately left
+client-only. This round does the actual wiring, matching the "alongside MarzPay"
+structure the owner picked in Round 101's question (3rd settings option, admin picks
+per-direction) rather than a replace.
+
+**Settings widened from a 2-way `'automatic'/'manual'` toggle to a real 3-way provider
+choice, with the legacy value never breaking an already-deployed database.**
+`normalizeProviderValue(v)` treats the OLD literal `'automatic'` as a permanent alias for
+`'marzpay'` — the live database (confirmed via the owner's own screenshot mid-session
+showing `depositMethod` currently set) never needed a migration. `depositProvider(sett)`/
+`withdrawProvider(sett)` (replacing the old boolean-only `payoutIsManual()`, which now
+just wraps `withdrawProvider(sett)==='manual'`) are the single resolvers — reading
+`depositMethod`/`withdrawMethod` raw anywhere else stays exactly the bug class this
+codebase's own comments have warned about since Round 88. `/admin/settings/update`'s
+validation now accepts `'marzpay'|'lipapay'|'manual'` (deposit) /
+`'follow'|'marzpay'|'lipapay'|'manual'` (withdraw) — deliberately does NOT accept writing
+`'automatic'` anymore (only recognizes it on READ), so nothing new can ever re-introduce
+the ambiguous legacy spelling.
+
+**`/deposit/marzpay`** (URL unchanged — the frontend already only cares whether
+`depositMethod==='manual'`, so keeping this one endpoint and branching internally on
+`depositProvider(sett)` needed zero frontend changes) now calls `lipaCollect()` instead
+of `marzCollect()` when the resolved provider is `'lipapay'`: `OutTradeNo` is the
+deposit's own doc id (already a `crypto.randomUUID()` — exactly LipaPay's required
+6–36-char allowed-charset shape, confirmed by checking `db.js`'s own id generation
+before assuming this would work), `TraderID` derived from Snow's canonical `+256...`
+phone via a new `lipaTraderId()` helper, `Channel` derived from the existing
+`NETWORK_NAMES` field via a new `lipaChannel()` helper. Every deposit doc now also
+stores `provider` (`'marzpay'|'lipapay'`), so the reconciler and admin panel can tell
+them apart without guessing.
+
+**Real, pre-existing gap #1, found and closed while restructuring this route (not
+introduced by LipaPay, already true for MarzPay alone): `/deposit/marzpay` never
+actually checked `depositMethod` at all.** With Manual active, the frontend correctly
+calls `/deposit/manual/init` instead — but nothing server-side stopped a direct call to
+this route from still going straight through the automatic provider, silently bypassing
+the admin's own "route deposits through admin numbers" intent. Only exploitable by
+someone crafting a raw request (not reachable through the real UI), but real
+nonetheless. Fixed with a guard mirroring `/deposit/manual/init`'s own symmetric one.
+
+**`processWithdrawalCore`** gained a `withdrawProvider(settNow)==='lipapay'` branch
+between the existing manual and MarzPay branches, mirroring the MarzPay branch
+function-for-function: `sendingReference`/`lipaOutTradeNo` written BEFORE ever calling
+LipaPay (same "a later write failure can never leave it unrecorded" reasoning this file
+already documents for `marzReference`), a network exception is ambiguous and never
+reverts to `'pending'` (would invite a double-pay retry), and a genuinely successful
+SUBMISSION only means `'processing'`, never `'processed'` — LipaPay's own doc says every
+Unified Order (collection OR disbursement) resolves asynchronously via the callback, so
+this never assumes completion on acceptance the way MarzPay's dev-sandbox shortcut does
+(LipaPay has no such shortcut to replicate). `totalWithdrawn` increments at the same
+`'processing'` transition MarzPay's own path already uses, so `computeRealTotals()`/
+`repair-ledger` (which already cover `status in ['processing','processed']` since Round
+53) need no changes to stay correct.
+
+**Two new webhooks**, `/deposit/lipapay/callback` and `/withdraw/lipapay/callback`
+(added to `GUARD_EXEMPT` so maintenance mode can never block them, matching the existing
+MarzPay callbacks). Both follow LipaPay's own explicit protocol requirement — respond
+the literal plain-text string `SUCCESS`, never JSON, or LipaPay retries for up to 24h —
+and both apply Round 81's own MarzPay-webhook hardening identically: the webhook BODY's
+own `PayStatus`/`Amount` are never trusted. `OutTradeNo` (== the deposit/withdrawal's own
+doc id) is used only to find WHICH record this claims to be about; the actual decision to
+credit/fail or process/decline always comes from an independent `lipaOrderQuery()` call
+using Snow's own credentials. Verified this isn't just a comment: fired a callback whose
+body LIES about success while the independent re-check says "still processing," and
+confirmed nothing gets credited.
+
+**`reconcilePendingDeposits()`/`reconcilePendingWithdrawals()`** each gained a LipaPay
+loop (querying `provider==='lipapay'` / `lipaOutTradeNo > ''`, mirroring the existing
+starvation-avoiding `marzTxUuid`-based query shape from the 2nd money-flow audit),
+independently re-checking via `lipaOrderQuery()` — so a lost or delayed webhook still
+resolves on its own via the existing 30s reconciler tick and the "Sync payments" admin
+button, exactly like MarzPay already does.
+
+**Real, pre-existing gap #2, found and closed while extending `/admin/withdraw/verify`
+for LipaPay: this route only ever branched on `manual` vs. assumed-MarzPay.** A
+LipaPay-routed withdrawal has neither `marzReference` nor `marzTxUuid` at all — without a
+dedicated branch it would have fallen straight into the "no gateway reference, nothing
+was sent" case, which is FALSE for a genuinely-sent LipaPay payout and would have invited
+an admin to reject (and refund) a withdrawal that had already gone out. This is exactly
+the class of bug Round 81's own MarzPay-side hardening exists to prevent — it just hadn't
+been extended to the new provider yet. Fixed with a `w.lipaOutTradeNo` branch doing the
+same independent live re-check.
+
+**`db.js`**: two new index specs — `withdrawals.lipaOutTradeNo` (mirrors
+`marzTxUuid`/`marzReference`) and `pendingDeposits.{provider,status,createdAt}` (the
+new reconciler query shape).
+
+**Admin panel** (`admin-src/index.html`): the Manual-payments radios widened from 2 to 3
+options for deposits (`Automatic (MarzPay)` / `Automatic (LipaPay)` / `Manual`) and from
+3 to 4 for withdrawals (adds `Always automatic (LipaPay sends payouts)`) — a legacy
+`'automatic'` stored value still correctly pre-checks the MarzPay radio via a new
+`normalizeProv()` helper mirroring the server's own resolver. The Withdrawals tab's
+approve button, confirm dialog, copy paragraph, and the "Verify" alert all now read the
+real active provider (`_witProvider`, threaded through from `payoutMode`) instead of a
+hardcoded "MarzPay" — reads "Send via LipaPay" when that's what's actually active, never
+lies. The Deposits tab's Method column shows "MarzPay"/"LipaPay" per-row (from the new
+`provider` field; an older row with none falls back to the pre-existing plain
+"Automatic" label, unchanged). "Sync MarzPay" renamed to "Sync payments" everywhere (it
+now genuinely reconciles both providers, not just one).
+
+**Verified**: `node --check` clean on `server.js`/`db.js`; `git diff --check` clean; a
+boot smoke test (dummy Firebase creds + unreachable Mongo) still fails only at the
+Mongo-connect step. Built a real in-memory Firestore-compatible mock (`mock-db.js`,
+matching `db.js`'s own exported interface exactly — `FieldValue.increment` upserts from
+zero, `.update()` on a missing doc throws, `updateIf()` is one atomic conditional
+match+update — the established "swap `./db` via `require.cache`" technique this file
+documents using in earlier rounds, but reimplemented in full since no committed mock
+existed to reuse) plus a stubbed `firebase-admin` (so a fake bearer token can carry a
+literal uid) and a local mock LipaPay HTTP server (routing responses by
+`path+OutTradeNo`, not a blind per-path FIFO — a first draft that used plain-path
+queuing produced a real flaky failure when two reconcile loops hit `/api/pay/orderquery`
+concurrently inside the same `Promise.all` and stole each other's queued response; fixed
+before trusting the result). Drives the REAL `server.js`, unmodified except the single
+`LIPA_BASE` line redirected to the mock (same one-line-substitution discipline Round 102
+already established) — **40/40 checks**: correct provider branching and cents conversion
+on deposit; the deposit webhook independently re-verifying and correctly crediting on a
+genuine success; a fabricated "success" webhook body correctly NOT crediting when the
+independent check disagrees; the manual-mode-reject guard (gap #1); MarzPay's own path
+confirmed completely unaffected (regression check); withdrawal disbursement via the real
+`/admin/withdraw/process` route with the correct `Channel` derived from network; a
+repeat process call refused with no double-counted `totalWithdrawn`; the withdrawal
+webhook finalizing correctly; `/admin/withdraw/verify` reporting the real LipaPay status
+instead of a false "nothing was sent" (gap #2); the reconciler settling a stuck LipaPay
+withdrawal via the real `/admin/payments/sync` route; settings validation; and the
+resolver's own backward-compat logic (`'automatic'` → `'marzpay'`) checked in isolation
+since `getSettings()`'s 60s in-process cache makes flipping that exact legacy value
+through a live HTTP round-trip impractical to force within a test run — a real, known
+harness limitation noted here rather than glossed over.
+`test-admin-obfuscated-build.js` (the real obfuscated admin build) extended with the
+renamed radio ids and new LipaPay-mode withdrawals-tab checks — 0 errors across all 12
+tabs. Admin cache bumped `v23`→`v24`. No user-src/user changes this round (the member
+app's own request/response shapes are unchanged) — no user cache bump needed.
+**`server.js`/`db.js` changed — Render should auto-deploy this push.**
+
+**Still needed from the owner before this can move real LipaPay money**: the real
+production `LIPAPAY_MCHID`/`LIPAPAY_PRIVATE_KEY` (Round 102 built the client against
+LipaPay's own sandbox credentials only), and ideally one real sandbox test call to
+confirm Round 102's amount-units reading (send cents, receive plain UGX) — this
+environment's network policy still blocks reaching LipaPay's servers directly, so that
+specific assumption remains doc-verified, not live-verified, exactly as flagged in Round
+102. Once real credentials are set, an admin switching Settings → Manual payments to
+"Automatic (LipaPay)" is the only step needed to go live — no further code changes.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
