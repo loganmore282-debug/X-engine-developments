@@ -15,6 +15,8 @@ services:
         sync: false
       - key: MARZPAY_KEY
         sync: false
+      - key: QUOTAGUARDSTATIC_URL
+        sync: false
 
   - type: web
     name: snow-app

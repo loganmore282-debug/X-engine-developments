@@ -6217,6 +6217,92 @@ subtab check; renamed the new one to `depHtml2`). `node --check` clean on `serve
 `v22`→`v23`. No user-app change this round. **`server.js` and `admin-src/index.html`
 changed — Render should auto-deploy this push.**
 
+## Round 101 (2026-09-01) — QuotaGuard static-IP proxy plumbing wired up for a new LipaPay payment method (LipaPay's own client code not yet built)
+
+Owner is provisioning a new payment provider, LipaPay, alongside/independent of MarzPay
+(nothing in the codebase or this file has ever mentioned LipaPay before this round —
+this is a genuinely new integration, not a rename). LipaPay whitelists a fixed IP rather
+than authenticating every request, so a QuotaGuard Static add-on was provisioned (2 fixed
+IPs, a proxy connection string) and `QUOTAGUARDSTATIC_URL` set on `snow-server`'s Render
+environment. Owner: *"we need to make sure that the new environment is processed."*
+
+**What "processed" means, concretely — and why nothing calls it yet.** Setting an env
+var on Render does nothing by itself (ChatGPT's own screenshot said as much, correctly)
+— something in `server.js` has to actually route a request through it. There is no
+LipaPay client code anywhere in this codebase to wire up, because LipaPay's API details
+(base URL, auth scheme, collect/send-money endpoint shapes) have never been supplied.
+Guessing at those for a MONEY-MOVING integration is exactly the kind of mistake this
+file's own standing discipline exists to prevent — so this round builds the proxy
+plumbing itself (genuinely finishable with zero guessing) and stops there; the actual
+`lipaCollect()`/`lipaSendMoney()` functions (mirroring `marzCollect()`/`marzSendMoney()`'s
+own shape) are a follow-up round once LipaPay's real API spec is in hand.
+
+**`server.js`**: `proxyFetch(url, opts)` — a drop-in replacement for `fetch()` that
+routes through a `ProxyAgent` (from `undici`, already a transitive dependency via
+`javascript-obfuscator`/`jsdom`'s own dependencies — pinned as a **direct** dependency
+this round so it can never silently disappear if either of those changes) built from
+`QUOTAGUARDSTATIC_URL`, or behaves as a plain `fetch()` when that env var is unset.
+**Deliberately opt-in per call, not global** — nothing routes MarzPay's own
+`marzCollect()`/`marzSendMoney()`/`_marzFetchTxStatus()` through this; MarzPay has no
+IP-whitelist requirement today, and there is no reason a LipaPay-specific proxy
+requirement should touch a payment path that already works. `proxyFetch()` itself is
+unused as of this commit — it exists ready for LipaPay's own client functions to call.
+
+**Real bug caught and fixed before shipping, not by inspection — by actually testing
+the failure mode.** `new ProxyAgent(url)` throws SYNCHRONOUSLY on a malformed/unparseable
+URL — confirmed by hand (`new ProxyAgent('not-a-valid-url')` → `Error: Invalid URL`).
+Left uncaught at module-load time, a single typo'd env var for this not-yet-used feature
+would have crashed the ENTIRE server at boot, taking every money path down with it —
+exactly the kind of "a misconfigured optional feature breaks everything" bug this
+codebase works hard to avoid elsewhere (e.g. `FORWARDER_PASSWORD`/`MANUAL_SMS_SECRET`
+being absent/wrong never blocks anything but the one feature that needs them). Wrapped
+the construction in try/catch: a malformed URL now logs a clear error and leaves
+`quotaGuardAgent` as `null` (so `proxyFetch()` quietly falls through to a direct
+request — which the IP-restricted provider would then reject with its own error,
+surfacing the misconfiguration honestly rather than crashing the app over it), instead
+of taking the whole server down.
+
+**`render.yaml`**: `QUOTAGUARDSTATIC_URL` added to `snow-server`'s `envVars` list
+(`sync: false`, matching every other secret's own placeholder entry) — documents it as
+part of the service's expected configuration, same as `MARZPAY_KEY`.
+
+**`package.json`/`package-lock.json`**: `undici` added as a direct dependency
+(`^6.28.0`, the version already resolved in the lockfile) rather than relying on it
+staying available as an incidental transitive dependency of two devDependencies.
+
+**Security note relayed to the owner, not a code change**: several Render environment
+variable values (`ADMIN_KEY`, `MONGODB_URI`, `MANUAL_SMS_SECRET`, `FORWARDER_PASSWORD`,
+and the QuotaGuard proxy username/password) were partially visible in the screenshots
+shared this round. Flagged for the owner to rotate on their own schedule — not something
+this session can act on directly, since rotating `MONGODB_URI`/QuotaGuard's own
+credentials requires action on those providers' own dashboards, not just a Render env
+var edit.
+
+**Verified**: `node --check server.js` clean; `git diff --check` clean; a boot test
+across 4 configurations (env var unset, a valid proxy URL, a malformed URL, an
+empty-string value) — the server stays running with no crash in all 4, with the
+malformed case logging the expected warning and nothing else; `npm install` resolves
+`undici` cleanly as a direct dependency with a consistent lockfile. This round is
+server.js/package.json/package-lock.json/render.yaml-only — no admin-src/user-src
+changes, so no cache bumps. **`server.js`/`package.json` changed — Render should
+auto-deploy this push** (the `npm install` build step will pick up the new direct
+`undici` dependency).
+
+**Still needed from the owner before LipaPay can actually move money**: LipaPay's API
+base URL, authentication scheme (API key header, Basic auth, Bearer token, etc.), and
+the request/response shapes for at least a collect-money (deposit) call, a send-money
+(withdrawal) call, and a transaction-status check — ideally their own API docs link.
+Once supplied, the next round builds `lipaCollect()`/`lipaSendMoney()`/status-check
+functions mirroring the MarzPay pattern exactly (claim-before-credit, the same
+`SUCCESS_STATUSES`/`FAILED_STATUSES` posture, webhook safety via an independent
+live re-check — never trusting an unauthenticated webhook body alone, matching Round
+81's own hardening of the MarzPay webhook), using `proxyFetch()` for LipaPay's own
+calls specifically. Also worth confirming with the owner: is LipaPay meant to
+**replace** MarzPay, run **alongside** it as a second automatic-payout option (the
+existing `depositMethod`/`withdrawMethod` settings are currently `'automatic'` = MarzPay
+or `'manual'` = admin-recorded by hand — a 3-way payment-provider choice would be new
+shape, not a drop-in), or something else? Not assumed here.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
@@ -6273,3 +6359,10 @@ on `snow-server` to lock the forwarder app's settings screen on the admin phones
 it unset to switch the lock off. It is not a substitute for `MANUAL_SMS_SECRET`: the
 password guards a screen, the secret is what the server actually verifies on every
 forwarded message. Never commit either.
+
+`QUOTAGUARDSTATIC_URL` (added Round 101) is a connection string with embedded
+credentials (`http://user:pass@host:port`) for a QuotaGuard Static proxy — routes an
+outbound call through one of 2 fixed IPs instead of Render's own dynamic egress, for a
+provider (LipaPay) that whitelists an IP rather than authenticating every request. Never
+commit it. Optional and inert until LipaPay's own client code is built (Round 101) — see
+that round for what it does and does not affect.

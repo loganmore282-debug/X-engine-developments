@@ -160,6 +160,41 @@ const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64-encoded credentials
 const MARZ_TIMEOUT = 20000;
 
+// ── OUTBOUND STATIC-IP PROXY (QuotaGuard) ──
+// Some payment providers (LipaPay is the reason this exists) whitelist a
+// fixed IP rather than authenticating every request -- Render's own egress
+// IPs are dynamic, so a request straight from this dyno can land from any
+// address and get rejected. QuotaGuard Static gives 2 fixed IPs and a proxy
+// URL; routing a specific outbound call through it makes that call appear
+// to come from one of those 2 IPs instead. This is opt-in PER CALL via
+// proxyFetch() below, not global -- MarzPay has no IP-whitelist requirement
+// today, so its own calls stay direct and unaffected by this being unset,
+// misconfigured, or the proxy itself being briefly down.
+const { ProxyAgent } = require('undici');
+const QUOTAGUARD_URL = (process.env.QUOTAGUARDSTATIC_URL || '').trim();
+let quotaGuardAgent = null;
+if (QUOTAGUARD_URL) {
+  // new ProxyAgent() THROWS synchronously on a malformed/unparseable URL --
+  // confirmed by hand before shipping this. Left uncaught, a single typo'd
+  // env var (this is optional plumbing for a not-yet-built LipaPay
+  // integration) would crash the ENTIRE server at boot, taking down every
+  // money path with it. A misconfigured proxy must only break the ONE
+  // feature that needs it, never the whole app.
+  try { quotaGuardAgent = new ProxyAgent(QUOTAGUARD_URL); }
+  catch (e) { console.error('QUOTAGUARDSTATIC_URL is set but could not be parsed as a proxy URL -- proxied calls will fall through to a DIRECT request, which a static-IP-only provider will reject. Error:', e.message); }
+}
+// Drop-in replacement for fetch() that routes through the QuotaGuard static
+// IP when QUOTAGUARDSTATIC_URL is configured, and behaves exactly like a
+// plain fetch() otherwise (so this is safe to use even before the env var
+// is ever set, e.g. in local dev). Never throws on its own for a missing
+// proxy config -- an unconfigured proxy is a deploy-config problem for the
+// provider's own request to surface (a 403 from THEM), not something this
+// helper should silently swallow or crash the server over.
+function proxyFetch(url, opts) {
+  if (!quotaGuardAgent) return fetch(url, opts);
+  return fetch(url, { ...opts, dispatcher: quotaGuardAgent });
+}
+
 // ── MAINTENANCE GATE ──
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team'];
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback']);
