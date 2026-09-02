@@ -1611,6 +1611,7 @@ const AUDIT_LABELS = {
   user_pin_reset:'Transaction PIN reset',
   user_deleted:'User account deleted', settings_updated:'Settings updated',
   banner_set:'Banner changed', announcement_image_set:'Announcement image changed',
+  manual_pay_image_set:'Manual-pay screen image changed',
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
   deposit_force_credited:'Deposit force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
@@ -1724,14 +1725,16 @@ window.addEventListener('beforeunload', (e) => {
 });
 let _manualNumbers = [];
 async function renderSettings(){
-  const [r, br, hbr, air, abr, pr, mnr] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list'), api('/admin/manual-numbers/list', {})
+  const [r, br, hbr, air, abr, pr, mnr, mpir] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list'), api('/admin/manual-numbers/list', {}), api('/admin/manual-pay-images')
   ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
   const bannerImage = br.image||'';
   const helpBannerImage = hbr.image||'';
   const announceImage = air.image||'';
+  const manualSelectorImage = mpir.selector||'';
+  const manualHeroImage = mpir.hero||'';
   const pushTokenCount = pr.status==='success' ? pr.count : null;
   _manualNumbers = mnr.numbers||[];
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
@@ -1793,6 +1796,33 @@ async function renderSettings(){
       <p class="muted" style="margin-top:0">A member is assigned one of these round-robin the moment Manual is active above -- give each one a real holder name, it's shown to the member so they know who they're sending to.</p>
       <div id="manualNumbersList"></div>
       <button class="btn block" id="mnAddBtn" style="margin-top:6px">+ Add payment number</button>
+    </div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin:0 0 6px">Manual payment screen images</h2>
+      <p class="muted" style="margin-top:0">Replaces the Snow snowflake mark on the manual-deposit flow's own 2 screens. An empty slot keeps the snowflake.</p>
+      <p class="muted" style="margin:0 0 6px"><b>Payment method screen</b> (network/phone selector)</p>
+      <div class="banner-row">
+        ${manualSelectorImage?`<img class="img-thumb" src="${esc(manualSelectorImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualSelectorImage?'Custom image':'<span class="muted">Snowflake mark</span>'}</div>
+        ${manualSelectorImage?`<button class="btn danger sm" id="mpSelectorImgClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="mpSelectorImgFile" accept="image/*" hidden></label>
+      <p class="muted" style="margin:16px 0 6px"><b>Final payment screen</b> (COPY &amp; PAY code screen)</p>
+      <div class="banner-row">
+        ${manualHeroImage?`<img class="img-thumb" src="${esc(manualHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualHeroImage?'Custom image':'<span class="muted">Snowflake mark</span>'}</div>
+        ${manualHeroImage?`<button class="btn danger sm" id="mpHeroImgClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="mpHeroImgFile" accept="image/*" hidden></label>
+    </div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin:0 0 6px">Payment reminder</h2>
+      <p class="muted" style="margin-top:0">Shown on the manual-deposit code screen once the member picks that network. Use <code>{{number}}</code> and <code>{{amount}}</code> anywhere in the steps -- both are replaced with that member's own real account number and order amount. Leave a network blank to hide the section for it.</p>
+      <label>MTN steps</label>
+      <textarea id="mpReminderMtn" rows="7" placeholder="1: Dial *165#&#10;2: Select 1 Send Money&#10;3: Select 1 Mobile User&#10;4: Enter number {{number}}&#10;5: Enter Amount {{amount}}&#10;6: Enter Reason&#10;7: Enter your PIN code">${esc(v('manualPayReminderMtn',''))}</textarea>
+      <label>Airtel steps</label>
+      <textarea id="mpReminderAirtel" rows="7" placeholder="e.g. Dial *185#, Select Send Money…">${esc(v('manualPayReminderAirtel',''))}</textarea>
+      <button class="btn block" id="saveMpReminder" style="margin-top:6px">Save payment reminder</button>
     </div>
 
     <h2 class="sec">Push notifications</h2>
@@ -2001,6 +2031,50 @@ async function renderSettings(){
       toast(d.status==='success'?'Image removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderSettings();
     })());
+  });
+  $('mpSelectorImgFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const image = await fileToDataUrl(f,1280,0.82);
+        const d = await api('/admin/manual-pay-image/set', { slot:'selector', image });
+        toast(d.status==='success'?'Saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderSettings();
+      } catch(err){ toast(err.message||'Could not read image','err'); }
+    })());
+  });
+  const mpSelectorImgClear = $('mpSelectorImgClear');
+  if (mpSelectorImgClear) mpSelectorImgClear.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/manual-pay-image/clear', { slot:'selector' });
+      toast(d.status==='success'?'Reverted to the snowflake mark':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  });
+  $('mpHeroImgFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const image = await fileToDataUrl(f,1280,0.82);
+        const d = await api('/admin/manual-pay-image/set', { slot:'hero', image });
+        toast(d.status==='success'?'Saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderSettings();
+      } catch(err){ toast(err.message||'Could not read image','err'); }
+    })());
+  });
+  const mpHeroImgClear = $('mpHeroImgClear');
+  if (mpHeroImgClear) mpHeroImgClear.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/manual-pay-image/clear', { slot:'hero' });
+      toast(d.status==='success'?'Reverted to the snowflake mark':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  });
+  $('saveMpReminder').addEventListener('click', async()=>{
+    const upd = { manualPayReminderMtn:$('mpReminderMtn').value, manualPayReminderAirtel:$('mpReminderAirtel').value };
+    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Payment reminder saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(),

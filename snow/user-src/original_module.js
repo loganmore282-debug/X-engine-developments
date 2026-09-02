@@ -36,6 +36,13 @@ var ICONS = {
   eyeOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A11.4 11.4 0 0 1 12 5c7 0 11 7 11 7a17.5 17.5 0 0 1-3.1 3.9M6.7 6.7C3.6 8.5 1 12 1 12s4 7 11 7a10.6 10.6 0 0 0 4.3-.9"/><path d="M9.5 9.8A3 3 0 0 0 12 15a3 3 0 0 0 2.2-.97"/></svg>',
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+  // 3 new icons for the manual-pay code screen's per-section timeline
+  // (owner: "use the same svg just as the last 3rd photo, it has proper
+  // svgs" -- that screenshot has no extractable source, drawn to visually
+  // match it in this app's own stroke-icon style rather than copied).
+  refresh: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5.5h5.5"/><path d="M20 20v-5.5h-5.5"/><path d="M5.2 9.5A8 8 0 0 1 19 8.2"/><path d="M18.8 14.5A8 8 0 0 1 5 15.8"/></svg>',
+  idCard: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-1.6 1.9-2.4 3-2.4s2.5.8 3 2.4"/><path d="M14 9.5h4.5M14 13h4.5"/></svg>',
+  bulb: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 18h5"/><path d="M10.3 21h3.4"/><path d="M12 3a6 6 0 0 0-3.3 11c.6.4.9.9.9 1.6v.4h4.8v-.4c0-.7.3-1.2.9-1.6A6 6 0 0 0 12 3Z"/></svg>',
 };
 // Owner supplied this exact icy-blue gradient snowflake mark (superseding
 // both the hand-drawn version and the Twemoji-glyph version from earlier
@@ -412,7 +419,7 @@ window.doLogout = async function(){
 // and every caller awaits this same promise (capped by withTimeout, see
 // below) before the spinner ever comes down, so nothing pops in afterward.
 async function boot(){
-  const [s, p, f, b, ai] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner'), api('/public/announcement-image') ]);
+  const [s, p, f, b, ai, mpi] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner'), api('/public/announcement-image'), api('/public/manual-pay-images') ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   STATE.products = p.status === 'success' ? p.products : [];
   STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
@@ -423,6 +430,13 @@ async function boot(){
   // announcement dialog's image is already known the instant
   // maybeShowAnnouncement() runs, not fetched lazily after the dialog opens.
   STATE.announceImage = (ai.status === 'success' && ai.image) ? ai.image : null;
+  // Same reasoning again -- a member could reach the manual-deposit flow
+  // moments after the app becomes visible, so both optional replacement
+  // images (owner: "upload image to replace those snow on payment network
+  // screen and final payment screenshot") are already known by the time
+  // openManualPayFlow() first renders, not fetched lazily on first open.
+  STATE.manualPaySelectorImage = (mpi.status === 'success' && mpi.selector) ? mpi.selector : null;
+  STATE.manualPayHeroImage = (mpi.status === 'success' && mpi.hero) ? mpi.hero : null;
   applyAuthTagline();
   applyNumberFont();
 }
@@ -2061,6 +2075,10 @@ function openManualDepositFormSheet(){
   openSheet('Recharge', `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
     ${chipsHtml}
+    <div class="pm-selected-row">
+      <span class="pm-selected-label">Payment method</span>
+      <span class="pm-selected-val">${ICONS.check}<b>KKpay</b></span>
+    </div>
     <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="proceedToManualPaymentMethod()">Recharge</button>
     <div class="instr-card">
       <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Recharge instructions</span></div>
@@ -2147,6 +2165,20 @@ window.closeManualPayOverlay = function(opts){
   if (history.state && history.state.manualPay) history.back();
   if (!(opts && opts.fromAction)) maybeAnnounceAfterSheet('Recharge');
 };
+// Selector/hero brand marks: an admin-uploaded image (owner: "upload image
+// to replace those snow on payment network screen and final payment
+// screenshot... 2 different images") takes over from Snow's own snowflake
+// mark when set, at the exact same footprint the mark used.
+function manualPaySelectorBrandHtml(){
+  return STATE.manualPaySelectorImage
+    ? `<img src="${esc(STATE.manualPaySelectorImage)}" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:12px;">`
+    : snowflakeSvg('', 44);
+}
+function manualPayHeroBrandHtml(){
+  return STATE.manualPayHeroImage
+    ? `<img src="${esc(STATE.manualPayHeroImage)}" alt="" style="width:32px;height:32px;object-fit:contain;border-radius:8px;">`
+    : snowflakeSvg('', 32);
+}
 function openManualPayFlow(amount){
   _manDepChosenMethod = '';
   _manDepId = null;
@@ -2154,7 +2186,7 @@ function openManualPayFlow(amount){
     <section id="manPaySelector" class="mp-selector-screen">
       <div class="mp-selector-card">
         <div class="mp-selector-inner">
-          <div class="mp-brand-center">${snowflakeSvg('', 64)}</div>
+          <div class="mp-brand-center">${manualPaySelectorBrandHtml()}</div>
           <p class="mp-lead">Please fill in your payment method and the actual payment account you will use to make the payment.</p>
           <div class="mp-amount-line">Payment Amount: <strong>${fmtUGX(amount)}</strong></div>
           <div class="mp-select-label">Please select a payment method</div>
@@ -2183,7 +2215,7 @@ function openManualPayFlow(amount){
 
     <section id="manPayScreen" class="mp-pay-screen mp-hidden">
       <div class="mp-hero">
-        <div class="mp-hero-logo">${snowflakeSvg('', 40)}</div>
+        <div class="mp-hero-logo">${manualPayHeroBrandHtml()}</div>
         <div class="mp-expiry">
           <div class="mp-label">Transaction expires later</div>
           <div class="mp-timer" id="manPayTimer"><span>1</span><span>5</span> : <span>0</span><span>0</span></div>
@@ -2191,47 +2223,63 @@ function openManualPayFlow(amount){
       </div>
 
       <div class="mp-timeline-card">
-        <div class="mp-step-line"></div>
-        <div class="mp-step-icon mp-one">${ICONS.doc}</div>
-        <div class="mp-step-icon mp-two">${ICONS.clock}</div>
-        <div class="mp-step-icon mp-three">${ICONS.check}</div>
+        <div class="mp-tl-row">
+          <div class="mp-tl-rail"><div class="mp-tl-icon">${ICONS.doc}</div><div class="mp-tl-line"></div></div>
+          <div class="mp-tl-body">
+            <h2 class="mp-card-title">COPY &amp; PAY</h2>
+            <div class="mp-sub">Copy this <b id="manPayMethodName">MTN</b> account and make payment</div>
+            <div class="mp-detail-box">
+              <div class="mp-label">Total Amount:</div>
+              <div class="mp-total"><small>UGX</small><span id="manPayTotal"></span></div>
 
-        <h2 class="mp-card-title">COPY &amp; PAY</h2>
-        <div class="mp-sub">Copy this <b id="manPayMethodName">MTN</b> account and make payment</div>
+              <div class="mp-label"><span id="manPayAccountMethod">MTN</span> Account:</div>
+              <div class="mp-account-value">
+                <span id="manPayMerchantNumber"></span>
+                <button type="button" class="mp-copybtn" onclick="copyText($('manPayMerchantNumber').textContent)" aria-label="Copy account"><i></i></button>
+              </div>
 
-        <div class="mp-detail-box">
-          <div class="mp-label">Total Amount:</div>
-          <div class="mp-total"><small>UGX</small><span id="manPayTotal"></span></div>
-
-          <div class="mp-label"><span id="manPayAccountMethod">MTN</span> Account:</div>
-          <div class="mp-account-value">
-            <span id="manPayMerchantNumber"></span>
-            <button type="button" class="mp-copybtn" onclick="copyText($('manPayMerchantNumber').textContent)" aria-label="Copy account"><i></i></button>
-          </div>
-
-          <div class="mp-label">Account Name:</div>
-          <div class="mp-name-value">
-            <span id="manPayMerchantName"></span>
-            <button type="button" class="mp-copybtn" onclick="copyText($('manPayMerchantName').textContent)" aria-label="Copy account name"><i></i></button>
-          </div>
-        </div>
-
-        <div class="mp-paydone">Payment completed?</div>
-        <div class="mp-refresh-text">Click <b>"Refresh"</b> to check if it is successful</div>
-
-        <div class="mp-paid-box">
-          <div class="mp-paid-row">
-            <div>
-              <div class="mp-paid-label">Amount paid:</div>
-              <div class="mp-paid-value" id="manPayPaidValue">UGX 0</div>
+              <div class="mp-label">Account Name:</div>
+              <div class="mp-name-value">
+                <span id="manPayMerchantName"></span>
+                <button type="button" class="mp-copybtn" onclick="copyText($('manPayMerchantName').textContent)" aria-label="Copy account name"><i></i></button>
+              </div>
             </div>
-            <button type="button" class="mp-refresh-btn" id="manPayRefreshBtn" onclick="manualPayRefresh()">Refresh</button>
           </div>
-          <div class="mp-note">The payment is expected to be successful in 2-10 minutes.<br>Click to refresh the results.</div>
         </div>
 
-        <div class="mp-your-account">Your payment account:</div>
-        <div class="mp-your-number" id="manPayYourNumber"></div>
+        <div class="mp-tl-row">
+          <div class="mp-tl-rail"><div class="mp-tl-icon">${ICONS.refresh}</div><div class="mp-tl-line"></div></div>
+          <div class="mp-tl-body">
+            <div class="mp-paydone">Payment completed?</div>
+            <div class="mp-refresh-text">Click <b>"Refresh"</b> to check if it is successful</div>
+            <div class="mp-paid-box">
+              <div class="mp-paid-row">
+                <div>
+                  <div class="mp-paid-label">Amount paid:</div>
+                  <div class="mp-paid-value" id="manPayPaidValue">UGX 0</div>
+                </div>
+                <button type="button" class="mp-refresh-btn" id="manPayRefreshBtn" onclick="manualPayRefresh()">Refresh</button>
+              </div>
+              <div class="mp-note">The payment is expected to be successful in 2-10 minutes.<br>Click to refresh the results.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mp-tl-row">
+          <div class="mp-tl-rail"><div class="mp-tl-icon">${ICONS.idCard}</div><div class="mp-tl-line" id="manPayYourAccountLine"></div></div>
+          <div class="mp-tl-body">
+            <div class="mp-your-account">Your payment account:</div>
+            <div class="mp-your-number" id="manPayYourNumber"></div>
+          </div>
+        </div>
+
+        <div class="mp-tl-row mp-hidden" id="manPayReminderRow">
+          <div class="mp-tl-rail"><div class="mp-tl-icon">${ICONS.bulb}</div></div>
+          <div class="mp-tl-body">
+            <div class="mp-reminder-title">Payment reminder</div>
+            <div class="mp-reminder-box" id="manPayReminderBox"></div>
+          </div>
+        </div>
 
         <div class="mp-sms-fallback mp-hidden" id="manPaySmsFallback">
           <div class="mp-sms-title">Get results faster!</div>
@@ -2321,8 +2369,28 @@ function presentManualPayCodeScreen(data){
   $('manPayYourNumber').textContent = data.senderPhone;
   $('manPaySelector').classList.add('mp-hidden');
   $('manPayScreen').classList.remove('mp-hidden');
+  renderManualPayReminder(data);
   manualPayStartTimer(data.expiresAt);
   pollManualDepositStatus(data.depositId);
+}
+// Owner: "let us establish Payment reminder, so as it is also editable in
+// admin panel for mtn and airtel" -- an admin-authored, network-specific
+// template (STATE.settings.manualPayReminderMtn/Airtel), {{number}}/
+// {{amount}} substituted for this real order's own assigned account/amount.
+// Blank template = the section never shows for that network, rather than
+// rendering an empty card. Also toggles whether the "Your payment account"
+// row above it still needs its own connecting line -- that row's `.mp-tl-line`
+// only reads as "more below" when there's genuinely another row following it.
+function renderManualPayReminder(data){
+  const s = STATE.settings || {};
+  const tpl = data.network === 'Airtel Money' ? (s.manualPayReminderAirtel || '') : (s.manualPayReminderMtn || '');
+  const row = $('manPayReminderRow');
+  const line = $('manPayYourAccountLine');
+  if (!tpl.trim()) { if (row) row.classList.add('mp-hidden'); if (line) line.style.display = 'none'; return; }
+  const text = tpl.replace(/\{\{number\}\}/g, data.assignedNumber).replace(/\{\{amount\}\}/g, String(data.amount));
+  $('manPayReminderBox').innerHTML = esc(text).replace(/\n/g, '<br>');
+  row.classList.remove('mp-hidden');
+  if (line) line.style.display = '';
 }
 window.manualPayConfirm = async function(amount){
   if (!_manDepChosenMethod) { toast('Please select a payment method', true); return; }

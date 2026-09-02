@@ -93,7 +93,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // hitting the small parser and failing with "request too large." Same bug
 // class space8's CLAUDE.md documents hitting its own home-banner-slides
 // route once, before that route was added here too.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/manual-pay-image/set']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set']);
 app.use((req, res, next) => (HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
@@ -321,6 +321,19 @@ const DEFAULT_SETTINGS = {
   // allowing e.g. manual deposits with LipaPay payouts. Resolved by
   // withdrawProvider()/payoutIsManual() -- never read this field raw.
   withdrawMethod: 'follow',
+  // Owner: "let us establish Payment reminder, so as it is also editable in
+  // admin panel for mtn and airtel" -- free-text, network-specific transfer
+  // instructions shown on the manual-deposit code screen (e.g. the real USSD
+  // steps for that network), rendered client-side with {{number}}/{{amount}}
+  // substituted for the member's own real assigned account/order amount so
+  // the same admin-authored template stays accurate across every order.
+  // Blank means the section doesn't render for that network at all -- never
+  // guess at a network's real USSD flow with an invented default; the owner
+  // supplied MTN's own real steps directly, so that one is prefilled exactly
+  // as given, Airtel is left blank for the admin to fill in with their own
+  // verified steps.
+  manualPayReminderMtn: '1: Dial *165#\n2: Select 1 Send Money\n3: Select 1 Mobile User\n4: Enter number {{number}}\n5: Enter Amount {{amount}}\n6: Enter Reason\n7: Enter your PIN code',
+  manualPayReminderAirtel: '',
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
 // user-src/original_module.js (the client-side fallback-stack lookup) and
@@ -439,6 +452,26 @@ async function getAnnouncementImage() {
   } catch (_) { _announceImageCache = _announceImageCache || null; }
   _announceImageCacheTs = Date.now();
   return _announceImageCache;
+}
+// Two more independent slots, same pattern as the three above -- optional
+// admin-uploaded images replacing the Snow snowflake mark on the manual-
+// deposit flow's own 2 screens (owner: "make sure l can upload image to
+// replace those snow on payment network screen and final payment
+// screenshot... they will be 2 different images"). 'selector' = the
+// payment-method/phone screen's brand mark; 'hero' = the COPY & PAY code
+// screen's hero logo. Kept as one shared getter taking a slot name rather
+// than duplicating the whole function twice, since the two are otherwise
+// identical in every respect (own doc, own cache, own fallback to null).
+const _manualPayImgCache = { selector: null, hero: null };
+const _manualPayImgCacheTs = { selector: 0, hero: 0 };
+async function getManualPayImage(slot) {
+  if (Date.now() - _manualPayImgCacheTs[slot] < 60 * 1000 && _manualPayImgCache[slot] !== null) return _manualPayImgCache[slot];
+  try {
+    const snap = await db.collection('banners').doc('manual-' + slot).get();
+    _manualPayImgCache[slot] = (snap.exists && snap.data().image) || null;
+  } catch (_) { _manualPayImgCache[slot] = _manualPayImgCache[slot] || null; }
+  _manualPayImgCacheTs[slot] = Date.now();
+  return _manualPayImgCache[slot];
 }
 // Admin-authored "About" article: an ordered list of {type:'text',text} /
 // {type:'image',image} blocks -- the admin decides the order and whether/
@@ -1724,6 +1757,16 @@ app.get('/public/help-banner', async (_req, res) => {
 app.get('/public/announcement-image', async (_req, res) => {
   try { res.json({ status: 'success', image: await getAnnouncementImage() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Both slots in one call (not two round trips) -- fetched unconditionally
+// inside boot()'s own Promise.all, same "cheap when unset" tradeoff every
+// other banner-style image already accepts, so a member who reaches the
+// manual-deposit flow moments after boot never sees a pop-in.
+app.get('/public/manual-pay-images', async (_req, res) => {
+  try {
+    const [selector, hero] = await Promise.all([getManualPayImage('selector'), getManualPayImage('hero')]);
+    res.json({ status: 'success', selector, hero });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
 // of /public/settings, see getAboutContent()'s own comment for why.
@@ -4874,6 +4917,37 @@ app.post('/admin/announcement-image/clear', async (req, res) => {
   try {
     await db.collection('banners').doc('announcement').delete();
     _announceImageCacheTs = 0;
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the image' }); }
+});
+app.get('/admin/manual-pay-images', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [selector, hero] = await Promise.all([getManualPayImage('selector'), getManualPayImage('hero')]);
+    res.json({ status: 'success', selector, hero });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/manual-pay-image/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const slot = String(req.body.slot || '');
+  if (slot !== 'selector' && slot !== 'hero') return res.status(400).json({ status: 'error', message: 'slot must be selector or hero' });
+  const image = String(req.body.image || '');
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+    return res.status(400).json({ status: 'error', message: 'Invalid image' });
+  try {
+    await db.collection('banners').doc('manual-' + slot).set({ image });
+    _manualPayImgCacheTs[slot] = 0;
+    logAdminAction(req, 'manual_pay_image_set', { slot });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the image' }); }
+});
+app.post('/admin/manual-pay-image/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const slot = String(req.body.slot || '');
+  if (slot !== 'selector' && slot !== 'hero') return res.status(400).json({ status: 'error', message: 'slot must be selector or hero' });
+  try {
+    await db.collection('banners').doc('manual-' + slot).delete();
+    _manualPayImgCacheTs[slot] = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the image' }); }
 });

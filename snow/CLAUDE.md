@@ -8004,6 +8004,124 @@ visual result -- meaningfully smaller cards/tabs/icons/text throughout, matching
 owner's own "small tabs copy text icons cards" request. Cache bumped `v85`→`v86`
 (user). **`user-src/`-only, no Render redeploy needed for the backend.**
 
+## Round 122 (2026-09-02) — a static "KKpay" payment-method row, the network-picker screen vertically balanced, a new admin-editable per-network Payment reminder section, and 2 admin-uploadable images replacing the snowflake mark on the manual-pay flow's own 2 screens
+
+Owner, from 3 screenshots (the Recharge amount screen, the network/phone
+selector screen, and a further-scrolled code screen showing "Payment
+completed?"/"Your payment account"/a "Payment reminder" card with real MTN
+USSD steps): "Just after quick amounts let's put payment method selected
+'KKpay' with tick aside no need to create another option no that is it
+that, also as you see the network payment page should be balanced in the
+middle of the page also let us establish Payment reminder, so as it is
+also editable in admin panel for mtn and airtel, also make sure l can
+upload image to replace those snow on payment network screen and final
+payment screenshot, upload able from admin so they will be 2 different
+images, please use the same svg just as the last 3rd photo, it has proper
+svgs use those ones." Five distinct asks, all in the manual-pay flow built
+across Rounds 117-121.
+
+**1. "KKpay" method row.** A plain informational row, not a real selector
+(owner: "no need to create another option") -- `openManualDepositFormSheet()`'s
+amount screen (step 1, the one screenshot 1 matches exactly: amount + quick
+amounts, no phone/network fields, since those live on step 2) gained a
+`.pm-selected-row` (new, general-stylesheet CSS, NOT scoped under
+`#manualPayFlow` since this screen is an ordinary app sheet, not the
+reference-styled overlay) showing "Payment method: ✓ KKpay" right after the
+quick-amount chip grid and before the Recharge button, matching "just after
+quick amounts" literally.
+
+**2. Selector screen vertically balanced.** `.mp-selector-screen` was
+`min-height:100vh` with the card simply top-aligned via its own padding --
+correct on a tall reference layout, but left a large empty gap below the
+card on a real phone screen (visible in the owner's own screenshot 2).
+Changed to `display:flex;flex-direction:column;justify-content:center`,
+`min-height` kept (not `height`) so genuinely tall content can still grow
+past one viewport rather than clipping. Verified the card now sits with
+equal space above and below (173px/173px at 390x844 in the test harness).
+
+**3. Payment reminder, admin-editable per network.** New `server.js`
+settings fields `manualPayReminderMtn`/`manualPayReminderAirtel` (free
+text, `{{number}}`/`{{amount}}` tokens substituted client-side with that
+order's own real assigned account/amount) -- MTN's default is prefilled
+with the owner's own 7-step sequence from their screenshot verbatim ("1:
+Dial *165#" through "7: Enter your PIN code"); Airtel's is left blank
+rather than guessing a USSD flow that was never supplied, so the section
+simply doesn't render for Airtel until the owner fills it in via the panel.
+A blank template hides the whole section for that network -- never an
+empty card. New admin Settings card ("Payment reminder", under Manual
+payments) with 2 textareas + Save, wired to the existing generic
+`/admin/settings/update` (no new validation needed, same free-text
+treatment as `rulesText`/`aboutText`).
+
+This forced restructuring the code screen's own timeline, which previously
+absolutely-positioned exactly 3 icons against the WHOLE card's own fixed
+height (`top`/`bottom`/`calc(50%...)` -- workable only because the card's
+total height never changed). A 4th, admin-authored, unpredictable-length
+section breaks that assumption outright. Rebuilt as `.mp-tl-row` (icon +
+a flex-stretched dashed connector + body, one row per real section: COPY &
+PAY / Payment completed? / Your payment account / Payment reminder) so each
+row's own connecting line sizes itself to that row's own content height via
+flex, not a guessed pixel offset -- robust regardless of how long the
+admin's reminder text ends up being. The "Your payment account" row's own
+line is hidden via JS when the reminder row stays hidden (blank template),
+so a trailing dash never points at nothing.
+
+**4. Two new admin-uploadable images, one per screen.** Owner: "upload
+image to replace those snow on payment network screen and final payment
+screenshot... they will be 2 different images." New `banners/manual-selector`
+and `banners/manual-hero` doc slots (one shared `getManualPayImage(slot)`
+getter/cache pair rather than duplicating the whole function twice, since
+the two are otherwise identical), `GET /public/manual-pay-images` (both
+slots in one call, prefetched unconditionally in `boot()`'s own
+`Promise.all` alongside the Home banner/announcement image -- same "cheap
+when unset, zero added latency" tradeoff), `GET /admin/manual-pay-images` +
+`POST /admin/manual-pay-image/set|clear` (`slot` param, owner-only,
+reusing the same base64-image validation every other banner route already
+uses). New admin "Manual payment screen images" card, 2 upload/remove
+blocks mirroring the existing Home/Help Centre banner cards exactly. On the
+frontend, `manualPaySelectorBrandHtml()`/`manualPayHeroBrandHtml()` render
+an `<img>` when set, falling back to the existing `snowflakeSvg()` mark at
+the same footprint when not -- both screens tested in both states.
+
+**5. New icons, drawn (not extracted) to match the owner's own reference
+photo.** The original GoPay reference file (still present on disk, checked
+directly before assuming anything) never had real SVGs at all -- its own
+"step" icons were bare Unicode characters (▣ ⟳ ♟), already swapped for
+`ICONS.doc`/`clock`/`check` back in Round 118 per this app's own no-emoji
+rule. So "use the same svg just as the last 3rd photo, it has proper svgs"
+has no literal source to copy -- read as a quality bar (real vector icons,
+matching what that screenshot visually shows), not literal code to extract.
+3 new stroke icons added to `ICONS`, same style/weight as every existing
+one in this file: `refresh` (2 circular arrows, replaces the old clock icon
+for "Payment completed?"), `idCard` (a card + a small face, for "Your
+payment account"), `bulb` (a lightbulb, for the new "Payment reminder").
+Flagged rather than silently claimed as pixel-identical to whatever the
+owner's own screenshot 3 actually is a photo of.
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`,
+`node build-core.js` and `node build-admin.js` both clean round-trips, a
+boot smoke test (real self-signed RSA dummy Firebase service-account PEM +
+unreachable `MONGODB_URI`) fails only at the expected Mongo-connect step,
+`git diff --check` clean. `test-admin-obfuscated-build.js` (the real
+obfuscated admin build) extended with fixtures for `/admin/manual-pay-images`
+and interaction steps confirming both upload inputs and both reminder
+textareas exist, the MTN default is genuinely prefilled from settings, and
+Save fires without error -- 0 errors across all 12 tabs. Playwright, against
+the real built (obfuscated) user app: the KKpay row renders with the
+checkmark icon on the manual deposit form; the selector screen is
+confirmed flex-centered with equal top/bottom gaps; the brand mark falls
+back to the snowflake SVG with no image configured and renders the real
+uploaded `<img>` on both screens once one is; exactly 4 `.mp-tl-row`
+elements render on the code screen; choosing MTN (a template is configured)
+shows the reminder section with the real assigned number and order amount
+correctly substituted for `{{number}}`/`{{amount}}` and no leftover
+placeholder text; choosing Airtel (blank template) correctly keeps the
+section hidden; zero horizontal overflow at 390px in either state.
+Screenshot confirms the visual result reads as a genuine per-section
+timeline matching the owner's own reference shape. Cache bumped `v86`→`v87`
+(user), `v30`→`v31` (admin). **`server.js` and `admin-src/index.html`
+changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

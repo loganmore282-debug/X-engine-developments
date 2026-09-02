@@ -19,6 +19,8 @@ const routes = {
     autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
     telegramGroup: '', telegramChannel: '', supportTelegram: '', whatsappGroup: '', whatsappContact: '',
     supportHours: '', rulesText: '', aboutText: '', brandTagline: '',
+    manualPayReminderMtn: '1: Dial *165#\n2: Select 1 Send Money\n3: Select 1 Mobile User\n4: Enter number {{number}}\n5: Enter Amount {{amount}}\n6: Enter Reason\n7: Enter your PIN code',
+    manualPayReminderAirtel: '',
   } },
   'GET /admin/banner': { status: 'success', image: '' },
   'GET /admin/stats': { status: 'success', stats: {
@@ -137,6 +139,9 @@ const routes = {
   'GET /admin/banner': { status: 'success', image: '' },
   'GET /admin/help-banner': { status: 'success', image: '' },
   'GET /admin/announcement-image': { status: 'success', image: '' },
+  'GET /admin/manual-pay-images': { status: 'success', selector: '', hero: '' },
+  'POST /admin/manual-pay-image/set': { status: 'success' },
+  'POST /admin/manual-pay-image/clear': { status: 'success' },
   'GET /admin/about-content': { status: 'success', blocks: [] },
   'GET /admin/push/list': { status: 'success', count: 0 },
   'POST /admin/promocodes/deactivate': { status: 'success' },
@@ -503,6 +508,16 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (!doc.getElementById('depMethodMarz') || !doc.getElementById('depMethodLipa') || !doc.getElementById('depMethodManual'))
     errors.push('Settings: deposit-method (3-way) radios missing');
   if (!setHtml.includes('Follow the payment method above')) errors.push('Settings: follow option label missing');
+  // Manual-pay screen images (2 independent slots) + the payment-reminder
+  // templates, both new this round.
+  if (!doc.getElementById('mpSelectorImgFile') || !doc.getElementById('mpHeroImgFile'))
+    errors.push('Settings: manual-pay image upload inputs missing');
+  const mpReminderMtn = doc.getElementById('mpReminderMtn');
+  const mpReminderAirtel = doc.getElementById('mpReminderAirtel');
+  if (!mpReminderMtn || !mpReminderAirtel) errors.push('Settings: payment-reminder textareas missing');
+  else if (!mpReminderMtn.value.includes('Dial *165#')) errors.push('Settings: MTN reminder default not prefilled from settings fixture');
+  if (!doc.getElementById('saveMpReminder')) errors.push('Settings: Save payment reminder button missing');
+  else { doc.getElementById('saveMpReminder').click(); await sleep(200); }
 
   // The unmatched-SMS review list lives on the Deposits tab.
   doc.querySelector('.tab[data-tab="deposits"]').click();
