@@ -7583,6 +7583,89 @@ preserved); the Team page's own generated/shared link now contains the new
 `#pages/register/?ref=UHA2J9` format when `referralCode` is `UHA2J9`. Cache bumped
 `v80`→`v81` (user). **`user-src/`-only, no Render redeploy needed for the backend.**
 
+## Round 117 (2026-09-02) — manual-deposit flow rebuilt into 3 steps (amount → payment method → payment code), restyled from an owner-supplied reference design into Snow's own black/wine/white palette
+
+Owner sent a reference payment-page HTML file ("GoPay Payment" — a 2-screen mock: a
+network-tile/phone selector, then a "COPY & PAY" screen with a dark header/countdown,
+account-number/name with copy buttons, and a manual "Refresh" check) and described the
+target flow: "so on deposit when on manual, one just selects network then goes to that
+code... so at recharge when on manual, remove number and network, they are living in my
+code, so only amount is needed, after that, spin loader then to my code page" — then,
+once the file was actually read: "it is there just blackening needed and adding some
+more things nothing to remove out."
+
+**Read as**: keep every real feature the reference shows (network picker, phone entry,
+the payment-code screen's whole layout, the manual Refresh check) and every real feature
+this app already had (the paste-SMS fallback, the live 15-minute countdown, the
+background poll — none of these were in the reference and none were to be removed),
+just reorganize WHEN each piece is collected and restyle the visuals — "blackening" —
+into Snow's own palette instead of the reference's gold (`#e58d00`) GoPay branding.
+**Did not reuse the reference's embedded base64 GoPay/MTN/Airtel logo images** — those
+are someone else's branding/photos, and this app has never used raster logos anywhere
+(network is shown as plain text elsewhere, e.g. the withdrawal-account bank-card tiles)
+— built small text/badge tiles instead, consistent with the app's own "SVG icons/text
+only, no borrowed branding" convention.
+
+**Flow, now 3 steps instead of 2** (`user-src/original_module.js`):
+1. `openManualDepositFormSheet()` — simplified to **Amount only** (quick-amount chips
+   kept). The phone number and network fields that used to live here are gone —
+   "they are living in my code" (the reference's own first screen, now step 2).
+2. `proceedToManualPaymentMethod()` — a purely visual transition (a small button
+   spinner for ~400ms; nothing to fetch yet, since network/phone aren't known until this
+   step) into `openManualPaymentMethodSheet(amount)` — the reference's own selector
+   screen restyled: two `.pay-method` tiles (MTN/Airtel, wine-active state matching this
+   app's own `.quick-amt.active` convention, not a new accent color) + the phone field
+   (unchanged `.phone-field`/`sanitizePhoneInput()` pattern every other phone field in
+   this app already uses) + a wine-tinted warning banner. Confirm calls the real
+   `/deposit/manual/init` (unchanged endpoint/payload shape — amount, senderPhone,
+   network — just collected on a different screen than before).
+3. `openManualDepositWaitSheet(...)` — the reference's own "COPY & PAY" screen restyled:
+   a deliberately **black** hero (`linear-gradient(150deg,#050505,#242424,#111)`) —
+   the one genuinely dark surface in this whole app, everywhere else uses the wine
+   gradient — carrying the SNOW wordmark + the live countdown, so this one step reads as
+   a distinct, serious payment-gateway screen (this is the literal "blackening" the
+   owner asked for). Below it, a `.pay-timeline-card` (dashed step line + 3 icons —
+   `ICONS.check`/`ICONS.clock`/`ICONS.walletLg`, real SVGs, not the reference's own
+   unicode symbols "▣ ⟳ ♟", which would violate this app's no-emoji rule) leads into the
+   detail box (Total amount / Account number+copy / Account name+copy, reusing the
+   app's existing global `copyText()` + `ICONS.copy` instead of the reference's own
+   bespoke copy-button CSS), a "Payment completed?" section with a real Refresh button,
+   and — new, the reference had nothing equivalent — "Your payment account" showing the
+   phone+network actually entered on step 2. The paste-SMS fallback textarea/button from
+   before this round are unchanged, unmoved, and still work exactly as before — nothing
+   here was removed, per the owner's explicit "nothing to remove out."
+
+**Refresh button wired to real data, not the reference's own fake response.** The
+reference's `refreshStatus()` always just showed "Payment not detected yet" — a static
+demo with no real check behind it. Built `handleManualDepositStatusResult(r)`, a shared
+helper factoring out the terminal-state handling (matched/failed/review →
+success/failed/review modal) that used to live only inside the background poll loop —
+now used by BOTH `pollManualDepositStatus()` (the existing automatic 5s-interval poll,
+unchanged in behavior) and the new `manualDepositManualRefresh(depositId)` (fires one
+real `/deposit/manual/status` call on tap, resolves the deposit immediately if it's
+already matched/failed/flagged for review instead of waiting for the next automatic
+tick). Same `_openSheetTitle !== 'Complete Payment'` re-check pattern this file's own
+Round 82 comment already documents (a member who navigated away mid-request must never
+have a stale response act on whatever sheet is open now) applied to the new manual path
+too.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip (this round is `user-src`-only — no `server.js`/`admin-src` changes,
+so no backend redeploy and no admin cache bump; `/deposit/manual/init`'s payload shape
+is completely unchanged, only which screen collects each field). `git diff --check`
+clean. Playwright, against the real built app, 2 scenarios: (1) step 1 has no
+`depPhone`/`depNetwork` elements (amount-only confirmed); submitting amount reaches
+step 2 with exactly 2 network tiles; confirming with no network chosen correctly stays
+on step 2 (does not proceed); choosing MTN correctly marks that tile `.active`; entering
+a phone and confirming reaches step 3, where the assigned account/holder name/entered
+phone all render correctly from the real `/deposit/manual/init` response; tapping
+Refresh while still pending correctly stays on step 3 (no premature close). (2) A
+resolved-to-`matched` Refresh response correctly closes the payment sheet and shows the
+existing "Recharge successful" status modal — confirming the shared
+`handleManualDepositStatusResult()` path works identically whether reached via the
+automatic poll or the new manual Refresh tap. Cache bumped `v81`→`v82` (user).
+**`user-src/`-only, no Render redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

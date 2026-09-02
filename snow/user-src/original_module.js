@@ -1995,13 +1995,22 @@ window.openDepositSheet = function(){
 };
 
 // ── Manual deposit flow (admin numbers, SMS-matched) -- shown instead of
-// the MarzPay form above when settings.depositMethod === 'manual'. Step 1
-// (this form) collects amount/network/sender phone and calls
-// /deposit/manual/init, which hands back an admin number to send money to;
-// step 2 (openManualDepositWaitSheet) shows that number + a live 15-minute
-// countdown and polls /deposit/manual/status until it resolves, with a
-// paste-your-own-SMS fallback for when the phone forwarder is slow. Reuses
-// the exact same quick-amount chips as the automatic form above.
+// the MarzPay form above when settings.depositMethod === 'manual'. Owner
+// supplied a reference payment-page design and asked for the flow split into
+// 3 steps: step 1 (this form) collects ONLY the amount now -- network and the
+// sender's own phone used to live here too, but the owner wanted them moved
+// onto their own screen ("remove number and network, they are living in my
+// code, so only amount is needed"); step 2 (openManualPaymentMethodSheet,
+// restyled from the owner's reference into Snow's own black/wine/white
+// palette -- no borrowed GoPay/operator logos, SVG/text only per this app's
+// own no-emoji rule) collects network + sender phone and is what actually
+// calls /deposit/manual/init, which hands back an admin number to send money
+// to; step 3 (openManualDepositWaitSheet, restyled from the same reference's
+// "COPY & PAY" screen) shows that number + a live 15-minute countdown and
+// polls /deposit/manual/status until it resolves, with a paste-your-own-SMS
+// fallback for when the phone forwarder is slow -- unchanged from before,
+// the owner only asked to move steps around and reskin, "nothing to remove
+// out." Reuses the exact same quick-amount chips as the automatic form above.
 function openManualDepositFormSheet(){
   const s = STATE.settings || {};
   const quickAmts = Array.from(new Set((STATE.products || [])
@@ -2014,37 +2023,65 @@ function openManualDepositFormSheet(){
   openSheet('Recharge', `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
     ${chipsHtml}
-    <div class="form-field"><label>Mobile-money phone number (the one you'll send from)</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this)"></div></div>
-    <div class="form-field"><label>Network</label>
-      <select id="depNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
-        <option value="" disabled selected>Select network</option>
-        <option value="MTN Mobile Money">MTN Mobile Money</option>
-        <option value="Airtel Money">Airtel Money</option>
-      </select>
-    </div>
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitManualDeposit()">Recharge</button>
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="proceedToManualPaymentMethod()">Recharge</button>
     <div class="instr-card">
       <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Recharge instructions</span></div>
       <ol>
         <li>Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount above.</li>
-        <li>Confirm your mobile-money number and network.</li>
-        <li>Tap Recharge, then send the exact amount shown to the number given.</li>
+        <li>Choose your payment method and mobile-money number on the next screen.</li>
+        <li>Send the exact amount shown to the number given.</li>
         <li>Your wallet updates automatically once your payment is matched.</li>
       </ol>
     </div>
   </div>`);
 }
-window.submitManualDeposit = async function(){
+// Nothing to fetch yet at this point (network/phone aren't known until step
+// 2), so this is a purely visual transition -- a brief spinner on the button
+// before the sheet body swaps -- mirroring the reference design's own
+// step-1-to-step-2 loading overlay rather than a real network wait.
+window.proceedToManualPaymentMethod = function(){
   const amount = parseMoneyInput($('depAmount').value);
-  const phone = $('depPhone').value;
-  const network = $('depNetwork').value;
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
-  $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Please wait…';
-  const r = await post('/deposit/manual/init', { amount, senderPhone: phone, network });
-  if ($('depSubmitBtn')) { $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge'; }
+  const btn = $('depSubmitBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="mini-spin"></div>'; }
+  setTimeout(() => openManualPaymentMethodSheet(amount), 400);
+};
+var _manDepChosenNetwork = '';
+function openManualPaymentMethodSheet(amount){
+  _manDepChosenNetwork = '';
+  openSheet('Recharge', `<div class="reveal-in">
+    <div class="pay-method-label" style="margin-bottom:2px;">Fill in your payment method and the mobile-money account you'll pay from.</div>
+    <div class="pay-amount-line">Amount to pay:<span class="mono">${fmtUGX(amount)}</span></div>
+    <div class="pay-method-label">Select network</div>
+    <div class="pay-method-grid">
+      <button type="button" class="pay-method" data-network="MTN Mobile Money" onclick="chooseManualNetwork(this)">
+        <span class="pay-method-badge mtn">MTN</span><span>MTN Mobile Money</span>
+      </button>
+      <button type="button" class="pay-method" data-network="Airtel Money" onclick="chooseManualNetwork(this)">
+        <span class="pay-method-badge airtel">Airtel</span><span>Airtel Money</span>
+      </button>
+    </div>
+    <div class="form-field" style="margin-top:18px;"><label>Mobile-money phone number (the one you'll send from)</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="manDepPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this)"></div></div>
+    <div class="pay-warning"><span class="pay-warning-bang">!</span><span>Enter this accurately -- a wrong network or number can send your payment to the wrong account.</span></div>
+    <button class="primary-button" id="manDepConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:4px;" onclick="submitManualDeposit(${amount})">Confirm</button>
+  </div>`);
+}
+window.chooseManualNetwork = function(el){
+  document.querySelectorAll('.pay-method').forEach(x => x.classList.remove('active'));
+  el.classList.add('active');
+  _manDepChosenNetwork = el.dataset.network;
+};
+window.submitManualDeposit = async function(amount){
+  if (!_manDepChosenNetwork) return toast('Select a network', true);
+  const phone = $('manDepPhone').value;
+  if (!phone || phone.length < 9) return toast('Enter your mobile-money number', true);
+  const btn = $('manDepConfirmBtn');
+  btn.disabled = true; btn.textContent = 'Please wait…';
+  const r = await post('/deposit/manual/init', { amount, senderPhone: phone, network: _manDepChosenNetwork });
+  if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
   if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
   await refreshTransactionsCache();
-  openManualDepositWaitSheet(r.depositId, r.assignedNumber, r.holderName, r.network, r.amount, r.expiresAt);
+  openManualDepositWaitSheet(r.depositId, r.assignedNumber, r.holderName, r.network, r.amount, r.expiresAt, phone);
 };
 var _manDepCountdownTimer = null;
 function startManualDepositCountdown(expiresAt){
@@ -2061,28 +2098,59 @@ function startManualDepositCountdown(expiresAt){
   tick();
   _manDepCountdownTimer = setInterval(tick, 1000);
 }
-function openManualDepositWaitSheet(depositId, assignedNumber, holderName, network, amount, expiresAt){
+// Restyled from the owner's own reference "COPY & PAY" design into Snow's
+// black/wine/white palette -- the hero is deliberately black (owner:
+// "blackening"), unlike every other wine hero in this app, so this one step
+// reads as a distinct, serious payment-gateway screen; the timeline/detail-
+// box/paid-box structure below it mirrors the reference layout, wired to
+// real data instead of the reference's static demo values.
+function openManualDepositWaitSheet(depositId, assignedNumber, holderName, network, amount, expiresAt, phone){
   openSheet('Complete Payment', `<div class="reveal-in">
-    <div class="form-hint" style="text-align:center;margin-bottom:2px;">Send exactly</div>
-    <div class="mono" style="font-size:26px;font-weight:800;text-align:center;color:var(--snow-wine);">${fmtUGX(amount)}</div>
-    <div class="form-hint" style="text-align:center;margin:2px 0 14px;">to</div>
-    <div class="app-card" style="text-align:center;padding:18px;">
-      <div style="font-size:19px;font-weight:800;letter-spacing:.5px;">${esc(assignedNumber)}</div>
-      <div style="margin-top:4px;font-size:13px;color:var(--snow-muted);">${esc(holderName)} · ${esc(network)}</div>
+    <div class="pay-hero">
+      <div class="pay-hero-brand">${snowflakeSvg('', 22)}<span>SNOW</span></div>
+      <div class="pay-hero-expiry">
+        <div class="pay-hero-expiry-label">Payment expires in</div>
+        <div class="mono pay-hero-timer" id="manDepCountdown">15:00</div>
+      </div>
     </div>
-    <div class="form-hint" style="text-align:center;margin:16px 0 2px;">Time remaining</div>
-    <div class="mono" id="manDepCountdown" style="font-size:22px;font-weight:800;text-align:center;">15:00</div>
-    <div class="instr-card" style="margin-top:16px;">
-      <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">How to pay</span></div>
-      <ol>
-        <li>Open your mobile money menu on the phone number you entered.</li>
-        <li>Send exactly ${fmtUGX(amount)} to ${esc(assignedNumber)}.</li>
-        <li>We match your wallet automatically once your payment is confirmed.</li>
-        <li>If it's taking a while, paste the message your phone got after sending, below.</li>
-      </ol>
+    <div class="pay-timeline-card">
+      <div class="pay-step-line"></div>
+      <div class="pay-step-icon one">${ICONS.check}</div>
+      <div class="pay-step-icon two">${ICONS.clock}</div>
+      <div class="pay-step-icon three">${ICONS.walletLg}</div>
+      <div class="pay-code-title">Send &amp; get credited</div>
+      <div class="pay-code-sub">Copy this <b>${esc(network)}</b> account and make your payment</div>
+      <div class="detail-box">
+        <div class="label">Total amount</div>
+        <div class="total mono">${fmtUGX(amount)}</div>
+        <div class="label">${esc(network)} account</div>
+        <div class="account-value">
+          <span class="mono" id="manDepAccountNum">${esc(assignedNumber)}</span>
+          <button class="copybtn-icon" onclick="copyText('${esc(assignedNumber)}')" aria-label="Copy account">${ICONS.copy}</button>
+        </div>
+        <div class="label">Account name</div>
+        <div class="name-value">
+          <span id="manDepAccountName">${esc(holderName)}</span>
+          <button class="copybtn-icon" onclick="copyText('${esc(holderName)}')" aria-label="Copy account name">${ICONS.copy}</button>
+        </div>
+      </div>
+      <div class="paydone">Payment completed?</div>
+      <div class="refresh-text">We check automatically -- tap <b>Refresh</b> to check right now.</div>
+      <div class="paid-box">
+        <div class="paid-row">
+          <div>
+            <div class="paid-label">Status</div>
+            <div class="paid-value" id="manDepStatusLabel">Waiting for payment</div>
+          </div>
+          <button class="refresh-btn" id="manDepRefreshBtn" onclick="manualDepositManualRefresh('${depositId}')">Refresh</button>
+        </div>
+        <div class="pay-note">Usually confirmed within a few minutes of sending.</div>
+      </div>
+      <div class="your-account">Your payment account</div>
+      <div class="your-number mono">+256${esc(phone || '')} &middot; ${esc(network)}</div>
+      <div class="form-field" style="margin-top:18px;"><label>Paste the message you got after sending (optional)</label><textarea id="manDepPastedSms" rows="3" placeholder="You have sent UGX ..."></textarea></div>
+      <button class="secondary-button" id="manDepPasteBtn" style="width:100%;padding:13px 0;" onclick="submitManualPasteSms('${depositId}')">Submit confirmation text</button>
     </div>
-    <div class="form-field" style="margin-top:16px;"><label>Paste the message you got after sending (optional)</label><textarea id="manDepPastedSms" rows="3" placeholder="You have sent UGX ..."></textarea></div>
-    <button class="secondary-button" id="manDepPasteBtn" style="width:100%;padding:13px 0;" onclick="submitManualPasteSms('${depositId}')">Submit confirmation text</button>
   </div>`);
   startManualDepositCountdown(expiresAt);
   pollManualDepositStatus(depositId);
@@ -2103,6 +2171,20 @@ function setDepositStatusReview(){
   $('depStatusBody').textContent = "We're checking this payment and will credit your wallet shortly if it's genuine. Check Records for updates.";
   $('depStatusCloseBtn').style.display = 'block';
 }
+// Shared by the background poll below AND the reference design's own
+// "Refresh" button (manualDepositManualRefresh) -- one place decides what a
+// /deposit/manual/status response means, so an on-demand check and the
+// automatic 5s poll can never disagree about how to react to the same
+// result. Returns true once the deposit has reached a terminal state (the
+// caller should stop polling / re-enable its own button); false means "still
+// waiting, nothing changed."
+async function handleManualDepositStatusResult(r){
+  if (r.status !== 'success') return false;
+  if (r.state === 'matched') { closeSheet({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return true; }
+  if (r.state === 'failed') { closeSheet({ fromAction: true }); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return true; }
+  if (r.state === 'review') { closeSheet({ fromAction: true }); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return true; }
+  return false;
+}
 // Polls for up to the full 15-minute payment window (matching
 // MANUAL_DEPOSIT_WINDOW_MS server-side) rather than automatic deposits'
 // short 60s window -- a manual match depends on a phone's SMS forwarder,
@@ -2122,12 +2204,26 @@ async function pollManualDepositStatus(depositId){
     // here matches every other cache-first/background-poll guard in this
     // file (e.g. switchTeamLevel()'s own post-await re-check).
     if (_openSheetTitle !== 'Complete Payment') return;
-    if (r.status !== 'success') continue;
-    if (r.state === 'matched') { closeSheet({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
-    if (r.state === 'failed') { closeSheet({ fromAction: true }); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return; }
-    if (r.state === 'review') { closeSheet({ fromAction: true }); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return; }
+    if (await handleManualDepositStatusResult(r)) return;
   }
 }
+// The reference design's own Refresh button, wired to a real on-demand
+// status check (the reference's own version always just said "Payment not
+// detected yet" -- a static demo). Same terminal-state handling as the
+// background poll via handleManualDepositStatusResult, so tapping Refresh
+// can resolve the deposit immediately instead of waiting for the next
+// automatic 5s tick.
+window.manualDepositManualRefresh = async function(depositId){
+  const btn = $('manDepRefreshBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  const r = await post('/deposit/manual/status', { depositId });
+  if (_openSheetTitle !== 'Complete Payment') return; // navigated away mid-request
+  const resolved = await handleManualDepositStatusResult(r);
+  if (!resolved) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+    toast(r.status === 'success' ? 'Not confirmed yet -- keep waiting' : (r.message || 'Could not check right now'), r.status !== 'success');
+  }
+};
 window.pickDepositAmount = function(amt){
   $('depAmount').value = amt;
   syncDepositQuickAmt();
