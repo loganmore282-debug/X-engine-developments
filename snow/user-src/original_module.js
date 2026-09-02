@@ -1650,25 +1650,30 @@ window.openAboutSheet = async function(){
   wrap.querySelectorAll('.scroll-reveal').forEach(el => _aboutScrollObserver.observe(el));
 };
 
-// Owner: "checkin will be resetting 24hrs not midnight" -- the cooldown is
-// now a genuine rolling 24h window from the exact moment of the previous
-// check-in (STATE.account.lastCheckinAt, a real epoch-ms timestamp server.js
-// now returns), not a fixed midnight boundary. Since the reset time is a
-// moving target rather than a fixed clock time, the button shows a live
-// "Available in HH:MM:SS" countdown instead of a static "resets at
-// midnight" label -- same live-ticking pattern startPlanCountdowns() already
-// uses on My Products, just scoped to this sheet.
+// Owner: "make daily checkin to reset at 00:00 not 24hrs" -- reverts back to
+// a calendar-midnight (EAT, UTC+3) daily reset instead of Round 87's rolling
+// 24h cooldown. STATE.account.lastCheckinAt is still the real epoch-ms
+// timestamp server.js already returns -- only the "when does the cooldown
+// lift" math changes, from "+24h" to "the next EAT midnight after
+// lastCheckinAt's own calendar day." The live "Available in HH:MM:SS"
+// countdown (same startCheckinCountdown() ticking pattern
+// startPlanCountdowns() already uses on My Products) is kept -- it now
+// counts down to that real midnight instant instead of a moving +24h target.
+function eatDayIndex(ts){ return Math.floor((ts + 3 * 3600000) / 86400000); }
+function eatMidnightAfter(ts){ return (eatDayIndex(ts) + 1) * 86400000 - 3 * 3600000; }
 window.openCheckinSheet = function(){
   const a = STATE.account || {};
   const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
   const streak = Number(a.checkinStreak) || 0;
-  const nextAt = a.lastCheckinAt ? Number(a.lastCheckinAt) + 24 * 3600000 : 0;
-  const onCooldown = nextAt > Date.now();
+  const now = Date.now();
+  const lastAt = a.lastCheckinAt ? Number(a.lastCheckinAt) : 0;
+  const onCooldown = !!lastAt && eatDayIndex(lastAt) === eatDayIndex(now);
+  const nextAt = onCooldown ? eatMidnightAfter(now) : 0;
   openSheet('Daily Check-in', `<div class="reveal-in">
     <div class="app-card" style="padding:24px 20px;text-align:center;">
       <div style="font-size:12.5px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.5px;">Current streak</div>
       <div class="mono" style="font-size:36px;font-weight:800;margin-top:6px;color:var(--snow-green);">${streak}<span style="font-size:15px;font-weight:600;color:var(--snow-muted);"> day${streak===1?'':'s'}</span></div>
-      <div style="font-size:13px;color:var(--snow-muted);margin-top:12px;line-height:1.5;">Check in every 24 hours to keep your streak and earn ${fmtUGX(bonus)} each time.</div>
+      <div style="font-size:13px;color:var(--snow-muted);margin-top:12px;line-height:1.5;">Check in once every day (resets at midnight) to keep your streak and earn ${fmtUGX(bonus)} each time.</div>
       <button class="primary-button" id="checkinBtn" data-checkin-next="${nextAt}" style="width:100%;padding:15px 0;font-size:15px;margin-top:20px;" ${onCooldown?'disabled':''} onclick="submitCheckin()">${onCooldown?'Available in <span class="countdown-val">--:--:--</span>':'Check In &middot; '+fmtUGX(bonus)}</button>
     </div>
   </div>`);

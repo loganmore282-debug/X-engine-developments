@@ -446,33 +446,35 @@ function eatDayKey(ts) {
   const d = new Date(tsMillis(ts) + 3 * 3600000);
   return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
 }
-// Owner: "checkin will be resetting 24hrs not midnight" -- Round 87 switched
-// check-in from a calendar-midnight (EAT) daily boundary to a genuine
-// rolling 24h cooldown measured from the exact moment of the previous
-// check-in. Recomputed from real check-in history (raw millisecond
-// timestamps, not calendar day-keys) on every call -- a stale/corrupted
+// Owner: "make daily checkin to reset at 00:00 not 24hrs" -- reverts Round
+// 87's rolling-24h cooldown back to a calendar-midnight (EAT) daily reset.
+// lastCheckinAt stays a real epoch-ms timestamp (Round 87's own field --
+// still read as-is by /admin/user/reconcile-checkin, recountAllTotals's own
+// freshness re-check, and the client's countdown) -- only the comparison
+// logic changes, from "was the gap >=24h/<48h" to "was it the same/previous
+// EAT calendar day," matching this app's original pre-Round-87 semantics.
+// Recomputed from real check-in history on every call -- a stale/corrupted
 // stored streak/timestamp can never keep silently breaking a real one.
 // Accepts a Set or Array of timestamps in any order; sorts internally.
 function computeCheckinStreak(timestampsMs) {
   const sorted = [...timestampsMs].sort((a, b) => a - b);
   if (!sorted.length) return { streak: 0, lastCheckinAt: null };
+  // Collapse same-EAT-day timestamps into one day-key each (a Set, exactly
+  // this app's own pre-Round-87 design) -- a stray legacy duplicate within
+  // one calendar day can never double-count or break the streak.
+  const dayKeys = [...new Set(sorted.map(ts => eatDayKey(new Date(ts))))].sort();
   let streak = 1;
-  for (let i = sorted.length - 1; i > 0; i--) {
-    const gap = sorted[i] - sorted[i - 1];
-    // Continues the streak only if the next check-in landed inside the
-    // single 24h window right after the previous cooldown lifted (>=24h so
-    // it couldn't have double-claimed within the cooldown, <48h so a fully
-    // skipped day still breaks it) -- the rolling-window analog of the old
-    // "was it exactly yesterday's calendar date" check.
-    if (gap >= 24 * 3600000 && gap < 48 * 3600000) streak++; else break;
+  for (let i = dayKeys.length - 1; i > 0; i--) {
+    const cur = Date.parse(dayKeys[i] + 'T00:00:00Z');
+    const prev = Date.parse(dayKeys[i - 1] + 'T00:00:00Z');
+    if (cur - prev === 86400000) streak++; else break;
   }
   return { streak, lastCheckinAt: sorted[sorted.length - 1] };
 }
-function formatCooldown(ms) {
-  const totalMin = Math.max(1, Math.ceil(ms / 60000));
-  const h = Math.floor(totalMin / 60), m = totalMin % 60;
-  if (h <= 0) return `${m}m`;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+// UTC ms instant of the next EAT (UTC+3) midnight strictly after `ts`.
+function eatNextMidnight(ts) {
+  const dayStart = Math.floor((ts + 3 * 3600000) / 86400000) * 86400000;
+  return dayStart + 86400000 - 3 * 3600000;
 }
 function eatParts(ts) {
   const ms = tsMillis(ts) || Date.now();
@@ -1958,15 +1960,17 @@ app.post('/checkin', async (req, res) => {
       const stamps = ledgerSnap.docs.map(d => tsMillis(d.data().createdAt)).filter(Boolean);
       const real = computeCheckinStreak(stamps);
       const now = Date.now();
-      const gap = real.lastCheckinAt ? now - real.lastCheckinAt : Infinity;
-      // Owner: "checkin will be resetting 24hrs not midnight" -- a genuine
-      // rolling 24h cooldown from the exact moment of the previous
-      // check-in, not a calendar-midnight (EAT) boundary.
-      if (real.lastCheckinAt && gap < 24 * 3600000) {
-        result = { code: 400, body: { status: 'error', message: `You can check in again in ${formatCooldown(24 * 3600000 - gap)}.`, nextCheckinAt: real.lastCheckinAt + 24 * 3600000 } };
+      // Owner: "make daily checkin to reset at 00:00 not 24hrs" -- gate and
+      // streak both compare EAT calendar days now, not a rolling 24h/48h
+      // window (see computeCheckinStreak's own header comment for why).
+      const todayKey = eatDayKey(new Date(now));
+      const lastKey = real.lastCheckinAt ? eatDayKey(new Date(real.lastCheckinAt)) : null;
+      if (lastKey === todayKey) {
+        result = { code: 400, body: { status: 'error', message: 'Already checked in today. Come back after midnight.', nextCheckinAt: eatNextMidnight(now) } };
         return;
       }
-      const streak = (real.lastCheckinAt && gap < 48 * 3600000) ? real.streak + 1 : 1;
+      const yesterdayKey = eatDayKey(new Date(now - 86400000));
+      const streak = (lastKey === yesterdayKey) ? real.streak + 1 : 1;
       const bonus = Number(sett.dailyCheckin) || 0;
       // Nested under bal:<uid> -- see settleInvestmentIfDue's own comment.
       await withLock('bal:' + uid, () => ref.update({ walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckinAt: now, checkinStreak: streak }));
@@ -1975,7 +1979,7 @@ app.post('/checkin', async (req, res) => {
         userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
         amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
-      result = { code: 200, body: { status: 'success', bonus, streak, nextCheckinAt: now + 24 * 3600000 } };
+      result = { code: 200, body: { status: 'success', bonus, streak, nextCheckinAt: eatNextMidnight(now) } };
     });
     res.status(result.code).json(result.body);
   } catch (e) {

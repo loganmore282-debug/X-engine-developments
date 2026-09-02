@@ -7141,6 +7141,84 @@ round is server.js/user-src/admin-src-only — `sms-forwarder-app/` untouched, p
 standing rule immediately above. Cache bumped `v72`→`v73` (user), `v27`→`v28` (admin).
 **`server.js` changed — Render should auto-deploy this push.**
 
+## Round 109 (2026-09-02) — owner: "make daily checkin to reset at 00:00 not 24hrs": reverts Round 87's rolling-24h cooldown back to a calendar-midnight (EAT) reset
+
+Owner asked to switch check-in back to a midnight boundary — the exact opposite of
+Round 87's own change ("checkin will be resetting 24hrs not midnight"), which had
+itself replaced the ORIGINAL midnight-based design. This round restores that original
+behavior rather than inventing something new — an explicit, deliberate reversal.
+
+**What changed, and what didn't.** `lastCheckinAt` stays exactly as Round 87 left it —
+a real epoch-ms timestamp, not a reverted-back-to date string — since that field is now
+also read by `/admin/user/reconcile-checkin`, `recountAllTotals()`'s own freshness
+re-check, and the client's countdown display; renaming it back would have meant
+touching several more call sites for zero behavioral benefit. Only the GATE ("can this
+member check in right now?") and the STREAK math (does this check-in continue or reset
+the streak?) changed, from "was the gap since the last check-in >=24h (and <48h for the
+streak)" to "is this a different EAT calendar day than the last check-in (and exactly
+the next one, for the streak)" — matching this app's own pre-Round-87 design, which is
+recoverable from git history (`ed0b228^`) and was used as the reference for the exact
+comparison shape (a sorted Set of EAT day-key strings, `Date.parse` 86400000ms apart =
+consecutive calendar days) rather than reinventing the logic from scratch.
+
+**`server.js`**: `computeCheckinStreak(timestampsMs)` rewritten — still takes raw
+millisecond timestamps and returns `{streak, lastCheckinAt}` (unchanged shape, unchanged
+callers), but now internally collapses them to `eatDayKey()` day-key strings before
+comparing, instead of computing hour gaps. A same-EAT-day duplicate timestamp (a stray
+legacy row, or historical data written under Round 87's own rolling-window system)
+collapses harmlessly into one day-key rather than needing special-casing. `formatCooldown()`
+(the "Xh Ym" remaining-time formatter, only ever used for the rolling-cooldown error
+message) is gone — a calendar-midnight rejection doesn't need a partial-duration string,
+only "come back after midnight." New `eatNextMidnight(ts)` replaces the old `ts + 24h`
+math everywhere `nextCheckinAt` is computed, returning the real UTC instant of the next
+EAT (UTC+3) midnight strictly after `ts`. `/checkin`'s own gate: rejects
+(`"Already checked in today. Come back after midnight."`) when `eatDayKey(now) ===
+eatDayKey(lastCheckinAt)`; the streak continues only when `eatDayKey(lastCheckinAt) ===
+eatDayKey(now - 1 day)` (yesterday), else resets to 1 — the exact calendar-adjacency
+check the original design used, now expressed against a stored ms timestamp instead of a
+stored date string. `/admin/user/reconcile-checkin` and `recountAllTotals()`'s freshness
+re-check needed zero changes — both already just call `computeCheckinStreak()` and trust
+its return value, so the new calendar-day semantics apply to them automatically with no
+separate edit.
+
+**`user-src/original_module.js`**: `openCheckinSheet()`'s cooldown math switched from
+`lastCheckinAt + 24h` to a new client-side `eatDayIndex(ts)`/`eatMidnightAfter(ts)` pair
+(the same day-index arithmetic as the server's `eatNextMidnight`, just computed locally
+so the sheet doesn't need a round trip to know whether today's check-in is already
+claimed) — `onCooldown` is true only when the last check-in's EAT day index equals
+today's, and the countdown target is the real next EAT midnight. The live "Available in
+HH:MM:SS" countdown (`startCheckinCountdown()`, built in Round 87) is kept exactly as-is
+— it already just counts down to whatever timestamp is in the button's
+`data-checkin-next` attribute, so it now correctly counts down to real midnight instead
+of a moving +24h target, with zero changes needed to the ticking logic itself. The
+explainer line changed from "Check in every 24 hours..." to "Check in once every day
+(resets at midnight)..." to match.
+
+**Verified**: `node --check` clean on both `server.js` and `original_module.js`.
+`node build-core.js` — clean round-trip (this round is user-facing + server-only; no
+`admin-src/index.html` changes, so `build-admin.js` wasn't re-run and the admin app/
+cache is untouched). `git diff --check` clean. Two standalone harnesses (not
+committed — throwaway, same practice this file already uses for money/logic-adjacent
+verification): (1) a pure-logic test extracting `computeCheckinStreak`/`eatDayKey`/
+`eatNextMidnight` straight out of the real `server.js` source at runtime (so it can
+never silently drift from what's shipped) — 11/11 checks, including the two edge cases
+that actually distinguish this round's behavior from Round 87's: a check-in at 23:59 EAT
+followed by another at 00:01 EAT two minutes later (crosses a real midnight — now
+correctly ALLOWED and continues the streak, would have been blocked under the old
+rolling-24h system) and a check-in at 00:01 EAT followed by another at 23:58 EAT the
+same day, nearly 24h apart (still the SAME EAT calendar day — now correctly BLOCKED,
+would have been allowed under the old system); also verified a 3-day streak accumulated
+at varying times of day, a skipped day correctly resetting the streak to 1, and
+same-day-duplicate timestamps collapsing without inflating the streak. (2) A full HTTP
+integration test booting the REAL `server.js` against an in-memory mock DB
+(`require.cache` substitution, the same technique this file's own Round 104/106/108
+harnesses established) and driving the actual `/checkin` route — confirms a first
+check-in succeeds, an immediate second attempt the same day is refused with the new
+midnight-referencing message (and no leftover "Xh Ym" cooldown wording), and the
+refusal carries a real future `nextCheckinAt` timestamp. Cache bumped `v73`→`v74`
+(user). No admin-src/admin cache change this round. **`server.js` changed — Render
+should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
