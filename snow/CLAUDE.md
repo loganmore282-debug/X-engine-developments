@@ -7958,6 +7958,52 @@ correctly on a genuine `history.back()`, not just the app's own close button. Ca
 bumped `v84`→`v85` (user). **`user-src/`-only, no Render redeploy needed for the
 backend.**
 
+## Round 121 (2026-09-02) — manual-pay flow's whole card/tab/icon/text scale reduced -- owner: "the tabs are stills very big plus text, please make them small tabs copy text icons cards, words are very big"
+
+Owner sent 2 screenshots of Round 120's build (the method-selector screen and the
+"COPY & PAY" code screen) with the quoted note above -- read as a straightforward,
+uniform scale-down request across the whole flow (both of the reference design's own
+screens), not a targeted fix to one element.
+
+Every size rule under `#manualPayFlow` in `user-src/index.html` was reduced by roughly
+the same proportion (the reference's own desktop-oriented base sizes, already adapted
+once in Round 119 for phone-width overflow, were still visually large/"tabby" at their
+correct-but-generous original scale):
+- **Method tiles** ("tabs"): `130x104px` → `96x78px`, their logo images/active-check
+  badge/gap/border-radius/font-size all scaled down to match.
+- **Selector screen**: card padding, brand-mark size (64px svg → 44px), lead/amount/
+  label text, phone-input height, warning banner, and the Confirm button (`58px` tall,
+  `280px` wide → `46px` tall, `220px` wide) all reduced.
+- **Code screen**: hero height (`220px`→`168px`), hero logo/timer digits, the timeline
+  card's step icons (`42px`→`32px`) and step-line offsets, card title/subtitle, the
+  detail box's Total/Account-number/Account-name figures (already `clamp()`-based since
+  Round 119 -- the clamp ranges themselves lowered, not just the CSS var), the **copy
+  button** (`32px`→`24px`, its overlapping-squares icon geometry recomputed
+  proportionally rather than just shrinking the outer box and leaving the inner glyph
+  mismatched), the paid-box/Refresh button, and "Your payment account" text.
+- **SMS fallback section** (Round 120's own addition): heading/subheading/textarea/
+  warning text sizes all reduced to match the same new scale, so it doesn't look
+  oversized next to everything else now that the rest of the screen has shrunk around
+  it.
+
+Deliberately did NOT touch layout/architecture, colors, or any interactive behavior --
+this is purely a size pass on an already-correct, already-verified flow (Round
+118/119/120's own architecture, backend wiring, toast fix, SMS-fallback gating, and
+reload-persistence are all untouched).
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip (this round is `user-src`-only -- no `server.js`/`admin-src` changes,
+so no backend redeploy and no admin cache bump). `git diff --check` clean. Playwright,
+against the real built app, at all 3 required widths (360/390/430px): the MTN method
+tile now measures exactly `96x78px` (was `130x104px`) at every width; zero horizontal
+overflow on either the selector screen, the code screen, or the code screen with the
+SMS fallback revealed; the account-number copy button's right edge stays comfortably
+inside the viewport at every width (a real `+256XXXXXXXXX`-length number was used, the
+same overflow-prone case Round 119 originally fixed). Screenshots at 390px confirm the
+visual result -- meaningfully smaller cards/tabs/icons/text throughout, matching the
+owner's own "small tabs copy text icons cards" request. Cache bumped `v85`→`v86`
+(user). **`user-src/`-only, no Render redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
