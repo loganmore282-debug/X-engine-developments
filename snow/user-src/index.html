@@ -227,7 +227,17 @@ a{color:inherit;}
 #announceBg.show{-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .announce-modal{position:relative;text-align:left;max-height:70vh;display:flex;flex-direction:column;}
 .announce-modal h3{font-size:16.5px;font-weight:800;margin:0 0 8px;padding-right:24px;flex-shrink:0;}
-.announce-scroll{overflow-y:auto;flex:1;min-height:0;}
+/* Owner: "when l scroll announcement dialog message, it scrolls inner
+   contents in dash too" -- the html/body overflow:hidden lockBodyScroll()
+   already applies (see maybeShowAnnouncement()'s own comment, Round 71's
+   fix for the identical bug on .sheet-bg) doesn't reliably stop a touch
+   drag from chaining past .announce-scroll's own top/bottom boundary on
+   mobile -- once the inner region runs out of room to scroll, the same
+   gesture keeps moving whatever's underneath (the Home page). Round 71
+   already closed this exact gap for .sheet-bg with overscroll-behavior;
+   it was never applied here. contain stops the chain at this element's own
+   boundary regardless of the html/body lock's own reliability. */
+.announce-scroll{overflow-y:auto;flex:1;min-height:0;overscroll-behavior:contain;}
 .announce-modal img{display:block;width:100%;max-height:130px;object-fit:cover;border-radius:14px;margin-bottom:12px;}
 .announce-modal p{white-space:pre-line;line-height:1.55;font-size:12.5px;color:rgba(255,255,255,.85);margin:0;}
 .announce-modal .primary-button{flex-shrink:0;}
@@ -403,7 +413,7 @@ a{color:inherit;}
     <h3 id="announceTitle" style="display:none;"></h3>
     <div class="announce-scroll"><img id="announceImg" alt="" style="display:none;" onerror="this.style.display='none'"><p id="announceBody"></p></div>
     <button class="primary-button" id="announceTelegramBtn" style="width:100%;padding:14px 0;font-size:15px;margin-top:16px;display:none;" onclick="openAnnounceTelegram()">Telegram</button>
-    <button class="primary-button" style="width:100%;padding:14px 0;font-size:15px;margin-top:10px;" onclick="closeAnnounce()">OK</button>
+    <button class="primary-button" id="announceWhatsappBtn" style="width:100%;padding:14px 0;font-size:15px;margin-top:10px;display:none;" onclick="openAnnounceWhatsapp()">WhatsApp</button>
   </div>
 </div>
 

@@ -7219,6 +7219,81 @@ refusal carries a real future `nextCheckinAt` timestamp. Cache bumped `v73`→`v
 (user). No admin-src/admin cache change this round. **`server.js` changed — Render
 should auto-deploy this push.**
 
+## Round 110 (2026-09-02) — 3 owner-reported items, all real: announcement-dialog scroll leak, Recharge's network picker always defaulting to MTN regardless of the real carrier, OK button replaced with WhatsApp
+
+Owner sent two screenshots (the Recharge form with a 074-prefix number and "MTN Mobile
+Money" showing selected; a login screen mid-"Network error") plus three questions/asks:
+why scrolling the announcement dialog's message also moves the page behind it; why
+Recharge never prefills the phone/network so they have to fill both in by hand; and a
+request to replace the announcement dialog's OK button with a WhatsApp button using the
+link already saved for Help Centre. Investigated all three against the actual code
+before touching anything — the second one turned out to be a real, different bug than
+what the wording first suggested.
+
+**Announcement scroll leak — real, root-caused.** `lockBodyScroll()` (Round 71) already
+sets `overflow:hidden` on `html`/`body` while the dialog is open, and Round 57 already
+locks it specifically for this dialog — but neither stops a touch drag from chaining
+past `.announce-scroll`'s own top/bottom boundary once the inner region runs out of
+room to scroll: the same gesture then keeps moving whatever's behind it. Round 71
+already hit and fixed this exact class of bug once for `.sheet-bg` with
+`overscroll-behavior:contain` — that fix was never applied to `.announce-scroll` (or
+its siblings), so the announcement dialog kept the gap. Added
+`overscroll-behavior:contain` to `.announce-scroll`.
+
+**Recharge's network picker — the screenshot was showing the bug, not a false
+positive.** The `+256742730382` number in the owner's screenshot has prefix `074` —
+genuinely **Airtel**, not MTN — yet "MTN Mobile Money" was pre-selected. Traced this to
+`<select id="depNetwork">` never having a real default: `<option value="MTN Mobile
+Money">` simply came first in the markup with no `selected` logic of any kind, so
+whichever network happened to be listed first in the HTML source is what every member
+saw regardless of their actual carrier — correct by pure coincidence for an MTN number,
+silently wrong for an Airtel one. The phone field, on inspection, DOES already prefill
+correctly from `STATE.account.phone` (via the existing `localPhoneDisplay()`, unchanged)
+— the screenshot's filled-in phone number wasn't a manual entry, it's what the app
+already produces; only the network side was genuinely broken. Fixed with a new
+`guessNetworkFromPhone(localDigits)` helper (`user-src/original_module.js`), reading
+Uganda's real MTN (`77/78/76/39`) vs Airtel (`70/74/75`) mobile prefixes and returning
+`''` (leave whatever's selected alone) for a prefix it can't confidently place — wired
+into both `openDepositSheet()`'s automatic form and `openManualDepositFormSheet()`'s
+manual form at initial render (marks the correct `<option selected>`), and kept live via
+a new `onDepPhoneInput(el)` handler on the phone field's `oninput` (still calls the
+existing `sanitizePhoneInput()` first, then re-guesses) — so editing the phone to a
+different number (e.g. paying from someone else's SIM) re-detects the network as they
+type instead of leaving a stale guess in place.
+
+**Announcement OK → WhatsApp.** `#announceBg`'s OK button (`closeAnnounce()`) replaced
+with `#announceWhatsappBtn` (`openAnnounceWhatsapp()`) — same shape, same
+`display:none`-when-unconfigured convention the Telegram button next to it already
+uses, reusing the `whatsappGroup` setting Help Centre's own "WhatsApp Group" button
+already reads (Round 60) rather than adding a new field. Tapping it opens the link and
+leaves the dialog open, matching the Telegram button's own established behavior
+(Round 84) — the dialog's existing top-right X close button is what dismisses it, since
+neither action button was ever meant to double as "close." If `whatsappGroup` is blank,
+the button stays hidden and the X remains the only way to dismiss, same as before.
+
+**Also answered, not a code change**: the "Network error. Check your connection." toast
+on the login screenshot is `api()`'s own honest report of a real `fetch()` failure
+(no connectivity at that moment, or the Render free-tier backend still spinning up from
+a cold start) — not a bug to patch, since that message only ever fires when the actual
+network request itself couldn't complete. If it recurs consistently rather than as an
+occasional blip, worth checking the `snow-server` Render service's own uptime/cold-start
+behavior, not the client code.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip (this round is user-facing only — no `server.js`/`admin-src` changes,
+so no backend redeploy and no admin cache bump). `git diff --check` clean. Playwright
+against the real built app, 7 checks: a 074-prefix account phone prefills the field
+exactly and auto-selects Airtel Money (not MTN); a 077-prefix account auto-selects MTN
+Mobile Money; the manual-deposit form (`depositMethod:'manual'`) shows the same correct
+prefill/auto-select; typing a fresh 078 number into the phone field live-updates the
+network picker to MTN; `.announce-scroll`'s computed `overscroll-behavior` is
+`contain`; with both `telegramGroup`/`whatsappGroup` configured, the dialog shows
+Telegram + WhatsApp buttons with no "OK" button anywhere, and tapping WhatsApp opens
+exactly the configured `wa.me` URL while the dialog stays open; with neither link
+configured, both buttons stay hidden and the X close button remains visible/functional.
+Cache bumped `v74`→`v75` (user). No admin-src/admin cache change this round —
+**`user-src/`-only, no Render redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
