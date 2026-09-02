@@ -7510,6 +7510,32 @@ extended with the new settings fixture fields and an interaction step (check the
 set a date, click Save) — 0 errors across all 12 tabs. Cache bumped `v78`→`v79` (user),
 `v29`→`v30` (admin). **`server.js` changed — Render should auto-deploy this push.**
 
+## Round 115 (2026-09-02) — manual deposit's "Get payment number" button relabeled to "Recharge"
+
+Owner asked why the manual-deposit form's submit button read "Get payment number"
+instead of "Recharge" like the automatic form. Answered first (that step genuinely
+doesn't move any money yet — it only assigns one of the admin's payment numbers to the
+order, the real recharge happens once the member sends money to it by hand and the
+SMS forwarder/paste-SMS fallback matches it), then the owner confirmed they still want
+it to say "Recharge" for consistency with the automatic form's button.
+
+`openManualDepositFormSheet()`'s submit button, its reset-after-submit label, and the
+manual-deposit instructions card's own step 3 ("Tap Get payment number...") in
+`user-src/original_module.js` all changed to "Recharge"/"Tap Recharge..." — no behavior
+change, purely the label. The step-1 form itself is otherwise unchanged (still calls
+`submitManualDeposit()` → `/deposit/manual/init` → hands off to
+`openManualDepositWaitSheet()`'s own "Complete Payment" screen, which already correctly
+shows the assigned number and a live countdown — that screen's own wording was never in
+question here).
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip (this round is `user-src`-only — no `server.js`/`admin-src` changes,
+so no backend redeploy and no admin cache bump). `git diff --check` clean. Playwright
+against the real built app, with `depositMethod:'manual'`: the submit button reads
+exactly "Recharge," the instructions card says "Tap Recharge..." with no remaining
+"Get payment number" text anywhere on the form. Cache bumped `v79`→`v80` (user).
+**`user-src/`-only, no Render redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

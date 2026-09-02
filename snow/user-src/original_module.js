@@ -2004,13 +2004,13 @@ function openManualDepositFormSheet(){
         <option value="Airtel Money">Airtel Money</option>
       </select>
     </div>
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitManualDeposit()">Get payment number</button>
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitManualDeposit()">Recharge</button>
     <div class="instr-card">
       <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Recharge instructions</span></div>
       <ol>
         <li>Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount above.</li>
         <li>Confirm your mobile-money number and network.</li>
-        <li>Tap Get payment number, then send the exact amount shown to the number given.</li>
+        <li>Tap Recharge, then send the exact amount shown to the number given.</li>
         <li>Your wallet updates automatically once your payment is matched.</li>
       </ol>
     </div>
@@ -2023,7 +2023,7 @@ window.submitManualDeposit = async function(){
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
   $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Please wait…';
   const r = await post('/deposit/manual/init', { amount, senderPhone: phone, network });
-  if ($('depSubmitBtn')) { $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Get payment number'; }
+  if ($('depSubmitBtn')) { $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge'; }
   if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
   await refreshTransactionsCache();
   openManualDepositWaitSheet(r.depositId, r.assignedNumber, r.holderName, r.network, r.amount, r.expiresAt);
