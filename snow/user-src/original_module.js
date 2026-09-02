@@ -2077,7 +2077,7 @@ function openManualDepositFormSheet(){
     ${chipsHtml}
     <div class="pm-selected-row">
       <span class="pm-selected-label">Payment method</span>
-      <span class="pm-selected-val">${ICONS.check}<b>KKpay</b></span>
+      <span class="pm-selected-val">${ICONS.check}<b>K-pay</b></span>
     </div>
     <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="proceedToManualPaymentMethod()">Recharge</button>
     <div class="instr-card">

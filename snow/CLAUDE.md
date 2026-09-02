@@ -8157,6 +8157,17 @@ Screenshot confirms the visual result. Cache bumped `v87`→`v88` (user). No
 `server.js`/`admin-src` changes — **`user-src/`-only, no Render redeploy
 needed for the backend.**
 
+## Round 124 (2026-09-02) — "KKpay" relabeled "K-pay"
+
+Owner: "change kkpay to K-pay." The static payment-method-selected row on
+the manual-deposit amount screen (Round 122) now reads "K-pay" instead of
+"KKpay" -- one string, no other change.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip.
+`git diff --check` clean. Playwright, against the real built app: the
+label reads exactly "K-pay" with no remaining "KKpay" anywhere. Cache
+bumped `v88`→`v89` (user). `user-src/`-only, no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
