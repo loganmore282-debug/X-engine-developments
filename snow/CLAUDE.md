@@ -8122,6 +8122,41 @@ timeline matching the owner's own reference shape. Cache bumped `v86`→`v87`
 (user), `v30`→`v31` (admin). **`server.js` and `admin-src/index.html`
 changed — Render should auto-deploy this push.**
 
+## Round 123 (2026-09-02) — "Get results faster!" fallback moved back next to Refresh (Round 122's own Payment reminder insert had pushed it down 2 sections)
+
+Owner, with a screenshot annotated by a long red arrow tracing from the
+Refresh button all the way down past "Your payment account" and "Payment
+reminder" to the SMS-fallback card: "l had expected that thing to be just
+down after pressing refresh, please return it there such that when one
+taps refresh it comes." Round 122's new "Payment reminder" section was
+inserted between "Your payment account" and the SMS fallback in the
+timeline's DOM order -- pushing a section that used to sit right after the
+Refresh/paid-box down 2 more sections, even though it's revealed BY that
+same Refresh tap and should read as directly connected to it.
+
+`#manPaySmsFallback` moved from being its own trailing block at the end of
+`.mp-timeline-card` into the SAME `.mp-tl-row` as "Payment completed?" /
+the paid-box (`openManualPayFlow()`), right after `.mp-paid-box` closes --
+so tapping Refresh with an unresolved result now reveals it immediately
+below the Refresh button itself, before "Your payment account" and
+"Payment reminder" in both DOM order and visual position, matching "just
+down after pressing refresh" literally. No CSS/logic changes needed beyond
+the move -- `manualPayRefresh()`'s own reveal call
+(`$('manPaySmsFallback').classList.remove('mp-hidden')`) and the element's
+own styling are untouched, only its position in the markup.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node
+build-core.js` clean round-trip (this round is `user-src`-only). `git diff
+--check` clean. Playwright, against the real built app: the fallback is
+confirmed hidden before any Refresh tap; confirmed to live inside the SAME
+`.mp-tl-row` as the paid-box; confirmed to precede both "Your payment
+account" and "Payment reminder" in DOM order; a Refresh tap against a
+still-`pending` result reveals it with only a 14px gap below the paid-box
+(not the multi-section gap from before); zero horizontal overflow.
+Screenshot confirms the visual result. Cache bumped `v87`→`v88` (user). No
+`server.js`/`admin-src` changes — **`user-src/`-only, no Render redeploy
+needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

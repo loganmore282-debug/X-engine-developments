@@ -2262,6 +2262,15 @@ function openManualPayFlow(amount){
               </div>
               <div class="mp-note">The payment is expected to be successful in 2-10 minutes.<br>Click to refresh the results.</div>
             </div>
+            <div class="mp-sms-fallback mp-hidden" id="manPaySmsFallback">
+              <div class="mp-sms-title">Get results faster!</div>
+              <div class="mp-sms-sub">Fill in the payment SMS or transaction ID</div>
+              <textarea id="manDepPastedSms" rows="4" placeholder="You have sent UGX xxx to xxx xxx, 256xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
+              <div class="mp-sms-warn">*Filling in the wrong payment SMS/transaction ID will result in payment loss.</div>
+              <div class="mp-confirm-wrap">
+                <button type="button" class="mp-confirm-btn" id="manDepPasteBtn" onclick="submitManualPasteSms()">Submit <span>&rarr;</span></button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2278,16 +2287,6 @@ function openManualPayFlow(amount){
           <div class="mp-tl-body">
             <div class="mp-reminder-title">Payment reminder</div>
             <div class="mp-reminder-box" id="manPayReminderBox"></div>
-          </div>
-        </div>
-
-        <div class="mp-sms-fallback mp-hidden" id="manPaySmsFallback">
-          <div class="mp-sms-title">Get results faster!</div>
-          <div class="mp-sms-sub">Fill in the payment SMS or transaction ID</div>
-          <textarea id="manDepPastedSms" rows="4" placeholder="You have sent UGX xxx to xxx xxx, 256xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
-          <div class="mp-sms-warn">*Filling in the wrong payment SMS/transaction ID will result in payment loss.</div>
-          <div class="mp-confirm-wrap">
-            <button type="button" class="mp-confirm-btn" id="manDepPasteBtn" onclick="submitManualPasteSms()">Submit <span>&rarr;</span></button>
           </div>
         </div>
       </div>
