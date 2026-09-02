@@ -7436,6 +7436,80 @@ leaves the dialog open; the X close button still dismisses it.
 redeploy and no admin cache bump). `git diff --check` clean. Cache bumped `v77`→`v78`
 (user). **`user-src/`-only, no Render redeploy needed for the backend.**
 
+## Round 114 (2026-09-02) — new pre-launch "opening countdown" gate, admin-toggleable next to Maintenance mode
+
+Owner: "let's establish a timer ie like saying snow opening in 23:59:34... so it will
+be after the start up loader, make when l can activate it or disable it, just near
+maintenance mode." A genuinely new feature — a scheduled-opening gate a member sees
+instead of the login/app until an admin-set future instant passes, built to mirror
+Maintenance mode's own shape (a boolean toggle + enforcement, not just a cosmetic
+frontend overlay) rather than inventing a separate pattern.
+
+**`server.js`**: `openingCountdownEnabled` (bool, default off) and `openingCountdownAt`
+(epoch-ms target instant, `0` = not scheduled) added to `DEFAULT_SETTINGS`, right next
+to `maintenanceMode`/`maintenanceMsg`. The existing `MAINTENANCE GATE` middleware
+(the one that already blocks `/account`, `/invest`, `/deposit`, `/withdraw`,
+`/register`, `/bank`, `/team` during maintenance) now ALSO checks
+`openingCountdownEnabled && openingCountdownAt > Date.now()` right after its existing
+maintenance check, refusing with `503 {code:'OPENING_COUNTDOWN', message, openingAt}` —
+same route list, same `GUARD_EXEMPT` webhook carve-outs untouched, so this can't be
+routed around by hitting a money/account endpoint directly, matching the owner's own
+"just near maintenance mode" framing literally (same enforcement mechanism, not just
+adjacent settings-panel placement). **Self-clearing by design**: the condition is
+`enabled && now < target`, so once real time passes the target the block lifts on its
+own with no separate step — the admin toggle exists for turning it off EARLY (opening
+sooner than planned), not for manually flipping it back off once the scheduled time has
+already come and gone. `openingCountdownAt` added to `SETTINGS_CRITICAL_RANGES`
+(`[0, 4102444800000]`, a plain year-2100 sanity cap, not a real business constraint);
+`openingCountdownEnabled` added to `SETTINGS_BOOLEAN_FIELDS`. `/public/settings`
+needed no changes — both fields already flow through unfiltered via its existing spread.
+
+**`user-src/`**: a new `#openingGate` full-screen element (same wine-gradient hero
+background + snowflake mark as the auth screen, for visual consistency — not a new
+palette), shown INSTEAD of the login screen or the app, with a live
+`#openingGateCountdown` ticking every second ("Snow opening in" + `HH:MM:SS`, or
+`Dd HH:MM:SS` once more than a day remains). New `maybeShowOpeningGate()` is checked at
+the very top of the `snow-auth` handler — before auto sign-in, before deciding
+login-screen-vs-enter-app — so it applies uniformly whether or not anyone happens to be
+signed in; reads `STATE.settings` synchronously in the ordinary case (already populated
+by the time `snow-auth` first fires, same reasoning Round 63 already established for the
+announcement dialog) with a bounded `withTimeout(_bootPromise, 6000)` fallback only for
+a genuinely first-ever, slow-network boot. Once the countdown reaches zero client-side,
+it calls `location.reload()` rather than trying to splice into the normal auto-sign-in/
+login/enter-app flow inline — a fresh boot then runs exactly like any ordinary visit
+(gate gone, or still gated if the admin pushed the target further out in the meantime).
+
+**`admin-src/index.html`**: a new "Opening countdown" switch-row directly under
+Maintenance mode's own switch-row and message field (the literal "just near maintenance
+mode" placement), with a `datetime-local` input for the target date/time. New
+`msToDatetimeLocal(ms)` helper round-trips the stored epoch-ms value into/out of the
+input's own local-time string format — `new Date(thatString)` already parses a bare
+`datetime-local` string as local time, so the round trip lands on the same real instant
+regardless of which admin's timezone is looking at it. Wired into the existing
+`saveRates` handler alongside every other rates/limits field.
+
+**Verified**: `node --check server.js`/`original_module.js` clean, `node build-core.js`
+and `node build-admin.js` both clean round-trips, `git diff --check` clean. A
+standalone HTTP harness (not committed — throwaway, same "boot the real server.js
+against an in-memory mock DB via require.cache substitution" technique this file's own
+Round 104/106/108/109/111/113 harnesses established) — 10/10 checks: the gate is off by
+default (`/account` works normally); an admin can save the new settings; with a FUTURE
+target and enabled, `/account` is correctly refused with `OPENING_COUNTDOWN` carrying the
+real `openingAt`; `/public/settings` itself is never blocked and correctly reflects the
+enabled countdown; with a PAST target (still enabled), the gate self-clears with no
+separate disable step; explicitly disabling lifts the block even with a future target
+still stored; the `/deposit/callback` webhook (GUARD_EXEMPT) stays reachable even while
+the gate is active; an absurd `openingCountdownAt` value is rejected by validation.
+Playwright, against the real built app, 4 scenarios: an active future-dated gate shows
+the countdown screen (not the login screen) for both a signed-out AND a signed-in
+Firebase auth state, with the countdown genuinely ticking down second to second;
+disabling the toggle shows the normal login screen with no gate; an enabled gate whose
+target has already passed also shows the normal login screen (self-clearing confirmed
+client-side too). `test-admin-obfuscated-build.js` (the real obfuscated admin build)
+extended with the new settings fixture fields and an interaction step (check the toggle,
+set a date, click Save) — 0 errors across all 12 tabs. Cache bumped `v78`→`v79` (user),
+`v29`→`v30` (admin). **`server.js` changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

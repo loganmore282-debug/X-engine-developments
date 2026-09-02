@@ -463,6 +463,66 @@ function captureReferralFromUrl(){
   } catch (_) {}
 }
 
+// Owner: "let's establish a timer ie like saying snow opening in
+// 23:59:34... so it will be after the start up loader, make when l can
+// activate it or disable it, just near maintenance mode." A pre-launch
+// gate, admin-toggleable in Settings right next to Maintenance mode --
+// server.js's own MAINTENANCE GATE middleware enforces the same block on
+// the actual money/account routes so this can't be routed around by hitting
+// the API directly; this is the client-side countdown screen shown instead
+// of the login/app while it's active.
+function isOpeningGateActive(){
+  const s = STATE.settings;
+  return !!(s && s.openingCountdownEnabled && Number(s.openingCountdownAt) > Date.now());
+}
+function formatOpeningCountdown(ms){
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const sec = totalSec % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return (days > 0 ? days + 'd ' : '') + `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
+var _openingGateTimer = null;
+function startOpeningGateCountdown(targetMs){
+  if (_openingGateTimer) clearInterval(_openingGateTimer);
+  const tick = () => {
+    const remaining = targetMs - Date.now();
+    const el = $('openingGateCountdown');
+    if (el) el.textContent = formatOpeningCountdown(remaining);
+    if (remaining <= 0) {
+      clearInterval(_openingGateTimer); _openingGateTimer = null;
+      // Target reached -- reload into a genuinely fresh boot rather than
+      // trying to splice this handler into the normal auto-sign-in/login/
+      // enter-app flow inline; every ordinary path (including a
+      // still-active gate if the admin pushed the time back out in the
+      // meantime) then runs exactly as it would on any real visit.
+      location.reload();
+    }
+  };
+  tick();
+  _openingGateTimer = setInterval(tick, 1000);
+}
+// Checked at the very top of the snow-auth handler, before auto sign-in,
+// the login screen, or entering the app -- STATE.settings is normally
+// already populated by the time snow-auth first fires (boot()'s own
+// /public/settings call started at module load, independent of auth
+// state), so this resolves instantly in the ordinary case; the
+// withTimeout() fallback only matters on a genuinely first-ever, slow-
+// network boot, same "don't block the common case for a rare edge case"
+// reasoning Round 63 already established for the announcement dialog.
+async function maybeShowOpeningGate(){
+  if (!STATE.settings) await withTimeout(_bootPromise, 6000);
+  if (!isOpeningGateActive()) return false;
+  $('loadingScreen').style.display = 'none';
+  $('authScreen').style.display = 'none';
+  $('app').style.display = 'none';
+  $('openingGate').style.display = 'flex';
+  startOpeningGateCountdown(Number(STATE.settings.openingCountdownAt));
+  return true;
+}
+
 // ── AUTH STATE HANDLER ──
 window.addEventListener('snow-auth', async (ev) => {
   const user = ev.detail;
@@ -485,6 +545,7 @@ window.addEventListener('snow-auth', async (ev) => {
   // having run first.
   STATE.authEpoch++;
   STATE.user = user;
+  if (await maybeShowOpeningGate()) return;
   if (!user) {
     // Only worth trying once, on the very first "nobody's signed in" we see
     // this page load (a real boot) -- not after an in-session doLogout(),

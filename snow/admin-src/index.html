@@ -260,6 +260,18 @@ function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function normalizeProv(v){ return (v==='lipapay'||v==='manual') ? v : 'marzpay'; }
 const PROVIDER_LABEL = { marzpay:'MarzPay', lipapay:'LipaPay', manual:'by hand' };
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
+// Round-trips openingCountdownAt (a plain epoch-ms number, same shape as
+// every other timestamp this file reads) into/out of a <input
+// type="datetime-local">'s own value format ("YYYY-MM-DDTHH:mm", always
+// LOCAL to whoever's looking at the admin panel) -- new Date(thatString)
+// parses it back as local time too, so the round trip lands on the exact
+// same real instant regardless of which admin's timezone picks it.
+function msToDatetimeLocal(ms){
+  if (!ms) return '';
+  const d = new Date(Number(ms));
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
 const TX_LABELS = {
   deposit: 'Deposit', withdraw: 'Cash out', commission: 'Commission', team_reward: 'Task Center reward',
@@ -1749,6 +1761,10 @@ async function renderSettings(){
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
+      <div class="switch-row" style="margin-top:8px"><span><b>Opening countdown</b> <span class="muted">(pre-launch gate, shows a live "Snow opening in..." timer instead of the app)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sOpenCd" ${s.openingCountdownEnabled?'checked':''} style="width:auto"></label></div>
+      <label>Opening date &amp; time</label><input id="sOpenCdAt" type="datetime-local" value="${msToDatetimeLocal(s.openingCountdownAt)}">
+      <p class="muted" style="margin:4px 0 0">While enabled and this time is still in the future, every user (new or existing) sees the countdown instead of the login/app -- it turns off on its own once the time passes, or uncheck it here to open early.</p>
       <h2 class="sec" style="margin:14px 0 4px">Appearance</h2>
       <label>Number/digit font (every UGX figure in the app)</label>
       <select id="sNumberFont">${NUMBER_FONT_OPTIONS.map(f=>`<option value="${esc(f)}" ${v('numberFont','Bodoni Moda')===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
@@ -1891,6 +1907,8 @@ async function renderSettings(){
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
       maintenanceMsg:$('sMaintMsg').value.trim(), numberFont:$('sNumberFont').value,
+      openingCountdownEnabled:$('sOpenCd').checked,
+      openingCountdownAt:$('sOpenCdAt').value ? new Date($('sOpenCdAt').value).getTime() : 0,
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });

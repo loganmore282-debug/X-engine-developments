@@ -128,6 +128,15 @@ a{color:inherit;}
 #loadingScreen{position:fixed;inset:0;background:var(--snow-canvas);display:flex;align-items:center;justify-content:center;z-index:500;}
 #loadingScreen .spin{width:40px;height:40px;border-radius:50%;border:3px solid var(--snow-wine-soft);border-top-color:var(--snow-wine);animation:sp .8s linear infinite;}
 @keyframes sp{to{transform:rotate(360deg);}}
+/* Owner: "establish a timer ie like saying snow opening in 23:59:34... so it
+   will be after the start up loader" -- a pre-launch gate shown instead of
+   the login/app once the loading screen would otherwise hand off, admin-
+   toggleable next to Maintenance mode in Settings. Same wine-gradient hero
+   background as the auth screen for visual consistency, not a new palette. */
+#openingGate{position:fixed;inset:0;z-index:501;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);color:#fff;}
+#openingGate .og-label{font-size:13px;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-top:18px;}
+#openingGate .og-countdown{font-size:40px;font-weight:800;margin-top:10px;font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,'Bodoni Moda',Didot,'Playfair Display',Georgia,serif);}
+#openingGate .og-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:14px;max-width:320px;line-height:1.5;}
 @keyframes tickerFlow{from{transform:translateX(0);}to{transform:translateX(-50%);}}
 @keyframes chestSwing{0%,100%{transform:rotate(-6deg);}50%{transform:rotate(6deg);}}
 .chest-hang{animation:chestSwing 2.6s ease-in-out infinite;transform-origin:50% -6px;}
@@ -299,6 +308,14 @@ a{color:inherit;}
 <body>
 
 <div id="loadingScreen"><div class="spin"></div></div>
+
+<div id="openingGate">
+  <svg width="40" height="40" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="iceGate" x1="96" y1="72" x2="416" y2="440" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8DE8FF"/><stop offset="0.5" stop-color="#4FC3F7"/><stop offset="1" stop-color="#168BD2"/></linearGradient></defs><g fill="none" stroke="url(#iceGate)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"><path d="M256 256V48M256 108L204 78M256 108L308 78M256 166L215 142M256 166L297 142"/><path d="M256 256V48M256 108L204 78M256 108L308 78M256 166L215 142M256 166L297 142" transform="rotate(60 256 256)"/><path d="M256 256V48M256 108L204 78M256 108L308 78M256 166L215 142M256 166L297 142" transform="rotate(120 256 256)"/><path d="M256 256V48M256 108L204 78M256 108L308 78M256 166L215 142M256 166L297 142" transform="rotate(180 256 256)"/><path d="M256 256V48M256 108L204 78M256 108L308 78M256 166L215 142M256 166L297 142" transform="rotate(240 256 256)"/><path d="M256 256V48M256 108L204 78M256 108L308 78M256 166L215 142M256 166L297 142" transform="rotate(300 256 256)"/></g><circle cx="256" cy="256" r="18" fill="url(#iceGate)"/></svg>
+  <div style="font-size:22px;font-weight:800;letter-spacing:2px;margin-top:10px;">SNOW</div>
+  <div class="og-label">Opening in</div>
+  <div class="og-countdown" id="openingGateCountdown">--:--:--</div>
+  <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
+</div>
 
 <!-- ═══════════ AUTH ═══════════ -->
 <div id="authScreen" style="display:none;">

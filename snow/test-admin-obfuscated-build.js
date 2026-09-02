@@ -15,6 +15,7 @@ const routes = {
     minDeposit: 30000, minWithdraw: 8000, welcomeBonus: 5000, dailyCheckin: 500,
     withdrawFeePct: 15, commL1: 27, commL2: 2, commL3: 1, returnMultiple: 30, cycleDays: 150,
     maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true, maintenanceMode: false, maintenanceMsg: '',
+    openingCountdownEnabled: false, openingCountdownAt: 0,
     autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
     telegramGroup: '', telegramChannel: '', supportTelegram: '', whatsappGroup: '', whatsappContact: '',
     supportHours: '', rulesText: '', aboutText: '', brandTagline: '',
@@ -224,6 +225,19 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (settingsHtml.includes('Send notification')) errors.push('Settings: broadcast notification card still present');
   if (settingsHtml.includes('Announcement dialog')) errors.push('Settings: announcement dialog card still present');
   if (settingsHtml.includes('Restrict withdrawal request hours')) errors.push('Settings: withdrawal-hours block still present');
+
+  // Opening countdown -- new pre-launch gate toggle, sits right next to
+  // Maintenance mode (owner: "just near maintenance mode").
+  if (!doc.getElementById('sOpenCd')) errors.push('Settings: opening-countdown checkbox missing');
+  if (!doc.getElementById('sOpenCdAt')) errors.push('Settings: opening-countdown datetime input missing');
+  if (!settingsHtml.includes('Opening countdown')) errors.push('Settings: opening-countdown card missing');
+  const openCdBox = doc.getElementById('sOpenCd');
+  if (openCdBox) {
+    openCdBox.checked = true;
+    doc.getElementById('sOpenCdAt').value = '2027-01-01T09:00';
+    doc.getElementById('saveRates')?.click();
+    await sleep(200);
+  }
 
   window.confirm = () => true;
   window.prompt = () => null;

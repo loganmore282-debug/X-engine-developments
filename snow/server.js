@@ -232,6 +232,19 @@ app.use(async (req, res, next) => {
       return res.status(503).json({ status: 'error', code: 'MAINTENANCE',
         message: s.maintenanceMsg || 'Snow is under maintenance. Please check back shortly.' });
     }
+    // Owner: "let's establish a timer ie like saying snow opening in
+    // 23:59:34... make when l can activate it or disable it, just near
+    // maintenance mode." Same route list as the maintenance block just
+    // above, so the client-side countdown gate can't be routed around by
+    // hitting a money/account endpoint directly. Self-clearing: once real
+    // time passes openingCountdownAt this stops blocking on its own with no
+    // separate step needed -- the admin toggle exists for turning it off
+    // early (opening sooner than originally scheduled), not for turning it
+    // back off again once the target time has actually passed.
+    if (s && s.openingCountdownEnabled && Number(s.openingCountdownAt) > Date.now()) {
+      return res.status(503).json({ status: 'error', code: 'OPENING_COUNTDOWN',
+        message: 'Snow has not opened yet.', openingAt: Number(s.openingCountdownAt) });
+    }
   } catch (_) {}
   next();
 });
@@ -248,6 +261,13 @@ const DEFAULT_SETTINGS = {
   // admin-editable like every other rate here.
   dailyCheckin: 500,
   maintenanceMode: false, maintenanceMsg: '',
+  // Owner: "let's establish a timer ie like saying snow opening in
+  // 23:59:34... just near maintenance mode." A pre-launch gate, separate
+  // from maintenanceMode -- an admin-set future instant (0 = not scheduled)
+  // nobody can use the app before, shown to the member as a live countdown
+  // right after the loading screen. See the MAINTENANCE GATE section below
+  // for the actual server-side enforcement.
+  openingCountdownEnabled: false, openingCountdownAt: 0,
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   // Off by default — approves every pending withdrawal automatically a few
   // seconds after it's requested, server-driven, idempotent (shares the
@@ -4726,8 +4746,13 @@ const SETTINGS_CRITICAL_RANGES = {
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
   autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
+  // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
+  // real business constraint -- an admin fat-fingering a date shouldn't be
+  // able to silently store something outside "any date anyone would ever
+  // actually pick here."
+  openingCountdownAt: [0, 4102444800000],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
