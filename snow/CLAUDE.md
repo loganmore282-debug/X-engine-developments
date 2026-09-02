@@ -23,6 +23,13 @@ design exploration exist so far (see AGENT_LOG.md for the full design history).
   `space8/`, `voltra/`, `choco-mcc/`, `nexus/`. This project's code lives under
   `snow/`, on its own dedicated branch: **`claude/snow-platform-build`**.
 - Never edit `space8/`, `voltra/`, or other sibling project folders from Snow sessions.
+- **`snow/sms-forwarder-app/` is hands-off by default (owner rule, Round 107)** — do NOT
+  read, review, or modify anything under it, and do NOT bump its `versionCode`/
+  `versionName`, as part of a general audit/"check everything" sweep. Every code change
+  to that app forces a real reinstall on every admin phone (no auto-update, no Play
+  Store), and the owner explicitly asked to stop being hit with that every round. Only
+  touch it when the owner specifically reports a problem with the forwarder itself. See
+  Round 107's own entry below for the full context.
 
 ## Product ladder (confirmed, owner-supplied — 2026-08-26)
 
@@ -7027,6 +7034,21 @@ previously this exact scenario would have wiped the page and redirected. `git di
 --check` clean. Cache bumped `v71`→`v72` (user), `v26`→`v27` (admin). No server.js/db.js
 changes — no Render redeploy needed for the backend; the frontend/admin changes take
 effect on the next static-site deploy from this push.
+
+**Standing rule, owner-set the same day — `sms-forwarder-app/` is now hands-off by
+default.** Owner, after the pace of Round 88 onward shipped a new forwarder APK version
+in nearly every round (v1.2 through v1.10 inside about two days): "eeeh, every time
+downloading, every time downloading, huh" — every code change to the app requires
+bumping `versionCode`/`versionName` (the app's own standing rule, Round 90 — otherwise
+phones never get offered the fix at all, since there's no Play Store auto-update), which
+means every touch forces a real reinstall on every admin phone. Given the choice of (1)
+batching forwarder fixes into less-frequent releases, (2) leaving the app alone unless
+the owner specifically reports a problem with it, or (3) some mix, the owner picked
+**(2)**. From this point on: general "check everything"/audit sweeps must NOT read,
+review, or modify anything under `sms-forwarder-app/`, and must NOT bump its version —
+only touch this app when the owner explicitly reports a problem with the forwarder
+itself. server.js/db.js/admin-src/user-src remain fully in scope for audits as before;
+this restriction is specific to the Android app only.
 
 ## Live infra (provisioning started 2026-08-26)
 
