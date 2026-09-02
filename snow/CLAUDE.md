@@ -7364,6 +7364,34 @@ option; the manual-deposit form is identical; typing a phone number and picking 
 network by hand both still work normally. Cache bumped `v75`→`v76` (user). No admin
 cache change. **`server.js` changed — Render should auto-deploy this push.**
 
+## Round 112 (2026-09-02) — guard-src.js's frame-bust target updated to the real custom domain
+
+Owner: "add that new domain in script guard." `guard-src.js`'s domain ALLOWLIST/lock
+was already removed entirely back in Round 107 (owner: "remove domain restrictions in
+script guard") — the only domain-shaped thing left in the file is `REAL`, the frame-bust
+redirect target (used when the page detects it's been embedded in an iframe, per
+section 1's own comment: "refuse to be embedded / proxied"). It still held
+`https://snow-platform.com/` — this project's own original placeholder domain, per
+Round 89/111's own notes never actually put into service — while the real live domain,
+confirmed by the owner in Round 111, is `chn-snow2beer.com`. Updated `REAL` to
+`https://chn-snow2beer.com/` so a frame-bust redirect (or the same-origin non-throwing
+branch of the frame-bust check) actually sends someone to the real live site instead of
+a domain that was never real.
+
+`guard-src.js` is shared, unobfuscated source compiled into BOTH the user app's and
+admin panel's `<head>` at build time (`build-core.js`/`build-admin.js` both obfuscate it
+into their own `<script data-nx-guard>`), so this one edit updates the frame-bust target
+for both apps — no admin-specific domain was supplied by the owner, so this uses the one
+real domain given rather than guessing a separate one for admin.
+
+**Verified**: `node --check guard-src.js` clean. `node build-core.js` and `node
+build-admin.js` both clean round-trips. `git diff --check` clean. A regex check against
+the readable source confirms `REAL` now holds exactly `https://chn-snow2beer.com/` (and
+no longer references the old placeholder value at that assignment). This round is
+`guard-src.js` + both built artifacts only — no `server.js`/`user-src`/`admin-src` logic
+changes, so no backend redeploy needed. Cache bumped `v76`→`v77` (user), `v28`→`v29`
+(admin) since both built `index.html` files' embedded guard script content changed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

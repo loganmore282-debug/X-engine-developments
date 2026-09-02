@@ -1,7 +1,10 @@
 (function(){
   "use strict";
-  // Canonical home, still used as the frame-bust redirect target below.
-  var REAL = "https://snow-platform.com/";
+  // Canonical home, used as the frame-bust redirect target below. Owner
+  // confirmed the real live custom domain is chn-snow2beer.com (Round 111) --
+  // snow-platform.com was this project's original placeholder and was never
+  // actually put into service.
+  var REAL = "https://chn-snow2beer.com/";
 
   // 1. FRAME-BUST — refuse to be embedded / proxied in an iframe
   try {
