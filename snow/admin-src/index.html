@@ -840,16 +840,30 @@ async function renderUsers(){
         if (a.kind==='registration_incomplete') return `<span>${a.hours}h ago, still not finished &nbsp; <button class="btn sm ghost" data-openuser="${esc(a.userId)}">Open user</button></span>`;
         return `<span><button class="btn sm ghost" data-openuser="${esc(a.userId)}">Open user</button></span>`;
       };
+      // Owner: "l no longer want issues in integrity audit... make a great
+      // system" -- /admin/user/repair-wallet (new) closes the one direction
+      // that's actually safe to automate: the real ledger says MORE than the
+      // wallet holds (a genuine under-credit), never the reverse. Only
+      // offered on a walletBalance row whose diff is positive; the other
+      // direction still says "diagnose by hand" with no button, unchanged.
+      const mismatchRow = m => `<div class="kv"><span class="k">${esc(FIELD_LABEL[m.field]||m.field)} ≠ real${m.phone?' · '+esc(m.phone):''}</span>
+            <span>stored ${ugx(m.stored)} vs real ${ugx(m.real)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-openuser="${esc(m.userId)}">Open user</button>${m.field==='walletBalance'&&m.diff>0?` <button class="btn sm ok" data-repairwallet="${esc(m.userId)}">Repair wallet</button>`:''}</span></div>`;
       openModal(`<h3>Integrity audit</h3>
         <div class="muted" style="margin-bottom:10px">${d.checked} user(s) checked</div>
         ${!total?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance/total matches its real records, no duplicate credits, no negative balances, no stuck registrations.</div>`
-        :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${total} issue(s) found.${walletMismatches.length?` ${walletMismatches.length} wallet-balance mismatch(es) can't be auto-closed. Credit/Debit move both sides together, so open the user and diagnose by hand.`:''}${recountableMismatches.length?` ${recountableMismatches.length} deposited/earned/invested mismatch(es) will be fixed by "Recalculate totals" above.`:''}</div>`+
-          mismatches.map(m=>`<div class="kv"><span class="k">${esc(FIELD_LABEL[m.field]||m.field)} ≠ real${m.phone?' · '+esc(m.phone):''}</span>
-            <span>stored ${ugx(m.stored)} vs real ${ugx(m.real)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-openuser="${esc(m.userId)}">Open user</button></span></div>`).join('')+
+        :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${total} issue(s) found.${walletMismatches.length?` ${walletMismatches.length} wallet-balance mismatch(es) -- click "Repair wallet" where the real ledger is HIGHER (safe to auto-close); a lower real total still needs a human to diagnose by hand.`:''}${recountableMismatches.length?` ${recountableMismatches.length} deposited/earned/invested mismatch(es) will be fixed by "Recalculate totals" above.`:''}</div>`+
+          mismatches.map(mismatchRow).join('')+
           alerts.map(a=>`<div class="kv"><span class="k">${esc(ALERT_LABEL[a.kind]||a.kind)}${a.phone?' · '+esc(a.phone):''}</span>
             ${alertRow(a)}</div>`).join('')}
         <button class="btn block" data-close>Close</button>`);
       document.querySelectorAll('[data-openuser]').forEach(b=>b.addEventListener('click', ()=>{ closeModal(); openUser(b.dataset.openuser); }));
+      document.querySelectorAll('[data-repairwallet]').forEach(b=>b.addEventListener('click', async()=>{
+        if(!confirm('Top up this wallet to match the real ledger total? Only do this after you understand why the gap exists -- this tops the wallet UP, it never reduces one.'))return;
+        b.disabled=true; b.textContent='Repairing…';
+        const rd=await api('/admin/user/repair-wallet',{userId:b.dataset.repairwallet});
+        toast(rd.message||rd.status, rd.status==='success'?'ok':'err');
+        if(rd.status==='success'){ $('auditBtn').click(); } else { b.disabled=false; b.textContent='Repair wallet'; }
+      }));
     });
   }
   drawUsers();

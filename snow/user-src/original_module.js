@@ -318,7 +318,42 @@ window.doRegister = async function(){
     await window.fbCreateUser(email, pass);
     storeCredentialIfPossible(email, pass);
   }
-  catch (e) { $('regError').innerHTML = `<div class="auth-error">${esc(fbErrMsg(e))}</div>`; setBtnLoading('regBtn', false, 'Register'); }
+  catch (e) {
+    // Owner-reported real bug: a Firebase Auth account can exist with no
+    // matching Snow profile -- e.g. an earlier registration attempt whose
+    // account-creation step succeeded but the network call to /register
+    // never finished (closed tab, lost connection, a crash) -- the classic
+    // "ghost account" this file already self-heals ON LOGIN
+    // (bootFromNetwork()'s own NOT_FOUND branch). But hitting Register
+    // again with that same number always failed at account-creation itself
+    // (auth/email-already-in-use) and stopped right here, before that
+    // self-heal ever got a chance to run -- a real dead end with no way
+    // forward, exactly what was reported.
+    //
+    // Fixed: try signing in with exactly what was just typed. A wrong
+    // password (a genuinely different person's number, or a mistyped one)
+    // fails and falls through to the normal error below, unchanged. A
+    // correct password succeeds -- which can only mean either a ghost
+    // account of THIS same attempt (ordinary sign-in), or an account that
+    // was actually already fully registered (registerCurrentUser() below
+    // treats server status 'already_done' as success too, so re-registering
+    // an already-complete account just lands them in the app instead of
+    // erroring). window._pendingRegPin/_pendingRegPhone are already set
+    // above with what was just typed, so the normal snow-auth event fires
+    // straight into bootFromNetwork()'s existing "just registered in this
+    // tab" branch and finishes the profile with the real PIN -- no separate
+    // recovery UI needed.
+    if (e && e.code === 'auth/email-already-in-use') {
+      const retryEmail = phoneToEmail(phone);
+      try {
+        await window.fbSignIn(retryEmail, pass);
+        storeCredentialIfPossible(retryEmail, pass);
+        return;
+      } catch (_) { /* wrong password -- fall through to the real error */ }
+    }
+    $('regError').innerHTML = `<div class="auth-error">${esc(fbErrMsg(e))}</div>`;
+    setBtnLoading('regBtn', false, 'Register');
+  }
 };
 window.doLogout = async function(){
   stopLiveRefresh();

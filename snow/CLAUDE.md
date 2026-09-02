@@ -7050,6 +7050,97 @@ only touch this app when the owner explicitly reports a problem with the forward
 itself. server.js/db.js/admin-src/user-src remain fully in scope for audits as before;
 this restriction is specific to the Android app only.
 
+## Round 108 (2026-09-02) — owner-reported: registration dead-end on a ghost account fixed; a new safe-direction Repair-wallet tool added for Integrity-Audit wallet mismatches
+
+Owner sent 3 screenshots: the live admin Integrity Audit flagging a real
+walletBalance/totalDeposited mismatch for `+256769968157` (stored 235,500 vs real
+265,500 — a genuine under-credit, real ledger higher than the wallet), and a
+registration attempt for `0742730383` failing with "An account with that number already
+exists" even though no such user appears in the admin Users list. Quoted: *"l no longer
+want issues in integrity audit, l told you to make a great system, also that error,
+user says exist but l am not seeing him either."* Two separate real bugs, both fixed.
+
+**Registration dead-end — the ghost-account self-heal existed but was unreachable from
+Register itself.** `bootFromNetwork()` already self-heals a ghost account (a Firebase
+Auth login that exists with no matching Snow profile doc — an earlier registration
+attempt whose account-creation step succeeded but whose `/register` call never
+finished: a closed tab, a lost connection, a crash) on ordinary LOGIN. But hitting
+Register again with the SAME number always failed at account creation itself
+(`auth/email-already-in-use`) and stopped right there, before that self-heal ever got a
+chance to run — exactly the dead end reported: a real account exists (so registering
+again fails), but it's invisible in the admin panel (no profile doc was ever created,
+so nothing shows up in Users) and the member has no way back in. Fixed in
+`doRegister()` (`user-src/original_module.js`): on `auth/email-already-in-use`, the
+function now tries signing in with exactly what was just typed before giving up. A
+wrong password (a genuinely different person's number, or a mistyped one) still fails
+and falls through to the normal error, unchanged. A correct password succeeds — which
+can only mean either a ghost account from this same attempt, or an account that's
+already fully registered (`registerCurrentUser()` already treats server `status:
+'already_done'` as success, so re-registering a complete account just lands the member
+in the app instead of erroring) — and since `window._pendingRegPin`/`_pendingRegPhone`
+are already set with what was just typed before this whole flow starts, the normal
+`snow-auth` event fires straight into `bootFromNetwork()`'s existing "just registered in
+this tab" branch and finishes the profile with the real PIN. No new recovery UI needed
+— reuses machinery that already existed for the login path. **Relies on retrying with
+the SAME password as the original interrupted attempt** — a different password
+correctly still fails with the normal error.
+
+**New `/admin/user/repair-wallet` — closes the one direction that's actually safe to
+automate.** `/admin/integrity` has always DETECTED a walletBalance-vs-ledger mismatch
+but deliberately never auto-fixed it (Round 17's own reasoning, still correct):
+Credit/Debit move both the wallet and the ledger together by design, so neither tool
+can close a gap BETWEEN them, and blindly reducing a wallet toward a lower ledger figure
+risks taking away money a member already relied on/withdrew against. But that reasoning
+only blocks ONE direction — when the real ledger says MORE than the wallet holds (a
+genuine under-credit, exactly `+256769968157`'s own shape), topping the wallet UP to
+match is safe: it's money the ledger already documents as having arrived, just never
+landed in the spendable balance. Built `POST /admin/user/repair-wallet` (owner-only,
+`withLock('bal:'+userId, ...)` — the same lock every other wallet-touching write in this
+file already uses): re-sums the user's full transaction ledger fresh, INSIDE the lock
+(the same full-ledger formula `/admin/integrity`'s own walletBalance check uses — every
+transaction type, deposits/earnings positive, investments/withdrawals/debits negative),
+compares to the stored wallet. `diff === 0` → no-op, reports already correct. `diff < 0`
+(real is LOWER than stored) → refuses with a 409, same "diagnose by hand" posture as
+before — a duplicate/erroneous credit is more likely than a missing debit here, and
+this tool was never meant to touch that direction. `diff > 0` (real is HIGHER) → tops
+the wallet up by exactly `diff` via `FieldValue.increment(diff)`.
+
+Two design corrections made before shipping, both because a naive first draft would have
+created a recurring version of the exact bug this tool exists to close: (1) the wallet
+top-up does NOT also increment `totalDeposited` — the missing amount could be from ANY
+transaction type (a deposit, a cashback payout, a commission), not necessarily a
+deposit, and guessing wrong would corrupt a DIFFERENT stat; "Recalculate totals"
+(existing, already correct — rebuilds every stat from the real ledger by type) is the
+right tool for those. (2) the top-up does NOT write a new `transactions` ledger row
+documenting the repair — the ledger already contains whatever real event(s) this diff
+represents (that's the entire premise: real > stored means money the ledger already
+documents never actually reached the wallet); adding a fresh row would double-count that
+same money on the very next audit, recreating an identically-sized mismatch in the same
+direction, one round later.
+
+**Admin UI** (`admin-src/index.html`): the Integrity Audit modal's mismatch rows gained
+a conditional "Repair wallet" button — only rendered when `field==='walletBalance' &&
+diff>0` (the one safe direction; a lower-real-than-stored row still shows no button,
+unchanged "diagnose by hand" posture). Confirm dialog before firing, wired to
+`/admin/user/repair-wallet`, and on success automatically re-runs the whole audit
+(`$('auditBtn').click()`) so the modal reflects the just-closed gap immediately instead
+of showing stale numbers.
+
+**Verified**: `node --check server.js` clean. `node build-core.js` and
+`node build-admin.js` both clean round-trips. `node test-admin-obfuscated-build.js` (the
+real obfuscated admin build) — 0 errors across all 12 tabs. `git diff --check` clean. A
+standalone harness (not committed — throwaway, same "boot the real server.js against an
+in-memory mock DB via require.cache substitution" technique this file's own Round
+104/106 harnesses established) drove the real `/admin/user/repair-wallet` HTTP endpoint
+directly — 9/9 checks: reproduces the EXACT reported shape (stored 235,500 → tops up to
+265,500 with `totalDeposited` left untouched at 230,000); a second run on the
+now-correct account reports "already correct" and makes no further change (idempotent);
+the real-lower-than-stored direction is refused with a 409 and the wallet is left
+untouched; an unauthenticated caller is refused; an unknown userId is refused. This
+round is server.js/user-src/admin-src-only — `sms-forwarder-app/` untouched, per the
+standing rule immediately above. Cache bumped `v72`→`v73` (user), `v27`→`v28` (admin).
+**`server.js` changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

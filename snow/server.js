@@ -5141,6 +5141,63 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
     res.json({ status: 'success', totals: { totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Owner-only wallet-balance repair for exactly ONE direction: the real ledger
+// total is HIGHER than what's stored (a genuine under-credit somewhere --
+// money the platform's own transaction records say arrived, that never
+// actually landed in the member's spendable balance). /admin/integrity has
+// always DETECTED this (the walletBalance check) but deliberately never
+// auto-fixed it -- Credit/Debit move both the wallet AND the ledger together
+// by design, so neither tool can close a gap BETWEEN them, and blindly
+// reducing a wallet toward a lower ledger figure risks taking away money a
+// member already relied on/withdrew against. This tool closes exactly the
+// safe half of that gap: topping a wallet UP to match a ledger that says it
+// should already be higher. The other direction (stored > real) still
+// refuses and asks for a human to diagnose by hand, unchanged.
+app.post('/admin/user/repair-wallet', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const result = await withLock('bal:' + userId, async () => {
+      const uRef = db.collection('users').doc(userId);
+      const uSnap = await uRef.get();
+      if (!uSnap.exists) return { ok: false, message: 'User not found' };
+      const stored = finiteMoney(uSnap.data().walletBalance);
+      // Fresh, full-ledger sum for just this user -- the exact same formula
+      // /admin/integrity itself uses for walletBalance (every transaction
+      // type; deposits/earnings positive, investments/withdrawals/debits
+      // negative, since that's how each is actually written) -- re-read
+      // INSIDE this lock so it can never disagree with a credit/debit/
+      // refund landing concurrently, same "fresh recheck inside the lock"
+      // pattern every other money-repair tool in this file already uses.
+      const txSnap = await db.collection('transactions').where('userId', '==', userId).limit(200000).get();
+      let real = 0;
+      txSnap.forEach(d => { real += Number(d.data().amount) || 0; });
+      const diff = Math.round(real) - Math.round(stored);
+      if (diff === 0) return { ok: true, message: 'Already correct -- nothing to repair.', diff: 0 };
+      if (diff < 0) {
+        return { ok: false, message: `The real ledger total (${fmtUGX(Math.round(real))}) is LOWER than the stored wallet balance (${fmtUGX(stored)}). This direction is never auto-repaired -- diagnose by hand (a duplicate/erroneous credit somewhere is more likely than a missing debit).` };
+      }
+      // Deliberately does NOT write a new transactions row for this top-up --
+      // the ledger ALREADY contains whatever real event(s) this diff
+      // represents (that's the entire premise: real > stored means money the
+      // ledger already documents never actually reached the wallet). Adding
+      // a fresh row here would double-count that same money on the NEXT
+      // audit, recreating a mismatch of the same size in the same direction.
+      // Also deliberately does NOT touch totalDeposited/totalEarned/etc. --
+      // the missing amount could be from ANY transaction type (a deposit, a
+      // cashback payout, a commission), and guessing it was a deposit would
+      // corrupt whichever stat it wasn't. "Recalculate totals" (existing,
+      // already correct -- rebuilds each stat from the real ledger by type)
+      // is the right tool for those; this one is walletBalance-only.
+      await uRef.update({ walletBalance: FieldValue.increment(diff) });
+      return { ok: true, message: `Wallet topped up by ${fmtUGX(diff)} to match the real ledger total. Run "Recalculate totals" too if totalDeposited/Earned/Invested were also flagged.`, diff };
+    });
+    if (!result.ok) return res.status(409).json({ status: 'error', message: result.message });
+    if (result.diff) logAdminAction(req, 'wallet_repaired', { userId, diff: result.diff });
+    res.json({ status: 'success', message: result.message });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 // Owner-only reconciliation for a registration that started (Firebase account
 // exists) but never finished (no Snow profile doc, or one stuck with
 // registrationDone:false). Reuses completeRegistrationCore so this can never
