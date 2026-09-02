@@ -7002,6 +7002,32 @@ Actions tab before relying on this build. Cache bumped `v70`→`v71` (user),
 `v25`→`v26` (admin). **`server.js`/`db.js`/`render.yaml` changed — Render should
 auto-deploy this push.**
 
+## Round 107 (2026-09-02) — owner: "remove domain restrictions in script guard": domain lock removed from guard-src.js
+
+Owner asked to remove the domain lock from `guard-src.js` (the small script obfuscated
+into `<script data-nx-guard>` in both the user app's and admin panel's `<head>` at build
+time — see the "Build & deploy pipeline"/build-core.js/build-admin.js sections above).
+Removed section 1 ("DOMAIN LOCK — block cloned rehosting"): the app no longer checks
+`location.hostname` against an allowlist (`snow-platform.com`, `www.snow-platform.com`,
+`localhost`, `127.0.0.1`, `*.onrender.com`) or wipes itself and bounces to
+`https://snow-platform.com/` when running anywhere else. The now-unused `hostOk()`
+helper was removed along with it; the `REAL` constant was kept since the frame-bust
+protection (section, now renumbered 1) still redirects there if the app is ever loaded
+inside an iframe. Every other guard behavior is untouched: frame-busting, the
+console self-XSS warning, right-click/long-press-save blocking, dev-tools keyboard
+shortcut blocking, selection/copy/drag blocking outside form fields, and the
+devtools-open dimension-heuristic shield.
+
+**Verified**: `node --check guard-src.js` clean; `node build-core.js` and
+`node build-admin.js` both clean round-trips; `node test-admin-obfuscated-build.js` — 0
+errors across all 12 tabs; a standalone jsdom check loading the real (unobfuscated)
+guard-src.js against a `https://some-random-untrusted-domain.example/` origin confirmed
+`location.replace` is never called and the page's own DOM content is left intact —
+previously this exact scenario would have wiped the page and redirected. `git diff
+--check` clean. Cache bumped `v71`→`v72` (user), `v26`→`v27` (admin). No server.js/db.js
+changes — no Render redeploy needed for the backend; the frontend/admin changes take
+effect on the next static-site deploy from this push.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -1,36 +1,9 @@
 (function(){
   "use strict";
-  // Canonical home a cloned/rehosted copy gets bounced to.
+  // Canonical home, still used as the frame-bust redirect target below.
   var REAL = "https://snow-platform.com/";
-  // DOMAIN LOCK — only these exact hosts (plus any *.onrender.com
-  // subdomain, kept as a fallback while a custom domain is still being set
-  // up/propagated) may run the app. A cloned/rehosted phishing copy on any
-  // other domain wipes itself and bounces to REAL. Fails OPEN on any error
-  // so real users are never wrongly locked out.
-  function hostOk(){
-    try {
-      var h = (location.hostname || "").toLowerCase();
-      if (!h) return true; // installed PWA / file:// — don't wipe
-      var ALLOW = [
-        "snow-platform.com",
-        "www.snow-platform.com",
-        "localhost",
-        "127.0.0.1"
-      ];
-      if (ALLOW.indexOf(h) !== -1) return true;
-      if (h.slice(-".onrender.com".length) === ".onrender.com") return true;
-      return false;
-    } catch (e) { return true; }
-  }
 
-  // 1. DOMAIN LOCK — block cloned rehosting
-  if (!hostOk()) {
-    try { document.documentElement.innerHTML = ""; } catch(e){}
-    location.replace(REAL);
-    return;
-  }
-
-  // 2. FRAME-BUST — refuse to be embedded / proxied in an iframe
+  // 1. FRAME-BUST — refuse to be embedded / proxied in an iframe
   try {
     if (window.top !== window.self) {
       window.top.location = REAL;
@@ -42,7 +15,7 @@
     return;
   }
 
-  // 3. CONSOLE SELF-XSS WARNING
+  // 2. CONSOLE SELF-XSS WARNING
   function warn(){
     try {
       console.log("%cSTOP", "color:#941827;font-size:48px;font-weight:900;");
@@ -52,10 +25,10 @@
   }
   warn();
 
-  // 4. BLOCK CONTEXT MENU (right-click / long-press save)
+  // 3. BLOCK CONTEXT MENU (right-click / long-press save)
   document.addEventListener("contextmenu", function(e){ e.preventDefault(); }, { capture:true });
 
-  // 5. BLOCK DEV / SOURCE SHORTCUTS
+  // 4. BLOCK DEV / SOURCE SHORTCUTS
   document.addEventListener("keydown", function(e){
     var k = (e.key || "").toLowerCase();
     var block =
@@ -65,7 +38,7 @@
     if (block) { e.preventDefault(); e.stopPropagation(); return false; }
   }, { capture:true });
 
-  // 6. BLOCK SELECTION / COPY / DRAG OUTSIDE INPUTS (keep forms usable)
+  // 5. BLOCK SELECTION / COPY / DRAG OUTSIDE INPUTS (keep forms usable)
   function inForm(t){
     return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" ||
       (t.isContentEditable === true));
@@ -76,7 +49,7 @@
     }, { capture:true });
   });
 
-  // 7. DEVTOOLS-OPEN DETECTION (dimension heuristic) → cover screen
+  // 6. DEVTOOLS-OPEN DETECTION (dimension heuristic) → cover screen
   // Skip on touch/mobile — keyboard open triggers false positives there.
   var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   if (!isMobile) {
