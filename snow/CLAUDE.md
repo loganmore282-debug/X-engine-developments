@@ -7851,6 +7851,113 @@ a real `history.back()` call (not this app's own close function) correctly close
 overlay and lands back on Home with zero page errors. Cache bumped `v83`→`v84` (user).
 **`user-src/`-only, no Render redeploy needed for the backend.**
 
+## Round 120 (2026-09-02) — a real "black dot" bug in the payment overlay's toast diagnosed and fixed by removing it in favor of the app's own global toast(); the SMS fallback now only appears after Refresh comes back unresolved, restyled to match the owner's own reference screenshots; a pending manual deposit now survives a reload
+
+Owner sent 5 screenshots (2 of their own device with red hand-drawn annotations on
+Round 119's build, 3 reference/inspiration screenshots of a different app's own
+"Get results faster!" SMS-fallback UI) and wrote: "there is a black dot which appears,
+remove it, also notify doesn't open from middle and it lags instead of after showing to
+disappear, also remove sms sending model down, being the sms forward forwards sms and
+server matches automatically, we are just putting them as fallback back, so here is
+functionality, when one clicks refresh, the page spreads so one puts sms and submits...
+also see my tabs or screen, they are simple and well sized moderately small cards, texts
+and numbers, so the app should cache and run in background so as that order page is not
+lost by startup loaders." Five parts, all real, all fixed.
+
+**Black dot / toast not centered / lagging -- root-caused, not patched around.** The
+reference file this flow was built from (Round 118) carried its own bottom-pill toast
+component (`#manPayToastEl`, `.mp-toast`/`.mp-toast.mp-show`), rendered as a direct
+child of `#manualPayFlow` -- which is itself given the `reveal-in` class the instant the
+overlay opens (`openManualPayOverlay()`). This app's own app-wide stagger-entrance rule,
+`.reveal-in > *{animation:revealIn .42s cubic-bezier(.22,1,.36,1) both;}` (Round 31),
+carries `animation-fill-mode:both` -- meaning the animation's own FINAL keyframe values
+permanently win over a direct child's static stylesheet rules once it finishes playing,
+for every direct child, not just the ones meant to animate. The toast element's own base
+CSS (`transform:translateX(-50%)` for centering, `opacity:0` until triggered) was
+silently overridden by that rule's own `to{opacity:1;transform:translateY(0)}` end state
+the moment the overlay opened -- producing exactly what was reported: a small,
+off-center, untriggered dark box sitting near the bottom of the screen with no text (the
+"black dot"), and because it was never actually centered to begin with, any real message
+it later showed would appear to "lag" into an already-wrong position rather than opening
+cleanly from the middle. Fixed by removing the reference's own local toast component
+entirely (`manualPayToast()`, its markup, its CSS) and routing every validation/status
+message on this screen through the app's own already-correct, already-centered global
+`toast()` (`#toastHost{position:fixed;inset:0;display:flex;align-items:center;
+justify-content:center}`, in use everywhere else in the app) instead of trying to patch
+a second, redundant, buggier one.
+
+**SMS fallback: hidden by default, restyled to match the owner's own reference,
+revealed only after an unresolved Refresh.** Owner's own words make the intended
+mechanic explicit: "the sms forward forwards sms and server matches automatically, we
+are just putting them as fallback... when one clicks refresh, the page spreads so one
+puts sms and submits, just like you see my screen shot, use that directly." The
+always-visible paste-SMS form from Round 118 was replaced with a `mp-hidden`-by-default
+`#manPaySmsFallback` block, restyled to match the 3 reference screenshots precisely:
+"Get results faster!" heading, "Fill in the payment SMS or transaction ID" subheading,
+a realistic placeholder SMS example, a red warning line about payment loss, and a
+"Submit →" button (`.mp-confirm-btn`, this app's own existing button style, not a new
+one). `manualPayRefresh()` now reveals it (`classList.remove('mp-hidden')`) only inside
+its own "still not resolved" branch -- a Refresh that comes back matched/failed/review
+closes the whole overlay via the existing `handleManualDepositStatusResult()` path and
+never gets here at all, so the fallback genuinely only ever appears once a real check
+has come back unresolved, exactly as described.
+
+**"Moderately small cards, texts and numbers" -- reaffirmed, not a new specific ask.**
+Re-checked this screen's own sizing against Round 119's own `clamp()`-based responsive
+rules (`.mp-total`/`.mp-account-value`/`.mp-name-value`) at 360/390/430px -- still
+correct, no regression found, nothing further changed here; read as confirmation that
+Round 119's own sizing direction was the right one, not a request for a new change.
+
+**Pending manual deposit now survives a startup-loader reload.** Owner: "the app should
+cache and run in background so as that order page is not lost by startup loaders." A
+manual deposit is real money already committed the instant `/deposit/manual/init`
+succeeds -- the assigned number/holder name were only ever held in memory before this
+round, so a PWA update, crash, or accidental reload while a member was sitting on the
+code screen left Records correctly showing "Processing" but with no way back to the
+actual account to pay into. Mirrors the exact `CACHED_STATE_KEY`/`loadCachedState()`
+pattern already established for the whole-app instant-boot cache (Round 46), including
+its own cross-account guard: `MANUAL_PAY_PENDING_KEY = 'snow_manual_pay_pending'`,
+`saveManualPayPending(uid, data)`/`loadManualPayPending(uid)` (rejects a cache whose
+`uid` doesn't match the currently signed-in member -- a shared device switching accounts
+can never resume someone else's payment screen -- and rejects one whose own 15-minute
+`expiresAt` has already passed) /`clearManualPayPending()`. Saved on a successful
+`/deposit/manual/init` (`manualPayConfirm()`, now factored through a shared
+`presentManualPayCodeScreen(data)` so a fresh confirm and a resumed session populate the
+same fields/timer/poll identically) and cleared the instant the deposit reaches any
+terminal state (matched/failed/review, inside `handleManualDepositStatusResult()`) so a
+resolved deposit can never be wrongly resurrected on a later reload. New
+`maybeResumeManualPayment()`/`resumeManualPayFlow(p)` are called from both boot paths
+(`enterApp()`'s cache-hit path and `bootFromNetwork()`'s network-boot path), right
+before `showPage()` so the overlay's own `.show` class is already set before the
+announcement-dialog check (`isAnyOverlayOpen()`, already correctly recognizing
+`#manualPayBg.show` since Round 119) ever runs against it; also re-checks the platform's
+own current `depositMethod` setting and clears the cache instead of resuming if an admin
+switched the platform off manual deposits while the payment was still pending. Explicitly
+a pure UI-resume convenience, same framing as `CACHED_STATE_KEY` itself -- never a source
+of truth for anything that touches a balance; the server's own `/deposit/manual/status`
+poll remains the sole authority on the real outcome either way, completely unaffected by
+whether this cache exists.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip (this round is `user-src`-only -- no `server.js`/`admin-src` changes,
+so no backend redeploy and no admin cache bump). `git diff --check` clean. Playwright,
+against the real built (obfuscated) app, 5 scenarios: the old buggy toast markup
+(`#manPayToastEl`) no longer exists anywhere; the SMS fallback is hidden by default on a
+freshly-opened code screen; an empty paste-SMS submit fires the real global toast (via
+`#toastHost`, confirmed `justify-content:center`), not the removed local component;
+tapping Refresh against a still-`pending` result reveals the SMS fallback, and a real
+paste-SMS submit correctly restores the button to its "Submit →" label afterward; a
+pending cache exists in `localStorage` immediately after a successful confirm and is
+byte-correct (real `uid`/`depositId`); reloading with a seeded pending cache resumes
+directly onto the code screen with the real cached assigned number/sender phone, no
+selector screen shown; a cache seeded under a DIFFERENT uid is correctly never resumed;
+the cache is confirmed present right after a confirm and confirmed cleared once a
+Refresh resolves the deposit to `matched`; and a Round 119 regression check (the real
+hardware-back-button history-API race fix) re-run clean -- the overlay still closes
+correctly on a genuine `history.back()`, not just the app's own close button. Cache
+bumped `v84`→`v85` (user). **`user-src/`-only, no Render redeploy needed for the
+backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

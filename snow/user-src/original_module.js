@@ -654,6 +654,7 @@ async function enterApp(){
   // own appearance, not this instant paint.
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
+  maybeResumeManualPayment();
   showPage(STATE.page || 'home');
   refreshAppDataInBackground(uid);
 }
@@ -750,6 +751,7 @@ async function bootFromNetwork(uid){
   saveCachedState(uid);
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
+  maybeResumeManualPayment();
   showPage(STATE.page || 'home');
 }
 // Runs right after painting instantly from cache -- reconciles with the
@@ -2231,55 +2233,110 @@ function openManualPayFlow(amount){
         <div class="mp-your-account">Your payment account:</div>
         <div class="mp-your-number" id="manPayYourNumber"></div>
 
-        <div class="form-field" style="margin-top:20px;"><label>Paste the message you got after sending (optional)</label><textarea id="manDepPastedSms" rows="3" placeholder="You have sent UGX ..."></textarea></div>
-        <button type="button" class="secondary-button" id="manDepPasteBtn" style="width:100%;padding:13px 0;" onclick="submitManualPasteSms()">Submit confirmation text</button>
+        <div class="mp-sms-fallback mp-hidden" id="manPaySmsFallback">
+          <div class="mp-sms-title">Get results faster!</div>
+          <div class="mp-sms-sub">Fill in the payment SMS or transaction ID</div>
+          <textarea id="manDepPastedSms" rows="4" placeholder="You have sent UGX xxx to xxx xxx, 256xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
+          <div class="mp-sms-warn">*Filling in the wrong payment SMS/transaction ID will result in payment loss.</div>
+          <div class="mp-confirm-wrap">
+            <button type="button" class="mp-confirm-btn" id="manDepPasteBtn" onclick="submitManualPasteSms()">Submit <span>&rarr;</span></button>
+          </div>
+        </div>
       </div>
     </section>
 
     <div id="manPayLoading" class="mp-loading-overlay mp-hidden">
       <div class="mp-loader-box"><div class="mp-spinner"></div><div>Loading...</div></div>
     </div>
-    <div id="manPayToastEl" class="mp-toast"></div>
   `);
+}
+// Resume-on-reload -- see saveManualPayPending()'s own comment above for
+// why this cache exists. Called from both boot paths, before showPage(),
+// so the overlay's .show class is already set before isAnyOverlayOpen()/
+// the announcement-dialog check ever run against it.
+function maybeResumeManualPayment(){
+  const uid = STATE.user && STATE.user.uid;
+  const pending = loadManualPayPending(uid);
+  if (!pending) return;
+  // The admin may have switched the platform off manual deposits while
+  // this was pending -- nothing left to usefully resume into.
+  if (!STATE.settings || STATE.settings.depositMethod !== 'manual') { clearManualPayPending(); return; }
+  resumeManualPayFlow(pending);
+}
+function resumeManualPayFlow(p){
+  _manDepChosenMethod = p.network === 'Airtel Money' ? 'Airtel' : 'MTN';
+  openManualPayFlow(p.amount);
+  presentManualPayCodeScreen(p);
 }
 window.manualPayChooseMethod = function(el){
   document.querySelectorAll('.mp-method').forEach(x => x.classList.remove('mp-active'));
   el.classList.add('mp-active');
   _manDepChosenMethod = el.dataset.method;
 };
-// The reference's own local toast (its own dark pill, kept exactly, rather
-// than reusing this app's global #toastHost -- the owner asked for
-// "nothing removed," and this is the reference's own self-contained
-// feedback mechanism for the validation errors on this screen).
-function manualPayToast(msg){
-  const t = $('manPayToastEl');
-  if (!t) return;
-  t.textContent = msg;
-  t.classList.add('mp-show');
-  clearTimeout(t._mpTimer);
-  t._mpTimer = setTimeout(() => t.classList.remove('mp-show'), 1800);
+// A manual deposit is real money already committed at the gateway/admin
+// side the instant /deposit/manual/init succeeds -- if the app gets
+// reloaded while the member is just sitting on this screen (a PWA update,
+// a crash, an accidental tab close), the assigned number/holder name were
+// only ever shown transiently in memory, with no way back to them; Records
+// would still show the deposit as "Processing" but with no account to pay
+// into. Owner: "the app should cache and run in background so as that
+// order page is not lost by startup loaders." Persists just enough to
+// resume the exact same code screen on the next boot -- this is a pure UI-
+// resume convenience, never a source of truth for anything that touches a
+// balance (the server's own status poll is what actually decides the
+// outcome either way, unaffected by whether this cache exists).
+var MANUAL_PAY_PENDING_KEY = 'snow_manual_pay_pending';
+function saveManualPayPending(uid, data){
+  try { localStorage.setItem(MANUAL_PAY_PENDING_KEY, JSON.stringify(Object.assign({ uid }, data))); } catch (_) {}
+}
+function loadManualPayPending(uid){
+  try {
+    const raw = localStorage.getItem(MANUAL_PAY_PENDING_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    // Same cross-account guard as loadCachedState() -- a shared device
+    // switching members must never resume the wrong person's payment
+    // screen. Also drop it once its own 15-minute window has genuinely
+    // passed -- nothing left to usefully resume into.
+    if (!p || p.uid !== uid) return null;
+    if (!p.expiresAt || p.expiresAt <= Date.now()) return null;
+    return p;
+  } catch (_) { return null; }
+}
+function clearManualPayPending(){
+  try { localStorage.removeItem(MANUAL_PAY_PENDING_KEY); } catch (_) {}
+}
+// Shared by a fresh /deposit/manual/init success AND by resumeManualPayFlow()
+// below -- one place populates the code screen's fields and starts the
+// timer/poll, so a resumed session behaves identically to a freshly-opened
+// one.
+function presentManualPayCodeScreen(data){
+  _manDepId = data.depositId;
+  const methodLabel = data.network === 'Airtel Money' ? 'Airtel' : 'MTN';
+  $('manPayMethodName').textContent = methodLabel;
+  $('manPayAccountMethod').textContent = methodLabel;
+  $('manPayTotal').textContent = fmtUGX(data.amount).replace('UGX ', '');
+  $('manPayMerchantNumber').textContent = data.assignedNumber;
+  $('manPayMerchantName').textContent = data.holderName;
+  $('manPayYourNumber').textContent = data.senderPhone;
+  $('manPaySelector').classList.add('mp-hidden');
+  $('manPayScreen').classList.remove('mp-hidden');
+  manualPayStartTimer(data.expiresAt);
+  pollManualDepositStatus(data.depositId);
 }
 window.manualPayConfirm = async function(amount){
-  if (!_manDepChosenMethod) { manualPayToast('Please select a payment method'); return; }
+  if (!_manDepChosenMethod) { toast('Please select a payment method', true); return; }
   const n = ($('manPayPhone').value || '').trim();
-  if (n.length < 9) { manualPayToast('Please enter your payment account'); return; }
+  if (n.length < 9) { toast('Please enter your payment account', true); return; }
   const network = _manDepChosenMethod === 'Airtel' ? 'Airtel Money' : 'MTN Mobile Money';
   $('manPayLoading').classList.remove('mp-hidden');
   const r = await post('/deposit/manual/init', { amount, senderPhone: n, network });
   if ($('manPayLoading')) $('manPayLoading').classList.add('mp-hidden');
-  if (r.status !== 'success') { manualPayToast(r.message || 'Could not start recharge'); return; }
+  if (r.status !== 'success') { toast(r.message || 'Could not start recharge', true); return; }
   await refreshTransactionsCache();
-  _manDepId = r.depositId;
-  $('manPayMethodName').textContent = _manDepChosenMethod;
-  $('manPayAccountMethod').textContent = _manDepChosenMethod;
-  $('manPayTotal').textContent = fmtUGX(r.amount).replace('UGX ', '');
-  $('manPayMerchantNumber').textContent = r.assignedNumber;
-  $('manPayMerchantName').textContent = r.holderName;
-  $('manPayYourNumber').textContent = n;
-  $('manPaySelector').classList.add('mp-hidden');
-  $('manPayScreen').classList.remove('mp-hidden');
-  manualPayStartTimer(r.expiresAt);
-  pollManualDepositStatus(_manDepId);
+  const data = { depositId: r.depositId, network, amount: r.amount, assignedNumber: r.assignedNumber, holderName: r.holderName, senderPhone: n, expiresAt: r.expiresAt };
+  saveManualPayPending(STATE.user && STATE.user.uid, data);
+  presentManualPayCodeScreen(data);
 };
 function manualPayOverlayOpen(){
   const el = $('manualPayBg');
@@ -2303,12 +2360,12 @@ function manualPayStartTimer(expiresAt){
 window.submitManualPasteSms = async function(){
   if (!_manDepId) return;
   const text = ($('manDepPastedSms').value || '').trim();
-  if (!text) { manualPayToast('Paste the confirmation SMS text first'); return; }
+  if (!text) { toast('Paste the payment SMS or transaction ID first', true); return; }
   const btn = $('manDepPasteBtn');
-  btn.disabled = true; btn.textContent = 'Submitting…';
+  btn.disabled = true; btn.innerHTML = 'Submitting…';
   const r = await post('/deposit/manual/paste-sms', { depositId: _manDepId, text });
-  if (btn) { btn.disabled = false; btn.textContent = 'Submit confirmation text'; }
-  manualPayToast(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'));
+  if (btn) { btn.disabled = false; btn.innerHTML = 'Submit <span>&rarr;</span>'; }
+  toast(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'), r.status !== 'success');
 };
 function setDepositStatusReview(){
   $('depStatusIcon').className = 'dep-status-icon';
@@ -2324,9 +2381,13 @@ function setDepositStatusReview(){
 // result. Returns true once the deposit has reached a terminal state.
 async function handleManualDepositStatusResult(r){
   if (r.status !== 'success') return false;
-  if (r.state === 'matched') { closeManualPayOverlay({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return true; }
-  if (r.state === 'failed') { closeManualPayOverlay({ fromAction: true }); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return true; }
-  if (r.state === 'review') { closeManualPayOverlay({ fromAction: true }); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return true; }
+  // A deposit reaching any terminal state (paid, failed, or handed to a
+  // human for review) is no longer "pending" -- the resume-on-reload cache
+  // must never resurrect the code screen for a deposit that's already
+  // been resolved one way or another.
+  if (r.state === 'matched') { clearManualPayPending(); closeManualPayOverlay({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return true; }
+  if (r.state === 'failed') { clearManualPayPending(); closeManualPayOverlay({ fromAction: true }); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return true; }
+  if (r.state === 'review') { clearManualPayPending(); closeManualPayOverlay({ fromAction: true }); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return true; }
   return false;
 }
 // Polls for up to the full 15-minute payment window (matching
@@ -2360,7 +2421,14 @@ window.manualPayRefresh = async function(){
   const resolved = await handleManualDepositStatusResult(r);
   if (!resolved) {
     if (btn) btn.disabled = false;
-    manualPayToast(r.status === 'success' ? 'Payment not detected yet' : (r.message || 'Could not check right now'));
+    toast(r.status === 'success' ? 'Payment not detected yet' : (r.message || 'Could not check right now'), r.status !== 'success');
+    // The forwarder matches automatically in the background -- this
+    // fallback is only offered once a manual check has come back
+    // unresolved, per the owner's own "we are just putting them as
+    // fallback... when one clicks refresh, the page spreads so one puts
+    // sms and submits."
+    const fallback = $('manPaySmsFallback');
+    if (fallback) fallback.classList.remove('mp-hidden');
   }
 };
 
