@@ -7392,6 +7392,50 @@ no longer references the old placeholder value at that assignment). This round i
 changes, so no backend redeploy needed. Cache bumped `v76`→`v77` (user), `v28`→`v29`
 (admin) since both built `index.html` files' embedded guard script content changed.
 
+## Round 113 (2026-09-02) — WhatsApp button removed from the announcement dialog (Telegram only, reversing Round 110); confirmed admin Deposits dashboard already correctly excludes the welcome/registration bonus
+
+Owner: "remove WhatsApp button on announcement dialog, only leave out telegram" — a
+direct reversal of Round 110's own change (which had replaced the dialog's old OK button
+with a WhatsApp button). Removed `#announceWhatsappBtn` from `index.html`'s markup,
+`openAnnounceWhatsapp()`/`window._announceWhatsappUrl`/its `maybeShowAnnouncement()`
+visibility-toggle from `original_module.js`. Telegram (`#announceTelegramBtn`,
+Round 84/110's own established behavior — opens the link, dialog stays open) is
+untouched and is now the dialog's only action button; the top-right X close button
+remains the way to dismiss it, same as when both Telegram and WhatsApp existed together.
+
+**Second ask, investigated thoroughly — found already correct, no code change needed.**
+Owner: "make sure that only real deposits should record in admin deposits dashboard,
+not reg bonus should be shown as deposit though." Traced every admin surface that shows
+a "deposit" figure or list against the actual code: `/admin/deposits/list` (the Deposits
+tab's own row list) and `/admin/stats`'s `depositAmount` ("Total deposited" on
+Dashboard) both query the `pendingDeposits` collection exclusively —
+`completeRegistrationCore()`'s welcome-bonus credit (`/register`) never creates a
+`pendingDeposits` document at all, only a `transactions` row with its own distinct
+`type: 'welcome_bonus'`; `/admin/analytics`'s `depAmount` KPI ("Deposits (all-time,
+matched)") sources the same way; the Transactions tab's type filter and `TX_LABELS`
+(admin-src) both already treat `welcome_bonus` as its own labeled type ("Welcome
+bonus"), never grouped with or mislabeled as "Deposit." Every one of these was already
+correct before this round — nothing needed fixing.
+
+**Verified, not just asserted from reading the code**: a standalone harness (not
+committed — throwaway, same "boot the real server.js against an in-memory mock DB via
+require.cache substitution" technique this file's own Round 104/106/108/109/111
+harnesses established) seeded one member with BOTH a real `welcome_bonus` transaction
+(5,000) and a real matched deposit (30,000), then called the real
+`/admin/deposits/list`, `/admin/stats`, and `/admin/analytics` endpoints — 6/6 checks:
+the Deposits tab's row list contains exactly 1 row (the real 30,000 deposit, not the
+welcome bonus); the Dashboard's "Total deposited" and Analytics' "Deposits (all-time,
+matched)" both report exactly 30,000, not 35,000; the welcome bonus is confirmed present
+in the ledger as its own genuinely distinct `welcome_bonus` type (not silently dropped
+or merged into `deposit`). Playwright, against the real built app: `#announceWhatsappBtn`
+no longer exists anywhere in the DOM; Telegram still opens its configured link and
+leaves the dialog open; the X close button still dismisses it.
+
+`node --check user-src/original_module.js` clean, `node build-core.js` clean round-trip
+(this round is `user-src`-only — no `server.js`/`admin-src` changes, so no backend
+redeploy and no admin cache bump). `git diff --check` clean. Cache bumped `v77`→`v78`
+(user). **`user-src/`-only, no Render redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -824,16 +824,6 @@ function maybeShowAnnouncement(){
   // its button" convention Help Centre's own Telegram/Customer-Service
   // buttons already use.
   $('announceTelegramBtn').style.display = url ? '' : 'none';
-  // Owner: "change okay button to WhatsApp button so when one taps he goes
-  // to WhatsApp group, link already saved but it is only living in help
-  // centered" -- reuses the same whatsappGroup setting Help Centre's own
-  // "WhatsApp Group" button already reads (Round 60), which the
-  // announcement dialog never consumed before. Replaces OK outright (same
-  // "opens the link, dialog stays open" behavior as the Telegram button
-  // above -- the X close button, top-right, is what dismisses the dialog).
-  const waUrl = s.whatsappGroup || '';
-  window._announceWhatsappUrl = waUrl;
-  $('announceWhatsappBtn').style.display = waUrl ? '' : 'none';
   $('announceBg').classList.add('show');
   // Without this, scrolling the dialog's own message text chains straight
   // through into the Home page sitting behind it (owner: "when one scrolls
@@ -847,9 +837,6 @@ window.closeAnnounce = function(){
 };
 window.openAnnounceTelegram = function(){
   if (window._announceUrl) window.open(window._announceUrl, '_blank', 'noopener');
-};
-window.openAnnounceWhatsapp = function(){
-  if (window._announceWhatsappUrl) window.open(window._announceWhatsappUrl, '_blank', 'noopener');
 };
 
 // ── HOME ──
