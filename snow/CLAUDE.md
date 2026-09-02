@@ -7536,6 +7536,53 @@ exactly "Recharge," the instructions card says "Tap Recharge..." with no remaini
 "Get payment number" text anywhere on the form. Cache bumped `v79`→`v80` (user).
 **`user-src/`-only, no Render redeploy needed for the backend.**
 
+## Round 116 (2026-09-02) — referral links now shareable in a `#pages/register/?ref=CODE` hash-route form, old plain-query links still work
+
+Owner: "how to make my link to be like #/pages/index5, like that register, login, home,
+my products, deposits, everything — like https://chn-snow2beer.com/#pages/register/
+?ref=UHA2J9 — like that and much more pages — can it be possible?" Asked via
+`AskUserQuestion` whether this meant a full client-side page-routing rebuild (every
+screen getting its own real URL/hash, deep-linkable, back-button-navigable) or just the
+one thing actually referenced by example (a referral link in that shape) — owner picked
+**"Just referral links (Recommended)."** Scoped strictly to that: no general hash-router
+was built, `showPage()`/the sheet-overlay navigation system, and the phone Back-button
+history handling (`_overlayStack`/`popstate`) are all completely untouched.
+
+**`paintTeam()`** (`user-src/original_module.js`): the referral link Team already builds
+and displays for copy/share changed from `location.origin + '/?ref=' + code` to
+`location.origin + '/#pages/register/?ref=' + code` — matches the owner's own example
+shape exactly.
+
+**`captureReferralFromUrl()`** rewritten to parse `ref` out of either form: `location.
+search` (the old plain query string, checked first since it's the cheaper/pre-existing
+case) or, failing that, out of `location.hash` by finding the `?` inside the fragment and
+parsing what follows it as its own `URLSearchParams` — necessary because a URL fragment
+(everything after `#`) is never sent to the server and never populated into `location.
+search` by the browser, so a `?ref=CODE` living inside a hash has to be pulled out by
+hand. Referral codes stay case-sensitive (server does an exact-string match, e.g.
+`QcNBht`) — no case transform applied to either path, matching this app's own existing
+"don't uppercase/lowercase a referral code" rule from Round 50.
+
+**Backward compatible by construction, not by a fallback shim**: any link already shared
+before this round (`.../?ref=CODE`) still works identically forever — `captureReferralFromUrl()`
+checks that form first and only falls through to the hash form when nothing was found
+there. No migration, no server-side change of any kind (the server was never involved in
+this at all — a referral code has always been read off whatever the client already
+extracted and put into `regReferral`/`STATE.refCode`).
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip (this round is `user-src`-only — no `server.js`/`admin-src` changes, so
+no backend redeploy and no admin cache bump). `git diff --check` clean, confirming
+exactly `user-src/original_module.js` + its built `user/index.html` changed (no
+`server.js`/`admin-src` files touched, matching the "just referral links" scoped
+decision). Playwright, against the real built app, 3 checks: a URL like
+`http://.../index.html#pages/register/?ref=UHA2J9` correctly lands on the Register pane
+with `#regReferral` prefilled to `UHA2J9` and `STATE.refCode` set to `UHA2J9`; the OLD
+plain-query form `?ref=OldCode1` still works identically (backward compatibility
+preserved); the Team page's own generated/shared link now contains the new
+`#pages/register/?ref=UHA2J9` format when `referralCode` is `UHA2J9`. Cache bumped
+`v80`→`v81` (user). **`user-src/`-only, no Render redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

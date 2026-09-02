@@ -451,8 +451,20 @@ function withTimeout(promise, ms){
 }
 function captureReferralFromUrl(){
   try {
-    const params = new URLSearchParams(location.search);
-    const ref = params.get('ref');
+    // Referral links are now shared as ".../#pages/register/?ref=CODE"
+    // (Round 116) -- everything after "#" is the URL fragment, which
+    // browsers never send to the server and never populate
+    // location.search with, so that form's ref code has to be pulled out
+    // of location.hash by hand. The original plain ".../?ref=CODE" query
+    // string (checked first, since it's the cheaper/more common case) still
+    // works too, so a link shared before this round keeps working exactly
+    // as it always has.
+    const search = new URLSearchParams(location.search);
+    let ref = search.get('ref');
+    if (!ref && location.hash) {
+      const qIdx = location.hash.indexOf('?');
+      if (qIdx !== -1) ref = new URLSearchParams(location.hash.slice(qIdx + 1)).get('ref');
+    }
     if (!ref) return;
     STATE.refCode = ref;
     // Referral codes are case-sensitive on the server (exact-match lookup,
@@ -1230,7 +1242,13 @@ function patchTeamStats(){
 }
 function paintTeam(){
   const t = STATE.teamStats || { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
-  const link = t.referralCode ? (location.origin + '/?ref=' + t.referralCode) : '';
+  // Owner: shared referral links should read like
+  // ".../#pages/register/?ref=CODE" instead of the plain ".../?ref=CODE"
+  // query string this used to build. captureReferralFromUrl() (boot-time)
+  // now parses ref out of either form, so an already-shared old-style link
+  // keeps working exactly as before -- only newly generated/copied links
+  // use the new format.
+  const link = t.referralCode ? (location.origin + '/#pages/register/?ref=' + t.referralCode) : '';
   let html = `
 <div style="display:flex;align-items:center;justify-content:center;gap:9px;padding:24px 20px 4px;">
   ${snowflakeSvg('var(--snow-green)',26)}
