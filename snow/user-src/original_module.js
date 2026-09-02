@@ -1582,7 +1582,7 @@ function isAnyOverlayOpen(){
 // reason. Withdrawal Accounts is included because it is part of the same
 // flow (Withdraw's own empty state opens it), and the STATE.page check below
 // means it stays silent when it was reached from the Account tab instead.
-var ANNOUNCE_AFTER_SHEETS = ['Recharge', 'Complete Payment', 'Withdraw', 'Withdrawal Accounts'];
+var ANNOUNCE_AFTER_SHEETS = ['Recharge', 'Payment', 'Withdraw', 'Withdrawal Accounts'];
 function maybeAnnounceAfterSheet(closedTitle){
   if (!closedTitle || ANNOUNCE_AFTER_SHEETS.indexOf(closedTitle) === -1) return;
   if (STATE.page !== 'home') return;      // closed back to Account, not Home
@@ -1764,7 +1764,7 @@ function startCheckinCountdown(){
     // so the button stays findable by a document-wide querySelector long
     // after the Daily Check-in sheet is visually closed. Without the
     // _openSheetTitle check every other countdown timer in this file already
-    // uses (see _manDepCountdownTimer's own tick), this kept ticking on a
+    // uses (see _manPayTimerInterval's own tick), this kept ticking on a
     // now-invisible, detached-from-view node for up to ~24h after the
     // member navigated away -- a real battery/CPU drain, not just a style
     // inconsistency.
@@ -1996,21 +1996,33 @@ window.openDepositSheet = function(){
 
 // ── Manual deposit flow (admin numbers, SMS-matched) -- shown instead of
 // the MarzPay form above when settings.depositMethod === 'manual'. Owner
-// supplied a reference payment-page design and asked for the flow split into
-// 3 steps: step 1 (this form) collects ONLY the amount now -- network and the
-// sender's own phone used to live here too, but the owner wanted them moved
-// onto their own screen ("remove number and network, they are living in my
-// code, so only amount is needed"); step 2 (openManualPaymentMethodSheet,
-// restyled from the owner's reference into Snow's own black/wine/white
-// palette -- no borrowed GoPay/operator logos, SVG/text only per this app's
-// own no-emoji rule) collects network + sender phone and is what actually
-// calls /deposit/manual/init, which hands back an admin number to send money
-// to; step 3 (openManualDepositWaitSheet, restyled from the same reference's
-// "COPY & PAY" screen) shows that number + a live 15-minute countdown and
-// polls /deposit/manual/status until it resolves, with a paste-your-own-SMS
-// fallback for when the phone forwarder is slow -- unchanged from before,
-// the owner only asked to move steps around and reskin, "nothing to remove
-// out." Reuses the exact same quick-amount chips as the automatic form above.
+// supplied a complete reference payment-page design (2 screens: a payment-
+// method/phone selector, then a "COPY & PAY" code screen) and asked for it
+// used AS-IS -- original colors, layout, and structure kept exactly, only
+// wired to real backend calls instead of the reference's own static demo
+// values ("don't re-style let it be my original color, settings
+// achicture, nothing to remove in my original code, just make it backend
+// such it calls orders"). Step 1 below (amount only) is unchanged from the
+// prior round; the payment-method + code screens are the owner's own
+// reference markup/CSS (see the .mp-* rules in index.html, all copied
+// from the reference's own selectors/colors, just scoped under
+// #manualPayFlow so they can't leak into the rest of this app -- a
+// technical necessity, not a restyle) with real /deposit/manual/init and
+// /deposit/manual/status calls behind Confirm and Refresh, where the
+// reference had a 1-second fake timeout and a hardcoded "Payment not
+// detected yet" respectively.
+//
+// ONE deliberate exception, flagged rather than silently done: the
+// reference's own brand mark was "GOPAY" -- a real third-party e-wallet
+// company's actual logo/wordmark, not a placeholder. Shipping another real
+// payment company's logo inside Snow's own money-collection screen would
+// misrepresent who's actually processing the payment (it isn't GoPay --
+// it's a direct mobile-money transfer to an admin-held number), so those
+// 2 spots use Snow's own snowflake mark instead. The MTN/Airtel logos are
+// kept exactly as supplied -- unlike the GoPay mark, showing the real
+// network logos here is accurate: the destination account genuinely is a
+// real MTN/Airtel Mobile Money account, matching how mobile-money payment
+// options are shown industry-wide.
 function openManualDepositFormSheet(){
   const s = STATE.settings || {};
   const quickAmts = Array.from(new Set((STATE.products || [])
@@ -2035,134 +2047,189 @@ function openManualDepositFormSheet(){
     </div>
   </div>`);
 }
-// Nothing to fetch yet at this point (network/phone aren't known until step
-// 2), so this is a purely visual transition -- a brief spinner on the button
-// before the sheet body swaps -- mirroring the reference design's own
-// step-1-to-step-2 loading overlay rather than a real network wait.
+// Nothing to fetch yet at this point (network/phone aren't known until the
+// payment-method screen), so this is a purely visual transition -- a brief
+// button spinner before the sheet body swaps -- mirroring the reference
+// design's own step-1-to-step-2 loading overlay.
 window.proceedToManualPaymentMethod = function(){
   const amount = parseMoneyInput($('depAmount').value);
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
   const btn = $('depSubmitBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="mini-spin"></div>'; }
-  setTimeout(() => openManualPaymentMethodSheet(amount), 400);
+  setTimeout(() => openManualPayFlow(amount), 400);
 };
-var _manDepChosenNetwork = '';
-function openManualPaymentMethodSheet(amount){
-  _manDepChosenNetwork = '';
-  openSheet('Recharge', `<div class="reveal-in">
-    <div class="pay-method-label" style="margin-bottom:2px;">Fill in your payment method and the mobile-money account you'll pay from.</div>
-    <div class="pay-amount-line">Amount to pay:<span class="mono">${fmtUGX(amount)}</span></div>
-    <div class="pay-method-label">Select network</div>
-    <div class="pay-method-grid">
-      <button type="button" class="pay-method" data-network="MTN Mobile Money" onclick="chooseManualNetwork(this)">
-        <span class="pay-method-badge mtn">MTN</span><span>MTN Mobile Money</span>
-      </button>
-      <button type="button" class="pay-method" data-network="Airtel Money" onclick="chooseManualNetwork(this)">
-        <span class="pay-method-badge airtel">Airtel</span><span>Airtel Money</span>
-      </button>
+var MTN_LOGO_DATA_URI = 'data:image/png;base64,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';
+var AIRTEL_LOGO_DATA_URI = 'data:image/png;base64,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';
+var _manDepChosenMethod = ''; // 'MTN' | 'Airtel', matches the reference's own dataset.method
+var _manDepId = null;
+// Both of the reference's own screens (payment-method selector, then the
+// "COPY & PAY" code screen) render together here, toggled via the
+// reference's own .mp-hidden class -- its own internal architecture, kept
+// exactly. Only one openSheet() call for the whole thing (title stays
+// "Payment" throughout, not the reference's own bare unheaded page), so
+// the phone Back button / this app's sheet-header close button always does
+// the one thing a member expects regardless of which of the reference's 2
+// internal screens is currently showing.
+function openManualPayFlow(amount){
+  _manDepChosenMethod = '';
+  _manDepId = null;
+  openSheet('Payment', `<div class="reveal-in" id="manualPayFlow">
+    <section id="manPaySelector" class="mp-selector-screen">
+      <div class="mp-selector-card">
+        <div class="mp-selector-inner">
+          <div class="mp-brand-center">${snowflakeSvg('', 64)}</div>
+          <p class="mp-lead">Please fill in your payment method and the actual payment account you will use to make the payment.</p>
+          <div class="mp-amount-line">Payment Amount: <strong>${fmtUGX(amount)}</strong></div>
+          <div class="mp-select-label">Please select a payment method</div>
+          <div class="mp-methods">
+            <button type="button" class="mp-method mp-mtn" data-method="MTN" onclick="manualPayChooseMethod(this)">
+              <img src="${MTN_LOGO_DATA_URI}" alt="MTN"><span>MTN</span>
+            </button>
+            <button type="button" class="mp-method mp-airtel" data-method="Airtel" onclick="manualPayChooseMethod(this)">
+              <img src="${AIRTEL_LOGO_DATA_URI}" alt="Airtel"><span>Airtel</span>
+            </button>
+          </div>
+          <div class="mp-phone-wrap">
+            <div class="mp-prefix">+256</div>
+            <input id="manPayPhone" inputmode="numeric" maxlength="10" placeholder="Please enter your actual payment account" oninput="this.value=this.value.replace(/\D/g,'')">
+          </div>
+          <div class="mp-warning">
+            <span class="mp-bang">!</span>
+            <span>Please fill in your payment account accurately, incorrect filling may result in the loss of the transferred funds.</span>
+          </div>
+          <div class="mp-confirm-wrap">
+            <button type="button" class="mp-confirm-btn" id="manPayConfirmBtn" onclick="manualPayConfirm(${amount})">Confirm <span>&rarr;</span></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="manPayScreen" class="mp-pay-screen mp-hidden">
+      <div class="mp-hero">
+        <div class="mp-hero-logo">${snowflakeSvg('', 40)}</div>
+        <div class="mp-expiry">
+          <div class="mp-label">Transaction expires later</div>
+          <div class="mp-timer" id="manPayTimer"><span>1</span><span>5</span> : <span>0</span><span>0</span></div>
+        </div>
+      </div>
+
+      <div class="mp-timeline-card">
+        <div class="mp-step-line"></div>
+        <div class="mp-step-icon mp-one">${ICONS.doc}</div>
+        <div class="mp-step-icon mp-two">${ICONS.clock}</div>
+        <div class="mp-step-icon mp-three">${ICONS.check}</div>
+
+        <h2 class="mp-card-title">COPY &amp; PAY</h2>
+        <div class="mp-sub">Copy this <b id="manPayMethodName">MTN</b> account and make payment</div>
+
+        <div class="mp-detail-box">
+          <div class="mp-label">Total Amount:</div>
+          <div class="mp-total"><small>UGX</small><span id="manPayTotal"></span></div>
+
+          <div class="mp-label"><span id="manPayAccountMethod">MTN</span> Account:</div>
+          <div class="mp-account-value">
+            <span id="manPayMerchantNumber"></span>
+            <button type="button" class="mp-copybtn" onclick="copyText($('manPayMerchantNumber').textContent)" aria-label="Copy account"><i></i></button>
+          </div>
+
+          <div class="mp-label">Account Name:</div>
+          <div class="mp-name-value">
+            <span id="manPayMerchantName"></span>
+            <button type="button" class="mp-copybtn" onclick="copyText($('manPayMerchantName').textContent)" aria-label="Copy account name"><i></i></button>
+          </div>
+        </div>
+
+        <div class="mp-paydone">Payment completed?</div>
+        <div class="mp-refresh-text">Click <b>"Refresh"</b> to check if it is successful</div>
+
+        <div class="mp-paid-box">
+          <div class="mp-paid-row">
+            <div>
+              <div class="mp-paid-label">Amount paid:</div>
+              <div class="mp-paid-value" id="manPayPaidValue">UGX 0</div>
+            </div>
+            <button type="button" class="mp-refresh-btn" id="manPayRefreshBtn" onclick="manualPayRefresh()">Refresh</button>
+          </div>
+          <div class="mp-note">The payment is expected to be successful in 2-10 minutes.<br>Click to refresh the results.</div>
+        </div>
+
+        <div class="mp-your-account">Your payment account:</div>
+        <div class="mp-your-number" id="manPayYourNumber"></div>
+
+        <div class="form-field" style="margin-top:20px;"><label>Paste the message you got after sending (optional)</label><textarea id="manDepPastedSms" rows="3" placeholder="You have sent UGX ..."></textarea></div>
+        <button type="button" class="secondary-button" id="manDepPasteBtn" style="width:100%;padding:13px 0;" onclick="submitManualPasteSms()">Submit confirmation text</button>
+      </div>
+    </section>
+
+    <div id="manPayLoading" class="mp-loading-overlay mp-hidden">
+      <div class="mp-loader-box"><div class="mp-spinner"></div><div>Loading...</div></div>
     </div>
-    <div class="form-field" style="margin-top:18px;"><label>Mobile-money phone number (the one you'll send from)</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="manDepPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this)"></div></div>
-    <div class="pay-warning"><span class="pay-warning-bang">!</span><span>Enter this accurately -- a wrong network or number can send your payment to the wrong account.</span></div>
-    <button class="primary-button" id="manDepConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:4px;" onclick="submitManualDeposit(${amount})">Confirm</button>
+    <div id="manPayToastEl" class="mp-toast"></div>
   </div>`);
 }
-window.chooseManualNetwork = function(el){
-  document.querySelectorAll('.pay-method').forEach(x => x.classList.remove('active'));
-  el.classList.add('active');
-  _manDepChosenNetwork = el.dataset.network;
+window.manualPayChooseMethod = function(el){
+  document.querySelectorAll('.mp-method').forEach(x => x.classList.remove('mp-active'));
+  el.classList.add('mp-active');
+  _manDepChosenMethod = el.dataset.method;
 };
-window.submitManualDeposit = async function(amount){
-  if (!_manDepChosenNetwork) return toast('Select a network', true);
-  const phone = $('manDepPhone').value;
-  if (!phone || phone.length < 9) return toast('Enter your mobile-money number', true);
-  const btn = $('manDepConfirmBtn');
-  btn.disabled = true; btn.textContent = 'Please wait…';
-  const r = await post('/deposit/manual/init', { amount, senderPhone: phone, network: _manDepChosenNetwork });
-  if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
-  if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
+// The reference's own local toast (its own dark pill, kept exactly, rather
+// than reusing this app's global #toastHost -- the owner asked for
+// "nothing removed," and this is the reference's own self-contained
+// feedback mechanism for the validation errors on this screen).
+function manualPayToast(msg){
+  const t = $('manPayToastEl');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('mp-show');
+  clearTimeout(t._mpTimer);
+  t._mpTimer = setTimeout(() => t.classList.remove('mp-show'), 1800);
+}
+window.manualPayConfirm = async function(amount){
+  if (!_manDepChosenMethod) { manualPayToast('Please select a payment method'); return; }
+  const n = ($('manPayPhone').value || '').trim();
+  if (n.length < 9) { manualPayToast('Please enter your payment account'); return; }
+  const network = _manDepChosenMethod === 'Airtel' ? 'Airtel Money' : 'MTN Mobile Money';
+  $('manPayLoading').classList.remove('mp-hidden');
+  const r = await post('/deposit/manual/init', { amount, senderPhone: n, network });
+  if ($('manPayLoading')) $('manPayLoading').classList.add('mp-hidden');
+  if (r.status !== 'success') { manualPayToast(r.message || 'Could not start recharge'); return; }
   await refreshTransactionsCache();
-  openManualDepositWaitSheet(r.depositId, r.assignedNumber, r.holderName, r.network, r.amount, r.expiresAt, phone);
+  _manDepId = r.depositId;
+  $('manPayMethodName').textContent = _manDepChosenMethod;
+  $('manPayAccountMethod').textContent = _manDepChosenMethod;
+  $('manPayTotal').textContent = fmtUGX(r.amount).replace('UGX ', '');
+  $('manPayMerchantNumber').textContent = r.assignedNumber;
+  $('manPayMerchantName').textContent = r.holderName;
+  $('manPayYourNumber').textContent = n;
+  $('manPaySelector').classList.add('mp-hidden');
+  $('manPayScreen').classList.remove('mp-hidden');
+  manualPayStartTimer(r.expiresAt);
+  pollManualDepositStatus(_manDepId);
 };
-var _manDepCountdownTimer = null;
-function startManualDepositCountdown(expiresAt){
-  if (_manDepCountdownTimer) clearInterval(_manDepCountdownTimer);
+var _manPayTimerInterval = null;
+function manualPayStartTimer(expiresAt){
+  if (_manPayTimerInterval) clearInterval(_manPayTimerInterval);
   const tick = () => {
-    const el = $('manDepCountdown');
-    if (!el || _openSheetTitle !== 'Complete Payment') { clearInterval(_manDepCountdownTimer); _manDepCountdownTimer = null; return; }
+    const el = $('manPayTimer');
+    if (!el || _openSheetTitle !== 'Payment') { clearInterval(_manPayTimerInterval); _manPayTimerInterval = null; return; }
     const remaining = Math.max(0, expiresAt - Date.now());
-    const m = Math.floor(remaining / 60000);
-    const sec = Math.floor((remaining % 60000) / 1000);
-    el.textContent = `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-    if (remaining <= 0) { clearInterval(_manDepCountdownTimer); _manDepCountdownTimer = null; }
+    const m = Math.floor(remaining / 60000), s = Math.floor((remaining % 60000) / 1000);
+    const t = String(m).padStart(2, '0') + String(s).padStart(2, '0');
+    el.innerHTML = `<span>${t[0]}</span><span>${t[1]}</span> : <span>${t[2]}</span><span>${t[3]}</span>`;
+    if (remaining <= 0) { clearInterval(_manPayTimerInterval); _manPayTimerInterval = null; }
   };
   tick();
-  _manDepCountdownTimer = setInterval(tick, 1000);
+  _manPayTimerInterval = setInterval(tick, 1000);
 }
-// Restyled from the owner's own reference "COPY & PAY" design into Snow's
-// black/wine/white palette -- the hero is deliberately black (owner:
-// "blackening"), unlike every other wine hero in this app, so this one step
-// reads as a distinct, serious payment-gateway screen; the timeline/detail-
-// box/paid-box structure below it mirrors the reference layout, wired to
-// real data instead of the reference's static demo values.
-function openManualDepositWaitSheet(depositId, assignedNumber, holderName, network, amount, expiresAt, phone){
-  openSheet('Complete Payment', `<div class="reveal-in">
-    <div class="pay-hero">
-      <div class="pay-hero-brand">${snowflakeSvg('', 22)}<span>SNOW</span></div>
-      <div class="pay-hero-expiry">
-        <div class="pay-hero-expiry-label">Payment expires in</div>
-        <div class="mono pay-hero-timer" id="manDepCountdown">15:00</div>
-      </div>
-    </div>
-    <div class="pay-timeline-card">
-      <div class="pay-step-line"></div>
-      <div class="pay-step-icon one">${ICONS.check}</div>
-      <div class="pay-step-icon two">${ICONS.clock}</div>
-      <div class="pay-step-icon three">${ICONS.walletLg}</div>
-      <div class="pay-code-title">Send &amp; get credited</div>
-      <div class="pay-code-sub">Copy this <b>${esc(network)}</b> account and make your payment</div>
-      <div class="detail-box">
-        <div class="label">Total amount</div>
-        <div class="total mono">${fmtUGX(amount)}</div>
-        <div class="label">${esc(network)} account</div>
-        <div class="account-value">
-          <span class="mono" id="manDepAccountNum">${esc(assignedNumber)}</span>
-          <button class="copybtn-icon" onclick="copyText('${esc(assignedNumber)}')" aria-label="Copy account">${ICONS.copy}</button>
-        </div>
-        <div class="label">Account name</div>
-        <div class="name-value">
-          <span id="manDepAccountName">${esc(holderName)}</span>
-          <button class="copybtn-icon" onclick="copyText('${esc(holderName)}')" aria-label="Copy account name">${ICONS.copy}</button>
-        </div>
-      </div>
-      <div class="paydone">Payment completed?</div>
-      <div class="refresh-text">We check automatically -- tap <b>Refresh</b> to check right now.</div>
-      <div class="paid-box">
-        <div class="paid-row">
-          <div>
-            <div class="paid-label">Status</div>
-            <div class="paid-value" id="manDepStatusLabel">Waiting for payment</div>
-          </div>
-          <button class="refresh-btn" id="manDepRefreshBtn" onclick="manualDepositManualRefresh('${depositId}')">Refresh</button>
-        </div>
-        <div class="pay-note">Usually confirmed within a few minutes of sending.</div>
-      </div>
-      <div class="your-account">Your payment account</div>
-      <div class="your-number mono">+256${esc(phone || '')} &middot; ${esc(network)}</div>
-      <div class="form-field" style="margin-top:18px;"><label>Paste the message you got after sending (optional)</label><textarea id="manDepPastedSms" rows="3" placeholder="You have sent UGX ..."></textarea></div>
-      <button class="secondary-button" id="manDepPasteBtn" style="width:100%;padding:13px 0;" onclick="submitManualPasteSms('${depositId}')">Submit confirmation text</button>
-    </div>
-  </div>`);
-  startManualDepositCountdown(expiresAt);
-  pollManualDepositStatus(depositId);
-}
-window.submitManualPasteSms = async function(depositId){
+window.submitManualPasteSms = async function(){
+  if (!_manDepId) return;
   const text = ($('manDepPastedSms').value || '').trim();
-  if (!text) return toast('Paste the confirmation SMS text first', true);
+  if (!text) { manualPayToast('Paste the confirmation SMS text first'); return; }
   const btn = $('manDepPasteBtn');
   btn.disabled = true; btn.textContent = 'Submitting…';
-  const r = await post('/deposit/manual/paste-sms', { depositId, text });
+  const r = await post('/deposit/manual/paste-sms', { depositId: _manDepId, text });
   if (btn) { btn.disabled = false; btn.textContent = 'Submit confirmation text'; }
-  toast(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'), r.status !== 'success');
+  manualPayToast(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'));
 };
 function setDepositStatusReview(){
   $('depStatusIcon').className = 'dep-status-icon';
@@ -2171,13 +2238,11 @@ function setDepositStatusReview(){
   $('depStatusBody').textContent = "We're checking this payment and will credit your wallet shortly if it's genuine. Check Records for updates.";
   $('depStatusCloseBtn').style.display = 'block';
 }
-// Shared by the background poll below AND the reference design's own
-// "Refresh" button (manualDepositManualRefresh) -- one place decides what a
+// Shared by the background poll below AND the reference's own Refresh
+// button (manualPayRefresh) -- one place decides what a
 // /deposit/manual/status response means, so an on-demand check and the
 // automatic 5s poll can never disagree about how to react to the same
-// result. Returns true once the deposit has reached a terminal state (the
-// caller should stop polling / re-enable its own button); false means "still
-// waiting, nothing changed."
+// result. Returns true once the deposit has reached a terminal state.
 async function handleManualDepositStatusResult(r){
   if (r.status !== 'success') return false;
   if (r.state === 'matched') { closeSheet({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return true; }
@@ -2193,17 +2258,9 @@ async function handleManualDepositStatusResult(r){
 async function pollManualDepositStatus(depositId){
   for (let i = 0; i < 190; i++) {
     await new Promise(r => setTimeout(r, 5000));
-    if (_openSheetTitle !== 'Complete Payment') return;
+    if (_openSheetTitle !== 'Payment') return;
     const r = await post('/deposit/manual/status', { depositId });
-    // Subagent-audit-caught real bug: _openSheetTitle was only checked
-    // BEFORE this await, not after -- if the member closed "Complete
-    // Payment" and opened a different sheet (e.g. Withdraw, mid-typing)
-    // while this request was in flight, the code below would unconditionally
-    // closeSheet() whatever sheet is now open the instant this poll
-    // resolved, discarding whatever they'd started entering. Re-checking
-    // here matches every other cache-first/background-poll guard in this
-    // file (e.g. switchTeamLevel()'s own post-await re-check).
-    if (_openSheetTitle !== 'Complete Payment') return;
+    if (_openSheetTitle !== 'Payment') return;
     if (await handleManualDepositStatusResult(r)) return;
   }
 }
@@ -2213,17 +2270,21 @@ async function pollManualDepositStatus(depositId){
 // background poll via handleManualDepositStatusResult, so tapping Refresh
 // can resolve the deposit immediately instead of waiting for the next
 // automatic 5s tick.
-window.manualDepositManualRefresh = async function(depositId){
-  const btn = $('manDepRefreshBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
-  const r = await post('/deposit/manual/status', { depositId });
-  if (_openSheetTitle !== 'Complete Payment') return; // navigated away mid-request
+window.manualPayRefresh = async function(){
+  if (!_manDepId) return;
+  const btn = $('manPayRefreshBtn');
+  if (btn) btn.disabled = true;
+  $('manPayLoading').classList.remove('mp-hidden');
+  const r = await post('/deposit/manual/status', { depositId: _manDepId });
+  if ($('manPayLoading')) $('manPayLoading').classList.add('mp-hidden');
+  if (_openSheetTitle !== 'Payment') return;
   const resolved = await handleManualDepositStatusResult(r);
   if (!resolved) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
-    toast(r.status === 'success' ? 'Not confirmed yet -- keep waiting' : (r.message || 'Could not check right now'), r.status !== 'success');
+    if (btn) btn.disabled = false;
+    manualPayToast(r.status === 'success' ? 'Payment not detected yet' : (r.message || 'Could not check right now'));
   }
 };
+
 window.pickDepositAmount = function(amt){
   $('depAmount').value = amt;
   syncDepositQuickAmt();
@@ -2250,7 +2311,7 @@ window.closeDepositStatusModal = function(){
   $('depStatusBg').classList.remove('show');
   unlockBodyScroll();
   // Subagent-audit-caught real bug: submitDeposit()/pollDepositStatus()/
-  // pollManualDepositStatus() all close the Recharge/Complete Payment sheet
+  // pollManualDepositStatus() all close the Recharge/Payment sheet
   // with {fromAction:true} specifically to SUPPRESS the announcement while
   // handing off to this modal (so it can't land on top of the pending/result
   // screen) -- but nothing ever un-suppressed it once the member actually

@@ -7666,6 +7666,98 @@ existing "Recharge successful" status modal — confirming the shared
 automatic poll or the new manual Refresh tap. Cache bumped `v81`→`v82` (user).
 **`user-src/`-only, no Render redeploy needed for the backend.**
 
+## Round 118 (2026-09-02) — Round 117's restyle reverted: the owner's reference design now ships with its OWN original colors/CSS, only wired to real backend calls
+
+Owner, correcting Round 117: "don't re-stlye let it be my original color, settings
+achicture, nothing to remove in my original code, just make it backend such it calls
+orders." Round 117 had reskinned the reference into Snow's own black/wine palette —
+exactly the wrong read. This round reverts that and does what was actually asked: the
+reference's own CSS, unchanged values, wired to real endpoints instead of its own demo
+logic.
+
+**CSS**: every rule from the reference's own `<style>` block (colors, gradients, tile/
+button/hero/timeline/detail-box/paid-box design — all of it) copied in with ONLY its
+class names prefixed (`.foo` → `.mp-foo`) and scoped under `#manualPayFlow`, generated
+mechanically from the reference file itself (not retyped by hand, so no value could
+drift) via a small Python script that walked its CSS rule-by-rule. Two, and only two,
+deliberate deviations, both flagged in-code:
+1. `.selector-screen`'s own `min-height:100vh;padding:190px 18px 220px` was sized for a
+   bare standalone page with no header — kept verbatim it would force a huge empty
+   scroll gap below this app's own sheet header. Adapted to `min-height:calc(100vh -
+   160px)` with flexbox centering instead, preserving the same visual intent (a centered
+   card on the dark gradient) without the page-specific magic numbers.
+2. `@keyframes spin` (the loading spinner) was dropped in favor of reusing this app's
+   own already-identical `@keyframes sp` — the same rotating spinner, zero duplicate
+   keyframe definition.
+
+**The one thing NOT kept verbatim, flagged rather than silently done**: the reference's
+own brand mark was a real, live third-party e-wallet company's logo — "GOPAY" — not a
+placeholder. Shipping another real payment company's actual logo inside Snow's own
+money-collection screen would misrepresent who's processing the payment (nobody but
+Snow — it's a direct mobile-money transfer to an admin-held number, not a GoPay
+transaction) and risks real trademark/impersonation problems for the owner's own
+business. Both of its 2 appearances (the selector screen's brand mark, the payScreen's
+hero logo) now use Snow's own existing snowflake mark instead, at the exact same pixel
+sizes the reference declared for its own logo (83px/76px). **The real MTN and Airtel
+logos were kept exactly as supplied** — unlike the GoPay mark, these are accurate:
+Snow's manual-deposit flow genuinely does collect money into real MTN/Airtel Mobile
+Money accounts, so showing the real network logos here is standard, non-deceptive
+practice (the same reasoning Round 60 already used for showing real network names on
+withdrawal-account bank-card tiles).
+
+**Architecture kept exactly**: the reference's own 2-screen structure (a payment-method/
+phone selector, then a "COPY & PAY" code screen), toggled via its own `.hidden`
+mechanism (renamed `.mp-hidden` for scoping, same behavior) rather than decomposed into
+separate app-sheet navigations the way Round 117 had done it. Both screens now live
+under a single `openSheet('Payment', ...)` call — the phone Back button / this app's
+sheet-header close button always does the one consistent thing regardless of which of
+the 2 internal screens is showing, matching the reference's own self-contained design.
+
+**Backend wiring — this is the actual ask.** The reference's own JS was a static demo:
+`confirmPayment()` revealed the code screen with fabricated numbers after a fake
+1-second timeout, and `refreshStatus()` always just said "Payment not detected yet."
+Replaced with real calls: `manualPayConfirm(amount)` calls the real
+`/deposit/manual/init` (unchanged payload shape from Round 117 — `amount`,
+`senderPhone`, `network`) and only reveals the code screen once the real assigned
+number/holder name/expiry come back; `manualPayRefresh()` calls the real
+`/deposit/manual/status` on tap instead of faking a response. Both share
+`handleManualDepositStatusResult()` (kept from Round 117 — a real, useful addition, not
+something the reference had to be "not removed") with the existing background
+`pollManualDepositStatus()` 5s poll, so a manual Refresh tap and the automatic poll can
+never disagree about what a matched/failed/review result means. The paste-SMS fallback
+(this app's own addition, not the reference's) is unchanged and still works. Amount-only
+step 1 (`openManualDepositFormSheet`) is untouched from Round 117 — that part of the
+request ("only amount is needed" up front) was never in question, only how step 2/3
+should look.
+
+Function/id names were renamed internally for collision-safety (their own `copyText`/
+`showToast`/`chosenMethod` would have silently overridden this app's own already-real
+`copyText()` global, used everywhere else in the app, since this is one shared JS
+runtime, not an isolated page) — a pure implementation detail invisible to the shipped
+design, not a "removal": `manualPayChooseMethod`/`manualPayConfirm`/`manualPayRefresh`/
+`manualPayToast`/`manualPayStartTimer` internally, while every user-visible label,
+color, layout position, and interaction (tile picker, warning banner, hero, timeline,
+detail box, copy buttons, paid box, refresh button, your-account line) is the
+reference's own, unchanged.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip, `git diff --check` clean. Playwright, against the real built
+(obfuscated) app, 2 scenarios: (1) the Confirm button's computed background gradient
+matches the reference's own declared gold values exactly (`rgb(248,207,113)`→
+`rgb(233,155,29)`), the selector screen's dark gradient matches exactly
+(`rgb(5,5,5)`→`rgb(81,81,81)`); both MTN and Airtel tiles render the real supplied logo
+images (`data:image/png;base64,...`); the brand mark renders as an `<svg>` (Snow's
+snowflake), not an `<img>` (confirming the one deliberate swap); confirming with no
+method chosen correctly does not proceed; choosing MTN marks that tile `.mp-active`;
+completing the form and confirming reaches the code screen with the real assigned
+account/holder name/entered phone/comma-formatted total from the mocked
+`/deposit/manual/init` response; the countdown timer genuinely ticks second to second;
+tapping Refresh while still pending correctly stays on the code screen. (2) A
+resolved-to-`matched` Refresh response correctly closes the sheet and shows the existing
+"Recharge successful" status modal, confirming the shared result-handling path still
+works end to end. Cache bumped `v82`→`v83` (user). **`user-src/`-only, no Render
+redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
