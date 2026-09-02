@@ -122,29 +122,6 @@ function sanitizePhoneInput(el){
   if (digits.length > maxDigits) digits = digits.slice(0, maxDigits);
   el.value = digits;
 }
-// Strips a stored full/international phone ("+256709123456", "256709123456")
-// back down to the local display form ("0709123456") for prefilling the
-// now-local-only Deposit phone field from STATE.account.phone -- the chip
-// already shows "+256" separately, so the input itself must never contain it.
-function localPhoneDisplay(fullPhone){
-  let digits = String(fullPhone || '').replace(/\D/g, '');
-  if (digits.startsWith('256') && digits.length > 9) digits = digits.slice(3);
-  return digits ? '0' + digits.replace(/^0+/, '') : '';
-}
-// Owner: "no auto selecting network to be mtn" -- the Recharge network
-// picker always defaulted to whichever <option> came first in the markup
-// (MTN) regardless of the member's real carrier, so a real Airtel number
-// (e.g. a 074 prefix) showed "MTN Mobile Money" pre-selected -- wrong, not
-// just unselected. Guesses from Uganda's real MTN/Airtel mobile prefixes
-// instead of defaulting blindly; returns '' (leave whatever's currently
-// selected alone) for a number/prefix this can't confidently place.
-function guessNetworkFromPhone(localDigits){
-  const d = String(localDigits || '').replace(/\D/g, '');
-  const p2 = d.startsWith('0') ? d.slice(1, 3) : d.slice(0, 2);
-  if (['77', '78', '76', '39'].includes(p2)) return 'MTN Mobile Money';
-  if (['70', '74', '75'].includes(p2)) return 'Airtel Money';
-  return '';
-}
 function $(id){ return document.getElementById(id); }
 function togglePw(id, btn){
   const el = $(id);
@@ -1927,16 +1904,15 @@ window.openDepositSheet = function(){
   const chipsHtml = quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
     quickAmts.map(p => `<button type="button" class="quick-amt" data-amt="${p}" onclick="pickDepositAmount(${p})">${fmtUGX(p)}</button>`).join('')
   }</div>` : '';
-  const prefillPhone = localPhoneDisplay((STATE.account && STATE.account.phone) || '');
-  const guessedNetwork = guessNetworkFromPhone(prefillPhone);
   openSheet('Recharge', `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
     ${chipsHtml}
-    <div class="form-field"><label>Mobile-money phone number</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${esc(prefillPhone)}" oninput="onDepPhoneInput(this)"></div></div>
+    <div class="form-field"><label>Mobile-money phone number</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this)"></div></div>
     <div class="form-field"><label>Network</label>
       <select id="depNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
-        <option value="MTN Mobile Money"${guessedNetwork === 'MTN Mobile Money' ? ' selected' : ''}>MTN Mobile Money</option>
-        <option value="Airtel Money"${guessedNetwork === 'Airtel Money' ? ' selected' : ''}>Airtel Money</option>
+        <option value="" disabled selected>Select network</option>
+        <option value="MTN Mobile Money">MTN Mobile Money</option>
+        <option value="Airtel Money">Airtel Money</option>
       </select>
     </div>
     <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Recharge</button>
@@ -1969,16 +1945,15 @@ function openManualDepositFormSheet(){
   const chipsHtml = quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
     quickAmts.map(p => `<button type="button" class="quick-amt" data-amt="${p}" onclick="pickDepositAmount(${p})">${fmtUGX(p)}</button>`).join('')
   }</div>` : '';
-  const prefillPhone = localPhoneDisplay((STATE.account && STATE.account.phone) || '');
-  const guessedNetwork = guessNetworkFromPhone(prefillPhone);
   openSheet('Recharge', `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
     ${chipsHtml}
-    <div class="form-field"><label>Mobile-money phone number (the one you'll send from)</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${esc(prefillPhone)}" oninput="onDepPhoneInput(this)"></div></div>
+    <div class="form-field"><label>Mobile-money phone number (the one you'll send from)</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this)"></div></div>
     <div class="form-field"><label>Network</label>
       <select id="depNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
-        <option value="MTN Mobile Money"${guessedNetwork === 'MTN Mobile Money' ? ' selected' : ''}>MTN Mobile Money</option>
-        <option value="Airtel Money"${guessedNetwork === 'Airtel Money' ? ' selected' : ''}>Airtel Money</option>
+        <option value="" disabled selected>Select network</option>
+        <option value="MTN Mobile Money">MTN Mobile Money</option>
+        <option value="Airtel Money">Airtel Money</option>
       </select>
     </div>
     <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitManualDeposit()">Get payment number</button>
@@ -2097,17 +2072,6 @@ function syncDepositQuickAmt(){
   const val = parseMoneyInput($('depAmount').value);
   box.querySelectorAll('.quick-amt').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.amt) === val));
 }
-// Re-guesses the network as the member edits the Recharge phone field (they
-// may be paying from a different number than their own account's) -- only
-// overrides the picker when the new prefix confidently resolves to one
-// network or the other; leaves whatever's currently selected alone otherwise
-// (never forces a guess onto a number this can't place).
-window.onDepPhoneInput = function(el){
-  sanitizePhoneInput(el);
-  const guess = guessNetworkFromPhone(el.value);
-  const sel = $('depNetwork');
-  if (guess && sel) sel.value = guess;
-};
 // Live deposit-status modal -- reuses the .chest-modal-bg/.chest-modal dark/
 // centered/thin pop-up convention. Opens the instant a recharge is accepted
 // and updates in place as pollDepositStatus() resolves, instead of just a

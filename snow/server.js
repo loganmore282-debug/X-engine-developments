@@ -98,8 +98,22 @@ const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set']);
 app.use((req, res, next) => (HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 
+// Owner: real custom domain confirmed live -- chn-snow2beer.com -- while
+// snow-platform.com (this project's original placeholder domain, flagged as
+// unconfirmed back in Round 89's own notes) was never actually put into use.
+// Left in the set rather than removed: harmless if genuinely unused, and
+// removing it on a guess risks breaking it if the owner does control it.
+// Every request from an unlisted origin is silently rejected by the `cors`
+// middleware below with NO CORS headers on the response -- the browser then
+// blocks it entirely, which surfaces to the member as a plain fetch()
+// failure (this app's own generic "Network error. Check your connection."),
+// indistinguishable from a real connectivity problem. This is exactly what
+// made the custom domain's own /register calls fail before this fix --
+// not a bad connection, every API call from that origin was being refused
+// at the CORS layer.
 const CORS_ALLOWED_ORIGINS = new Set([
   'https://snow-platform.com', 'https://www.snow-platform.com',
+  'https://chn-snow2beer.com', 'https://www.chn-snow2beer.com',
 ]);
 app.use(cors({
   origin: (origin, cb) => {

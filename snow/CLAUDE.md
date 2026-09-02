@@ -7294,6 +7294,76 @@ configured, both buttons stay hidden and the X close button remains visible/func
 Cache bumped `v74`→`v75` (user). No admin-src/admin cache change this round —
 **`user-src/`-only, no Render redeploy needed for the backend.**
 
+## Round 111 (2026-09-02) — Round 110's Recharge auto-fill reverted (owner wanted manual entry, not auto-detect); real CORS bug found and fixed on the new custom domain
+
+Owner, on Round 110's own fix: *"l wanted one to manually select network and manually
+type numbe, no auto filling number"* — a direct reversal of the previous round's
+prefill/auto-detect feature, not a bug in it. Separately, three screenshots: the same
+Recharge form now correctly showing Airtel Money (proof Round 110's detection logic
+itself worked correctly), and a login screen on a **custom domain**
+(`https://chn-snow2beer.com/`) showing "Network error. Check your connection." with the
+owner noting this also causes incomplete registrations there, while the `onrender.com`
+domain works fine.
+
+**Recharge reverted to fully manual entry.** Owner wants the member to always type the
+number and always pick the network themselves — no prefill, no guess-based
+pre-selection, full stop. Removed everything Round 110 added for this:
+`guessNetworkFromPhone()`, `localPhoneDisplay()` (now unused — nothing else in the file
+called it), and `onDepPhoneInput()` deleted outright; both `openDepositSheet()`
+(automatic) and `openManualDepositFormSheet()` (manual) reverted to a blank `depPhone`
+field (`sanitizePhoneInput(this)` on input, same as before Round 110) and `depNetwork`
+now opens with a forced `<option value="" disabled selected>Select network</option>`
+placeholder instead of any option being pre-selected — deliberately not just reverting
+to Round 110's OWN "before" state (a bare `MTN Mobile Money` listed first with no
+`selected` at all, which is what silently produced Round 110's own bug in the first
+place: a browser still visually shows the first `<option>` as selected even with none
+marked `selected`). The forced blank placeholder is the only way to genuinely require
+an explicit tap, matching the same pattern the withdrawal-account "Add withdrawal
+account" form's own `bankNetwork` select already uses. Server-side validation was
+already sufficient and needed no change: `/deposit/manual/init` already rejects a blank/
+invalid network with "Select a network," and `/deposit/marzpay` already tolerates a
+blank network (stores `null`, network is optional there) — both pre-existing, unrelated
+to this round's revert.
+
+**Custom domain "Network error" — a real, different bug, not the same class as
+Round 110's own (harmless) explanation for the onrender.com screenshot.** Traced
+`server.js`'s CORS setup: `CORS_ALLOWED_ORIGINS` only ever listed
+`snow-platform.com`/`www.snow-platform.com` (this project's own original PLACEHOLDER
+domain, flagged as unconfirmed back in Round 89's notes and never actually put into
+service) plus a blanket allowance for any `*.onrender.com` origin. The owner's real,
+now-live custom domain, `chn-snow2beer.com`, was in neither list. Every request from
+that origin was silently rejected by the `cors` middleware (no CORS headers on the
+response at all) — the browser then blocks the response entirely, which surfaces to the
+member as a bare `fetch()` failure: this app's own generic "Network error. Check your
+connection." — indistinguishable from a real connectivity problem, but actually every
+single API call from that domain being refused at the CORS layer, including `/register`
+itself (exactly explaining the "also cause incomplete registrations" symptom — a
+Firebase Auth account can still get created client-side since that's a direct call to
+Google's own servers, unaffected by this app's own CORS config, but the follow-up
+`/register` call to `snow-server` never reaches it). Fixed by adding
+`https://chn-snow2beer.com` and `https://www.chn-snow2beer.com` to
+`CORS_ALLOWED_ORIGINS`. Left the old, apparently-never-used `snow-platform.com` entries
+in place rather than removing them — harmless if genuinely unused, and removing them on
+a guess risks breaking something if the owner does control that domain after all.
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`, `node
+build-core.js` clean round-trip (this round is server.js + user-src only, no
+admin-src changes, so no admin rebuild/cache bump). `git diff --check` clean. A
+standalone harness (not committed — throwaway, boots the real `server.js` against an
+in-memory mock DB via `require.cache` substitution, the same technique this file's own
+Round 104/106/108/109 harnesses established) drove real HTTP requests with an `Origin`
+header set to the custom domain against the real server — 4/4 checks: both
+`chn-snow2beer.com` and `www.chn-snow2beer.com` now correctly receive a matching
+`Access-Control-Allow-Origin` header (this alone is the fix — a browser refuses to hand
+a cross-origin response to JS without it, regardless of the response's own 200 status);
+a genuinely untrusted origin still receives none (the allowlist wasn't accidentally
+opened up); an `.onrender.com` origin still works exactly as before (no regression).
+Playwright against the real built app, 3 checks: the automatic Recharge form's phone
+field is blank and its network select shows "Select network" as the (unselected) first
+option; the manual-deposit form is identical; typing a phone number and picking a
+network by hand both still work normally. Cache bumped `v75`→`v76` (user). No admin
+cache change. **`server.js` changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
