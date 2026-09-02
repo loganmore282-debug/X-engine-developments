@@ -7758,6 +7758,99 @@ resolved-to-`matched` Refresh response correctly closes the sheet and shows the 
 works end to end. Cache bumped `v82`→`v83` (user). **`user-src/`-only, no Render
 redeploy needed for the backend.**
 
+## Round 119 (2026-09-02) — the payment-method + code screens moved OUT of the sheet system into their own independent full-screen overlay; red accents removed; a real overflow bug and a real history-API race both found and fixed
+
+Owner sent 3 screenshots of Round 118's build: the code screen's detail box with its
+copy-button icon visibly clipped off the right edge, and the network-selector screen
+showing a visible dark bezel/gutter on both sides and across the top -- like a screen
+nested inside another screen. Quoted: "contents are not well sized and fit in the
+screen, first of all the start up screen of choose network is poorly developed make
+sure it is well fit and no frame, let them be independent, so l don't expect header
+bars or red colors, just fresh well sized screen, things are fine but everything is not
+resized very well, make sure everything fits perfectly and well spread."
+
+**Root cause of the "frame."** Round 118 embedded the reference's own 2-screen design
+inside this app's sheet system (`openSheet('Payment', ...)`) -- a header bar (back arrow
++ title) plus the sheet body's own 20px side padding sitting around the reference's own
+already-padded dark-gradient page. That's genuinely a screen nested inside another
+screen's chrome, exactly what read as a "frame." Fixed by giving this flow its own
+dedicated full-screen overlay (`#manualPayBg`, `position:fixed;inset:0`, the same
+pattern `#openingGate`/`#loadingScreen` already use in this app) instead of a sheet --
+with no header bar at all, only one small unobtrusive circular back button (`.mp-back-btn`,
+fixed top-left, matching the style of `.announce-close`) that stays in the same spot
+regardless of which of the reference's 2 internal screens is showing. Because it's now a
+genuine bare full-page overlay again, the reference's own original
+`min-height:100vh` sizing applies with no adaptation needed (Round 118's `calc(100vh -
+160px)` workaround for fitting under a sheet header is gone).
+
+**Red removed.** The reference's own `#c92727`/`#c92b2b` accents (the network name in
+"Copy this **MTN** account", the word "**Refresh**") are now the same neutral dark tone
+(`#4b4b4b`) the rest of the reference's own body copy already uses -- not a new color,
+just dropping the two red ones specifically, per the owner's explicit "no red colors."
+
+**Real overflow bug, not just a size preference.** A live registered admin number is a
+real `+256XXXXXXXXX` string -- 13 characters. At the reference's own declared sizes
+(42px desktop, 35px at its own `@media(max-width:520px)` breakpoint) that number's own
+digits alone were wide enough to push the copy button off the right edge of an actual
+360-430px phone screen -- confirmed by measuring the owner's own screenshot, where the
+copy-button icon is visibly cut by the viewport edge. Fixed with `clamp()`-based
+responsive sizing on `.mp-total`/`.mp-account-value`/`.mp-name-value` instead of the
+reference's own two fixed breakpoints, so the figure genuinely shrinks to fit whatever
+width it's actually shown at rather than only having two discrete sizes tuned for the
+reference's own wider target. `min-width:0` + `overflow-wrap:anywhere` added to the
+number/name spans so a still-tight fit degrades to wrapping rather than overflowing.
+Every other size in the flow (labels, buttons, tiles, warning text) was also brought
+down from the reference's own desktop-oriented base sizes to sit correctly on a real
+phone-width screen without needing the `@media` breakpoint's own second pass at all --
+"make sure everything fits perfectly and well spread" addressed holistically, not just
+at the one clipped spot the screenshot happened to show.
+
+**Real history-API race, caught by testing, not by reading the code.** The first version
+of this round's rewrite had `proceedToManualPaymentMethod()` call `closeSheet({fromAction:
+true})` (which internally calls `history.back()`) immediately followed by
+`openManualPayOverlay()`'s own `history.pushState()`. `history.back()` is asynchronous --
+its own `popstate` event fires on a LATER tick, not immediately -- so by the time that
+stale, delayed `popstate` actually landed, the overlay had already been opened and had
+already pushed its own newer history state on top. This app's shared `popstate` handler
+then ran against that late event, saw the overlay marked `.show`, and immediately tore it
+back down (cleared its content, removed the `.show` class) the instant after it had just
+opened -- reproduced directly via Playwright (the overlay's `innerHTML` measured empty
+and `.show` absent after the transition completed, every time). Fixed by not routing
+through `closeSheet()`/`history.back()` for this transition at all: the amount sheet's
+visible state is cleared directly (no history operation), and `openManualPayOverlay()`
+now calls `history.replaceState(...)` instead of `pushState(...)` -- taking over the
+amount sheet's own already-pushed history slot rather than stacking a second entry on
+top of it, so one Back tap from the payment overlay lands straight on Home, and there is
+only ever one history operation involved in the whole transition, eliminating the race
+entirely rather than trying to sequence around it.
+
+**`isAnyOverlayOpen()`/`maybeAnnounceAfterSheet` extended** to recognize the new overlay
+(so the Home announcement dialog still correctly never pops up over an in-progress
+payment, and still correctly fires once the member is genuinely back on Home afterward --
+both via the overlay's own back button and via the phone's hardware Back button, the
+latter needing the shared `popstate` handler taught to also recognize and close this new
+overlay type, not just `.sheet-bg`). `ANNOUNCE_AFTER_SHEETS` had its stale `'Payment'`
+entry removed (that string was never actually going to be checked against anything once
+this flow stopped being a titled sheet).
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip, `git diff --check` clean. Playwright, against the real built app, at
+360/390/430px (the full width range this app already tests against): zero horizontal
+overflow on either internal screen at any width; the overlay's own bounding box is
+flush to the true viewport edges (`left:0, top:0, width===innerWidth`) with the app's
+own sheet header confirmed NOT present behind it; the small back button renders at its
+intended 36px size; neither red accent color survives anywhere in the flow; the
+account-number AND account-name copy buttons both stay fully on-screen (right edge
+`<=` viewport width) even with a real 13-character phone number; the real assigned
+account/holder name still render correctly from the mocked `/deposit/manual/init`
+response; the back button correctly closes the overlay. A second pass confirmed the
+history-race fix directly: a resolved-to-`matched` Refresh tap still correctly closes
+the overlay and shows the existing "Recharge successful" modal; and -- the actual
+regression check for the race itself -- simulating the phone's hardware Back button via
+a real `history.back()` call (not this app's own close function) correctly closes the
+overlay and lands back on Home with zero page errors. Cache bumped `v83`→`v84` (user).
+**`user-src/`-only, no Render redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

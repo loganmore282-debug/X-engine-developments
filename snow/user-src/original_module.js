@@ -1565,7 +1565,11 @@ function isAnyOverlayOpen(){
     // written and was never added to it -- it is exactly the kind of thing
     // the announcement must never land on top of, since it carries the
     // outcome of a payment the member is waiting on.
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show')));
+    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
+    // The manual-deposit payment overlay (its own independent full-screen
+    // layer, not a sheet -- see openManualPayOverlay()) is the same kind of
+    // "member is mid-payment" surface this guard already protects.
+    || ($('manualPayBg') && $('manualPayBg').classList.contains('show')));
 }
 
 // Owner: "make when the announcement dialog message appears when one is from
@@ -1582,7 +1586,7 @@ function isAnyOverlayOpen(){
 // reason. Withdrawal Accounts is included because it is part of the same
 // flow (Withdraw's own empty state opens it), and the STATE.page check below
 // means it stays silent when it was reached from the Account tab instead.
-var ANNOUNCE_AFTER_SHEETS = ['Recharge', 'Payment', 'Withdraw', 'Withdrawal Accounts'];
+var ANNOUNCE_AFTER_SHEETS = ['Recharge', 'Withdraw', 'Withdrawal Accounts'];
 function maybeAnnounceAfterSheet(closedTitle){
   if (!closedTitle || ANNOUNCE_AFTER_SHEETS.indexOf(closedTitle) === -1) return;
   if (STATE.page !== 'home') return;      // closed back to Account, not Home
@@ -1626,14 +1630,23 @@ window.closeSheet = function(opts){
   if (!(opts && opts.fromAction)) maybeAnnounceAfterSheet(closed);
 };
 window.addEventListener('popstate', () => {
-  // The phone's own Back button, which never goes through closeSheet(). When
-  // closeSheet() ran first its own history.back() lands here too, but it has
-  // already cleared the title, so this can't announce a second time.
+  // The phone's own Back button, which never goes through closeSheet()/
+  // closeManualPayOverlay() directly. When either of those ran first, their
+  // own history.back() lands here too, but they've already cleared their
+  // own state (title / .show class), so this can't announce a second time.
   const closed = _openSheetTitle;
+  const wasManualPayOpen = manualPayOverlayOpen();
   $('sheetBg').classList.remove('show');
   unlockBodyScroll();
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
+  if (wasManualPayOpen) {
+    $('manualPayBg').classList.remove('show');
+    $('manualPayFlow').innerHTML = '';
+    unlockBodyScroll();
+    maybeAnnounceAfterSheet('Recharge');
+    return;
+  }
   maybeAnnounceAfterSheet(closed);
 });
 
@@ -1998,14 +2011,25 @@ window.openDepositSheet = function(){
 // the MarzPay form above when settings.depositMethod === 'manual'. Owner
 // supplied a complete reference payment-page design (2 screens: a payment-
 // method/phone selector, then a "COPY & PAY" code screen) and asked for it
-// used AS-IS -- original colors, layout, and structure kept exactly, only
-// wired to real backend calls instead of the reference's own static demo
-// values ("don't re-style let it be my original color, settings
-// achicture, nothing to remove in my original code, just make it backend
-// such it calls orders"). Step 1 below (amount only) is unchanged from the
-// prior round; the payment-method + code screens are the owner's own
-// reference markup/CSS (see the .mp-* rules in index.html, all copied
-// from the reference's own selectors/colors, just scoped under
+// used AS-IS -- original colors and layout kept exactly, only wired to
+// real backend calls instead of the reference's own static demo values
+// ("don't re-style let it be my original color, settings achicture,
+// nothing to remove in my original code, just make it backend such it
+// calls orders"). A first pass embedded the payment-method + code screens
+// inside this app's own sheet system; the owner then said that read as an
+// unwanted "frame" around the reference's own full-page design ("no
+// frame, let them be independent... don't expect header bars or red
+// colors, just fresh well sized screen") -- so they now live in their own
+// dedicated full-screen overlay (openManualPayOverlay(), same pattern as
+// #openingGate/#loadingScreen) instead, with the reference's own exact
+// min-height:100vh page sizing restored (no longer needs adapting for a
+// sheet header that isn't there anymore), its 2 small red accents replaced
+// with a neutral dark tone, and its account-number/name figures given
+// clamp()-based responsive sizing so a real 13-character +256 number never
+// pushes the copy button off the edge of a real phone screen. Step 1
+// below (amount only) is unchanged; the payment-method + code screens are
+// the owner's own reference markup/CSS (see the .mp-* rules in index.html,
+// all copied from the reference's own selectors/colors, just scoped under
 // #manualPayFlow so they can't leak into the rest of this app -- a
 // technical necessity, not a restyle) with real /deposit/manual/init and
 // /deposit/manual/status calls behind Confirm and Refresh, where the
@@ -2049,31 +2073,82 @@ function openManualDepositFormSheet(){
 }
 // Nothing to fetch yet at this point (network/phone aren't known until the
 // payment-method screen), so this is a purely visual transition -- a brief
-// button spinner before the sheet body swaps -- mirroring the reference
-// design's own step-1-to-step-2 loading overlay.
+// button spinner before the amount sheet closes and the independent
+// payment overlay opens -- mirroring the reference design's own
+// step-1-to-step-2 loading overlay.
 window.proceedToManualPaymentMethod = function(){
   const amount = parseMoneyInput($('depAmount').value);
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
   const btn = $('depSubmitBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="mini-spin"></div>'; }
-  setTimeout(() => openManualPayFlow(amount), 400);
+  setTimeout(() => {
+    // Hide the amount sheet WITHOUT going through closeSheet()'s own
+    // history.back() -- that's inherently async (its popstate fires on a
+    // later tick), and openManualPayOverlay() below pushes its own history
+    // state immediately after. A real bug caught by testing, not guessed:
+    // calling back() then pushState() in the same tick lets the stale,
+    // delayed popstate from back() land AFTER the overlay's state was
+    // pushed, and this file's own popstate handler then tore the
+    // just-opened overlay right back down (empty content, no .show class)
+    // because it couldn't tell that popstate was for a navigation that had
+    // already been superseded. Clearing the sheet's own visible state
+    // directly, then letting openManualPayOverlay() REPLACE (not push) its
+    // history entry, avoids the race entirely -- see that function's own
+    // comment.
+    $('sheetBg').classList.remove('show');
+    unlockBodyScroll();
+    _openSheetTitle = null;
+    openManualPayFlow(amount);
+  }, 400);
 };
 var MTN_LOGO_DATA_URI = 'data:image/png;base64,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';
 var AIRTEL_LOGO_DATA_URI = 'data:image/png;base64,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';
 var _manDepChosenMethod = ''; // 'MTN' | 'Airtel', matches the reference's own dataset.method
 var _manDepId = null;
-// Both of the reference's own screens (payment-method selector, then the
-// "COPY & PAY" code screen) render together here, toggled via the
-// reference's own .mp-hidden class -- its own internal architecture, kept
-// exactly. Only one openSheet() call for the whole thing (title stays
-// "Payment" throughout, not the reference's own bare unheaded page), so
-// the phone Back button / this app's sheet-header close button always does
-// the one thing a member expects regardless of which of the reference's 2
+// Owner: "no frame, let them be independent... don't expect header bars".
+// This whole flow now lives in its OWN full-screen overlay (#manualPayBg,
+// the same position:fixed;inset:0 pattern #openingGate/#loadingScreen
+// already use) instead of inside this app's own sheet system -- embedding
+// it in a sheet (header bar + side padding) read as an unwanted "frame"
+// around the reference's own full-page design. Both of the reference's own
+// screens (payment-method selector, then the "COPY & PAY" code screen)
+// still render together here, toggled via the reference's own .mp-hidden
+// class -- its own internal architecture, kept exactly -- just inside this
+// overlay instead of a sheet body. A single small back button (not a
+// header bar) stays fixed top-left the whole time, so the member always
+// has one consistent way out regardless of which of the reference's 2
 // internal screens is currently showing.
+function openManualPayOverlay(html){
+  const el = $('manualPayFlow');
+  el.className = 'reveal-in';
+  el.innerHTML = html;
+  $('manualPayBg').classList.add('show');
+  // replaceState, not pushState: the amount sheet already pushed its own
+  // history entry when it opened (openSheet('Recharge', ...)) and this
+  // overlay takes over that same slot rather than stacking a second entry
+  // on top -- one Back tap from here lands straight on Home, matching
+  // every other single-purpose overlay in this app. See
+  // proceedToManualPaymentMethod()'s own comment for the real race this
+  // avoids (pushState racing a still-pending history.back() from
+  // closeSheet() tore the overlay back down the instant it opened).
+  history.replaceState({ manualPay: true }, '', '');
+  lockBodyScroll();
+}
+// opts.fromAction mirrors closeSheet()'s own convention -- a close the CODE
+// performed after a resolved payment (handing off to the result modal)
+// must not also announce; a real back-tap (the default) should, matching
+// every other Recharge exit path.
+window.closeManualPayOverlay = function(opts){
+  $('manualPayBg').classList.remove('show');
+  $('manualPayFlow').innerHTML = '';
+  unlockBodyScroll();
+  if (history.state && history.state.manualPay) history.back();
+  if (!(opts && opts.fromAction)) maybeAnnounceAfterSheet('Recharge');
+};
 function openManualPayFlow(amount){
   _manDepChosenMethod = '';
   _manDepId = null;
-  openSheet('Payment', `<div class="reveal-in" id="manualPayFlow">
+  openManualPayOverlay(`
     <section id="manPaySelector" class="mp-selector-screen">
       <div class="mp-selector-card">
         <div class="mp-selector-inner">
@@ -2165,7 +2240,7 @@ function openManualPayFlow(amount){
       <div class="mp-loader-box"><div class="mp-spinner"></div><div>Loading...</div></div>
     </div>
     <div id="manPayToastEl" class="mp-toast"></div>
-  </div>`);
+  `);
 }
 window.manualPayChooseMethod = function(el){
   document.querySelectorAll('.mp-method').forEach(x => x.classList.remove('mp-active'));
@@ -2206,12 +2281,16 @@ window.manualPayConfirm = async function(amount){
   manualPayStartTimer(r.expiresAt);
   pollManualDepositStatus(_manDepId);
 };
+function manualPayOverlayOpen(){
+  const el = $('manualPayBg');
+  return !!(el && el.classList.contains('show'));
+}
 var _manPayTimerInterval = null;
 function manualPayStartTimer(expiresAt){
   if (_manPayTimerInterval) clearInterval(_manPayTimerInterval);
   const tick = () => {
     const el = $('manPayTimer');
-    if (!el || _openSheetTitle !== 'Payment') { clearInterval(_manPayTimerInterval); _manPayTimerInterval = null; return; }
+    if (!el || !manualPayOverlayOpen()) { clearInterval(_manPayTimerInterval); _manPayTimerInterval = null; return; }
     const remaining = Math.max(0, expiresAt - Date.now());
     const m = Math.floor(remaining / 60000), s = Math.floor((remaining % 60000) / 1000);
     const t = String(m).padStart(2, '0') + String(s).padStart(2, '0');
@@ -2245,22 +2324,22 @@ function setDepositStatusReview(){
 // result. Returns true once the deposit has reached a terminal state.
 async function handleManualDepositStatusResult(r){
   if (r.status !== 'success') return false;
-  if (r.state === 'matched') { closeSheet({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return true; }
-  if (r.state === 'failed') { closeSheet({ fromAction: true }); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return true; }
-  if (r.state === 'review') { closeSheet({ fromAction: true }); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return true; }
+  if (r.state === 'matched') { closeManualPayOverlay({ fromAction: true }); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return true; }
+  if (r.state === 'failed') { closeManualPayOverlay({ fromAction: true }); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return true; }
+  if (r.state === 'review') { closeManualPayOverlay({ fromAction: true }); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return true; }
   return false;
 }
 // Polls for up to the full 15-minute payment window (matching
 // MANUAL_DEPOSIT_WINDOW_MS server-side) rather than automatic deposits'
 // short 60s window -- a manual match depends on a phone's SMS forwarder,
 // not an instant gateway callback, so it can genuinely take longer.
-// Self-terminates the moment the member navigates away from this sheet.
+// Self-terminates the moment the member navigates away from this overlay.
 async function pollManualDepositStatus(depositId){
   for (let i = 0; i < 190; i++) {
     await new Promise(r => setTimeout(r, 5000));
-    if (_openSheetTitle !== 'Payment') return;
+    if (!manualPayOverlayOpen()) return;
     const r = await post('/deposit/manual/status', { depositId });
-    if (_openSheetTitle !== 'Payment') return;
+    if (!manualPayOverlayOpen()) return;
     if (await handleManualDepositStatusResult(r)) return;
   }
 }
@@ -2277,7 +2356,7 @@ window.manualPayRefresh = async function(){
   $('manPayLoading').classList.remove('mp-hidden');
   const r = await post('/deposit/manual/status', { depositId: _manDepId });
   if ($('manPayLoading')) $('manPayLoading').classList.add('mp-hidden');
-  if (_openSheetTitle !== 'Payment') return;
+  if (!manualPayOverlayOpen()) return;
   const resolved = await handleManualDepositStatusResult(r);
   if (!resolved) {
     if (btn) btn.disabled = false;
