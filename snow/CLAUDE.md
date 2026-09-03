@@ -8247,6 +8247,69 @@ when A is genuinely still the current order). Cache bumped `v89`→`v90`
 (user). No `server.js`/`admin-src` changes -- **`user-src/`-only, no
 Render redeploy needed for the backend.**
 
+## Round 126 (2026-09-02) — a genuinely invisible transition spinner fixed (tapping Recharge did nothing visible for 400ms), and the service worker no longer forces an automatic mid-session reload
+
+Owner, two asks in one message: "when one taps recharge after having
+select amount it should bring a spin loader so as to open the screen
+which is for selecting network and number"; and "remove double loading of
+startup loader or system it's self it can loading the again it reloads
+automatically without touching it so remove it, the system should launch
+once per user's request."
+
+**1. A real, invisible-not-just-subtle gap, not a preference.**
+`proceedToManualPaymentMethod()` (built in Round 118) already swaps the
+Recharge button's own label for `<div class="mini-spin"></div>` during
+its 400ms transition to the network/number screen -- but grepped the
+whole stylesheet and found `.mini-spin` was never actually given ANY CSS.
+An empty, unstyled `<div>` renders with zero size -- tapping Recharge
+genuinely showed nothing for 400ms before the next screen appeared,
+reading exactly like an unresponsive tap. Fixed with real spinner CSS
+(reusing the app's own existing `@keyframes sp` rotation, same white-on-
+wine styling `.primary-button` already establishes, sized to sit cleanly
+inside the button).
+
+**2. The service worker's own auto-update reload, traced and removed.**
+This app ships a new build almost every round (`sw.js`'s own cache
+version bumps nearly every commit) -- `checkForUpdate()` already runs
+hourly AND on every tab focus/visibility change, so a member who simply
+switched back to this tab after a few minutes on another app was very
+likely to already have a new service worker waiting, take control
+(`controllerchange`), and get bounced straight back to the loading screen
+via an unprompted `location.reload()` -- exactly "reloads automatically
+without touching it." Genuine, working-as-designed auto-update behavior,
+not a bug in the sense of doing the wrong thing, but the owner explicitly
+doesn't want the app ever reloading itself outside of their own action of
+launching it. Removed the forced reload entirely: the new service worker
+still activates and takes over in the background exactly as before
+(`clients.claim()` unchanged, `sw.js` itself untouched), so the next
+genuine launch (closing and reopening the app, or a manual browser
+refresh) already serves the fresh shell via `sw.js`'s own network-first
+navigation strategy -- updates still land, just never by silently
+interrupting whatever the member is doing right now. The `MONEY_ENDPOINTS`/
+`window._moneyCallsInFlight` tracking that only ever existed to gate this
+one reload (so it wouldn't fire mid-payment) had no other consumer once
+the reload itself was gone -- removed as genuinely dead code rather than
+left orphaned, along with the `try/finally` wrapper in `api()` that only
+existed to decrement it.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node
+build-core.js` clean round-trip. `git diff --check` clean. Playwright,
+against the real built app: mid-transition (120ms into the 400ms window),
+`.mini-spin` now measures a real, non-zero box with the `sp` animation
+genuinely applied (was invisible before this round); the network/number
+screen still opens correctly once the transition completes. A second
+scenario stubs `navigator.serviceWorker` with a controller already
+present at load (the exact condition that used to arm the reload) and
+fires a simulated `controllerchange` -- confirmed `location.reload()` is
+never called and the app's own `STATE` survives untouched (proving no
+reload actually happened, not just that the call went unlogged). Re-ran
+both the Round 120 regression suite and the Round 125 stale-poll repro
+against the rebuilt app -- both still pass clean, confirming the `api()`
+restructuring (removing the now-empty `try/finally`) didn't change its
+own behavior. Cache bumped `v90`→`v91` (user). No `server.js`/`admin-src`
+changes -- **`user-src/`-only, no Render redeploy needed for the
+backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

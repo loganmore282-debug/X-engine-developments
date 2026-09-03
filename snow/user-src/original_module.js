@@ -174,20 +174,8 @@ function toast(msg, isErr){
 }
 
 // ── API ──
-// Endpoints that actually move money -- a background service-worker reload
-// (see the registration script near the bottom of this file) waits for this
-// count to hit 0 before ever yanking the page out from under one of these.
-// subagent-audit-caught: /mission/salary/claim and /mission/deposit/claim
-// both genuinely credit walletBalance server-side (same as every other
-// entry here) but were missing, so a background service-worker update
-// landing mid-claim could yank the page out from under one -- the exact
-// thing this whole tracking mechanism exists to prevent.
-var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/deposit/manual/init', '/deposit/manual/paste-sms', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete', '/checkin', '/redeem', '/mission/salary/claim', '/mission/deposit/claim']);
-window._moneyCallsInFlight = 0;
 async function api(path, opts){
   opts = opts || {};
-  const isMoneyCall = MONEY_ENDPOINTS.has(path);
-  if (isMoneyCall) window._moneyCallsInFlight++;
   // Captured before the network round-trip, checked after -- if a logout or
   // a different user's login happened while this request was in flight (see
   // STATE.authEpoch's own comment), the response belongs to a session that
@@ -201,24 +189,20 @@ async function api(path, opts){
   // every single page load.
   const isPublicCall = path.indexOf('/public/') === 0;
   const startEpoch = STATE.authEpoch;
-  try {
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-    if (window.fbAuth && window.fbAuth.currentUser) {
-      try { headers['Authorization'] = 'Bearer ' + (await window.fbAuth.currentUser.getIdToken()); } catch (_) {}
-    }
-    let resp;
-    try {
-      resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
-    } catch (e) {
-      return { status: 'error', message: 'Network error. Check your connection.' };
-    }
-    let data;
-    try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response from server' }; }
-    if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', message: 'Session changed', stale: true };
-    return data;
-  } finally {
-    if (isMoneyCall) window._moneyCallsInFlight--;
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  if (window.fbAuth && window.fbAuth.currentUser) {
+    try { headers['Authorization'] = 'Bearer ' + (await window.fbAuth.currentUser.getIdToken()); } catch (_) {}
   }
+  let resp;
+  try {
+    resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
+  } catch (e) {
+    return { status: 'error', message: 'Network error. Check your connection.' };
+  }
+  let data;
+  try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response from server' }; }
+  if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', message: 'Session changed', stale: true };
+  return data;
 }
 function post(path, body){ return api(path, { method: 'POST', body: JSON.stringify(body || {}) }); }
 
@@ -2880,6 +2864,26 @@ window.promptInstallApp = async function(){
   await window._installPrompt.userChoice.catch(() => {});
   window._installPrompt = null;
 };
+// Owner: "remove double loading of startup loader or system it's self it
+// can loading the again it reloads automatically without touching it so
+// remove it, the system should launch once per user's request." This app
+// ships a new build almost every round (sw.js's own cache version bumps
+// nearly every commit) -- checkForUpdate() below runs hourly AND on every
+// tab focus/visibility change, so a member who simply switches back to
+// this tab after using another app for a few minutes was very likely to
+// have a new service worker already waiting, take control
+// (controllerchange), and get bounced straight back to the loading
+// screen via an UNPROMPTED location.reload() -- exactly "reloads
+// automatically without touching it." Genuine auto-update behavior, not
+// a bug in the sense of doing the wrong thing, but the owner explicitly
+// doesn't want the app ever reloading itself outside of the member's own
+// action of launching it. Fixed by dropping the forced reload entirely --
+// the new service worker still activates and takes over in the
+// background exactly as before (clients.claim() is unchanged, sw.js
+// itself untouched), so the NEXT genuine launch (closing and reopening
+// the app, or a manual browser refresh) already serves the fresh shell
+// via sw.js's own network-first navigation strategy, with zero silent
+// interruption of whatever the member is doing right now.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then((reg) => {
@@ -2888,21 +2892,6 @@ if ('serviceWorker' in navigator) {
       document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
       window.addEventListener('focus', checkForUpdate);
     }).catch(() => {});
-  });
-  // Only reload when there was ALREADY a controller at page-load time --
-  // controllerchange also fires on the very first clients.claim() after a
-  // fresh install/cleared cache, which is not a real update and would
-  // otherwise bounce the app back to the loading screen for no reason.
-  let _swReloading = false;
-  let _hadControllerAtLoad = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (_swReloading) return;
-    if (!_hadControllerAtLoad) { _hadControllerAtLoad = true; return; }
-    (function tryReload(){
-      if ((window._moneyCallsInFlight || 0) > 0) { setTimeout(tryReload, 500); return; }
-      _swReloading = true;
-      location.reload();
-    })();
   });
 }
 

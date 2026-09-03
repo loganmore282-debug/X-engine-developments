@@ -128,6 +128,16 @@ a{color:inherit;}
 #loadingScreen{position:fixed;inset:0;background:var(--snow-canvas);display:flex;align-items:center;justify-content:center;z-index:500;}
 #loadingScreen .spin{width:40px;height:40px;border-radius:50%;border:3px solid var(--snow-wine-soft);border-top-color:var(--snow-wine);animation:sp .8s linear infinite;}
 @keyframes sp{to{transform:rotate(360deg);}}
+/* Owner: "when one taps recharge after having select amount it should
+   bring a spin loader so as to open the screen which is for selecting
+   network and number" -- proceedToManualPaymentMethod() already swapped
+   the button's own label for this markup during its brief transition to
+   the network/number screen, but .mini-spin was never actually given any
+   CSS -- an empty, invisible <div>, so tapping Recharge visibly did
+   nothing for 400ms before the next screen appeared. Real gap, not just
+   too subtle; same white-on-wine spinner style as .primary-button already
+   uses elsewhere, sized to sit cleanly inside a button. */
+.mini-spin{width:18px;height:18px;margin:0 auto;border-radius:50%;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;animation:sp .7s linear infinite;}
 /* Owner: "establish a timer ie like saying snow opening in 23:59:34... so it
    will be after the start up loader" -- a pre-launch gate shown instead of
    the login/app once the loading screen would otherwise hand off, admin-
