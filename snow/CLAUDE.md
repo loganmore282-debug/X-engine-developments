@@ -8633,6 +8633,44 @@ any existing flow that opens/closes these dialogs. Cache bumped
 `v92`→`v93` (user). **`user-src/`-only, no Render redeploy needed for the
 backend.**
 
+## Round 132 (2026-09-03) — Round 131's popups/toast slowed down further, with a short start delay added
+
+Owner, same day as Round 131: "l want them to have abit slow appearing
+delay abit." Widened the same 3 rules Round 131 touched: `.confirm-sheet`/
+`.chest-modal` (covering the announcement dialog, gift-code popup, and
+recharge-status modal via the shared class) went from `340ms` to `520ms`,
+and `.toast` from `300ms` to `500ms` -- both still using the same
+established `cubic-bezier(.22,1,.36,1)` "gentle settle" curve, just
+slower. A genuine "delay" (not just a slower ease) was added on top --
+`100ms` on the popups, `80ms` on the toast -- via CSS `transition-delay`/
+a 3rd `animation` shorthand argument, so each one now visibly pauses a
+beat before it starts moving into place, not just eases in slower from
+the instant it's shown. The toast's `animation` shorthand also picked up
+an explicit `both` fill-mode (needed for a delay on a plain `@keyframes`
+animation specifically -- without it, the element would render at its own
+un-animated base style, i.e. instantly fully visible, for the whole delay
+window before the animation ever started, defeating the point of adding
+one).
+
+**Verified**: `node build-core.js` clean round-trip (this round is
+`user-src/index.html`-only, plain CSS again -- no `server.js`/
+`admin-src`/`original_module.js` changes). `git diff --check` clean.
+Playwright, against the real built app, extended the same Round 131
+checks with the new values: the announcement modal's computed
+`transition-duration` is `0.52s` with a `0.1s` `transition-delay`; a
+fired toast's `animation-duration` is `0.5s` with an `0.08s`
+`animation-delay`, and -- the one genuinely new thing to verify, not just
+a bigger number -- a toast's computed `opacity` is confirmed `0` (not the
+element's own un-animated full-opacity base style) while still inside its
+own delay window, proving the `both` fill-mode fix actually holds it
+invisible for that gap rather than flashing it on screen early; the
+gift-code chest modal (sharing `.chest-modal`) shows the same widened
+`0.52s`/`0.1s` values. Re-ran the Round 120 manual-pay regression suite,
+the Round 125 stale-poll repro, and the Round 126 spinner/no-forced-reload
+check against the rebuilt app -- all still pass clean. Cache bumped
+`v93`→`v94` (user). **`user-src/`-only, no Render redeploy needed for the
+backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
