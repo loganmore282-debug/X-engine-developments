@@ -19,7 +19,7 @@ const path = require('path');
 
 const src = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
 const start = src.indexOf('function _smsAmount');
-const end = src.indexOf('// Picks the next number');
+const end = src.indexOf('// Picks a number from this network');
 if (start < 0 || end < 0 || end <= start) {
   console.error('Could not locate the SMS parsers in server.js -- did the surrounding code move?');
   process.exit(1);

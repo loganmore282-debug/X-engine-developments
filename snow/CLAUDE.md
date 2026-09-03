@@ -8440,6 +8440,82 @@ cache bumped `v32`→`v33`. **`admin-src/index.html` changed, no
 `server.js` changes -- Render will redeploy the static admin site from
 this push; no backend redeploy needed.**
 
+## Round 129 (2026-09-03) — manual-deposit number assignment switched from round-robin to a genuine, uniformly-random Fisher-Yates shuffle
+
+Owner: "bro remove following of order of numbers let them be choose at
+random but everything should be uniformly assigned." Since Round 88's
+original build, `assignManualNumberAndCreateDeposit()` picked the next
+manual payment number by walking a persisted `lastIndex` (stored in a
+`manualNumberRotation` collection, one doc per network) -- deterministic
+round-robin: number 1, then 2, then 3, then back to 1, entirely
+predictable from the pool's own saved order.
+
+**What "uniformly assigned" means here, made explicit before building
+anything**: over many orders, every active number should get a fair,
+even long-run share -- which is exactly what genuine randomness provides
+automatically, since each number has an equal chance on every draw. A
+fixed round-robin sequence is ALREADY perfectly even by construction (it
+doesn't need randomness to be fair) -- so this is purely an ordering
+change (remove the predictable sequence), not a fairness fix layered on
+top of anything that was actually unfair before.
+
+**`assignManualNumberAndCreateDeposit()` rewritten**: the pool is no
+longer fetched `orderBy('order','asc')` (that field still exists and
+still controls the admin panel's own Payment Numbers editor list
+ordering, untouched -- it's simply no longer consulted for assignment).
+Instead, the whole pool array is shuffled with a real Fisher-Yates pass
+(`crypto.randomInt`, matching this file's own standing convention of
+cryptographically strong randomness everywhere else it needs random
+values -- referral codes, gift codes, etc. -- never `Math.random()`)
+immediately after being fetched, then walked in that shuffled order
+looking for the first number without a live clashing order on the exact
+same amount (the existing collision-avoidance logic, completely
+unchanged). Every permutation of the pool is equally likely, so not just
+the first-tried candidate but every fallback candidate too (when the
+first pick clashes) is genuinely uniformly random on each call, not just
+"different from last time." The `manualNumberRotation` collection and its
+`lastIndex` state are gone entirely -- there is nothing left to persist
+once the pick is random every single call; the concurrency-safety lock
+(`withLock('manual-number-assign:'+network, ...)`, from Round 104's own
+HIGH-severity race fix) is completely untouched, since it protects the
+pick-and-write as one atomic unit regardless of how the pick itself is
+made.
+
+**Verified**: `node --check server.js` clean, `git diff --check` clean, a
+boot smoke test (a real self-signed RSA dummy Firebase service-account
+PEM + an unreachable `MONGODB_URI`) fails only at the expected
+Mongo-connect step. The Round 104 concurrency-race harness (boots the
+real `server.js` against an in-memory Mongo-compatible mock DB via
+`require.cache` substitution, drives real HTTP requests) re-run clean --
+11/11, confirming two genuinely concurrent same-network-same-amount
+requests still always get 2 distinct numbers, a 3rd concurrent request
+against an exhausted pool is still correctly refused, and deleting a
+number with a live pending order is still correctly refused. A new
+dedicated randomness/uniformity harness (same technique, 4 active
+numbers on one network) — 8/8 checks: 45 real, genuinely sequential
+`/deposit/manual/init` calls (one per distinct user, working around two
+real per-user limits discovered by reading the actual rejections rather
+than guessing -- `_depCreateDebounce`'s 7-second same-user cooldown, and
+this harness's fake bearer tokens all falling back to one shared
+rate-limit bucket since they don't parse as real JWTs) produced at least
+one genuine back-to-back repeat pick (mathematically impossible under
+the old round-robin, since consecutive draws could never land on the
+same index) with a real, near-uniform distribution across all 4 numbers
+(11/13/10/11 out of 45 -- close to the expected ~11.25 each); the
+collision-skip logic still correctly hands 4 concurrent same-exact-amount
+requests 4 distinct numbers with zero duplicates; a 5th request against
+the now-fully-busy amount is still correctly refused (503), never
+double-assigned. `test-momo-sms-parsers.js` (the committed SMS-parser
+regression suite, which extracts code from `server.js` at runtime using a
+comment-text anchor immediately following this function) had its own
+extraction anchor updated to match the rewritten comment -- re-run clean,
+70/70, confirming the parser logic itself is completely untouched by this
+change. This round is `server.js` + `test-momo-sms-parsers.js`-only -- no
+`user-src`/`admin-src` changes (the member-facing flow and the admin
+panel's own number editor are both unaffected by which number gets
+picked under the hood), so no cache bumps needed. **`server.js`
+changed -- Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

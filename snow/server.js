@@ -2865,14 +2865,28 @@ function parseSentMoMoSms(text) {
   return { amount, txId: _smsTxId(t), recipient: _smsCounterparty(t, 'to'), raw: t };
 }
 
-// Picks the next number in this network's round-robin pool, skipping any
-// number that already has an active pending order for this EXACT amount
-// (owner: "if user A deposit on number 1, user B deposits on number 2...
-// every session, it's own number" -- the multi-number pool itself is the
-// collision-avoidance mechanism, not Nexus's own "add random shillings to
-// the amount" trick, which would fight the whole point of wanting several
-// clean, round-number-friendly destinations). Locked per network so two
-// concurrent inits can never both claim the same "next" slot.
+// Picks a number from this network's pool at RANDOM (owner: "remove
+// following of order of numbers let them be choose at random but
+// everything should be uniformly assigned" -- was a deterministic
+// round-robin walking a persisted lastIndex, so who got which number was
+// entirely predictable from order alone; replaced with a real Fisher-
+// Yates shuffle of the whole pool on every single call, so every active
+// number has an EQUAL chance of being tried first, second, third, etc. --
+// "uniformly assigned" means fair long-run distribution across the pool,
+// which random selection gives for free; a fixed round-robin sequence
+// does NOT need randomness to already be perfectly even, so this is a
+// pure ordering change, not a fairness fix). The old
+// `manualNumberRotation` collection/lastIndex state this used to persist
+// is gone entirely -- nothing needs to remember "which number is next"
+// once the pick is random every time.
+// Skips any number that already has an active pending order for this
+// EXACT amount (owner: "if user A deposit on number 1, user B deposits on
+// number 2... every session, it's own number" -- the multi-number pool
+// itself is the collision-avoidance mechanism, not Nexus's own "add
+// random shillings to the amount" trick, which would fight the whole
+// point of wanting several clean, round-number-friendly destinations).
+// Locked per network so two concurrent inits can never both claim the
+// same shuffled-first candidate.
 // Subagent-audit-caught HIGH-severity real bug: this used to only PICK a
 // number under the lock and return it -- the caller then wrote the actual
 // pendingDeposits doc separately, after an awaited uniqueRef() call (a real
@@ -2895,22 +2909,24 @@ function parseSentMoMoSms(text) {
 async function assignManualNumberAndCreateDeposit(network, amount, depositFields) {
   return withLock('manual-number-assign:' + network, async () => {
     const numsSnap = await db.collection('manualPaymentNumbers')
-      .where('network', '==', network).where('active', '==', true).orderBy('order', 'asc').get();
+      .where('network', '==', network).where('active', '==', true).get();
     const pool = numsSnap.docs.map(d => ({ id: d.id, number: d.data().number, holderName: d.data().holderName }));
     if (!pool.length) return null;
-    const rotRef = db.collection('manualNumberRotation').doc(network);
-    const rotSnap = await rotRef.get();
-    const startIdx = ((rotSnap.exists ? Number(rotSnap.data().lastIndex) : -1) + 1) % pool.length;
+    // Fisher-Yates -- every permutation of the pool is equally likely, so
+    // the candidate tried first (and, if it clashes, second, third, ...)
+    // is genuinely uniformly random on every call, not just "different
+    // from last time."
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = crypto.randomInt(i + 1);
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
     const now = Date.now();
-    for (let i = 0; i < pool.length; i++) {
-      const idx = (startIdx + i) % pool.length;
-      const candidate = pool[idx];
+    for (const candidate of pool) {
       const clash = await db.collection('pendingDeposits')
         .where('method', '==', 'manual').where('assignedNumber', '==', candidate.number)
         .where('amount', '==', amount).where('status', '==', 'pending').limit(5).get();
       const stillActive = clash.docs.some(d => (d.data().expiresAt || 0) > now);
       if (!stillActive) {
-        await rotRef.set({ lastIndex: idx, network, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         const depRef = db.collection('pendingDeposits').doc();
         await depRef.set({
           ...depositFields,
