@@ -36,8 +36,8 @@ const routes = {
     { id: 'u1', phone: '+256700000001', publicId: '000001', referralCode: 'abC123', walletBalance: 10000, totalInvested: 30000, totalEarned: 5000, status: 'active' },
   ], count: 1 },
   'POST /admin/deposits/list': { status: 'success', deposits: [
-    { id: 'dep1', userId: 'u1', accountPhone: '+256700000001', method: 'automatic', amount: 30000, status: 'pending', ref: 'MZ001', createdAt: new Date().toISOString() },
-    { id: 'dep2', userId: 'u1', accountPhone: '+256700000001', method: 'manual', network: 'MTN Mobile Money', assignedNumber: '+256770000001', amount: 50000, status: 'review', reviewReason: 'Multiple pending orders matched this SMS (same number + amount)', ref: 'M001', createdAt: new Date().toISOString() },
+    { id: 'dep1', userId: 'u1', accountPhone: '+256700000001', phone: '+256709998877', method: 'automatic', amount: 30000, status: 'pending', ref: 'MZ001', createdAt: new Date().toISOString() },
+    { id: 'dep2', userId: 'u1', accountPhone: '+256700000001', senderPhone: '+256701112233', method: 'manual', network: 'MTN Mobile Money', assignedNumber: '+256770000001', amount: 50000, status: 'review', reviewReason: 'Multiple pending orders matched this SMS (same number + amount)', ref: 'M001', createdAt: new Date().toISOString() },
   ], counts: {}, processedByDay: [], processedAmount: 0 },
   'POST /admin/deposit/force-credit': { status: 'success', message: 'Force-credited UGX 50,000 to the user' },
   'POST /admin/deposit/manual/reject': { status: 'success' },
@@ -388,6 +388,14 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   await sleep(250);
   const depHtml = doc.getElementById('content').innerHTML;
   if (!depHtml.includes('Needs Review')) errors.push('Deposits tab missing the Needs Review subtab');
+  // Owner: "let me see even user number he used to send besides account
+  // and method" -- a new "Paid from" column, distinct from the account's
+  // own registered phone, showing whichever field the deposit actually
+  // carries (phone for automatic, senderPhone for manual). dep1 (default
+  // 'pending' subtab) is the automatic-provider case.
+  if (!depHtml.includes('Paid from')) errors.push('Deposits: "Paid from" column header missing');
+  const depRowsInitial = doc.getElementById('depRows');
+  if (!depRowsInitial || !depRowsInitial.textContent.includes('+256709998877')) errors.push('Deposits: automatic deposit\'s sender phone (fixture dep1.phone) not shown in "Paid from"');
   const reviewSubtab = doc.querySelector('[data-df="review"]');
   if (!reviewSubtab) errors.push('review subtab button not found');
   else {
@@ -396,6 +404,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     const rows = doc.getElementById('depRows');
     if (!rows || !rows.textContent.includes('MTN Mobile Money')) errors.push('Needs Review tab does not show the manual deposit\'s network/number');
     if (!rows || !rows.textContent.includes('Multiple pending orders')) errors.push('Needs Review tab does not show the reviewReason');
+    if (!rows || !rows.textContent.includes('+256701112233')) errors.push('Deposits: manual deposit\'s sender phone (fixture dep2.senderPhone) not shown in "Paid from"');
     const approveBtn = doc.querySelector('[data-force]');
     const rejectBtn = doc.querySelector('[data-mreject]');
     if (!approveBtn) errors.push('Approve button missing on a review-status manual deposit');

@@ -1187,7 +1187,7 @@ async function renderDeposits(){
     ${smsLogCard(_smsLog)}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Method</th><th>Amount</th><th>Ref</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Paid from</th><th>Method</th><th>Amount</th><th>Ref</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
   $('depSync').addEventListener('click', ()=>syncMarzPay($('depSync'), renderDeposits));
   $('depSearch').addEventListener('input', drawDeps);
   document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); }));
@@ -1204,7 +1204,8 @@ function drawDeps(){
   const q = raw.toLowerCase(), qCore = phoneCore(raw);
   if(q) list = list.filter(d =>
     (d.referralCode||'').toLowerCase().includes(q) ||
-    (qCore && phoneCore(d.accountPhone||d.phone).includes(qCore))
+    (qCore && phoneCore(d.accountPhone||d.phone).includes(qCore)) ||
+    (qCore && phoneCore(d.senderPhone||'').includes(qCore))
   );
   $('depRows').innerHTML = list.length?list.map(d=>{
     const isManual = d.method==='manual';
@@ -1227,14 +1228,24 @@ function drawDeps(){
       // it always had (it can only ever have gone through MarzPay).
       : (d.provider==='lipapay'?'LipaPay':d.provider==='marzpay'?'MarzPay':'Automatic');
     const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
+    // Owner: "let me see even user number he used to send besides account
+    // and method" -- the "User" column is the member's own REGISTERED
+    // account phone (accountPhone, from the users collection); the number
+    // they actually paid FROM on this one order is a separate field
+    // (senderPhone for a manual order, phone for an automatic one -- both
+    // captured server-side at /deposit/manual/init and /deposit/marzpay,
+    // never shown here before this column existed) and can genuinely
+    // differ, e.g. paying from a friend's or a shared phone.
+    const paidFrom = d.senderPhone || d.phone || 'Not set';
     return `<tr><td>${fdate(d.createdAt)}</td>
       <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
+      <td>${esc(paidFrom)}</td>
       <td>${methodLabel}</td>
       <td><b>${ugx(d.amount)}</b></td>
       <td>${esc(d.ref||'Not set')}</td>
       <td>${statusPill(d.status)}${reviewNote}</td>
       <td>${actions}</td></tr>`;
-  }).join(''):'<tr><td colspan="7" class="empty">No deposits</td></tr>';
+  }).join(''):'<tr><td colspan="8" class="empty">No deposits</td></tr>';
   document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async()=>{
     if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});

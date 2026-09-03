@@ -8392,6 +8392,54 @@ bumped `v91`→`v92` (user), `v31`→`v32` (admin). **`admin-src/index.html`
 changed but no `server.js` changes -- Render will redeploy the static
 admin site from this push; no backend redeploy needed.**
 
+## Round 128 (2026-09-03) — admin Deposits tab gains a "Paid from" column: the number a member actually sent money FROM, distinct from their account's own registered number
+
+Owner: "make in admin panel on deposits such l can see even user number he
+used to send besides account and method." Checked the data before
+building anything: both `/deposit/marzpay` (automatic) and `/deposit/
+manual/init` (manual) already store the number the member typed into the
+deposit form on the `pendingDeposits` doc -- `phone` for automatic,
+`senderPhone` (and a duplicate `phone`) for manual -- and
+`/admin/deposits/list` already spreads the full doc, so this value was
+already reaching the admin panel's own JS. It just had no column to
+render it in: the existing "User" column shows `accountPhone` (the
+member's own REGISTERED phone, joined in from the `users` collection),
+and since that's populated for every real user, the sender-specific
+`phone`/`senderPhone` field was never actually shown anywhere -- a member
+paying from a different phone than their registered account (borrowing a
+friend's line, a shared household phone, etc.) had no visible trace of
+which number the money actually came from.
+
+**`admin-src/index.html`**: a new "Paid from" column added to the
+Deposits tab's table, between "User" and "Method" (`renderDeposits()`'s
+header row + `drawDeps()`'s row template), reading
+`d.senderPhone || d.phone || 'Not set'` -- covers both providers with one
+expression since manual orders always carry `senderPhone` and automatic
+ones only ever carry `phone`. `quietRefreshDeposits()` (the periodic
+live-refresh) needed no separate change since it already re-runs the same
+`drawDeps()` row template. The empty-state row's `colspan` bumped 7→8 to
+match the new column count. Also widened the existing phone search
+(`drawDeps()`'s `depSearch` filter) to additionally match against
+`d.senderPhone`, so an admin can now find a deposit by the number it was
+actually paid from, not only by the account's own registered number or
+referral code -- a small, low-risk extension in the same spirit as
+"seeing" the number, not a new feature the owner didn't ask for.
+
+**Verified**: `node build-admin.js` clean round-trip, `git diff --check`
+clean (this round is `admin-src/`-only -- no `server.js`/`user-src`
+changes, since the data was already being sent, only never rendered; no
+backend redeploy, no user-app cache bump). `test-admin-obfuscated-build.js`
+(the real obfuscated admin build) extended with `phone`/`senderPhone`
+fixture values on the two seeded deposit rows (an automatic one and a
+manual-in-review one) and 3 new assertions -- the "Paid from" header
+renders, the automatic deposit's `phone` fixture value renders in the
+default Pending view, and the manual deposit's `senderPhone` fixture
+value renders in the Needs Review view -- 0 errors across all 12 tabs,
+all 3 new assertions passing against the real obfuscated build. Admin
+cache bumped `v32`→`v33`. **`admin-src/index.html` changed, no
+`server.js` changes -- Render will redeploy the static admin site from
+this push; no backend redeploy needed.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
