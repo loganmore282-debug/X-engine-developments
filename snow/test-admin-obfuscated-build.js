@@ -344,6 +344,11 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   await sleep(250);
   const openUserBtn = doc.querySelector('[data-openuser]');
   if (openUserBtn) { openUserBtn.click(); await sleep(200); }
+  // Close it -- left open otherwise, which used to give later modalRoot
+  // checks (e.g. the Deposits tab's button-vs-row-click test) a false
+  // positive: they'd see a modal already open from THIS click, not one
+  // their own action just opened.
+  doc.querySelector('.modal-close')?.click();
 
   // ── Round 60 findings ──
   let confirmCalls = [];
@@ -406,6 +411,29 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (!depHtml.includes('Paid from')) errors.push('Deposits: "Paid from" column header missing');
   const depRowsInitial = doc.getElementById('depRows');
   if (!depRowsInitial || !depRowsInitial.textContent.includes('+256709998877')) errors.push('Deposits: automatic deposit\'s sender phone (fixture dep1.phone) not shown in "Paid from"');
+  // Owner: "l can tap on a deposit to see user details just like those
+  // when a user is tapped in user list" -- same clickable-row pattern the
+  // Withdrawals tab already has. dep1's status ('pending') also renders a
+  // Force-credit button in the same row, so clicking THAT specifically
+  // must NOT also open the user modal underneath it.
+  window.confirm = () => false; // decline the "credit this deposit?" confirm the click below triggers
+  const forceCreditBtnOnRow = doc.querySelector('#depRows [data-force]');
+  if (!forceCreditBtnOnRow) errors.push('Deposits: expected a Force-credit button on the pending dep1 row for this button-vs-row-click check');
+  else {
+    forceCreditBtnOnRow.click();
+    if (doc.getElementById('modalRoot') && !doc.getElementById('modalRoot').classList.contains('hidden'))
+      errors.push('Deposits: clicking the Force-credit button also opened the user-detail modal (stopPropagation missing)');
+  }
+  const depRow1 = doc.querySelector('#depRows tr[data-uid]');
+  if (!depRow1) errors.push('Deposits: no clickable row (missing data-uid) on the pending dep1 row');
+  else {
+    depRow1.click();
+    await sleep(150);
+    const modalHtml = (doc.getElementById('modalRoot') || {}).innerHTML || '';
+    if (!modalHtml.includes('abC123')) errors.push('Deposits: tapping the deposit row did not open the user-detail modal for its userId (fixture referralCode abC123 not found)');
+    const modalCloseBtn = doc.querySelector('.modal-close');
+    if (modalCloseBtn) modalCloseBtn.click();
+  }
   const reviewSubtab = doc.querySelector('[data-df="review"]');
   if (!reviewSubtab) errors.push('review subtab button not found');
   else {

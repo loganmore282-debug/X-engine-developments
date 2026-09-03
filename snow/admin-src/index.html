@@ -1271,7 +1271,7 @@ function drawDeps(){
     // never shown here before this column existed) and can genuinely
     // differ, e.g. paying from a friend's or a shared phone.
     const paidFrom = d.senderPhone || d.phone || 'Not set';
-    return `<tr><td>${fdate(d.createdAt)}</td>
+    return `<tr class="${d.userId?'clickable':''}" ${d.userId?`data-uid="${esc(d.userId)}"`:''}><td>${fdate(d.createdAt)}</td>
       <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
       <td>${esc(paidFrom)}</td>
       <td>${methodLabel}</td>
@@ -1280,12 +1280,25 @@ function drawDeps(){
       <td>${statusPill(d.status)}${reviewNote}</td>
       <td>${actions}</td></tr>`;
   }).join(''):'<tr><td colspan="8" class="empty">No deposits</td></tr>';
-  document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async()=>{
+  // Owner: "l want them to have... l can tap on a deposit to see user
+  // details just like those when a user is tapped in user list" -- same
+  // pattern the Withdrawals tab's own rows already use: tapping anywhere
+  // on the row opens the SAME full user-detail modal as the Users tab,
+  // except when the tap actually landed on one of the row's own
+  // Force-credit/Approve/Reject buttons, which must still do their own
+  // thing instead of also opening the modal underneath them.
+  document.querySelectorAll('#depRows tr[data-uid]').forEach(tr=>tr.addEventListener('click', e=>{
+    if(e.target.closest('button')) return;
+    openUser(tr.dataset.uid);
+  }));
+  document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async(e)=>{
+    e.stopPropagation();
     if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
     toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
   }));
-  document.querySelectorAll('[data-mreject]').forEach(b=>b.addEventListener('click',async()=>{
+  document.querySelectorAll('[data-mreject]').forEach(b=>b.addEventListener('click',async(e)=>{
+    e.stopPropagation();
     if(!confirm('Reject this deposit? The member will be told the payment failed and no wallet credit will be given.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/manual/reject',{depositId:b.dataset.mreject});
     toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();

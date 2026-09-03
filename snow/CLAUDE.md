@@ -8671,6 +8671,60 @@ check against the rebuilt app -- all still pass clean. Cache bumped
 `v93`→`v94` (user). **`user-src/`-only, no Render redeploy needed for the
 backend.**
 
+## Round 133 (2026-09-03) — admin Deposits tab rows are now clickable, opening the same user-detail modal as the Users tab (a real gap caught along the way, not just a feature parity gap)
+
+Owner: "are when l can tap on a deposit to see user details just like
+those when are user is tapped in user list." Checked how this already
+works elsewhere before building anything -- the Withdrawals tab's own
+rows already do exactly this (`tr.clickable[data-uid]`, a row-level click
+listener that opens `openUser(uid)` unless the click landed on one of the
+row's own action buttons); the Deposits tab's rows never got the same
+treatment, even though `pendingDeposits` already carries `userId` on
+every row. Copied the exact same pattern rather than inventing a new one.
+
+**`admin-src/index.html`**: `drawDeps()`'s `<tr>` now carries
+`class="clickable" data-uid="${d.userId}"` (guarded, matching the
+Transactions tab's own defensive `d.userId?'clickable':''` pattern, in
+case a legacy row is ever missing it); a row click listener opens
+`openUser(tr.dataset.uid)` unless `e.target.closest('button')` -- the
+same guard the Withdrawals tab already uses so a tap on Force-credit/
+Approve/Reject doesn't also open the modal underneath it. The
+Force-credit and Reject button handlers also gained their own
+`e.stopPropagation()` (the Withdrawals tab's buttons have this too, on
+top of the row's own `closest('button')` check -- belt-and-suspenders,
+not strictly required since either guard alone is sufficient, but kept
+for consistency with the exact precedent being copied).
+
+**A real pre-existing test-hygiene gap caught while writing the
+verification for this, not an app bug**: the very first attempt at a
+"clicking a deposit row's own action button must NOT also open the
+modal" check failed -- traced it and found the modal was already sitting
+open from an EARLIER, unrelated test step (the Integrity Audit modal's
+own "Open user" link, several sections earlier in the same test run,
+which opened `openUser()` and never closed it again). That earlier step
+never cleaned up after itself, so any LATER check in the same test run
+that looks at whether `#modalRoot` is open was silently checking stale
+state left over from a different assertion entirely. Fixed by closing
+the modal right after that Integrity Audit check finishes
+(`doc.querySelector('.modal-close')?.click()`) -- a real fix to the test
+harness's own hygiene, not a workaround for the app.
+
+**Verified**: `node build-admin.js` clean round-trip, `git diff --check`
+clean (this round is `admin-src/`-only -- no `server.js`/`user-src`
+changes, since `userId` was already flowing to the client; no backend
+redeploy, no user-app cache bump). `test-admin-obfuscated-build.js` (the
+real obfuscated admin build) extended with 2 new checks against the real
+built DOM: clicking the pending dep1 row's own Force-credit button does
+NOT open the user-detail modal; clicking anywhere else on that same row
+DOES open it, showing the correct user's own data (the fixture's
+`abC123` referral code) -- both passing only after the test-hygiene fix
+above was applied (the first run of the new checks correctly caught the
+stale-modal false positive before it was fixed, proving the check itself
+is real and not vacuously passing). 0 errors across all 12 tabs. Admin
+cache bumped `v34`→`v35`. **`admin-src/index.html` changed, no
+`server.js` changes -- Render will redeploy the static admin site from
+this push; no backend redeploy needed.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
