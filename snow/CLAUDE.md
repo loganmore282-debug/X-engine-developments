@@ -8516,6 +8516,73 @@ panel's own number editor are both unaffected by which number gets
 picked under the hood), so no cache bumps needed. **`server.js`
 changed -- Render should auto-deploy this push.**
 
+## Round 130 (2026-09-03) — admin push notifications: self-healing token resync closes a real recurring-duplication gap Round 45 left open
+
+Owner sent a screenshot of the SAME phone receiving 2 identical "New
+withdrawal request UGX 8,300 requested via Airtel Money" push
+notifications for one real order (recurrence of the exact class of bug
+Round 45 already investigated and partially mitigated). Re-verified
+`sendAdminPush()` before touching anything, not assumed: exactly one call
+site per event type (`/withdraw/request`'s success path, `creditDeposit()`'s
+own `justCredited` branch), no loop, no retry -- confirms this is still
+NOT a server-side double-send. `sendEachForMulticast()` sends to every
+token in `adminPushTokens`; if the same physical phone holds 2
+simultaneously-valid tokens, one server-side send legitimately produces 2
+OS-level notifications. Round 45's own fix (`enablePush()` retiring a
+DIFFERENT previously-stored token from THIS browsing context before
+storing a new one) only ever runs when the admin manually clicks Notify
+again -- but an FCM token can also rotate SILENTLY in the background (a
+service-worker update -- `admin/sw.js`'s own cache version bumps almost
+every deploy in this project -- or routine browser push-subscription
+maintenance), and nothing detected or retired the now-stale old
+registration until the admin happened to re-toggle the button by hand.
+That silent-rotation gap is what this round closes.
+
+**`admin-src/index.html`**: new `resyncPushToken()` -- if this device
+already has a stored token and notification permission is still granted,
+silently re-fetches the CURRENT real token via `messaging.getToken()`
+(no permission prompt, since already granted) and compares it against
+what's stored; if it changed, retires the old registration
+(`/admin/push/unregister`) and registers+stores the new one
+(`/admin/push/register`), with zero toast unless something actually
+needed fixing. Wired into `openShell()` (both a fresh login and a
+resumed already-valid session -- the natural "the admin just opened the
+panel" trigger, once per real visit, not on every tab switch), so any
+silent rotation since the device's last visit self-heals automatically
+instead of requiring the admin to remember to manually re-enable
+notifications after every deploy.
+
+**Honest about what this does and doesn't fix**: `resyncPushToken()`
+closes the SAME-browsing-context silent-rotation case. It does NOT
+retroactively clean up a genuinely separate registration from a
+DIFFERENT browsing context on the same physical device (e.g. an
+installed PWA icon and a regular browser tab each get their own
+`localStorage`, so neither can see or retire the other's token) --
+Round 45's own "Reset all devices" button (Settings tab, owner-only,
+`/admin/push/clear-all`) remains the right tool for that, and for
+clearing the 2 tokens already sitting duplicated on the reported phone
+right now. Told the owner directly: tap Reset all devices once, then
+re-open Notify on that phone -- this round's fix keeps it from silently
+happening again afterward, it doesn't retroactively undo what's already
+duplicated.
+
+**Verified**: `node build-admin.js` clean round-trip, `git diff --check`
+clean (this round is `admin-src/`-only -- no `server.js`/`user-src`
+changes, so no backend redeploy and no user-app cache bump).
+`test-admin-obfuscated-build.js` (the real obfuscated admin build)
+extended: seeds `localStorage.snow_admin_push_token` with an existing
+token BEFORE login (simulating a device that already had push enabled in
+an earlier session), confirming `openShell()`'s new `resyncPushToken()`
+call runs against that state with zero crashes/errors even though this
+jsdom harness has no real Firebase Messaging available at all (the
+early-return-when-messaging-is-unavailable path), and confirming the
+existing token is left completely untouched rather than being
+wiped/corrupted by a resync attempt that can't actually complete -- 0
+errors across all 12 tabs, both new assertions passing. Admin cache
+bumped `v33`→`v34`. **`admin-src/index.html` changed, no `server.js`
+changes -- Render will redeploy the static admin site from this push; no
+backend redeploy needed.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

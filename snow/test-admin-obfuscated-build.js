@@ -193,6 +193,14 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   await sleep(300); // let the module script's DecompressionStream loader + inline eval settle
   const doc = window.document;
 
+  // Simulates a device that already had push notifications enabled in an
+  // earlier session -- openShell()'s new resyncPushToken() call (fixing
+  // the owner-reported duplicate-notification bug) must run against this
+  // without crashing, and must not clear/corrupt an existing token just
+  // because Firebase Messaging itself isn't available in this jsdom
+  // harness (no `firebase` global is stubbed here at all).
+  window.localStorage.setItem('snow_admin_push_token', 'existing-token-abc');
+
   // Log in as owner (blank username, raw key)
   const keyInput = doc.getElementById('keyInput');
   const loginBtn = doc.getElementById('loginBtn');
@@ -206,6 +214,8 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   const shellVisible = !doc.getElementById('shell').classList.contains('hidden');
   console.log('shell visible after login:', shellVisible);
   if (!shellVisible) errors.push('shell did not become visible after login');
+  if (window.localStorage.getItem('snow_admin_push_token') !== 'existing-token-abc')
+    errors.push('resyncPushToken() altered/cleared an existing push token when Firebase Messaging was unavailable, instead of leaving it alone');
 
   const tabsToClick = ['dashboard', 'analytics', 'users', 'deposits', 'withdrawals', 'products', 'promocodes', 'transactions', 'referrals', 'settings', 'admins', 'auditlog'];
   for (const t of tabsToClick) {
