@@ -112,6 +112,16 @@ function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-
 // before parsing.
 function parseMoneyInput(v){ return parseInt(String(v||'').replace(/,/g,''), 10); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Owner: "let payment number on payment page be 07.....,no country code
+// putting" -- the merchant/admin payment number stored server-side (and
+// used for exact-string SMS-forwarder matching) always stays canonical
+// +256XXXXXXXXX; this is a DISPLAY-ONLY conversion applied at render time,
+// never touching what's stored/compared. See CLAUDE.md's own note on why
+// the stored format must never change.
+function toLocalPhoneDisplay(num){
+  const s = String(num || '').trim();
+  return s.indexOf('+256') === 0 ? '0' + s.slice(4) : s;
+}
 // Every phone field is now local-number-only -- the "+256" country code is
 // a static chip next to the input (see .phone-field/.phone-prefix), not
 // something typed here at all (owner: "make +256 static, so one can type
@@ -2347,7 +2357,7 @@ function presentManualPayCodeScreen(data){
   $('manPayMethodName').textContent = methodLabel;
   $('manPayAccountMethod').textContent = methodLabel;
   $('manPayTotal').textContent = fmtUGX(data.amount).replace('UGX ', '');
-  $('manPayMerchantNumber').textContent = data.assignedNumber;
+  $('manPayMerchantNumber').textContent = toLocalPhoneDisplay(data.assignedNumber);
   $('manPayMerchantName').textContent = data.holderName;
   $('manPayYourNumber').textContent = data.senderPhone;
   $('manPaySelector').classList.add('mp-hidden');
@@ -2370,7 +2380,7 @@ function renderManualPayReminder(data){
   const row = $('manPayReminderRow');
   const line = $('manPayYourAccountLine');
   if (!tpl.trim()) { if (row) row.classList.add('mp-hidden'); if (line) line.style.display = 'none'; return; }
-  const text = tpl.replace(/\{\{number\}\}/g, data.assignedNumber).replace(/\{\{amount\}\}/g, String(data.amount));
+  const text = tpl.replace(/\{\{number\}\}/g, toLocalPhoneDisplay(data.assignedNumber)).replace(/\{\{amount\}\}/g, String(data.amount));
   $('manPayReminderBox').innerHTML = esc(text).replace(/\n/g, '<br>');
   row.classList.remove('mp-hidden');
   if (line) line.style.display = '';

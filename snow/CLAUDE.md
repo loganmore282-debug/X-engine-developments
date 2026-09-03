@@ -8310,6 +8310,88 @@ own behavior. Cache bumped `v90`→`v91` (user). No `server.js`/`admin-src`
 changes -- **`user-src/`-only, no Render redeploy needed for the
 backend.**
 
+## Round 127 (2026-09-03) — merchant payment number now displays local "07..." format on the payment page and in the admin panel (never touching the canonical +256 stored/matched value)
+
+Owner: "let payment number on payment page be 07.....,no country code
+putting, l am trying to saved them in admin panel but they change to
++2567..." Traced the root cause before touching anything: `/admin/
+manual-numbers/save` (`server.js`) calls `cleanPhone(number)` before
+storing, normalizing whatever format the admin typed into canonical
+`+256XXXXXXXXX` -- that's why a number saved as "07..." visibly "changes"
+afterward. Critically, also traced `/deposit/manual/sms-forwarder`
+(the automated SMS-matching webhook): it does an EXACT string equality
+match (`where('number','==',receivingNumber)`) between the SMS
+forwarder's own `cleanPhone()`-normalized `receivingNumber` and this same
+stored field. **This means the stored/matched format must never change to
+local-only -- doing so would silently break every future SMS
+auto-match, a real money-safety regression.** The fix is therefore
+display-only: a `toLocalPhoneDisplay(num)` helper (`+256XXXXXXXXX` →
+`0XXXXXXXXX`) applied purely at render time, added independently to both
+`user-src/original_module.js` and `admin-src/index.html` (small display
+helpers are already duplicated between the two apps in this codebase --
+they're separately built/obfuscated with no shared module) -- never
+touching what's stored in Mongo or what `cleanPhone()` writes/compares.
+
+**`user-src/original_module.js`**: `presentManualPayCodeScreen(data)`'s
+`$('manPayMerchantNumber').textContent` now shows
+`toLocalPhoneDisplay(data.assignedNumber)` instead of the raw
+`+256...` value -- the copy button next to it reads `.textContent`
+directly, so it now copies the same local-format number with zero extra
+change. `renderManualPayReminder(data)`'s `{{number}}` template
+substitution (the admin-authored Payment Reminder section, Round 122) now
+substitutes the local-format number too, matching the owner's own
+Round-122 reference screenshot ("Enter number 0783280479" -- already
+local format). `$('manPayYourNumber').textContent = data.senderPhone`
+(the member's OWN entered number, not the merchant's) was confirmed to
+need no change -- it's built client-side from the raw local-digit input
+the member typed in `manualPayConfirm()`, never server-cleaned, so it was
+already displaying correctly.
+
+**`admin-src/index.html`**: same `toLocalPhoneDisplay()` helper added
+independently. Applied at 3 spots: `renderManualNumbersEditor()`'s
+editable phone-number input's `value=` attribute (the admin's own Payment
+Numbers editor -- the literal "l am trying to saved them in admin panel
+but they change to +2567..." complaint); `numberCard()`'s own per-number
+analytics-card header (`<b>holderName</b> <span>number</span>`, the
+Analytics tab's "Payment number activity" section -- included for
+consistency, since the owner's own wording plausibly covers everywhere
+the admin sees a saved number, not only the one editable field); and the
+delete-confirmation dialog's own number fallback text (`n.holderName||
+n.number`). **Deliberately left unconverted**: the SAVE payload
+construction in `renderManualNumbersEditor()` (`number: box.querySelector(
+...).value.trim()`) -- `cleanPhone()` server-side already correctly
+normalizes whatever format is typed, so no client change was needed
+there; and `unknownCard()`'s own `u.number` display (the "Messages from
+numbers you have not saved" warning card) -- those are raw numbers
+reported by SMS forwarders for numbers that were never saved as a
+payment number in the first place, a genuinely different surface than
+"saved payment numbers," left out to keep this fix tightly scoped to
+what was actually reported.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node
+build-core.js` and `node build-admin.js` both clean round-trips, `git
+diff --check` clean. `test-admin-obfuscated-build.js` (the real
+obfuscated admin build) extended with two new assertions -- the Payment
+Numbers editor's input for a fixture number stored as `+256770000001`
+now shows exactly `0770000001`, and the Analytics tab's per-number card
+renders `0770000001` rather than the raw `+256` form -- 0 errors across
+all 12 tabs, both new assertions passing. Playwright, against the real
+built (obfuscated) user app: seeded `/deposit/manual/init`'s mocked
+response with a canonical `+256770000001` `assignedNumber` and confirmed
+the payment page's merchant-number display reads exactly `0770000001`
+(no `+256` anywhere in it), the copy button's own `onclick` still reads
+`.textContent` (so it copies the same local value), and the Payment
+Reminder section's `{{number}}` substitution also reads `0770000001`
+with no leftover `+256`. Re-ran the Round 120 manual-pay regression suite
+(11 checks, all pass -- confirms the shared `presentManualPayCodeScreen`/
+resume-on-reload/cross-account-cache paths this round touched are all
+still correct), the Round 125 stale-poll repro (still correctly shows no
+bug present), and the Round 126 spinner/no-forced-reload check (still
+clean) -- no regressions from touching these shared render paths. Cache
+bumped `v91`→`v92` (user), `v31`→`v32` (admin). **`admin-src/index.html`
+changed but no `server.js` changes -- Render will redeploy the static
+admin site from this push; no backend redeploy needed.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

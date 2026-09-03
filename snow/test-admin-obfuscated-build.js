@@ -415,6 +415,14 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (!settingsHtml3.includes('Manual payments')) errors.push('Settings: Manual payments section missing');
   if (!settingsHtml3.includes('Payment numbers')) errors.push('Settings: Payment numbers card missing');
   if (!settingsHtml3.includes('Snow MTN 1') || !settingsHtml3.includes('Snow Airtel 1')) errors.push('Settings: payment numbers from fixture not rendered');
+  // Owner: "l am trying to saved them in admin panel but they change to
+  // +2567..." -- the fixture stores '+256770000001' (canonical, matching
+  // what cleanPhone() actually writes); the editable input must show it
+  // back in local "07..." form, never the raw +256 the server stores/
+  // matches on.
+  const mnNumberInput0 = doc.querySelector('[data-mn-number="0"]');
+  if (!mnNumberInput0) errors.push('Settings: payment-number input missing');
+  else if (mnNumberInput0.value !== '0770000001') errors.push('Settings: payment-number input shows ' + mnNumberInput0.value + ', expected local-format 0770000001');
   const depMethodManualRadio = doc.getElementById('depMethodManual');
   const saveDepMethodBtn = doc.getElementById('saveDepMethod');
   if (!depMethodManualRadio || !saveDepMethodBtn) errors.push('Settings: deposit-method radio/save button missing');
@@ -481,6 +489,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   const an = doc.getElementById('content').innerHTML;
   if (!an.includes('Payment number activity')) errors.push('Analytics: payment-number section missing');
   if (!an.includes('Snow MTN 1')) errors.push('Analytics: number holder name missing');
+  if (!an.includes('0770000001')) errors.push('Analytics: number card shows the raw +256 form, not local 0770000001');
   if (!an.includes('Samsung SM-A047F')) errors.push('Analytics: device name missing');
   if (!an.includes('75%')) errors.push('Analytics: success rate missing');
   if (!an.includes('Online')) errors.push('Analytics: health pill missing');

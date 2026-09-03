@@ -242,6 +242,17 @@ function clearSession(){
 
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Owner: "l am trying to saved them in admin panel but they change to
+// +2567..." -- cleanPhone() server-side always normalizes a saved payment
+// number to canonical +256XXXXXXXXX before storing (must stay that way --
+// the SMS-forwarder matching pipeline does an exact-string comparison
+// against this same stored value). This is DISPLAY-ONLY, applied wherever
+// the admin panel shows a saved number back, so a number typed as
+// "07XXXXXXXX" doesn't visibly "change" after saving.
+function toLocalPhoneDisplay(num){
+  const s = String(num || '').trim();
+  return s.indexOf('+256') === 0 ? '0' + s.slice(4) : s;
+}
 async function copyText(str, btn){
   try {
     if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(str); }
@@ -735,7 +746,7 @@ function numberCard(n){
   return `<div class="panel-card" style="margin-bottom:10px">
     <div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
       <div style="flex:1">
-        <b>${esc(n.holderName||'Unnamed')}</b> <span class="muted">${esc(n.number)}</span>
+        <b>${esc(n.holderName||'Unnamed')}</b> <span class="muted">${esc(toLocalPhoneDisplay(n.number))}</span>
         <div class="muted" style="font-size:11px">${esc(n.network||'')}${n.active?'':' · disabled'}${n.device?' · '+esc(n.device):''}${n.appVersion?' · app '+esc(n.appVersion):''}${n.battery!==null&&n.battery!==undefined?' · battery '+n.battery+'%':''}</div>
       </div>
       ${healthPill(n)}
@@ -2162,7 +2173,7 @@ function renderManualNumbersEditor(){
         <div><label>Network</label><select data-mn-network="${i}">${NETWORK_OPTIONS.map(net=>`<option value="${esc(net)}" ${n.network===net?'selected':''}>${esc(net)}</option>`).join('')}</select></div>
         <div><label>Order</label><input type="number" data-mn-order="${i}" value="${n.order||0}"></div>
       </div>
-      <label>Phone number</label><input data-mn-number="${i}" value="${esc(n.number||'')}" placeholder="0770000001">
+      <label>Phone number</label><input data-mn-number="${i}" value="${esc(toLocalPhoneDisplay(n.number||''))}" placeholder="0770000001">
       <label>Account holder name</label><input data-mn-holder="${i}" value="${esc(n.holderName||'')}" placeholder="Snow MTN 1">
       <label style="width:auto;display:flex;align-items:center;gap:8px;margin:8px 0;"><input type="checkbox" data-mn-active="${i}" ${n.active!==false?'checked':''} style="width:auto"> Active (eligible for round-robin)</label>
       <div class="row">
@@ -2196,7 +2207,7 @@ function renderManualNumbersEditor(){
     // /admin/manual-numbers/delete now refuses (409) outright if a live
     // pending deposit is still assigned to this number, rather than deleting
     // it "unaffected". Corrected so the dialog matches what actually happens.
-    if (!confirm(`Delete ${n.holderName||n.number}? It will stop being handed out to new deposits right away. If a member currently has a live pending order on it, the delete will be refused until that order resolves (within 15 minutes).`)) return;
+    if (!confirm(`Delete ${n.holderName||toLocalPhoneDisplay(n.number)}? It will stop being handed out to new deposits right away. If a member currently has a live pending order on it, the delete will be refused until that order resolves (within 15 minutes).`)) return;
     btn.disabled = true;
     const d = await api('/admin/manual-numbers/delete', { id: n.id });
     if (d.status !== 'success') { btn.disabled = false; return toast(d.message||'Failed', 'err'); }
