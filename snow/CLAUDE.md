@@ -8583,6 +8583,56 @@ bumped `v33`→`v34`. **`admin-src/index.html` changed, no `server.js`
 changes -- Render will redeploy the static admin site from this push; no
 backend redeploy needed.**
 
+## Round 131 (2026-09-03) — announcement dialog, every popup, and toast ("notify") now ease in smoothly instead of popping in
+
+Owner: "l also l was a smooth appearing of announcement dialog message,
+not just appearing suddenly, no it should come smoothly, even also
+notify and popups." Checked the actual CSS before touching anything
+rather than assuming nothing existed: `.chest-modal`/`.confirm-sheet`
+(which `.announce-modal`/`.dep-status-modal` both extend via a shared
+class) already had a scale+fade entrance transition since Round 28 --
+but only `180ms` at a plain linear `ease`, which reads as a quick snap/pop
+rather than a settle. `.toast` ("notify") had genuinely ZERO entrance
+animation at all -- a freshly created `<div>` just gets appended straight
+into `#toastHost` with no fade-in whatsoever, popping into existence
+instantly.
+
+**`user-src/index.html`**: `.confirm-sheet`/`.chest-modal`'s transition
+widened from `180ms ease` to `340ms cubic-bezier(.22,1,.36,1)` -- reusing
+this app's own already-established "gentle settle" easing curve (the
+exact same one `.reveal-in`/`.scroll-reveal` already use elsewhere, per
+Round 31's own comment naming it that), not a new value invented for this
+round. Since `.announce-modal` and `.dep-status-modal` both share the
+`.chest-modal` class, this one change smooths the announcement dialog,
+the gift-code popup, AND the recharge-status modal all at once -- "even
+also... popups" covered by construction, not three separate edits. New
+`@keyframes toastIn{from{opacity:0;transform:scale(.9)}to{opacity:1;
+transform:scale(1)}}` added and applied to `.toast` (`animation:toastIn
+.3s cubic-bezier(.22,1,.36,1)`) -- a plain CSS animation rather than a
+transition, since `toast()` creates a brand-new DOM node per call (never
+reused) and a transition needs an already-on-screen "from" state to
+animate away from, which a fresh node doesn't have; an animation plays
+automatically the instant a new element is inserted, which is exactly
+what's needed here.
+
+**Verified**: `node build-core.js` clean round-trip (this round is
+`user-src/index.html`-only, plain CSS -- `original_module.js` untouched,
+confirmed via its own unchanged `node --check` pass; no `server.js`/
+`admin-src` changes, so no backend redeploy and no admin cache bump).
+`git diff --check` clean. Playwright, against the real built app, 3
+checks: the announcement modal's computed `transition-duration` is
+`0.34s` with `cubic-bezier` timing (was `0.18s`/`ease`); a fired toast's
+computed `animation-name` is `toastIn` with `cubic-bezier` timing (was no
+animation at all); the gift-code chest modal (sharing `.chest-modal`)
+shows the same widened `0.34s`/`cubic-bezier` transition, confirming the
+one shared-class change reached all three popup types. Re-ran the Round
+120 manual-pay regression suite, the Round 125 stale-poll repro, and the
+Round 126 spinner/no-forced-reload check against the rebuilt app -- all
+still pass clean, confirming the wider transition timing doesn't break
+any existing flow that opens/closes these dialogs. Cache bumped
+`v92`→`v93` (user). **`user-src/`-only, no Render redeploy needed for the
+backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

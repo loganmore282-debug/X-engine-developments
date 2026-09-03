@@ -481,14 +481,27 @@ a{color:inherit;}
 .sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
 
 #toastHost{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:600;pointer-events:none;padding:20px;}
-.toast{background:rgba(17,17,17,.82);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;max-width:86%;text-align:center;box-shadow:0 12px 28px -14px rgba(0,0,0,.4);}
+/* Owner: "notify... should come smoothly" -- toast() creates a fresh DOM
+   node per call (never reused), so a plain @keyframes animation (not a
+   transition, which needs a prior "from" state already on screen to
+   animate away from) plays automatically the instant it's inserted --
+   same easing/scale-in feel as the popups above. */
+@keyframes toastIn{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:scale(1);}}
+.toast{background:rgba(17,17,17,.82);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;max-width:86%;text-align:center;box-shadow:0 12px 28px -14px rgba(0,0,0,.4);animation:toastIn .3s cubic-bezier(.22,1,.36,1);}
 
 /* All pop-up dialogs (as opposed to full-page sheets) open centered, share
    the activity ticker's own dark pill color, and use a modest radius --
-   not the tall rounded bottom-sheet look. */
+   not the tall rounded bottom-sheet look. Owner: "smooth appearing... not
+   just appearing suddenly" -- the scale+fade entrance (below, and on
+   .chest-modal, which .announce-modal/.dep-status-modal both extend) was
+   real but only 180ms/linear ease, which read as a snap/pop rather than a
+   settle. Widened to 340ms and switched to this app's own established
+   "gentle settle" curve (cubic-bezier(.22,1,.36,1), the exact same one
+   .reveal-in/.scroll-reveal already use elsewhere) so every popup in the
+   app now eases in consistently, not just opens faster. */
 .confirm-bg{position:fixed;inset:0;background:rgba(17,17,17,.5);z-index:300;display:none;align-items:center;justify-content:center;padding:20px;}
 .confirm-bg.show{display:flex;}
-.confirm-sheet{background:rgba(17,17,17,.82);color:#fff;width:100%;max-width:340px;border-radius:16px;padding:22px 20px 24px;transform:scale(.92);opacity:0;transition:transform .18s ease,opacity .18s ease;}
+.confirm-sheet{background:rgba(17,17,17,.82);color:#fff;width:100%;max-width:340px;border-radius:16px;padding:22px 20px 24px;transform:scale(.92);opacity:0;transition:transform .34s cubic-bezier(.22,1,.36,1),opacity .34s cubic-bezier(.22,1,.36,1);}
 .confirm-bg.show .confirm-sheet{transform:scale(1);opacity:1;}
 .confirm-sheet h3{margin:0 0 6px;font-size:18px;font-weight:800;}
 .confirm-row{display:flex;justify-content:space-between;font-size:13.5px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.14);}
@@ -498,7 +511,7 @@ a{color:inherit;}
    treasure-chest gift-code entry on Home. */
 .chest-modal-bg{position:fixed;inset:0;background:rgba(17,17,17,.55);z-index:310;display:none;align-items:center;justify-content:center;padding:20px;}
 .chest-modal-bg.show{display:flex;}
-.chest-modal{background:rgba(17,17,17,.82);color:#fff;width:100%;max-width:340px;border-radius:16px;padding:22px 20px;text-align:center;transform:scale(.92);opacity:0;transition:transform .18s ease,opacity .18s ease;}
+.chest-modal{background:rgba(17,17,17,.82);color:#fff;width:100%;max-width:340px;border-radius:16px;padding:22px 20px;text-align:center;transform:scale(.92);opacity:0;transition:transform .34s cubic-bezier(.22,1,.36,1),opacity .34s cubic-bezier(.22,1,.36,1);}
 .chest-modal-bg.show .chest-modal{transform:scale(1);opacity:1;}
 .chest-modal img{width:96px;height:auto;display:block;margin:0 auto 10px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.28));}
 .chest-modal h3{margin:0 0 6px;font-size:18px;font-weight:800;}
