@@ -2462,12 +2462,31 @@ async function handleManualDepositStatusResult(r){
 // short 60s window -- a manual match depends on a phone's SMS forwarder,
 // not an instant gateway callback, so it can genuinely take longer.
 // Self-terminates the moment the member navigates away from this overlay.
+//
+// Real, reproduced bug fixed here: manualPayOverlayOpen() only checks
+// whether SOME manual-pay overlay is open, not whether THIS poll's own
+// depositId is still the one being shown. The overlay has an always-
+// reachable back button (owner: "let them be independent... no header
+// bars"), so a member can back out of order A while it's still pending,
+// start a fresh order B, and have A's own background poll loop wake up
+// moments later, see the overlay "open" again (now showing B), and act
+// on A's resolution as if it were about to B -- forcibly closing B's
+// screen and popping a misleading "Recharge successful/failed" modal
+// that's actually about the abandoned order A, while also wiping B's own
+// resume cache. Reproduced directly (order A resolved 'matched' while B
+// was still 'pending' -> B's overlay was torn down and the success modal
+// showed) before this fix. _manDepId always tracks whichever order is
+// CURRENTLY displayed (set by presentManualPayCodeScreen(), called by
+// both a fresh confirm and a resume) -- comparing this poll's own
+// depositId against it lets a stale, abandoned order's poll recognize
+// itself as stale and quietly stop, never touching UI that now belongs
+// to a different order.
 async function pollManualDepositStatus(depositId){
   for (let i = 0; i < 190; i++) {
     await new Promise(r => setTimeout(r, 5000));
-    if (!manualPayOverlayOpen()) return;
+    if (!manualPayOverlayOpen() || depositId !== _manDepId) return;
     const r = await post('/deposit/manual/status', { depositId });
-    if (!manualPayOverlayOpen()) return;
+    if (!manualPayOverlayOpen() || depositId !== _manDepId) return;
     if (await handleManualDepositStatusResult(r)) return;
   }
 }

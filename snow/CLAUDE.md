@@ -8168,6 +8168,85 @@ the manual-deposit amount screen (Round 122) now reads "K-pay" instead of
 label reads exactly "K-pay" with no remaining "KKpay" anywhere. Cache
 bumped `v88`→`v89` (user). `user-src/`-only, no Render redeploy needed.
 
+## Round 125 (2026-09-02) — deposit payment system audit: 1 real, empirically-reproduced session/order-crossing bug found and fixed (a stale abandoned manual order's background poll could hijack and misreport on a completely different, currently-active order); double-tap/double-submit and the automatic-flow's own status modal both checked and confirmed already safe
+
+Owner: "make sure the deposit payment system is now bug free accurate on
+every session and orders." Traced every client-side deposit code path
+(`manualPayConfirm`/`presentManualPayCodeScreen`/`pollManualDepositStatus`/
+`handleManualDepositStatusResult`/`manualPayRefresh`/the resume-on-reload
+cache, and the automatic flow's `submitDeposit`/`pollDepositStatus`/
+`openDepositStatusModal`) against the actual code rather than assuming,
+and reproduced findings with Playwright before touching anything, per
+this file's own standing discipline.
+
+**Real bug, reproduced, fixed: an abandoned manual order's own background
+poll could reach into and corrupt a completely different, currently-open
+order.** `pollManualDepositStatus(depositId)`'s only staleness guard was
+`manualPayOverlayOpen()` -- "is SOME manual-pay overlay open," not "is
+THIS specific order still the one being shown." The overlay's own back
+button (added Round 119, "let them be independent... no header bars," and
+deliberately reachable at any time, even mid-payment) means a member can
+back out of order A while it's still genuinely pending, start a fresh
+order B, and have order A's own poll loop -- still alive in the
+background, nothing ever cancels it -- wake up moments later, see the
+overlay "open" again (now showing B, not A), and act on A's own
+resolution as if it were about B: forcibly closing B's screen, popping a
+"Recharge successful/failed" modal that's actually about the abandoned
+order A while B might still be genuinely pending, and wiping B's own
+localStorage resume cache in the process.
+
+**Reproduced directly, not just reasoned about**: started manual order A,
+backed out before it resolved, started order B, then had the mock backend
+report A as `matched` while B stayed `pending` -- confirmed B's overlay
+was torn down, the misleading success modal appeared, and B's resume
+cache was wiped, exactly as the trace predicted, before any fix was
+applied.
+
+**Fixed**: `_manDepId` already tracks whichever order is CURRENTLY
+displayed (set by `presentManualPayCodeScreen()`, called by both a fresh
+confirm and a resume) -- `pollManualDepositStatus()` now also checks
+`depositId !== _manDepId` at both of its existing staleness checkpoints,
+alongside the existing `manualPayOverlayOpen()` check. A poll for an
+order that's no longer the one on screen now recognizes itself as stale
+and quietly stops, touching nothing -- it can never again act on behalf
+of whatever order happens to be showing when it wakes up.
+
+**Investigated and confirmed already safe, not silently skipped**:
+- **Double/rapid-tap on the manual Confirm button.** No explicit
+  `disabled=true` guard exists (unlike this app's other money buttons),
+  but `manualPayConfirm()` shows `#manPayLoading` -- a genuinely
+  `position:fixed;inset:0` overlay with no `pointer-events:none` -- before
+  the `await`, which blocks taps on anything underneath for the duration
+  of the request. Verified empirically: 5 rapid taps on Confirm produced
+  exactly 1 real `/deposit/manual/init` call, not 5.
+- **The automatic (MarzPay/LipaPay) flow's own `pollDepositStatus()`
+  has no equivalent staleness guard at all** -- worse on paper than the
+  manual flow's own (weaker) check before this fix. But traced its actual
+  reachability: `#depStatusBg` has no backdrop-tap-to-close, no X button,
+  and its Close button stays `display:none` until the poll resolves or
+  gives up -- confirmed via both the markup and a grep for any delegated
+  click handler on `.chest-modal-bg`. The `popstate` handler (Round 71)
+  also never touches `#depStatusBg`. With no reachable way to escape it
+  while genuinely pending, there is no live path for a second automatic
+  deposit to ever start while an earlier one's poll is still running --
+  unlike the manual flow, which has an always-open back button by design.
+  Left unguarded rather than adding a check against a failure mode that
+  cannot currently occur.
+- **Cross-user isolation** on `/deposit/manual/status` (server-side,
+  already correctly scoped: `depSnap.data().userId !== userId` → 404) --
+  re-confirmed, not assumed.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node
+build-core.js` clean round-trip (this round is `user-src`-only). `git diff
+--check` clean. The full Round 120 regression suite (toast/SMS-fallback
+gating, resume-on-reload, cross-account cache safety, cache-cleared-on-
+resolve, hardware-back-button handling) re-run clean against the fixed
+build -- confirms the fix doesn't regress the ordinary single-order
+resolution path (A's own status check still fires and correctly resolves
+when A is genuinely still the current order). Cache bumped `v89`→`v90`
+(user). No `server.js`/`admin-src` changes -- **`user-src/`-only, no
+Render redeploy needed for the backend.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
