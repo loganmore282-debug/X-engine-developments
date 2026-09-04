@@ -9295,6 +9295,90 @@ already lists `MARZPAY_KEY` as a configured env var on `snow-server`);
 the owner may want to fully close and reopen the admin panel once to
 pick up the bumped service-worker cache.**
 
+## Round 141 (2026-09-04) — every withdrawal request now texts all admin payment numbers, a deliberately generic alert with no amount/phone/identity in it
+
+Owner: "l want also to put sms functions for every withdrawal
+request, sms should be sent to all admin payment numbers to alert them
+for incoming withdrawal request to be processed, don't put number or
+details in sms to be sent just make it simple, that there is new pending
+with, please verify from management group before sending withdrawal and
+approving." Provided MarzPay's own SMS-product integration guide (a PDF,
+`MarzSms, SMS/Airtime/Data API Integration Guide`) -- extracted with
+`pypdf` (`pdftoppm`/poppler-utils isn't installed in this sandbox and
+couldn't be installed either, package repo 404s; pip install pypdf
+worked instead).
+
+**MarzSms is a SEPARATE MarzPay product** from the wallet API Snow
+already integrates -- its own dashboard and API keys at
+`sms.wearemarz.com` (base URL `https://sms.wearemarz.com/api/v1`), same
+`Basic base64(api_key:api_secret)` auth convention as the wallet API but
+a genuinely different credential pair. New env var `MARZSMS_KEY`
+(optional -- unset means the feature silently does nothing, exactly like
+admin push notifications degrade when Firebase isn't configured), added
+to `render.yaml`'s documented env-var list.
+
+**`marzSmsSend(recipients, message)`** -- `POST /sms/send` with
+`{recipient, message}` (`recipient` accepts a comma-separated list per
+the docs, so every admin number goes out in ONE call, not one per
+number). MarzSms's own documented error shape is `{success:false,
+message,error}` -- no `status` field, unlike the wallet API -- so this
+checks `resp.ok` directly rather than reusing `_marzParse`'s
+wallet-API-shaped convention.
+
+**"Admin payment numbers"** are the existing `manualPaymentNumbers`
+collection admins already manage for collecting deposits -- real phones
+staff actively watch, and exactly what the owner's own phrase names, so
+no new number-management UI was needed. `sendWithdrawalSmsAlert()` reads
+every `active:true` number, de-duplicates, and skips entirely (no call
+at all) if the list is empty.
+
+**The message is deliberately bare, per the owner's own explicit
+instruction**: `"New pending withdrawal request. Please verify from the
+management group before sending payment and approving."` -- no amount,
+no phone number, no member identity, no withdrawal reference. An SMS is
+not a secure or private channel; this is purely an attention-getter
+telling staff to go check the real admin panel and the management group
+themselves, never a replacement for actually verifying there.
+
+**Wired into `/withdraw/request`'s existing success path**, right next
+to the `sendAdminPush(...).catch(()=>{})` call it already had -- same
+fire-and-forget convention (`.catch(()=>{})`, never awaited into the
+response), so a MarzSms outage, bad credentials, or a network timeout can
+never fail or delay a member's real withdrawal request. Nothing here
+gates any money-moving decision; it is pure staff notification.
+
+**Verified**: `node --check server.js` clean, `git diff --check` clean,
+boot smoke test clean. This round is server-only (no admin-panel or
+user-app UI), so no rebuild or cache bump. New standalone harness
+(`round141-withdrawal-sms-alert-test.js`, same real-`server.js`-against-
+an-in-memory-mock-DB technique as every earlier round, with `global.fetch`
+mocked ONLY for calls actually targeting `sms.wearemarz.com` -- there is
+no real MarzSms account to test against) -- 16/16 across two separate
+server boots (`MARZSMS_KEY` is a top-level const captured at require()
+time, so testing both "configured" and "not configured" needs two
+instances, same technique Round 140's own harness used): with no
+`MARZSMS_KEY` set, a withdrawal succeeds and zero SMS calls are ever
+attempted; with 4 seeded numbers (2 active + 1 disabled + 1 duplicate of
+an active one), a real withdrawal triggers exactly one SMS call with the
+recipient list correctly deduped to the 2 distinct active numbers, the
+disabled number excluded, and the message body containing no amount, no
+phone number, and no member/withdrawal identity, while matching the
+exact required "new pending withdrawal... management group" wording; a
+real HTTP error from MarzSms (e.g. insufficient SMS balance) and a
+network-level throw (timeout) both leave the withdrawal itself
+succeeding, proving the fire-and-forget guarantee; zero active payment
+numbers correctly skips the call entirely rather than sending to an
+empty recipient list. Re-ran Round 104 (11/11), Round 135 (11/11), Round
+136 (37/37), the gift-code suite (32/32), Round 140's MarzPay-balance
+suite (12/12), `test-admin-obfuscated-build.js` (0 errors, unaffected
+since no UI changed), and `test-momo-sms-parsers.js` (70/70) -- 0
+regressions. **`server.js` and `render.yaml` changed -- `snow-server`
+auto-deploys from this push per its own `autoDeploy: true`; the owner
+needs to add a real `MARZSMS_KEY` (base64 of `api_key:api_secret` from
+the MarzSms dashboard's Settings & Tools → API Keys) to Render's env vars
+for this feature to actually start sending -- until then it silently does
+nothing, exactly as designed, not a bug to report.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

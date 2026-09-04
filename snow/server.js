@@ -173,6 +173,12 @@ const PUBLIC_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64-encoded credentials
 const MARZ_TIMEOUT = 20000;
+// MarzSms -- a SEPARATE MarzPay product (its own dashboard/API keys at
+// sms.wearemarz.com, distinct from the wallet product MARZPAY_KEY above)
+// used only to alert admins by text when a withdrawal needs processing.
+// Same "base64(api_key:api_secret)" Basic-auth convention as the wallet API.
+const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
+const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
 // ── OUTBOUND STATIC-IP PROXY (QuotaGuard) ──
 // Some payment providers (LipaPay is the reason this exists) whitelist a
@@ -1119,6 +1125,46 @@ async function marzGetBalance() {
   const d = await _marzParse(resp);
   if (d.status === 'error') return d;
   return { status: 'success', ..._marzExtractBalance(d) };
+}
+// ── MARZSMS (a SEPARATE MarzPay product, sms.wearemarz.com -- alerts
+// staff by text, never moves money) ──
+async function marzSmsSend(recipients, message) {
+  const resp = await fetch(`${MARZSMS_BASE}/sms/send`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZSMS_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recipient: recipients, message }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  // MarzSms's own documented error shape is {success:false,message,error}
+  // (no `status` field, unlike the wallet API) -- resp.ok is the reliable
+  // signal here, not any particular body field.
+  if (!resp.ok) throw new Error(data.message || data.error || `MarzSms HTTP ${resp.status}`);
+  return data;
+}
+// Owner: "sms should be sent to all admin payment numbers to alert them
+// for incoming withdrawal request to be processed, don't put number or
+// details in sms to be sent just make it simple, that there is new
+// pending with, please verify from management group before sending
+// withdrawal and approving." Deliberately generic -- no amount, no
+// phone number, no member identity -- an SMS is not a secure or private
+// channel; this is purely an attention-getter telling staff to go check
+// the real admin panel and the management group themselves, never a
+// substitute for actually verifying there. "Admin payment numbers" are
+// the same manualPaymentNumbers admins already manage for collecting
+// deposits -- these are real phones admins actively watch, unlike a
+// separate staff-contact list this codebase doesn't otherwise have.
+// Fire-and-forget from its one call site (matches sendAdminPush's own
+// convention) -- an SMS-provider hiccup must never fail or delay a
+// member's real withdrawal request.
+const WITHDRAWAL_SMS_ALERT_TEXT = 'New pending withdrawal request. Please verify from the management group before sending payment and approving.';
+async function sendWithdrawalSmsAlert() {
+  if (!MARZSMS_KEY) return;
+  try {
+    const numsSnap = await db.collection('manualPaymentNumbers').where('active', '==', true).get();
+    const numbers = [...new Set(numsSnap.docs.map(d => d.data().number).filter(Boolean))];
+    if (!numbers.length) return;
+    await marzSmsSend(numbers.join(','), WITHDRAWAL_SMS_ALERT_TEXT);
+  } catch (e) { console.warn('Withdrawal SMS alert failed (non-critical):', e.message); }
 }
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
@@ -3843,6 +3889,7 @@ app.post('/withdraw/request', async (req, res) => {
       }
     });
     sendAdminPush('New withdrawal request', `${fmtUGX(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
+    sendWithdrawalSmsAlert().catch(() => {});
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested, processing now' });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });

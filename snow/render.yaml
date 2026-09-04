@@ -15,6 +15,12 @@ services:
         sync: false
       - key: MARZPAY_KEY
         sync: false
+      # Round 141 -- MarzSms, a SEPARATE MarzPay product (its own
+      # dashboard/API keys at sms.wearemarz.com) used only to text-alert
+      # admins on a new withdrawal request. Optional: server.js skips the
+      # SMS entirely (no error) if this is left unset.
+      - key: MARZSMS_KEY
+        sync: false
       - key: QUOTAGUARDSTATIC_URL
         sync: false
       - key: LIPAPAY_MCHID
