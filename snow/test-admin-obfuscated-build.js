@@ -127,11 +127,36 @@ const routes = {
     { username: 'mary', active: false, createdAt: new Date().toISOString(), lastLoginAt: null },
   ] },
   'GET /admin/audit-log': { status: 'success', log: [] },
-  'POST /admin/analytics': { status: 'success', kpis: {
-    depAmount: 900000, witAmount: 300000, investedAmount: 400000, commissionsPaid: 20000,
-    depositsByTimeOfDay: { morning: 100000, afternoon: 200000, evening: 300000, night: 50000 },
-  } },
-  'POST /admin/analytics/abuse': { status: 'success', events: [] },
+  'POST /admin/analytics': { status: 'success', period: 30,
+    kpis: {
+      depositsAmount: 900000, depositsCount: 3, withdrawalsAmount: 300000, withdrawalsCount: 2,
+      netFlow: 600000, totalUsers: 5, newUsers: 2, activeInvestors: 3,
+      investedAmount: 400000, commissionsPaid: 20000, teamRewardsPaid: 5000,
+    },
+    byHour: Array.from({ length: 24 }, (_, h) => ({
+      h, depAmt: h === 9 ? 900000 : 0, depCnt: h === 9 ? 3 : 0, witAmt: h === 14 ? 300000 : 0, witCnt: h === 14 ? 2 : 0,
+    })),
+    bands: { morning: { dep: 900000, wit: 0 }, afternoon: { dep: 0, wit: 300000 }, evening: { dep: 0, wit: 0 }, night: { dep: 0, wit: 0 } },
+    byDay: [{ day: '2026-09-03', dep: 900000, wit: 300000, users: 2 }],
+    peakDepositHour: 9, peakWithdrawHour: 14, busiestBand: 'morning',
+    forecast: {
+      withdrawals: { estimate: 300000, likelyWithdrawerCount: 1, trendReference: 300000 },
+      deposits: { estimate: 400000, organicTrend: 900000, maturingReinvestEstimate: 0, maturingCount: 0, reinvestRatePct: 35, pipelineEstimate: 0, pipelineUserCount: 0, conversionRatePct: 20 },
+    },
+    staffApprovals: {
+      byStaff: [{ actor: 'mary', approvals: 2, declines: 1, amountApproved: 100000, amountDeclined: 20000, totalHandled: 3, sharePct: 100, lastAt: Date.now() }],
+      timeline: [{ actor: 'mary', action: 'approved', phone: '+256700000001', amount: 50000, at: Date.now() }],
+    },
+    topReferrers: [{ phone: '+256700000002', team: 3, earned: 15000 }],
+    topDepositors: [{ phone: '+256700000001', amount: 900000 }],
+    biggestWithdrawals: [{ phone: '+256700000003', amount: 300000 }],
+  },
+  'POST /admin/analytics/abuse': { status: 'success', period: 30, minCount: 3,
+    repeatedFailedDeposits: [{ userId: 'u9', phone: '+256700000009', count: 4, lastAt: Date.now(), samples: [{ amount: 20000, reason: 'timeout' }] }],
+    repeatedInsufficientWithdrawals: [],
+    repeatedCheckinAlreadyClaimed: [],
+    giftcodeGuessing: [],
+  },
   'GET /admin/badges': { status: 'success', pendingWithdrawals: 2, unmatchedSms: 1 },
   'GET /admin/users/recount': { status: 'success', updated: 0 },
   'GET /admin/integrity': { status: 'success', checked: 1, mismatches: [
@@ -543,10 +568,44 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (witLipa.includes('Send via MarzPay')) errors.push('Withdrawals: lipapay mode should not offer "Send via MarzPay"');
   if (!doc.getElementById('witSync')) errors.push('Withdrawals: lipapay mode should still show the Sync button (it is an automatic provider too)');
 
-  // Payment-number activity lives on the Analytics tab.
+  // Round 136: Space8-level analytics richness (owner: "space8 analytics
+  // are not here") -- period selector, tomorrow's estimate, hourly/daily
+  // charts, top referrers/depositors/biggest withdrawals, staff approvals,
+  // and categorized suspicious-activity tables (owner-only).
   doc.querySelector('.tab[data-tab="analytics"]').click();
   await sleep(400);
-  const an = doc.getElementById('content').innerHTML;
+  let an = doc.getElementById('content').innerHTML;
+  if (!an.includes('30 days')) errors.push('Analytics: period selector missing');
+  if (!an.includes("Tomorrow's estimate")) errors.push('Analytics: forecast card missing');
+  if (!an.includes('1 plan(s) likely maturing')) errors.push('Analytics: withdrawal forecast detail missing');
+  if (!an.includes('Deposits (3)')) errors.push('Analytics: deposits KPI count missing');
+  if (!an.includes('Net flow')) errors.push('Analytics: net-flow KPI missing');
+  if (!an.includes('Task Center rewards paid')) errors.push('Analytics: team-rewards KPI missing');
+  if (!an.includes('busiest')) errors.push('Analytics: busiest time-of-day band not highlighted');
+  if (!an.includes('Daily trend')) errors.push('Analytics: daily trend chart missing');
+  if (!an.includes('Top referrers')) errors.push('Analytics: top referrers table missing');
+  if (!an.includes('+256700000002')) errors.push('Analytics: top referrer row missing');
+  if (!an.includes('Top depositors')) errors.push('Analytics: top depositors table missing');
+  if (!an.includes('Biggest withdrawals')) errors.push('Analytics: biggest withdrawals table missing');
+  if (!an.includes('Staff withdrawal approvals')) errors.push('Analytics: staff approvals table missing');
+  if (!an.includes('mary')) errors.push('Analytics: staff approvals row missing real staff username');
+  if (!an.includes('Suspicious activity')) errors.push('Analytics: owner-only suspicious-activity section missing');
+  if (!an.includes('Repeated failed deposits')) errors.push('Analytics: repeated-failed-deposits table missing');
+  if (!an.includes('+256700000009')) errors.push('Analytics: repeated-offender row missing');
+  if (an.includes('NaN') || an.includes('undefined')) errors.push('Analytics: NaN/undefined leaked into the analytics section');
+  const perBtn = [...doc.querySelectorAll('[data-per]')].find(b => b.textContent.includes('7 days'));
+  if (!perBtn) errors.push('Analytics: 7-day period button missing');
+  else {
+    routes['POST /admin/analytics'] = Object.assign({}, routes['POST /admin/analytics'], { period: 7 });
+    routes['POST /admin/analytics/abuse'] = Object.assign({}, routes['POST /admin/analytics/abuse'], { period: 7 });
+    perBtn.click();
+    await sleep(400);
+    const an7 = doc.getElementById('content').innerHTML;
+    if (!an7.includes('last 7 days')) errors.push('Analytics: switching to 7-day period did not refetch/re-render');
+  }
+
+  // Payment-number activity lives on the same Analytics tab.
+  an = doc.getElementById('content').innerHTML;
   if (!an.includes('Payment number activity')) errors.push('Analytics: payment-number section missing');
   if (!an.includes('Snow MTN 1')) errors.push('Analytics: number holder name missing');
   if (!an.includes('0770000001')) errors.push('Analytics: number card shows the raw +256 form, not local 0770000001');

@@ -547,7 +547,7 @@ function eatParts(ts) {
   const ms = tsMillis(ts) || Date.now();
   const d = new Date(ms + 3 * 3600000);
   const pad = n => String(n).padStart(2, '0');
-  return { day: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` };
+  return { day: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, hour: d.getUTCHours() };
 }
 // Synthetic login email — same convention as space8's phoneToEmail, using
 // the domain already established in Snow's own design (referral links use
@@ -946,6 +946,21 @@ async function banUserAutomatically(userId, reason) {
     await db.collection('users').doc(userId).update({ status: 'banned', banReason: reason, bannedAt: FieldValue.serverTimestamp() });
     console.warn(`Auto-banned ${userId}: ${reason}`);
   } catch (e) { console.error('Auto-ban failed:', e.message); }
+}
+// Lightweight, fire-and-forget log of a suspicious/rejected action -- feeds
+// the owner-only "Suspicious activity" analytics (repeated insufficient-
+// funds withdrawal attempts, repeated already-claimed check-ins, gift/promo
+// code guessing). This collection already existed (read by /admin/analytics/
+// abuse and purged on account deletion) but nothing ever wrote to it --
+// ported from the sibling Space8 project's own equivalent, which this
+// analytics tab is being brought up to parity with. Deliberately NOT
+// awaited at any call site: this is pure visibility, never on the critical
+// path of the actual request, and a logging failure must never turn into a
+// user-facing error.
+function logSecurityEvent(userId, type, meta) {
+  if (!userId) return;
+  db.collection('securityEvents').add({ userId, type, meta: meta || null, createdAt: FieldValue.serverTimestamp() })
+    .catch(e => console.error('logSecurityEvent error:', e.message));
 }
 async function markDepositFailed(depRef, userId, reason) {
   // subagent-audit-caught HIGH bug: this used to overwrite status:'failed'
@@ -2043,6 +2058,7 @@ app.post('/checkin', async (req, res) => {
       const todayKey = eatDayKey(new Date(now));
       const lastKey = real.lastCheckinAt ? eatDayKey(new Date(real.lastCheckinAt)) : null;
       if (lastKey === todayKey) {
+        logSecurityEvent(uid, 'checkin_already_claimed', null);
         result = { code: 400, body: { status: 'error', message: 'Already checked in today. Come back after midnight.', nextCheckinAt: eatNextMidnight(now) } };
         return;
       }
@@ -3730,7 +3746,10 @@ app.post('/withdraw/request', async (req, res) => {
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
         throw new Error('Purchase at least one plan before you can cash out.');
       const bal = fresh.data().walletBalance || 0;
-      if (bal < amt) throw new Error(`Not enough balance, you have ${fmtUGX(bal)}`);
+      if (bal < amt) {
+        logSecurityEvent(userId, 'withdraw_insufficient_funds', { attempted: amt, balance: bal });
+        throw new Error(`Not enough balance, you have ${fmtUGX(bal)}`);
+      }
       const maxPerDay = Number(sett.maxWithdrawalsPerDay) || 0;
       if (maxPerDay > 0) {
         const today = nowStr().date;
@@ -4517,7 +4536,14 @@ app.post('/redeem', async (req, res) => {
       if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
       if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
       const codeSnap = await db.collection('promoCodes').where('code', '==', raw).limit(1).get();
-      if (codeSnap.empty) { result = { code: 400, body: { status: 'error', message: "That code isn't valid" } }; return; }
+      if (codeSnap.empty) {
+        // A code that doesn't exist at all is the actual "guessing" signal --
+        // an already-used or usage-capped code below is a REAL code, not a
+        // guess, so those aren't logged here.
+        logSecurityEvent(userId, 'giftcode_invalid_attempt', { code: raw });
+        result = { code: 400, body: { status: 'error', message: "That code isn't valid" } };
+        return;
+      }
       const codeDoc = codeSnap.docs[0];
       const cd = codeDoc.data();
       const code = cd.code;
@@ -6037,36 +6063,261 @@ app.get('/admin/badges', async (req, res) => {
     res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size, unmatchedSms: unresolvedSms.length });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-function bandOf(h) { return h < 6 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; }
+// Owner: "also all analytics were removed, see space8 analytics are not
+// here." Traced to Round 12/14's own documented, deliberate deferral (this
+// exact port, from the sibling Space8 project's richer analytics, flagged
+// as a "known gap" back then rather than attempted as a scope surprise in a
+// UI-reskin round) -- this round is that deferred backend feature-build.
+// Ported field-for-field from Space8's own /admin/analytics, mapped onto
+// Snow's real schema (verified against every field name used below: users.
+// {walletBalance,totalDeposited,totalInvested,teamCommission,teamL1Count,
+// referredBy,createdAt}, pendingDeposits.{status:'matched',amount,
+// senderPhone,createdAt}, withdrawals.{status:'processed',amount,net,phone,
+// holder,processedBy,processedAt,declinedBy,declinedAt}, investments.
+// {status:'active',paidOut,dailyPayout,expectedReturn} -- all real, all
+// already written by this file's own code). staffApprovals (who actually
+// approved/declined each payout) only became meaningful once
+// processedBy/declinedBy started being written to real staff usernames
+// instead of a hardcoded 'owner' string (see the withdrawal-attribution fix
+// immediately before this round).
+function bandOf(h) {
+  if (h >= 5 && h < 12) return 'morning';
+  if (h >= 12 && h < 17) return 'afternoon';
+  if (h >= 17 && h < 21) return 'evening';
+  return 'night';
+}
 app.post('/admin/analytics', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const days = Math.min(Math.max(parseInt(req.body.days) || 30, 1), 180);
+  const sinceMs = Date.now() - days * 86400000;
   try {
-    const [depSnap, witSnap, invSnap] = await Promise.all([
-      db.collection('pendingDeposits').where('status', '==', 'matched').limit(50000).get(),
-      db.collection('withdrawals').where('status', '==', 'processed').limit(50000).get(),
-      db.collection('investments').limit(50000).get(),
+    const [depSnap, witSnap, usersSnap, activeInvSnap, sett] = await Promise.all([
+      db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(10000).get(),
+      db.collection('withdrawals').orderBy('createdAt', 'desc').limit(10000).get(),
+      db.collection('users').limit(10000).get(),
+      db.collection('investments').where('status', '==', 'active').limit(10000).get(),
+      getSettings(),
     ]);
-    let depAmount = 0, witAmount = 0, investedAmount = 0, commissionsPaid = 0;
-    const byBand = { night: 0, morning: 0, afternoon: 0, evening: 0 };
+    const byHour = Array.from({ length: 24 }, (_, h) => ({ h, depAmt: 0, depCnt: 0, witAmt: 0, witCnt: 0 }));
+    const bands = { morning: { dep: 0, wit: 0 }, afternoon: { dep: 0, wit: 0 }, evening: { dep: 0, wit: 0 }, night: { dep: 0, wit: 0 } };
+    const dayMap = {};
+    const ensureDay = k => (dayMap[k] = dayMap[k] || { day: k, dep: 0, wit: 0, users: 0 });
+
+    let depAmount = 0, depCount = 0;
     depSnap.forEach(d => {
       const dep = d.data();
-      depAmount += finiteMoney(dep.amount);
-      const h = new Date(tsMillis(dep.createdAt) + 3 * 3600000).getUTCHours();
-      byBand[bandOf(h)] += finiteMoney(dep.amount);
+      if (dep.status !== 'matched') return;
+      const ms = tsMillis(dep.createdAt);
+      if (ms < sinceMs) return;
+      const a = finiteMoney(dep.amount);
+      depAmount += a; depCount++;
+      const { hour, day } = eatParts(dep.createdAt);
+      byHour[hour].depAmt += a; byHour[hour].depCnt++;
+      bands[bandOf(hour)].dep += a;
+      ensureDay(day).dep += a;
     });
-    witSnap.forEach(d => witAmount += finiteMoney(d.data().net));
-    invSnap.forEach(d => investedAmount += finiteMoney(d.data().amount));
-    const commSnap = await db.collection('transactions').where('type', '==', 'commission').limit(50000).get();
-    commSnap.forEach(d => commissionsPaid += finiteMoney(d.data().amount));
-    res.json({ status: 'success', kpis: { depAmount, witAmount, investedAmount, commissionsPaid, depositsByTimeOfDay: byBand } });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+
+    let witAmount = 0, witCount = 0;
+    const bigWits = [];
+    witSnap.forEach(d => {
+      const w = d.data();
+      if (w.status !== 'processed') return;
+      const ms = tsMillis(w.createdAt);
+      bigWits.push({ phone: w.phone || w.holder || '', amount: finiteMoney(w.net) || finiteMoney(w.amount), when: ms });
+      if (ms < sinceMs) return;
+      const a = finiteMoney(w.net) || finiteMoney(w.amount);
+      witAmount += a; witCount++;
+      const { hour, day } = eatParts(w.createdAt);
+      byHour[hour].witAmt += a; byHour[hour].witCnt++;
+      bands[bandOf(hour)].wit += a;
+      ensureDay(day).wit += a;
+    });
+    bigWits.sort((a, b) => b.amount - a.amount);
+
+    // Who's actually approving/declining payouts, and how fast -- separate
+    // from the deposits/withdrawals volume above because it's about STAFF
+    // activity, not member activity.
+    const staffMap = {};
+    const staffTimeline = [];
+    const touchStaff = actor => (staffMap[actor] = staffMap[actor] || { actor, approvals: 0, declines: 0, amountApproved: 0, amountDeclined: 0, firstAt: null, lastAt: null });
+    witSnap.forEach(d => {
+      const w = d.data();
+      // processedBy/declinedBy mark an ADMIN ACTION happened, independent of
+      // the withdrawal's current status -- a fresh approval lands at
+      // 'processing' (still awaiting confirmation) and only becomes
+      // 'processed' later, so gating on status==='processed' here would
+      // undercount every recent approval. Deliberately not mutually
+      // exclusive: a withdrawal can be approved by one admin, fail, and get
+      // declined/refunded by another -- both actions credit whoever
+      // actually did them.
+      if (w.processedBy) {
+        const ms = tsMillis(w.processedAt || w.createdAt);
+        if (ms >= sinceMs) {
+          const s = touchStaff(w.processedBy);
+          s.approvals++; s.amountApproved += finiteMoney(w.amount);
+          s.firstAt = s.firstAt === null ? ms : Math.min(s.firstAt, ms);
+          s.lastAt = s.lastAt === null ? ms : Math.max(s.lastAt, ms);
+          staffTimeline.push({ actor: w.processedBy, action: 'approved', phone: w.phone || w.holder || '', amount: finiteMoney(w.amount), at: ms });
+        }
+      }
+      if (w.declinedBy) {
+        const ms = tsMillis(w.declinedAt || w.createdAt);
+        if (ms >= sinceMs) {
+          const s = touchStaff(w.declinedBy);
+          s.declines++; s.amountDeclined += finiteMoney(w.amount);
+          s.firstAt = s.firstAt === null ? ms : Math.min(s.firstAt, ms);
+          s.lastAt = s.lastAt === null ? ms : Math.max(s.lastAt, ms);
+          staffTimeline.push({ actor: w.declinedBy, action: 'declined', phone: w.phone || w.holder || '', amount: finiteMoney(w.amount), at: ms });
+        }
+      }
+    });
+    const staffActionsTotal = Object.values(staffMap).reduce((s, x) => s + x.approvals + x.declines, 0);
+    const staffApprovals = {
+      byStaff: Object.values(staffMap)
+        .map(s => ({ ...s, totalHandled: s.approvals + s.declines, sharePct: staffActionsTotal ? Math.round((s.approvals + s.declines) / staffActionsTotal * 1000) / 10 : 0 }))
+        .sort((a, b) => b.totalHandled - a.totalHandled),
+      timeline: staffTimeline.sort((a, b) => b.at - a.at).slice(0, 40),
+    };
+
+    let totalUsers = 0, newUsers = 0, activeInvestors = 0, investedAmount = 0, commissionsPaid = 0;
+    const referrers = [], depositors = [];
+    usersSnap.forEach(d => {
+      const u = d.data(); totalUsers++;
+      const ms = tsMillis(u.createdAt);
+      if (ms >= sinceMs) { newUsers++; const { day } = eatParts(u.createdAt); ensureDay(day).users++; }
+      if ((u.totalInvested || 0) > 0) activeInvestors++;
+      investedAmount += finiteMoney(u.totalInvested);
+      commissionsPaid += finiteMoney(u.teamCommission);
+      if ((u.teamL1Count || 0) > 0 || (u.teamCommission || 0) > 0)
+        referrers.push({ phone: u.phone || '', team: u.teamL1Count || 0, earned: finiteMoney(u.teamCommission) });
+      if ((u.totalDeposited || 0) > 0) depositors.push({ phone: u.phone || '', amount: finiteMoney(u.totalDeposited) });
+    });
+    // Task Center rewards paid so far -- /team/milestone/claim already writes
+    // an immutable `team_reward` transaction with the exact amount paid at
+    // claim time, so summing those directly is correct even after the
+    // owner edits the reward ladder's rates later (unlike re-deriving it
+    // from the CURRENT ladder, which would silently misstate history).
+    let teamRewardsPaid = 0;
+    try {
+      const rewardTxSnap = await db.collection('transactions').where('type', '==', 'team_reward').limit(200000).get();
+      rewardTxSnap.forEach(d => { teamRewardsPaid += finiteMoney(d.data().amount); });
+    } catch (e) { console.error('teamRewardsPaid query error:', e.message); }
+    referrers.sort((a, b) => (b.team - a.team) || (b.earned - a.earned));
+    depositors.sort((a, b) => b.amount - a.amount);
+
+    const byDay = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const k = new Date(Date.now() + 3 * 3600000 - i * 86400000).toISOString().slice(0, 10);
+      byDay.push(dayMap[k] || { day: k, dep: 0, wit: 0, users: 0 });
+    }
+    const peakDepositHour = byHour.reduce((p, c) => c.depCnt > p.depCnt ? c : p, byHour[0]).h;
+    const peakWithdrawHour = byHour.reduce((p, c) => c.witCnt > p.witCnt ? c : p, byHour[0]).h;
+    const busiestBand = Object.entries(bands).reduce((p, c) => (c[1].dep + c[1].wit) > (p[1].dep + p[1].wit) ? c : p)[0];
+
+    // ── TOMORROW'S ESTIMATE — read from real platform state (who's actually
+    // maturing, who's actually mid-signup-funnel), not just a straight trend
+    // line. Explicitly labelled an estimate to the admin, never a promise.
+    const trailing = byDay.slice(-Math.min(7, byDay.length));
+    const trailN = trailing.length || 1;
+    const witTrend = trailing.reduce((s, d) => s + d.wit, 0) / trailN;
+    const depTrend = trailing.reduce((s, d) => s + d.dep, 0) / trailN;
+    let maturingCount = 0, maturingPayout = 0;
+    activeInvSnap.forEach(d => {
+      const inv = d.data();
+      const paidOut = finiteMoney(inv.paidOut), dailyPayout = finiteMoney(inv.dailyPayout), expected = finiteMoney(inv.expectedReturn);
+      if (expected > 0 && paidOut + dailyPayout >= expected) { maturingCount++; maturingPayout += Math.max(0, expected - paidOut); }
+    });
+    const REINVEST_RATE_PCT = 35;
+    const CONVERSION_RATE_PCT = 20;
+    const pipelineCutoff = Date.now() - 3 * 86400000;
+    let pipelineUserCount = 0;
+    usersSnap.forEach(d => {
+      const u = d.data();
+      if (tsMillis(u.createdAt) >= pipelineCutoff && (u.totalDeposited || 0) === 0) pipelineUserCount++;
+    });
+    const pipelineEstimate = Math.round(pipelineUserCount * (sett.minDeposit || 0) * (CONVERSION_RATE_PCT / 100));
+    const maturingReinvestEstimate = Math.round(maturingPayout * (REINVEST_RATE_PCT / 100));
+    const forecast = {
+      withdrawals: { estimate: Math.round(witTrend), likelyWithdrawerCount: maturingCount, trendReference: Math.round(witTrend) },
+      deposits: {
+        estimate: Math.round(depTrend + maturingReinvestEstimate + pipelineEstimate),
+        organicTrend: Math.round(depTrend), maturingReinvestEstimate, maturingCount, reinvestRatePct: REINVEST_RATE_PCT,
+        pipelineEstimate, pipelineUserCount, conversionRatePct: CONVERSION_RATE_PCT
+      }
+    };
+
+    res.json({
+      status: 'success', period: days,
+      kpis: {
+        depositsAmount: depAmount, depositsCount: depCount,
+        withdrawalsAmount: witAmount, withdrawalsCount: witCount,
+        netFlow: depAmount - witAmount, totalUsers, newUsers, activeInvestors,
+        investedAmount, commissionsPaid, teamRewardsPaid
+      },
+      byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand, forecast, staffApprovals,
+      topReferrers: referrers.slice(0, 10), topDepositors: depositors.slice(0, 10), biggestWithdrawals: bigWits.slice(0, 10)
+    });
+  } catch (e) { console.error('Analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }
 });
+
+// Owner-only visibility into suspicious/abusive usage patterns -- deliberately
+// a SEPARATE endpoint from /admin/analytics (which staff can also read) and
+// gated with verifyOwner, not verifyAdmin, so staff never receives this data
+// at all, same "never disclose it" treatment as the Integrity audit and other
+// owner-only tools. Surfaces repeat offenders across four signals: accounts
+// with many FAILED deposits (reads the same pendingDeposits records
+// /admin/integrity already trusts, no new logging needed), accounts
+// repeatedly trying to withdraw more than their balance, accounts repeatedly
+// tapping check-in after already claiming today, and accounts trying gift/
+// promo codes that don't exist (guessing) -- the last three are logged to
+// securityEvents at the exact point each one is rejected (see
+// logSecurityEvent call sites above). Only ever a READ over events that
+// already happened; never blocks or bans anyone by itself.
 app.post('/admin/analytics/abuse', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const days = Math.min(Math.max(parseInt(req.body.days) || 30, 1), 180);
+  const minCount = Math.min(Math.max(parseInt(req.body.minCount) || 3, 1), 1000);
+  const sinceMs = Date.now() - days * 86400000;
   try {
-    const snap = await db.collection('securityEvents').orderBy('createdAt', 'desc').limit(300).get();
-    res.json({ status: 'success', events: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+    const [depSnap, evSnap, usersSnap] = await Promise.all([
+      db.collection('pendingDeposits').where('status', '==', 'failed').limit(10000).get(),
+      db.collection('securityEvents').limit(10000).get(),
+      db.collection('users').limit(10000).get(),
+    ]);
+    const phoneOf = {};
+    usersSnap.forEach(d => { phoneOf[d.id] = d.data().phone || d.id; });
+
+    // Groups docs matching filterFn into a per-user count, windowed to the
+    // period, keeping up to 5 sample details per user for the admin to
+    // actually see WHAT was attempted (amounts, codes tried), not just a
+    // bare number. Only users at/above minCount show up at all -- a single
+    // failed deposit or one mistimed check-in tap is normal life, not abuse.
+    function topOffenders(snap, filterFn, sampleFn) {
+      const byUser = {};
+      snap.forEach(d => {
+        const x = d.data();
+        if (!x.userId || !filterFn(x)) return;
+        const ms = tsMillis(x.createdAt);
+        if (ms < sinceMs) return;
+        const row = byUser[x.userId] || (byUser[x.userId] = { userId: x.userId, phone: phoneOf[x.userId] || x.userId, count: 0, lastAt: 0, samples: [] });
+        row.count++;
+        row.lastAt = Math.max(row.lastAt, ms);
+        if (sampleFn && row.samples.length < 5) row.samples.push(sampleFn(x));
+      });
+      return Object.values(byUser).filter(r => r.count >= minCount).sort((a, b) => b.count - a.count).slice(0, 50);
+    }
+
+    const repeatedFailedDeposits = topOffenders(depSnap, () => true, x => ({ amount: x.amount || 0, reason: x.failureReason || null }));
+    const repeatedInsufficientWithdrawals = topOffenders(evSnap, x => x.type === 'withdraw_insufficient_funds',
+      x => ({ attempted: (x.meta && x.meta.attempted) || 0, balance: (x.meta && x.meta.balance) || 0 }));
+    const repeatedCheckinAlreadyClaimed = topOffenders(evSnap, x => x.type === 'checkin_already_claimed', null);
+    const giftcodeGuessing = topOffenders(evSnap, x => x.type === 'giftcode_invalid_attempt', x => (x.meta && x.meta.code) || '');
+
+    res.json({
+      status: 'success', period: days, minCount,
+      repeatedFailedDeposits, repeatedInsufficientWithdrawals, repeatedCheckinAlreadyClaimed, giftcodeGuessing
+    });
+  } catch (e) { console.error('Abuse analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Cross-checks every one of a user's own stored running totals --
 // walletBalance, totalDeposited, totalEarned, totalInvested -- against what

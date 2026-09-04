@@ -8844,6 +8844,116 @@ correctly rendered whichever value these fields held) -- both still
 clean, 0 regressions. This round is `server.js`-only, so no cache bumps.
 **`server.js` changed -- Render should auto-deploy this push.**
 
+## Round 136 (2026-09-04) — Space8-level Analytics richness ported in: period selector, tomorrow's estimate, hourly/daily charts, staff approvals, top referrers/depositors/biggest withdrawals, and categorized suspicious-activity tables
+
+Owner: "also all analytics were removed, see space8 analytics are not
+here." Not a regression -- traced to Round 12/14's own documented,
+**deliberate** deferral: when the admin panel was first ported from the
+sibling Space8 project, Space8's own rich Analytics tab called endpoint
+shapes Snow's backend didn't have (hourly/daily charts, tomorrow's
+forecast, a staff-approval leaderboard, categorized abuse tables), and
+Round 14 shipped a leaner, real, working alternative instead of either
+scope-creeping a UI-reskin round into a backend feature-build, or silently
+shipping blank/`NaN` cards -- explicitly flagged in this file as a "known
+gap... a dedicated future round if the owner wants full parity here
+specifically." This round is that dedicated round.
+
+**Ported field-for-field from Space8's own `/admin/analytics`/
+`/admin/analytics/abuse`**, mapped onto Snow's real schema (every field
+name below verified against this file's own existing writes before use --
+none invented): `users.{walletBalance,totalDeposited,totalInvested,
+teamCommission,teamL1Count,referredBy,createdAt}`, `pendingDeposits.
+{status:'matched'/'failed',amount,createdAt}`, `withdrawals.
+{status:'processed',amount,net,phone,holder,processedBy,processedAt,
+declinedBy,declinedAt}`, `investments.{status:'active',paidOut,
+dailyPayout,expectedReturn}`, `transactions.{type:'team_reward'}`.
+
+**`/admin/analytics`** (POST) now takes a `days` period (7/30/90 in the
+UI, clamped 1-180 server-side, default 30) and returns: 11 KPIs (deposits/
+withdrawals amount+count, net flow, new users, active investors, invested,
+commissions paid, Task Center rewards paid -- up from 4 all-time-only
+figures); an hourly bar chart (24 buckets, deposits vs withdrawals) with
+peak-hour callouts; time-of-day bands (morning/afternoon/evening/night,
+now with the busiest one highlighted, matching Space8's own hour
+boundaries: 5-12/12-17/17-21/rest); a daily trend chart for the selected
+period; **tomorrow's estimate** -- a real forecast read from live platform
+state, not a straight trend line: withdrawals from investments that are
+actually maturing (`paidOut+dailyPayout >= expectedReturn`), deposits from
+organic trend + an estimated reinvestment share of maturing payouts +
+an estimated conversion share of users mid-signup-funnel (created in the
+last 3 days, zero deposits yet); top referrers, top depositors, biggest
+withdrawals; and **staff withdrawal approvals** -- who approved/declined
+each payout and how much of the workload each person carries, plus a
+40-row recent-activity timeline. This last section is the direct payoff of
+Round 135's fix earlier this session: `processedBy`/`declinedBy` only
+started holding real staff usernames instead of a hardcoded `'owner'`
+string a few commits ago, so this leaderboard would have shown nothing
+useful (or nothing at all, for declines) had Round 136 landed first.
+
+**`/admin/analytics/abuse`** (POST, `verifyOwner`-gated, unchanged) was a
+raw, unfiltered dump of the `securityEvents` collection -- which is real,
+already read on account deletion, but **nothing in this codebase had ever
+written to it**; the "Recent security events" card was permanently empty.
+Rewrote to Space8's own categorized "Suspicious activity" shape (repeated
+failed deposits, repeated insufficient-funds withdrawal attempts, repeated
+already-claimed check-in taps, gift/promo code guessing -- each grouped
+per user, windowed to the period, with up to 5 real samples and a
+`minCount` floor so a single mistake never surfaces), and added the
+missing writer: `logSecurityEvent(userId, type, meta)` (fire-and-forget,
+never on the request's critical path), called from the 3 real rejection
+points Space8's own version calls it from -- `/checkin`'s
+"already checked in today" branch, `/withdraw/request`'s
+"not enough balance" branch, and `/redeem`'s "code doesn't exist" branch.
+Repeated failed deposits needed no new logging -- it reads the same
+`pendingDeposits` `status:'failed'` rows `/admin/integrity` already trusts.
+
+**Admin panel (`admin-src/index.html`)**: `renderAnalytics()` rewritten to
+render all of the above (period-selector `.seg` buttons, `.chart`/
+`.chart-col` hourly and daily bars, forecast/KPI/band/top-N/staff-approval
+cards, the categorized suspicious-activity tables) -- all CSS classes
+(`.chart`, `.legend`, `.seg`) and the `_anPeriod` state variable already
+existed in this file, unused, evidently scaffolded in a past round in
+anticipation of exactly this port. Snow's own Payment-number-activity
+section (a real Snow feature with no Space8 equivalent -- per-number SMS-
+forwarder health/success-rate tracking) stays exactly where it was, on the
+same tab, underneath the new sections; nothing about it changed. Dashboard
+(`/admin/stats`, the separate tab) was deliberately left alone -- the
+owner's report named Analytics specifically, and Round 14 already
+adapted Dashboard's own richness intentionally; Space8-level Dashboard
+parity (a platform-health/liabilities section) remains a separate,
+un-asked-for gap if wanted later.
+
+**Verified, not assumed**: `node --check server.js` clean; `build-admin.js`
+round-trip OK; `git diff --check` clean; a boot smoke test (real
+self-signed RSA dummy Firebase service-account + unreachable `MONGODB_URI`)
+fails only at the expected Mongo-connect step. `test-admin-obfuscated-build.js`
+extended with 20 new assertions against the REAL obfuscated build (period
+selector, forecast card, all KPIs, busiest-band highlight, daily trend,
+top-N tables, staff approvals showing a real username, the suspicious-
+activity section, switching the 7/30/90-day period actually re-fetches and
+re-renders) -- all green, 0 errors across all 12 tabs. A new standalone
+harness (`round136-analytics-test.js`, same real-`server.js`-against-an-
+in-memory-mock-DB technique as every earlier round's own harness) seeds
+real deposits/withdrawals/investments/users, then drives the 3
+security-event-triggering actions through their REAL request handlers
+(double check-in, an over-balance withdrawal, redeeming a bogus gift
+code) rather than hand-seeding `securityEvents` rows directly -- proving
+the writer call sites are actually wired, not just that the reader can
+aggregate a fixture -- 37/37 checks: every KPI, the maturing-investment
+forecast, the pipeline-signup forecast, staff-approval attribution for
+both a real staff username and the owner's own key, top referrers/
+depositors/biggest withdrawals, all 4 abuse categories populated from the
+real triggered events with correct samples, and staff still refused (401)
+on the owner-only abuse endpoint while still able to read `/admin/analytics`
+itself. Re-ran the Round 104 manual-deposit concurrency suite (11/11),
+the Round 135 withdrawal-attribution suite (11/11), and
+`test-momo-sms-parsers.js` (70/70) -- 0 regressions. `admin/sw.js` cache
+bumped `v36`→`v37`. **`server.js` and the admin panel (`admin/index.html`,
+`admin/sw.js`) both changed -- both `snow-server` and `snow-admin` are
+`autoDeploy: true` on Render per `render.yaml`, so this push redeploys
+both on its own; the owner may still need to fully close and reopen the
+admin panel once to pick up the bumped service-worker cache.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
