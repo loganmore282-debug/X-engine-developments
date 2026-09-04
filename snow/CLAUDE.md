@@ -9831,6 +9831,55 @@ bumped `v43`→`v44`. **`admin-src/index.html` changed, no `server.js`
 changes -- Render will redeploy the static admin site from this push; no
 backend redeploy needed.**
 
+## Round 147 (2026-09-04) — Referral search now jumps straight to real team phone numbers + the total deposits figure, not just L1/L2/L3 counts
+
+Owner, with a screenshot of Round 146's own search result row (showing
+only "14 / 2 / 0" for Team L1/L2/L3): "l want to see numbers of his team
+and total deposits not just something like that." Correctly read as: the
+counts alone aren't the ask -- the actual phone numbers of the team and a
+real deposits figure are. Tapping a search result used to open the plain
+user-detail modal, which shows an aggregate "Team's total deposits"
+figure but not one single team-member phone number -- getting to those
+needed a second tap on "View referral chain," and even THAT view (built
+Round 76) never showed the deposits figure at all, only phone/code/status
+per member with no money figure anywhere on the whole screen.
+
+**`server.js`**: `/admin/user/referral-chain` now also returns
+`teamDeposits` (calls the existing `wholeTeamDeposits(userId)` helper --
+the exact same L1-L3-scoped figure `/admin/user/detail` already labels
+"Team's total deposits," deliberately not a new, wider "every downline
+level" definition that would disagree with it and confuse anyone
+comparing the two screens for the same member).
+
+**`admin-src/index.html`**: `openReferralChain()`'s modal now leads with
+"Team L1/L2/L3 members" and "Team's total deposits" (the real number,
+bold) right under the header, before the upline/downline lists -- and
+each upline/downline row (real phone numbers, already there) now also
+shows that member's own invested amount next to their number, not just
+their referral code and status. Referrals-tab search results (Round 146)
+now open this referral-chain view DIRECTLY on tap instead of the plain
+profile modal -- one tap from a search now shows real team member phone
+numbers plus the real total-deposits figure, exactly what was asked for.
+The default (no-search) relationship table's own rows are untouched,
+still opening the plain profile modal as before -- that table is about
+who-referred-whom, a different question from "show me this member's
+team."
+
+**Verified**: `node --check server.js` clean, `node build-admin.js` clean
+round-trip, a boot smoke test (real self-signed RSA dummy Firebase
+service-account PEM + unreachable `MONGODB_URI`) fails only at the
+expected Mongo-connect step, `git diff --check` clean.
+`test-admin-obfuscated-build.js` (the real obfuscated admin build)
+extended: the referral-chain fixture now carries a real `teamDeposits:
+245000`; searching and tapping a result confirms the modal that opens is
+genuinely the referral-chain view (not the plain profile modal), shows
+"Team's total deposits" with the real `245,000` figure, and shows the
+real downline member's own phone number (`+256700000003`) -- 0 errors
+across all 12 tabs. Admin cache bumped `v44`→`v45`. **`server.js` and
+`admin-src/index.html` changed -- both auto-deploy on Render from this
+push per `render.yaml` (`snow-server` for the backend field,
+`snow-admin` for the static panel).**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

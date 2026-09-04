@@ -1075,9 +1075,14 @@ async function quietRefreshUsers(){
 async function openReferralChain(uid){
   const r = await api('/admin/user/referral-chain',{ userId:uid });
   if(r.status!=='success'){ toast(r.message||'Could not load referral chain','err'); return; }
+  // Owner: "l want to see numbers of his team and total deposits, not just
+  // something like that" -- each row now shows that member's own phone
+  // number (unchanged) PLUS their own invested amount, and the whole view
+  // leads with the team's real aggregate deposits figure, not just level
+  // counts.
   const rowHtml = (m, extra) => `<div class="kv" data-uid="${esc(m.id)}" style="cursor:pointer">
     <span class="k">${esc(m.phone||m.id)}</span>
-    <span>${esc(m.referralCode||'Not set')} · <span class="pill-tag ${m.status==='banned'?'t-bad':'t-ok'}">${esc(m.status)}</span>${extra||''}</span>
+    <span>${ugx(m.totalInvested)} · ${esc(m.referralCode||'Not set')} · <span class="pill-tag ${m.status==='banned'?'t-bad':'t-ok'}">${esc(m.status)}</span>${extra||''}</span>
   </div>`;
   const uplineHtml = r.upline.length
     ? r.upline.map(rowHtml).join('')
@@ -1090,11 +1095,13 @@ async function openReferralChain(uid){
   openModal(`
     <h3>Referral chain</h3>
     <div class="muted" style="margin-bottom:10px">${esc(r.user.phone||r.user.id)}${r.cycleDetected?' <span class="pill-tag t-bad">Cycle detected in data -- stopped early</span>':''}</div>
+    <div class="kv"><span class="k">Team L1/L2/L3 members</span><span>${r.downlineCountByLevel[1]||0} / ${r.downlineCountByLevel[2]||0} / ${r.downlineCountByLevel[3]||0}</span></div>
+    <div class="kv"><span class="k">Team's total deposits</span><b>${ugx(r.teamDeposits)}</b></div>
     <h4 style="margin:10px 0 6px;font-size:13px">Root</h4>
     <div class="kv"><span class="k">${esc(r.root.phone||r.root.id)}</span><span>${esc(r.root.referralCode||'Not set')}${r.root.id===r.user.id?' <span class="pill-tag t-ok">This user</span>':''}</span></div>
     <h4 style="margin:14px 0 6px;font-size:13px">Upline (direct referrer → root), ${r.upline.length} link${r.upline.length===1?'':'s'}</h4>
     <div class="table-scroll" style="max-height:180px">${uplineHtml}</div>
-    <h4 style="margin:14px 0 6px;font-size:13px">Downline, ${r.downline.length}${r.downlineTruncated?'+':''} total -- ${esc(levelSummary)}</h4>
+    <h4 style="margin:14px 0 6px;font-size:13px">Downline (this member's own team), ${r.downline.length}${r.downlineTruncated?'+':''} total -- ${esc(levelSummary)}</h4>
     ${r.downline.length ? `<div class="table-scroll" style="max-height:260px">${downlineRows}</div>${r.downlineTruncated?'<p class="muted" style="font-size:11.5px;margin:6px 0 0">List capped at 5,000 nodes -- the level counts above still cover everyone.</p>':''}` : '<p class="muted" style="margin:0">This user has not referred anyone.</p>'}
   `);
   $('modalRoot').querySelectorAll('[data-uid]').forEach(el=>el.addEventListener('click',()=>{ closeModal(); openUser(el.dataset.uid); }));
@@ -1936,13 +1943,18 @@ function drawRefs(){
     wrap.innerHTML = `<div class="panel-card table-scroll"><table><thead><tr><th>Referred user</th><th>Referrer's code</th><th>Invested</th><th>Status</th></tr></thead>
       <tbody>${_refs.length?_refs.map(x=>`<tr class="clickable" data-uid="${esc(x.id)}"><td><b>${esc(x.phone||'')}</b></td><td>${esc(x.referrerCode||'None')}</td><td>${ugx(x.invested)}</td><td><span class="pill-tag ${x.status==='banned'?'t-bad':'t-ok'}">${x.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
   } else {
-    // Searching -- match ANY member by phone or referral code, referred or not.
+    // Searching -- match ANY member by phone or referral code, referred or
+    // not. Tapping a match jumps straight into the referral-chain view
+    // (real team member numbers + the aggregate team-deposits figure) --
+    // that's literally what this search exists for, so no extra click
+    // through a plain profile modal first.
     const matches = _refAllUsers.filter(u => (u.phone||'').toLowerCase().includes(raw) || (u.referralCode||'').toLowerCase().includes(raw));
-    if (hint) hint.textContent = `${matches.length} match${matches.length===1?'':'es'} -- tap one to see its team and total team deposits.`;
+    if (hint) hint.textContent = `${matches.length} match${matches.length===1?'':'es'} -- tap one to see its team's phone numbers and total deposits.`;
     wrap.innerHTML = `<div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Team L1/L2/L3</th><th>Status</th></tr></thead>
-      <tbody>${matches.length?matches.map(u=>`<tr class="clickable" data-uid="${esc(u.id)}"><td><b>${esc(u.phone||'')}</b></td><td>${esc(u.referralCode||'Not set')}</td><td>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</td><td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No matching member</td></tr>'}</tbody></table></div>`;
+      <tbody>${matches.length?matches.map(u=>`<tr class="clickable" data-chain-uid="${esc(u.id)}"><td><b>${esc(u.phone||'')}</b></td><td>${esc(u.referralCode||'Not set')}</td><td>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</td><td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No matching member</td></tr>'}</tbody></table></div>`;
   }
   document.querySelectorAll('#refTableWrap tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
+  document.querySelectorAll('#refTableWrap tr[data-chain-uid]').forEach(tr=>tr.addEventListener('click',()=>openReferralChain(tr.dataset.chainUid)));
 }
 // Live-refresh counterpart to renderReferrals() -- see quietRefreshUsers().
 async function quietRefreshReferrals(){

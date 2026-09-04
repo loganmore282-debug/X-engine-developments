@@ -113,6 +113,9 @@ const routes = {
     ],
     downlineCountByLevel: { 1: 1 },
     downlineTruncated: false,
+    // Round 147: owner "l want to see numbers of his team and total
+    // deposits" -- the real aggregate figure, not just level counts.
+    teamDeposits: 245000,
   },
   'GET /admin/referrals/list': { status: 'success', referrals: [
     { id: 'u1', phone: '+256700000001', referrerId: 'r1', referrerCode: 'xYz789', invested: 30000, status: 'active' },
@@ -305,17 +308,19 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     const codeSearchHtml = doc.getElementById('refTableWrap').innerHTML;
     if (!codeSearchHtml.includes('+256700000099')) errors.push('Referrals: searching by referral code found nothing');
 
-    // Clicking a search-result row opens the same user-detail modal that
-    // already shows Team L1/L2/L3, Team's total deposits, and the "View
-    // referral chain" button -- the actual feature this search exists for.
-    const resultRow = doc.querySelector('#refTableWrap tr[data-uid]');
+    // Clicking a search-result row jumps straight into the referral-chain
+    // view (Round 147) -- real team member phone numbers PLUS the real
+    // aggregate "Team's total deposits" figure, not the plain profile
+    // modal's own counts-only summary.
+    const resultRow = doc.querySelector('#refTableWrap tr[data-chain-uid]');
     if (!resultRow) errors.push('Referrals: no clickable row rendered for a real search match');
     else {
       resultRow.click();
       await sleep(250);
       const modalHtml = (doc.getElementById('modalRoot') || {}).innerHTML || '';
-      if (!modalHtml.includes("Team's total deposits")) errors.push('Referrals: clicking a search result did not open the user-detail modal (Team\'s total deposits missing)');
-      if (!modalHtml.includes('View referral chain')) errors.push('Referrals: user-detail modal opened from search is missing the View referral chain button');
+      if (!modalHtml.includes('Referral chain')) errors.push('Referrals: clicking a search result did not open the referral-chain view');
+      if (!modalHtml.includes("Team's total deposits") || !modalHtml.includes('245,000')) errors.push('Referrals: referral-chain view is missing the real aggregate team-deposits figure');
+      if (!modalHtml.includes('+256700000003')) errors.push('Referrals: referral-chain view is missing the real downline member\'s own phone number');
       const closeBtn = doc.querySelector('.modal-close');
       if (closeBtn) closeBtn.click();
       await sleep(100);

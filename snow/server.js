@@ -6286,10 +6286,21 @@ app.post('/admin/user/referral-chain', async (req, res) => {
     const downlineCountByLevel = {};
     downline.forEach(d => { downlineCountByLevel[d.level] = (downlineCountByLevel[d.level] || 0) + 1; });
 
+    // Owner: "l want to see numbers of his team and total deposits" -- the
+    // admin panel's Referrals search (Round 146) already found the right
+    // member, but tapping through only ever reached the plain user-detail
+    // modal's own aggregate counts, not this chain view's own real member
+    // list. Same figure /admin/user/detail already labels "Team's total
+    // deposits" (wholeTeamDeposits(), L1-L3 only -- deliberately the same
+    // commission-scoped definition used everywhere else in this file, not
+    // a new, wider "every downline level" total that would disagree with
+    // it and confuse anyone comparing the two screens).
+    const teamDeposits = await wholeTeamDeposits(userId);
+
     res.json({
       status: 'success',
       user: brief(startSnap.id, startSnap.data()),
-      root, upline, cycleDetected,
+      root, upline, cycleDetected, teamDeposits,
       downline, downlineCountByLevel, downlineTruncated: downline.length >= DOWNLINE_CAP, downlineCycleDetected,
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
