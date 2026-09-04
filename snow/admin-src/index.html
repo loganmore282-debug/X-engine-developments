@@ -1991,13 +1991,16 @@ async function renderSettings(){
 
     <h2 class="sec">Manual payments</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">MarzPay and LipaPay are both instant, no admin numbers needed. Manual assigns each member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
-      <p class="muted" style="margin-top:0"><b>By default this covers withdrawals too.</b> On Manual, neither MarzPay nor LipaPay is in the payout path: you send each cash-out yourself from an admin phone and then tap <b>Mark as paid</b> on the Withdrawals tab to record it. Auto-approve is ignored whenever payouts are manual, since nothing should be marked paid without a person actually sending the money. Use the Withdrawals setting below to split the two directions.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="depMethod" id="depMethodMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> Automatic (MarzPay)</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="depMethod" id="depMethodLipa" value="lipapay" ${normalizeProv(v('depositMethod','marzpay'))==='lipapay'?'checked':''} style="width:auto"> Automatic (LipaPay)</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depMethod" id="depMethodManual" value="manual" ${normalizeProv(v('depositMethod','marzpay'))==='manual'?'checked':''} style="width:auto"> Manual (admin numbers below)</label>
+      <p class="muted" style="margin-top:0">Members now see up to 2 payment options on the Recharge screen, labelled neutrally "PAY A" and "PAY B" (no "manual"/"automatic" wording is ever shown to them) -- enable either one alone, or both at once so the member picks. <b>PAY A</b> is the automatic gateway (MarzPay or LipaPay, chosen below) -- instant, no admin numbers needed, and no network to select either: the gateway detects it from the phone number. <b>PAY B</b> is manual -- assigns the member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:6px;"><input type="checkbox" id="depPayAOn" ${v('depositPayAEnabled',true)?'checked':''} style="width:auto"> <b>Enable PAY A</b> (automatic)</label>
+      <div id="depPayAGateway" style="margin:0 0 12px 26px">
+        <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))!=='lipapay'?'checked':''} style="width:auto"> MarzPay</label>
+        <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depGateway" id="depGatewayLipa" value="lipapay" ${normalizeProv(v('depositMethod','marzpay'))==='lipapay'?'checked':''} style="width:auto"> LipaPay</label>
+      </div>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="checkbox" id="depPayBOn" ${v('depositPayBEnabled',false)?'checked':''} style="width:auto"> <b>Enable PAY B</b> (manual, admin numbers below)</label>
+      <p class="muted" style="margin:10px 0 0"><b>Withdrawals are separate from the toggles above</b> -- payouts still use exactly one method at a time, set below. On Manual, neither MarzPay nor LipaPay is in the payout path: you send each cash-out yourself from an admin phone and then tap <b>Mark as paid</b> on the Withdrawals tab to record it. Auto-approve is ignored whenever payouts are manual, since nothing should be marked paid without a person actually sending the money.</p>
       <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
-      <p class="muted" style="margin:0 0 8px">By default payouts follow the setting above. Pin them here if you want the two directions to differ, for example manual recharges with LipaPay payouts, or the reverse.</p>
+      <p class="muted" style="margin:0 0 8px">By default payouts follow PAY A's own automatic gateway above. Pin them here if you want the two directions to differ, for example manual recharges with LipaPay payouts, or the reverse.</p>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the payment method above</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodLipa" value="lipapay" ${v('withdrawMethod','follow')==='lipapay'?'checked':''} style="width:auto"> Always automatic (LipaPay sends payouts)</label>
@@ -2129,13 +2132,26 @@ async function renderSettings(){
     </div>`;
   renderAboutBlocksEditor();
   renderManualNumbersEditor();
+  // PAY A's own gateway sub-choice only matters while PAY A is enabled --
+  // dimmed (not hidden, so the previously-chosen gateway stays visible/
+  // legible) when it's off, so the admin isn't left guessing which
+  // gateway will apply the next time PAY A gets switched back on.
+  const syncPayAGatewayDim = () => { $('depPayAGateway').style.opacity = $('depPayAOn').checked ? '1' : '.4'; };
+  $('depPayAOn').addEventListener('change', syncPayAGatewayDim);
+  syncPayAGatewayDim();
   $('saveDepMethod').addEventListener('click', async()=>{
-    const method = document.querySelector('input[name="depMethod"]:checked').value;
+    const payAOn = $('depPayAOn').checked;
+    const payBOn = $('depPayBOn').checked;
+    const gateway = document.querySelector('input[name="depGateway"]:checked').value;
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
-    const d = await api('/admin/settings/update', { settings: { depositMethod: method, withdrawMethod: witMethod } });
-    const payoutProv = witMethod==='follow' ? method : witMethod;
+    const d = await api('/admin/settings/update', { settings: {
+      depositPayAEnabled: payAOn, depositPayBEnabled: payBOn, depositMethod: gateway, withdrawMethod: witMethod,
+    } });
+    const payoutProv = witMethod==='follow' ? gateway : witMethod;
+    const payALabel = payAOn ? `PAY A on (${PROVIDER_LABEL[normalizeProv(gateway)]})` : 'PAY A off';
+    const payBLabel = payBOn ? 'PAY B on (manual)' : 'PAY B off';
     toast(d.status==='success'
-      ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(method)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
+      ? `Saved. Recharges: ${payALabel}, ${payBLabel}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('mnAddBtn').addEventListener('click', ()=>{

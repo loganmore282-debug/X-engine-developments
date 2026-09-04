@@ -9597,6 +9597,174 @@ backend regression suite re-run was needed. `user/sw.js` cache bumped
 push; the owner should fully close and reopen the app once to pick up
 the bumped service-worker cache.**
 
+## Round 145 (2026-09-04) — Recharge gets 2 neutrally-labelled payment method boxes, "PAY A" and "PAY B", independently admin-enableable; PAY A drops its network selector entirely
+
+Owner: "we will enable 2 payment methods for users to tap and use, so they
+will be 2 boxes so one can use manual or automatic via MarzPay, but l
+didn't tell you to put manual and automatic wordings, no let it just be
+1. PAY A 2. PAY B. SO leave number, it is neutral and also number network
+is detected by marzpy system api, so one selects amount, puts number, and
+if selects manual he has to go to select network and number page so no
+changing that payment page regardless of putting the number twice, so make
+in admin when l can enable bank A, or Bank B, or all at same time for user
+to choose." A real architecture change, not a cosmetic one: since Round
+88, `depositMethod` has always been a single EXCLUSIVE choice (marzpay /
+lipapay / manual) — only one payment path was ever live for every member
+at once. This round makes automatic (now always called "PAY A" to the
+member) and manual (now "PAY B") independently toggleable, including
+simultaneously, with the member choosing per-transaction.
+
+**`server.js`**: two new settings, `depositPayAEnabled`/`depositPayBEnabled`
+(both booleans, defaults `true`/`false` — matches the historical
+"automatic only" behaviour every already-deployed database was already
+running). `depositMethod` itself is NOT retired — it still exists, but its
+meaning narrows to "which automatic GATEWAY PAY A uses" (MarzPay or
+LipaPay) rather than "the one live method." New `depositAutomaticProvider(sett)`
+resolves that gateway choice, deliberately distinct from the existing
+`depositProvider(sett)` (which withdrawals' own `withdrawMethod:'follow'`
+mode still reads raw, completely untouched by this round — withdrawals
+were never part of this request and still resolve to exactly one payout
+method at a time, unchanged) — a legacy `depositMethod:'manual'` value can
+never leak through as an "automatic" gateway; it falls back to MarzPay,
+the historical default, the same way every other unrecognized value
+already does elsewhere in this file.
+
+**Migration, not a breaking change.** `getSettings()` now derives real
+starting values for the two new booleans from whatever `depositMethod`
+was already stored, the FIRST time a database is read after this round
+ships (only when NEITHER new field has ever been written yet): a
+database sitting on `depositMethod:'manual'` (manual was the platform's
+only live method) migrates to `PayAEnabled:false, PayBEnabled:true` —
+automatic recharges stay off exactly as the owner had them, not silently
+reopened. Everything else migrates to `PayAEnabled:true, PayBEnabled:false`
+— the historical default. Once an admin explicitly saves the new toggles
+via the panel, both fields land in the stored doc for real and this
+one-time migration never runs again for that database.
+
+`/deposit/marzpay`'s own guard changed from "is `depositMethod` !=
+'manual'" to "is `depositPayAEnabled` true" (mirrors the exact same
+real-gap class this route's own Round 102 comment already documents once
+— a direct call here must never silently bypass the admin's actual
+intent); `/deposit/manual/init`'s guard changed the same way, from
+checking `depositProvider(sett)==='manual'` to `depositPayBEnabled`.
+`/admin/settings/update`'s validation for `depositMethod` narrowed from
+`'marzpay'|'lipapay'|'manual'` to `'marzpay'|'lipapay'` only — 'manual' is
+no longer a value anything should ever WRITE to that field again (PAY B's
+own availability is `depositPayBEnabled`'s job now); an already-stored
+legacy 'manual' value is still read correctly by the migration above and
+by `depositAutomaticProvider()`'s own fallback, it just can't be written
+again. Both new booleans added to `SETTINGS_BOOLEAN_FIELDS`.
+
+**Network selector removed from PAY A entirely.** Confirmed against the
+real `marzCollect()`/`lipaChannel()` code before removing anything:
+MarzPay's own collect-money call has never required a network parameter
+(only `amount`/`phone`/`reference` — MarzPay's own gateway already
+resolves the network from the phone number, matching the owner's own
+"network is detected by the marzpay system api" wording exactly), and
+`lipaChannel(null)` already resolves to `0` = "Auto" for LipaPay too — so
+dropping the field costs nothing on the gateway side, for either
+automatic provider.
+
+**`admin-src/index.html`**: the old 3-way exclusive "Automatic (MarzPay) /
+Automatic (LipaPay) / Manual" radio group under Manual payments →
+Settings replaced with 2 independent checkboxes ("Enable PAY A" / "Enable
+PAY B") plus a 2-way sub-radio (MarzPay/LipaPay) that only matters while
+PAY A is checked (dimmed, not hidden, while PAY A is off, so the admin
+isn't left guessing which gateway applies once it's switched back on).
+The Withdrawals radio group directly below (follow/marzpay/lipapay/manual)
+is completely untouched — payouts still pick exactly one method at a
+time, as this round never touched that side. Save button now posts
+`depositPayAEnabled`/`depositPayBEnabled`/`depositMethod`(gateway)/
+`withdrawMethod` together and reports back which of PAY A/PAY B ended up
+on and which gateway/payout provider is active.
+
+**`user-src/original_module.js`**: `openDepositSheet()` is now a
+dispatcher, not a single form-renderer — reads the 2 new settings and
+picks one of 3 paths: PAY B only → straight to the existing
+`openManualDepositFormSheet()` (completely unchanged); PAY A only →
+`openAutomaticDepositFormSheet()` (the old automatic form, minus its
+`<select id="depNetwork">`, which is gone for good — just Amount + a
+phone field now); both enabled → a new `openDepositMethodSheet()`, the
+real 2-box picker. That combined screen shows Amount + quick amounts, two
+tappable boxes labelled exactly "PAY A"/"PAY B" (reusing the existing
+`.quick-amt`/`.quick-amt.active` chip styling for visual consistency —
+no new component invented), and — per the owner's own literal wording —
+**neither box starts pre-selected**, matching this app's own established
+"no auto-select" rule from Round 70 (withdrawal accounts). Picking PAY A
+reveals a phone-number field right there (still no network selector
+anywhere); picking PAY B reveals nothing extra on this screen at all —
+tapping Recharge with PAY B chosen calls the exact same
+`proceedToManualPaymentMethod()` the manual-only path already uses,
+carrying the amount already typed straight into the existing,
+byte-for-byte-unchanged manual network/phone selector screen. This is the
+literal "so no changing that payment page regardless of putting the
+number twice" instruction — the manual flow's own second number entry is
+deliberately left alone, not deduplicated. `submitDeposit()` no longer
+reads `$('depNetwork')` (that element may not exist at all now) and sends
+no `network` field to `/deposit/marzpay`, matching the server's own
+already-optional handling of it.
+
+**USSD-fallback message (Round 144) degrades gracefully.** With no
+network selector on PAY A anymore, `setDepositStatusPending()` can no
+longer always know which network a recharge went out on — its own
+`*165#`/`*185#` fallback line now shows BOTH codes ("*165# (MTN) or *185#
+(Airtel)") whenever `network` isn't supplied, while still showing the
+single correct code whenever it genuinely is known (verified this
+backward-compat path still works via Round 144's own original test suite,
+unmodified, still green).
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`,
+`node build-core.js` and `node build-admin.js` both clean round-trips, a
+boot smoke test (a real self-signed RSA dummy Firebase service-account
+PEM + an unreachable `MONGODB_URI`) fails only at the expected
+Mongo-connect step, `git diff --check` clean. A new standalone harness
+(same real-`server.js`-against-an-in-memory-mock-DB technique this file's
+own established practice uses) — 23/23 checks: fresh-DB defaults
+(PAY A on/PAY B off); the migration path for a pre-Round-145
+`depositMethod:'manual'` database (confirmed via a genuine fresh server
+restart against the raw migrated doc, not just reasoned about); both
+routes' own enabled-flag guards in all 4 on/off combinations, including
+both fully disabled; `depositMethod:'manual'` correctly REJECTED as a
+future write (400) while `'lipapay'` is still accepted; PAY A's own
+gateway resolution genuinely calling LipaPay's real endpoint (not
+MarzPay's) when configured that way — confirmed by intercepting outbound
+`fetch()` calls to each provider's real host, not by reading response
+shapes alone; and the `depositAutomaticProvider()` fallback confirmed via
+a THIRD fresh server boot against a raw `{depositMethod:'manual',
+depositPayAEnabled:true}` doc — PAY A still correctly calls MarzPay, never
+errors, never silently calls nothing. A new Playwright pass against the
+real built (obfuscated) app — all 3 scenarios (PAY A only, PAY B only,
+both enabled) confirmed: no `#depNetwork` element exists anywhere in any
+scenario; PAY-A-only skips straight to the amount+phone form; PAY-B-only
+skips straight to the existing K-pay-labelled manual form unchanged;
+both-enabled shows exactly `['PAY A','PAY B']` as the box labels with
+neither pre-selected; tapping Recharge with nothing chosen stays on the
+picker; picking PAY A reveals the phone field and reaches the real
+deposit-status modal on submit; picking PAY B reveals no extra field and
+correctly hands off into the existing manual overlay
+(`#manualPayBg.show`). Re-ran 3 pre-existing Playwright suites against the
+rebuilt app to confirm no regression in code this round didn't mean to
+touch: Round 144's own USSD-fallback suite (8/8, unmodified — the
+known-network branches are still exactly correct); Round 120's manual-pay
+suite (11/11, its settings fixture updated from the retired
+`depositMethod:'manual'` shape to `depositPayBEnabled:true` — toast
+smoothing, SMS-fallback gating, resume-on-reload, and cross-account cache
+safety are all still correct when PAY B is reached via the direct
+single-method path); Round 125's stale-poll cross-order repro (still
+correctly shows no bug present, same fixture-shape update applied).
+`test-admin-obfuscated-build.js` (the real obfuscated admin build)
+updated for the new checkbox/radio ids in place of the retired 3-way
+group — 0 errors across all 12 tabs. `user/sw.js` cache bumped
+`v97`→`v98`, `admin/sw.js` bumped `v42`→`v43`. **`server.js`, the user
+app, and the admin panel all changed — all three (`snow-server`,
+`snow-app`, `snow-admin`) are `autoDeploy: true` on Render per
+`render.yaml`, so this push redeploys all of them on its own; the owner
+should fully close and reopen both apps once to pick up the bumped
+service-worker caches, and should visit Settings → Manual payments in the
+admin panel to check the new PAY A/PAY B checkboxes reflect what they
+actually want live (the migration should already have preserved whatever
+was running before, but worth a glance).**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

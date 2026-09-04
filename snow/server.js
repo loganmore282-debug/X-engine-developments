@@ -340,6 +340,19 @@ const DEFAULT_SETTINGS = {
   // verified steps.
   manualPayReminderMtn: '1: Dial *165#\n2: Select 1 Send Money\n3: Select 1 Mobile User\n4: Enter number {{number}}\n5: Enter Amount {{amount}}\n6: Enter Reason\n7: Enter your PIN code',
   manualPayReminderAirtel: '',
+  // Owner (Round 145): "we will enable 2 payment methods for users to tap
+  // and use... let it just be PAY A / PAY B" -- both can now be offered to
+  // the member AT THE SAME TIME (previously depositMethod was a single
+  // exclusive choice: automatic OR manual, never both). PAY A is always
+  // the automatic gateway (whichever depositMethod itself resolves to via
+  // depositAutomaticProvider() below -- MarzPay or LipaPay); PAY B is
+  // always the admin-managed manual flow. Neither name ("manual"/
+  // "automatic") is ever shown to a member -- the app only ever renders
+  // the neutral "PAY A"/"PAY B" labels. See getSettings()'s own migration
+  // comment for how an already-deployed database (which only ever had the
+  // single depositMethod field) gets sane values for these two the first
+  // time it's read after this round ships.
+  depositPayAEnabled: true, depositPayBEnabled: false,
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
 // user-src/original_module.js (the client-side fallback-stack lookup) and
@@ -367,7 +380,22 @@ async function getSettings() {
   if (Date.now() - _settingsCacheTs < 60 * 1000 && _settingsCache) return _settingsCache;
   try {
     const snap = await db.collection('settings').doc('main').get();
-    _settingsCache = Object.assign({}, DEFAULT_SETTINGS, snap.exists ? snap.data() : {});
+    const stored = snap.exists ? snap.data() : {};
+    // Migration (Round 145): a database saved before the PAY A/PAY B split
+    // never wrote depositPayAEnabled/depositPayBEnabled at all -- letting
+    // DEFAULT_SETTINGS' own true/false defaults silently fill them in below
+    // would incorrectly reopen automatic recharges on a platform the owner
+    // had deliberately set to depositMethod:'manual' (manual-only). Derive
+    // real starting values from the old single depositMethod value instead,
+    // exactly once -- the moment an admin explicitly saves the new toggles
+    // via /admin/settings/update, both fields land in the stored doc for
+    // real and this block is skipped for that database from then on.
+    if (!('depositPayAEnabled' in stored) && !('depositPayBEnabled' in stored)) {
+      const legacyManualOnly = stored.depositMethod === 'manual';
+      stored.depositPayAEnabled = !legacyManualOnly;
+      stored.depositPayBEnabled = legacyManualOnly;
+    }
+    _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored);
   } catch (_) { _settingsCache = _settingsCache || DEFAULT_SETTINGS; }
   _settingsCacheTs = Date.now();
   return _settingsCache;
@@ -387,6 +415,18 @@ function normalizeProviderValue(v) {
 // Reading depositMethod raw anywhere else is a bug waiting to happen.
 function depositProvider(sett) {
   return normalizeProviderValue(sett && sett.depositMethod);
+}
+// Resolves the automatic GATEWAY (marzpay vs lipapay) "PAY A" should use,
+// once the /deposit/marzpay route has already confirmed PAY A is actually
+// enabled (depositPayAEnabled) -- deliberately distinct from
+// depositProvider() above, which withdrawals' own 'follow' mode still
+// reads raw and untouched by the Round 145 PAY A/PAY B split. A legacy
+// depositMethod:'manual' value (stored from before that split, back when
+// this one field doubled as the single always-on method) must never leak
+// through here as an "automatic" gateway -- it falls back to MarzPay, the
+// historical default, same as every other unrecognized value.
+function depositAutomaticProvider(sett) {
+  return depositProvider(sett) === 'lipapay' ? 'lipapay' : 'marzpay';
 }
 // The single place that decides which real payment path a WITHDRAWAL
 // (payout) uses. 'follow' defers to depositProvider() -- everything else
@@ -2292,14 +2332,15 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
     // Real gap found while adding LipaPay as a 2nd automatic provider (Round
-    // 102): this route never actually checked depositMethod at all -- with
-    // Manual active, the frontend correctly diverts to /deposit/manual/init,
-    // but nothing server-side stopped a direct call here from still going
-    // straight through the automatic provider, silently bypassing the
-    // admin's own "route deposits through admin numbers" intent. Mirrors
+    // 102): this route never actually checked whether PAY A was even
+    // enabled -- a direct call here used to always go straight through the
+    // automatic provider regardless of the admin's own settings, silently
+    // bypassing intent. Round 145 widened this from a single exclusive
+    // depositMethod choice to an independent depositPayAEnabled flag (PAY A
+    // and PAY B -- manual -- can now both be live at once). Mirrors
     // /deposit/manual/init's own symmetric guard below.
-    const provider = depositProvider(sett);
-    if (provider === 'manual') return res.status(400).json({ status: 'error', message: 'Automatic recharges are not enabled right now.' });
+    if (!sett.depositPayAEnabled) return res.status(400).json({ status: 'error', message: 'Automatic recharges are not enabled right now.' });
+    const provider = depositAutomaticProvider(sett);
 
     // Validate BEFORE touching the debounce/abuse-attempt counters below --
     // a below-minimum amount or a missing phone number must never consume a
@@ -3061,7 +3102,7 @@ app.post('/deposit/manual/init', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (depositProvider(sett) !== 'manual') return res.status(400).json({ status: 'error', message: 'Manual deposits are not enabled right now.' });
+    if (!sett.depositPayBEnabled) return res.status(400).json({ status: 'error', message: 'Manual deposits are not enabled right now.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
     // Same validate-before-touching-abuse-counters ordering as
     // /deposit/marzpay -- see its own comment for why this order matters.
@@ -4974,7 +5015,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // actually pick here."
   openingCountdownAt: [0, 4102444800000],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -5014,8 +5055,15 @@ app.post('/admin/settings/update', async (req, res) => {
     // it's still recognized when READING an already-stored legacy value
     // (normalizeProviderValue()), but nothing should ever WRITE it again
     // now that 'marzpay'/'lipapay' are the real, distinct canonical values.
-    if ('depositMethod' in updates && !['marzpay', 'lipapay', 'manual'].includes(updates.depositMethod))
-      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'lipapay' or 'manual'` });
+    // 'manual' is likewise no longer accepted as of Round 145 -- this field
+    // now only ever picks PAY A's own automatic GATEWAY; whether manual
+    // (PAY B) is offered at all is controlled independently by
+    // depositPayBEnabled below, not by this field. An already-stored
+    // legacy 'manual' value is still read correctly (see getSettings()'s
+    // own migration + depositAutomaticProvider()'s own fallback) -- it
+    // just can never be WRITTEN again going forward.
+    if ('depositMethod' in updates && !['marzpay', 'lipapay'].includes(updates.depositMethod))
+      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'lipapay'` });
     if ('withdrawMethod' in updates && !['follow', 'marzpay', 'lipapay', 'manual'].includes(updates.withdrawMethod))
       return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'lipapay' or 'manual'` });
     await db.collection('settings').doc('main').set(updates, { merge: true });

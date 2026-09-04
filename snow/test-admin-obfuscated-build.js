@@ -567,11 +567,16 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   const mnNumberInput0 = doc.querySelector('[data-mn-number="0"]');
   if (!mnNumberInput0) errors.push('Settings: payment-number input missing');
   else if (mnNumberInput0.value !== '0770000001') errors.push('Settings: payment-number input shows ' + mnNumberInput0.value + ', expected local-format 0770000001');
-  const depMethodManualRadio = doc.getElementById('depMethodManual');
+  // Round 145: the old exclusive 3-way depMethod radio (Automatic MarzPay/
+  // LipaPay/Manual) became 2 independent checkboxes (PAY A/PAY B, either
+  // or both can be on at once) plus a gateway sub-radio for PAY A only.
+  const depPayAOn = doc.getElementById('depPayAOn');
+  const depPayBOn = doc.getElementById('depPayBOn');
   const saveDepMethodBtn = doc.getElementById('saveDepMethod');
-  if (!depMethodManualRadio || !saveDepMethodBtn) errors.push('Settings: deposit-method radio/save button missing');
+  if (!depPayAOn || !depPayBOn || !saveDepMethodBtn) errors.push('Settings: PAY A/PAY B toggle or save button missing');
   else {
-    depMethodManualRadio.checked = true;
+    depPayAOn.checked = false;
+    depPayBOn.checked = true;
     saveDepMethodBtn.click();
     await sleep(200);
   }
@@ -692,8 +697,11 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   const setHtml = doc.getElementById('content').innerHTML;
   if (!doc.getElementById('witMethodManual') || !doc.getElementById('witMethodMarz') || !doc.getElementById('witMethodLipa') || !doc.getElementById('witMethodFollow'))
     errors.push('Settings: withdrawal-method radios missing');
-  if (!doc.getElementById('depMethodMarz') || !doc.getElementById('depMethodLipa') || !doc.getElementById('depMethodManual'))
-    errors.push('Settings: deposit-method (3-way) radios missing');
+  // Round 145: PAY A/PAY B are independent checkboxes now, not a 3-way
+  // exclusive radio -- MarzPay/LipaPay stay a 2-way radio, but only
+  // choosing PAY A's own automatic gateway, not whether manual is on too.
+  if (!doc.getElementById('depPayAOn') || !doc.getElementById('depPayBOn') || !doc.getElementById('depGatewayMarz') || !doc.getElementById('depGatewayLipa'))
+    errors.push('Settings: PAY A/PAY B toggles or gateway radios missing');
   if (!setHtml.includes('Follow the payment method above')) errors.push('Settings: follow option label missing');
   // Manual-pay screen images (2 independent slots) + the payment-reminder
   // templates, both new this round.

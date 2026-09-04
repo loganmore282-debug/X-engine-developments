@@ -2051,42 +2051,112 @@ function cleanDesc(d){ return d || ''; }
 // automatically if the owner ever adds/reprices a product in admin,
 // instead of a hardcoded list going stale). Deposit only -- "l didn't say
 // to put quick amounts on withdrawal, l said on deposit."
-window.openDepositSheet = function(){
-  const s = STATE.settings || {};
-  if (s.depositMethod === 'manual') return openManualDepositFormSheet();
+function depositQuickAmountsHtml(s){
   const quickAmts = Array.from(new Set((STATE.products || [])
     .map(p => Number(p.price) || 0)
     .filter(p => p >= (Number(s.minDeposit) || 0))))
     .sort((a, b) => a - b);
-  const chipsHtml = quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
+  return quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
     quickAmts.map(p => `<button type="button" class="quick-amt" data-amt="${p}" onclick="pickDepositAmount(${p})">${fmtUGX(p)}</button>`).join('')
   }</div>` : '';
+}
+// Owner (Round 145): "we will enable 2 payment methods for users to tap
+// and use... they will be 2 boxes so one can use manual or automatic via
+// MarzPay, but l didn't tell you to put manual and automatic wordings...
+// let it just be PAY A / PAY B." Admin can now enable either one alone,
+// or both at once (depositPayAEnabled/depositPayBEnabled, independent
+// booleans -- see server.js's own getSettings() migration comment for how
+// an already-deployed database that only ever had the old single
+// depositMethod value gets sane defaults for these). PAY A is always the
+// automatic gateway (openAutomaticDepositFormSheet()); PAY B is always
+// the existing manual admin-numbers flow (openManualDepositFormSheet(),
+// completely untouched). With only one enabled there's no real choice to
+// make, so this skips straight to that one flow, exactly as before this
+// round -- the 2-box picker (openDepositMethodSheet()) only ever shows
+// when both are genuinely available.
+window.openDepositSheet = function(){
+  const s = STATE.settings || {};
+  const payA = s.depositPayAEnabled !== false;
+  const payB = !!s.depositPayBEnabled;
+  if (payB && !payA) return openManualDepositFormSheet();
+  if (payA && !payB) return openAutomaticDepositFormSheet();
+  if (!payA && !payB) return toast('Recharges are not available right now.', true);
+  return openDepositMethodSheet();
+};
+// PAY A's own form -- MarzPay/LipaPay collect straight off the member's
+// phone number, no network selector needed at all: "leave number, it is
+// neutral and also network is detected by the marzpay system api" -- the
+// gateway itself figures out MTN vs Airtel from the number.
+function openAutomaticDepositFormSheet(){
+  const s = STATE.settings || {};
   openSheet('Recharge', `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
-    ${chipsHtml}
+    ${depositQuickAmountsHtml(s)}
     <div class="form-field"><label>Mobile-money phone number</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this)"></div></div>
-    <div class="form-field"><label>Network</label>
-      <select id="depNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
-        <option value="" disabled selected>Select network</option>
-        <option value="MTN Mobile Money">MTN Mobile Money</option>
-        <option value="Airtel Money">Airtel Money</option>
-      </select>
-    </div>
     <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Recharge</button>
     <div class="instr-card">
       <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Recharge instructions</span></div>
       <ol>
         <li>Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount above.</li>
-        <li>Confirm your mobile-money number and network.</li>
+        <li>Confirm your mobile-money number -- the network is detected automatically.</li>
         <li>Tap Recharge, then approve the prompt on your phone.</li>
         <li>Your wallet updates automatically once payment is confirmed.</li>
       </ol>
     </div>
   </div>`);
+}
+// Shown only when both PAY A and PAY B are enabled -- a genuine choice,
+// so neither box starts selected (this app's own established "no
+// auto-select" convention, e.g. withdrawal accounts, Round 70). PAY A's
+// own phone-number field only appears once PAY A is picked; PAY B needs
+// no extra field here at all -- its own next screen collects network AND
+// number itself. Owner: "so no changing that payment page regardless of
+// putting the number twice" -- i.e. leave that page exactly as it already
+// is, a second number entry there is fine.
+var _depPayChoice = '';
+function openDepositMethodSheet(){
+  const s = STATE.settings || {};
+  _depPayChoice = '';
+  openSheet('Recharge', `<div class="reveal-in">
+    <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
+    ${depositQuickAmountsHtml(s)}
+    <div class="form-field"><label>Payment method</label></div>
+    <div class="pm-choice-row">
+      <button type="button" class="quick-amt" id="depPayChoiceA" onclick="pickDepositPayMethod('A')">PAY A</button>
+      <button type="button" class="quick-amt" id="depPayChoiceB" onclick="pickDepositPayMethod('B')">PAY B</button>
+    </div>
+    <div id="depPayAExtraFields" style="display:none">
+      <div class="form-field"><label>Mobile-money phone number</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this)"></div></div>
+    </div>
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDepositChoice()">Recharge</button>
+    <div class="instr-card">
+      <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Recharge instructions</span></div>
+      <ol>
+        <li>Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount above.</li>
+        <li>Choose PAY A or PAY B above.</li>
+        <li>PAY A: confirm your mobile-money number, then approve the prompt on your phone. PAY B: pick your network and number on the next screen.</li>
+        <li>Your wallet updates automatically once payment is confirmed.</li>
+      </ol>
+    </div>
+  </div>`);
+}
+window.pickDepositPayMethod = function(which){
+  _depPayChoice = which;
+  const boxA = $('depPayChoiceA'), boxB = $('depPayChoiceB');
+  if (boxA) boxA.classList.toggle('active', which === 'A');
+  if (boxB) boxB.classList.toggle('active', which === 'B');
+  const extra = $('depPayAExtraFields');
+  if (extra) extra.style.display = which === 'A' ? '' : 'none';
+};
+window.submitDepositChoice = function(){
+  if (!_depPayChoice) return toast('Choose PAY A or PAY B', true);
+  if (_depPayChoice === 'A') return submitDeposit();
+  return proceedToManualPaymentMethod();
 };
 
-// ── Manual deposit flow (admin numbers, SMS-matched) -- shown instead of
-// the MarzPay form above when settings.depositMethod === 'manual'. Owner
+// ── Manual deposit flow (admin numbers, SMS-matched) -- reached as PAY B,
+// either directly (openDepositSheet() above, when only PAY B is enabled)
+// or via the 2-box picker's own proceedToManualPaymentMethod() call. Owner
 // supplied a complete reference payment-page design (2 screens: a payment-
 // method/phone selector, then a "COPY & PAY" code screen) and asked for it
 // used AS-IS -- original colors and layout kept exactly, only wired to
@@ -2127,16 +2197,9 @@ window.openDepositSheet = function(){
 // options are shown industry-wide.
 function openManualDepositFormSheet(){
   const s = STATE.settings || {};
-  const quickAmts = Array.from(new Set((STATE.products || [])
-    .map(p => Number(p.price) || 0)
-    .filter(p => p >= (Number(s.minDeposit) || 0))))
-    .sort((a, b) => a - b);
-  const chipsHtml = quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
-    quickAmts.map(p => `<button type="button" class="quick-amt" data-amt="${p}" onclick="pickDepositAmount(${p})">${fmtUGX(p)}</button>`).join('')
-  }</div>` : '';
   openSheet('Recharge', `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
-    ${chipsHtml}
+    ${depositQuickAmountsHtml(s)}
     <div class="pm-selected-row">
       <span class="pm-selected-label">Payment method</span>
       <span class="pm-selected-val">${ICONS.check}<b>K-pay</b></span>
@@ -2367,9 +2430,10 @@ function maybeResumeManualPayment(){
   const uid = STATE.user && STATE.user.uid;
   const pending = loadManualPayPending(uid);
   if (!pending) return;
-  // The admin may have switched the platform off manual deposits while
-  // this was pending -- nothing left to usefully resume into.
-  if (!STATE.settings || STATE.settings.depositMethod !== 'manual') { clearManualPayPending(); return; }
+  // The admin may have switched PAY B (manual) off while this was pending
+  // -- nothing left to usefully resume into. Round 145: availability is
+  // now depositPayBEnabled, not a single exclusive depositMethod value.
+  if (!STATE.settings || !STATE.settings.depositPayBEnabled) { clearManualPayPending(); return; }
   resumeManualPayFlow(pending);
 }
 function resumeManualPayFlow(p){
@@ -2632,8 +2696,11 @@ function setDepositStatusPending(amount, phone, network){
   // own money menu surfaces the same pending collection request for
   // manual approval there instead. Network-specific -- *165# is MTN
   // Mobile Money's own menu, *185# is Airtel Money's; showing the wrong
-  // one would send a member down a dead end.
-  const ussd = network === 'Airtel Money' ? '*185#' : '*165#';
+  // one would send a member down a dead end. Round 145 dropped the
+  // network selector from PAY A's own form (the gateway detects it
+  // instead), so `network` is no longer reliably known here -- show both
+  // codes rather than guessing.
+  const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) or *185# (Airtel)');
   $('depStatusBody').textContent = `Payment prompt sent to ${displayPhone} for ${fmtUGX(amount)}. Approve it on your phone to complete this recharge. If the prompt doesn't come up, dial ${ussd} on that phone to find and approve the pending payment yourself.`;
   $('depStatusCloseBtn').style.display = 'none';
 }
@@ -2661,10 +2728,12 @@ function setDepositStatusUnknown(){
 window.submitDeposit = async function(){
   const amount = parseMoneyInput($('depAmount').value);
   const phone = $('depPhone').value;
-  const network = $('depNetwork').value;
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
   $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Please wait…';
-  const r = await post('/deposit/marzpay', { amount, phone, network });
+  // No network field on this form (Round 145) -- the gateway detects it
+  // from the phone number itself; server.js already treats `network` as
+  // optional here.
+  const r = await post('/deposit/marzpay', { amount, phone });
   $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge';
   if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
   // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
@@ -2672,7 +2741,7 @@ window.submitDeposit = async function(){
   // cache now so it's actually there the next time Records opens.
   await refreshTransactionsCache();
   closeSheet({ fromAction: true });
-  openDepositStatusModal(amount, phone, network);
+  openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
 };
 async function pollDepositStatus(depositId){

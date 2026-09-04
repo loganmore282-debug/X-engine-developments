@@ -196,6 +196,13 @@ a{color:inherit;}
 .pm-selected-label{font-size:13px;color:var(--snow-muted);font-weight:600;}
 .pm-selected-val{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:800;color:var(--snow-wine);}
 .pm-selected-val svg{width:15px;height:15px;flex:0 0 auto;}
+/* Owner (Round 145): "2 boxes so one can use manual or automatic via
+   MarzPay... let it just be PAY A / PAY B" -- reuses the same
+   .quick-amt/.quick-amt.active look as the quick-amount chips just above
+   for visual consistency, only bigger (2 columns, not 3) since these are
+   a real tap-to-choose control, not a dense chip row. */
+.pm-choice-row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:2px 0 14px;}
+.pm-choice-row .quick-amt{padding:16px 8px;font-size:14px;font-weight:800;}
 .milestone-card{display:flex;align-items:stretch;background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:20px;overflow:hidden;margin-top:14px;box-shadow:0 14px 34px -26px rgba(17,17,17,.22);}
 .milestone-rail{width:52px;flex-shrink:0;background:linear-gradient(165deg,var(--snow-wine),var(--snow-wine-deep));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14.5px;}
 .milestone-rail.done{background:linear-gradient(165deg,var(--snow-green),#1F4E33);}
