@@ -122,6 +122,21 @@ function fmtUGX(n){
 // before parsing.
 function parseMoneyInput(v){ return parseInt(String(v||'').replace(/,/g,''), 10); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Owner: "on announcement welcome dialog, make when l can put a link text
+// just within the message body so as l put the WhatsApp group link in
+// the text, so it will be link text." Auto-detects any http(s) URL
+// (exactly the form WhatsApp itself gives you when you copy a group
+// invite link) typed directly inside a plain-text message and turns just
+// that substring into a real clickable link -- everything else stays
+// plain text. esc() runs FIRST over the whole string, so this is safe to
+// render as innerHTML: the only markup that can ever appear is the <a>
+// tag this function itself adds, never anything from the admin-entered
+// text (an already-escaped '&amp;' inside a matched URL is correctly
+// re-decoded by the browser when it appears inside the href attribute).
+const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
+function linkifyText(text){
+  return esc(text).replace(URL_PATTERN, url => `<a href="${url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;font-weight:700;">${url}</a>`);
+}
 // Owner: "let payment number on payment page be 07.....,no country code
 // putting" -- the merchant/admin payment number stored server-side (and
 // used for exact-string SMS-forwarder matching) always stays canonical
@@ -898,7 +913,7 @@ function maybeShowAnnouncement(){
   const url = s.telegramGroup || s.telegramChannel || '';
   $('announceTitle').style.display = s.annTitle ? '' : 'none';
   $('announceTitle').textContent = s.annTitle || '';
-  $('announceBody').textContent = s.annBody;
+  $('announceBody').innerHTML = linkifyText(s.annBody);
   // Owner: "introduce announcement dialog image, it will be up of dialog
   // message and scrollable" -- the <img> sits as the first child inside
   // .announce-scroll, directly above #announceBody, so it scrolls together
@@ -1021,13 +1036,56 @@ ${STATE.homeBanner ? `<div style="margin:${'-6px 20px 0'};border-radius:20px;ove
   });
   html += `</div><div style="height:16px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  // Baseline for the NEXT patchHomeBalances() call to animate from --
+  // whatever was just painted here (possibly a stale cached figure) is
+  // the true starting point of any correction that follows. See
+  // patchHomeBalances()'s own comment for why this matters.
+  _homeBalanceVals.wallet = Number(a.walletBalance) || 0;
+  _homeBalanceVals.earned = Number(a.totalEarned) || 0;
+  _homeBalanceVals.invested = Number(a.totalInvested) || 0;
   startActivityTicker();
+}
+// Owner: "balance takes long to load ie when you login it can say
+// 388600.47 but few seconds it increases to 456709.23 which is the right
+// amount, so my question is that why doesn't it load up straight away to
+// right amount instead of starting back, so loader start should load
+// everything smoothly." Root cause: Round 46's own deliberate cache-first
+// boot (owner-requested then -- "it loads basic ui features as backend
+// loads user data... no delays", see loadCachedState()'s own comment)
+// paints a device's last-known balance INSTANTLY so Home never sits on a
+// loading screen, then patchHomeBalances() corrects it the moment the
+// live /account fetch actually resolves. That correction is real and
+// expected -- removing the instant-paint would undo the exact speed
+// feature the owner asked for before -- but an instant textContent swap
+// between two different numbers reads as a glitch, not a deliberate
+// refresh. The correction now animates smoothly from the stale figure up
+// (or down) to the real one instead of snapping, so 388,600 becoming
+// 456,709 reads as money visibly counting up, not a flash of wrong data.
+var _homeBalanceVals = { wallet: null, earned: null, invested: null };
+function animateBalanceEl(el, key, toValue){
+  toValue = Number(toValue) || 0;
+  const fromValue = _homeBalanceVals[key];
+  _homeBalanceVals[key] = toValue;
+  if (!el) return;
+  // Nothing to animate on a genuinely first paint (no prior value yet) or
+  // when the figure hasn't actually changed -- avoids needless motion on
+  // every routine live-refresh tick, where balances usually sit still.
+  if (fromValue === null || fromValue === toValue) { el.textContent = fmtUGX(toValue); return; }
+  const start = performance.now(), duration = 700;
+  function tick(now){
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic -- fast start, gentle settle
+    el.textContent = fmtUGX(fromValue + (toValue - fromValue) * eased);
+    if (t < 1) requestAnimationFrame(tick);
+    else el.textContent = fmtUGX(toValue);
+  }
+  requestAnimationFrame(tick);
 }
 function patchHomeBalances(){
   const a = STATE.account || {};
-  const w = $('homeWallet'); if (w) w.textContent = fmtUGX(a.walletBalance);
-  const e = $('homeTotalEarned'); if (e) e.textContent = fmtUGX(a.totalEarned);
-  const i = $('homeTotalInvested'); if (i) i.textContent = fmtUGX(a.totalInvested);
+  animateBalanceEl($('homeWallet'), 'wallet', a.walletBalance);
+  animateBalanceEl($('homeTotalEarned'), 'earned', a.totalEarned);
+  animateBalanceEl($('homeTotalInvested'), 'invested', a.totalInvested);
 }
 
 // ── MY PRODUCTS ──

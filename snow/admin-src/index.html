@@ -2058,6 +2058,7 @@ async function renderSettings(){
       <label style="width:auto;display:flex;align-items:center;gap:8px;margin-bottom:10px;"><input type="checkbox" id="annOn" ${s.annEnabled?'checked':''} style="width:auto"> Enabled</label>
       <label>Title (optional)</label><input id="annTitleInput" value="${esc(v('annTitle',''))}" placeholder="Welcome to Snow!">
       <label>Message</label><textarea id="annBodyInput" rows="5" placeholder="Tell members what's new, or invite them to your Telegram group…">${esc(v('annBody',''))}</textarea>
+      <p class="muted" style="margin:4px 0 0">Paste any link (e.g. a WhatsApp group invite, https://chat.whatsapp.com/...) directly into the message -- it becomes tappable text automatically, right where you typed it.</p>
       <button class="btn block" id="saveAnn" style="margin-top:6px">Save announcement</button>
       <div class="banner-row" style="margin-top:14px;">
         ${announceImage?`<img class="img-thumb" src="${esc(announceImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}

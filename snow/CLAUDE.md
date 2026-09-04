@@ -9379,6 +9379,98 @@ the MarzSms dashboard's Settings & Tools → API Keys) to Render's env vars
 for this feature to actually start sending -- until then it silently does
 nothing, exactly as designed, not a bug to report.**
 
+## Round 142 (2026-09-04) — Home balance corrections now animate smoothly instead of snapping, and the announcement dialog supports a real clickable link typed directly inside its message
+
+Two owner requests, both about the same "loading should feel smooth"
+theme.
+
+**1. Balance jump on login/app-open.** Owner: "balance takes long to
+load ie when you login it can say 388600.47 but few seconds it increases
+to 456709.23 which is the right amount, so my question is that why
+doesn't it load up straight away to right amount instead of starting
+back, so loader start should load everything smoothly." Traced to
+Round 46's own deliberate cache-first boot (the owner asked for this
+specifically, relaying a friend's "no delays" instant-loading advice --
+see `loadCachedState()`'s own comment): a returning login paints Home
+INSTANTLY from a small `localStorage` snapshot of the device's last-known
+balance (zero network wait), then `renderHome()`'s live `/account` fetch
+resolves a moment later and `patchHomeBalances()` snaps the figure to the
+real one. That correction is real, expected, and exactly what the feature
+was built to do -- the actual bug was that the correction was an instant
+`textContent` swap between two different numbers, which reads as a
+glitch, not a deliberate refresh. Removing the instant-paint would undo
+the exact speed feature the owner asked for before, so instead: the
+correction now **animates** smoothly from the stale figure to the real
+one (700ms, ease-out-cubic, via `requestAnimationFrame`) -- `388,600`
+becoming `456,709` now visibly counts up like money arriving, not a flash
+of wrong data. New `animateBalanceEl(el, key, toValue)` + a small
+`_homeBalanceVals` baseline tracker (seeded in `paintHome()` from
+whatever was just painted -- possibly the stale cached figure -- so the
+NEXT correction always has a real "from" to animate from); `patchHomeBalances()`
+now routes wallet/earned/invested through it instead of setting
+`textContent` directly. Skips the animation entirely (sets the value
+immediately) on a genuine first paint or when the figure hasn't actually
+changed, so a routine live-refresh tick where nothing moved doesn't
+flicker for no reason. All 5 of `patchHomeBalances()`'s existing call
+sites (boot correction, the periodic live-refresh timer, and 3 others)
+get this for free -- one shared function, no per-call-site changes
+needed.
+
+**2. Inline link text in the announcement message.** Owner: "on
+announcement welcome dialog, make when l can put a link text just within
+the message body so as l put the WhatsApp group link in the text, so it
+will be link text." The announcement dialog already had a DEDICATED
+Telegram-only link field + button (`s.telegramGroup`/`telegramChannel`,
+a separate "Telegram" button) from an earlier round, but the owner wants
+something more general: paste ANY link straight into the free-text
+message itself (the WhatsApp group invite link is the concrete case) and
+have just that substring render as real, tappable link text, without a
+separate field. New `linkifyText(text)` (`user-src/original_module.js`,
+next to `esc()`): escapes the WHOLE string first via the existing `esc()`
+helper, then wraps any `https?://` URL substring in a real `<a
+href="..." target="_blank" rel="noopener">` tag. `maybeShowAnnouncement()`
+switched from `$('announceBody').textContent = s.annBody` to
+`$('announceBody').innerHTML = linkifyText(s.annBody)` -- safe specifically
+BECAUSE escaping happens first: the only markup that can ever appear is
+the one `<a>` tag this function itself adds, nothing from the admin-typed
+text can ever inject real HTML (verified with a deliberately hostile test
+string containing a literal `<script>` tag and a bare `&`, both correctly
+neutralized -- see verification below). Admin panel gained one line of
+help text under the message textarea explaining the new capability
+(`admin-src/index.html`) -- no new field, no backend change at all
+(`annBody` was already a free-text string with no server-side HTML
+stripping or length cap, confirmed by reading `/admin/settings/update`
+before touching anything).
+
+**Verified with a real headless browser, not just reasoning**:
+Playwright (Python, this sandbox's pre-installed Chromium at
+`/opt/pw-browsers/chromium`) driving the REAL obfuscated
+`user/index.html` served locally, calling the app's own real
+window-scoped functions directly (`paintHome`, `patchHomeBalances`,
+`maybeShowAnnouncement` all attach to `window` per this app's own
+"every top-level binding must be var" build convention, so no
+login/Firebase flow was needed to exercise them) --
+`round142-balance-animation-linkify-check.py`, 14/14: initial paint shows
+the stale figure exactly; ~80ms into a correction the figure is
+genuinely mid-transition (neither the old nor the new value yet); after
+the full animation duration it settles on the exact correct amount;
+re-patching with an UNCHANGED value shows correctly with no needless
+animation; Total Earned animates the same way; a WhatsApp URL embedded
+in hostile test text (containing a real `<script>` tag and a bare `&`)
+becomes a real, correctly-targeted `<a>` tag while the script tag is
+neutralized to inert escaped text and the `&` survives correctly as a
+literal character when read back; a body with no URL at all still
+renders as plain text with zero stray markup (no regression for the
+common case). `node --check` clean on nothing (no `server.js` touched
+this round), `build-core.js` and `build-admin.js` both round-trip OK,
+`test-admin-obfuscated-build.js` still 0 errors across all 12 tabs
+(Settings tab content length grew, confirming the new hint text
+rendered), `git diff --check` clean. `user/sw.js` cache bumped
+`v95`→`v96`, `admin/sw.js` bumped `v40`→`v41`. **Both the user app and
+the admin panel changed -- both auto-deploy on Render from this push;
+the owner should fully close and reopen both apps once to pick up the
+bumped service-worker caches.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
