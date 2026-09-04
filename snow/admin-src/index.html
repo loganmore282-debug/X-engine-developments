@@ -641,15 +641,26 @@ async function renderDashboard(){
       <div class="stat"><div class="n">${stats.pendingWitCount||0}</div><div class="l">Pending withdrawals</div></div>
     </div>
     <div class="panel-card">
+      <h2 class="sec" style="margin-top:0">MarzPay available balance</h2>
+      <p class="muted" style="margin-top:0">The real float sitting in MarzPay's own account -- what payouts actually get sent from, distinct from members' own wallet balances above.</p>
+      <div id="marzBalance">${spinnerHtml()}</div>
+    </div>
+    <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Recent transactions</h2>
       <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th></tr></thead><tbody id="dashTx"><tr><td colspan="3">${spinnerHtml()}</td></tr></tbody></table></div>
     </div>`;
-  const r = await api('/admin/transactions/list', { limit: 12 });
+  const [r, mb] = await Promise.all([
+    api('/admin/transactions/list', { limit: 12 }),
+    api('/admin/marzpay/balance'),
+  ]);
   if(staleTab('dashboard')) return;
   const list = (r.transactions || []).slice(0, 12);
   $('dashTx').innerHTML = list.length ? list.map(t=>`
     <tr><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">No transactions</td></tr>';
+  $('marzBalance').innerHTML = mb.status==='success'
+    ? `<div class="n" style="font-size:26px">${ugx(mb.amount)}</div>${mb.accountStatus?`<p class="muted" style="margin:4px 0 0">Account status: ${esc(mb.accountStatus)}</p>`:''}`
+    : `<p class="muted" style="margin:0">${esc(mb.message||'Could not check MarzPay balance right now.')}</p>`;
 }
 function statusPill(s){
   s=String(s||'success').toLowerCase();

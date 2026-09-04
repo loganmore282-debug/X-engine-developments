@@ -27,6 +27,7 @@ const routes = {
     totalUsers: 12, activeUsers: 11, bannedUsers: 1, walletTotal: 500000, depositAmount: 900000,
     withdrawAmount: 300000, investedAmount: 400000, activeInvestments: 3, pendingDepCount: 1, pendingWitCount: 2,
   } },
+  'GET /admin/marzpay/balance': { status: 'success', amount: 4523891, formatted: 'UGX 4,523,891', currency: 'UGX', accountStatus: 'active' },
   'POST /admin/transactions/list': { status: 'success', transactions: [
     { id: 't1', type: 'deposit', amount: 30000, description: 'Wallet recharge', ref: 'B123', createdAt: new Date().toISOString(), userId: 'u1' },
     { id: 't2', type: 'mission_salary', amount: 750, description: 'Mission Center salary', createdAt: new Date().toISOString(), userId: 'u1' },
@@ -257,6 +258,28 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     const text = content ? content.textContent : '';
     console.log(`tab ${t}: content length ${text.length}, sample: ${JSON.stringify(text.slice(0, 60))}`);
   }
+
+  // Round 140: owner asked for MarzPay's own available balance on the
+  // Dashboard tab -- a live external check, distinct from the DB-derived
+  // "Wallet balances" stat right above it.
+  doc.querySelector('.tab[data-tab="dashboard"]').click();
+  await sleep(350);
+  const dashHtml = doc.getElementById('content').innerHTML;
+  if (!dashHtml.includes('MarzPay available balance')) errors.push('Dashboard: MarzPay balance card missing');
+  if (!dashHtml.includes('4,523,891')) errors.push('Dashboard: MarzPay balance amount missing/not rendered');
+  if (!dashHtml.includes('Account status: active')) errors.push('Dashboard: MarzPay account status missing');
+
+  // MarzPay unreachable (provider down / not configured) must degrade
+  // gracefully -- an error message in the card, not a broken Dashboard.
+  routes['GET /admin/marzpay/balance'] = { status: 'error', message: 'The payment provider is busy right now. Please try again in a moment.' };
+  doc.querySelector('.tab[data-tab="analytics"]').click();
+  await sleep(150);
+  doc.querySelector('.tab[data-tab="dashboard"]').click();
+  await sleep(350);
+  const dashHtmlDown = doc.getElementById('content').innerHTML;
+  if (!dashHtmlDown.includes('payment provider is busy')) errors.push('Dashboard: MarzPay balance error state not shown when the provider is unreachable');
+  if (dashHtmlDown.includes('NaN') || dashHtmlDown.includes('undefined')) errors.push('Dashboard: MarzPay balance error state leaked NaN/undefined');
+  routes['GET /admin/marzpay/balance'] = { status: 'success', amount: 4523891, formatted: 'UGX 4,523,891', currency: 'UGX', accountStatus: 'active' };
 
   // Confirm Banners tab button no longer exists at all
   const bannersBtn = doc.querySelector('.tab[data-tab="banners"]');

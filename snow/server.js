@@ -1089,6 +1089,37 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
   });
   return _marzParse(resp);
 }
+// Owner: "let us put on dashboard so as it checks marzpy available
+// balance." GET /balance -- confirmed against MarzPay's own official
+// JS SDK (marzpay-js on npm, published by MarzPay's own maintainer),
+// whose real BalanceAPI.getBalance() implementation calls this exact
+// path (the README's shorter accounts.getBalance() example doesn't
+// actually exist as working code in that same package -- the executable
+// BalanceAPI class is what's trustworthy here, not a doc-comment).
+// Response shape per that SDK's own JSDoc examples:
+// { data: { account: { balance: { raw, formatted, currency },
+// status: { account_status } } } }. Extracted defensively (several
+// plausible field paths tried, same "don't trust one exact shape"
+// defensiveness _marzExtractTx already uses for this same provider) since
+// this is a live external call whose exact envelope was verified against
+// SDK source, not MarzPay's own docs page directly.
+function _marzExtractBalance(d) {
+  const acct = d?.data?.account || d?.account || d?.data || d || {};
+  const bal = acct.balance;
+  const raw = (bal && typeof bal === 'object') ? (bal.raw ?? bal.amount ?? bal.value) : bal;
+  const formatted = (bal && typeof bal === 'object') ? bal.formatted : undefined;
+  const currency = (bal && typeof bal === 'object' && bal.currency) || acct.currency || 'UGX';
+  const accountStatus = acct.status?.account_status || acct.account_status || null;
+  return { amount: finiteMoney(raw), formatted: formatted || null, currency, accountStatus };
+}
+async function marzGetBalance() {
+  const resp = await fetch(`${MARZPAY_BASE}/balance`, {
+    signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+  });
+  const d = await _marzParse(resp);
+  if (d.status === 'error') return d;
+  return { status: 'success', ..._marzExtractBalance(d) };
+}
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
   const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || d?.status || '';
@@ -5994,6 +6025,24 @@ app.get('/admin/stats', async (req, res) => {
     const pendingWitCount = (await db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get()).size;
     res.json({ status: 'success', stats: { totalUsers, activeUsers, bannedUsers, walletTotal, depositAmount, withdrawAmount, investedAmount, activeInvestments, pendingDepCount, pendingWitCount } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Owner: "let us put on dashboard so as it checks marzpy available
+// balance." A real, live check of MarzPay's own float -- how much money
+// is actually sitting in the account MarzPay pays withdrawals FROM --
+// distinct from walletTotal above (members' own balances, this
+// platform's liability) or any DB figure. verifyAdmin, not verifyOwner --
+// same visibility level as the rest of Dashboard, which staff already see.
+app.get('/admin/marzpay/balance', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!MARZPAY_KEY) return res.status(400).json({ status: 'error', message: 'MarzPay is not configured on this server (no MARZPAY_KEY set).' });
+  try {
+    const d = await marzGetBalance();
+    if (d.status !== 'success') return res.status(502).json({ status: 'error', message: marzUserMsg(d, 'Could not reach MarzPay') });
+    res.json({ status: 'success', amount: d.amount, formatted: d.formatted, currency: d.currency, accountStatus: d.accountStatus });
+  } catch (e) {
+    console.error('MarzPay balance check failed:', e.message);
+    res.status(502).json({ status: 'error', message: PROVIDER_BUSY_MSG });
+  }
 });
 app.post('/admin/transactions/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

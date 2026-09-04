@@ -9220,6 +9220,81 @@ changed -- both auto-deploy on Render from this push per `render.yaml`;
 the owner may want to fully close and reopen the admin panel once to
 pick up the bumped service-worker cache.**
 
+## Round 140 (2026-09-04) — Dashboard now checks MarzPay's own available balance live
+
+Owner: "also let us put on dashboard so as it checks marzpy available
+balance. check documentation
+https://wallet.wearemarz.com/documentation/getting-started." That exact
+docs page (and every alternate fetch route tried -- web.archive.org,
+r.jina.ai) is not reachable from this sandboxed session (egress-blocked).
+Confirmed the real endpoint a different way: MarzPay's own official
+JavaScript SDK, `marzpay-js` on npm (published by the same maintainer
+account as MarzPay's PHP SDK, `katznicho`), pulled straight from the npm
+registry (`registry.npmjs.org`, which IS reachable) and inspected as
+actual compiled, executable code, not documentation prose. Its real
+`BalanceAPI.getBalance()` implementation calls `this.marzpay.request(
+'/balance')` against the exact same base URL Snow's `server.js` already
+uses (`https://wallet.wearemarz.com/api/v1`), with the exact same `Basic
+base64(apiKey:apiSecret)` auth scheme Snow's own `MARZPAY_KEY` env var
+already is. (The SDK's own README shows a shorter, different-looking
+`accounts.getBalance()` example, but that method doesn't actually exist
+in the compiled bundle -- a stale doc comment, not real code; the
+`BalanceAPI` class is what's genuine and trustworthy here.)
+
+**New `GET /admin/marzpay/balance`** (`verifyAdmin`, same visibility as
+the rest of Dashboard, not owner-only) calls `marzGetBalance()` (new
+helper, mirrors `marzCollect`/`marzSendMoney`'s own shape) and extracts
+the balance defensively -- `_marzExtractBalance()` tries several
+plausible field paths, the same "don't trust one exact shape blindly"
+defensiveness `_marzExtractTx()` already uses for this same provider,
+since the response envelope was confirmed from SDK source rather than
+MarzPay's own docs page directly. Per that SDK's own JSDoc examples, the
+real shape is `{ data: { account: { balance: {raw,formatted,currency},
+status: {account_status} } } }`. Returns a clear "MarzPay is not
+configured on this server" 400 if `MARZPAY_KEY` is unset (rather than
+attempting a call that can only fail), and a clean 502 with
+`marzUserMsg()`'s existing friendly wording for any real HTTP or network
+failure -- this is a purely informational Dashboard tile, never gates
+any money-moving decision, so a failure here degrades to an error message
+in that one card, nothing else on Dashboard is affected.
+
+**Admin panel**: `renderDashboard()` gained a "MarzPay available balance"
+panel-card -- the real float MarzPay actually pays withdrawals FROM,
+explicitly distinguished in its own subtitle from "Wallet balances" right
+above it (members' own balances, a completely different, DB-derived
+figure). Fetched in parallel with the existing "Recent transactions" call
+(same loading-placeholder-then-patch-in pattern that section already
+used), so a slow/failed MarzPay check never delays the rest of the
+Dashboard.
+
+**Verified**: `node --check server.js` clean, `build-admin.js` round-trip
+OK, `git diff --check` clean, boot smoke test clean.
+`test-admin-obfuscated-build.js` extended: the card and a real formatted
+balance render on the REAL obfuscated build, and a second pass with the
+fixture forced into an error state confirms the card shows a friendly
+message (not NaN/undefined) instead of breaking the tab -- 0 errors
+across all 12 tabs. New `round140-marzpay-balance-test.js` (same
+real-`server.js`-against-an-in-memory-mock-DB technique as every earlier
+round, PLUS a mocked `global.fetch` scoped only to calls actually
+targeting `wallet.wearemarz.com` -- there is no real MarzPay account to
+test against, so this proves `server.js`'s own parsing/error-handling
+logic against the exact response shape confirmed from SDK source) --
+12/12: no `MARZPAY_KEY` configured returns a clear 400, not a crash; an
+unauthenticated request is refused; both a real staff account AND the
+owner's raw key can read it (not owner-only); the SDK-documented success
+shape parses to the exact right amount/currency/account status; a real
+HTTP error from MarzPay (e.g. bad credentials) and a network-level
+failure (timeout) both degrade to a clean 502, never a 500; and a
+genuinely unexpected/incomplete response shape degrades to `amount: 0`
+rather than throwing. Re-ran Round 104 (11/11), Round 135 (11/11), Round
+136 (37/37), Round 137/139's gift-code suite (32/32), and
+`test-momo-sms-parsers.js` (70/70) -- 0 regressions. `admin/sw.js` cache
+bumped `v39`→`v40`. **`server.js` and the admin panel both changed --
+both auto-deploy on Render from this push per `render.yaml` (which
+already lists `MARZPAY_KEY` as a configured env var on `snow-server`);
+the owner may want to fully close and reopen the admin panel once to
+pick up the bumped service-worker cache.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
