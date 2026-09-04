@@ -8775,6 +8775,75 @@ assertions passing against the real obfuscated build. Admin cache bumped
 should auto-deploy this push (server.js) and the admin build needs no
 separate deploy step beyond the push (static site).**
 
+## Round 135 (2026-09-03) — withdrawal "processed by"/"declined by" now shows the real staff account, not always "owner"
+
+Owner: "l can't see who manually approved the withdrawal, everywhere
+shows owner, owner yet admins are available." The admin UI's own
+Withdrawals tab row (`drawWits()`, already built) has always correctly
+rendered `w.processedBy`/`w.declinedBy` -- the bug was entirely
+server-side, in what actually got written to those fields.
+
+**Bug 1, real and the one actually producing the reported symptom**:
+`/admin/withdraw/process` -- `verifyAdmin`-gated, so ANY staff account
+can approve a payout, not just the owner -- called
+`processWithdrawalCore(withdrawalId, 'owner')` with the literal string
+`'owner'` hardcoded, regardless of which real staff username actually
+clicked Send/Mark-as-paid. Every admin's own approvals were
+indistinguishable from every other admin's, always reading "owner."
+Fixed to `req.adminUser?.username || 'owner'` -- the same
+`req.adminUser`-or-fallback pattern already used everywhere else in this
+file that attributes an admin action (`logAdminAction`'s own `actor`
+field, `giftcode_generated`'s `createdBy`, etc.) -- a real staff session
+now correctly attributes to that staff member's own username; the
+owner's own raw-master-key login (which never populates `req.adminUser`
+at all) still correctly falls back to `'owner'`.
+
+**Bug 2, found while tracing the first one**: `declineWithdrawalAndRefund()`
+-- the function every reject/decline path in this file funnels through --
+never wrote `declinedBy`/`declinedAt` AT ALL, on any call, ever. The admin
+UI's own `w.declinedBy` conditional branch was completely dead code --
+not "always shows owner," but "never shows anyone," including for the
+owner's own rejections. Fixed by adding an optional 5th `declinedBy`
+parameter: when supplied, `declinedBy`/`declinedAt` are written alongside
+the existing `status:'declined'` update; when omitted (every OTHER call
+site -- webhook/reconciler-driven declines for a genuine provider-side
+failure, never a person's decision), those fields stay unset exactly as
+before, so a system-driven decline is never misattributed to a human who
+didn't make that call. Only `/admin/withdraw/reject` (the one real
+admin-initiated decline path) now passes `req.adminUser?.username ||
+'owner'`. That route is deliberately `verifyOwner`-gated already (an
+existing, unrelated money-safety restriction -- rejecting/refunding a
+payout is owner-only in this codebase, same as force-crediting a
+deposit) -- confirmed this round's change doesn't loosen that; a staff
+account still gets refused there, so in practice `declinedBy` will
+currently only ever read `'owner'`, which is honest and correct given
+who's actually allowed to reject.
+
+**Verified**: `node --check server.js` clean, a boot smoke test (a real
+self-signed RSA dummy Firebase service-account PEM + an unreachable
+`MONGODB_URI`) fails only at the expected Mongo-connect step, `git diff
+--check` clean. A new standalone harness (boots the real `server.js`
+against an in-memory Mongo-compatible mock DB via `require.cache`
+substitution, the same technique this file's own Round 103/104/129
+harnesses established) creates a REAL staff admin account ("mary"),
+logs her in for a genuine session token, and drives the actual routes
+over real HTTP -- 11/11 checks: mary's own `/admin/withdraw/process`
+call (manual-payout mode, to sidestep an unrelated "payment provider is
+busy" failure from this offline harness having no real MarzPay
+credentials configured -- attribution logic is identical regardless of
+which payout branch runs) writes `processedBy:'mary'`, not `'owner'`;
+the owner's own raw-key call still correctly writes `processedBy:'owner'`;
+the owner's `/admin/withdraw/reject` call now writes both
+`declinedBy:'owner'` and a real `declinedAt` timestamp, where neither was
+ever written before; mary is still correctly refused (401) when
+attempting to reject, confirming the existing owner-only restriction is
+untouched. Re-ran the Round 104 manual-deposit concurrency suite (11/11)
+and `test-admin-obfuscated-build.js` (the real obfuscated admin build,
+unaffected since `admin-src/index.html` needed no changes -- it already
+correctly rendered whichever value these fields held) -- both still
+clean, 0 regressions. This round is `server.js`-only, so no cache bumps.
+**`server.js` changed -- Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

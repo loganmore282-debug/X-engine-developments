@@ -3893,14 +3893,20 @@ async function completeWithdrawalRefund(witRef, userId) {
 // was still short by the full amount until the reconciler's later retry
 // caught up -- a real, reproducible source of the "wallet balance ≠ ledger"
 // mismatches the owner reported.
-async function declineWithdrawalAndRefund(witRef, userId, reason, fromStatuses) {
+// declinedBy is only ever supplied by a real admin action (/admin/withdraw/
+// reject) -- every other call site is a system/reconciler-driven decline
+// (a provider-side failure, not a person's decision), so it's left unset
+// there rather than attributed to a made-up actor.
+async function declineWithdrawalAndRefund(witRef, userId, reason, fromStatuses, declinedBy) {
   let didDecline = false, refunded = false;
   await withLock('bal:' + userId, async () => {
     const fresh = await witRef.get();
     if (!fresh.exists || !fromStatuses.includes(fresh.data().status)) return;
     const fd = fresh.data();
     const netToUnwind = fd.status === 'processing' ? fd.net : 0;
-    await witRef.update({ status: 'declined', failureReason: reason, refundPending: true, refundAmount: fd.amount, refundNetToUnwind: netToUnwind });
+    const updates = { status: 'declined', failureReason: reason, refundPending: true, refundAmount: fd.amount, refundNetToUnwind: netToUnwind };
+    if (declinedBy) { updates.declinedBy = declinedBy; updates.declinedAt = FieldValue.serverTimestamp(); }
+    await witRef.update(updates);
     didDecline = true;
     refunded = await completeWithdrawalRefund(witRef, userId);
   });
@@ -4135,7 +4141,12 @@ app.post('/admin/withdraw/process', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const withdrawalId = String(req.body.withdrawalId || '');
   if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
-  const result = await processWithdrawalCore(withdrawalId, 'owner');
+  // Owner: "l can't see who manually approved the withdrawal, everywhere
+  // shows owner, owner yet admins are available" -- this hardcoded the
+  // literal string 'owner' regardless of which real staff account actually
+  // clicked Send, so the "processed by X" line the admin UI already shows
+  // was never telling the truth once more than one admin existed.
+  const result = await processWithdrawalCore(withdrawalId, req.adminUser?.username || 'owner');
   if (result.code === 200) logAdminAction(req, 'withdrawal_processed', { withdrawalId, ...result.meta });
   res.status(result.code).json(result.body);
 });
@@ -5850,7 +5861,7 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     // sent -- if MarzPay's dashboard shows it WAS sent, take no action here
     // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
-    const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending']);
+    const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
     if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied. Refresh and try again.' });
     await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
     logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded });
