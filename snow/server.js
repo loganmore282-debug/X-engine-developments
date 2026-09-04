@@ -4620,8 +4620,15 @@ app.post('/redeem', async (req, res) => {
       } else {
         // A genuinely lost roll (deploy-time race, never observed in
         // testing) falls back to minReward rather than re-rolling -- never
-        // credit MORE than what could have been promised.
-        reward = round2(Number(cd.claimedRewards && cd.claimedRewards[userId]) || minReward);
+        // credit MORE than what could have been promised. Reads with a
+        // real Number.isFinite() presence check, not `||` -- a `||`
+        // fallback would wrongly treat a legitimately-rolled reward of
+        // exactly 0 as "missing" and substitute minReward instead (0 is
+        // falsy in JS). Can't happen via normal generation (minReward must
+        // be > 0), but this makes the fallback correct on its own terms
+        // rather than relying on that invariant holding elsewhere.
+        const persisted = cd.claimedRewards && cd.claimedRewards[userId];
+        reward = round2(Number.isFinite(persisted) ? persisted : minReward);
       }
       // Codex-caught real bug (2nd money-flow audit): claiming the code in
       // usedBy above is NOT the same as the credit having actually landed --

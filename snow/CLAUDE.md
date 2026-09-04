@@ -9083,6 +9083,69 @@ user app, and the admin panel all changed -- all three (`snow-server`,
 may still want to fully close and reopen both apps once to pick up the
 bumped service-worker caches.**
 
+## Round 138 (2026-09-04) — self-review of Round 137: 1 real (narrow) bug found and fixed in the resumed-claim fallback, everything else re-verified clean
+
+Owner: "check again that fix such that no more bugs." Re-read every line
+of Round 137's `/redeem`, `/admin/promocodes/generate`, and
+`/admin/promocodes/list` changes fresh, plus the two `fmtUGX`/`ugx`
+rewrites, specifically hunting for money-correctness edge cases that
+independent test-writing might share a blind spot with.
+
+**1 real bug found and fixed**: the resumed-claim fallback --
+`reward = round2(Number(cd.claimedRewards && cd.claimedRewards[userId]) ||
+minReward)` -- used `||` to fall back to `minReward` when no persisted
+roll was found. `||` treats `0` as falsy, so a resumed claim whose
+persisted rolled reward was genuinely `0` would have silently paid
+`minReward` instead of `0` -- wrong, and in the wrong direction (pays
+MORE than what was actually promised, the opposite of this fallback's own
+"never credit more than promised" intent). Cannot happen through real
+code-generation (`minReward` must be `> 0`, so `crypto.randomInt` can
+never roll exactly `0` for a new code), so this was unreachable via the
+live app, not a practical exploit -- but a fallback path meant to be the
+safety net for a genuinely bad state should be correct on its own terms,
+not correct only because something else upstream happens to prevent
+hitting it. Fixed with a real presence check
+(`Number.isFinite(persisted) ? persisted : minReward`) instead of a
+truthiness check. New regression case added to
+`round137-giftcode-random-reward-test.js`: hand-seeds a resume state with
+a persisted reward of exactly `0` and confirms the redeem now pays `0`,
+not `minReward`.
+
+**Everything else re-verified, nothing else changed**: the atomic
+`usedBy`+`claimedRewards` dotted-path write was re-confirmed correct by
+re-reading `db.js`'s own `buildMongoUpdate()` -- a `FieldValue.arrayUnion`
+value and a plain literal value in the same `update()` call land in
+`$addToSet` and `$set` respectively, applied together in ONE real
+`updateOne()`, genuinely atomic. `crypto.randomInt`'s cent-range math was
+re-checked against its documented `[min, max)` semantics and Node's `2^48`
+range ceiling -- fine at this app's `MAX_MONEY_AMOUNT` scale. Ran a 2
+million-sample randomized check that `cents / 100` always round-trips
+cleanly through `Math.round(v*100)` (no float-division dirt reaching
+`fmtUGX`'s cents-detection or the stored value) -- 0 mismatches. Checked
+whether decimal money could make `recountAllTotals()`'s exact `!==`
+staleness pre-filter mis-fire from floating-point summation-order drift --
+theoretically possible at the ~1e-13 level, but harmless even if it does:
+the worst case is one extra (still-correct) write, and `/admin/integrity`'s
+own mismatch detector already tolerates exactly this class of noise
+(`Math.abs(stored - real) > 1`, a whole-UGX tolerance, not exact
+equality) -- not a bug, left as-is. Checked every other `||`-vs-`??`
+money fallback introduced in Round 137 (the `minReward`/`maxReward`
+legacy-fallback reads) -- those are safe because their fallback target
+equals what `||`'s own zero-coercion would produce anyway, unlike the one
+real bug above where the fallback target was a genuinely different value.
+Grepped for any stray `Math.round()`/`parseInt()` that might truncate a
+gift-code reward elsewhere in the file -- none found; the only
+`Math.round()` touching a reward is the intentional cents conversion.
+
+**Verified**: `node --check server.js` clean, boot smoke test clean,
+`git diff --check` clean. `round137-giftcode-random-reward-test.js` now
+28/28 (was 26/26, +2 for the new zero-reward regression case). Re-ran
+Round 104 (11/11), Round 135 (11/11), Round 136 (37/37), and
+`test-momo-sms-parsers.js` (70/70) -- 0 regressions. This round is
+`server.js`-only -- no response shape changed, so no frontend rebuild or
+cache bump needed. **`server.js` changed -- Render auto-deploys it on its
+own.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
