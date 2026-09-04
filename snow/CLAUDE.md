@@ -9765,6 +9765,24 @@ admin panel to check the new PAY A/PAY B checkboxes reflect what they
 actually want live (the migration should already have preserved whatever
 was running before, but worth a glance).**
 
+## Round 145 follow-up (2026-09-04) — PAY A/PAY B boxes corrected to stacked/vertical, not side-by-side
+
+Owner, from a phone screenshot of Round 145's own build: "no its not
+supposed to be like that, in horizontal, into should be vertical, so PAY
+A [newline] PAY B." `.pm-choice-row` changed from a 2-column grid to a
+`display:flex;flex-direction:column` stack — PAY A now sits directly
+above PAY B, each spanning the full row width, instead of side by side.
+No other change (box styling, tap-to-select behaviour, the phone field
+reveal under PAY A, all untouched).
+
+**Verified** with Playwright against the real built app: `.pm-choice-row`
+computes `flex-direction:column`; PAY A's box sits above PAY B's (lower
+`y`); both share the same left edge and full-row width (confirmed
+stacked, not columns). `node build-core.js` clean round-trip. `user/sw.js`
+cache bumped `v98`→`v99`. **User-app-only change — Render redeploys
+`snow-app` on its own from this push; the owner should fully close and
+reopen the app once to pick up the bumped cache.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
