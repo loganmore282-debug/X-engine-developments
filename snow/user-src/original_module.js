@@ -2597,8 +2597,8 @@ function syncDepositQuickAmt(){
 // (a real operation is in flight); the Close button only appears once
 // resolved (or once the poll gives up), matching the app's own established
 // pattern of only offering Close on a settled dialog state.
-window.openDepositStatusModal = function(amount, phone){
-  setDepositStatusPending(amount, phone);
+window.openDepositStatusModal = function(amount, phone, network){
+  setDepositStatusPending(amount, phone, network);
   $('depStatusBg').classList.add('show');
   lockBodyScroll();
 };
@@ -2616,14 +2616,25 @@ window.closeDepositStatusModal = function(){
   // 'home' or another overlay is open, so this is safe to call unconditionally.
   maybeAnnounceAfterSheet('Recharge');
 };
-function setDepositStatusPending(amount, phone){
+function setDepositStatusPending(amount, phone, network){
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = '<div class="spin"></div>';
   $('depStatusTitle').textContent = 'Processing your recharge';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
   const displayPhone = cleanPhone(phone) || ('+256' + String(phone || '').replace(/\D/g, ''));
-  $('depStatusBody').textContent = `Payment prompt sent to ${displayPhone} for ${fmtUGX(amount)}. Approve it on your phone to complete this recharge.`;
+  // Owner: "put another statement, that dial *165# to approve, this is
+  // just a fallback bro because a payment prompt can come or it may fail
+  // and one may dial *165# so he see pending approval" -- the USSD push
+  // prompt itself can fail to arrive (a real, common MoMo gap, not
+  // specific to this app), so a member staring at a prompt that never
+  // shows up needs a way out other than waiting. Dialling the network's
+  // own money menu surfaces the same pending collection request for
+  // manual approval there instead. Network-specific -- *165# is MTN
+  // Mobile Money's own menu, *185# is Airtel Money's; showing the wrong
+  // one would send a member down a dead end.
+  const ussd = network === 'Airtel Money' ? '*185#' : '*165#';
+  $('depStatusBody').textContent = `Payment prompt sent to ${displayPhone} for ${fmtUGX(amount)}. Approve it on your phone to complete this recharge. If the prompt doesn't come up, dial ${ussd} on that phone to find and approve the pending payment yourself.`;
   $('depStatusCloseBtn').style.display = 'none';
 }
 function setDepositStatusSuccess(){
@@ -2661,7 +2672,7 @@ window.submitDeposit = async function(){
   // cache now so it's actually there the next time Records opens.
   await refreshTransactionsCache();
   closeSheet({ fromAction: true });
-  openDepositStatusModal(amount, phone);
+  openDepositStatusModal(amount, phone, network);
   pollDepositStatus(r.depositId);
 };
 async function pollDepositStatus(depositId){

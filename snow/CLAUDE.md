@@ -9558,6 +9558,45 @@ independent confirmation that the stored figures genuinely match the
 real ledger -- this round explains and surfaces the composition of the
 number, it does not itself re-verify the ledger the way that tool does.**
 
+## Round 144 (2026-09-04) — "Processing your recharge" now tells a member how to approve manually if the MoMo push prompt never arrives
+
+Owner: "also put another statement, that dial *165# to approve, this is
+just a fallback bro because a payment prompt can come or it may fail and
+one may dial *165# so he see pending approval." A real, common MoMo gap
+this app doesn't control -- MTN/Airtel's own push-prompt delivery can
+fail or arrive late, leaving a member staring at "Processing your
+recharge" with nothing to approve on their phone and no way out except
+waiting.
+
+**Network-specific, confirmed before hardcoding**: `*165#` is MTN Mobile
+Money's own menu (where a pending collection request also shows up for
+manual approval); Airtel Money's equivalent is `*185#`, not the same
+code (confirmed via web search before assuming they'd match -- showing
+the wrong network's USSD code would send a member down a dead end).
+`setDepositStatusPending()`/`openDepositStatusModal()` gained a `network`
+parameter (the deposit form already collects this via `$('depNetwork')`,
+just wasn't being threaded through to this specific dialog before);
+the pending-deposit message now ends with "If the prompt doesn't come
+up, dial *165# [or *185# for Airtel] on that phone to find and approve
+the pending payment yourself." Scoped to only this one dialog (the exact
+one in the owner's own screenshot) -- the automatic MarzPay deposit push
+flow; the manual SMS-forwarder deposit flow already has its own,
+different instructions and wasn't touched.
+
+**Verified with a real headless browser**: Playwright (same technique as
+Round 142's own check) driving the REAL obfuscated `user/index.html`
+served locally, calling `openDepositStatusModal()` directly for both
+networks -- 8/8: the original "payment prompt sent to X for Y" sentence
+with the real phone/amount is unchanged; MTN shows `*165#` and never
+`*185#`; Airtel shows `*185#` and never `*165#`; the fallback framing
+("if the prompt doesn't come up...") is present in both. `build-core.js`
+round-trips OK, `git diff --check` clean. This round only touched
+`user-src/original_module.js` (no `server.js`, no admin panel), so no
+backend regression suite re-run was needed. `user/sw.js` cache bumped
+`v96`→`v97`. **The user app changed -- auto-deploys on Render from this
+push; the owner should fully close and reopen the app once to pick up
+the bumped service-worker cache.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

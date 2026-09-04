@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'snow-shell-v96';
+const CACHE = 'snow-shell-v97';
 const VENDOR_CACHE = 'snow-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/badge.png', '/treasure-chest.png'];
 
