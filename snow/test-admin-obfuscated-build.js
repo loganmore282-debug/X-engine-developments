@@ -115,6 +115,10 @@ const routes = {
       referredBy: null, teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, checkinStreak: 3, status: 'active',
       hasPayoutPin: true, registrationDone: true },
     investments: [], transactions: [], withdrawals: [], bankAccounts: [], teamDeposits: 0,
+    deposits: [
+      { id: 'dep1', userId: 'u1', method: 'manual', network: 'MTN Mobile Money', assignedNumber: '+256770000001', senderPhone: '+256701112233', amount: 50000, status: 'matched', createdAt: new Date().toISOString() },
+      { id: 'dep2', userId: 'u1', provider: 'marzpay', phone: '+256709998877', amount: 30000, status: 'pending', createdAt: new Date().toISOString() },
+    ],
   },
   'POST /admin/user/reset-payout-pin': { status: 'success' },
   'POST /admin/user/reconcile-checkin': { status: 'success', before: { checkinStreak: 2 }, after: { checkinStreak: 3 }, changed: true, lastCheckin: '2026-08-26' },
@@ -431,6 +435,15 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     await sleep(150);
     const modalHtml = (doc.getElementById('modalRoot') || {}).innerHTML || '';
     if (!modalHtml.includes('abC123')) errors.push('Deposits: tapping the deposit row did not open the user-detail modal for its userId (fixture referralCode abC123 not found)');
+    // Owner: "l can see people's deposits in details such that l see the
+    // deposits they made and to which number and from which number at
+    // what time" -- the modal's own new Deposits section, built from the
+    // fixture's 2 deposits (one manual, one automatic).
+    if (!modalHtml.includes('Deposits (2)')) errors.push('User-detail modal: Deposits section count missing/wrong');
+    if (!modalHtml.includes('+256770000001')) errors.push('User-detail modal: manual deposit\'s "Paid to" (assignedNumber) not shown');
+    if (!modalHtml.includes('+256701112233')) errors.push('User-detail modal: manual deposit\'s "Paid from" (senderPhone) not shown');
+    if (!modalHtml.includes('Automatic (MarzPay)')) errors.push('User-detail modal: automatic deposit\'s "Paid to" should read "Automatic (MarzPay)" (no real admin-side number exists for that path)');
+    if (!modalHtml.includes('+256709998877')) errors.push('User-detail modal: automatic deposit\'s "Paid from" (phone) not shown');
     const modalCloseBtn = doc.querySelector('.modal-close');
     if (modalCloseBtn) modalCloseBtn.click();
   }

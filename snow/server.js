@@ -5172,11 +5172,19 @@ app.post('/admin/user/detail', async (req, res) => {
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const [uSnap, invSnap, txSnap, witSnap, bankSnap, teamDeposits] = await Promise.all([
+    const [uSnap, invSnap, txSnap, witSnap, depSnap, bankSnap, teamDeposits] = await Promise.all([
       db.collection('users').doc(userId).get(),
       db.collection('investments').where('userId', '==', userId).limit(200).get(),
       db.collection('transactions').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(200).get(),
       db.collection('withdrawals').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get(),
+      // Owner: "l can see people's deposits in details such that l see the
+      // deposits they made and to which number and from which number at
+      // what time" -- the generic `transactions` ledger row for a deposit
+      // only ever carries amount/status/ref, never the actual
+      // assignedNumber/senderPhone/network a real deposit order carries.
+      // That detail only lives on the pendingDeposits doc itself, which
+      // this endpoint never fetched per-user before.
+      db.collection('pendingDeposits').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get(),
       db.collection('bankAccounts').where('userId', '==', userId).get(),
       wholeTeamDeposits(userId),
     ]);
@@ -5189,6 +5197,7 @@ app.post('/admin/user/detail', async (req, res) => {
       investments: invSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       transactions: txSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       withdrawals: witSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+      deposits: depSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       // Codex-caught real bug: these two were never sent, so the admin
       // modal always showed "UGX 0" / "None saved" regardless of reality.
       bankAccounts: bankSnap.docs.map(d => ({ id: d.id, ...d.data() })),

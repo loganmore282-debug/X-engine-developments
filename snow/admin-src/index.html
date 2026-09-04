@@ -1061,6 +1061,23 @@ async function openUser(uid){
       <div style="flex:2"><input id="pinNew" type="text" inputmode="numeric" maxlength="5" placeholder="New 5-digit PIN"></div>
       <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
     </div>`:''}
+    <h4 style="margin:18px 0 8px;font-size:14px">Deposits (${(r.deposits||[]).length})</h4>
+    ${(r.deposits||[]).length?`<div class="table-scroll" style="max-height:230px"><table><thead><tr><th>When</th><th>Amount</th><th>Paid to</th><th>Paid from</th><th>Status</th></tr></thead><tbody>
+      ${r.deposits.map(d=>{
+        // Owner: "l can see people's deposits in details such that l see
+        // the deposits they made and to which number and from which
+        // number at what time" -- "Paid to" only has real meaning for a
+        // manual order (one of the admin's own numbers, assignedNumber);
+        // an automatic (MarzPay/LipaPay) deposit never has a specific
+        // admin-side number of its own -- it's collected straight off the
+        // member's own phone into the payment gateway -- so that's
+        // labelled honestly instead of showing a blank or a made-up value.
+        const paidTo = d.method==='manual' ? esc(d.assignedNumber||'Not set')
+          : `Automatic (${d.provider==='lipapay'?'LipaPay':'MarzPay'})`;
+        const paidFrom = esc(d.senderPhone||d.phone||'Not set');
+        return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
+      }).join('')}
+    </tbody></table></div>`:'<p class="muted" style="margin:0">No deposits yet.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
     <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td>${spinnerHtml()}</td></tr></tbody></table></div>`);
   const tx=(r.transactions||[]).slice(0,25);

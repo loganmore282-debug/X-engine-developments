@@ -8725,6 +8725,56 @@ cache bumped `v34`→`v35`. **`admin-src/index.html` changed, no
 `server.js` changes -- Render will redeploy the static admin site from
 this push; no backend redeploy needed.**
 
+## Round 134 (2026-09-03) — the user-detail modal (opened from any tab, per Round 133) now shows that member's own deposit history: amount, paid-to number, paid-from number, and time
+
+Owner: "make when l can see people's deposits in details such that l see
+the deposits they made and to which number and from which number at what
+time." The Deposits TAB's own list (Round 128) already shows "Paid from"
+per row across ALL members at once -- this is different: a single
+member's own full deposit history, in the SAME per-user detail modal
+Round 133 just made reachable from a deposit/withdrawal row, not the
+Deposits tab's own flat list.
+
+**`server.js`**: `/admin/user/detail` never fetched from
+`pendingDeposits` at all -- the generic `transactions` ledger row for a
+deposit only ever carries amount/status/ref, never the real
+`assignedNumber`/`senderPhone`/`network` a deposit ORDER carries (that
+detail only lives on the `pendingDeposits` doc itself). Added a
+`db.collection('pendingDeposits').where('userId','==',userId)
+.orderBy('createdAt','desc').limit(100).get()` query to the existing
+`Promise.all` (an index for this exact shape, `{userId:1,createdAt:-1}`,
+already existed from Round 104 -- no new index needed) and a `deposits`
+field in the response.
+
+**`admin-src/index.html`**: `openUser()` gained a new "Deposits (N)"
+table section (same `table-scroll` style as "Recent transactions"),
+listing each deposit's time, amount, "Paid to," "Paid from," and status.
+**"Paid to" only has real meaning for a manual order** -- one of the
+admin's own saved numbers (`assignedNumber`); an automatic (MarzPay/
+LipaPay) deposit is collected straight off the member's own phone
+directly into the payment gateway and has no specific admin-side number
+of its own, so that case reads `Automatic (MarzPay)`/`Automatic
+(LipaPay)` instead of a blank cell or an invented value. "Paid from"
+reads `senderPhone||phone`, the same field-precedence the Deposits tab's
+own "Paid from" column (Round 128) already established.
+
+**Verified**: `node --check server.js` clean, `node build-admin.js`
+clean round-trip, a boot smoke test (a real self-signed RSA dummy
+Firebase service-account PEM + an unreachable `MONGODB_URI`) fails only
+at the expected Mongo-connect step, `git diff --check` clean.
+`test-admin-obfuscated-build.js` (the real obfuscated admin build)
+extended: the `/admin/user/detail` fixture now carries 2 deposits (one
+manual, one automatic); clicking the Deposits tab's own dep1 row (Round
+133's own feature) opens the user-detail modal and confirms it shows
+"Deposits (2)," the manual deposit's real `assignedNumber` under "Paid
+to" and `senderPhone` under "Paid from," and the automatic deposit
+correctly reading "Automatic (MarzPay)" for "Paid to" with its own
+`phone` under "Paid from" -- 0 errors across all 12 tabs, all 5 new
+assertions passing against the real obfuscated build. Admin cache bumped
+`v35`→`v36`. **`server.js` and `admin-src/index.html` changed -- Render
+should auto-deploy this push (server.js) and the admin build needs no
+separate deploy step beyond the push (static site).**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
