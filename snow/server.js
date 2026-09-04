@@ -5243,8 +5243,19 @@ app.get('/admin/promocodes/list', async (req, res) => {
       // A code generated before this round only ever has the old, single
       // `reward` field -- read as a degenerate range (min===max) so the
       // admin UI needs no legacy-shape branch at all.
+      const uses = (c.usedBy || []).length;
+      // Owner: "showing total reward claimed on each treasure." Real
+      // per-claim rolled amounts, summed -- `claimedRewards` is written
+      // atomically alongside `usedBy` at claim time (see /redeem), so it
+      // always has exactly one entry per real claim, in sync with `uses`.
+      // A code from before random rewards has no `claimedRewards` map at
+      // all -- every one of its claims paid the exact same fixed `reward`,
+      // so `reward * uses` is exactly right, not an approximation.
+      const totalClaimed = c.claimedRewards
+        ? round2(Object.values(c.claimedRewards).reduce((s, r) => s + (Number(r) || 0), 0))
+        : round2((Number(c.reward) || 0) * uses);
       return { id: d.id, code: c.code, minReward: c.minReward ?? c.reward, maxReward: c.maxReward ?? c.reward,
-        maxUses: c.maxUses || null, uses: (c.usedBy || []).length,
+        maxUses: c.maxUses || null, uses, totalClaimed,
         active: c.active !== false, expiresAt: c.expiresAt || null, createdAt: c.createdAt || null };
     }) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }

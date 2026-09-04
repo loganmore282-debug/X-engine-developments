@@ -1679,18 +1679,20 @@ async function renderPromoCodes(){
       <button class="btn block" id="genBtn">Generate codes</button>
       <div id="genOut"></div>
     </div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward range</th><th>Used</th><th>Status</th><th>Expires</th><th>Created</th><th></th></tr></thead>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward range</th><th>Used</th><th>Total claimed</th><th>Status</th><th>Expires</th><th>Created</th><th></th></tr></thead>
     <tbody>${list.length?list.map(c=>{
       const expiredNow = c.expiresAt && tsMs(c.expiresAt) < Date.now();
       const statusLabel = expiredNow ? 'Expired' : (c.active!==false?'Active':'Off');
       const statusClass = expiredNow ? 't-bad' : (c.active!==false?'t-ok':'t-mut');
       const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward) : `${ugx(c.minReward)} – ${ugx(c.maxReward)}`;
+      const claimedCol = c.uses ? `<b>${ugx(c.totalClaimed)}</b>` : '<span class="muted">Not claimed yet</span>';
       return `<tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${rewardCol}</td><td>${c.uses||0} / ${c.maxUses||'∞'}</td>
+      <td>${claimedCol}</td>
       <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
       <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>
       <td>${fdate(c.createdAt)}</td>
       <td>${(c.active!==false&&!expiredNow)?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`;
-    }).join(''):'<tr><td colspan="7" class="empty">No codes yet</td></tr>'}
+    }).join(''):'<tr><td colspan="8" class="empty">No codes yet</td></tr>'}
     </tbody></table></div>`;
   $('genBtn').addEventListener('click', async()=>{
     const minReward=parseFloat($('cMinReward').value||0), maxReward=parseFloat($('cMaxReward').value||0);

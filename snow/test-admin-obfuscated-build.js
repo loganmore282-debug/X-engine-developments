@@ -90,7 +90,8 @@ const routes = {
     { key: 'qing-shuang', name: 'Snow Qing Shuang', price: 30000, cycle: 150, expectedReturn: 900000, active: true },
   ] },
   'GET /admin/promocodes/list': { status: 'success', codes: [
-    { id: 'c1', code: 'AB12CDEF', minReward: 100.5, maxReward: 500.5, uses: 0, maxUses: 1, active: true, createdAt: new Date().toISOString() },
+    { id: 'c1', code: 'AB12CDEF', minReward: 100.5, maxReward: 500.5, uses: 0, totalClaimed: 0, maxUses: 1, active: true, createdAt: new Date().toISOString() },
+    { id: 'c2', code: 'ZZ99CLAIMED', minReward: 100, maxReward: 500, uses: 3, totalClaimed: 812.77, maxUses: null, active: true, createdAt: new Date().toISOString() },
   ] },
   'POST /admin/user/referral-chain': { status: 'success',
     user: { id: 'u1', phone: '+256700000001', referralCode: 'abC123', status: 'active', totalInvested: 30000 },
@@ -312,6 +313,11 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (!codesHtml.includes('Expires after (seconds')) errors.push('Gift codes: seconds-based expiry field missing');
   if (!codesHtml.includes('100.50')) errors.push('Gift codes: existing code\'s reward range (min, with cents) missing');
   if (!codesHtml.includes('500.50')) errors.push('Gift codes: existing code\'s reward range (max, with cents) missing');
+  // Round 139: owner asked for the total actually claimed on each code,
+  // shown alongside it in the panel.
+  if (!codesHtml.includes('Total claimed')) errors.push('Gift codes: Total claimed column header missing');
+  if (!codesHtml.includes('Not claimed yet')) errors.push('Gift codes: unclaimed code should say "Not claimed yet", not a blank/zero cell');
+  if (!codesHtml.includes('812.77')) errors.push('Gift codes: a claimed code\'s real total-claimed amount is missing');
   const cMinReward = doc.getElementById('cMinReward'), cMaxReward = doc.getElementById('cMaxReward');
   if (cMinReward && cMaxReward) {
     cMinReward.value = '100'; cMaxReward.value = '500';

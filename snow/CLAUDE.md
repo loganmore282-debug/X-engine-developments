@@ -9146,6 +9146,80 @@ Round 104 (11/11), Round 135 (11/11), Round 136 (37/37), and
 cache bump needed. **`server.js` changed -- Render auto-deploys it on its
 own.**
 
+## Round 139 (2026-09-04) — Gift Codes tab now shows total reward actually claimed on each code, and fixes a real gap in this project's own mock-DB test tooling caught while verifying it
+
+Owner: "also make this aside on every gift code generated, showing total
+reward claimed on each treasure, in admin panel."
+
+**The feature**: `/admin/promocodes/list` now sums the real, per-claim
+rolled amounts for each code and returns `totalClaimed`. For a code with
+random rewards (Round 137), this reads `claimedRewards` (the per-user map
+`/redeem` already writes atomically at claim time) and sums its values --
+the REAL amount each claimant actually got, not `uses * maxReward` or any
+other approximation. A code from before Round 137 (bare `reward` field,
+no `claimedRewards` map at all) falls back to `reward * uses` -- exactly
+right, not an approximation, since every one of ITS claims paid the
+identical fixed amount. Admin panel: a new "Total claimed" column next to
+"Used", showing `ugx(c.totalClaimed)` in bold, or "Not claimed yet" (not
+a bare "UGX 0", which could read as "broken") for a code nobody has
+claimed.
+
+**A real gap found and fixed while verifying this, in this project's own
+test tooling, not the app**: `/redeem`'s first-claim write
+(`codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId),
+['claimedRewards.' + userId]: reward })`, from Round 137) relies on real
+MongoDB's standard dot-notation `$set` behavior -- a dotted string key
+like `'claimedRewards.member0'` resolves to a NESTED field path,
+creating the `claimedRewards` object if it doesn't exist yet. This is
+correct against a real MongoDB server (well-documented, standard
+behavior `db.js`'s compat layer just passes straight through to the
+native driver). But this project's own `mock-db.js` -- the in-memory
+Mongo-compatible mock every one of this session's test harnesses boots
+the REAL `server.js` against -- had never needed to handle a dotted-path
+key before (Round 137's `claimedRewards.<userId>` write is the first one
+in this codebase), and its `applyUpdate()` did a naive `doc[k] = v`,
+which for a dotted key creates a literal FLAT property named
+`"claimedRewards.member0"` instead of a real nested object. Every
+earlier Round 137/138 test that touched `claimedRewards` happened to
+hand-seed it directly as a real nested object via `.set()` (testing the
+RESUME/read side only), so this gap was invisible until this round's new
+`totalClaimed` check -- the first test to read back a `claimedRewards`
+value that the app itself had WRITTEN via the real dotted-path
+`.update()` call -- caught it immediately (`totalClaimed: 0` on codes
+with real claims). Fixed `mock-db.js`'s `applyUpdate()` (and the
+matching delete path, for the maxUses-rollback's `FieldValue.delete()`
+on the same dotted key) to resolve/create nested paths the way real
+Mongo does, via new `getPath`/`setPath`/`deletePath` helpers. This is a
+test-tooling fix, not a `server.js` change -- the app's own dotted-path
+write was correct all along against a real MongoDB server; the mock just
+couldn't prove it until now. `mock-db.js` lives in the scratchpad, not
+this repo, so nothing here needed committing for it, but flagging it here
+since this mock is reused across nearly every round's own verification
+harness in this session -- worth remembering that a NEW Mongo operator
+shape (a dotted key, an operator this mock hasn't seen before) needs
+checking against the mock's own fidelity, not just assumed to work.
+
+**Verified**: `node --check server.js` clean, `build-admin.js` round-trip
+OK, `git diff --check` clean, boot smoke test clean.
+`test-admin-obfuscated-build.js` extended against the REAL obfuscated
+build: "Total claimed" column header present, an unclaimed code shows
+"Not claimed yet" (not a blank/zero cell), a claimed code's real total
+(812.77, with cents) renders correctly -- 0 errors across all 12 tabs.
+`round137-giftcode-random-reward-test.js` extended to 32/32 (was 28/28):
+the random-range code's `totalClaimed` equals the exact sum of the 10
+real rolled rewards; the legacy code's `totalClaimed` is `reward*uses`;
+a fixed-reward code with exactly 2 real claims sums to exactly double;
+a flash code claimed once before expiring shows only that one real
+claim, never a phantom second entry for the later, correctly-refused
+expired attempt. Re-ran Round 104 (11/11), Round 135 (11/11), Round 136
+(37/37), and `test-momo-sms-parsers.js` (70/70) with the fixed mock --
+0 regressions, confirming the mock fix is purely additive (a
+non-dotted key still behaves identically to before). `admin/sw.js`
+cache bumped `v38`→`v39`. **`server.js` and the admin panel both
+changed -- both auto-deploy on Render from this push per `render.yaml`;
+the owner may want to fully close and reopen the admin panel once to
+pick up the bumped service-worker cache.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
