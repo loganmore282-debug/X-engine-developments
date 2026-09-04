@@ -1103,6 +1103,22 @@ async function openUser(uid){
   const r = await api('/admin/user/detail',{ userId:uid });
   if(r.status!=='success'){ toast(r.message||'Not found','err'); return; }
   const u=r.user;
+  // Owner: "money/unknown money is continuing to pile up... a very bad
+  // bug bro." Root cause traced to a genuinely misleading label, not a
+  // money bug: "Cashback earned" (totalEarned) is actually cashback PLUS
+  // referral commission PLUS checkin/gift-code/Task-Center/Mission-Center
+  // bonuses all folded into one number, shown directly above a SEPARATE
+  // "Team commission" line that looks like an independent pool of money
+  // stacking on top of it -- it's actually already counted INSIDE it. A
+  // member with a large team (hundreds of referrals) can easily earn six
+  // figures in commission alone, which is completely legitimate but looks
+  // like unexplained inflation without a breakdown. Relabelled + a real
+  // per-source breakdown (server-computed, uncapped -- see
+  // earnedBreakdown's own comment in /admin/user/detail) so every
+  // shilling in the total is traceable to a named source, not one opaque
+  // number.
+  const eb = r.earnedBreakdown || {};
+  const mission = (eb.mission_salary||0) + (eb.mission_deposit_reward||0);
   openModal(`
     <h3>${esc(u.phone||'')}</h3>
     <div class="muted" style="margin-bottom:10px">Referral code: ${esc(u.referralCode||'Not set')}</div>
@@ -1110,8 +1126,9 @@ async function openUser(uid){
     <div class="kv"><span class="k">Deposited</span><span>${ugx(u.totalDeposited)}</span></div>
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
     <div class="kv"><span class="k">Withdrawn</span><span>${ugx(u.totalWithdrawn)}</span></div>
-    <div class="kv"><span class="k">Cashback earned</span><span>${ugx(u.totalEarned)}</span></div>
-    <div class="kv"><span class="k">Team commission</span><span>${ugx(u.teamCommission)}</span></div>
+    <div class="kv"><span class="k">Total earned (all sources)</span><span>${ugx(u.totalEarned)}</span></div>
+    <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Check-in ${ugx(eb.checkin)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Task Center ${ugx(eb.team_reward)} &middot; Mission Center ${ugx(mission)}</div>
+    <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
     <div class="kv"><span class="k">Team's total deposits</span><b>${ugx(r.teamDeposits)}</b></div>

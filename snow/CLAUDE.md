@@ -9471,6 +9471,93 @@ the admin panel changed -- both auto-deploy on Render from this push;
 the owner should fully close and reopen both apps once to pick up the
 bumped service-worker caches.**
 
+## Round 143 (2026-09-04) — "money piling up unknowingly" investigated: a real, misleading admin-panel label, not a money bug -- now shows exactly which source earned what
+
+Owner, alarmed, with two screenshots: their own app's My Products showed
+"UGX 42,000 earned so far," but the admin panel's user-detail modal for
+the same account showed "Cashback earned: UGX 303,173.68" and "Team
+commission: UGX 192,000" as two separate-looking lines -- "money/unknown
+money is continuing to pile up... a very bad bug bro, money is just
+increasing unknowingly."
+
+**Investigated, not assumed.** Traced every figure by hand against the
+account's own real numbers (626/116/24-strong team, 260,000 deposited,
+30,000 invested, 7 days into a 6,000/day Qing Shuang plan). Two real,
+separate things were going on, NEITHER of which is a money bug:
+
+1. **My Products' "UGX 42,000 earned so far" and the admin panel's
+   "Cashback earned" are two DIFFERENT, differently-scoped numbers that
+   merely share a similar name.** My Products' figure is `paidOut`
+   summed across ONLY that member's currently-active investment plans
+   (this was already known and documented from an earlier round's own
+   investigation) -- 7 days × 6,000/day = exactly 42,000, correct. The
+   admin panel's `totalEarned` field (labelled "Cashback earned") is a
+   completely different, much broader figure: cashback PLUS referral
+   commission PLUS checkin bonuses PLUS gift-code rewards PLUS Task
+   Center PLUS Mission Center, every earning source a member has EVER
+   had, summed for their ENTIRE account lifetime -- confirmed by reading
+   `computeUserRealTotals()`'s own definition
+   (`EARNING_TX_TYPES`, extracted as a new shared constant this round --
+   see below). These were never meant to be the same number.
+2. **"Team commission: UGX 192,000" was displayed as if it were a
+   SEPARATE pool sitting on top of "Cashback earned," when it is actually
+   already counted INSIDE that total** -- the admin UI showed two big
+   numbers side by side with no indication one contains the other, which
+   reads exactly like unexplained double-counted money even though the
+   underlying `walletBalance`/`totalEarned` arithmetic was never actually
+   wrong. A 626-person direct team earning 192,000 in commission alone is
+   completely ordinary at that scale, not evidence of a bug.
+
+**The real fix: make the total legible, not opaque.** `/admin/user/detail`
+now also returns `earnedBreakdown` -- a real, server-computed sum per
+earning-transaction-type (cashback / commission / team_reward / promocode
+/ checkin / mission_salary / mission_deposit_reward), queried UNCAPPED
+(the existing `transactions` array returned by this same endpoint is
+capped at 200 for the Recent Transactions list's own display purposes --
+a 626-person-team account can easily have far more than 200
+commission-crediting rows, so a breakdown computed from that capped list
+would silently under-count and not add up to the real total, exactly the
+kind of confusion this exists to remove). `EARNING_TX_TYPES` extracted as
+one shared top-level constant (previously duplicated as an identical
+literal array in `computeUserRealTotals()` and `computeRealTotals()` --
+now both, plus the new breakdown, read from the same single source of
+truth, so they can never silently drift apart from each other about what
+"earned" means). Admin panel: "Cashback earned" relabelled to "Total
+earned (all sources)", with a new breakdown line directly underneath
+showing exactly how much came from investment cashback vs referral
+commission vs check-in vs gift codes vs Task Center vs Mission Center,
+and "Team commission" now carries an explicit "(already included above)"
+note.
+
+**Verified, not just reasoned about**: `node --check server.js` clean,
+`build-admin.js` round-trip OK, `git diff --check` clean, boot smoke test
+clean. New standalone harness (`round143-earned-breakdown-test.js`, same
+real-`server.js`-against-an-in-memory-mock-DB technique as every earlier
+round) seeds one real transaction of EVERY earning type (including a
+decimal gift-code amount, 317.42, to confirm Round 137's decimal rewards
+survive the breakdown correctly) plus deposit/investment/withdrawal
+transactions that must be EXCLUDED -- 13/13: every bucket sums exactly
+right, the 7 buckets sum to EXACTLY the same figure as the stored
+`totalEarned` already shown above them (260,317.42, proving this is a
+real decomposition of the existing number, not a new, possibly-
+inconsistent one), deposit/investment/withdrawal transactions are
+correctly excluded from every bucket, and a brand-new user with zero
+transactions gets real zeros in every bucket, never `undefined`/`NaN`.
+`test-admin-obfuscated-build.js` extended against the REAL obfuscated
+build: the old "Cashback earned" label is gone, "Total earned (all
+sources)" and the "(already included above)" note are present, and each
+breakdown line renders with its real amount -- 0 errors across all 12
+tabs. Re-ran Round 104 (11/11), Round 135 (11/11), Round 136 (37/37), the
+gift-code suite (32/32), Round 140's MarzPay-balance suite (12/12), Round
+141's withdrawal-SMS suite (16/16), and `test-momo-sms-parsers.js`
+(70/70) -- 0 regressions. `admin/sw.js` cache bumped `v41`→`v42`.
+**`server.js` and the admin panel both changed -- both auto-deploy on
+Render from this push; the owner should still run the admin panel's own
+"Integrity Audit" tool (Users tab) on this specific account for
+independent confirmation that the stored figures genuinely match the
+real ledger -- this round explains and surfaces the composition of the
+number, it does not itself re-verify the ledger the way that tool does.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

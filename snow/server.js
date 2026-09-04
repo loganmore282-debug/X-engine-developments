@@ -5362,7 +5362,7 @@ app.post('/admin/user/detail', async (req, res) => {
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const [uSnap, invSnap, txSnap, witSnap, depSnap, bankSnap, teamDeposits] = await Promise.all([
+    const [uSnap, invSnap, txSnap, witSnap, depSnap, bankSnap, teamDeposits, earnedTxSnap] = await Promise.all([
       db.collection('users').doc(userId).get(),
       db.collection('investments').where('userId', '==', userId).limit(200).get(),
       db.collection('transactions').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(200).get(),
@@ -5377,11 +5377,34 @@ app.post('/admin/user/detail', async (req, res) => {
       db.collection('pendingDeposits').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get(),
       db.collection('bankAccounts').where('userId', '==', userId).get(),
       wholeTeamDeposits(userId),
+      // Owner: "money/unknown money is continuing to pile up... a very bad
+      // bug bro" -- traced to the admin panel's "Cashback earned" field
+      // (totalEarned) being a genuinely misleading label: it's cashback
+      // PLUS referral commission PLUS checkin/gift-code/Task-Center/
+      // Mission-Center bonuses, all folded into one number, shown right
+      // above a SEPARATE "Team commission" figure that looks like an
+      // independent pool but is actually already counted INSIDE it -- a
+      // real explanation for why the total can look alarmingly large with
+      // no obvious single source. Not a money bug (see the CLAUDE.md round
+      // entry for this fix); a real visibility gap. Deliberately a
+      // SEPARATE, uncapped-at-200 query (the `txSnap` above is capped for
+      // the Recent Transactions list's own display purposes) -- a member
+      // with a large team can have far more than 200 commission-crediting
+      // rows, and a breakdown computed from a truncated list would
+      // silently under-count and not add up to the real total shown above
+      // it, which is exactly the kind of confusion this exists to remove.
+      db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     // transactionPinHash never leaves this server, even to an admin --
     // hasPayoutPin is the boolean the admin UI actually needs.
     const { transactionPinHash, ...userSafe } = uSnap.data();
+    const earnedBreakdown = {};
+    EARNING_TX_TYPES.forEach(t => { earnedBreakdown[t] = 0; });
+    earnedTxSnap.forEach(d => {
+      const t = d.data();
+      if (EARNING_TX_TYPES.includes(t.type)) earnedBreakdown[t.type] += finiteMoney(t.amount);
+    });
     res.json({
       status: 'success', user: { id: uSnap.id, ...userSafe, hasPayoutPin: !!transactionPinHash },
       investments: invSnap.docs.map(d => ({ id: d.id, ...d.data() })),
@@ -5391,7 +5414,7 @@ app.post('/admin/user/detail', async (req, res) => {
       // Codex-caught real bug: these two were never sent, so the admin
       // modal always showed "UGX 0" / "None saved" regardless of reality.
       bankAccounts: bankSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-      teamDeposits,
+      teamDeposits, earnedBreakdown,
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -6584,6 +6607,17 @@ app.get('/admin/integrity', async (req, res) => {
 // (same earning-type list, same admin_credit inclusion, same
 // totalWithdrawn-from-net-not-gross logic) or the two tools would
 // contradict each other about what "correct" means.
+// Every transaction type that counts toward totalEarned -- MUST stay in
+// lockstep across every place that decides what "earned" means
+// (computeUserRealTotals, computeRealTotals, and /admin/user/detail's own
+// earnedBreakdown below), or the admin panel could show a per-source
+// breakdown that doesn't actually add up to the "Cashback earned" total
+// sitting right above it. Named for what it actually is (every earning
+// source, not just investment cashback) since the admin UI's "Cashback
+// earned" label is a real misnomer -- this field is cashback PLUS
+// referral commission PLUS checkin/gift-code/Task-Center/Mission-Center
+// bonuses, all folded into one number.
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
@@ -6594,7 +6628,7 @@ async function computeUserRealTotals(userId) {
   txSnap.forEach(d => {
     const t = d.data();
     if (t.type === 'deposit' || t.type === 'admin_credit') deposited += finiteMoney(t.amount);
-    else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) earned += finiteMoney(t.amount);
+    else if (EARNING_TX_TYPES.includes(t.type)) earned += finiteMoney(t.amount);
   });
   let invested = 0;
   invSnap.forEach(d => { invested += finiteMoney(d.data().amount); });
@@ -6630,7 +6664,7 @@ async function computeRealTotals() {
     // here too, or a "Recalculate totals" run silently wipes it back to
     // zero — cashback/commission/team_reward (Task Center)/promocode
     // (gift codes)/checkin.
-    if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) row.earned += finiteMoney(t.amount);
+    if (EARNING_TX_TYPES.includes(t.type)) row.earned += finiteMoney(t.amount);
     if (t.type === 'checkin') (checkinTimestamps[t.userId] || (checkinTimestamps[t.userId] = new Set())).add(tsMillis(t.createdAt));
   });
   const invested = {};

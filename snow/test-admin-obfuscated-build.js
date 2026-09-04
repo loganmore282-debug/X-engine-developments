@@ -113,7 +113,7 @@ const routes = {
   ] },
   'POST /admin/user/detail': { status: 'success',
     user: { id: 'u1', phone: '+256700000001', publicId: '000001', referralCode: 'abC123', walletBalance: 10000,
-      totalDeposited: 30000, totalInvested: 30000, totalWithdrawn: 0, totalEarned: 5000, teamCommission: 0,
+      totalDeposited: 30000, totalInvested: 30000, totalWithdrawn: 0, totalEarned: 5000, teamCommission: 1500,
       referredBy: null, teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, checkinStreak: 3, status: 'active',
       hasPayoutPin: true, registrationDone: true },
     investments: [], transactions: [], withdrawals: [], bankAccounts: [], teamDeposits: 0,
@@ -121,6 +121,10 @@ const routes = {
       { id: 'dep1', userId: 'u1', method: 'manual', network: 'MTN Mobile Money', assignedNumber: '+256770000001', senderPhone: '+256701112233', amount: 50000, status: 'matched', createdAt: new Date().toISOString() },
       { id: 'dep2', userId: 'u1', provider: 'marzpay', phone: '+256709998877', amount: 30000, status: 'pending', createdAt: new Date().toISOString() },
     ],
+    // Round 143: real per-source breakdown of totalEarned (5000 = the
+    // sum of all 7 below), replacing the previously-opaque "Cashback
+    // earned" figure with a labeled composition.
+    earnedBreakdown: { cashback: 3000, commission: 1500, team_reward: 0, promocode: 0, checkin: 500, mission_salary: 0, mission_deposit_reward: 0 },
   },
   'POST /admin/user/reset-payout-pin': { status: 'success' },
   'POST /admin/user/reconcile-checkin': { status: 'success', before: { checkinStreak: 2 }, after: { checkinStreak: 3 }, changed: true, lastCheckin: '2026-08-26' },
@@ -360,6 +364,17 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   else {
     userRow.click();
     await sleep(250);
+    // Round 143: owner-reported "money piling up unknowingly" traced to a
+    // misleading "Cashback earned" label -- now relabelled with a real,
+    // server-computed per-source breakdown right underneath it.
+    const modalHtml = doc.getElementById('modalRoot').innerHTML;
+    if (!modalHtml.includes('Total earned (all sources)')) errors.push('User detail: relabelled "Total earned (all sources)" missing');
+    if (modalHtml.includes('Cashback earned')) errors.push('User detail: old misleading "Cashback earned" label still present');
+    if (!modalHtml.includes('already included above')) errors.push('User detail: Team commission is-already-included note missing');
+    if (!/Investment cashback[\s\S]{0,40}3,000/.test(modalHtml)) errors.push('User detail: cashback breakdown line/amount missing');
+    if (!/Referral commission[\s\S]{0,40}1,500/.test(modalHtml)) errors.push('User detail: commission breakdown line/amount missing');
+    if (!/Check-in[\s\S]{0,40}500/.test(modalHtml)) errors.push('User detail: check-in breakdown line/amount missing');
+    if (modalHtml.includes('NaN') || modalHtml.includes('undefined')) errors.push('User detail: NaN/undefined leaked into the earnings breakdown');
     const pinInput = doc.getElementById('pinNew');
     if (!pinInput) errors.push('pinNew input not found in user detail modal');
     else {
