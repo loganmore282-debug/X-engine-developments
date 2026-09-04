@@ -35,7 +35,13 @@ const routes = {
   ] },
   'GET /admin/users': { status: 'success', users: [
     { id: 'u1', phone: '+256700000001', publicId: '000001', referralCode: 'abC123', walletBalance: 10000, totalInvested: 30000, totalEarned: 5000, status: 'active' },
-  ], count: 1 },
+    // A root member with no referrer -- never appears in
+    // /admin/referrals/list's own rows (that list only carries people who
+    // WERE referred by someone), which is exactly the real gap Round 146's
+    // widened referral search closes: this user must still be findable by
+    // searching their own phone/code in the Referrals tab.
+    { id: 'r9', phone: '+256700000099', publicId: '000099', referralCode: 'root99', walletBalance: 0, totalInvested: 0, totalEarned: 0, status: 'active', referredBy: null, teamL1Count: 4, teamL2Count: 2, teamL3Count: 1 },
+  ], count: 2 },
   'POST /admin/deposits/list': { status: 'success', deposits: [
     { id: 'dep1', userId: 'u1', accountPhone: '+256700000001', phone: '+256709998877', method: 'automatic', amount: 30000, status: 'pending', ref: 'MZ001', createdAt: new Date().toISOString() },
     { id: 'dep2', userId: 'u1', accountPhone: '+256700000001', senderPhone: '+256701112233', method: 'manual', network: 'MTN Mobile Money', assignedNumber: '+256770000001', amount: 50000, status: 'review', reviewReason: 'Multiple pending orders matched this SMS (same number + amount)', ref: 'M001', createdAt: new Date().toISOString() },
@@ -261,6 +267,73 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     const content = doc.getElementById('content');
     const text = content ? content.textContent : '';
     console.log(`tab ${t}: content length ${text.length}, sample: ${JSON.stringify(text.slice(0, 60))}`);
+  }
+
+  // Round 146: owner asked to be able to search a phone number in the
+  // Referrals tab and see its team + total team deposits. The referral-
+  // relationship list alone (/admin/referrals/list) only ever lists
+  // people who WERE referred -- a root member with their own team (like
+  // the fixture's r9 above) never appears in it. The search must find
+  // ANY member, not just referred ones.
+  doc.querySelector('.tab[data-tab="referrals"]').click();
+  await sleep(300);
+  const refSearchInput = doc.getElementById('refSearch');
+  if (!refSearchInput) errors.push('Referrals: search input missing');
+  else {
+    // No search term -- unaffected, the original relationship table.
+    const unfilteredHtml = doc.getElementById('refTableWrap').innerHTML;
+    if (!unfilteredHtml.includes('+256700000001') || !unfilteredHtml.includes('Referred user'))
+      errors.push('Referrals: default (no-search) relationship table missing/wrong');
+    if (unfilteredHtml.includes('+256700000099'))
+      errors.push('Referrals: the root fixture user should not appear in the default relationship table (they were never referred)');
+
+    // Search by the ROOT user's own phone -- someone with no referrer at
+    // all, invisible to the old referred-only search.
+    refSearchInput.value = '256700000099';
+    refSearchInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await sleep(150);
+    const rootSearchHtml = doc.getElementById('refTableWrap').innerHTML;
+    if (!rootSearchHtml.includes('+256700000099')) errors.push('Referrals: searching a root (non-referred) member\'s phone found nothing');
+    if (!rootSearchHtml.includes('4 / 2 / 1')) errors.push('Referrals: search result did not show the matched member\'s real Team L1/L2/L3 counts');
+    const hintAfterSearch = (doc.getElementById('refSearchHint') || {}).textContent || '';
+    if (!/1 match/i.test(hintAfterSearch)) errors.push('Referrals: search hint did not report exactly 1 match');
+
+    // Search by REFERRAL CODE instead of phone -- must also work.
+    refSearchInput.value = 'root99';
+    refSearchInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await sleep(150);
+    const codeSearchHtml = doc.getElementById('refTableWrap').innerHTML;
+    if (!codeSearchHtml.includes('+256700000099')) errors.push('Referrals: searching by referral code found nothing');
+
+    // Clicking a search-result row opens the same user-detail modal that
+    // already shows Team L1/L2/L3, Team's total deposits, and the "View
+    // referral chain" button -- the actual feature this search exists for.
+    const resultRow = doc.querySelector('#refTableWrap tr[data-uid]');
+    if (!resultRow) errors.push('Referrals: no clickable row rendered for a real search match');
+    else {
+      resultRow.click();
+      await sleep(250);
+      const modalHtml = (doc.getElementById('modalRoot') || {}).innerHTML || '';
+      if (!modalHtml.includes("Team's total deposits")) errors.push('Referrals: clicking a search result did not open the user-detail modal (Team\'s total deposits missing)');
+      if (!modalHtml.includes('View referral chain')) errors.push('Referrals: user-detail modal opened from search is missing the View referral chain button');
+      const closeBtn = doc.querySelector('.modal-close');
+      if (closeBtn) closeBtn.click();
+      await sleep(100);
+    }
+
+    // A query matching nobody shows a clear empty state, not a blank table.
+    refSearchInput.value = 'zzz-no-such-member';
+    refSearchInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await sleep(150);
+    const noMatchHtml = doc.getElementById('refTableWrap').innerHTML;
+    if (!/no matching member/i.test(noMatchHtml)) errors.push('Referrals: an unmatched search should show a clear "no matching member" state');
+
+    // Clear the search back out for hygiene (doesn't affect later checks,
+    // but avoids leaving the tab in a searched state for anyone reading
+    // logs).
+    refSearchInput.value = '';
+    refSearchInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await sleep(100);
   }
 
   // Round 140: owner asked for MarzPay's own available balance on the

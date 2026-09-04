@@ -9783,6 +9783,54 @@ cache bumped `v98`→`v99`. **User-app-only change — Render redeploys
 `snow-app` on its own from this push; the owner should fully close and
 reopen the app once to pick up the bumped cache.**
 
+## Round 146 (2026-09-04) — Referrals tab search widened to find ANY member by phone or code, not just ones who were themselves referred
+
+Owner: "also make sure l can search for a number in referral section to
+see its team and its total deposits it made." The user-detail modal
+already showed exactly this (Team L1/L2/L3, "Team's total deposits", and
+a "View referral chain" button for the full upline/downline tree, all
+built in earlier rounds) -- the real gap was the search itself. The
+Referrals tab's `#refSearch` box only ever filtered `_refs`, the rows
+from `/admin/referrals/list` -- and that list, by its own nature, only
+ever contains people who WERE referred by someone (a referred user's own
+phone in one column, their referrer's CODE — never a phone — in the
+other). A root member with a large team of their own, exactly who an
+admin most wants to look up here, has no referrer and so never appeared
+in that list at all; searching by a REFERRER's own phone number never
+matched anything either, since only the referred person's phone was ever
+indexed.
+
+**Fixed by loading the full user list too** (`/admin/users`, the same
+endpoint the Users tab already uses) alongside the existing
+`/admin/referrals/list` call, and switching what the search box searches
+based on whether it holds a query: empty → the original referral-
+relationship table, unchanged; non-empty → matches ANY member by phone OR
+referral code against the full user list, showing Phone / Referral code /
+Team L1/L2/L3 / Status, with a live "N matches" hint. Clicking a result
+row (found or not) opens the exact same, already-existing `openUser()`
+modal every other admin table row already opens — no new modal, no new
+endpoint, since that modal already surfaces the actual "team + total
+deposits" the request was about.
+
+**Verified**: `node build-admin.js` clean round-trip, `git diff --check`
+clean (this round is `admin-src/`-only -- no `server.js`/`user-src`
+changes, since `/admin/users` and `/admin/referrals/list` already existed
+and already carried everything needed; no backend redeploy, no user-app
+cache bump). `test-admin-obfuscated-build.js` (the real obfuscated admin
+build) extended with a 2nd fixture user, a root member with no referrer
+and a real team (`teamL1Count:4, teamL2Count:2, teamL3Count:1`) who
+deliberately does NOT appear in the `/admin/referrals/list` fixture --
+0 errors across all 12 tabs, confirming: the default (no-search) table is
+unaffected and correctly excludes the root fixture user; searching that
+root member's own phone finds them with their real team counts shown;
+searching by their referral code also finds them; clicking a search
+result opens the real user-detail modal showing "Team's total deposits"
+and the "View referral chain" button; and a query matching nobody shows a
+clear "No matching member" state rather than a blank table. Admin cache
+bumped `v43`→`v44`. **`admin-src/index.html` changed, no `server.js`
+changes -- Render will redeploy the static admin site from this push; no
+backend redeploy needed.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -1889,10 +1889,28 @@ async function quietRefreshTransactions(){
 
 // ── REFERRALS ──
 let _refs=[];
+// Owner: "make sure l can search for a number in referral section to see
+// its team and its total deposits it made." The old search here only
+// matched against _refs -- rows from /admin/referrals/list, which only
+// ever lists people who WERE referred by someone (a referred user's own
+// phone in one column, their referrer's CODE, never a phone, in the
+// other). A root member with a big team of their own -- exactly who an
+// admin most wants to look up here -- has no referrer, so their phone
+// never appeared in that list at all, and searching by a REFERRER's own
+// number never matched anything either (only the referred person's phone
+// was ever indexed). Fixed by also loading the full user list (same one
+// the Users tab already uses) so a search here can find ANY member by
+// phone or referral code, not just ones who happen to appear as a "referred"
+// row -- clicking through still opens the existing user-detail modal,
+// which already shows "Team L1/L2/L3", "Team's total deposits" and a
+// "View referral chain" button (the actual team + deposits this feature
+// is about), so no new modal/endpoint was needed, only a wider search.
+let _refAllUsers = [];
 async function renderReferrals(){
-  const r = await api('/admin/referrals/list');
+  const [r, ru] = await Promise.all([api('/admin/referrals/list'), api('/admin/users')]);
   if(staleTab('referrals')) return;
   _refs = r.referrals||[];
+  _refAllUsers = ru.users||[];
   // Codex-caught real bug: the backend caps this list (a very generous
   // ceiling, not real pagination -- see its own comment) with no signal at
   // all when that ceiling is actually hit, so the tab could silently show
@@ -1901,23 +1919,37 @@ async function renderReferrals(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="refsCount">Referrals (${_refs.length}${r.truncated?'+':''})</h2></div>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_refs.length+' referrals only. The platform has more than this list can currently display.</div>':''}
-    <div class="panel-card" style="margin-bottom:12px"><input id="refSearch" placeholder="Search a phone number"></div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Referred user</th><th>Referrer's code</th><th>Invested</th><th>Status</th></tr></thead>
-    <tbody id="refRows"></tbody></table></div>`;
+    <div class="panel-card" style="margin-bottom:6px"><input id="refSearch" placeholder="Search any phone number or referral code"></div>
+    <p class="muted" id="refSearchHint" style="margin:0 0 12px">Find any member here -- tap the result to see their team size and their team's total deposits.</p>
+    <div id="refTableWrap"></div>`;
   $('refSearch').addEventListener('input', drawRefs);
   drawRefs();
 }
 function drawRefs(){
   const raw = ($('refSearch')?.value||'').trim().toLowerCase();
-  const list = raw ? _refs.filter(x => (x.phone||'').toLowerCase().includes(raw)) : _refs;
-  $('refRows').innerHTML = list.length?list.map(x=>`<tr class="clickable" data-uid="${esc(x.id)}"><td><b>${esc(x.phone||'')}</b></td><td>${esc(x.referrerCode||'None')}</td><td>${ugx(x.invested)}</td><td><span class="pill-tag ${x.status==='banned'?'t-bad':'t-ok'}">${x.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):`<tr><td colspan="4" class="empty">${raw?'No matching referrals':'No referrals yet'}</td></tr>`;
-  document.querySelectorAll('#refRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
+  const wrap = $('refTableWrap');
+  if (!wrap) return;
+  const hint = $('refSearchHint');
+  if (!raw) {
+    // No search term -- the original relationship table (who referred whom).
+    if (hint) hint.textContent = "Find any member here -- tap the result to see their team size and their team's total deposits.";
+    wrap.innerHTML = `<div class="panel-card table-scroll"><table><thead><tr><th>Referred user</th><th>Referrer's code</th><th>Invested</th><th>Status</th></tr></thead>
+      <tbody>${_refs.length?_refs.map(x=>`<tr class="clickable" data-uid="${esc(x.id)}"><td><b>${esc(x.phone||'')}</b></td><td>${esc(x.referrerCode||'None')}</td><td>${ugx(x.invested)}</td><td><span class="pill-tag ${x.status==='banned'?'t-bad':'t-ok'}">${x.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
+  } else {
+    // Searching -- match ANY member by phone or referral code, referred or not.
+    const matches = _refAllUsers.filter(u => (u.phone||'').toLowerCase().includes(raw) || (u.referralCode||'').toLowerCase().includes(raw));
+    if (hint) hint.textContent = `${matches.length} match${matches.length===1?'':'es'} -- tap one to see its team and total team deposits.`;
+    wrap.innerHTML = `<div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Team L1/L2/L3</th><th>Status</th></tr></thead>
+      <tbody>${matches.length?matches.map(u=>`<tr class="clickable" data-uid="${esc(u.id)}"><td><b>${esc(u.phone||'')}</b></td><td>${esc(u.referralCode||'Not set')}</td><td>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</td><td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No matching member</td></tr>'}</tbody></table></div>`;
+  }
+  document.querySelectorAll('#refTableWrap tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 // Live-refresh counterpart to renderReferrals() -- see quietRefreshUsers().
 async function quietRefreshReferrals(){
-  const r = await api('/admin/referrals/list');
-  if(staleTab('referrals') || !$('refRows')) return;
+  const [r, ru] = await Promise.all([api('/admin/referrals/list'), api('/admin/users')]);
+  if(staleTab('referrals') || !$('refTableWrap')) return;
   _refs = r.referrals||[];
+  _refAllUsers = ru.users||[];
   const h = $('refsCount'); if(h) h.textContent = `Referrals (${_refs.length})`;
   drawRefs();
 }
