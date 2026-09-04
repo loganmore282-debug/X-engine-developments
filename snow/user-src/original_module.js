@@ -101,7 +101,17 @@ function accountWaveFull(){
 }
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
 
-function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-UG'); }
+// Every money amount elsewhere is always a whole shilling -- only a
+// gift-code reward can ever carry cents (Round 137's randomized rewards,
+// e.g. 123.39), so this used to Math.round() them away entirely before
+// display. Now only shows decimals on a value that actually has them --
+// everything else (deposits, withdrawals, prices, cashback) keeps its old,
+// clean whole-number look with no changes needed at any call site.
+function fmtUGX(n){
+  const v = Number(n)||0;
+  const hasCents = Math.round(v*100)%100 !== 0;
+  return 'UGX ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
+}
 // subagent-audit-caught: the deposit/withdraw amount fields have no
 // oninput sanitizer, and every amount the app itself shows (quick-amount
 // chips, "min UGX 30,000" hints) is comma-formatted via fmtUGX() -- so a

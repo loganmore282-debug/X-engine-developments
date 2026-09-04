@@ -8954,6 +8954,135 @@ bumped `v36`→`v37`. **`server.js` and the admin panel (`admin/index.html`,
 both on its own; the owner may still need to fully close and reopen the
 admin panel once to pick up the bumped service-worker cache.**
 
+## Round 137 (2026-09-04) — gift codes now pay a genuinely random reward per claim (admin sets a min/max range, not one fixed amount), with real 2-decimal precision, plus expiry settable in seconds
+
+Owner: "make when gift codes are randomly claimed no fixed claiming so
+user randomly gets rewards, also this is governed by setting of minimum
+reward and maximum reward, so no more fixed rewards, also introduce
+decimal places in account balance or earnings, so in treasure codes there
+are also decimals i.e. you can set 100.00ugx to 500.00ugx so server
+randomly generates rewards to user as treasure code reward one can get
+123.39ugx another can get 234.89ugx, also make when I can set treasure
+code to expire in given seconds." Three real, related changes to gift
+(treasure) codes -- random per-claim reward, decimal money, seconds-level
+expiry -- all touching the same feature, done together.
+
+**1. No more fixed reward -- a code now carries a min/max range.**
+`promoCodes` documents used to store one `reward` field, paid identically
+to every claimant. Replaced with `minReward`/`maxReward`; `/redeem` rolls
+a genuinely random amount for EACH claim, uniformly at cent (2-decimal)
+granularity via `crypto.randomInt` over the range converted to cents
+(`crypto.randomInt(minCents, maxCents+1) / 100` -- this codebase's
+established randomness convention, already used for referral codes and
+manual-number shuffling). Setting `minReward === maxReward` still pays
+that one exact amount to everyone, so an admin who actually wants a fixed
+reward isn't worse off. **Legacy codes generated before this round** (only
+have the old bare `reward` field) are read as a zero-width range
+(`minReward ?? reward`, `maxReward ?? reward`) everywhere the server
+reads a code -- no migration needed, no special-casing in either
+frontend, they just keep paying their original fixed amount forever.
+
+**Retry-safety, the part that needed real care**: the existing
+CLAIM-BEFORE-CREDIT design (claim the code in `usedBy` first, credit the
+wallet second, so a crash between those two steps can be safely resumed
+without double-crediting) assumed the reward was a fixed, code-level
+constant -- reading `cd.reward` fresh on a resume was always correct
+because it never changed. With a per-claim RANDOM reward, a resumed
+request re-reading `cd.reward` would roll a brand-new random amount,
+which could differ from whatever amount the client already saw in the
+first (crashed) attempt's response, or from what any other observer of
+that transaction expects. Fixed by rolling the reward and claiming the
+code in ONE atomic write: `codeDoc.ref.update({ usedBy:
+FieldValue.arrayUnion(userId), ['claimedRewards.' + userId]: reward })`
+-- a real MongoDB dot-path field set, confirmed safe by reading
+`db.js`'s own `buildMongoUpdate()` (object keys pass straight through as
+literal Mongo field paths, so a computed key like this nests correctly
+with no parent object needing to pre-exist first). A resumed request
+(already in `usedBy`, no `promoRedemptions` row yet) now reads
+`cd.claimedRewards[userId]` back instead of re-rolling -- pays EXACTLY
+what was already promised, every time, no matter how many times a client
+retries. The maxUses-race rollback path (claiming a code that turns out
+to be at its cap) now also deletes the matching `claimedRewards` entry
+via `FieldValue.delete()` on the same dotted path, so a declined claim
+never leaves an orphaned promised-amount behind.
+
+**2. Decimal money -- but only where it can actually occur.** Every OTHER
+amount in this app (deposits, withdrawals, investments, commissions,
+product prices) is always a whole shilling, straight from a mobile-money
+transaction or a `Math.round()`'d calculation -- a gift-code reward is now
+the ONLY thing that can ever be fractional. Rather than force a
+"000000.00" mask onto every single money display in the app (which would
+mean typing ".00" after every deposit, withdrawal, and price -- pure
+visual noise on figures that can never carry cents), `fmtUGX()`/`ugx()`
+(all three copies: `server.js`, `admin-src/index.html`, `user-src/
+original_module.js`) were made cents-aware instead: `Math.round(v*100)%100
+!== 0` decides whether to render with forced `{minimumFractionDigits:2,
+maximumFractionDigits:2}` or the old clean whole-number format. A whole
+balance still shows `UGX 30,000`; the instant it holds real cents (from a
+redeemed gift code) it shows `UGX 30,123.39` -- automatically, at every
+existing call site (home wallet, total earned, transaction rows, the
+admin Users list, the user-detail modal, the integrity audit's mismatch
+figures, gift-code amounts), with ZERO changes needed at any of them.
+`user-src`'s `fmtUGX` used to `Math.round()` its input BEFORE formatting
+-- that literally destroyed any cents before they could ever be shown; a
+real, previously-invisible gap this round closes as a side effect of the
+feature. A `round2()` helper (`Math.round(n*100)/100`) normalizes every
+admin-entered min/max reward and the rolled amount itself, so float input
+noise never leaks into a stored money field.
+
+**3. Expiry in seconds, not just minutes.** `/admin/promocodes/generate`
+now takes `durationSeconds` (was `durationMinutes`) -- `expiresAt = now +
+durationSeconds*1000`. The admin Gift Codes form's "Expires after"
+field is relabelled to seconds, letting the owner set a genuinely fast
+flash code (e.g. 30 seconds) that whole-minute granularity couldn't
+express.
+
+**Admin panel (`admin-src/index.html`)**: the generation form's single
+"Reward (UGX)" input became "Min reward (UGX)" / "Max reward (UGX)"
+(both `step="0.01"`, decimals allowed); the codes table's "Reward" column
+now shows a range (`100.50 – 500.50`) or, when `minReward===maxReward`,
+a single figure -- covering both new random-range codes and old fixed
+ones with the same render logic, no legacy branch needed. The generation
+confirmation text describes "a random amount between X and Y" instead of
+"each paying X."
+
+**Verified, not assumed**: `node --check server.js` clean; `build-core.js`
+and `build-admin.js` both round-trip OK; `git diff --check` clean; a boot
+smoke test (real self-signed RSA dummy Firebase service-account +
+unreachable `MONGODB_URI`) fails only at the expected Mongo-connect step.
+`test-admin-obfuscated-build.js` extended against the REAL obfuscated
+build: min/max reward fields present, seconds-based expiry field present,
+an existing code's reward range renders with real cents (`100.50`/
+`500.50`), generating a code shows the new random-range confirmation
+copy and the seconds-based expiry text -- 0 errors across all 12 tabs. A
+new standalone harness (`round137-giftcode-random-reward-test.js`, same
+real-`server.js`-against-an-in-memory-mock-DB technique as every earlier
+round) -- 26/26 checks: the `fmtUGX` cents-detection formula itself
+(whole numbers stay clean, `123.39` keeps its cents, `100.5` pads to
+`100.50`, `0.1+0.2` float noise doesn't fool it); generation rejects
+`maxReward < minReward`; 10 real members redeeming the SAME code land on
+genuinely different random rewards, all inside the configured range, at
+least one with real non-integer cents, and each member's stored
+`walletBalance`/`totalEarned` matches EXACTLY the amount the API reported
+to them (not silently different); a duplicate redeem is still refused;
+`minReward===maxReward` still pays one fixed amount to everyone;
+`maxUses` is still enforced (2 allowed, a 3rd refused); a hand-seeded
+pre-Round-137 legacy code (bare `reward` field only) redeems correctly at
+its exact stored amount; a simulated crash-before-ledger-write resume
+pays EXACTLY the previously-rolled amount rather than re-rolling; a
+1-second `durationSeconds` code is redeemable within its window and
+correctly refused just after; and `/admin/promocodes/list` surfaces both
+a new code's real range and a legacy code's degenerate min=max range.
+Re-ran the Round 104 concurrency suite (11/11), Round 135's withdrawal-
+attribution suite (11/11), Round 136's analytics suite (37/37), and
+`test-momo-sms-parsers.js` (70/70) -- 0 regressions. `user/sw.js` cache
+bumped `v94`→`v95`, `admin/sw.js` bumped `v37`→`v38`. **`server.js`, the
+user app, and the admin panel all changed -- all three (`snow-server`,
+`snow-app`, `snow-admin`) are `autoDeploy: true` on Render per
+`render.yaml`, so this push redeploys all of them on its own; the owner
+may still want to fully close and reopen both apps once to pick up the
+bumped service-worker caches.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

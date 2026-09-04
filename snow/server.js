@@ -492,7 +492,24 @@ async function getAboutContent() {
 }
 
 // ── HELPERS ──
-function fmtUGX(n) { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
+// Owner: "introduce decimal places in account balance or earnings, so in
+// treasure codes there are also decimals." Every OTHER money amount in
+// this app (deposits, withdrawals, investments, commissions) is always a
+// whole shilling -- only a gift-code reward can ever be fractional (see
+// round2()/randomReward() below) -- so this stays whole-number-clean
+// everywhere it always was, and only shows cents on the one figure that
+// can actually carry them, with no per-call-site changes needed anywhere
+// in this file or either frontend.
+function fmtUGX(n) {
+  const v = Number(n) || 0;
+  const hasCents = Math.round(v * 100) % 100 !== 0;
+  return 'UGX ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
+}
+// Rounds to the nearest UGX cent (2 decimal places) -- every gift-code
+// reward amount (admin-entered min/max, and the randomly rolled value
+// actually credited) is normalized through this so float noise from user
+// input or arithmetic never leaks into a stored money field.
+function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function stripHtml(s) { return String(s || '').replace(/<[^>]*>/g, '').trim(); }
 function eatNow()  { return new Date(Date.now() + 3 * 3600000); } // Kampala (UTC+3)
 function nowStr() {
@@ -4567,20 +4584,44 @@ app.post('/redeem', async (req, res) => {
       } else if (cd.maxUses && usedBy.length >= cd.maxUses) {
         result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
       }
-      const reward = Number(cd.reward) || 0;
+      // Legacy fallback: a code generated before random rewards only has
+      // the old single `reward` field -- treat it as a zero-width range so
+      // it still pays exactly that fixed amount, unchanged.
+      const minReward = round2(Number(cd.minReward ?? cd.reward) || 0);
+      const maxReward = round2(Number(cd.maxReward ?? cd.reward) || 0);
+      let reward;
       // CLAIM-BEFORE-CREDIT — a retried redeem after a mid-request failure
       // must never credit twice off the same code. A resumed (already-
       // claimed-by-this-user) call skips the redundant arrayUnion write --
-      // it's already there — and goes straight to completing the credit.
+      // it's already there — and goes straight to completing the credit,
+      // reusing the amount already rolled and persisted on the FIRST
+      // attempt (below), never re-rolling — a retry must always pay
+      // exactly what was already promised, not a fresh random draw.
       if (!alreadyClaimed) {
-        await codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId) });
+        // Rolled ONCE per claim, uniformly at cent (2-decimal) granularity
+        // -- e.g. min 100.00/max 500.00 can land on 123.39, 234.89, etc.
+        // crypto.randomInt's upper bound is exclusive, hence maxCents+1;
+        // minReward===maxReward (a code with no real range) still works,
+        // always returning that one value.
+        const minCents = Math.round(minReward * 100), maxCents = Math.round(maxReward * 100);
+        reward = crypto.randomInt(minCents, maxCents + 1) / 100;
+        // Claiming the code AND persisting the rolled amount happen in one
+        // atomic write, so a crash right after this line can never lose
+        // track of what was promised -- the resume path above reads it
+        // straight back off `cd.claimedRewards[userId]` on retry.
+        await codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId), ['claimedRewards.' + userId]: reward });
         const claimSnap = await codeDoc.ref.get();
         const claimedBy = (claimSnap.exists && claimSnap.data().usedBy) || [];
         if (claimedBy.indexOf(userId) === -1) { result = { code: 500, body: { status: 'error', message: 'Could not redeem this code' } }; return; }
         if (cd.maxUses && claimedBy.length > cd.maxUses) {
-          await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId) }).catch(() => {});
+          await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId), ['claimedRewards.' + userId]: FieldValue.delete() }).catch(() => {});
           result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
         }
+      } else {
+        // A genuinely lost roll (deploy-time race, never observed in
+        // testing) falls back to minReward rather than re-rolling -- never
+        // credit MORE than what could have been promised.
+        reward = round2(Number(cd.claimedRewards && cd.claimedRewards[userId]) || minReward);
       }
       // Codex-caught real bug (2nd money-flow audit): claiming the code in
       // usedBy above is NOT the same as the credit having actually landed --
@@ -5154,24 +5195,36 @@ app.post('/admin/products/sync-pricing', async (req, res) => {
 // ═══════════════════════════════════════════
 // ADMIN — GIFT CODES
 // ═══════════════════════════════════════════
+// Owner: "make when gift codes are randomly claimed no fixed claiming so
+// user randomly gets rewards, also this is governed by setting of minimum
+// reward and maximum reward, so no more fixed rewards... also make when I
+// can set treasure code to expire in given seconds." A code no longer
+// carries one fixed `reward` -- it carries a `minReward`/`maxReward` range,
+// and /redeem below rolls a real random amount (2-decimal precision, e.g.
+// 123.39) for each claim, independently. Setting minReward===maxReward
+// still works and behaves exactly like the old fixed-reward code, so
+// nothing is lost for an admin who wants that. Expiry switched from
+// whole minutes to whole seconds for finer-grained flash-code control.
 app.post('/admin/promocodes/generate', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const reward = Math.round(Number(req.body.reward));
+  const minReward = round2(Number(req.body.minReward));
+  const maxReward = round2(Number(req.body.maxReward));
   const maxUses = req.body.maxUses ? Math.round(Number(req.body.maxUses)) : null;
-  const durationMinutes = req.body.durationMinutes ? Number(req.body.durationMinutes) : null;
-  if (!Number.isFinite(reward) || reward <= 0 || reward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Enter a valid reward amount' });
+  const durationSeconds = req.body.durationSeconds ? Number(req.body.durationSeconds) : null;
+  if (!Number.isFinite(minReward) || minReward <= 0 || minReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Enter a valid minimum reward amount' });
+  if (!Number.isFinite(maxReward) || maxReward < minReward || maxReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Maximum reward must be a valid amount, at least the minimum' });
   if (maxUses !== null && (!Number.isFinite(maxUses) || maxUses <= 0)) return res.status(400).json({ status: 'error', message: 'Max uses must be a positive number' });
-  if (durationMinutes !== null && (!Number.isFinite(durationMinutes) || durationMinutes <= 0)) return res.status(400).json({ status: 'error', message: 'Duration must be a positive number of minutes' });
+  if (durationSeconds !== null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0)) return res.status(400).json({ status: 'error', message: 'Duration must be a positive number of seconds' });
   try {
     const code = await generateUniqueGiftCode();
     const doc = {
-      code, codeLower: code.toLowerCase(), reward, maxUses: maxUses || null, usedBy: [], active: true,
+      code, codeLower: code.toLowerCase(), minReward, maxReward, maxUses: maxUses || null, usedBy: [], active: true,
       createdBy: req.adminUser?.username || 'owner', createdAt: FieldValue.serverTimestamp(),
     };
-    if (durationMinutes) doc.expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
+    if (durationSeconds) doc.expiresAt = new Date(Date.now() + durationSeconds * 1000);
     await db.collection('promoCodes').add(doc);
-    logAdminAction(req, 'giftcode_generated', { code, reward, maxUses, durationMinutes });
-    res.json({ status: 'success', code, reward });
+    logAdminAction(req, 'giftcode_generated', { code, minReward, maxReward, maxUses, durationSeconds });
+    res.json({ status: 'success', code, minReward, maxReward });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/promocodes/list', async (req, res) => {
@@ -5180,7 +5233,11 @@ app.get('/admin/promocodes/list', async (req, res) => {
     const snap = await db.collection('promoCodes').orderBy('createdAt', 'desc').limit(300).get();
     res.json({ status: 'success', codes: snap.docs.map(d => {
       const c = d.data();
-      return { id: d.id, code: c.code, reward: c.reward, maxUses: c.maxUses || null, uses: (c.usedBy || []).length,
+      // A code generated before this round only ever has the old, single
+      // `reward` field -- read as a degenerate range (min===max) so the
+      // admin UI needs no legacy-shape branch at all.
+      return { id: d.id, code: c.code, minReward: c.minReward ?? c.reward, maxReward: c.maxReward ?? c.reward,
+        maxUses: c.maxUses || null, uses: (c.usedBy || []).length,
         active: c.active !== false, expiresAt: c.expiresAt || null, createdAt: c.createdAt || null };
     }) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }

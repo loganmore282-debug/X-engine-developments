@@ -90,7 +90,7 @@ const routes = {
     { key: 'qing-shuang', name: 'Snow Qing Shuang', price: 30000, cycle: 150, expectedReturn: 900000, active: true },
   ] },
   'GET /admin/promocodes/list': { status: 'success', codes: [
-    { id: 'c1', code: 'AB12CDEF', reward: 5000, uses: 0, maxUses: 1, active: true, createdAt: new Date().toISOString() },
+    { id: 'c1', code: 'AB12CDEF', minReward: 100.5, maxReward: 500.5, uses: 0, maxUses: 1, active: true, createdAt: new Date().toISOString() },
   ] },
   'POST /admin/user/referral-chain': { status: 'success',
     user: { id: 'u1', phone: '+256700000001', referralCode: 'abC123', status: 'active', totalInvested: 30000 },
@@ -164,7 +164,7 @@ const routes = {
   ] },
   'POST /admin/products/clear': { status: 'success', removed: 1 },
   'POST /admin/products/sync-pricing': { status: 'success', synced: 1 },
-  'POST /admin/promocodes/generate': { status: 'success', code: 'ab3Kx', reward: 5000 },
+  'POST /admin/promocodes/generate': { status: 'success', code: 'ab3Kx', minReward: 100, maxReward: 500 },
   'GET /admin/banner': { status: 'success', image: '' },
   'GET /admin/help-banner': { status: 'success', image: '' },
   'GET /admin/announcement-image': { status: 'success', image: '' },
@@ -302,11 +302,26 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   doc.getElementById('auditBtn')?.click();
   await sleep(200);
 
-  // Gift codes: generate one
+  // Gift codes: generate one, min/max reward range (Round 137: no more
+  // fixed reward -- the panel now sends minReward/maxReward).
   doc.querySelector('.tab[data-tab="promocodes"]').click();
   await sleep(200);
-  const cReward = doc.getElementById('cReward');
-  if (cReward) { cReward.value = '5000'; doc.getElementById('genBtn')?.click(); await sleep(300); }
+  const codesHtml = doc.getElementById('content').innerHTML;
+  if (!codesHtml.includes('Min reward')) errors.push('Gift codes: min-reward field missing');
+  if (!codesHtml.includes('Max reward')) errors.push('Gift codes: max-reward field missing');
+  if (!codesHtml.includes('Expires after (seconds')) errors.push('Gift codes: seconds-based expiry field missing');
+  if (!codesHtml.includes('100.50')) errors.push('Gift codes: existing code\'s reward range (min, with cents) missing');
+  if (!codesHtml.includes('500.50')) errors.push('Gift codes: existing code\'s reward range (max, with cents) missing');
+  const cMinReward = doc.getElementById('cMinReward'), cMaxReward = doc.getElementById('cMaxReward');
+  if (cMinReward && cMaxReward) {
+    cMinReward.value = '100'; cMaxReward.value = '500';
+    doc.getElementById('cDuration').value = '30';
+    doc.getElementById('genBtn')?.click();
+    await sleep(300);
+    const genOut = doc.getElementById('genOut')?.innerHTML || '';
+    if (!genOut.includes('a random amount between')) errors.push('Gift codes: generation confirmation should describe a random range, not a fixed amount');
+    if (!genOut.includes('30 seconds')) errors.push('Gift codes: generation confirmation should show the seconds-based expiry');
+  } else errors.push('Gift codes: min/max reward inputs not found for generation');
 
   // Users: open a user row's detail modal, exercise PIN reset + streak reconcile
   doc.querySelector('.tab[data-tab="users"]').click();
