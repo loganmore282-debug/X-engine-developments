@@ -10072,6 +10072,109 @@ cache bumped `v45`→`v46`. **`server.js` and `db.js` changed — Render should 
 this push; `admin-src/index.html`/`admin/index.html` changed too — the static admin site
 redeploys from the same push, no separate step needed.**
 
+## Round 150 (2026-09-05) — SMS-forwarder catches up on missed messages by re-scanning its own inbox; the general "Unmatched SMS" admin review card removed
+
+Owner, two asks in one message: "l want it to catch out even previous messages for
+matching, also remove area for unmatched sms in admin." The first followed directly from
+answering an owner question the round before ("what if an sms comes but when l haven't
+activated forwarder, what happens, and later l activate it in seconds") — the honest
+answer at the time was "nothing catches up automatically," with an offer to build a
+fix; this round is that fix.
+
+**Why the gap existed, confirmed against the real code, not assumed.**
+`SmsReceiver.onReceive()` (line 41) does `if (!prefs.active()) return;` the instant a
+live `SMS_RECEIVED` broadcast arrives — Android delivers that broadcast exactly once, at
+the moment the SMS lands, to whichever receivers are currently registered; there is no
+redelivery later, and nothing in this app persisted the message for a retry. Reactivating
+moments (or days) later did not, and could not, recover it — this is exactly the class of
+gap this project's own Round 89 already named and deliberately deferred: "a genuine
+server-INITIATED 'pull missed SMS from the phone's inbox' resync... confirmed structurally
+impossible over carrier-NAT'd mobile data with no public IP — would need a phone-initiated
+periodic inbox-backlog POST instead, deferred." That's exactly what this round builds —
+the fix was never impossible, only from the wrong direction.
+
+**`sms-forwarder-app/` touched with the owner's explicit go-ahead** — this app is
+hands-off by standing rule (Round 107) except when the owner reports a problem with the
+forwarder itself or explicitly asks for a change, which this is.
+
+**New `InboxScanner.java`**: re-reads the phone's own `content://sms/inbox` (via
+`android.provider.Telephony.Sms`, using the `READ_SMS` permission this app already
+declares and already requests at runtime — no new permission needed) for messages
+`DATE > watermark`, sorted ascending. Applies the exact same rules a live message gets:
+`SmsReceiver.isMoneySender()` (now `static`, shared rather than duplicated), SIM-slot
+attribution via a new shared `SmsReceiver.resolveSimSlotFromSubId()` (extracted from the
+existing broadcast-Bundle-based `resolveSimSlot()`, which now just delegates to it —
+same subscription-id-to-slot lookup, reused against a stored SMS row's own `sub_id`
+column instead of a live Bundle), and the same "never guess which SIM" refusal
+(`Prefs.resolveReceivingNumber()`, untouched) if the slot can't be resolved. Each
+qualifying message is posted through the SAME `Poster.postSync()` call and the SAME
+webhook a live message uses — **no server.js change was needed at all**, since the
+webhook has never cared when a message arrives, only what it says; the server's own
+existing TID/content-hash dedup (already built for exactly this kind of idempotent
+re-submission) safely no-ops on anything already matched earlier and correctly
+processes anything it never saw, including a reversal SMS missed the same way.
+`forwardDelayMs` is deliberately never sent for a backlog message (it may be hours or
+days old) — omitting it is the same graceful degradation an older app build already gets,
+so it can't corrupt the Round 95 per-number average-delivery-delay analytics.
+
+**Runs automatically, and on demand.** `Prefs.lastScannedSmsDate()` (0 = never scanned)
+is the watermark; `ForwardService.onCreate()` (which fires once per genuine service
+(re)start — a fresh "Start forwarding" tap, or `BootReceiver` restarting it after a
+reboot, not on every `onStartCommand()` call while already running) kicks off an
+incremental scan since that watermark, in the background, with no admin action needed —
+directly answering "later l activate it in seconds": that reactivation now automatically
+sweeps up anything missed while it was off. Because the watermark starts at 0, the very
+first scan ever (a fresh install, or a phone that's simply never been toggled before)
+naturally covers the WHOLE inbox — "even previous messages," literally. A new "Scan for
+missed messages" button on the main screen forces a full re-sweep on demand regardless of
+the stored watermark (for a deliberate "check everything again," e.g. after fixing a
+misconfigured number), without resetting the watermark backwards — a plain reactivation
+right after stays incremental. Capped at 3,000 messages per pass so a very large inbox
+can't block startup indefinitely; the watermark still advances to the newest message
+examined, so a second pass (the next activation, or another tap of the button) picks up
+exactly where the first stopped.
+
+**Admin panel: the "Unmatched SMS" review card removed** (owner: "remove area for
+unmatched sms in admin"). This was Round 100's own general-purpose review list for
+genuine money with nowhere to go (unparsed/unknown-number/ambiguous/mismatch/unmatched
+manual-deposit SMS) — a DIFFERENT, more specific card built later (this session's own
+"Deposit reversal alerts," for the MTN reversal-fraud feature) stays untouched; only the
+general one is gone. Removed: `smsLogCard()`/`smsReasonLabel()`/`_smsLog` and its render
+call and data fetch from `renderDeposits()` (`admin-src/index.html`); the `smsBadge` nav
+chip on the Deposits tab button and its `refreshBadges()` wiring; the now-fully-unused
+`unresolvedManualSmsLog()` helper and `POST /admin/manual-sms-log/list` route
+(`server.js`); the `unmatchedSms` field from `GET /admin/badges`'s response. **Kept, on
+purpose**: `POST /admin/manual-sms-log/resolve` (still actively used by the Deposit
+reversal alerts card's own "Mark reviewed" button for an ambiguous/unmatched reversal —
+it already worked on any `manualSmsLog` doc id regardless of type, so no new resolve
+route was needed); every underlying `manualSmsLog` write in the webhook itself
+(unparsed/unknown-number diagnostic entries, the core TID/hash-based dedup records) —
+these still serve real diagnostic and idempotency purposes with zero UI reading them
+back, same as `console.warn('MANUAL_SMS_UNPARSED...')` already gives Render-log
+visibility independent of any admin-panel view.
+
+**Verified**: `node --check server.js` clean, `node build-admin.js` clean round-trip, a
+boot smoke test (real self-signed RSA dummy Firebase service-account PEM + unreachable
+`MONGODB_URI`) fails only at the expected Mongo-connect step, `test-admin-obfuscated-
+build.js` (the real obfuscated admin build) updated — confirms the "Unmatched SMS" card
+and `smsBadge` are genuinely gone, and the Deposit reversal alerts card's own resolve
+button and clickable row both still work — 0 errors across all 12 tabs.
+`test-momo-sms-parsers.js` (70/70) and the reversal-fraud harness from the round before
+(23/23) both re-run clean, confirming neither the parser logic nor the reversal-matching
+logic was touched by this round. Android: this project's own `check-java-symbols.py`
+clean, `xmllint` confirms the (unchanged) manifest is still well-formed, balanced-brace
+checks clean across all 12 Java files (no Android SDK/Gradle toolchain in this sandbox —
+the real proof is the GitHub Actions build this push triggers automatically via
+`.github/workflows/build-snow-sms-apk.yml`'s own path filter on `snow/sms-forwarder-app/
+**`; check the Actions tab before relying on this build). **Untested on real hardware,
+same honest limitation as every prior forwarder-app round**: the inbox scan itself (both
+the automatic and manual paths) has only been proven to compile, not exercised against a
+real phone's SMS provider. App bumped to `versionCode 12` / `"1.11"` per this app's own
+standing rule. Admin cache bumped `v46`→`v47`. **`server.js` and `admin-src/index.html`/
+`admin/index.html` changed — Render should auto-deploy this push (server.js and the
+static admin site); the Android app changes ship as a new APK release once the GitHub
+Actions build completes, no Render redeploy involved for those.**
+
 ## Live infra
 
 Updated 2026-09-05 — corrected forward from the original 2026-08-26 provisioning notes

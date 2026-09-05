@@ -3593,64 +3593,19 @@ async function reconcileManualDeposits() {
   } catch (e) { console.error('Reconcile manual deposits error:', e.message); }
 }
 
-// Owner: "if one receives a deposit message but no order created, what can
-// server do?" -- genuine money can arrive on an admin number with nowhere to
-// go: no order was waiting (wrong amount, a typo, an order that already
-// expired), the receiving number itself was never saved
-// (MANUAL_SMS_UNKNOWN_NUMBER), or an operator reworded a template so no
-// parser claimed the message (MANUAL_SMS_UNPARSED). Every one of these was
-// already being written to manualSmsLog and counted in the per-number
-// analytics -- but nothing ever SHOWED the admin the actual message, so the
-// only way to notice was watching Render logs. This is that missing view.
+// Owner-only. Marks any manualSmsLog row reviewed -- used by the "Deposit
+// reversal alerts" card (below) for an ambiguous/unmatched reversal event
+// that needed a human look. Deciding a piece of unaccounted-for money or an
+// unresolved reversal needs no further action is a real judgement call, not
+// a routine dismiss. This never moves money on its own; crediting/debiting
+// the right member still goes through the existing /admin/deposit or
+// /admin/debit tools once the admin has identified who it belongs to.
 //
-// Shared by the list route and /admin/badges so the two can never quietly
-// disagree about what counts as "still needs a look".
-async function unresolvedManualSmsLog(limit) {
-  // Subagent-audit-caught real bug: this used to take the 500 most recent
-  // rows of the WHOLE manualSmsLog collection -- including every ordinary
-  // successful match, which vastly outnumbers genuinely-unresolved rows on
-  // any platform with real deposit volume -- and only filtered matched/
-  // resolved OUT afterward, in memory. A genuinely-unresolved row (real
-  // money with nowhere to go) could silently age out of the 500-row window
-  // entirely once 500+ OTHER events (mostly normal successful credits)
-  // happened since it was logged, with no signal anywhere that it was ever
-  // dropped -- exactly the failure mode this whole feature exists to
-  // prevent. Fixed by excluding matched/resolved rows in the QUERY itself
-  // (Mongo's $ne correctly matches a document where the field is simply
-  // absent, same as every other $ne-based exclusion in this file), so the
-  // 500-row limit only ever bounds rows that actually still need a look.
-  const snap = await db.collection('manualSmsLog')
-    .where('matched', '!=', true).where('resolved', '!=', true)
-    .orderBy('createdAt', 'desc').limit(limit || 500).get();
-  const rows = [];
-  snap.forEach(d => {
-    const v = d.data();
-    rows.push({
-      id: d.id,
-      reason: v.unparsed ? 'unparsed' : v.unknownNumber ? 'unknown-number'
-        : v.ambiguous ? 'ambiguous' : v.mismatch ? 'mismatch' : 'unmatched',
-      receivingNumber: v.receivingNumber || '',
-      amount: v.amount != null ? v.amount : null,
-      sender: v.sender || '',
-      raw: v.raw || '',
-      device: v.device || '', appVersion: v.appVersion || '',
-      createdAt: v.createdAt || null,
-    });
-  });
-  return rows;
-}
-app.post('/admin/manual-sms-log/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const rows = await unresolvedManualSmsLog(500);
-    res.json({ status: 'success', rows });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-// Owner-only, same posture as /admin/deposit/manual/reject just above --
-// deciding a piece of unaccounted-for money needs no further action is a
-// real judgement call, not a routine dismiss. This never moves money on its
-// own; crediting the right member still goes through the existing
-// /admin/deposit tool once the admin has identified who it belongs to.
+// (Owner: "remove area for unmatched sms in admin" -- the general-purpose
+// "Unmatched SMS" review list this route was originally built for is gone;
+// the underlying manualSmsLog writes for unparsed/unknown-number/duplicate-
+// dedup entries are untouched and still serve their original diagnostic and
+// idempotency roles, just with no admin-panel view reading them back.)
 app.post('/admin/manual-sms-log/resolve', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const id = String(req.body.id || '');
@@ -6488,12 +6443,11 @@ app.post('/admin/user/referral-chain', async (req, res) => {
 app.get('/admin/badges', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [pendingDep, pendingWit, unresolvedSms] = await Promise.all([
+    const [pendingDep, pendingWit] = await Promise.all([
       db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get(),
       db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get(),
-      unresolvedManualSmsLog(500),
     ]);
-    res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size, unmatchedSms: unresolvedSms.length });
+    res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Owner: "also all analytics were removed, see space8 analytics are not

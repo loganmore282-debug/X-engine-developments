@@ -108,8 +108,16 @@ public class SmsReceiver extends BroadcastReceiver {
             if (subId < 0 && bundle.containsKey("subscription"))
                 subId = bundle.getInt("subscription", -1);
         } catch (Exception ignored) {}
-        if (subId < 0) return -1;
+        return resolveSimSlotFromSubId(context, subId);
+    }
 
+    /**
+     * Shared with InboxScanner, which reads a subscription id straight out of
+     * a stored SMS row's own column rather than a live broadcast's Bundle --
+     * the id-to-slot lookup below is identical either way.
+     */
+    static int resolveSimSlotFromSubId(Context context, int subId) {
+        if (subId < 0) return -1;
         try {
             SubscriptionManager sm = (SubscriptionManager)
                     context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
@@ -145,7 +153,7 @@ public class SmsReceiver extends BroadcastReceiver {
      * "never guess, drop rather than misattribute" posture throughout.
      */
     @SuppressWarnings("deprecation")
-    private boolean isSingleSimHardware(Context context) {
+    static boolean isSingleSimHardware(Context context) {
         try {
             TelephonyManager tm = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
             if (tm == null) return false;
@@ -155,7 +163,7 @@ public class SmsReceiver extends BroadcastReceiver {
         }
     }
 
-    private boolean isMoneySender(String sender) {
+    static boolean isMoneySender(String sender) {
         String s = (sender == null ? "" : sender).toLowerCase();
         if (s.isEmpty()) return false;
         for (String m : MONEY_SENDERS) {

@@ -13,8 +13,8 @@ android {
         // Bump BOTH on every change you want phones to be offered. The build
         // publishes these as version.json next to the APK, and installed apps
         // compare versionCode against it to decide whether to prompt.
-        versionCode 11
-        versionName "1.10"
+        versionCode 12
+        versionName "1.11"
     }
 
     // AGP 8 stops generating BuildConfig unless asked. The forwarder reports

@@ -34,6 +34,18 @@ public class ForwardService extends Service {
         startForeground(NOTIF_ID, buildNotification());
         startUpdateChecks();
         startHeartbeats();
+        // Runs once per genuine service (re)start -- a fresh "Start
+        // forwarding" tap, or BootReceiver restarting it after a reboot --
+        // not on every onStartCommand() while already running. Owner: "l
+        // want it to catch out even previous messages for matching" -- any
+        // SMS that arrived while forwarding was off (or before this phone
+        // was ever activated) never got a live broadcast delivered to
+        // SmsReceiver, and nothing replays that later on its own. This
+        // sweeps the phone's own inbox for anything since the last scan
+        // (the whole inbox, the very first time) and forwards it through the
+        // same webhook, so a "forgot to turn it on" gap self-heals the
+        // moment forwarding starts again, with no admin action needed.
+        InboxScanner.scanAndForwardAsync(this, false, null);
     }
 
     @Override

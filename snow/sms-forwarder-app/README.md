@@ -88,6 +88,24 @@ reinstalling on every phone.
    credits the member's wallet, and (if the match is ambiguous or the sender phone
    disagrees) flags it for a human to review in the admin panel instead of guessing.
 
+## Catching up on messages missed while forwarding was off
+
+`SmsReceiver` only ever sees a message at the exact instant Android delivers the
+live broadcast. If forwarding was off at that moment -- not yet activated, or a
+phone that sat untouched for a while -- Android never redelivers it later, and
+nothing here retries on its own.
+
+`InboxScanner` closes that gap by re-reading the phone's OWN SMS inbox (needs the
+`READ_SMS` permission, already requested on first launch) instead of the server
+trying to reach INTO a phone that sits behind carrier NAT with no public IP, which
+is not possible. It runs automatically every time forwarding genuinely (re)starts
+(a fresh "Start forwarding" tap, or a reboot) -- the very first time, that means
+the whole inbox; every time after, only messages since the last scan. A "Scan for
+missed messages" button on the main screen forces a full re-sweep on demand
+regardless of what was already scanned. Either way it posts through the exact same
+webhook as a live message, so the server's own dedup safely ignores anything
+already matched and correctly processes anything it never saw.
+
 ## Build the APK
 
 ### Option A — Android Studio

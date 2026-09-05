@@ -119,6 +119,16 @@ public class MainActivity extends Activity {
         });
         root.addView(testBtn);
 
+        Button scanBtn = button("Scan for missed messages");
+        scanBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { scanInboxNow(); }
+        });
+        root.addView(scanBtn);
+        root.addView(hint("Re-reads this phone's own SMS inbox and forwards any Mobile "
+                + "Money message it missed -- covers a gap where forwarding was off, or "
+                + "the very first backlog on a fresh install. Safe to tap any time; "
+                + "already-matched messages are ignored by the server automatically."));
+
         Button updateBtn = button("Check for updates");
         updateBtn.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { checkForUpdate(true); }
@@ -868,6 +878,39 @@ public class MainActivity extends Activity {
                         });
                     }
                 });
+    }
+
+    /**
+     * Manual, on-demand re-sweep of this phone's own SMS inbox. Unlike the
+     * automatic scan ForwardService kicks off on every genuine start (which
+     * only looks for messages since the last scan), this one always forces a
+     * full pass regardless of the stored watermark -- for a deliberate
+     * "check everything again" the admin might want after fixing a
+     * misconfigured number, or just to be sure nothing was missed.
+     */
+    private void scanInboxNow() {
+        saveSettings();
+        if (prefs.url().isEmpty() || prefs.secret().isEmpty()) {
+            toast("Enter URL and secret first");
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+            toast("Allow the SMS permission first");
+            requestPerms();
+            return;
+        }
+        status.setText("Scanning inbox for missed messages...");
+        InboxScanner.scanAndForwardAsync(this, true, new InboxScanner.Callback() {
+            @Override public void onDone(final int examined, final int forwarded, final int skipped) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (isFinishing()) return;
+                        status.setText("Scan done: looked at " + examined + " message(s), "
+                                + "forwarded " + forwarded + " for matching.");
+                    }
+                });
+            }
+        });
     }
 
     private String firstConfiguredNumber() {

@@ -202,7 +202,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="analytics">Analytics</button>
         <button class="tab" data-tab="users">Users</button>
-        <button class="tab" data-tab="deposits">Deposits <span class="badge-n hidden" id="smsBadge"></span></button>
+        <button class="tab" data-tab="deposits">Deposits</button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
         <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
@@ -525,11 +525,6 @@ async function refreshBadges(){
   const s = await api('/admin/badges');
   if(s.status==='success' && s.pendingWithdrawals>0){ $('wBadge').textContent=s.pendingWithdrawals; $('wBadge').classList.remove('hidden'); }
   else $('wBadge').classList.add('hidden');
-  // Genuine money with nowhere to go (see renderDeposits()'s own "Unmatched
-  // SMS" card) is exactly as actionable as a pending withdrawal, so it gets
-  // the same nav-badge treatment.
-  if(s.status==='success' && s.unmatchedSms>0){ $('smsBadge').textContent=s.unmatchedSms; $('smsBadge').classList.remove('hidden'); }
-  else $('smsBadge').classList.add('hidden');
 }
 
 // ── LIVE AUTO-REFRESH ──
@@ -1320,28 +1315,6 @@ async function syncMarzPay(btn, afterFn){
 }
 const DEP_GROUPS = { pending: ['initiating','pending'], review: ['review'], matched: ['matched'], failed: ['failed','rejected'] };
 let _deps=[], _depFilter='pending';
-let _smsLog = [];
-function smsReasonLabel(r){
-  return { unparsed:'Unreadable (operator likely changed their SMS format)', 'unknown-number':'Sent to a number not saved in Payment numbers',
-    ambiguous:'Matched more than one pending order', mismatch:'Sender did not match the order', unmatched:'No pending order was waiting for this amount' }[r] || r;
-}
-function smsLogCard(rows){
-  if(!rows.length) return '';
-  return `<div class="panel-card" style="margin-bottom:12px;border:1px solid var(--danger)">
-    <h2 class="sec" style="margin:0 0 4px;color:var(--danger)">Unmatched SMS (${rows.length})</h2>
-    <p class="muted" style="margin:0 0 10px">A payment phone forwarded one of these, but the server could not safely attach it to a member's deposit -- money may genuinely be sitting on that number with nobody credited for it. Find the member (search Users by the sender's phone number below, if shown) and credit them by hand from their profile, then mark this resolved. Nothing here credits anyone automatically.</p>
-    <div class="table-scroll"><table><thead><tr><th>When</th><th>Reason</th><th>Number</th><th>Amount</th><th>Sender</th><th>Message</th><th></th></tr></thead>
-    <tbody>${rows.map(v=>`<tr>
-      <td>${fdate(v.createdAt)}</td>
-      <td>${esc(smsReasonLabel(v.reason))}</td>
-      <td>${esc(v.receivingNumber||'Not set')}</td>
-      <td>${v.amount!=null?ugx(v.amount):'Unknown'}</td>
-      <td>${esc(v.sender||'Not shown')}</td>
-      <td style="max-width:260px;white-space:normal;font-size:11px;color:var(--muted)">${esc((v.raw||'').slice(0,220))}</td>
-      <td>${SESSION_ROLE==='owner'?`<button class="btn sm ghost" data-smsresolve="${esc(v.id)}">Mark resolved</button>`:''}</td>
-    </tr>`).join('')}</tbody></table></div>
-  </div>`;
-}
 let _reversals = [];
 function reversalOutcomeLabel(v){
   if (v.applied) return 'Auto-debited & banned';
@@ -1366,10 +1339,9 @@ function reversalsCard(rows){
   </div>`;
 }
 async function renderDeposits(){
-  const [r, smsR, revR] = await Promise.all([api('/admin/deposits/list', {}), api('/admin/manual-sms-log/list', {}), api('/admin/manual-reversals/list', {})]);
+  const [r, revR] = await Promise.all([api('/admin/deposits/list', {}), api('/admin/manual-reversals/list', {})]);
   if(staleTab('deposits')) return;
   _deps = r.deposits||[];
-  _smsLog = smsR.rows||[];
   _reversals = revR.rows||[];
   const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
   const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
@@ -1388,7 +1360,6 @@ async function renderDeposits(){
     <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time -- automatic (MarzPay or LipaPay) or manual (admin numbers, SMS-matched). Needs Review covers a manual order the SMS matcher couldn't safely resolve on its own (ambiguous match, sender mismatch, or a member-pasted confirmation) -- approve it once you've verified the money genuinely landed, or reject it if it didn't.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' deposits only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
-    ${smsLogCard(_smsLog)}
     ${reversalsCard(_reversals)}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>

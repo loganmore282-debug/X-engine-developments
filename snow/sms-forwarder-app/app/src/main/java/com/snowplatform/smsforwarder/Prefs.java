@@ -44,6 +44,16 @@ public final class Prefs {
     public boolean active() { return sp.getBoolean(K_ACTIVE, false); }
 
     /**
+     * The `date` (ms) of the newest inbox SMS InboxScanner has already looked
+     * at, whether or not it was actually forwarded. 0 means "never scanned",
+     * which InboxScanner treats as "scan the WHOLE inbox" -- exactly the
+     * "catch even previous messages" case for a fresh install or a phone
+     * that sat inactive a long time before anyone noticed.
+     */
+    public long lastScannedSmsDate() { return sp.getLong("lastScannedSmsDate", 0L); }
+    public void setLastScannedSmsDate(long v) { sp.edit().putLong("lastScannedSmsDate", v).apply(); }
+
+    /**
      * The configured receiving numbers, keyed by SIM slot index as a string.
      * Transparently migrates a v1 single-number install into slot "0".
      */

@@ -55,11 +55,6 @@ const routes = {
   'POST /admin/manual-numbers/save': { status: 'success' },
   'POST /admin/manual-numbers/delete': { status: 'success' },
   'POST /admin/settings/update': { status: 'success' },
-  'POST /admin/manual-sms-log/list': { status: 'success', rows: [
-    { id: 'sms1', reason: 'unmatched', receivingNumber: '+256770000001', amount: 30000,
-      sender: '+256701234567', raw: 'RECEIVED. TID 999. UGX 30,000 from 701234567, JANE.',
-      device: 'Samsung SM-A047F', appVersion: '1.9', createdAt: new Date().toISOString() },
-  ] },
   'POST /admin/manual-sms-log/resolve': { status: 'success' },
   'POST /admin/manual-reversals/list': { status: 'success', rows: [
     { id: 'rev1', amount: 30000, receivingNumber: '+256770000001', payerPhone: '+256700000010',
@@ -180,7 +175,7 @@ const routes = {
     repeatedCheckinAlreadyClaimed: [],
     giftcodeGuessing: [],
   },
-  'GET /admin/badges': { status: 'success', pendingWithdrawals: 2, unmatchedSms: 1 },
+  'GET /admin/badges': { status: 'success', pendingWithdrawals: 2 },
   'GET /admin/users/recount': { status: 'success', updated: 0 },
   'GET /admin/integrity': { status: 'success', checked: 1, mismatches: [
     { userId: 'u1', phone: '+256700000001', walletBalance: 10000, ledgerSum: 5000, diff: 5000 },
@@ -800,28 +795,28 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (!doc.getElementById('saveMpReminder')) errors.push('Settings: Save payment reminder button missing');
   else { doc.getElementById('saveMpReminder').click(); await sleep(200); }
 
-  // The unmatched-SMS review list lives on the Deposits tab.
+  // Owner: "remove area for unmatched sms in admin" -- the Deposits tab no
+  // longer carries a general "Unmatched SMS" review card or its nav badge.
   doc.querySelector('.tab[data-tab="deposits"]').click();
   await sleep(400);
   const depHtml2 = doc.getElementById('content').innerHTML;
-  if (!depHtml2.includes('Unmatched SMS')) errors.push('Deposits: Unmatched SMS card missing');
-  if (!depHtml2.includes('+256701234567')) errors.push('Deposits: sender from the fixture not rendered');
-  if (!depHtml2.includes('No pending order was waiting')) errors.push('Deposits: reason label not rendered');
+  if (depHtml2.includes('Unmatched SMS')) errors.push('Deposits: Unmatched SMS card should have been removed');
+  if (doc.getElementById('smsBadge')) errors.push('Nav: smsBadge element should have been removed');
+
+  // MTN deposit-reversal fraud alerts card, same Deposits tab -- this one
+  // stays; it still reuses the shared /admin/manual-sms-log/resolve route
+  // for its own "Mark reviewed" button (the ambiguous rev2 fixture row).
+  if (!depHtml2.includes('Deposit reversal alerts')) errors.push('Deposits: reversal alerts card missing');
+  if (!depHtml2.includes('Auto-debited')) errors.push('Deposits: applied-reversal outcome label not rendered');
+  if (!depHtml2.includes('Matched multiple members')) errors.push('Deposits: ambiguous-reversal outcome label not rendered');
+  if (!depHtml2.includes('+256700000010')) errors.push('Deposits: reversal payer phone not rendered');
   const smsResolveBtn = doc.querySelector('[data-smsresolve]');
-  if (!smsResolveBtn) errors.push('Deposits: Mark resolved button missing');
+  if (!smsResolveBtn) errors.push('Deposits: reversal-alerts Mark reviewed button missing');
   else {
     window.confirm = () => true;
     smsResolveBtn.click();
     await sleep(300);
   }
-  const smsBadge = doc.getElementById('smsBadge');
-  if (!smsBadge || smsBadge.classList.contains('hidden')) errors.push('Nav: Deposits unmatched-SMS badge not shown for the fixture');
-
-  // MTN deposit-reversal fraud alerts card, same Deposits tab.
-  if (!depHtml2.includes('Deposit reversal alerts')) errors.push('Deposits: reversal alerts card missing');
-  if (!depHtml2.includes('Auto-debited')) errors.push('Deposits: applied-reversal outcome label not rendered');
-  if (!depHtml2.includes('Matched multiple members')) errors.push('Deposits: ambiguous-reversal outcome label not rendered');
-  if (!depHtml2.includes('+256700000010')) errors.push('Deposits: reversal payer phone not rendered');
   const revRow = doc.querySelector('#revAlertsWrap tr[data-uid="u1"]');
   if (!revRow) errors.push('Deposits: applied-reversal row missing its clickable data-uid');
   else {
