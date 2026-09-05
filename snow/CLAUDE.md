@@ -10175,6 +10175,82 @@ standing rule. Admin cache bumped `v46`→`v47`. **`server.js` and `admin-src/in
 static admin site); the Android app changes ship as a new APK release once the GitHub
 Actions build completes, no Render redeploy involved for those.**
 
+## Round 151 (2026-09-05) — GoPay manual-pay screen: selecting a network now deliberately assigns the OPPOSITE network's admin account, plus a permissive "is this a real mobile number" check
+
+Owner's initial message read, taken completely literally, as "swap which admin account
+each network tile gives" — the exact opposite of the obviously-correct mapping (MTN
+tile → MTN admin account), and something that would break every real deposit if
+misread. Given the money-safety stakes, asked directly rather than guessing: confirmed
+via `AskUserQuestion` that this genuinely IS the wanted behavior (owner picked "Assign
+the opposite network's admin account," not the alternative "validate the typed number
+against the selected network" reading) — not a bug report, not a typo, an intentional
+choice. A second round of questions settled the two remaining pieces: what should
+trigger the "network is invalid" notify ("not a real Uganda mobile prefix at all,"
+independent of which tile was tapped — since tile-vs-number no longer needs to agree
+once the swap is real), and where the corrected MTN/Airtel prefix table should come
+from (owner: "research and confirm back with you" rather than hand you a list unverified).
+
+**Research done before writing any code, per that explicit request.** Web search
+(`WebSearch`, since direct `WebFetch` to Wikipedia/ugtechmag/most Uganda telecom blogs is
+blocked by this environment's egress proxy) confirmed real, current UCC-allocation-backed
+prefixes: MTN 076/077/078/079, Airtel 070/074/075. The owner's own claim ("even airtel has
+073") could NOT be corroborated — research instead points to 073 as Africell's old block
+(Africell exited Uganda in 2021; where those numbers landed since, if anywhere, is
+unconfirmed). Reported this discrepancy back to the owner directly rather than silently
+picking one side, then built the validation permissively per their own "no need to put
+rules" instruction: **070/073/074/075/076/077/078/079 all count as valid** — a real MTN/
+Airtel prefix list widened by exactly the one prefix the owner asked for, explicitly NOT
+a strict per-network match (Uganda's prefix assignments keep shifting — new blocks
+granted to operators, Mobile Number Portability approved March 2025 — so a strict rule
+would need constant upkeep the owner explicitly said not to build). The 031/039/020/0800
+fixed-line/toll-free prefixes from the owner's own reference table are correctly never
+mobile-valid regardless.
+
+**`user-src/original_module.js`**:
+- New `UGANDA_MOBILE_PREFIXES` + `isValidUgandaMobileNumber(raw)`, next to `cleanPhone()`
+  (same normalization rules — accepts `0XXX`/bare `XXX`/`256XXX`/`+256XXX`, any format the
+  rest of this app already accepts elsewhere) — checks only that the number LOOKS like a
+  real Uganda mobile number at all, never which network it belongs to.
+- `manualPayConfirm()` (the GoPay-styled manual-deposit flow's own submit handler): now
+  calls `isValidUgandaMobileNumber(n)` on the typed sender phone before proceeding —
+  rejects with `'Invalid network. Enter a real mobile number.'` if it doesn't match,
+  regardless of which method tile is active (a landline/toll-free/garbled number is
+  invalid whether MTN or Airtel was tapped). The actual network-account assignment line
+  flipped from `_manDepChosenMethod === 'Airtel' ? 'Airtel Money' : 'MTN Mobile Money'` to
+  `_manDepChosenMethod === 'MTN' ? 'Airtel Money' : 'MTN Mobile Money'` — tapping MTN now
+  requests an Airtel admin account from `/deposit/manual/init`, and tapping Airtel
+  requests an MTN one. No other change needed anywhere downstream: `presentManualPayCode
+  Screen()`'s account-network label, the `*165#`/`*185#` USSD-reminder selection
+  (Round 144), and the admin-authored per-network payment-reminder template
+  (Round 122) all already read `data.network`/`network` as "the network of the account
+  actually being paid into," not "the network the member tapped" — so every one of those
+  stays correct automatically once this one assignment line changed. Confirmed via
+  `AskUserQuestion` that no auto-selecting/auto-correcting the tile itself was wanted —
+  Round 111's own "fully manual, no auto-select" decision stands untouched; this round
+  only changed what happens AFTER a manual pick, never the picking itself.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+clean round-trip, `git diff --check` clean. A standalone unit test (extracts
+`isValidUgandaMobileNumber()` straight out of the real source at runtime, same technique
+`test-momo-sms-parsers.js` already established, so it can never silently drift from
+what's shipped) — 19/19 checks: every MTN prefix (076-079) and every Airtel prefix
+(070/074/075) valid in every accepted input format (`0XXX`/bare `XXX`/`256XXX`/
+`+256XXX`); the owner-requested 073 valid; every fixed-line/toll-free prefix from the
+owner's own table (031/039/020/0800) correctly invalid; garbage/empty/too-short all
+correctly invalid. Playwright, against the real built (obfuscated) app, driving the
+actual `window.manualPayConfirm()` with the network-assignment call intercepted (not
+just reasoned about): tapping the MTN tile with a valid MTN-shaped number sent
+`network:"Airtel Money"` to `/deposit/manual/init`; tapping Airtel with a valid
+Airtel-shaped number sent `network:"MTN Mobile Money"`; a landline-shaped number (031...)
+was rejected with an "invalid" toast and `/deposit/manual/init` was never called; the
+owner-requested 073-prefix number was accepted and did call it. Re-ran the Round 120
+manual-pay suite (toast/SMS-fallback/resume-on-reload/cross-account-cache — all still
+correct, this round's edit sits entirely inside `manualPayConfirm()`'s own validation/
+payload-construction, nothing those checks cover) and the Round 125 stale-poll-across-
+orders repro (still correctly shows no bug) — both clean, confirming no regression from
+touching this shared function. Cache bumped `v99`→`v100`. `user-src/`-only change — no
+Render redeploy needed for the backend.
+
 ## Live infra
 
 Updated 2026-09-05 — corrected forward from the original 2026-08-26 provisioning notes

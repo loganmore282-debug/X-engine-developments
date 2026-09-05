@@ -252,6 +252,28 @@ function cleanPhone(raw){
   if (!local9 || !/^7\d{8}$/.test(local9)) return null;
   return '+256' + local9;
 }
+// Owner: manual-pay's own network-selector screen deliberately assigns the
+// OPPOSITE network's admin account to whichever tile the member taps (see
+// manualPayConfirm()'s own comment), so "does this number match the network
+// I picked" is no longer a meaningful check. This is a plain "is this a
+// real Uganda mobile number at all" sanity check instead -- kept
+// deliberately PERMISSIVE, not a strict MTN-vs-Airtel list, per the owner's
+// own explicit "no need to put rules": Uganda's prefix assignments keep
+// shifting (new blocks granted to operators, Mobile Number Portability
+// approved 2025) and even the owner's own reference table needed a live
+// correction mid-conversation (073, historically Africell's block --
+// Africell exited Uganda in 2021 and where those numbers landed since is
+// unconfirmed) -- so this only screens out something that clearly ISN'T a
+// mobile number (a landline, a toll-free number, garbled digits), never a
+// specific network match.
+var UGANDA_MOBILE_PREFIXES = ['70', '73', '74', '75', '76', '77', '78', '79'];
+function isValidUgandaMobileNumber(raw){
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('256') && d.length === 12) d = d.slice(3);
+  else if (d.startsWith('0') && d.length === 10) d = d.slice(1);
+  if (d.length !== 9 || d[0] !== '7') return false;
+  return UGANDA_MOBILE_PREFIXES.indexOf(d.slice(0, 2)) !== -1;
+}
 function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
@@ -2521,7 +2543,24 @@ window.manualPayConfirm = async function(amount){
   if (!_manDepChosenMethod) { toast('Please select a payment method', true); return; }
   const n = ($('manPayPhone').value || '').trim();
   if (n.length < 9) { toast('Please enter your payment account', true); return; }
-  const network = _manDepChosenMethod === 'Airtel' ? 'Airtel Money' : 'MTN Mobile Money';
+  // Owner: "no need to put rules so a notify will just appear to tell a
+  // user that the network is invalid" -- deliberately NOT a check that the
+  // number matches whichever tile was tapped (see the network-swap comment
+  // just below for why those two are no longer even meant to agree). This
+  // only rejects something that isn't a real Uganda mobile number at all
+  // (a landline, a toll-free number, garbled digits) -- see
+  // isValidUgandaMobileNumber()'s own comment for the permissive prefix
+  // list this checks against.
+  if (!isValidUgandaMobileNumber(n)) { toast('Invalid network. Enter a real mobile number.', true); return; }
+  // Owner, confirmed explicitly (not a bug): selecting MTN assigns an
+  // AIRTEL admin account, and selecting Airtel assigns an MTN admin
+  // account -- the OPPOSITE of the tile tapped. Everything downstream
+  // (the code screen's own account-network label, the *165#/*185# USSD
+  // reminder, the admin-authored payment-reminder template) already reads
+  // `network` as "the network of the account actually being paid into,"
+  // not "the network the member tapped" -- so flipping it here is the only
+  // change needed; nothing else assumes the two match.
+  const network = _manDepChosenMethod === 'MTN' ? 'Airtel Money' : 'MTN Mobile Money';
   $('manPayLoading').classList.remove('mp-hidden');
   const r = await post('/deposit/manual/init', { amount, senderPhone: n, network });
   if ($('manPayLoading')) $('manPayLoading').classList.add('mp-hidden');
