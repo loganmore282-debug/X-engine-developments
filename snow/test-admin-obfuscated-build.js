@@ -21,6 +21,7 @@ const routes = {
     supportHours: '', rulesText: '', aboutText: '', brandTagline: '',
     manualPayReminderMtn: '1: Dial *165#\n2: Select 1 Send Money\n3: Select 1 Mobile User\n4: Enter number {{number}}\n5: Enter Amount {{amount}}\n6: Enter Reason\n7: Enter your PIN code',
     manualPayReminderAirtel: '',
+    activityTickerSpeed: 220,
   } },
   'GET /admin/banner': { status: 'success', image: '' },
   'GET /admin/stats': { status: 'success', stats: {
@@ -391,6 +392,13 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     doc.getElementById('saveRates')?.click();
     await sleep(200);
   }
+
+  // Owner: "make when l can configure what speed the activity checker be
+  // on home screen" -- the Home activity ticker's own scroll speed, admin-
+  // editable instead of a hardcoded constant.
+  const tickerSpeedInput = doc.getElementById('sTickerSpeed');
+  if (!tickerSpeedInput) errors.push('Settings: activity-ticker-speed input missing');
+  else if (String(tickerSpeedInput.value) !== '220') errors.push('Settings: activity-ticker-speed not prefilled from the fixture (' + tickerSpeedInput.value + ')');
 
   window.confirm = () => true;
   window.prompt = () => null;

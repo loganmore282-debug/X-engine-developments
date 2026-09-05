@@ -10251,6 +10251,50 @@ orders repro (still correctly shows no bug) — both clean, confirming no regres
 touching this shared function. Cache bumped `v99`→`v100`. `user-src/`-only change — no
 Render redeploy needed for the backend.
 
+## Round 152 (2026-09-05) — Home activity ticker's scroll speed is now admin-editable
+
+Owner: "make when l can configure what speed the activity checker be on home screen
+those transactions flowing from right to left." The scrolling deposit/withdraw activity
+strip's own speed (px/second) has been a hardcoded constant in `user-src/
+original_module.js` since Round 24, hand-tuned by direct owner request across several
+earlier rounds (45→90→160, Rounds 26/28) — each change needing a code edit + rebuild.
+Now a plain settings field instead.
+
+**`server.js`**: `activityTickerSpeed: 160` added to `DEFAULT_SETTINGS` (matches the
+current hardcoded value exactly, so nothing changes for an already-deployed database
+until the admin actually touches the new field) and `activityTickerSpeed: [10, 2000]`
+to `SETTINGS_CRITICAL_RANGES` — the floor is above 0 deliberately, since the client
+divides scroll distance by this value to get an animation duration, and 0 would produce
+an infinite/frozen animation rather than a genuinely paused one.
+
+**`user-src/original_module.js`**: `renderActivityTicker()`'s duration math
+(`singleWidth / speed`) now reads `STATE.settings.activityTickerSpeed`, falling back to
+the same original `160` if it's ever missing (a boot before settings resolve, or a
+database from before this field existed) — same "never crash on an absent value"
+posture every other settings-read in this file already has.
+
+**`admin-src/index.html`**: a new "Home activity ticker speed (px/second)" number input
+under the existing "Appearance" subsection (alongside the number-font selector, Round
+86's own pattern for a small standalone display-tuning field sharing the "Rates &
+limits" panel-card and its one Save button), wired into the existing `saveRates` payload.
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`, `node
+build-core.js` and `node build-admin.js` both clean round-trips, a boot smoke test (real
+self-signed RSA dummy Firebase service-account PEM + unreachable `MONGODB_URI`) fails
+only at the expected Mongo-connect step, `git diff --check` clean.
+`test-admin-obfuscated-build.js` (the real obfuscated admin build) extended with an
+`activityTickerSpeed: 220` fixture value and an assertion that the new input exists and
+is genuinely prefilled from it — 0 errors across all 12 tabs. Playwright, against the
+real built (obfuscated) user app, driving the actual `window.renderActivityTicker()`
+function directly (not a reimplementation of its math): a configured speed of 400
+produces a short duration, a configured speed of 40 on the identical feed content
+produces a genuinely LONGER duration (proving the setting is actually being read, not
+silently ignored in favor of the old hardcoded 160), and settings with the field
+entirely absent still produces a working, non-crashing animation via the fallback.
+Cache bumped `v100`→`v101` (user), `v47`→`v48` (admin). **`server.js` and
+`admin-src/index.html`/`admin/index.html` changed — Render should auto-deploy this push
+(server.js and the static admin site).**
+
 ## Live infra
 
 Updated 2026-09-05 — corrected forward from the original 2026-08-26 provisioning notes

@@ -353,6 +353,15 @@ const DEFAULT_SETTINGS = {
   // single depositMethod field) gets sane values for these two the first
   // time it's read after this round ships.
   depositPayAEnabled: true, depositPayBEnabled: false,
+  // Owner: "make when l can configure what speed the activity checker be
+  // on home screen." The Home activity ticker's own scroll speed (px/sec)
+  // was hand-tuned across several earlier rounds by direct owner request
+  // (45 -> 90 -> 160, Rounds 26/28) -- always a hardcoded constant in
+  // user-src/original_module.js needing a code change + rebuild each time.
+  // Now a plain admin-editable number instead, default 160 to match
+  // whatever every already-deployed database is already running (zero
+  // behavior change until the admin actually touches this field).
+  activityTickerSpeed: 160,
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
 // user-src/original_module.js (the client-side fallback-stack lookup) and
@@ -5149,6 +5158,11 @@ const SETTINGS_CRITICAL_RANGES = {
   // able to silently store something outside "any date anyone would ever
   // actually pick here."
   openingCountdownAt: [0, 4102444800000],
+  // A floor above 0 -- the client divides scroll distance by this to get a
+  // duration, so 0 would produce an infinite/frozen animation rather than
+  // a genuinely paused one. 2000 is a generous ceiling, well past anything
+  // that would still read as a legible scroll.
+  activityTickerSpeed: [10, 2000],
 };
 const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight

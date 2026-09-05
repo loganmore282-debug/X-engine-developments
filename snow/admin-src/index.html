@@ -2030,6 +2030,9 @@ async function renderSettings(){
       <h2 class="sec" style="margin:14px 0 4px">Appearance</h2>
       <label>Number/digit font (every UGX figure in the app)</label>
       <select id="sNumberFont">${NUMBER_FONT_OPTIONS.map(f=>`<option value="${esc(f)}" ${v('numberFont','Bodoni Moda')===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
+      <label>Home activity ticker speed (px/second)</label>
+      <input id="sTickerSpeed" type="number" min="10" max="2000" value="${esc(v('activityTickerSpeed',160))}">
+      <p class="muted" style="margin:4px 0 0">How fast the scrolling deposit/withdraw activity strip on the user Home screen flows right to left. Higher is faster; 160 is the current default.</p>
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Whether recharges and cash-outs run through MarzPay or are handled by hand is set under <b>Manual payments</b> below. Either way, a cash-out waits as Pending until an admin acts on it in the Withdrawals tab.</p>
       <button class="btn block" id="saveRates">Save rates</button>
@@ -2215,6 +2218,7 @@ async function renderSettings(){
       maintenanceMsg:$('sMaintMsg').value.trim(), numberFont:$('sNumberFont').value,
       openingCountdownEnabled:$('sOpenCd').checked,
       openingCountdownAt:$('sOpenCdAt').value ? new Date($('sOpenCdAt').value).getTime() : 0,
+      activityTickerSpeed:+$('sTickerSpeed').value,
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });

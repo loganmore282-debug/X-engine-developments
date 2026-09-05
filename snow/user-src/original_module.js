@@ -1263,7 +1263,14 @@ async function renderActivityTicker(){
   track.style.animation = 'none';
   track.innerHTML = `<span style="padding-right:48px;">${joined}</span><span style="padding-right:48px;" aria-hidden="true">${joined}</span>`;
   const singleWidth = track.scrollWidth / 2;
-  const duration = Math.max(4, singleWidth / 160); // ~160px/sec, floor so a short feed doesn't whip past
+  // Owner: "make when l can configure what speed the activity checker be
+  // on home screen" -- was a hardcoded 160 (hand-tuned across Rounds
+  // 26/28), now admin-editable via STATE.settings.activityTickerSpeed
+  // (px/sec), falling back to that same original value if it's ever
+  // missing (a boot before settings resolve, or a database from before
+  // this field existed).
+  const speed = (STATE.settings && STATE.settings.activityTickerSpeed) || 160;
+  const duration = Math.max(4, singleWidth / speed); // floor so a short feed doesn't whip past
   track.style.animation = `tickerFlow ${duration}s linear infinite`;
 }
 function stopActivityTicker(){
