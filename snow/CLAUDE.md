@@ -9960,6 +9960,118 @@ exercise these lines anyway; the real, only meaningful test is that the driver a
 the options and the app still boots, both confirmed above). **`db.js` changed — Render
 should auto-deploy this push.**
 
+## Round 149 (2026-09-05) — MTN deposit-reversal fraud detection: automatic debit + ban
+
+Owner, split across two messages (first interrupted): a member deposits money manually
+(the SMS-forwarder path), the deposit is credited, and the member later exploits MTN's
+own reversal/dispute mechanism to claw the real money back from the admin's phone — the
+admin loses the real cash while the member keeps the platform credit. Final, explicit
+instruction: **"yeah server debits exactly what was reversed, a reversal can be partial
+or full so make intelligence in server so it debits and bans automatically."** MTN's own
+reversal SMS format was confirmed via 3 real captured screenshots; Airtel's was
+explicitly NOT supplied ("l got for mtn but l didn't get airtel, let's go with this for
+now") and was deliberately NOT guessed at, per this project's own standing "never guess
+an SMS format" rule.
+
+**Confirmed real format, MTN Uganda**: `"<FIRSTNAME>, <PHONE> has initiated a reversal of
+<AMOUNT> wrongly sent to you. Please approve the reversal by dialling *165*8*3# and enter
+your PIN or call 100/ WhatsApp <NUM> if you object to the reversal. Thank you."` —
+critically, unlike a normal deposit SMS this carries **no transaction id** referencing the
+original deposit, so matching can't rely on the same TID-based dedup the deposit path
+uses.
+
+**Confirmed no Android forwarder changes needed.** Read `SmsReceiver.java`'s own
+`MONEY_SENDERS` filtering before touching anything: it already forwards ANY SMS whose
+sender ID loosely contains "mtn" or "airtel" (case-insensitive substring, not exact, and
+not filtered by message CONTENT at all) — a reversal SMS from an "MTN Uganda"-shaped
+sender was already being forwarded to the server today. This is a server.js-only change,
+consistent with the Round 107 standing rule that `sms-forwarder-app/` stays hands-off
+unless the owner explicitly asks for a change to the app itself.
+
+**`server.js`**:
+- `RE_REVERSAL_MTN` + `parseReversalSms(text)` (placed right after `parseSentMoMoSms()`)
+  — matches only the one confirmed MTN phrase (`"has initiated a reversal of"`), extracts
+  the reversed amount (scanned right after that phrase, tolerant of an optional currency
+  word) and the payer's phone (scanned before the phrase, preferring a `+2567...`-shaped
+  candidate, same discipline as the existing `_smsCounterparty()` helper). Anything that
+  doesn't match this exact phrase — Airtel's own real format once captured, or an
+  unrelated message — falls straight through to the ordinary `parseMoMoSms()` path below,
+  which already safely rejects it; nothing here can crash or misfire on an unrecognized
+  message.
+- `/deposit/manual/sms-forwarder`'s handler now checks `parseReversalSms()` BEFORE the
+  ordinary deposit parser. A match is deduped via a hash of (raw text + receiving number)
+  prefixed `rev:` in `manualSmsLog` (no TID exists to dedup by, unlike a normal deposit
+  SMS) — a genuine repeat post of the same SMS never re-processes. It then queries
+  `pendingDeposits` for already-**credited** (`status:'matched'`) manual deposits on that
+  same admin number, optionally narrowed by the payer's own phone (**amount is
+  deliberately NOT part of the match key** — the owner confirmed a reversal can be
+  partial) — resolving to the distinct set of member accounts those deposits belong to:
+  - **Exactly one member** → `applyDepositReversal()` fires automatically.
+  - **Zero members** → logged as `reversal-unmatched`, nobody touched — needs a human.
+  - **More than one distinct member** → logged as `reversal-ambiguous`, **nobody**
+    auto-debited/banned — never guesses which of several members it belongs to.
+- `applyDepositReversal(userId, amount, raw, receivingNumber, payerPhone)` — under the
+  same `withLock('bal:'+userId, ...)` every other wallet-touching write in this file
+  already uses: debits `walletBalance` by **exactly** the reversed amount (deliberately
+  allowed to go **negative** here, unlike `/admin/debit`'s own refuse-to-overdraw
+  behavior — this is a punitive correction for confirmed fraud, not a routine
+  adjustment, and a negative balance correctly reflects the member now owing the
+  platform), decrements `totalDeposited` by the same amount, writes a new
+  `deposit_reversal`-type transaction ledger row (negative amount, so Records/the admin
+  panel shows exactly what happened rather than silently shrinking the original deposit's
+  own historical row), and immediately sets `status:'banned'` with a
+  `banReason`/`bannedAt` naming the automatic cause. Also calls `logSecurityEvent()` for
+  auditability. `'deposit_reversal'` was added alongside `'deposit'`/`'admin_credit'` in
+  both `computeUserRealTotals()`'s and `computeRealTotals()`'s own `totalDeposited` sum
+  (its negative amount subtracts correctly), so a later "Recalculate totals" run can
+  never silently wipe this correction back out.
+- New `POST /admin/manual-reversals/list` (`verifyAdmin`) — a full audit trail of every
+  reversal SMS ever seen (applied/ambiguous/unmatched), read from `manualSmsLog` filtered
+  to `reversal:true` rows. The existing `POST /admin/manual-sms-log/resolve` route already
+  works on ANY `manualSmsLog` doc id regardless of type, so an ambiguous/unmatched row can
+  be marked reviewed with that same endpoint — no separate resolve route was needed.
+- `db.js`: 2 new index specs — `manualSmsLog.{reversal,createdAt}` (this new list route's
+  own query shape) and `pendingDeposits.{method,status,assignedNumber,senderPhone,
+  createdAt}` (the reversal-matching query's own shape).
+
+**`admin-src/index.html`**: a new "Deposit reversal alerts" card on the Deposits tab
+(same visual treatment/placement as the existing "Unmatched SMS" card from Round 100,
+right below it) — shows every reversal event with its outcome
+("Auto-debited & banned" / "Matched multiple members, needs a look" / "No matching
+credited deposit found"), amount, admin number, payer, and the raw message. An applied
+row's whole line is clickable, opening the same real user-detail modal every other admin
+table row already opens (same `tr.clickable[data-uid]` pattern Round 133 established for
+the Deposits tab's own rows). `TX_LABELS` gained a `deposit_reversal: 'Deposit reversed
+(fraud)'` entry so the Transactions tab and user-detail modal render a readable label
+instead of a raw type string.
+
+**Verified**: `node --check` clean on `server.js`/`db.js`, `node build-admin.js` clean
+round-trip, a boot smoke test (real self-signed RSA dummy Firebase service-account PEM +
+unreachable `MONGODB_URI`) fails only at the expected Mongo-connect step, `git diff
+--check` clean. A new standalone harness (boots the real `server.js` against an
+in-memory Mongo-compatible mock DB via `require.cache` substitution, the same technique
+this file's own Round 103/104/106/108/109/111/113 harnesses established, driving the
+real `/deposit/manual/sms-forwarder` webhook with the real shared-secret header) — 23/23
+checks: a full reversal debits and bans exactly one matched member; a **partial**
+reversal debits **exactly** the stated (smaller) amount, not the full original deposit,
+and still bans; a duplicate post of the identical reversal SMS never re-debits; an
+unmatched reversal (no credited deposit for that number/payer) is reported and nobody is
+touched; an ambiguous reversal (two different members both have matched deposits from
+the same payer+number) is flagged for review with **neither** candidate debited or
+banned; an ordinary MTN deposit SMS, an ordinary Airtel-shaped deposit SMS, and a
+completely unrelated message are all confirmed to NOT be treated as reversals (no crash,
+no misfire); a wrong shared secret is refused (403); the new admin list endpoint
+surfaces all 3 outcome types with the real matched userId on the applied row.
+`test-momo-sms-parsers.js` (the committed 70-check SMS-parser regression suite) re-run
+green — confirms the new reversal parser doesn't interfere with the existing deposit
+parsers. `test-admin-obfuscated-build.js` (the real obfuscated admin build) extended
+with a fixture for `/admin/manual-reversals/list` and new interaction steps (the card
+renders both outcome labels and the real payer phone, clicking an applied row's own
+`tr[data-uid]` opens the real user-detail modal) — 0 errors across all 12 tabs. Admin
+cache bumped `v45`→`v46`. **`server.js` and `db.js` changed — Render should auto-deploy
+this push; `admin-src/index.html`/`admin/index.html` changed too — the static admin site
+redeploys from the same push, no separate step needed.**
+
 ## Live infra
 
 Updated 2026-09-05 — corrected forward from the original 2026-08-26 provisioning notes

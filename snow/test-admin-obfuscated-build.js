@@ -61,6 +61,14 @@ const routes = {
       device: 'Samsung SM-A047F', appVersion: '1.9', createdAt: new Date().toISOString() },
   ] },
   'POST /admin/manual-sms-log/resolve': { status: 'success' },
+  'POST /admin/manual-reversals/list': { status: 'success', rows: [
+    { id: 'rev1', amount: 30000, receivingNumber: '+256770000001', payerPhone: '+256700000010',
+      raw: 'JOHN DOE, 256700000010 has initiated a reversal of UGX 30,000 wrongly sent to you.',
+      applied: true, ambiguous: false, matchedUserId: 'u1', resolved: false, createdAt: new Date().toISOString() },
+    { id: 'rev2', amount: 10000, receivingNumber: '+256770000001', payerPhone: '+256700000040',
+      raw: 'SHARED PAYER, 256700000040 has initiated a reversal of UGX 10,000 wrongly sent to you.',
+      applied: false, ambiguous: true, matchedUserId: null, resolved: false, createdAt: new Date().toISOString() },
+  ] },
   'POST /admin/manual-numbers/analytics': { status: 'success', days: 14,
     totals: { smsForwarded: 12, credited: 9, unmatched: 2, ambiguous: 0, mismatch: 1, duplicate: 0,
       unparsed: 0, ignored: 0, assigned: 11, expired: 2, amount: 450000, deliveryMsSum: 9000,
@@ -808,6 +816,22 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   }
   const smsBadge = doc.getElementById('smsBadge');
   if (!smsBadge || smsBadge.classList.contains('hidden')) errors.push('Nav: Deposits unmatched-SMS badge not shown for the fixture');
+
+  // MTN deposit-reversal fraud alerts card, same Deposits tab.
+  if (!depHtml2.includes('Deposit reversal alerts')) errors.push('Deposits: reversal alerts card missing');
+  if (!depHtml2.includes('Auto-debited')) errors.push('Deposits: applied-reversal outcome label not rendered');
+  if (!depHtml2.includes('Matched multiple members')) errors.push('Deposits: ambiguous-reversal outcome label not rendered');
+  if (!depHtml2.includes('+256700000010')) errors.push('Deposits: reversal payer phone not rendered');
+  const revRow = doc.querySelector('#revAlertsWrap tr[data-uid="u1"]');
+  if (!revRow) errors.push('Deposits: applied-reversal row missing its clickable data-uid');
+  else {
+    revRow.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await sleep(300);
+    const modalHtml = doc.getElementById('modalRoot') ? doc.getElementById('modalRoot').innerHTML : '';
+    if (!modalHtml || !modalHtml.includes('u1') && !modalHtml.toLowerCase().includes('user')) errors.push('Deposits: clicking a reversal-alert row did not open the user-detail modal');
+    doc.querySelector('.modal-close')?.click();
+    await sleep(150);
+  }
 
   console.log('\n=== ERRORS (' + errors.length + ') ===');
   errors.forEach(e => console.log(' -', e));

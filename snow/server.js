@@ -3016,6 +3016,98 @@ function parseSentMoMoSms(text) {
   return { amount, txId: _smsTxId(t), recipient: _smsCounterparty(t, 'to'), raw: t };
 }
 
+// MTN deposit-reversal fraud: a member deposits manually (the SMS-forwarder
+// path below), gets credited, then exploits MTN's own reversal/dispute
+// mechanism to claw the real money back from the admin's phone -- the admin
+// loses the real cash while the member keeps the platform credit. Real,
+// confirmed format (3 captured screenshots, MTN Uganda -- owner: "l got for
+// mtn but l didn't get airtel"):
+//   "<FIRSTNAME>, <PHONE> has initiated a reversal of <AMOUNT> wrongly sent
+//   to you. Please approve the reversal by dialling *165*8*3# and enter your
+//   PIN or call 100/ WhatsApp <NUM> if you object to the reversal. Thank
+//   you."
+// Critically, unlike a normal deposit SMS this carries NO transaction id
+// referencing the original deposit -- so matching is by (receivingNumber,
+// payer phone) against already-CREDITED manual deposits, never guessed by
+// amount alone (the owner confirmed a reversal can be PARTIAL, less than the
+// original deposit). Airtel's own reversal wording has never been captured
+// -- per this project's standing "never guess an SMS format" rule, this
+// parser only recognizes the one confirmed MTN shape; anything else
+// (Airtel's real format, once captured, or an unrelated message) simply
+// doesn't match RE_REVERSAL_MTN and falls straight through to the ordinary
+// parseMoMoSms() path below, which already safely rejects it as "not a
+// deposit" -- nothing here can crash or misfire on a message it doesn't
+// recognize.
+const RE_REVERSAL_MTN = /has initiated a reversal of/i;
+function parseReversalSms(text) {
+  if (!text) return null;
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  if (!RE_REVERSAL_MTN.test(t)) return null;
+  // Amount sits right after "reversal of", with or without a currency word
+  // -- real captured samples showed a plain UGX prefix, but this stays
+  // tolerant of either shape rather than assuming one.
+  const amtMatch = t.match(/reversal of\s*(?:ugx|ush|shs?)?\s*([\d,]+(?:\.\d+)?)/i);
+  const amount = amtMatch ? parseFloat(amtMatch[1].replace(/,/g, '')) : NaN;
+  if (!amount || isNaN(amount)) return null;
+  // The payer's phone sits before "has initiated a reversal", right after
+  // their name (see the confirmed format above) -- scanned rather than
+  // assumed positionally, same discipline as _smsCounterparty(), preferring
+  // a Ugandan-mobile-shaped candidate.
+  const before = t.slice(0, t.search(/has initiated a reversal/i));
+  const candidates = before.match(/(?<!\d)\+?\d{9,13}(?!\d)/g) || [];
+  let payerPhone = '';
+  for (const c of candidates) {
+    const cleaned = cleanPhone(c);
+    if (cleaned && /^\+2567/.test(cleaned)) { payerPhone = c.replace(/[\s\-]/g, ''); break; }
+  }
+  return { amount, payerPhone, raw: t };
+}
+
+// Auto-applied the instant a reversal SMS is matched to EXACTLY one member
+// (see the webhook handler below) -- debits the wallet by EXACTLY the
+// reversed amount (a reversal can be partial, never the assumed-full
+// original deposit) and bans the account immediately, since the real money
+// has already left the admin's phone by the time this SMS exists.
+// Deliberately allows walletBalance to go NEGATIVE here, unlike every other
+// debit path in this file (e.g. /admin/debit, which refuses to overdraw) --
+// this is a punitive correction for confirmed fraud, not a routine balance
+// adjustment, and a negative balance correctly reflects that the member now
+// owes the platform rather than silently capping the correction at whatever
+// happened to still be sitting in the wallet.
+//
+// Recorded as its own ledger row (type 'deposit_reversal', negative amount)
+// rather than shrinking the original deposit's own ledger row in place --
+// keeps the original deposit's history intact (it genuinely happened) while
+// still making the correction visible and auditable in Records/the admin
+// panel. 'deposit_reversal' is added alongside 'deposit'/'admin_credit' in
+// computeUserRealTotals()/computeRealTotals()'s own totalDeposited sum (its
+// negative amount subtracts correctly), so a later "Recalculate totals" run
+// can never silently wipe this correction back out.
+async function applyDepositReversal(userId, amount, raw, receivingNumber, payerPhone) {
+  const amt = Math.round(amount);
+  const uRef = db.collection('users').doc(userId);
+  await withLock('bal:' + userId, async () => {
+    const uSnap = await uRef.get();
+    if (!uSnap.exists) throw new Error('User not found for reversal');
+    const { date, time } = nowStr();
+    await uRef.update({
+      walletBalance: FieldValue.increment(-amt),
+      totalDeposited: FieldValue.increment(-amt),
+      status: 'banned',
+      banReason: `Automatic: MTN deposit reversal detected (${fmtUGX(amt)} reversed by network)`,
+      bannedAt: FieldValue.serverTimestamp(),
+    });
+    await db.collection('transactions').add({
+      userId, type: 'deposit_reversal',
+      description: `Deposit reversed by network. ${fmtUGX(amt)} debited, account banned.`,
+      amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  logSecurityEvent(userId, 'deposit_reversal_ban', {
+    amount: amt, receivingNumber, payerPhone: payerPhone || null, raw: String(raw || '').slice(0, 500),
+  });
+}
+
 // Picks a number from this network's pool at RANDOM (owner: "remove
 // following of order of numbers let them be choose at random but
 // everything should be uniformly assigned" -- was a deterministic
@@ -3250,6 +3342,66 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
   const device = String((req.body && req.body.device) || '').slice(0, 60);
   const appVersion = String((req.body && req.body.appVersion) || '').slice(0, 20);
   if (receivingNumber) trackManual(receivingNumber, 'forwarded', { deliveryMs, device, appVersion });
+
+  // Checked BEFORE the ordinary deposit parser -- a reversal SMS never
+  // matches parseMoMoSms() anyway (see that function's own RE_INCOMING),
+  // but branching explicitly here keeps the fraud-detection logic separate
+  // and readable rather than relying on that as an implicit side effect.
+  const reversal = parseReversalSms(text);
+  if (reversal) {
+    try {
+      // No transaction id exists in this message (see parseReversalSms()'s
+      // own comment) -- dedup by hashing the raw text + receiving number,
+      // same fallback shape the ordinary deposit path already uses. Prefixed
+      // so a reversal's dedup key can never collide with a deposit SMS's own
+      // hash-fallback id for the same collection.
+      const revTid = 'rev:' + crypto.createHash('sha256').update(text + '|' + receivingNumber).digest('hex').slice(0, 24);
+      const revRef = db.collection('manualSmsLog').doc(revTid);
+      if ((await revRef.get()).exists) return res.json({ status: 'duplicate-reversal' });
+      await revRef.set({
+        reversal: true, amount: reversal.amount, payerPhone: reversal.payerPhone || '',
+        receivingNumber, raw: reversal.raw, device, appVersion, createdAt: FieldValue.serverTimestamp(),
+      });
+      // Find already-CREDITED manual deposits on this same admin number --
+      // amount is deliberately NOT part of the match key (a reversal can be
+      // partial, per the owner's own confirmation), only (receivingNumber,
+      // payer phone), so the reversal is attached to the right MEMBER, not
+      // guessed against a specific deposit amount.
+      let depQuery = db.collection('pendingDeposits')
+        .where('method', '==', 'manual').where('status', '==', 'matched')
+        .where('assignedNumber', '==', receivingNumber);
+      if (reversal.payerPhone) {
+        const cleanedPayer = cleanPhone(reversal.payerPhone) || reversal.payerPhone;
+        depQuery = depQuery.where('senderPhone', '==', cleanedPayer);
+      }
+      const depSnap = await depQuery.orderBy('createdAt', 'desc').limit(50).get();
+      const candidateUserIds = [...new Set(depSnap.docs.map(d => d.data().userId).filter(Boolean))];
+      if (!candidateUserIds.length) {
+        await revRef.update({ matchedUserId: null, reviewReason: 'No credited deposit found for this receiving number/payer' }).catch(() => {});
+        console.warn(`MANUAL_REVERSAL_UNMATCHED: ${fmtUGX(reversal.amount)} reversal reported on ${receivingNumber} from ${reversal.payerPhone || 'unknown payer'} -- no matching credited deposit found. Needs a human.`);
+        trackManual(receivingNumber, 'reversalUnmatched', { amount: reversal.amount });
+        return res.json({ status: 'reversal-unmatched', amount: reversal.amount });
+      }
+      if (candidateUserIds.length > 1) {
+        // Never guess with money -- more than one distinct member's own
+        // credited deposits match this (receivingNumber, payer) pair, so
+        // nobody is auto-debited/banned. Flagged for a human instead.
+        await revRef.update({ ambiguous: true, candidateUserIds }).catch(() => {});
+        console.warn(`MANUAL_REVERSAL_AMBIGUOUS: ${fmtUGX(reversal.amount)} reversal on ${receivingNumber} matches ${candidateUserIds.length} different members -- flagged for review, nobody auto-debited/banned.`);
+        trackManual(receivingNumber, 'reversalAmbiguous', { amount: reversal.amount });
+        return res.json({ status: 'reversal-ambiguous', amount: reversal.amount });
+      }
+      const targetUserId = candidateUserIds[0];
+      await applyDepositReversal(targetUserId, reversal.amount, reversal.raw, receivingNumber, reversal.payerPhone);
+      await revRef.update({ matchedUserId: targetUserId, applied: true }).catch(() => {});
+      trackManual(receivingNumber, 'reversalApplied', { amount: reversal.amount });
+      return res.json({ status: 'reversal-applied', amount: reversal.amount, userId: targetUserId });
+    } catch (e) {
+      console.error('Manual deposit reversal error:', e.message);
+      return res.status(500).json({ status: 'error', message: e.message });
+    }
+  }
+
   const info = parseMoMoSms(text);
   if (!info) {
     // Operators reword these templates without notice. If a message LOOKS
@@ -3507,6 +3659,34 @@ app.post('/admin/manual-sms-log/resolve', async (req, res) => {
     await db.collection('manualSmsLog').doc(id).update({ resolved: true, resolvedBy: req.adminUser?.username || 'owner', resolvedAt: FieldValue.serverTimestamp() });
     logAdminAction(req, 'manual_sms_log_resolved', { id });
     res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Full audit trail of every MTN deposit-reversal SMS this platform has ever
+// seen (see parseReversalSms()/applyDepositReversal() above) -- whether it
+// was auto-applied (a real, matched member, already debited and banned),
+// ambiguous (matched more than one member, nobody touched automatically), or
+// unmatched (no credited deposit found for that number/payer at all). Every
+// row is a real, already-happened event by the time it's read here -- this
+// list is purely visibility, it never itself moves money or changes a ban.
+// The existing /admin/manual-sms-log/resolve route already works on ANY
+// manualSmsLog doc id regardless of type, so an ambiguous/unmatched row here
+// can be marked reviewed with that same endpoint -- no separate resolve
+// route needed.
+app.post('/admin/manual-reversals/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('manualSmsLog').where('reversal', '==', true).orderBy('createdAt', 'desc').limit(200).get();
+    const rows = [];
+    snap.forEach(d => {
+      const v = d.data();
+      rows.push({
+        id: d.id, amount: v.amount != null ? v.amount : null, receivingNumber: v.receivingNumber || '',
+        payerPhone: v.payerPhone || '', raw: v.raw || '', applied: !!v.applied, ambiguous: !!v.ambiguous,
+        matchedUserId: v.matchedUserId || null, resolved: !!v.resolved, createdAt: v.createdAt || null,
+      });
+    });
+    res.json({ status: 'success', rows });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -6686,7 +6866,10 @@ async function computeUserRealTotals(userId) {
   let deposited = 0, earned = 0;
   txSnap.forEach(d => {
     const t = d.data();
-    if (t.type === 'deposit' || t.type === 'admin_credit') deposited += finiteMoney(t.amount);
+    // deposit_reversal carries a negative amount (see applyDepositReversal())
+    // and must be included here or a later "Recalculate totals" run would
+    // silently wipe the correction back out.
+    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') deposited += finiteMoney(t.amount);
     else if (EARNING_TX_TYPES.includes(t.type)) earned += finiteMoney(t.amount);
   });
   let invested = 0;
@@ -6718,7 +6901,9 @@ async function computeRealTotals() {
     const t = d.data();
     if (!t.userId) return;
     const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
-    if (t.type === 'deposit' || t.type === 'admin_credit') row.deposited += finiteMoney(t.amount);
+    // deposit_reversal carries a negative amount (see applyDepositReversal())
+    // and must be included here for the same reason as computeUserRealTotals().
+    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') row.deposited += finiteMoney(t.amount);
     // Every income source that credits totalEarned live must be summed
     // here too, or a "Recalculate totals" run silently wipes it back to
     // zero — cashback/commission/team_reward (Task Center)/promocode

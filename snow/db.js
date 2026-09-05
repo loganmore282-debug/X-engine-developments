@@ -148,6 +148,14 @@ async function ensureIndexes() {
     // Round 106 -- unresolvedManualSmsLog()'s real query shape after the
     // matched/resolved exclusion was pushed into the query itself.
     ['manualSmsLog', { matched: 1, resolved: 1, createdAt: -1 }],
+    // MTN deposit-reversal fraud detection's own review list
+    // (/admin/manual-reversals/list) -- queried by recency, filtered to
+    // reversal-tagged rows only.
+    ['manualSmsLog', { reversal: 1, createdAt: -1 }],
+    // parseReversalSms()'s own match query: find already-credited manual
+    // deposits on the admin number that reported the reversal, from the
+    // same payer.
+    ['pendingDeposits', { method: 1, status: 1, assignedNumber: 1, senderPhone: 1, createdAt: -1 }],
   ];
   // Built in small parallel batches, not strictly one at a time -- was
   // sequential because a shared M0 cluster had very little real
