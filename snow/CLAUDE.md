@@ -9880,12 +9880,112 @@ across all 12 tabs. Admin cache bumped `v44`→`v45`. **`server.js` and
 push per `render.yaml` (`snow-server` for the backend field,
 `snow-admin` for the static panel).**
 
-## Live infra (provisioning started 2026-08-26)
+## Round 148 (2026-09-05) — corrected the "M0 has no real transactions" story (it was never actually about the tier), db.js retuned for the owner's paid Flex/Render-Pro upgrade
 
-- **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
-  a Firebase web `apiKey` is not a secret, access control is Security Rules/App Check,
-  same reasoning space8 already uses for its own committed config in
-  `user-src/index.html`/`admin-src/index.html`):
+Owner revealed (unprompted, mid a VPS/hosting side-conversation) that Snow has been
+running on paid infrastructure for a while, not the free tiers this whole project's own
+history assumed: MongoDB Atlas **Flex** (paid, ~$32/mo projected), not M0, and Render's
+paid **Pro** plan on `snow-server`, not the free tier. Asked me to "check snow to make it
+super solid" now that this was clear.
+
+**The important correction, made before touching any code.** This project's entire money-
+safety architecture — `withLock()`, claim-before-credit ordering, `updateIf()`'s atomic
+single-document conditionals — has been justified throughout dozens of prior rounds by
+one repeated line: "M0 has no real multi-document ACID transactions." That framing is
+misleading and needed fixing before the owner drew the wrong conclusion from their own
+upgrade. Read `db.js` directly to check: `Transaction`/`WriteBatch` (the classes behind
+`db.runTransaction()`/`db.batch()`) are hand-written to mimic Firestore's API and just
+run each queued operation sequentially in a loop — **neither one ever calls MongoDB's
+real session-based transaction API** (`client.startSession()`/`session.withTransaction()`)
+at all. That's a property of how this compat layer was written, not of the Atlas tier —
+it behaves identically on M0, Flex, or a dedicated M40. Upgrading MongoDB does not, and
+never did, unlock atomic multi-document writes for this app; only rewriting `db.js` to
+use real sessions would. Corrected `db.js`'s own header comment and 2 other scattered
+comments that repeated the same misattribution (`ensureIndexes()`'s own comment, the
+`Transaction` class's own section header) — left the money-safety reasoning in
+`server.js` itself untouched (it correctly describes the CONSEQUENCE — no rollback — even
+where its own wording about WHY is imprecise; not worth chasing every one of those for a
+label fix, per this file's own standing practice against pure-accuracy churn with no
+functional effect).
+
+**What actually did change with the upgrade, and what didn't need to.** Flex genuinely
+removes M0's hard 512MB storage ceiling and adds real continuous backups (M0 has none) —
+both real, valuable, unrelated to the transaction question. The existing money-safety
+architecture (`withLock`/claim-before-credit/`updateIf`) stays exactly as it is — it's
+correctly protecting against CONCURRENT REQUESTS WITHIN THIS ONE NODE PROCESS, not
+working around a missing database feature, so it remains necessary and correct
+regardless of what tier the database runs on. No case for tearing any of it out or
+attempting a real-transactions rewrite — that would be a large, high-risk change to
+code that has already passed ~10 rounds of independent Codex/subagent audits, for a
+benefit (atomicity this app doesn't currently lack in practice) that doesn't exist.
+
+**Two real, low-risk tuning changes made given the genuinely new headroom:**
+1. `db.js`'s Mongo client `minPoolSize` raised `0`→`3`. Was `0` (open connections only
+   on demand) — a sensible default for a free-tier service that could spin down anyway;
+   less sensible now that `snow-server` stays up continuously on Render Pro, where a
+   couple of warm connections avoid a small latency hit on the first request after any
+   quiet stretch. `maxPoolSize` (50) was left unchanged — already generous for a single
+   Node process regardless of tier, no evidence it's ever been a bottleneck.
+2. `ensureIndexes()` (the background index-build pass run once at boot) changed from
+   strictly one-index-at-a-time to small parallel batches of 5 (`Promise.allSettled`
+   per batch). Was sequential specifically because a shared M0 cluster had very little
+   real concurrency headroom for simultaneous index builds; a paid Flex cluster handles
+   several at once comfortably, so a fresh deploy's ~30+ index specs now converge
+   faster. Deliberately batched rather than one big unbounded `Promise.all` — this is
+   still non-blocking background work (never awaited by `connectMongo()`, so it can
+   never delay a deploy or a request either way), no need to hit the cluster with 30+
+   simultaneous index builds just to shave a few seconds off an already-invisible task.
+
+**Checked and found already fine, no change made**: every hardcoded `.limit(N)`
+collection-scan ceiling across `server.js` (grepped all of them) — the smallest of the
+"generous ceiling, not real pagination" caps documented in earlier rounds is 10,000 rows
+(`/admin/users`, `/admin/stats`, etc.); the admin panel's own live Referrals count
+(1,278, seen in a screenshot the owner sent this same conversation) confirms the
+platform's real current scale is comfortably under every one of these — nothing is close
+to being hit. Building genuine cursor-based pagination to replace them remains a real,
+larger project (this compat layer has none, as several earlier rounds already noted) —
+not warranted by anything observed today, and not undertaken.
+
+**Verified**: `node --check db.js`/`server.js` clean; a boot smoke test (real self-signed
+RSA dummy Firebase service-account PEM + unreachable `MONGODB_URI`) fails only at the
+expected Mongo-connect step, confirming the new client options (`minPoolSize:3`) are
+accepted by the driver with no earlier error; a standalone isolated test of the exact
+batched-index-build logic (13 fake specs across 3 batches of 5/5/3, one simulated
+failure) confirmed every spec is still attempted exactly once, batch sizing is correct,
+and the failure count is accurate. `git diff --check` clean. This round is `db.js`-only
+(a connection-tuning and comment-accuracy change, not a behavior change any test harness
+would need to re-verify — every existing money-safety harness in this project's history
+substitutes a mock in place of `db.js` entirely via `require.cache`, so none of them
+exercise these lines anyway; the real, only meaningful test is that the driver accepts
+the options and the app still boots, both confirmed above). **`db.js` changed — Render
+should auto-deploy this push.**
+
+## Live infra
+
+Updated 2026-09-05 — corrected forward from the original 2026-08-26 provisioning notes
+below, which described a pre-launch planning state (no frontend code, MongoDB user
+mid-setup) that stopped being true 147 rounds ago. Kept the original text underneath for
+history per this file's own practice, but treat THIS block as the current, real state.
+
+- **Firebase**: project `snow-beer-cbf65`, live and in use by both `user/index.html` and
+  `admin/index.html` (email/password auth). Client config below is genuinely not secret
+  (access control is Security Rules/App Check, not the `apiKey`) — safe to have committed.
+- **MongoDB Atlas**: owner upgraded from the original M0 free tier to a paid **Flex**
+  cluster (pay-as-you-go, ~$0.011/hour, projected ~$32/month at current usage, 5GB
+  storage) — same cluster, same `MONGODB_URI` already set on Render, no connection-string
+  change needed. Flex removes M0's hard 512MB storage ceiling and includes real
+  continuous backups (M0 has none). **This does NOT change db.js's own transaction
+  model** — see that file's own header comment (corrected the same day): the lack of
+  atomic multi-document writes was never actually an M0 limitation, it's that
+  `Transaction`/`WriteBatch` in db.js never call MongoDB's real session API at all, on
+  any tier. `db.js`'s connection pool settings were tuned in response to this upgrade
+  (`minPoolSize` 0→3, index builds now run in small parallel batches instead of strictly
+  one-at-a-time) — see that round's own entry below.
+- **Render**: `snow-server` is on the paid **Pro** plan ($25/mo flat-fee + compute) — no
+  more free-tier cold starts/spin-down. `snow-app`/`snow-admin` (the 2 static sites) were
+  not confirmed changed from their original plan.
+
+**Original 2026-08-26 provisioning notes (kept for history, superseded above):**
   ```js
   const firebaseConfig = {
     apiKey: "AIzaSyDhaVbSaQyYRdSiP1LLze-Apb6kNNTVCsc",
@@ -9903,7 +10003,7 @@ push per `render.yaml` (`snow-server` for the backend field,
   (server-side, genuinely secret) has NOT been provided and must never go in this repo
   when it is — only into the backend host's env vars, exactly like space8's
   `FIREBASE_SERVICE_ACCOUNT` on Render.
-- **MongoDB Atlas**: owner is creating a dedicated `snow` database user (same shared
+  MongoDB Atlas: owner is creating a dedicated `snow` database user (same shared
   cluster/project space8 and choco-mcc already use, separated by database name — see
   space8's own equivalent note in `space8/CLAUDE.md`). Mid-setup as of 2026-08-26: the
   Atlas "Add New Database User" dialog was screenshotted with username `snow` filled

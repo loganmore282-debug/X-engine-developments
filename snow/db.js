@@ -3,11 +3,28 @@
 // Wraps the MongoDB native driver in a Firestore-like API so server.js needs
 // minimal changes. Collections use `_id` as the document ID (string, not ObjectId).
 //
-// NOTE: MongoDB Atlas M0 free tier does not support multi-document ACID transactions.
-// runTransaction() runs operations sequentially; financial dedup flags in the business
-// logic already guard against double-credits on failure -- see server.js's in-process
-// withLock() single-writer locks around every money-crediting path.
-
+// NOTE on transactions, corrected 2026-09-05 (the owner upgraded from Atlas
+// M0 to a paid Flex cluster + Render's paid Pro plan, and asked whether that
+// changes anything here -- it doesn't, for a reason worth being precise
+// about): the earlier comment here blamed "M0 free tier" for the lack of
+// real multi-document ACID transactions. That was never actually the cause.
+// Transaction/WriteBatch below are hand-written to mimic Firestore's API and
+// just run each queued operation sequentially with a plain loop (see their
+// own class comments) -- they never call MongoDB's real session-based
+// transaction API (client.startSession()/session.withTransaction()) at all.
+// That's a property of THIS FILE's own implementation, not of the Atlas
+// tier -- it would behave identically on M0, Flex, or a dedicated M40.
+// Upgrading the cluster tier does not unlock atomic multi-document writes
+// for this app; only rewriting this compat layer to use real sessions
+// would. The financial dedup flags in server.js's own business logic
+// already guard against double-credits regardless (claim-before-credit
+// ordering, updateIf()'s atomic single-document conditionals, and the
+// in-process withLock() single-writer locks around every money-crediting
+// path) -- all of that stays correct and necessary no matter what tier the
+// database runs on, since it's really guarding against concurrent requests
+// within this one Node process, not against a missing DB feature. Not
+// something to rip out or "upgrade away" just because a bigger cluster is
+// now available.
 const { MongoClient } = require('mongodb');
 
 let _client = null;
@@ -18,8 +35,15 @@ async function connectMongo(uri) {
     serverSelectionTimeoutMS: 10000, // give up finding a server after 10s
     connectTimeoutMS:         15000,
     socketTimeoutMS:          45000, // don't let a slow query hang a socket forever
-    maxPoolSize:              50,    // cap connections so one instance can't exhaust M0
-    minPoolSize:              0,
+    maxPoolSize:              50,    // generous for a single Node process regardless of cluster tier
+    // Owner upgraded Render to its paid Pro plan (2026-09-05) -- this
+    // process no longer spins down between requests the way a free-tier
+    // service did, so it's worth keeping a couple of connections warm
+    // instead of opening a fresh one from cold on every request after an
+    // idle stretch. Was 0 (open nothing until actually needed) -- a
+    // sensible default on a free tier that could spin down anyway, less so
+    // now that the process legitimately stays up continuously.
+    minPoolSize:              3,
     retryReads:               true,  // auto-retry reads through a transient blip
     retryWrites:              true,  // auto-retry writes through a transient blip
     waitQueueTimeoutMS:       10000
@@ -125,11 +149,26 @@ async function ensureIndexes() {
     // matched/resolved exclusion was pushed into the query itself.
     ['manualSmsLog', { matched: 1, resolved: 1, createdAt: -1 }],
   ];
-  // ONE AT A TIME -- M0's free tier has very little real concurrency headroom.
+  // Built in small parallel batches, not strictly one at a time -- was
+  // sequential because a shared M0 cluster had very little real
+  // concurrency headroom; a paid Flex/dedicated cluster tolerates several
+  // index builds at once comfortably, so this converges faster after a
+  // fresh deploy or when new indexes are added. Kept batched (not one big
+  // Promise.all) rather than fully unbounded, since this is still
+  // background work with no user waiting on it -- no need to hit the
+  // cluster with 30+ simultaneous index builds just to save a few seconds.
+  const BATCH = 5;
   let failed = 0;
-  for (const [col, keys] of specs) {
-    try { await _mdb.collection(col).createIndex(keys); }
-    catch (e) { failed++; console.warn(`Index build failed (${col} ${JSON.stringify(keys)}):`, e.message); }
+  for (let i = 0; i < specs.length; i += BATCH) {
+    const batch = specs.slice(i, i + BATCH);
+    const results = await Promise.allSettled(batch.map(([col, keys]) => _mdb.collection(col).createIndex(keys)));
+    results.forEach((r, j) => {
+      if (r.status === 'rejected') {
+        failed++;
+        const [col, keys] = batch[j];
+        console.warn(`Index build failed (${col} ${JSON.stringify(keys)}):`, r.reason && r.reason.message);
+      }
+    });
   }
   console.log(`MongoDB indexes ensured (${specs.length - failed}/${specs.length})`);
 }
@@ -372,7 +411,8 @@ class CollectionReference extends Query {
   }
 }
 
-// ── Transaction proxy (sequential — M0 free tier doesn't support sessions) ───
+// ── Transaction proxy (sequential — never wired to Mongo's real session API,
+// see this file's own header note; not a tier limitation) ───────────────────
 class Transaction {
   constructor() { this._ops = []; }
   get(ref) { return ref.get(); }
