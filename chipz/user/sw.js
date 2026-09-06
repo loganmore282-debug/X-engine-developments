@@ -4,7 +4,7 @@
 // both hit repeatedly before this pattern was adopted).
 const CACHE = 'chipz-shell-v1';
 const VENDOR_CACHE = 'chipz-vendor-firebase-v1';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/badge.png', '/treasure-chest.png',
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/treasure-chest.png',
   '/nav-home.png', '/nav-products.png', '/nav-myproducts.png', '/nav-referral.png', '/nav-team.png', '/nav-account.png',
   '/act-deposit.png', '/act-withdraw.png', '/act-channel.png', '/act-service.png',
   '/set-download.png', '/set-wallet.png', '/set-balance.png', '/set-messages.png', '/set-loginpw.png', '/set-tradepw.png'];
