@@ -96,16 +96,6 @@ a{color:inherit;}
 .navitem .nav-ic img{width:23px;height:23px;object-fit:contain;filter:grayscale(1) opacity(.5);transition:filter .15s;}
 .navitem.active .nav-ic img{filter:none;}
 
-.brand-hero--full{position:relative;overflow:hidden;min-height:250px;padding-bottom:100px;background:var(--chipz-hero);color:#fff;}
-.brand-wave--full{position:absolute;inset:auto 0 -1px;width:100%;height:126px;display:block;}
-.brand-card{background:var(--chipz-hero);border-radius:var(--snow-radius-card);position:relative;overflow:hidden;color:#fff;}
-/* Account page's profile header -- same full-bleed "fills the upper part"
-   shape as Home's hero, but its own scalloped triple-bump wave (accountWaveFull())
-   instead of Home's single S-curve (brandWaveFull()), so the two read as
-   distinct, not copy-pasted (owner: "wavy design but different from that
-   of home"). */
-.account-hero--full{position:relative;overflow:hidden;min-height:230px;padding-bottom:58px;background:var(--chipz-hero);color:#fff;}
-.account-wave--full{position:absolute;inset:auto 0 -1px;width:100%;height:86px;display:block;}
 
 .wordmark{display:flex;align-items:center;gap:9px;}
 .wordmark .wm-text{font-weight:800;letter-spacing:2px;}
@@ -133,26 +123,7 @@ a{color:inherit;}
 .list-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
 .list-row:last-child{border-bottom:none;}
 
-/* Withdrawal accounts, shown as a bank-card style tile -- owner: "I want a
-   saved account to appear like a bank card... before saving [it shows
-   masked placeholders], and after saving it shows holder name and number." */
-.bank-card{position:relative;overflow:hidden;min-height:130px;border-radius:20px;padding:20px;margin-bottom:14px;color:#fff;background:var(--chipz-hero);box-shadow:0 16px 30px -20px rgba(17,17,17,.45);display:flex;flex-direction:column;justify-content:space-between;}
-.bank-card.bank-card-empty{opacity:.6;}
-.bank-card-top{position:relative;display:flex;align-items:center;justify-content:space-between;}
-.bank-card-network{font-size:11.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;opacity:.9;}
-.bank-card-number{position:relative;font-size:19px;font-weight:700;letter-spacing:2.5px;margin-top:18px;}
-.bank-card-bottom{position:relative;display:flex;align-items:flex-end;justify-content:space-between;margin-top:16px;gap:10px;}
-.bank-card-holder{font-size:12.5px;font-weight:700;letter-spacing:.4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.bank-card-delete{position:relative;flex-shrink:0;border:none;background:rgba(255,255,255,.16);color:#fff;padding:8px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
 
-.account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
-.account-feature-card{min-height:190px;border-radius:var(--snow-radius-card);overflow:hidden;box-shadow:0 16px 32px -22px rgba(17,17,17,.35);position:relative;color:#fff;padding:20px;display:flex;flex-direction:column;justify-content:flex-end;border:none;text-align:left;font-family:inherit;}
-.account-utility-card{min-height:100px;border-radius:26px;padding:16px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:row;align-items:center;gap:14px;border:none;text-align:left;font-family:inherit;width:100%;}
-.account-icon-bubble{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.utility-wine{border:1px solid rgba(148,24,39,.10);}
-.utility-wine .account-icon-bubble{background:linear-gradient(145deg,#B42638,var(--snow-wine));color:#fff;box-shadow:0 10px 20px -12px rgba(113,16,27,.55);}
-.utility-green{border:1px solid rgba(47,107,71,.12);}
-.utility-green .account-icon-bubble{background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));color:#fff;box-shadow:0 10px 20px -12px rgba(31,81,54,.5);}
 
 .team-referral-card{position:relative;overflow:hidden;min-height:210px;padding:22px;border-radius:var(--snow-radius-card);color:#fff;background:var(--chipz-hero);box-shadow:0 16px 32px -22px rgba(17,17,17,.35);}
 .team-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
@@ -401,8 +372,15 @@ a{color:inherit;}
    are deliberately real emoji glyphs (owner: "even see those emoji or
    symbols of padlock, key... l need that same key") -- the only place in
    this app that uses emoji instead of SVG. */
-.auth-hero{position:relative;overflow:hidden;padding:26px 20px 0;background:var(--chipz-hero);background-size:cover;background-position:center;color:#fff;min-height:250px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
-.auth-wave{position:absolute;inset:auto 0 -1px;width:100%;height:70px;display:block;}
+.auth-hero{position:relative;overflow:hidden;height:280px;background:var(--chipz-grad);background-size:cover;background-position:center;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
+/* Angular triangle motifs, straight off Main.dc.html -- Chipz's brand
+   language is angular, NOT the soft wave this screen inherited from Snow
+   (owner: "l no longer need to see this wavy curvy design"). */
+.auth-tri{position:absolute;}
+.auth-tri.t1{width:0;height:0;border-left:90px solid transparent;border-right:90px solid transparent;border-bottom:150px solid rgba(0,0,0,.16);top:-60px;left:-40px;transform:rotate(18deg);}
+.auth-tri.t2{width:0;height:0;border-left:70px solid transparent;border-right:70px solid transparent;border-bottom:120px solid rgba(255,255,255,.14);bottom:-50px;right:-30px;transform:rotate(-12deg);}
+.mark-row{display:flex;align-items:center;gap:8px;position:relative;z-index:2;}
+.mark-tri{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-bottom:20px solid #14100d;flex-shrink:0;}
 .auth-wordmark{position:relative;font-family:'Playfair Display',Georgia,serif;font-size:36px;letter-spacing:.02em;transform:skewX(-7deg);color:#fff;}
 .auth-wordmark b{color:#14100d;font-weight:400;}
 .auth-card{background:var(--snow-surface);margin-top:-28px;border-radius:var(--snow-radius-sheet) var(--snow-radius-sheet) 0 0;position:relative;z-index:3;padding:32px 22px 30px;box-shadow:0 22px 44px -26px rgba(40,10,4,.5);}
@@ -887,11 +865,13 @@ a{color:inherit;}
 <div id="authScreen" style="display:none;">
   <div class="wrap" style="padding-bottom:0;">
     <div class="auth-hero" id="authHero">
-      <div class="auth-wordmark">CHIP<b>Z</b></div>
-      <div id="authTagline" style="position:relative;text-align:center;font-size:13px;color:rgba(255,255,255,.85);font-weight:600;display:none;"></div>
-      <svg class="auth-wave" viewBox="0 0 390 70" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M0 48 C58 22 104 18 154 34 C205 50 251 44 296 22 C332 6 362 0 390 4 L390 70 L0 70 Z" fill="var(--snow-canvas)"></path>
-      </svg>
+      <span class="auth-tri t1" aria-hidden="true"></span>
+      <span class="auth-tri t2" aria-hidden="true"></span>
+      <div class="mark-row">
+        <span class="mark-tri" aria-hidden="true"></span>
+        <span class="auth-wordmark">CHIP<b>Z</b></span>
+      </div>
+      <div id="authTagline" style="position:relative;z-index:2;text-align:center;font-size:14px;color:rgba(255,255,255,.92);font-weight:600;padding:0 40px;display:none;"></div>
     </div>
     <div class="auth-card">
       <div id="loginPane">
