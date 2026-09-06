@@ -63,9 +63,10 @@ everything else pixel-for-pixel.
   catalog into Home with no separate Products tab. Referral tab sits between My
   Products and Team, holding the banner + Share URL/Copy Invite Link + Invitation
   Reward content (moved OUT of Team, which now only holds stats + member list).
-- **Register has a confirm-password field** and a **6-digit Trade Password with its own
-  confirm field** — Snow's registration has no confirm fields and a 5-digit single PIN.
-  Referral code field is **required**, not optional/skippable.
+- **Register has a confirm-login-password field** and a **6-digit Trade Password**
+  (single field — `Register.dc.html` has no confirm for it, an earlier note here said
+  otherwise and was wrong). Snow's registration has no confirm field and a 5-digit
+  PIN. Referral code field is **required**, not optional/skippable.
 - **Messages / notifications feature** — Chipz has a real inbox (list + detail popup),
   something Snow deliberately does NOT have (explicitly removed there by owner
   decision). Reuses Snow's dormant backend concept if one exists; otherwise build fresh.
@@ -169,13 +170,55 @@ service account, admin key, payment-provider keys) live ONLY in the hosting plat
 env vars once Chipz has its own live deploy — never in this repo, never in chat unless
 truly necessary and immediately treated as compromised.
 
-## Status as of this file's creation
+## Status
 
-Backend/frontend/admin have just been mechanically forked from `snow/` (file copy,
-`node_modules` excluded, package/service names rebranded) onto this file's own commit.
-**Nothing has been visually reskinned or structurally changed yet** — the real
-`user-src/index.html`/`original_module.js`/`admin-src/index.html` still look and behave
-exactly like Snow's own, product catalog still has Snow's real Snow Beer product
-names/images, and no live infrastructure (Firebase/Mongo/payment providers) has been
-provisioned. The screen-by-screen port to match the `chipz-design/` mockups is the next
-phase of work.
+The screen-by-screen port to the `chipz-design/` mockups is **done** — every screen
+in the mockup set is built in the real app and verified against the real obfuscated
+build with Playwright (zero page errors).
+
+Built and verified: Login, Sign Up, Loading, Home (topbar + banner + 4 action buttons
++ activity ticker + Hot/New product tabs + floating chest), Products (catalog),
+My Products, Referral, Team, Account, Wallet, Balance Record (All/Deposit/Withdraw/
+Turntable), Messages (inbox + detail sheet), Change Login Password, Change Trade
+Password, Treasure Chest + win state, Notify dialog, Announcement, Deposit, Withdraw.
+
+What was built beyond a pure port:
+- **Messages backend** (`messages` + `messageReads` collections; `GET /messages`,
+  `POST /messages/read`, and admin `list`/`save`/`delete`) plus a **Messages tab in
+  the admin panel**. A built-in "welcome" message is served virtually until an admin
+  writes a real one, and a deleted one leaves a tombstone so it stays gone.
+- **Trade Password is now 6 digits** everywhere (was Snow's 5) — `pinCheck`,
+  `/account/transaction-pin/change`, `/admin/user/reset-payout-pin`, registration,
+  withdrawal, and every piece of copy. "Transaction PIN" is renamed "Trade Password"
+  in user- and admin-facing text.
+- **Auth email domain** is `@chipz-platform.com` (was `@snow-platform.com`).
+- **Two new admin image slots** — the Referral page banner and the Account brand
+  logo — behind one generic endpoint pair (`/public/chipz-images`,
+  `/admin/chipz-image/set|clear`, `banners/chipz-<slot>` docs).
+- **Owner's own PNG icon set shipped** in `user/`: `nav-*.png` (6 bottom-nav icons,
+  greyscale-filtered when inactive), `act-*.png` (4 Home action icons), `set-*.png`
+  (6 Account settings-row icons), `treasure-chest.png`. All downscaled; ~285 KB total.
+- **Snow's snowflake mark is gone** — `chipzMarkHtml()` (a skewed CHIPZ wordmark on
+  the brand gradient) replaces it wherever a compact logo is needed.
+- Admin panel rebranded to "Chipz Admin" with the red accent (value-only `--gold*`
+  token swap); PWA manifest + `sw.js` rebranded, cache bumped to `chipz-shell-v1`,
+  and the new icons added to the precache SHELL list.
+- Snow's old Records sheet was removed — Balance Record fully replaces it.
+
+Known gaps / next up:
+- **Turntable has no backend yet.** The Balance Record tab exists and renders empty;
+  the daily-spin mechanic, its admin-set win amount, and the per-product extra-spin
+  percentage still need building (see the Turntable bullet above for the spec).
+- Product catalog is still placeholder ("Product-1".."Product-10") — the owner has
+  not supplied real names/prices/images.
+- No live infrastructure yet: `user-src/index.html` still carries Snow's Firebase
+  config, and `API_BASE` still points at Snow's Render URL. Both need swapping when
+  Chipz gets its own Firebase project, MongoDB cluster and backend deploy.
+
+### Testing notes (reusable)
+Playwright verification runs against the **built** `user/index.html` served over
+`http://127.0.0.1:8731`, with `service_workers="block"` on the browser context — the
+service worker otherwise intercepts API calls before `page.route` sees them, which
+looks exactly like a broken endpoint. Firebase's ESM modules are stubbed by routing
+`https://www.gstatic.com/firebasejs/**/firebase-{app,auth}.js` to a tiny fake module
+that reports an already-signed-in user.

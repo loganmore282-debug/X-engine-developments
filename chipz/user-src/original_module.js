@@ -10,7 +10,16 @@
 var API_BASE = 'https://mylifeismyhappiness.onrender.com';
 
 var ICONS = {
-  bell: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>',
+  // ── Chipz additions ──────────────────────────────────────────────────
+  grid: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
+  megaphone: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1Z"/><path d="M14.5 8.5a4.5 4.5 0 0 1 0 7"/><path d="M17.5 5.5a8.5 8.5 0 0 1 0 13"/></svg>',
+  envelope: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 6l8 7 8-7"/></svg>',
+  lock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
+  keyIcon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l2 2M14 9l2 2"/></svg>',
+  telegram: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 3.5 2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5Z"/></svg>',
+  warnTriangle: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M12 3 2 20h20L12 3Z" fill="#f4b400" stroke="#a66a00" stroke-width="1"/><path d="M12 10v4" stroke="#5a3d00" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="#5a3d00"/></svg>',
+  wheel: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg>',
+  bell:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>',
   deposit: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8"/><path d="M8.5 12 12 15.5 15.5 12"/></svg>',
   withdraw: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-8"/><path d="M8.5 12 12 8.5 15.5 12"/></svg>',
   chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
@@ -44,26 +53,15 @@ var ICONS = {
   idCard: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-1.6 1.9-2.4 3-2.4s2.5.8 3 2.4"/><path d="M14 9.5h4.5M14 13h4.5"/></svg>',
   bulb: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 18h5"/><path d="M10.3 21h3.4"/><path d="M12 3a6 6 0 0 0-3.3 11c.6.4.9.9.9 1.6v.4h4.8v-.4c0-.7.3-1.2.9-1.6A6 6 0 0 0 12 3Z"/></svg>',
 };
-// Owner supplied this exact icy-blue gradient snowflake mark (superseding
-// both the hand-drawn version and the Twemoji-glyph version from earlier
-// rounds) and asked for it "everywhere." It's a stroke-based 6-arm mark
-// with a fixed linear gradient (#8DE8FF -> #4FC3F7 -> #168BD2), unlike
-// every other icon in this file which takes a single flat `color` -- the
-// `color` param is kept (unused) purely so every existing call site
-// (Home/Team/Account/My-Products headers) needs no changes. Each call gets
-// its own unique gradient id via _snowflakeIdCounter: this app renders the
-// mark twice in the same DOM on Account (header + profile card), and SVG
-// <linearGradient> ids must be unique or the second instance's gradient
-// resolution is undefined behavior.
 // Owner: "make when l can change figure/digit fonts in admin panel" -- the
 // `.mono` class (every UGX figure/numeric stat) reads its font-family from
 // the `--number-font` CSS custom property (see index.html), set from
 // STATE.settings.numberFont by applyNumberFont() below. Keep this exact key
 // set in sync with NUMBER_FONT_OPTIONS in server.js and the admin <select>
-// options -- a value outside this map falls back to Bodoni Moda's stack
-// (the original hardcoded default) rather than rendering with no
-// font-family at all. Georgia/"System default" need no Google Fonts
-// webfont; every other option is loaded up front in index.html's <link>.
+// options -- a value outside this map falls back to Playfair Display's
+// stack (Chipz's own default) rather than rendering with no font-family at
+// all. Georgia/"System default" need no Google Fonts webfont; every other
+// option is loaded up front in index.html's <link>.
 var NUMBER_FONT_STACKS = {
   'Bodoni Moda': "'Bodoni Moda',Didot,'Playfair Display',Georgia,serif",
   'Playfair Display': "'Playfair Display',Didot,Georgia,serif",
@@ -74,12 +72,12 @@ var NUMBER_FONT_STACKS = {
   'Orbitron': "'Orbitron',ui-sans-serif,sans-serif",
   'System default': "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
 };
-var _snowflakeIdCounter = 0;
-function snowflakeSvg(color, size){
-  const gid = 'ice' + (_snowflakeIdCounter++);
-  const armD = 'M256 256V48M256 108L204 78M256 108L308 78M256 166L215 142M256 166L297 142';
-  const arms = [0,60,120,180,240,300].map(deg => `<path d="${armD}" transform="rotate(${deg} 256 256)"/>`).join('');
-  return `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="${gid}" x1="96" y1="72" x2="416" y2="440" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8DE8FF"/><stop offset="0.5" stop-color="#4FC3F7"/><stop offset="1" stop-color="#168BD2"/></linearGradient></defs><g fill="none" stroke="url(#${gid})" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">${arms}</g><circle cx="256" cy="256" r="18" fill="url(#${gid})"/></svg>`;
+// Chipz's own brand mark, used wherever a compact logo is needed and no
+// admin-uploaded image is set. A skewed CHIPZ wordmark on the brand
+// gradient -- this replaces Snow's inherited icy snowflake mark entirely.
+function chipzMarkHtml(size){
+  const px = Number(size) || 44;
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--chipz-grad);color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:${Math.round(px/3.4)}px;letter-spacing:.02em;transform:skewX(-6deg);">CHIPZ</span>`;
 }
 function waveLinesTR(w,h,color,count,opacity){
   color = color || 'var(--snow-wave-on-wine)'; count = count || 4; opacity = opacity == null ? .9 : opacity;
@@ -242,7 +240,7 @@ async function api(path, opts){
 function post(path, body){ return api(path, { method: 'POST', body: JSON.stringify(body || {}) }); }
 
 // ── AUTH ──
-function phoneToEmail(phone){ return String(phone).replace(/\D/g,'').replace(/^0+/, '') + '@snow-platform.com'; }
+function phoneToEmail(phone){ return String(phone).replace(/\D/g,'').replace(/^0+/, '') + '@chipz-platform.com'; }
 function cleanPhone(raw){
   const s = String(raw||'').replace(/\D/g,'');
   let local9 = null;
@@ -333,23 +331,32 @@ window.doLogin = async function(){
   try {
     const email = phoneToEmail(phone);
     await window.fbSignIn(email, pass);
-    storeCredentialIfPossible(email, pass);
+    // "Remember me" (Main.dc.html) gates the saved-credential store that
+    // drives tryAutoSignIn() on the next visit. Unchecked -> nothing is
+    // saved, so the login screen asks again next time.
+    const remember = $('rememberMe');
+    if (!remember || remember.checked) storeCredentialIfPossible(email, pass);
   }
   catch (e) { $('loginError').innerHTML = `<div class="auth-error">${esc(fbErrMsg(e))}</div>`; setBtnLoading('loginBtn', false, 'Login'); }
 };
 window.doRegister = async function(){
   const phone = cleanPhone($('regPhone').value);
   const pass = $('regPassword').value;
+  const pass2 = $('regPassword2').value;
   const pin = $('regPin').value.trim();
-  if (!phone) return $('regError').innerHTML = '<div class="auth-error">Enter a valid Uganda mobile number.</div>';
-  if (!pass || pass.length < 6) return $('regError').innerHTML = '<div class="auth-error">Password must be at least 6 characters.</div>';
-  if (!/^\d{5}$/.test(pin)) return $('regError').innerHTML = '<div class="auth-error">Transaction PIN must be exactly 5 digits.</div>';
-  $('regError').innerHTML = '';
-  setBtnLoading('regBtn', true);
   // Referral code box is prefilled from ?ref= (see captureReferralFromUrl)
   // but stays editable -- whatever's in the box at submit time wins,
   // whether that's the link's code, untouched, or something typed by hand.
-  STATE.refCode = $('regReferral').value.trim();
+  // Chipz makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
+  const referral = $('regReferral').value.trim();
+  if (!phone) return $('regError').innerHTML = '<div class="auth-error">Enter a valid Uganda mobile number.</div>';
+  if (!pass || pass.length < 6) return $('regError').innerHTML = '<div class="auth-error">Password must be at least 6 characters.</div>';
+  if (pass !== pass2) return $('regError').innerHTML = '<div class="auth-error">The two login passwords do not match.</div>';
+  if (!/^\d{6}$/.test(pin)) return $('regError').innerHTML = '<div class="auth-error">Trade Password must be exactly 6 digits.</div>';
+  if (!referral) return $('regError').innerHTML = '<div class="auth-error">A referral code is required to sign up.</div>';
+  $('regError').innerHTML = '';
+  setBtnLoading('regBtn', true);
+  STATE.refCode = referral;
   window._pendingRegPin = pin;
   window._pendingRegPhone = phone;
   try {
@@ -359,7 +366,7 @@ window.doRegister = async function(){
   }
   catch (e) {
     // Owner-reported real bug: a Firebase Auth account can exist with no
-    // matching Snow profile -- e.g. an earlier registration attempt whose
+    // matching Chipz profile -- e.g. an earlier registration attempt whose
     // account-creation step succeeded but the network call to /register
     // never finished (closed tab, lost connection, a crash) -- the classic
     // "ghost account" this file already self-heals ON LOGIN
@@ -460,7 +467,7 @@ window.doLogout = async function(){
 // and every caller awaits this same promise (capped by withTimeout, see
 // below) before the spinner ever comes down, so nothing pops in afterward.
 async function boot(){
-  const [s, p, f, b, ai, mpi] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner'), api('/public/announcement-image'), api('/public/manual-pay-images') ]);
+  const [s, p, f, b, ai, mpi, ci] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner'), api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images') ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   STATE.products = p.status === 'success' ? p.products : [];
   STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
@@ -478,6 +485,10 @@ async function boot(){
   // openManualPayFlow() first renders, not fetched lazily on first open.
   STATE.manualPaySelectorImage = (mpi.status === 'success' && mpi.selector) ? mpi.selector : null;
   STATE.manualPayHeroImage = (mpi.status === 'success' && mpi.hero) ? mpi.hero : null;
+  // Same reasoning once more for the two Chipz-only slots: the Referral
+  // page banner and the brand logo on the Account profile card.
+  STATE.referralBanner = (ci.status === 'success' && ci.referral) ? ci.referral : null;
+  STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   applyAuthTagline();
   applyNumberFont();
 }
@@ -839,15 +850,27 @@ async function refreshAppDataInBackground(uid){
 }
 
 // ── NAV ──
+// The six bottom-nav icons are the owner's own artwork (see CLAUDE.md's
+// "Icon assets" note), shipped as PNGs in user/ rather than inline SVG --
+// the inactive state is greyed with a CSS filter, exactly as the mockups do
+// it, so one file covers both states.
+var NAV_ICON_SRC = {
+  home: '/nav-home.png',
+  catalog: '/nav-products.png',
+  products: '/nav-myproducts.png',
+  referral: '/nav-referral.png',
+  team: '/nav-team.png',
+  account: '/nav-account.png',
+};
 function updateNavIcons(){
   document.querySelectorAll('.navitem').forEach(btn => {
     const key = btn.dataset.nav;
     const active = key === STATE.page;
-    const iconKey = key === 'products' ? 'box' : (key === 'account' ? 'user' : key);
-    const icon = ICONS[iconKey];
-    btn.querySelector('.nav-ic').innerHTML = active
-      ? `<div style="width:40px;height:40px;border-radius:14px;background:var(--snow-wine-soft);display:flex;align-items:center;justify-content:center;">${icon}</div>`
-      : icon;
+    const slot = btn.querySelector('.nav-ic');
+    const src = NAV_ICON_SRC[key];
+    // Only rewrite the <img> when it isn't already there -- reassigning the
+    // same src on every navigation makes the icon blink on a cold cache.
+    if (slot && !slot.querySelector('img')) slot.innerHTML = `<img src="${src}" alt="" width="23" height="23">`;
     btn.classList.toggle('active', active);
   });
 }
@@ -909,7 +932,9 @@ window.showPage = async function(name){
     if (STATE.settings) showAnnouncementNow();
     else withTimeout(_bootPromise, 6000).then(showAnnouncementNow);
   }
+  else if (name === 'catalog') await renderCatalog();
   else if (name === 'products') await renderProducts();
+  else if (name === 'referral') await renderReferral();
   else if (name === 'team') await renderTeam();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
@@ -924,7 +949,7 @@ window.showPage = async function(name){
 // this app before now (it was only ever a dead admin-panel section pointing
 // at nothing -- see CLAUDE.md's Round 14 note); built fresh here, not
 // restored from a prior working version. Markup/CSS mirror the existing
-// #chestModalBg centered-modal pattern exactly (static HTML + .show class
+// #chestWinBg centered-modal pattern exactly (static HTML + .show class
 // toggle, tap-outside-to-close), not a new one-off. Fires every time Home
 // is entered (matching the one established precedent for this exact
 // feature, from the sibling Space8 project) -- same hook point showPage()
@@ -933,32 +958,26 @@ function maybeShowAnnouncement(){
   const s = STATE.settings;
   if (!s || !s.annEnabled || !s.annBody) return;
   const url = s.telegramGroup || s.telegramChannel || '';
-  $('announceTitle').style.display = s.annTitle ? '' : 'none';
-  $('announceTitle').textContent = s.annTitle || '';
+  // Announcement.dc.html centres a fixed "Welcome" header; an admin-set
+  // title replaces it when one is configured.
+  $('announceTitle').textContent = s.annTitle || 'Welcome';
   $('announceBody').innerHTML = linkifyText(s.annBody);
-  // Owner: "introduce announcement dialog image, it will be up of dialog
-  // message and scrollable" -- the <img> sits as the first child inside
-  // .announce-scroll, directly above #announceBody, so it scrolls together
-  // with the message inside the same fixed-height region (Round 61) instead
-  // of being a separate non-scrolling element. STATE.announceImage was
-  // already prefetched in boot() alongside the Home banner, so this never
-  // adds a wait to the dialog's own already-fixed 0-wait appearance.
-  const img = $('announceImg');
-  if (STATE.announceImage) { img.src = STATE.announceImage; img.style.display = ''; }
-  else { img.removeAttribute('src'); img.style.display = 'none'; }
+  // The admin-uploadable banner fills the whole banner block; with no image
+  // configured the block keeps its gradient + CHIPZ wordmark, exactly as
+  // the mockup's placeholder shows. STATE.announceImage was prefetched in
+  // boot() alongside the Home banner, so this adds no wait.
+  const banner = $('announceBanner');
+  banner.innerHTML = STATE.announceImage
+    ? `<img src="${esc(STATE.announceImage)}" alt="" onerror="this.remove()">`
+    : '<div class="wm">CHIP<b>Z</b></div>';
   window._announceUrl = url;
-  // Owner: "the dialog message should have Telegram button and ok... so the
-  // Telegram will be first followed by ok button" -- two separate buttons,
-  // same solid-wine style, instead of OK itself opening the link. Hidden
-  // entirely when no Telegram link is configured, same "blank field hides
-  // its button" convention Help Centre's own Telegram/Customer-Service
-  // buttons already use.
-  $('announceTelegramBtn').style.display = url ? '' : 'none';
+  // Same "blank field hides its button" convention as Help Centre's own
+  // Telegram links -- no channel configured, no Join Channel button.
+  $('announceTelegramBtn').style.display = url ? 'flex' : 'none';
   $('announceBg').classList.add('show');
   // Without this, scrolling the dialog's own message text chains straight
-  // through into the Home page sitting behind it (owner: "when one scrolls
-  // it, it scrolls even contents in home") -- same lock openSheet() already
-  // applies for real sheets, just missing here since this modal isn't one.
+  // through into the Home page sitting behind it -- same lock openSheet()
+  // already applies for real sheets, just missing here since this isn't one.
   lockBodyScroll();
 }
 window.closeAnnounce = function(){
@@ -983,69 +1002,99 @@ async function renderHome(){
   if (accR.status === 'success') STATE.account = accR.account;
   if (STATE.page !== 'home') return; // navigated away while awaiting
   if (hadCache) patchHomeBalances(); else paintHome();
+  // The envelope button's unread dot. Fetched once per Home entry, AFTER
+  // the paint (never blocking it) and patched in place via
+  // updateMessageBadge() so it can't tear down the ticker/chest animation.
+  const msgR = await api('/messages');
+  if (msgR.status === 'success') STATE.messages = msgR.messages;
+  if (STATE.page === 'home') updateMessageBadge();
 }
 function paintHome(){
   const a = STATE.account || {};
+  const st = STATE.settings || {};
   const products = STATE.products || [];
+  const unread = (STATE.messages || []).filter(m => !m.read).length;
+  // Home follows the approved Home.dc.html mockup: a top bar (messages +
+  // wordmark), the admin-uploadable banner, a 4-action row, the activity
+  // ticker, a Hot Products / New Arrivals segmented control, and the
+  // bouncing treasure chest anchored bottom-right. The wallet balance is
+  // deliberately NOT repeated here -- it lives on Account, per the mockups.
+  const tab = _homeProductTab;
+  const shown = tab === 'new' ? products.slice(3) : products.slice(0, 3);
   let html = `
-<div class="brand-hero--full">
-  ${waveLinesTR(140,133)}
-  <button aria-label="Open gift code" onclick="openChestModal()" class="chest-hang" style="position:absolute;top:-6px;right:20px;z-index:2;width:64px;height:60px;border:none;background:none;padding:0;cursor:pointer;filter:drop-shadow(0 8px 12px rgba(0,0,0,.4));">
-    <img src="/treasure-chest.png" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
+<div class="home-topbar">
+  <button class="icon-btn" onclick="openMessagesSheet()" aria-label="Messages">
+    ${ICONS.envelope}${unread ? '<span class="dot"></span>' : ''}
   </button>
-  <div style="position:relative;padding:22px 20px 0;">
-    <div style="display:flex;align-items:center;gap:9px;">
-      ${snowflakeSvg('var(--snow-green)',26)}
-      <img src="/badge.png" alt="" style="height:38px;width:auto;">
-      <div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div>
-    </div>
-    <div style="margin-top:26px;">
-      <div style="font-size:12.5px;opacity:.82;">Wallet Balance</div>
-      <div id="homeWallet" class="mono" style="font-size:32px;font-weight:800;margin-top:4px;">${fmtUGX(a.walletBalance)}</div>
-      <div style="display:flex;gap:10px;margin-top:16px;">
-        <div style="flex:1;background:rgba(255,255,255,.14);border-radius:16px;padding:10px 12px;">
-          <div style="font-size:11px;opacity:.8;">Total Earned</div>
-          <div id="homeTotalEarned" class="mono" style="font-size:14.5px;font-weight:700;margin-top:2px;">${fmtUGX(a.totalEarned)}</div>
-        </div>
-        <div style="flex:1;background:rgba(255,255,255,.14);border-radius:16px;padding:10px 12px;">
-          <div style="font-size:11px;opacity:.8;">Total Invested</div>
-          <div id="homeTotalInvested" class="mono" style="font-size:14.5px;font-weight:700;margin-top:2px;">${fmtUGX(a.totalInvested)}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  ${brandWaveFull()}
+  <div class="top-wordmark">CHIP<b>Z</b></div>
+  <div style="width:38px;height:38px;flex-shrink:0;"></div>
 </div>
-${STATE.homeBanner ? `<div style="margin:${'-6px 20px 0'};border-radius:20px;overflow:hidden;position:relative;z-index:1;"><img src="${esc(STATE.homeBanner)}" alt="" style="display:block;width:100%;height:auto;" onerror="this.parentElement.style.display='none'"></div>` : ''}
-<div style="display:flex;gap:12px;margin:${STATE.homeBanner ? '14px' : '-6px'} 20px 0;position:relative;z-index:1;">
-  <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openDepositSheet()">${ICONS.deposit}Recharge</button>
-  <button class="secondary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openWithdrawSheet()">${ICONS.withdraw}Withdraw</button>
+<div class="home-banner">
+  ${STATE.homeBanner
+    ? `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">`
+    : `<div class="hb-stripes"></div><div class="hb-cap">${esc(st.brandTagline || "Uganda's boldest way to grow your money")}</div>`}
 </div>
-<div id="activityTicker" style="margin:14px 20px 0;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:rgba(17,17,17,.82);box-shadow:0 6px 16px -8px rgba(0,0,0,.35);overflow:hidden;">
-  <span style="width:6px;height:6px;border-radius:50%;background:var(--snow-green);flex-shrink:0;"></span>
+<div class="home-actions">
+  <button class="home-action" onclick="openDepositSheet()">
+    <span class="badge"><img src="/act-deposit.png" alt=""></span><span class="lbl">Deposit</span>
+  </button>
+  <button class="home-action" onclick="openWithdrawSheet()">
+    <span class="badge"><img src="/act-withdraw.png" alt=""></span><span class="lbl">Withdraw</span>
+  </button>
+  <button class="home-action" onclick="openChannelLink()">
+    <span class="badge"><img src="/act-channel.png" alt=""></span><span class="lbl">Channel</span>
+  </button>
+  <button class="home-action" onclick="openHelpSheet()">
+    <span class="badge"><img src="/act-service.png" alt=""></span><span class="lbl">Service</span>
+  </button>
+</div>
+<div id="activityTicker" style="margin:14px 18px 0;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:#171213;box-shadow:0 6px 16px -8px rgba(0,0,0,.35);overflow:hidden;">
+  <span style="width:6px;height:6px;border-radius:50%;background:var(--chipz-orange);flex-shrink:0;"></span>
   <div style="overflow:hidden;flex:1;min-width:0;">
-    <div id="activityTickerTrack" class="mono" style="display:inline-flex;white-space:nowrap;color:#fff;font-size:11.5px;">Loading activity&hellip;</div>
+    <div id="activityTickerTrack" class="mono" style="display:inline-flex;white-space:nowrap;color:#f2c078;font-size:11.5px;">Loading activity&hellip;</div>
   </div>
 </div>
-<div class="app-card" style="margin:18px 20px 0;padding:20px 22px;background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;" onclick="showPage('team')">
-  <div style="min-width:0;">
-    <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-green);font-weight:700;">Referral Program</div>
-    <div style="font-size:18px;font-weight:800;margin-top:4px;max-width:250px;line-height:1.25;color:var(--snow-ink);">Earn ${(STATE.settings&&STATE.settings.commL1)||27}% on every referral&rsquo;s first investment</div>
-  </div>
-  <button style="flex-shrink:0;border:none;cursor:pointer;font-family:inherit;background:var(--snow-wine);color:#fff;border-radius:999px;padding:5px 12px;font-size:10.5px;font-weight:700;" onclick="event.stopPropagation();openCheckinSheet()">Go check in</button>
+<div class="home-tabs">
+  <button class="ht ${tab==='hot'?'active':'off'}" onclick="switchHomeProductTab('hot')">Hot Products</button>
+  <button class="ht ${tab==='new'?'active':'off'}" onclick="switchHomeProductTab('new')">New Arrivals</button>
 </div>
-<div style="display:flex;align-items:baseline;justify-content:space-between;margin:26px 20px 12px;">
-  <div class="section-title">Investment Plans</div>
-  <div style="font-size:12.5px;color:var(--snow-muted);">${products.length} plan${products.length===1?'':'s'}</div>
+<div id="homeProductList" style="display:flex;flex-direction:column;gap:12px;margin:0 18px;">
+  ${shown.length ? shown.map(productCardHtml).join('') : '<div class="list-empty">Nothing here yet.</div>'}
 </div>
-<div style="display:flex;flex-direction:column;gap:12px;margin:0 20px;">`;
-  products.forEach(p => {
-    const dailyPayout = Math.round((p.expectedReturn || p.price*30) / (p.cycle || 150));
-    html += `
+<div style="text-align:center;margin:16px 0 0;">
+  <button style="background:none;border:none;color:var(--snow-wine);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;" onclick="showPage('catalog')">See all products &rsaquo;</button>
+</div>
+<button aria-label="Open treasure chest" onclick="openChestSheet()" class="chest-float">
+  <img src="/treasure-chest.png" alt="">
+</button>
+<div style="height:16px;"></div>`;
+  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  startActivityTicker();
+}
+// Which Home product strip is showing. Top-level binding must be `var`
+// (never const/let) -- see this file's own header rule about the
+// obfuscated build.
+var _homeProductTab = 'hot';
+window.switchHomeProductTab = function(tab){
+  _homeProductTab = tab;
+  document.querySelectorAll('.home-tabs .ht').forEach((b,i) => {
+    const on = (i === 0) === (tab === 'hot');
+    b.className = 'ht ' + (on ? 'active' : 'off');
+  });
+  const products = STATE.products || [];
+  const shown = tab === 'new' ? products.slice(3) : products.slice(0, 3);
+  const host = $('homeProductList');
+  if (host) host.innerHTML = shown.length ? shown.map(productCardHtml).join('') : '<div class="list-empty">Nothing here yet.</div>';
+};
+// One shared product-card renderer for Home's strip and the Products tab,
+// so the two can never drift apart visually.
+function productCardHtml(p){
+  const dailyPayout = Math.round((p.expectedReturn || p.price*30) / (p.cycle || 150));
+  return `
   <div class="product-card">
-    <img class="product-card__thumb" src="${esc(p.image||'')}" alt="${esc(p.name)}" onerror="this.style.display='none'">
+    <img class="product-card__thumb" src="${esc(p.image||'')}" alt="${esc(p.name)}" onerror="this.style.visibility='hidden'">
     <div class="product-card__body">
-      <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">${esc(p.name)}</div>
+      <div style="font-size:15px;font-weight:800;color:var(--snow-wine);">${esc(p.name)}</div>
       <div class="product-card__stats" style="margin-top:10px;">
         <div><div class="stat-label">Price</div><div class="stat-val mono">${fmtUGX(p.price)}</div></div>
         <div><div class="stat-label">Daily Income</div><div class="stat-val mono" style="color:var(--snow-green);">${fmtUGX(dailyPayout)}</div></div>
@@ -1055,17 +1104,76 @@ ${STATE.homeBanner ? `<div style="margin:${'-6px 20px 0'};border-radius:20px;ove
       <button class="primary-button product-card__cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}')">${p.comingSoon?'Coming Soon':'Buy'}</button>
     </div>
   </div>`;
-  });
-  html += `</div><div style="height:16px;"></div>`;
+}
+// Opens whichever community channel the admin configured. Kept separate
+// from Help Centre (the Service button) so the two tiles do different things.
+window.openChannelLink = function(){
+  const st = STATE.settings || {};
+  const url = st.telegramGroup || st.telegramChannel || '';
+  if (!url) { toast('No channel link is set yet.', true); return; }
+  window.open(url, '_blank', 'noopener');
+};
+
+// ── PRODUCTS (full catalog tab) ──
+async function renderCatalog(){
+  paintCatalog();
+  const r = await api('/public/products');
+  if (r.status === 'success' && Array.isArray(r.products)) {
+    STATE.products = r.products;
+    if (STATE.page === 'catalog') paintCatalog();
+  }
+}
+function paintCatalog(){
+  const products = STATE.products || [];
+  let html = `
+<div class="page-head"><h2>Products</h2><span>${products.length} plan${products.length===1?'':'s'}</span></div>
+<div style="display:flex;flex-direction:column;gap:12px;margin:0 18px;">
+  ${products.length ? products.map(productCardHtml).join('') : '<div class="list-empty">No products yet.</div>'}
+</div>
+<div style="height:16px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-  // Baseline for the NEXT patchHomeBalances() call to animate from --
-  // whatever was just painted here (possibly a stale cached figure) is
-  // the true starting point of any correction that follows. See
-  // patchHomeBalances()'s own comment for why this matters.
-  _homeBalanceVals.wallet = Number(a.walletBalance) || 0;
-  _homeBalanceVals.earned = Number(a.totalEarned) || 0;
-  _homeBalanceVals.invested = Number(a.totalInvested) || 0;
-  startActivityTicker();
+}
+
+// ── REFERRAL (own tab) ──
+// Owner: "introduce a new nav icon just between my products and team, it is
+// called referral, so here there will be that banner and referral link and
+// instruction, so remove them from team and they come here to this tab."
+async function renderReferral(){
+  paintReferral();
+  const r = await api('/team/stats');
+  if (r.status === 'success') { STATE.teamStats = r; if (STATE.page === 'referral') paintReferral(); }
+}
+function paintReferral(){
+  const t = STATE.teamStats || {};
+  const a = STATE.account || {};
+  const st = STATE.settings || {};
+  const code = a.referralCode || t.referralCode || '';
+  const link = code ? `${location.origin}/#pages/register/?ref=${encodeURIComponent(code)}` : '';
+  let html = `
+<div class="page-head"><h2>Referral</h2></div>
+<div class="ref-banner">
+  ${STATE.referralBanner
+    ? `<img src="${esc(STATE.referralBanner)}" alt="" onerror="this.style.display='none'">`
+    : `<div class="hb-stripes"></div><div class="hb-cap">Invite friends. Earn on every deposit they make.</div>`}
+</div>
+<div class="app-card" style="margin:0 18px;padding:18px;">
+  <div style="font-size:13px;font-weight:800;color:var(--snow-muted);margin-bottom:10px;">Share URL</div>
+  <div class="url-row">
+    <span>${esc(link || 'Your link appears once your code is ready')}</span>
+    <button class="copy-ic" onclick="copyText('${esc(link)}')" aria-label="Copy link">${ICONS.copy}</button>
+  </div>
+  <button class="primary-button" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="shareReferral()">COPY INVITE LINK</button>
+</div>
+<div class="app-card" style="margin:16px 18px 0;padding:20px;">
+  <h3 style="font-size:17px;font-weight:700;margin:0 0 10px;">Invitation Reward</h3>
+  <p style="font-size:13px;color:var(--snow-muted);font-weight:600;line-height:1.6;margin:0 0 10px;">Share your link, create your wealth, improve your life.</p>
+  <div class="lv-line">LV1 = ${st.commL1 != null ? st.commL1 : 28}%</div>
+  <div class="lv-line">LV2 = ${st.commL2 != null ? st.commL2 : 1}%</div>
+  <div class="lv-line">LV3 = ${st.commL3 != null ? st.commL3 : 1}%</div>
+  <p style="font-size:13px;color:var(--snow-muted);font-weight:600;line-height:1.6;margin:8px 0 0;">Earn daily wages by inviting members to invest.</p>
+</div>
+<div style="height:16px;"></div>`;
+  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
 // Owner: "balance takes long to load ie when you login it can say
 // 388600.47 but few seconds it increases to 456709.23 which is the right
@@ -1084,28 +1192,37 @@ ${STATE.homeBanner ? `<div style="margin:${'-6px 20px 0'};border-radius:20px;ove
 // (or down) to the real one instead of snapping, so 388,600 becoming
 // 456,709 reads as money visibly counting up, not a flash of wrong data.
 var _homeBalanceVals = { wallet: null, earned: null, invested: null };
-function animateBalanceEl(el, key, toValue){
+// `fmt` is the formatter that painted the element in the first place --
+// Account's wallet figure carries cents ("UGX 2,000.00"), the rest don't,
+// and a live-refresh tick must not silently reformat what it re-writes.
+function animateBalanceEl(el, key, toValue, fmt){
+  // Chipz's Home no longer carries the balance figures (they live on
+  // Account, per the mockups), so the element genuinely may not exist on
+  // the page the live-refresh tick happens to fire on.
+  if (!el) return;
+  fmt = fmt || fmtUGX;
   toValue = Number(toValue) || 0;
   const fromValue = _homeBalanceVals[key];
   _homeBalanceVals[key] = toValue;
-  if (!el) return;
   // Nothing to animate on a genuinely first paint (no prior value yet) or
   // when the figure hasn't actually changed -- avoids needless motion on
   // every routine live-refresh tick, where balances usually sit still.
-  if (fromValue === null || fromValue === toValue) { el.textContent = fmtUGX(toValue); return; }
+  if (fromValue === null || fromValue === toValue) { el.textContent = fmt(toValue); return; }
   const start = performance.now(), duration = 700;
   function tick(now){
     const t = Math.min(1, (now - start) / duration);
     const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic -- fast start, gentle settle
-    el.textContent = fmtUGX(fromValue + (toValue - fromValue) * eased);
+    el.textContent = fmt(fromValue + (toValue - fromValue) * eased);
     if (t < 1) requestAnimationFrame(tick);
-    else el.textContent = fmtUGX(toValue);
+    else el.textContent = fmt(toValue);
   }
   requestAnimationFrame(tick);
 }
 function patchHomeBalances(){
   const a = STATE.account || {};
-  animateBalanceEl($('homeWallet'), 'wallet', a.walletBalance);
+  // Account is where the wallet figure lives in Chipz; these all no-op
+  // safely on a page that doesn't carry the element.
+  animateBalanceEl($('acctWallet'), 'wallet', a.walletBalance, fmtUGXCents);
   animateBalanceEl($('homeTotalEarned'), 'earned', a.totalEarned);
   animateBalanceEl($('homeTotalInvested'), 'invested', a.totalInvested);
 }
@@ -1141,11 +1258,8 @@ function paintProducts(animate){
   const totalInvested = active.reduce((s,i)=>s+(Number(i.amount)||0),0);
   const totalEarned = active.reduce((s,i)=>s+(Number(i.paidOut)||0),0);
   let html = `
-<div class="top-bar" style="display:flex;align-items:center;justify-content:space-between;padding:24px 20px 4px;">
-  <div class="wordmark">${snowflakeSvg('var(--snow-ink)',15)}<div class="wm-text" style="font-size:17px;">SNOW</div></div>
-</div>
-<div style="margin:16px 20px 0;">
-  <div style="font-size:22px;font-weight:800;color:var(--snow-ink);">My Products</div>
+<div class="page-head"><h2>My Products</h2></div>
+<div style="margin:4px 20px 0;">
   <div style="font-size:13px;color:var(--snow-muted);margin-top:3px;">${active.length} active plan${active.length===1?'':'s'} &middot; ${fmtUGX(totalEarned)} earned so far</div>
 </div>
 <div style="display:flex;gap:10px;margin:16px 20px 0;">
@@ -1294,6 +1408,13 @@ var _activeTeamLevel = null;
 window.switchTeamLevel = async function(level){
   _activeTeamLevel = level;
   document.querySelectorAll('.team-level-switcher .seg').forEach(s => s.classList.toggle('active', Number(s.dataset.level)===level));
+  // Keep the Commission Rate card in step with the selected level -- it
+  // shows that level's own rate and member count in the mockup, not L1's.
+  const t = STATE.teamStats || {}, rates = t.commRates || {}, team = t.team || {};
+  const setTxt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  setTxt('teamCommLevelLabel', 'Level ' + level);
+  setTxt('teamCommPct', (rates['l' + level] != null ? rates['l' + level] : 0) + '%');
+  setTxt('teamCommMembers', ((team['l' + level]) || 0) + ' Members');
   if (!STATE.teamMembers[level]) {
     const r = await api('/team/members?level=' + level);
     STATE.teamMembers[level] = r.status === 'success' ? r.members : [];
@@ -1322,14 +1443,21 @@ function renderTeamMembers(level){
   $('teamMembersCount').textContent = `${members.length} member${members.length===1?'':'s'}`;
   const box = $('teamMembersBox');
   if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">No members at this level yet.</div>'; return; }
+  // Member card layout per Team.dc.html: gradient avatar, masked phone,
+  // amount on the right, join date and a "Total Purchase" footer line.
   box.innerHTML = '<div class="reveal-in">' + members.map((m,idx) => `
-  <div class="list-row">
-    <div class="mono" style="width:24px;flex-shrink:0;text-align:center;font-size:14px;font-weight:700;color:var(--snow-muted);">${idx+1}</div>
-    <div style="flex:1;min-width:0;">
-      <div class="mono" style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">${esc(maskPhone(m.phone))}</div>
-      <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">${timeAgo(m.createdAt)}</div>
+  <div class="team-member">
+    <div class="top">
+      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#f4b400,#e21b2a)' : 'var(--chipz-grad)'};"></div>
+      <div style="min-width:0;">
+        <div class="name">User</div>
+        <div class="phone mono">${esc(maskPhone(m.phone))}</div>
+      </div>
+      <div class="amt3 mono">${fmtUGX(m.invested || 0)}</div>
     </div>
-    <div class="status-pill ${m.invested>0?'active':'pending'} mono">${m.invested>0?fmtUGX(m.invested):'UGX 0'}</div>
+    <div class="joined">Joined ${esc(timeAgo(m.createdAt) || '—')}</div>
+    <div class="ln2"></div>
+    <div class="foot">Total Purchase</div>
   </div>`).join('') + '</div>';
 }
 async function renderTeam(){
@@ -1348,75 +1476,40 @@ function patchTeamStats(){
   const td = $('teamDepositsAmt'); if (td) td.textContent = fmtUGX(t.teamDeposits);
 }
 function paintTeam(){
-  const t = STATE.teamStats || { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
-  // Owner: shared referral links should read like
-  // ".../#pages/register/?ref=CODE" instead of the plain ".../?ref=CODE"
-  // query string this used to build. captureReferralFromUrl() (boot-time)
-  // now parses ref out of either form, so an already-shared old-style link
-  // keeps working exactly as before -- only newly generated/copied links
-  // use the new format.
-  const link = t.referralCode ? (location.origin + '/#pages/register/?ref=' + t.referralCode) : '';
+  const t = STATE.teamStats || { referralCode:'', commRates:{l1:28,l2:1,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
+  const rates = t.commRates || {};
+  // Team follows Team.dc.html: a Total Team card, a Commission Rate card,
+  // the Level 1/2/3 switcher and the member list. The referral code / invite
+  // link / Invitation Reward blocks that used to live here now have their own
+  // Referral tab (owner: "remove them from team and they come here to this tab").
   let html = `
-<div style="display:flex;align-items:center;justify-content:center;gap:9px;padding:24px 20px 4px;">
-  ${snowflakeSvg('var(--snow-green)',26)}
-  <img src="/badge.png" alt="" style="height:38px;width:auto;">
-  <div class="wm-text" style="font-size:19px;color:var(--snow-green);">SNOW</div>
+<div class="page-head"><h2>Team</h2></div>
+<div class="team-gcard" style="margin:0 18px;">
+  <div class="row1"><span class="lbl">Total Team</span><span class="num mono" id="teamTotalCount">${t.totalTeam || 0}</span></div>
+  <div class="ln"></div>
+  <div class="amt mono" id="teamDepositsAmt">${fmtUGX(t.teamDeposits)}</div>
+  <div class="cap">Purchase</div>
 </div>
-<div style="margin:16px 20px 0;">
-  <div style="font-size:22px;font-weight:800;color:var(--snow-ink);">Team</div>
-  <div style="font-size:13px;color:var(--snow-muted);margin-top:3px;">Invite friends and grow your rewards</div>
+<h2 class="plain-head">Commission Rate</h2>
+<div class="team-gcard comm" style="margin:0 18px;">
+  <div class="lvl" id="teamCommLevelLabel">Level 1</div>
+  <div class="pct" id="teamCommPct">${rates.l1 != null ? rates.l1 : 28}%</div>
+  <div class="amt2 mono" id="teamCommissionAmt">${fmtUGX(t.teamCommission)}</div>
+  <div class="mem" id="teamCommMembers">${(t.team && t.team.l1) || 0} Members</div>
 </div>
-<div class="team-referral-card" style="margin:16px 20px 0;">
-  ${waveLinesTR(120,114)}
-  ${softBlob('var(--snow-wine-deep)',.4,110,-28,-28)}
-  <div style="position:relative;">
-    <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;opacity:.8;font-weight:700;">Your Referral Code</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
-      <div class="mono" style="font-size:30px;font-weight:800;letter-spacing:1px;">${esc(t.referralCode||'Not set')}</div>
-      <button style="border:none;background:none;padding:0;" onclick="copyText('${esc(t.referralCode||'')}')">${copyBubble()}</button>
-    </div>
-    <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;opacity:.8;font-weight:700;margin-top:18px;">Your Invite Link</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;background:rgba(255,255,255,.16);border-radius:14px;padding:9px 12px;">
-      <div style="opacity:.85;flex-shrink:0;">${ICONS.link}</div>
-      <div class="mono" style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(link)}</div>
-      <button style="border:none;background:none;padding:0;color:#fff;" onclick="copyText('${esc(link)}')">${ICONS.copy}</button>
-    </div>
-    <button style="width:100%;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;color:var(--snow-wine);border:none;border-radius:var(--snow-radius-control);padding:13px 0;font-size:13.5px;font-weight:700;" onclick="shareReferral('${esc(link)}')">${ICONS.share} Share referral link</button>
-  </div>
-</div>
-<div class="app-card" style="margin:16px 20px 0;padding:0;display:flex;overflow:hidden;">
-  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-wine-soft);"><div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.people2}</div><div style="font-size:10.5px;color:var(--snow-muted);">Level 1</div><div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-wine);">${t.commRates.l1}%</div></div>
-  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-green-soft);"><div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(47,107,71,.12);color:var(--snow-green);">${ICONS.people2}</div><div style="font-size:10.5px;color:var(--snow-muted);">Level 2</div><div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-green);">${t.commRates.l2}%</div></div>
-  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-wine-soft);"><div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.people2}</div><div style="font-size:10.5px;color:var(--snow-muted);">Level 3</div><div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-wine);">${t.commRates.l3}%</div></div>
-</div>
-<button class="brand-card" style="margin:14px 20px 0;padding:18px 20px;width:calc(100% - 40px);display:flex;align-items:center;justify-content:space-between;gap:12px;border:none;cursor:pointer;text-align:left;" onclick="openMissionCenterSheet()">
-  ${waveLinesTR(90,84,'rgba(255,255,255,.55)',2,.7)}
-  <div style="position:relative;display:flex;align-items:center;gap:12px;">
-    <div class="account-icon-bubble" style="width:46px;height:46px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);">${ICONS.people2}</div>
-    <div><div style="font-size:14.5px;font-weight:800;">Mission Center</div><div style="font-size:11.5px;opacity:.85;margin-top:2px;">Daily salary &amp; team deposit rewards</div></div>
-  </div>
-  <div style="position:relative;">${ICONS.chev}</div>
-</button>
-<div class="team-summary-grid" style="margin:14px 20px 0;">
-  <div class="stat-tile" style="background:var(--snow-wine-soft);border-color:transparent;display:flex;align-items:center;gap:12px;"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.people2}</div><div><div style="font-size:10.5px;color:var(--snow-muted);">Total team</div><div id="teamTotalCount" class="mono" style="font-size:18px;font-weight:800;color:var(--snow-wine);">${t.totalTeam}</div></div></div>
-  <div class="stat-tile" style="background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:center;gap:12px;"><div class="icon-tile" style="width:38px;height:38px;background:rgba(47,107,71,.12);color:var(--snow-green);">${ICONS.user}</div><div><div style="font-size:10.5px;color:var(--snow-muted);">Team commission</div><div id="teamCommissionAmt" class="mono" style="font-size:18px;font-weight:800;color:var(--snow-green);">${fmtUGX(t.teamCommission)}</div></div></div>
-  <div class="team-deposits-card">
-    ${waveLinesTR(90,84,'rgba(255,255,255,.55)',2,.7)}
-    <div style="position:relative;display:flex;align-items:center;gap:12px;"><div class="account-icon-bubble" style="width:46px;height:46px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);">${ICONS.walletLg}</div><div><div style="font-size:11px;opacity:.85;">Team deposits</div><div id="teamDepositsAmt" class="mono" style="font-size:20px;font-weight:800;margin-top:2px;">${fmtUGX(t.teamDeposits)}</div></div></div>
-  </div>
-</div>
-<div class="team-level-switcher" style="margin:22px 20px 0;">
+<div class="team-level-switcher" style="margin:16px 18px 14px;">
   <div class="seg active" data-level="1" onclick="switchTeamLevel(1)">Level 1</div>
   <div class="seg" data-level="2" onclick="switchTeamLevel(2)">Level 2</div>
   <div class="seg" data-level="3" onclick="switchTeamLevel(3)">Level 3</div>
 </div>
-<div class="app-card" style="margin:14px 20px 0;padding:6px 18px;">
-  <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 0 4px;">
+<div style="margin:0 18px;">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 2px 10px;">
     <div id="teamMembersHeading" style="font-size:15px;font-weight:800;color:var(--snow-ink);">Level 1 members</div>
-    <div id="teamMembersCount" style="font-size:12px;color:var(--snow-muted);"></div>
+    <div id="teamMembersCount" style="font-size:12px;color:var(--snow-muted);font-weight:600;"></div>
   </div>
   <div id="teamMembersBox"></div>
 </div>
+<button class="dark-button" style="width:calc(100% - 36px);margin:16px 18px 0;padding:15px 0;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="openMissionCenterSheet()">${ICONS.people2}Mission Center</button>
 <div style="height:16px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   STATE.teamMembers = {1:null,2:null,3:null};
@@ -1429,7 +1522,7 @@ function paintTeam(){
 // Real bug fixed: this used to always repaint sheetBody once the background
 // /mission/status refetch resolved, even when there was already a cached
 // copy shown instantly on open -- every other cache-first sheet
-// (openWithdrawSheet, openWithdrawalAccountsSheet, openRecordsSheet) only
+// (openWithdrawSheet, openWithdrawalAccountsSheet, openBalanceRecordSheet) only
 // repaints from that refetch when there was NO cache to show initially,
 // otherwise it just updates STATE silently for next time. Owner: "it opens
 // very well but I think again it reloads silently" -- that second,
@@ -1533,7 +1626,7 @@ window.claimMissionSalary = async function(){
   if (s2.status === 'success') { STATE.mission = s2; if (_openSheetTitle === 'Mission Center') renderMissionCenter(); }
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
-  // Same stale-Records fix as submitCheckin()/submitChestCode() -- the
+  // Same stale-Records fix as submitCheckin()/submitChestKey() -- the
   // claim already wrote a real ledger row server-side by this point.
   await refreshTransactionsCache();
 };
@@ -1585,54 +1678,493 @@ window.shareReferral = function(link){
 };
 
 // ── ACCOUNT ──
+// Account.dc.html: a profile card (admin logo, member ID, phone, wallet
+// balance, Deposit/Withdraw) sitting above a plain white SETTINGS list and
+// a black Log Out button. Deliberately NOT Snow's coloured card matrix --
+// see CLAUDE.md's "Structural differences from Snow".
+//
+// The wallet balance lives HERE, not on Home (the mockups put it on this
+// screen only), which is why patchHomeBalances()'s live tick targets
+// #acctWallet.
+function settingRowHtml(icon, title, sub, onclick){
+  return `
+  <button class="setting-row" onclick="${onclick}">
+    <span class="sq"><img src="/set-${icon}.png" alt=""></span>
+    <span class="txt"><span class="t1" style="display:block;">${title}</span><span class="t2" style="display:block;">${sub}</span></span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
+  </button>`;
+}
 async function renderAccount(){
   const a = STATE.account || {};
-  const s = STATE.settings || {};
-  let html = `
-<div class="account-hero--full">
-  ${waveLinesTR(120,114)}
-  <div style="position:relative;padding:24px 20px 0;">
-    <div style="display:flex;align-items:center;gap:9px;">
-      ${snowflakeSvg('var(--snow-green)',26)}
-      <img src="/badge.png" alt="" style="height:38px;width:auto;">
-      <div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px;margin-top:24px;">
-      <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${snowflakeSvg('#fff',26)}</div>
-      <img src="/badge.png" alt="" style="height:104px;width:auto;flex-shrink:0;filter:drop-shadow(0 8px 12px rgba(0,0,0,.28));">
-      <div style="flex:1;min-width:0;">
-        <div style="display:flex;align-items:center;gap:7px;"><div class="mono" style="font-size:14.5px;font-weight:700;white-space:nowrap;">${esc(a.phone||'')}</div><button style="border:none;background:none;color:#fff;padding:0;" onclick="copyText('${esc(a.phone||'')}')">${ICONS.copy}</button></div>
+  const logo = STATE.brandLogo
+    ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.remove()">`
+    : '<span>CHIPZ</span>';
+  const html = `
+<div style="padding:18px 18px 0;">
+  <div class="acct-profile">
+    <div class="p-top">
+      <div class="acct-logo">${logo}</div>
+      <div style="min-width:0;">
+        <div class="p-id">ID: ${esc(a.publicId || '—')}</div>
+        <div class="p-phone">${esc(formatPhoneDisplay(a.phone))}</div>
       </div>
     </div>
+    <div class="acct-divider"></div>
+    <div class="bal-label">Wallet Balance</div>
+    <div class="bal-value" id="acctWallet">${fmtUGXCents(a.walletBalance || 0)}</div>
+    <div class="acct-btnrow">
+      <button class="primary-button" onclick="openDepositSheet()">Deposit</button>
+      <button class="secondary-button" onclick="openWithdrawSheet()">Withdraw</button>
+    </div>
   </div>
-  ${accountWaveFull()}
-</div>
-<div class="account-grid" style="margin:-8px 20px 0;position:relative;z-index:1;">
-  <button class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);padding:20px 16px;" onclick="openWithdrawalAccountsSheet()">
-    ${waveLinesTR(95,90,undefined,3,.75)}${softBlob('var(--snow-wine-deep)',.4,100,-26,-26)}
-    <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;margin-bottom:14px;">${ICONS.walletLg}</div>
-    <div style="position:relative;font-size:14px;font-weight:800;">Withdrawal account</div>
-    <div style="position:relative;font-size:12px;opacity:.85;margin-top:4px;">Manage your payout account</div>
+
+  <div class="sec-head"><span class="bar"></span><h2>SETTINGS</h2><span class="ln"></span></div>
+  <div class="setting-list">
+    ${settingRowHtml('download', 'Download APP', 'Get the mobile app', 'promptInstallApp()')}
+    ${settingRowHtml('wallet', 'Wallet', 'Manage your withdrawal wallet', 'openWalletSheet()')}
+    ${settingRowHtml('balance', 'Balance Record', 'Transaction history', 'openBalanceRecordSheet()')}
+    ${settingRowHtml('messages', 'Messages', 'Notifications &amp; mail', 'openMessagesSheet()')}
+    ${settingRowHtml('loginpw', 'Login Password', 'Change login password', 'openChangeLoginPasswordSheet()')}
+    ${settingRowHtml('tradepw', 'Trade Password', 'Change trade / withdrawal password', 'openChangeTradePasswordSheet()')}
+  </div>
+
+  <button class="dark-button logout-btn" onclick="doLogout()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>
+    Log Out
   </button>
-  <button class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-green) 0%,var(--snow-green-deep) 100%);padding:20px 16px;" onclick="openRecordsSheet()">
-    ${waveLinesTR(95,90,'rgba(255,255,255,.55)',3,.75)}${softBlob('var(--snow-green-deep)',.45,100,-26,-26)}
-    <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;margin-bottom:14px;">${ICONS.docLg}</div>
-    <div style="position:relative;font-size:14px;font-weight:800;">Records</div>
-    <div style="position:relative;font-size:12px;opacity:.85;margin-top:4px;">Deposits &middot; Withdrawals &middot; Income</div>
-  </button>
-  <button class="account-utility-card utility-wine" style="background:var(--snow-wine-soft);" onclick="openInfoSheet('about')">${softBlob('var(--snow-wine)',.08,70,-16,-16)}<div class="account-icon-bubble" style="position:relative;">${ICONS.doc}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-wine-deep);">About Snow</div></button>
-  <button class="account-utility-card utility-green" style="background:var(--snow-green-soft);" onclick="openInfoSheet('rules')">${waveLinesTR(56,52,'var(--snow-green)',2,.3)}<div class="account-icon-bubble" style="position:relative;">${ICONS.shield}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-green-deep);">Rules &amp; Terms</div></button>
-  <button class="account-utility-card utility-wine" style="background:var(--snow-wine-soft);" onclick="openInfoSheet('help')">${softBlob('var(--snow-wine)',.12,16,14,74)}<div class="account-icon-bubble" style="position:relative;">${ICONS.headset}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-wine-deep);">Help Centre</div></button>
-  <button class="account-utility-card utility-green" style="background:var(--snow-green-soft);" onclick="promptInstallApp()">${waveLinesTR(56,52,'var(--snow-green)',2,.3)}<div class="account-icon-bubble" style="position:relative;">${ICONS.download}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-green-deep);">Install Snow</div></button>
-</div>
-<button class="account-utility-card utility-wine" style="margin:14px 20px 0;width:calc(100% - 40px);background:var(--snow-wine-soft);min-height:88px;border-radius:28px;padding:20px;" onclick="doLogout()">
-  ${softBlob('var(--snow-wine)',.1,90,-22,-22)}
-  <div class="account-icon-bubble" style="position:relative;">${ICONS.logout}</div>
-  <div style="position:relative;font-size:15px;font-weight:700;color:var(--snow-wine-deep);">Sign out</div>
-</button>
-<div style="height:16px;"></div>`;
+  <div style="height:20px;"></div>
+</div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
+// "+256 742 730 382" -- the shape the mockups show, from whatever the
+// server stored (0742730382 / 256742730382 / +256742730382 all normalise).
+function formatPhoneDisplay(phone){
+  let d = String(phone || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.slice(0, 3) === '256') d = d.slice(3);
+  d = d.replace(/^0+/, '');
+  const groups = d.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
+  return '+256 ' + groups;
+}
+
+// ── WALLET (Wallet.dc.html) ──
+// ONE bound payout account, shown as a bank-card tile. "Edit Wallet"
+// reveals the provider/account/holder form; Submit saves through the same
+// /bank/save endpoint the app already had, and because Chipz binds exactly
+// one wallet, saving a second one replaces the first (any older rows are
+// deleted after the new one lands). Not Snow's list-of-many model.
+var _walletEditing = false;
+window.openWalletSheet = async function(){
+  _walletEditing = false;
+  const hadCache = Array.isArray(STATE.bankAccounts);
+  openSheet('Wallet', hadCache ? '' : '<div class="list-empty">Loading&hellip;</div>');
+  if (hadCache) renderWalletSheet();
+  const r = await api('/bank/list');
+  if (r.status === 'success') STATE.bankAccounts = r.accounts;
+  else if (!hadCache) STATE.bankAccounts = [];
+  if (_openSheetTitle === 'Wallet' && !_walletEditing) renderWalletSheet();
+};
+function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
+function maskedTail(phone){
+  const d = String(phone || '').replace(/\D/g, '');
+  return d ? '****' + d.slice(-4) : '****';
+}
+function walletCardHtml(w){
+  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : 'CHIPZ';
+  const num = w && w.phone ? String(w.phone).replace(/\D/g, '') : 'XXXXXXXXXX';
+  const holder = w && w.holder ? esc(String(w.holder).toUpperCase()) : 'NO WALLET BOUND';
+  return `
+  <div class="wallet-card">
+    <div class="sheen"></div>
+    <div class="row1">
+      <span class="provider">${esc(provider)}</span>
+      <svg width="24" height="18" viewBox="0 0 24 18" fill="none"><rect x="0" y="2" width="18" height="12" rx="2" fill="rgba(255,255,255,.35)"></rect><rect x="5" y="4" width="18" height="12" rx="2" fill="rgba(255,255,255,.9)"></rect></svg>
+    </div>
+    <div class="chip"></div>
+    <div class="num">${esc(num)}</div>
+    <div class="holder-lbl">Account Holder</div>
+    <div class="holder-name">${holder}</div>
+  </div>`;
+}
+function renderWalletSheet(){
+  const w = currentWallet();
+  const providers = ['MTN Mobile Money', 'Airtel Money'];
+  const editPanel = !_walletEditing ? '' : `
+  <div class="wallet-panel">
+    <div class="sec-head" style="margin:0 0 16px;"><span class="bar"></span><h2 style="font-size:17px;font-weight:700;">Edit Wallet</h2></div>
+    <div class="lbl">Wallet Provider</div>
+    <div class="field"><select id="walProvider">
+      <option value="" ${w && w.network ? '' : 'selected'} disabled>Select wallet provider</option>
+      ${providers.map(p => `<option value="${p}" ${w && w.network === p ? 'selected' : ''}>${p}</option>`).join('')}
+    </select></div>
+    <div class="lbl">Wallet Account</div>
+    <div class="field"><input id="walPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${w ? esc(w.phone || '') : ''}" oninput="sanitizePhoneInput(this)"></div>
+    <div class="lbl">Account Holder Name</div>
+    <div class="field"><input id="walHolder" type="text" placeholder="Full name" value="${w ? esc(w.holder || '') : ''}"></div>
+    <div class="btnrow">
+      <button class="cancel" onclick="toggleWalletEdit(false)">Cancel</button>
+      <button class="primary-button" id="walSaveBtn" onclick="submitWallet()">Submit</button>
+    </div>
+  </div>`;
+  const summary = w ? `
+  <h2 class="plain-h2">Your Wallet</h2>
+  <div class="wallet-summary">
+    <span class="prov">${esc(String(w.network || '').replace(/\s*(Mobile )?Money$/i, '') || 'Wallet')}</span>
+    <span class="masked">${maskedTail(w.phone)}</span>
+    <span class="holder">${esc(String(w.holder || '').toUpperCase()).replace(/\s+/, '<br>')}</span>
+  </div>` : '';
+  $('sheetBody').innerHTML = `<div class="reveal-in">
+    ${walletCardHtml(w)}
+    ${_walletEditing ? '' : `<button class="dark-button" style="width:100%;height:52px;padding:0;margin-bottom:22px;" onclick="toggleWalletEdit(true)">Edit Wallet</button>`}
+    ${editPanel}
+    ${summary}
+  </div>`;
+}
+window.toggleWalletEdit = function(on){ _walletEditing = !!on; renderWalletSheet(); };
+window.submitWallet = async function(){
+  const network = $('walProvider').value;
+  const phone = $('walPhone').value;
+  const holder = $('walHolder').value.trim();
+  if (!network) return notify('Select your wallet provider.');
+  if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
+  if (!holder) return notify('Enter the account holder name.');
+  const btn = $('walSaveBtn');
+  btn.disabled = true; btn.textContent = 'Please wait…';
+  const r = await post('/bank/save', { holder, network, phone });
+  btn.disabled = false; btn.textContent = 'Submit';
+  if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
+  // Chipz binds exactly ONE wallet -- drop any older rows so the card, the
+  // summary row and the Withdraw screen can never disagree about which
+  // account a payout goes to.
+  const list = await api('/bank/list');
+  let accounts = list.status === 'success' ? list.accounts : [];
+  const keep = accounts[accounts.length - 1];
+  for (const acc of accounts) {
+    if (keep && acc.id === keep.id) continue;
+    await post('/bank/delete', { id: acc.id });
+  }
+  const fresh = await api('/bank/list');
+  STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (keep ? [keep] : []);
+  _walletEditing = false;
+  toast('Wallet saved');
+  if (_openSheetTitle === 'Wallet') renderWalletSheet();
+};
+
+// ── NOTIFY DIALOG (Notify.dc.html) ──
+// The app-wide validation alert: dimmed backdrop, amber warning triangle,
+// message, one pill OK. Replaces toast() for anything the member must
+// acknowledge before continuing (toast is still used for confirmations
+// that need no acknowledgement, e.g. "Copied", "Wallet saved").
+window.notify = function(message){
+  $('notifyMsg').textContent = String(message || '');
+  $('notifyBg').classList.add('show');
+};
+window.closeNotify = function(){ $('notifyBg').classList.remove('show'); };
+
+// ── BALANCE RECORD (BalanceRecord.dc.html) ──
+// Current-balance band + All / Deposit / Withdraw / Turntable tabs over the
+// same /transactions ledger the app already keeps. Rows carry a lettered
+// avatar, a status pill for deposits/withdrawals, and a wine-red negative
+// amount -- exactly as the mockups show, including the no-space
+// "UGX2,000.00" money format used on this screen only.
+var _balTab = 'all';
+// Turntable (the daily spin bonus) has its own ledger type; until the
+// backend feature ships, the tab renders empty rather than being hidden --
+// the mockups show it as a permanent fourth tab.
+var TURNTABLE_TX_TYPES = new Set(['turntable', 'spin', 'spin_bonus']);
+function balTabMatch(cat, t){
+  if (cat === 'deposit') return t.type === 'deposit';
+  if (cat === 'withdraw') return t.type === 'withdraw';
+  if (cat === 'turntable') return TURNTABLE_TX_TYPES.has(t.type);
+  return true;
+}
+// "UGX2,000.00" -- no space after UGX, always 2 decimals. Only this screen
+// and the wallet band use it; every other screen keeps fmtUGX().
+// "UGX 2,000.00" -- the spaced variant Account.dc.html's wallet balance uses.
+function fmtUGXCents(n){ return 'UGX ' + fmtUGX2(n).slice(3); }
+function fmtUGX2(n){
+  const v = Math.abs(Number(n) || 0);
+  return 'UGX' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// One-letter avatar + its colour: withdrawals get the wine treatment, and
+// everything that adds money gets the green one.
+function balAvatar(t){
+  const label = balRowTitle(t);
+  const letter = (label.trim()[0] || '?').toUpperCase();
+  const wine = t.type === 'withdraw';
+  return `<div class="av ${wine ? 'w' : 'g'}">${esc(letter)}</div>`;
+}
+var BAL_TITLES = {
+  deposit: 'Deposit', withdraw: 'Withdraw', promocode: 'Treasure Chest',
+  commission: 'Commission', cashback: 'Daily Income', checkin: 'Check-in Bonus',
+  welcome_bonus: 'Welcome Bonus', admin_credit: 'Chipz Credit',
+  team_reward: 'Team Reward', mission_salary: 'Mission Salary',
+  mission_deposit_reward: 'Mission Reward', invest: 'Purchase',
+  turntable: 'Turntable', spin: 'Turntable', spin_bonus: 'Turntable',
+};
+function balRowTitle(t){ return BAL_TITLES[t.type] || 'Transaction'; }
+// The status pill (deposit/withdraw only) or the plain grey sub-label
+// (everything else) that sits under the date, per the mockup.
+function balRowStatus(t){
+  const desc = String(t.description || '');
+  if (t.type === 'deposit' || t.type === 'withdraw') {
+    const status = depWitStatusLabel(desc) || 'Pending';
+    const low = status.toLowerCase();
+    const cls = /fail|declin|reject|cancel/.test(low) ? 'fail'
+      : /pend|process|await/.test(low) ? 'pend' : 'paid';
+    const text = t.type === 'deposit' && cls === 'pend' ? 'Pending Deposit' : status;
+    return `<span class="rec-pill ${cls}">${esc(text)}</span>`;
+  }
+  const sub = cleanDesc(desc);
+  return sub ? `<div class="t3">${esc(sub)}</div>` : '<div class="t3">Other</div>';
+}
+window.openBalanceRecordSheet = async function(){
+  _balTab = 'all';
+  const hadCache = Array.isArray(STATE.transactions);
+  const bal = (STATE.account || {}).walletBalance || 0;
+  openSheet('Balance Record', `
+    <div class="bal-band">
+      <div class="lbl">Current Balance</div>
+      <div class="val" id="balBandValue">${fmtUGX2(bal)}</div>
+    </div>
+    <div class="rec-tabs" id="balTabs">
+      <button class="tb on" data-cat="all" onclick="switchBalTab('all')">All</button>
+      <button class="tb" data-cat="deposit" onclick="switchBalTab('deposit')">Deposit</button>
+      <button class="tb" data-cat="withdraw" onclick="switchBalTab('withdraw')">Withdraw</button>
+      <button class="tb" data-cat="turntable" onclick="switchBalTab('turntable')">Turntable</button>
+    </div>
+    <div id="balBody"></div>`);
+  if (hadCache) renderBalTab(_balTab);
+  const r = await api('/transactions');
+  if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
+  else if (!hadCache) STATE.transactions = [];
+  if (!hadCache && $('balBody')) renderBalTab(_balTab);
+};
+window.switchBalTab = function(cat){
+  _balTab = cat;
+  const tabs = $('balTabs');
+  if (tabs) tabs.querySelectorAll('.tb').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
+  renderBalTab(cat);
+};
+function renderBalTab(cat){
+  const body = $('balBody');
+  if (!body) return;
+  const rows = (STATE.transactions || []).filter(t => balTabMatch(cat, t));
+  if (!rows.length) {
+    body.innerHTML = '<div class="list-empty reveal-in">' +
+      (cat === 'turntable' ? 'No turntable spins yet.' : 'No records yet.') + '</div>';
+    return;
+  }
+  const footer = STATE.transactionsTruncated
+    ? '<div class="list-end">Showing your most recent records</div>'
+    : '<div class="list-end">No more data</div>';
+  body.innerHTML = '<div class="reveal-in">' + rows.map(t => {
+    const amt = recordsRowAmount(t);
+    return `
+    <div class="rec">
+      ${balAvatar(t)}
+      <div class="txt">
+        <div class="t1">${esc(balRowTitle(t))}</div>
+        <div class="t2">${esc(t.date || '')} ${esc(t.time || '')}</div>
+        ${balRowStatus(t)}
+      </div>
+      <div class="right"><div class="amt ${amt < 0 ? 'neg' : 'pos'}">${amt < 0 ? '-' : '+'}${fmtUGX2(amt)}</div></div>
+    </div>`;
+  }).join('') + footer + '</div>';
+}
+
+// ── MESSAGES (MessagesList.dc.html / Messages.dc.html) ──
+// Real inbox, backed by /messages (admin-authored broadcasts) with per-
+// member read state. Snow has no equivalent -- see CLAUDE.md.
+window.openMessagesSheet = async function(){
+  const hadCache = Array.isArray(STATE.messages);
+  openSheet('Messages', '<div id="msgBody"></div>');
+  if (hadCache) renderMessagesList();
+  else $('msgBody').innerHTML = '<div class="list-empty">Loading&hellip;</div>';
+  const r = await api('/messages');
+  if (r.status === 'success') STATE.messages = r.messages;
+  else if (!hadCache) STATE.messages = [];
+  if (_openSheetTitle === 'Messages') renderMessagesList();
+  updateMessageBadge();
+};
+function messagePreview(body){
+  const flat = String(body || '').replace(/\s+/g, ' ').trim();
+  return flat.length > 48 ? flat.slice(0, 48) + '…' : flat;
+}
+function renderMessagesList(){
+  const box = $('msgBody');
+  if (!box) return;
+  const list = STATE.messages || [];
+  if (!list.length) { box.innerHTML = '<div class="list-empty">No messages yet.</div>'; return; }
+  box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
+    <button class="msg-row${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
+      <span class="av">C</span>
+      <span class="txt">
+        <span class="top">
+          <span class="t1">${esc(m.title || '')}</span>
+          <span class="date">${esc(m.date || '')}<br>${esc(m.time || '')}</span>
+        </span>
+        <span class="t2">${esc(messagePreview(m.body))}</span>
+      </span>
+    </button>`).join('') + '</div>';
+}
+window.openMessageDetail = async function(index){
+  const m = (STATE.messages || [])[index];
+  if (!m) return;
+  $('msgDetail').innerHTML = `
+    <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    <div class="head">
+      <div class="av">C</div>
+      <div>
+        <h2>${esc(m.title || '')}</h2>
+        <div class="date">${esc(m.date || '')} ${esc(m.time || '')}</div>
+      </div>
+    </div>
+    <div class="ln"></div>
+    <div class="content">${esc(m.body || '')}</div>`;
+  $('msgDetailBg').classList.add('show');
+  if (m.read) return;
+  m.read = true;
+  renderMessagesList();
+  updateMessageBadge();
+  await post('/messages/read', { messageId: m.id });
+};
+window.closeMessageDetail = function(){ $('msgDetailBg').classList.remove('show'); };
+// Home's envelope button shows a dot while anything is unread. Kept in sync
+// from whatever the last /messages fetch returned -- Home itself re-reads
+// STATE.messages on every paint.
+function unreadMessageCount(){ return (STATE.messages || []).filter(m => !m.read).length; }
+function updateMessageBadge(){
+  const btn = document.querySelector('.home-topbar .icon-btn');
+  if (!btn) return;
+  const has = unreadMessageCount() > 0;
+  const dot = btn.querySelector('.dot');
+  if (has && !dot) btn.insertAdjacentHTML('beforeend', '<span class="dot"></span>');
+  if (!has && dot) dot.remove();
+}
+
+// ── CHANGE LOGIN PASSWORD (ChangeLoginPassword.dc.html) ──
+function pwLockSvg(){
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8c7f76" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>`;
+}
+function pwFieldHtml(id, placeholder, pin){
+  return `<div class="pw-field${pin ? ' pin' : ''}">${pwLockSvg()}<input id="${id}" type="password" placeholder="${placeholder}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
+}
+window.openChangeLoginPasswordSheet = function(){
+  openSheet('Login Password', `<div class="reveal-in" style="padding-top:22px;">
+    <p class="pw-note">Your login password is used to sign in to your Chipz account.</p>
+    <div class="pw-head"><span class="bar"></span><span>Old Login Password</span></div>
+    ${pwFieldHtml('lpOld', 'Enter old password')}
+    <div class="pw-head"><span class="bar"></span><span>New Login Password</span></div>
+    ${pwFieldHtml('lpNew', 'Enter new password')}
+    <div class="pw-head"><span class="bar"></span><span>Confirm New Password</span></div>
+    ${pwFieldHtml('lpNew2', 'Re-enter new password')}
+    <button class="primary-button" id="lpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitLoginPasswordChange()">SAVE LOGIN PASSWORD</button>
+  </div>`);
+};
+window.submitLoginPasswordChange = async function(){
+  const oldPass = $('lpOld').value;
+  const newPass = $('lpNew').value;
+  const confirm = $('lpNew2').value;
+  if (!oldPass) return notify('Enter your current login password.');
+  if (!newPass || newPass.length < 6) return notify('Your new password must be at least 6 characters.');
+  if (newPass !== confirm) return notify('The two new passwords do not match.');
+  if (newPass === oldPass) return notify('Your new password must be different from the old one.');
+  const btn = $('lpSaveBtn');
+  btn.disabled = true; btn.textContent = 'SAVING…';
+  try {
+    await window.fbChangePassword(phoneToEmail((STATE.account || {}).phone), oldPass, newPass);
+    btn.disabled = false; btn.textContent = 'SAVE LOGIN PASSWORD';
+    closeSheet({ fromAction: true });
+    toast('Login password changed');
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'SAVE LOGIN PASSWORD';
+    // fbErrMsg's wrong-credential copy names the phone number, which only
+    // makes sense on the login screen -- here the only thing that can be
+    // wrong is the old password itself.
+    const code = e && e.code || '';
+    notify(code === 'auth/invalid-credential' || code === 'auth/wrong-password'
+      ? 'That is not your current login password.'
+      : fbErrMsg(e));
+  }
+};
+
+// ── CHANGE TRADE PASSWORD (ChangePassword.dc.html) ──
+// The 6-digit PIN that confirms withdrawals. Chipz uses 6 digits where Snow
+// used 5 -- server.js validates the same length on /account/transaction-pin/change.
+window.openChangeTradePasswordSheet = function(){
+  openSheet('Trade Password', `<div class="reveal-in" style="padding-top:22px;">
+    <p class="pw-note">Your trade password is your 6-digit PIN used to confirm withdrawals and other sensitive actions.</p>
+    <div class="pw-head"><span class="bar"></span><span>Old Trade Password</span></div>
+    ${pwFieldHtml('tpOld', 'Enter old 6-digit PIN', true)}
+    <div class="pw-head"><span class="bar"></span><span>New Trade Password</span></div>
+    ${pwFieldHtml('tpNew', 'Enter new 6-digit PIN', true)}
+    <div class="pw-head"><span class="bar"></span><span>Confirm New Password</span></div>
+    ${pwFieldHtml('tpNew2', 'Re-enter new 6-digit PIN', true)}
+    <button class="primary-button" id="tpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitTradePasswordChange()">SAVE TRADE PASSWORD</button>
+  </div>`);
+};
+window.submitTradePasswordChange = async function(){
+  const oldPin = $('tpOld').value.trim();
+  const newPin = $('tpNew').value.trim();
+  const confirm = $('tpNew2').value.trim();
+  if (!/^\d{6}$/.test(oldPin)) return notify('Enter your current 6-digit trade password.');
+  if (!/^\d{6}$/.test(newPin)) return notify('Your new trade password must be exactly 6 digits.');
+  if (newPin !== confirm) return notify('The two new trade passwords do not match.');
+  if (newPin === oldPin) return notify('Your new trade password must be different from the old one.');
+  const btn = $('tpSaveBtn');
+  btn.disabled = true; btn.textContent = 'SAVING…';
+  const r = await post('/account/transaction-pin/change', { oldPin, newPin });
+  btn.disabled = false; btn.textContent = 'SAVE TRADE PASSWORD';
+  if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
+  closeSheet({ fromAction: true });
+  toast('Trade password changed');
+};
+
+// ── TREASURE CHEST (Chest.dc.html / ChestSuccess.dc.html) ──
+// The bouncing chest on Home opens this full screen: glowing ring, bouncing
+// chest artwork, key field, OPEN CHEST. A valid key flashes the green
+// full-screen win state with the amount won and the new balance.
+window.openChestSheet = function(){
+  openSheet('TREASURE CHEST', `<div class="reveal-in chest-stage">
+    <div class="glow-ring"><img src="/treasure-chest.png" alt=""></div>
+    <h2>Mystery Treasure</h2>
+    <p class="sub">Enter your key to unlock the reward</p>
+    <div style="width:100%;">
+      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter treasure chest key" autocapitalize="characters" autocomplete="off"></div>
+      <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.1em;" onclick="submitChestKey()">OPEN CHEST</button>
+    </div>
+  </div>`);
+  setTimeout(() => { const el = $('chestKey'); if (el) el.focus(); }, 60);
+};
+window.submitChestKey = async function(){
+  const raw = ($('chestKey').value || '').trim();
+  if (!raw) return notify('Enter your treasure chest key.');
+  const btn = $('chestOpenBtn');
+  btn.disabled = true; btn.textContent = 'OPENING…';
+  const r = await post('/redeem', { code: raw });
+  btn.disabled = false; btn.textContent = 'OPEN CHEST';
+  if (r.status !== 'success') return notify(r.message || 'That key did not open the chest.');
+  // Refresh the wallet BEFORE showing the win card so "New Balance" is the
+  // real post-credit figure, not the stale pre-redeem one.
+  const acc = await api('/account');
+  if (acc.status === 'success') STATE.account = acc.account;
+  await refreshTransactionsCache();
+  closeSheet({ fromAction: true });
+  showChestWin(r.reward, (STATE.account || {}).walletBalance || 0);
+};
+function showChestWin(reward, balance){
+  $('chestWinAmount').textContent = fmtUGX2(reward);
+  $('chestWinBalance').textContent = 'New Balance: ' + fmtUGX2(balance);
+  $('chestWinBg').classList.add('show');
+  lockBodyScroll();
+}
+window.closeChestWin = function(){
+  $('chestWinBg').classList.remove('show');
+  if (!_openSheetTitle) unlockBodyScroll();
+  if (STATE.page === 'home') renderHome();
+  if (STATE.page === 'account') renderAccount();
+};
 
 // Shared by every full-screen overlay (sheets, the announcement dialog, the
 // gift-code modal, confirm dialogs) that needs to stop the page behind it
@@ -1666,7 +2198,9 @@ var _openSheetTitle = null;
 // throughout), so _openSheetTitle alone isn't enough on its own.
 function isAnyOverlayOpen(){
   return !!(_openSheetTitle
-    || ($('chestModalBg') && $('chestModalBg').classList.contains('show'))
+    || ($('chestWinBg') && $('chestWinBg').classList.contains('show'))
+    || ($('msgDetailBg') && $('msgDetailBg').classList.contains('show'))
+    || ($('notifyBg') && $('notifyBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
     // The recharge result modal (Round 82) came after this guard was first
     // written and was never added to it -- it is exactly the kind of thing
@@ -1826,7 +2360,7 @@ window.openAboutSheet = async function(){
   const wrap = $('aboutArticle');
   if (!wrap) return; // sheet was closed again before this resolved
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
-    : [{ type: 'text', text: s.aboutText || 'Snow lets you invest in a range of plans with daily cashback and a 3-level referral program.' }];
+    : [{ type: 'text', text: s.aboutText || 'Chipz lets you invest in a range of products with daily income and a 3-level referral program.' }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
     ? `<div class="scroll-reveal about-image about-block"><img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;" alt=""></div>`
     : `<div class="scroll-reveal about-block"><p style="white-space:pre-line;line-height:1.7;color:var(--snow-ink);">${revealWordsHtml(esc(b.text))}</p></div>`
@@ -1934,111 +2468,12 @@ window.submitCheckin = async function(){
   if (STATE.page === 'home') renderHome();
 };
 
-// Treasure chest on Home -- opens a centered popup (not a bottom sheet) to
-// redeem a gift code, reusing the existing /redeem endpoint. Same feature as
-// admin's promo codes, just entered here via the chest instead of an
-// Account menu item.
-window.openChestModal = function(){
-  $('chestCodeInput').value = '';
-  $('chestError').innerHTML = '';
-  $('chestModalBg').classList.add('show');
-  lockBodyScroll(); // same scroll-chaining gap as the announcement dialog -- see maybeShowAnnouncement()
-  setTimeout(() => $('chestCodeInput').focus(), 50);
-};
-window.closeChestModal = function(){
-  $('chestModalBg').classList.remove('show');
-  unlockBodyScroll();
-};
-window.submitChestCode = async function(){
-  const raw = $('chestCodeInput').value.trim();
-  if (!raw) { $('chestError').innerHTML = '<div class="auth-error">Enter a code</div>'; return; }
-  const btn = $('chestSubmitBtn');
-  const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Opening…';
-  const r = await post('/redeem', { code: raw });
-  btn.disabled = false; btn.textContent = label;
-  if (r.status !== 'success') { $('chestError').innerHTML = `<div class="auth-error">${esc(r.message || 'Could not redeem this code')}</div>`; return; }
-  closeChestModal();
-  toast(`${fmtUGX(r.reward)} added to your wallet`);
-  const acc = await api('/account');
-  if (acc.status === 'success') STATE.account = acc.account;
-  // Same stale-Records fix as submitCheckin() above -- /redeem already
-  // wrote a real ledger row server-side by this point.
-  await refreshTransactionsCache();
-  if (STATE.page === 'home') renderHome();
-};
-
-var _recordsTab = 'income';
-var INCOME_TX_TYPES = new Set(['cashback','commission','team_reward','mission_salary','mission_deposit_reward','welcome_bonus','checkin','promocode','admin_credit']);
-function recordsTabMatch(cat, t){
-  if (cat === 'deposit') return t.type === 'deposit';
-  if (cat === 'withdraw') return t.type === 'withdraw';
-  return INCOME_TX_TYPES.has(t.type);
-}
-// Cache-first: STATE.transactions is already prefetched at login (see
-// enterApp()), so this normally has data to show the instant the sheet
-// opens -- no network wait. Still quietly re-fetches in the background to
-// stay current for next time -- but, matching every other cache-first sheet
-// in this app (openWithdrawSheet/openWithdrawalAccountsSheet, and Mission
-// Center after Round 41's fix for this exact bug), that background refetch
-// only repaints when there was NO cache to show initially. This one never
-// got the guard: it used to call renderRecordsTab() again unconditionally
-// once the refetch landed, replaying the row list's .reveal-in entrance
-// animation a moment after the sheet had already finished opening --
-// visually indistinguishable from the whole list quietly reloading itself
-// (owner: "records income has silent loader... shows and loads in
-// background and reshow again").
-window.openRecordsSheet = async function(){
-  _recordsTab = 'income';
-  const hadCache = Array.isArray(STATE.transactions);
-  openSheet('Records', `
-    <div class="segmented-control" id="recordsTabs">
-      <button class="seg active" data-cat="income" onclick="switchRecordsTab('income')">Income</button>
-      <button class="seg" data-cat="deposit" onclick="switchRecordsTab('deposit')">Recharges</button>
-      <button class="seg" data-cat="withdraw" onclick="switchRecordsTab('withdraw')">Withdrawals</button>
-    </div>
-    <div id="recordsBody" style="margin-top:16px;"></div>`);
-  if (hadCache) renderRecordsTab(_recordsTab);
-  const r = await api('/transactions');
-  if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
-  else if (!hadCache) STATE.transactions = [];
-  if (!hadCache && $('recordsBody')) renderRecordsTab(_recordsTab);
-};
-window.switchRecordsTab = function(cat){
-  _recordsTab = cat;
-  const tabs = $('recordsTabs');
-  if (tabs) tabs.querySelectorAll('.seg').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
-  renderRecordsTab(cat);
-};
-// Owner: "l need deposit and withdrawals to be plain no details, so
-// deposit amount and status, also withdrawals, amount and status." The
-// amount is already shown on its own in the right-hand mono column, so the
-// server's own "Deposit: Success (UGX 30,000)" / "Withdrawal: Failed,
-// refunded (UGX 50,000)" description is trimmed here to just its status
-// segment (the part after "Type: ", with the trailing "(UGX ...)" amount
-// stripped) for the Deposits/Withdrawals tabs, dropping the type prefix and
-// the repeated amount. Income-tab rows (cashback, commission, etc.) are
-// untouched -- only deposit/withdraw were asked to go plain. No dashes in
-// this format at all (owner: "no using dashes") -- a colon separates the
-// type from the status, a plain comma separates "Failed" from "refunded".
 function depWitStatusLabel(desc){
   const parts = String(desc || '').split(': ');
   const label = parts.length >= 2 ? parts[1] : (desc || '');
   return label.replace(/\s*\([^)]*\)\s*$/, '');
 }
-function recordsRowLabel(cat, t){
-  return (cat === 'deposit' || cat === 'withdraw') ? depWitStatusLabel(t.description) : cleanDesc(t.description);
-}
-// A failed deposit / a declined-and-refunded withdrawal has its ledger
-// row's `amount` zeroed server-side (see markDepositFailed()/
-// finalizeWithdrawalTransactionRecord() in server.js) so the admin's
-// walletBalance/totalDeposited integrity math stays honest -- but the
-// amount column here must still show what was actually attempted, not
-// "+UGX 0". `displayAmount` is a separate, never-zeroed copy of the real
-// amount server.js writes at creation time for exactly this. Falls back to
-// parsing the figure back out of the description for older rows written
-// before that field existed (only realistically possible for withdrawals --
-// deposits only started getting a ledger row at all in Round 58).
+
 function recordsRowAmount(t){
   if (t.displayAmount !== undefined && t.displayAmount !== null) return Number(t.displayAmount) || 0;
   if ((Number(t.amount) || 0) === 0 && t.description) {
@@ -2050,27 +2485,7 @@ function recordsRowAmount(t){
   }
   return Number(t.amount) || 0;
 }
-function renderRecordsTab(cat){
-  const body = $('recordsBody');
-  if (!body) return;
-  const rows = (STATE.transactions || []).filter(t => recordsTabMatch(cat, t));
-  if (!rows.length) { body.innerHTML = '<div class="list-empty reveal-in">No records yet.</div>'; return; }
-  // Codex-caught real bug (2nd money-flow audit): this always claimed "No
-  // more data" even when the server's own list was truncated (a fixed
-  // fetch cap, well past on a long-lived heavy user) -- a false claim of
-  // completeness. Only say so when the fetch genuinely wasn't cut short.
-  const footer = STATE.transactionsTruncated
-    ? '<div class="list-end">Showing your most recent records</div>'
-    : '<div class="list-end">No more data</div>';
-  body.innerHTML = '<div class="reveal-in"><div class="settings-list">' + rows.map(t => { const amt = recordsRowAmount(t); return `
-    <div class="list-row">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13.5px;font-weight:600;">${esc(recordsRowLabel(cat, t))}</div>
-        <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">${esc(t.date||'')} ${esc(t.time||'')}</div>
-      </div>
-      <div class="mono" style="font-size:13px;font-weight:700;color:${amt<0?'var(--snow-wine)':'var(--snow-green)'};">${amt<0?'-':'+'}${fmtUGX(Math.abs(amt))}</div>
-    </div>`; }).join('') + '</div>' + footer + '</div>';
-}
+
 function cleanDesc(d){ return d || ''; }
 
 // Owner: "l also need quick amounts, juck put quick amounts basing on
@@ -2319,19 +2734,17 @@ window.closeManualPayOverlay = function(opts){
   if (history.state && history.state.manualPay) history.back();
   if (!(opts && opts.fromAction)) maybeAnnounceAfterSheet('Recharge');
 };
-// Selector/hero brand marks: an admin-uploaded image (owner: "upload image
-// to replace those snow on payment network screen and final payment
-// screenshot... 2 different images") takes over from Snow's own snowflake
-// mark when set, at the exact same footprint the mark used.
+// Selector/hero brand marks: an admin-uploaded image takes over from the
+// CHIPZ wordmark when set, at the exact same footprint the mark uses.
 function manualPaySelectorBrandHtml(){
   return STATE.manualPaySelectorImage
     ? `<img src="${esc(STATE.manualPaySelectorImage)}" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:12px;">`
-    : snowflakeSvg('', 44);
+    : chipzMarkHtml(56);
 }
 function manualPayHeroBrandHtml(){
   return STATE.manualPayHeroImage
     ? `<img src="${esc(STATE.manualPayHeroImage)}" alt="" style="width:32px;height:32px;object-fit:contain;border-radius:8px;">`
-    : snowflakeSvg('', 32);
+    : chipzMarkHtml(32);
 }
 function openManualPayFlow(amount){
   _manDepChosenMethod = '';
@@ -2828,14 +3241,14 @@ function paintWithdrawSheet(s){
         ? `<select id="witAccount" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">${acctOptions}</select>`
         : `<div class="form-hint">No withdrawal account saved yet.</div><button class="secondary-button" style="width:100%;padding:12px 0;margin-top:8px;" onclick="openWithdrawalAccountsSheet()">Add withdrawal account</button>`}
     </div>
-    <div class="form-field"><label>Transaction PIN</label><input id="witPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code"></div>
+    <div class="form-field"><label>Trade Password</label><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="6 digits" autocomplete="one-time-code"></div>
     <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button>
     <div class="instr-card">
       <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Withdrawal instructions</span></div>
       <ol>
         <li>Enter an amount (min ${fmtUGX(s.minWithdraw)}). A ${s.withdrawFeePct||15}% fee applies.</li>
         <li>Select a saved withdrawal account.</li>
-        <li>Enter your Transaction PIN and tap Request Withdrawal.</li>
+        <li>Enter your Trade Password and tap Request Withdrawal.</li>
         <li>${s.payoutManual
               ? 'We have received your withdrawal request, it will be processed as soon as possible.'
               : 'Funds are sent to your mobile-money number once processed.'}</li>
@@ -2852,7 +3265,7 @@ window.syncWithdrawReceiveAmt = function(){
   const net = Math.max(0, amount - fee);
   el.textContent = fmtUGX(net);
 };
-// Records (openRecordsSheet()) is cache-first: it paints instantly from
+// Balance Record (openBalanceRecordSheet()) is cache-first: it paints from
 // whatever STATE.transactions already holds, and per Round 55's own fix,
 // deliberately does NOT repaint once its own background refetch lands (that
 // was to stop a sheet that's already open from silently reloading itself
@@ -2880,7 +3293,7 @@ window.submitWithdraw = async function(){
   const acct = acctSel ? STATE.bankAccounts.find(a => a.id === acctSel.value) : null;
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
   if (!acct) return toast('Select a withdrawal account', true);
-  if (!/^\d{5}$/.test(pin)) return toast('Enter your 5-digit Transaction PIN', true);
+  if (!/^\d{6}$/.test(pin)) return toast('Enter your 6-digit Trade Password', true);
   $('witSubmitBtn').disabled = true; $('witSubmitBtn').textContent = 'Please wait…';
   const r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin });
   $('witSubmitBtn').disabled = false; $('witSubmitBtn').textContent = 'Request Withdrawal';
@@ -3012,7 +3425,7 @@ window.openInvestConfirm = function(tierKey){
     <button class="primary-button" id="investConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;" onclick="confirmInvest('${esc(tierKey)}')">Confirm & Buy</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
   $('confirmBg').classList.add('show');
-  lockBodyScroll(); // subagent-audit-caught: same scroll-chaining gap already fixed for #announceBg/#chestModalBg
+  lockBodyScroll(); // subagent-audit-caught: same scroll-chaining gap already fixed for #announceBg/#chestWinBg
 };
 window.closeConfirm = function(){
   $('confirmBg').classList.remove('show');
@@ -3063,7 +3476,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => { window._installPrompt = null; });
 window.promptInstallApp = async function(){
-  if (!window._installPrompt) { toast('Already installed, or your browser doesn\'t support installing Snow.'); return; }
+  if (!window._installPrompt) { toast('Already installed, or your browser doesn\'t support installing Chipz.'); return; }
   window._installPrompt.prompt();
   await window._installPrompt.userChoice.catch(() => {});
   window._installPrompt = null;

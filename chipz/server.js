@@ -112,7 +112,7 @@ app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 // not a bad connection, every API call from that origin was being refused
 // at the CORS layer.
 const CORS_ALLOWED_ORIGINS = new Set([
-  'https://snow-platform.com', 'https://www.snow-platform.com',
+  'https://chipz-platform.com', 'https://www.chipz-platform.com',
   'https://chn-snow2beer.com', 'https://www.chn-snow2beer.com',
 ]);
 app.use(cors({
@@ -496,6 +496,25 @@ async function getHelpBanner() {
   _helpBannerCacheTs = Date.now();
   return _helpBannerCache;
 }
+// Two Chipz-only image slots -- the Referral page banner and the brand logo
+// shown on the Account profile card. Same 'banners' collection and same
+// 60s cache shape as getHomeBanner()/getHelpBanner() above, but written
+// once generically rather than copy-pasted per slot: `chipz-<slot>` doc ids
+// keep them from colliding with Snow's inherited 'home'/'help' docs.
+const CHIPZ_IMAGE_SLOTS = ['referral', 'logo'];
+const _chipzImageCache = {};
+async function getChipzImage(slot) {
+  if (!CHIPZ_IMAGE_SLOTS.includes(slot)) return null;
+  const c = _chipzImageCache[slot];
+  if (c && Date.now() - c.ts < 60 * 1000) return c.image;
+  let image = null;
+  try {
+    const snap = await db.collection('banners').doc('chipz-' + slot).get();
+    image = (snap.exists && snap.data().image) || null;
+  } catch (_) { image = c ? c.image : null; }
+  _chipzImageCache[slot] = { image, ts: Date.now() };
+  return image;
+}
 // Optional image for the Home announcement dialog (owner: "introduce
 // announcement dialog image, it will be up of dialog message and
 // scrollable") -- same independent-slot/independent-cache pattern as the
@@ -627,7 +646,7 @@ function eatParts(ts) {
 // Synthetic login email — same convention as space8's phoneToEmail, using
 // the domain already established in Snow's own design (referral links use
 // snow-platform.com).
-function phoneToEmail(phone) { return String(phone).replace(/\D/g, '').replace(/^0+/, '') + '@snow-platform.com'; }
+function phoneToEmail(phone) { return String(phone).replace(/\D/g, '').replace(/^0+/, '') + '@chipz-platform.com'; }
 // STRICT on purpose — every real Uganda mobile number is 256 + exactly 9
 // digits starting with 7. Rejects anything that doesn't reduce to exactly
 // that, so a garbled/wrong-country number never reaches MarzPay.
@@ -1919,6 +1938,14 @@ app.get('/public/announcement-image', async (_req, res) => {
   try { res.json({ status: 'success', image: await getAnnouncementImage() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// The Referral banner and the Account brand logo, in one call -- fetched
+// in boot()'s own Promise.all alongside the Home banner so neither pops in.
+app.get('/public/chipz-images', async (_req, res) => {
+  try {
+    const [referral, logo] = await Promise.all([getChipzImage('referral'), getChipzImage('logo')]);
+    res.json({ status: 'success', referral, logo });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 // Both slots in one call (not two round trips) -- fetched unconditionally
 // inside boot()'s own Promise.all, same "cheap when unset" tradeoff every
 // other banner-style image already accepts, so a member who reaches the
@@ -1996,10 +2023,11 @@ app.get('/public/activity-feed', async (_req, res) => {
 // ═══════════════════════════════════════════
 // REGISTRATION / ACCOUNT
 // ═══════════════════════════════════════════
-// A 5-digit PIN, per Snow's registration spec — rejects the weakest shape
+// A 6-digit trade password, per Chipz's registration spec (Snow used 5) —
+// rejects the weakest shape
 // (all-same-digit) whenever a NEW PIN is being chosen, never when an
 // existing one is being verified.
-function isWeakPin(pin) { return /^(\d)\1{4}$/.test(String(pin || '')); }
+function isWeakPin(pin) { return /^(\d)\1{5}$/.test(String(pin || '')); }
 
 function defaultProfileDoc(phone) {
   return {
@@ -2034,7 +2062,7 @@ app.post('/account/create-profile', async (req, res) => {
   }
 });
 // Shared by the member's own /register — the ONE place that ever assigns a
-// referral code, links a referrer's team counts, sets the Transaction PIN,
+// referral code, links a referrer's team counts, sets the Trade Password,
 // or credits the welcome bonus.
 // `phone` is only used to create the profile doc if it's genuinely still
 // missing -- creation MUST happen inside this same 'reg:'+userId lock, not
@@ -2055,10 +2083,10 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     if (userSnap.data().registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userSnap.data().referralCode || null } };
 
-    if (!/^\d{5}$/.test(String(pin || '')))
-      return { code: 400, body: { status: 'error', code: 'INVALID_PIN', message: 'Enter a 5-digit Transaction PIN.' } };
+    if (!/^\d{6}$/.test(String(pin || '')))
+      return { code: 400, body: { status: 'error', code: 'INVALID_PIN', message: 'Enter a 6-digit Trade Password.' } };
     if (isWeakPin(pin))
-      return { code: 400, body: { status: 'error', code: 'WEAK_PIN', message: 'That PIN is too easy to guess. Choose 5 digits that are not all the same.' } };
+      return { code: 400, body: { status: 'error', code: 'WEAK_PIN', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' } };
 
     const code = String(referralCode || '').trim();
     let referrerId = null;
@@ -3950,7 +3978,7 @@ app.post('/admin/deposit/manual/reject', async (req, res) => {
 // ═══════════════════════════════════════════
 const _withdrawInFlight = new Set();
 const _witRequestInFlight = new Set();
-// The Transaction PIN set at registration is the ONLY PIN in Snow -- it
+// The Trade Password set at registration is the ONLY PIN in Chipz -- it
 // gates every actual money-moving withdrawal request. It no longer gates
 // binding/removing a withdrawal account (owner, Round 39: "remove pin
 // putting here, only it will be on Withdrawals") -- saving/removing a
@@ -3959,8 +3987,8 @@ const _witRequestInFlight = new Set();
 const PIN_LOCK_MS = 15 * 60 * 1000;
 const PIN_MAX_FAILS = 5;
 async function pinCheck(userId, pin) {
-  if (!/^\d{5}$/.test(String(pin || '')))
-    return { ok: false, code: 'INVALID_PIN', message: 'Enter your 5-digit Transaction PIN.' };
+  if (!/^\d{6}$/.test(String(pin || '')))
+    return { ok: false, code: 'INVALID_PIN', message: 'Enter your 6-digit Trade Password.' };
   return withLock('pin:' + userId, async () => {
     const uRef = db.collection('users').doc(userId);
     const snap = await uRef.get();
@@ -3969,16 +3997,16 @@ async function pinCheck(userId, pin) {
     const now = Date.now();
     if (u.pinLockedUntil && tsMillis(u.pinLockedUntil) > now) {
       const mins = Math.ceil((tsMillis(u.pinLockedUntil) - now) / 60000);
-      return { ok: false, code: 'LOCKED', message: `Too many wrong PIN attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
+      return { ok: false, code: 'LOCKED', message: `Too many wrong Trade Password attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
     }
-    if (!u.transactionPinHash) return { ok: false, code: 'NO_PIN', message: 'No Transaction PIN is set on this account.' };
+    if (!u.transactionPinHash) return { ok: false, code: 'NO_PIN', message: 'No Trade Password is set on this account.' };
     if (!scryptVerify(pin, u.transactionPinHash)) {
       const fails = (u.pinFailCount || 0) + 1;
       const update = { pinFailCount: fails };
       let locked = false;
       if (fails >= PIN_MAX_FAILS) { update.pinLockedUntil = new Date(now + PIN_LOCK_MS); update.pinFailCount = 0; locked = true; }
       await uRef.update(update);
-      return { ok: false, code: locked ? 'LOCKED' : 'WRONG_PIN', message: locked ? `Too many wrong PIN attempts. Try again in ${PIN_LOCK_MS / 60000} minutes.` : 'Incorrect Transaction PIN.' };
+      return { ok: false, code: locked ? 'LOCKED' : 'WRONG_PIN', message: locked ? `Too many wrong Trade Password attempts. Try again in ${PIN_LOCK_MS / 60000} minutes.` : 'Incorrect Trade Password.' };
     }
     await uRef.update({ pinFailCount: 0 });
     return { ok: true };
@@ -4788,8 +4816,8 @@ app.post('/account/transaction-pin/change', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const newPin = String(req.body.newPin || '');
-  if (!/^\d{5}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New PIN must be 5 digits.' });
-  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 5 digits that are not all the same.' });
+  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New trade password must be 6 digits.' });
+  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' });
   try {
     // subagent-audit-caught: was missing the banned check every sibling
     // account-mutating route has.
@@ -4977,6 +5005,62 @@ app.get('/withdrawals', async (req, res) => {
     const snap = await db.collection('withdrawals').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(200).get();
     res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal history' }); }
+});
+
+// ═══════════════════════════════════════════
+// MESSAGES (member inbox)
+// ═══════════════════════════════════════════
+// Chipz has a real inbox -- Snow deliberately does not (see chipz/CLAUDE.md's
+// "Structural differences from Snow"). Messages are admin-authored
+// BROADCASTS stored once in `messages`; per-member read state lives in
+// `messageReads` keyed `<uid>_<messageId>` so a broadcast never has to be
+// fanned out into one document per member.
+const DEFAULT_WELCOME_MESSAGE = {
+  id: 'welcome',
+  title: 'Welcome to the Chipz Investment Returns app!',
+  body: 'You can earn daily income through investments via the app, and also earn daily wages by sharing your referral link with friends and family.',
+};
+async function listBroadcastMessages() {
+  const snap = await db.collection('messages').orderBy('createdAt', 'desc').limit(100).get();
+  const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const rows = all.filter(m => !m.deleted);
+  // A brand-new deployment has no admin-authored messages yet; the welcome
+  // note the mockups show is served as a virtual row so the inbox is never
+  // blank on day one. The moment an admin writes a real 'welcome' doc it
+  // takes over (same id), so this can't ever duplicate it. Tested against
+  // `all`, not `rows` -- an admin who DELETED the welcome message left a
+  // tombstone behind, and checking the filtered list would resurrect it.
+  if (!all.some(m => m.id === 'welcome')) {
+    rows.push({ ...DEFAULT_WELCOME_MESSAGE, createdAt: 0, date: '', time: '' });
+  }
+  return rows;
+}
+app.get('/messages', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const rows = await listBroadcastMessages();
+    const reads = await db.collection('messageReads').where('userId', '==', uid).limit(200).get();
+    const readIds = new Set(reads.docs.map(d => d.data().messageId));
+    res.json({ status: 'success', messages: rows.map(m => ({
+      id: m.id, title: m.title || '', body: m.body || '',
+      date: m.date || '', time: m.time || '', createdAt: m.createdAt || 0,
+      read: readIds.has(m.id),
+    })) });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your messages' }); }
+});
+app.post('/messages/read', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const messageId = String(req.body.messageId || '').slice(0, 120);
+  if (!messageId) return res.status(400).json({ status: 'error', message: 'messageId required' });
+  try {
+    // Deterministic doc id -> marking the same message read twice is a
+    // harmless idempotent overwrite, never a duplicate row.
+    await db.collection('messageReads').doc(uid + '_' + messageId)
+      .set({ userId: uid, messageId, readAt: Date.now() }, { merge: true });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not update this message' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -5223,6 +5307,38 @@ app.post('/admin/settings/update', async (req, res) => {
     logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save settings' }); }
+});
+app.get('/admin/chipz-images', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [referral, logo] = await Promise.all([getChipzImage('referral'), getChipzImage('logo')]);
+    res.json({ status: 'success', referral, logo });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/chipz-image/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const slot = String(req.body.slot || '');
+  if (!CHIPZ_IMAGE_SLOTS.includes(slot)) return res.status(400).json({ status: 'error', message: 'Unknown image slot' });
+  const image = String(req.body.image || '');
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+    return res.status(400).json({ status: 'error', message: 'Invalid image' });
+  try {
+    await db.collection('banners').doc('chipz-' + slot).set({ image });
+    delete _chipzImageCache[slot];
+    logAdminAction(req, 'chipz_image_set', { slot });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this image' }); }
+});
+app.post('/admin/chipz-image/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const slot = String(req.body.slot || '');
+  if (!CHIPZ_IMAGE_SLOTS.includes(slot)) return res.status(400).json({ status: 'error', message: 'Unknown image slot' });
+  try {
+    await db.collection('banners').doc('chipz-' + slot).set({ image: null });
+    delete _chipzImageCache[slot];
+    logAdminAction(req, 'chipz_image_cleared', { slot });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear this image' }); }
 });
 app.get('/admin/banner', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -5478,6 +5594,47 @@ app.post('/admin/products/sync-pricing', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// ADMIN — MESSAGES
+// ═══════════════════════════════════════════
+app.get('/admin/messages/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', messages: await listBroadcastMessages() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load messages' }); }
+});
+app.post('/admin/messages/save', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const title = stripHtml(req.body.title).slice(0, 200);
+  const body = stripHtml(req.body.body).slice(0, 4000);
+  if (!title) return res.status(400).json({ status: 'error', message: 'A title is required' });
+  if (!body) return res.status(400).json({ status: 'error', message: 'A message body is required' });
+  // An explicit id edits that message in place; no id writes a new one.
+  const id = String(req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120)
+    || 'msg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  try {
+    const stamp = nowStr();
+    await db.collection('messages').doc(id).set({
+      title, body, date: stamp.date, time: stamp.time, createdAt: Date.now(), deleted: false,
+    }, { merge: true });
+    logAdminAction(req, 'message_saved', { id, title });
+    res.json({ status: 'success', id });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this message' }); }
+});
+app.post('/admin/messages/delete', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const id = String(req.body.id || '');
+  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+  try {
+    // Tombstoned rather than removed so the built-in 'welcome' message can
+    // also be hidden by an admin who does not want it (listBroadcastMessages
+    // only re-adds the virtual welcome row when no doc with that id exists,
+    // and a tombstone IS such a doc).
+    await db.collection('messages').doc(id).set({ deleted: true }, { merge: true });
+    logAdminAction(req, 'message_deleted', { id });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this message' }); }
+});
+
+// ═══════════════════════════════════════════
 // ADMIN — GIFT CODES
 // ═══════════════════════════════════════════
 // Owner: "make when gift codes are randomly claimed no fixed claiming so
@@ -5632,8 +5789,8 @@ app.post('/admin/user/reset-payout-pin', async (req, res) => {
   const userId = String(req.body.userId || '');
   const newPin = String(req.body.newPin || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
-  if (!/^\d{5}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New PIN must be 5 digits.' });
-  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 5 digits that are not all the same.' });
+  if (!/^\d{6}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New trade password must be 6 digits.' });
+  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' });
   try {
     const ref = db.collection('users').doc(userId);
     const snap = await ref.get();
@@ -6108,7 +6265,7 @@ app.post('/admin/deposit', async (req, res) => {
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
       t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
-      t.set(db.collection('transactions').doc(), { userId, type: 'admin_credit', description: note || 'Snow credit', amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+      t.set(db.collection('transactions').doc(), { userId, type: 'admin_credit', description: note || 'Chipz credit', amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
     }));
     logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });

@@ -2,9 +2,12 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'snow-shell-v101';
-const VENDOR_CACHE = 'snow-vendor-firebase-v1';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/badge.png', '/treasure-chest.png'];
+const CACHE = 'chipz-shell-v1';
+const VENDOR_CACHE = 'chipz-vendor-firebase-v1';
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/badge.png', '/treasure-chest.png',
+  '/nav-home.png', '/nav-products.png', '/nav-myproducts.png', '/nav-referral.png', '/nav-team.png', '/nav-account.png',
+  '/act-deposit.png', '/act-withdraw.png', '/act-channel.png', '/act-service.png',
+  '/set-download.png', '/set-wallet.png', '/set-balance.png', '/set-messages.png', '/set-loginpw.png', '/set-tradepw.png'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();
