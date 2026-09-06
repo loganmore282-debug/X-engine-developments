@@ -120,11 +120,17 @@ deployed `user/`/`admin/` folders exactly the same way). Key differences from Sn
 setup:
 - Service names: `chipz-server` / `chipz-app` / `chipz-admin` (in `render.yaml`).
 - `package.json`'s `name` is `chipz-server`.
-- Real app URLs, Firebase project, MongoDB database, and all payment-provider
-  credentials are **not yet provisioned** — this fork is still in the "port + reskin"
-  phase, no live deploy has happened yet. Do not assume any of Snow's own live infra
-  (Firebase project `snow-beer-cbf65`, its MongoDB Atlas cluster, its MarzPay/LipaPay
-  keys) carries over — Chipz needs its own, set up when the owner is ready to deploy.
+- **Firebase project is `chipz-23a4c`** — the owner supplied the web config and it is
+  stamped into BOTH `user-src/index.html` and `admin-src/index.html` (apiKey,
+  authDomain, projectId, storageBucket, messagingSenderId, appId, measurementId).
+  Snow's `snow-beer-cbf65` config is fully gone from both. This is the public client
+  config only; the matching `FIREBASE_SERVICE_ACCOUNT` for the backend is a real
+  secret and belongs in the host's env vars, never here.
+- **`API_BASE` still points at Snow's backend** (`mylifeismyhappiness.onrender.com`,
+  top of `user-src/original_module.js`, mirrored in `admin-src/index.html`). The owner
+  has not given a Chipz backend URL yet — swap it the moment they do, or nothing the
+  app does will reach a Chipz database.
+- MongoDB database and payment-provider credentials are still **not provisioned**.
 
 ## Product config (not yet finalized — do not invent real numbers)
 
@@ -211,9 +217,16 @@ Known gaps / next up:
   percentage still need building (see the Turntable bullet above for the spec).
 - Product catalog is still placeholder ("Product-1".."Product-10") — the owner has
   not supplied real names/prices/images.
-- No live infrastructure yet: `user-src/index.html` still carries Snow's Firebase
-  config, and `API_BASE` still points at Snow's Render URL. Both need swapping when
-  Chipz gets its own Firebase project, MongoDB cluster and backend deploy.
+- **`API_BASE` still points at Snow's Render URL** — the Chipz Firebase config IS now
+  stamped in (project `chipz-23a4c`), but the backend URL, MongoDB cluster and
+  payment-provider keys are still outstanding. Nothing reaches a Chipz database until
+  the backend URL is swapped.
+
+A note on how the Firebase config got missed the first time: the owner supplied it
+mid-session with "now stamp in this config in admin and userpanel and start building",
+and the mechanical `snow/` -> `chipz/` file copy silently carried Snow's config
+forward over it. When the owner hands over config values, stamp them in immediately
+and grep for the OLD values afterwards to prove nothing survived.
 
 ### Testing notes (reusable)
 Playwright verification runs against the **built** `user/index.html` served over
