@@ -98,30 +98,34 @@ const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set']);
 app.use((req, res, next) => (HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 
-// Owner: real custom domain confirmed live -- chn-snow2beer.com -- while
-// snow-platform.com (this project's original placeholder domain, flagged as
-// unconfirmed back in Round 89's own notes) was never actually put into use.
-// Left in the set rather than removed: harmless if genuinely unused, and
-// removing it on a guess risks breaking it if the owner does control it.
-// Every request from an unlisted origin is silently rejected by the `cors`
-// middleware below with NO CORS headers on the response -- the browser then
-// blocks it entirely, which surfaces to the member as a plain fetch()
-// failure (this app's own generic "Network error. Check your connection."),
-// indistinguishable from a real connectivity problem. This is exactly what
-// made the custom domain's own /register calls fail before this fix --
-// not a bad connection, every API call from that origin was being refused
-// at the CORS layer.
+// Chipz's frontend is hosted on Tencent EdgeOne Pages while this backend
+// runs elsewhere (Render), so the browser treats every API call as
+// cross-origin and the EdgeOne origin MUST be allowed here. Get this wrong
+// and the failure is deeply misleading: the `cors` middleware answers an
+// unlisted origin with NO CORS headers at all, the browser blocks the
+// response, and the app reports its own generic "Network error. Check your
+// connection." -- identical to a real connectivity problem, on a backend
+// that is actually up and healthy. Snow hit exactly this when its custom
+// domain went live and every /register call started failing.
+//
+// Snow's own live domain (chn-snow2beer.com) was deliberately dropped from
+// this copy -- it has no business reaching Chipz's database.
 const CORS_ALLOWED_ORIGINS = new Set([
   'https://chipz-platform.com', 'https://www.chipz-platform.com',
-  'https://chn-snow2beer.com', 'https://www.chn-snow2beer.com',
 ]);
+// Suffix-matched hosts. EdgeOne hands out both *.edgeone.app and
+// *.edgeone.site subdomains and the project can be renamed or redeployed to
+// a new one, so matching the suffix avoids a dead app every time that
+// changes. Render's own *.onrender.com is here for the same reason.
+const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.onrender.com', '.pages.dev'];
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     if (CORS_ALLOWED_ORIGINS.has(origin)) return cb(null, true);
     try {
       const h = new URL(origin).hostname.toLowerCase();
-      if (h.endsWith('.onrender.com') || h === 'localhost' || h === '127.0.0.1') return cb(null, true);
+      if (CORS_ALLOWED_SUFFIXES.some(sfx => h.endsWith(sfx))) return cb(null, true);
+      if (h === 'localhost' || h === '127.0.0.1') return cb(null, true);
     } catch (_) {}
     cb(null, false);
   }
