@@ -499,14 +499,22 @@ a{color:inherit;}
 .notify-ok:active{opacity:.85;}
 
 /* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
-.chest-stage{display:flex;flex-direction:column;align-items:center;padding:44px 0 0;}
+/* The mockup frames the whole block with a hairline above the chest and
+   another below the button -- a light rule that fades out at both ends, not
+   a hard border edge to edge. */
+.chest-stage{display:flex;flex-direction:column;align-items:center;padding:30px 0 0;}
+.chest-rule{width:64%;height:1px;flex-shrink:0;background:linear-gradient(to right,transparent,var(--snow-border) 22%,var(--snow-border) 78%,transparent);}
+.chest-rule.top{margin-bottom:22px;}
+.chest-rule.bottom{margin-top:24px;}
 .glow-ring{width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,138,31,.32),rgba(255,138,31,0) 70%);display:flex;align-items:center;justify-content:center;position:relative;}
-.glow-ring::before{content:'';position:absolute;inset:14px;border-radius:50%;border:1.5px dashed rgba(226,27,42,.28);}
+/* Fine dots, matching the mockup's ring -- the old 1.5px dashes read as a
+   drawn border rather than the faint guide circle it should be. */
+.glow-ring::before{content:'';position:absolute;inset:14px;border-radius:50%;border:1px dotted rgba(226,27,42,.22);}
 .glow-ring img{width:140px;filter:drop-shadow(0 18px 20px rgba(30,10,5,.35));animation:chestBounce 1.8s ease-in-out infinite;}
 .chest-stage h2{font-size:26px;font-weight:700;text-align:center;margin:26px 0 6px;}
 .chest-stage .sub{color:var(--snow-muted);font-size:14px;font-style:italic;font-weight:500;text-align:center;margin:0 0 26px;}
 .key-field{width:100%;height:54px;border:1.6px solid var(--snow-border);border-radius:4px;background:var(--snow-surface);display:flex;align-items:center;padding:0 18px;margin-bottom:16px;}
-.key-field input{border:0;outline:0;background:transparent;font-size:15px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+.key-field input{border:0;outline:0;background:transparent;font-size:16px;text-align:center;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .chest-win-bg{position:fixed;inset:0;background:#2ecc71;display:none;align-items:center;justify-content:center;padding:28px;z-index:320;}
 .chest-win-bg.show{display:flex;animation:winFlash .5s ease-out;}
 @keyframes winFlash{0%{background:#fff;}60%{background:#8ef0b4;}100%{background:#2ecc71;}}

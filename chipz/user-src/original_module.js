@@ -2419,6 +2419,7 @@ window.submitTradePasswordChange = async function(){
 // full-screen win state with the amount won and the new balance.
 window.openChestSheet = function(){
   openSheet('TREASURE CHEST', `<div class="reveal-in chest-stage">
+    <div class="chest-rule top"></div>
     <div class="glow-ring"><img src="/treasure-chest.png" alt=""></div>
     <h2>Mystery Treasure</h2>
     <p class="sub">Enter your key to unlock the reward</p>
@@ -2426,6 +2427,7 @@ window.openChestSheet = function(){
       <div class="key-field"><input id="chestKey" type="text" placeholder="Enter treasure chest key" autocapitalize="characters" autocomplete="off"></div>
       <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.1em;" onclick="submitChestKey()">OPEN CHEST</button>
     </div>
+    <div class="chest-rule bottom"></div>
   </div>`);
   setTimeout(() => { const el = $('chestKey'); if (el) el.focus(); }, 60);
 };
