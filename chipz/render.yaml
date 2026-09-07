@@ -82,10 +82,13 @@ services:
       - path: /*
         name: Cross-Origin-Resource-Policy
         value: same-site
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    # No SPA rewrite rule. The app never puts anything in the URL path --
+    # every pushState/replaceState call passes '' (keep the current URL) and
+    # navigation is pure in-memory state -- so a /* -> /index.html rewrite
+    # buys nothing, and a rule that broad sitting in front of sw.js, the
+    # manifest and the nav/action PNGs is a risk with no upside. A service
+    # worker that ever answers with index.html fails in a way that looks
+    # exactly like the stale-cache problems this project already fights.
 
   - type: web
     name: chipz-admin
@@ -118,7 +121,5 @@ services:
       - path: /*
         name: Cross-Origin-Resource-Policy
         value: same-site
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    # No SPA rewrite here either, for the same reason: admin/index.html is
+    # the entire panel and nothing routes by path.

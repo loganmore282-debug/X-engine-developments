@@ -266,6 +266,21 @@ and the mechanical `snow/` -> `chipz/` file copy silently carried Snow's config
 forward over it. When the owner hands over config values, stamp them in immediately
 and grep for the OLD values afterwards to prove nothing survived.
 
+### CORS: the "Network error" that is not a network error
+
+`CORS_ALLOWED_SUFFIXES` in `server.js` gates which frontend origins may call the
+backend. An unlisted origin gets NO CORS headers, the browser blocks the response, and
+the app shows its own generic **"Network error. Try again."** on a backend that is up
+and healthy. **This has now bitten twice** — Snow when its custom domain went live, and
+Chipz when the admin panel landed on `*.edgeone.dev` (only `.edgeone.app` and
+`.edgeone.site` were listed). EdgeOne hands out `.edgeone.app`, `.edgeone.site` AND
+`.edgeone.dev`; all three are listed now, plus `.onrender.com` and `.pages.dev`.
+
+**If any Chipz screen reports a network error while the server is fine, check this list
+FIRST** — before suspecting the host, the database, or the deploy. `test-cors-origins.js`
+covers the real domains and the suffix-spoofing attempts (`edgeone.dev.evil.com` must
+NOT match).
+
 ### Signing up: the referral code, and the very first account
 
 The owner's rule is that the Sign Up referral code is a **MUST**. Taken literally that

@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'chipz-shell-v4';
+const CACHE = 'chipz-shell-v5';
 const VENDOR_CACHE = 'chipz-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/treasure-chest.png',
   '/nav-home.png', '/nav-products.png', '/nav-myproducts.png', '/nav-referral.png', '/nav-team.png', '/nav-account.png',

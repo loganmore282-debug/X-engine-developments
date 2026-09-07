@@ -10,6 +10,12 @@ const originFn = eval(`(() => { ${consts}\n return function(origin){ let out; co
 const cases = [
   ['https://chipz-app.edgeone.app',        true,  'EdgeOne user panel'],
   ['https://chipz-admin.edgeone.site',     true,  'EdgeOne admin panel'],
+  // The real one that broke: the owner's admin panel landed on .edgeone.dev,
+  // which was missing from the list, and the login reported "Network error"
+  // on a healthy backend.
+  ['https://chipz-admin.edgeone.dev',      true,  'EdgeOne admin panel on .edgeone.dev'],
+  ['https://chipz-app.edgeone.dev',        true,  'EdgeOne user panel on .edgeone.dev'],
+  ['https://edgeone.dev.evil.com',         false, 'suffix-spoofing attacker on .edgeone.dev'],
   ['https://anything.pages.dev',           true,  'Cloudflare Pages'],
   ['https://chipz-server.onrender.com',    true,  'Render'],
   ['http://localhost:3000',                true,  'local dev'],

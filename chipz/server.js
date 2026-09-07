@@ -113,11 +113,16 @@ app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 const CORS_ALLOWED_ORIGINS = new Set([
   'https://chipz-platform.com', 'https://www.chipz-platform.com',
 ]);
-// Suffix-matched hosts. EdgeOne hands out both *.edgeone.app and
-// *.edgeone.site subdomains and the project can be renamed or redeployed to
+// Suffix-matched hosts. EdgeOne hands out *.edgeone.app, *.edgeone.site AND
+// *.edgeone.dev subdomains, and the project can be renamed or redeployed to
 // a new one, so matching the suffix avoids a dead app every time that
 // changes. Render's own *.onrender.com is here for the same reason.
-const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.onrender.com', '.pages.dev'];
+// .edgeone.dev was missing and the admin panel landed on exactly that
+// domain: the owner's login showed "Network error. Try again." on a backend
+// that was up and healthy -- the misleading failure this block's own comment
+// above warns about, hit for real a second time. If a Chipz screen ever
+// reports a network error while the server is fine, check this list FIRST.
+const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.edgeone.dev', '.onrender.com', '.pages.dev'];
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
