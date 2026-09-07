@@ -807,22 +807,38 @@ function finiteMoney(v) {
 // kinds apart by construction: gift 12, referral 6.
 const GIFTCODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const GIFTCODE_LENGTH = 12;
-// Referral codes, changed 2026-08-27 (owner: uppercase letters + numbers
-// only, e.g. "FTD6GH", "fully recognized, encrypted, safeguarded and
-// global so no repetition"). Same unambiguous-character philosophy as
-// CODE_CHARS (no I/O/0/1) but uppercase-only, no lowercase. Every
-// already-issued mixed-case code (old CODE_CHARS-based) keeps working
-// untouched forever -- redemption/matching below is exact-string
-// comparison against whatever's actually stored, no case transform, no
-// migration needed. This only changes what NEWLY generated codes look
-// like going forward.
-const REFERRAL_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/O/0/1
+// Referral codes, changed 2026-09-07 (owner: "mixture of letters and numbers
+// only 4 characters ie Gy2f, 5GHqt"). Mixed case and digits, still with no
+// I/l/O/0/1 so a code read off a screenshot is never ambiguous. 54
+// characters over 4 places is 8,503,056 codes; the uniqueness check below is
+// what actually guarantees no repetition, the space only decides how often it
+// has to retry.
+// Every already-issued code keeps working untouched -- nothing is migrated,
+// this only changes what NEWLY generated codes look like.
+const REFERRAL_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; // no I/l/O/0/1
+const REFERRAL_LENGTH = 4;
 function randFromAlphabet(alphabet, n) {
   let s = '';
   for (let i = 0; i < n; i++) s += alphabet[crypto.randomInt(alphabet.length)];
   return s;
 }
-function randCode(n = 6) { return randFromAlphabet(REFERRAL_CHARS, n); }
+function randCode(n = REFERRAL_LENGTH) { return randFromAlphabet(REFERRAL_CHARS, n); }
+// Finds the owner of a referral code, ignoring case. Safe precisely because
+// generateUniqueReferralCode() below refuses to issue two codes whose
+// lowercase forms match -- so at most one user can ever answer to a given
+// spelling, and matching case-insensitively cannot pick the wrong one.
+// Codes are mixed case and only 4 characters now, so "Gy2f" typed as "gy2f"
+// is a typo, not a different code; rejecting it would turn a real invite
+// into "that referral code does not exist".
+async function findUserByReferralCode(code) {
+  const raw = String(code || '').trim();
+  if (!raw) return null;
+  const exact = await db.collection('users').where('referralCode', '==', raw).limit(1).get();
+  if (!exact.empty) return exact.docs[0];
+  const lower = raw.toLowerCase();
+  const byLower = await db.collection('users').where('referralCodeLower', '==', lower).limit(1).get();
+  return byLower.empty ? null : byLower.docs[0];
+}
 function genGiftCode() { return randFromAlphabet(GIFTCODE_CHARS, GIFTCODE_LENGTH); }
 async function generateUniqueGiftCode() {
   return withLock('giftcode-gen', async () => {
@@ -849,13 +865,20 @@ async function generateUniqueReferralCode(userId) {
       await db.collection('users').doc(userId).update({ referralCode: code, referralCodeLower: codeLower });
       return code;
     };
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const claimed = await tryClaim(randCode(6));
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const claimed = await tryClaim(randCode(REFERRAL_LENGTH));
       if (claimed) return claimed;
     }
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const claimed = await tryClaim(randCode(8));
-      if (claimed) return claimed;
+    // Safety valve, not the normal path. 25 collisions in a row at 4
+    // characters means the 8.5M space is genuinely crowded, and at that point
+    // a 5- then 6-character code is far better than refusing to let somebody
+    // register. Length is not what identifies a referral code anywhere in
+    // this file, so a longer one is handled identically.
+    for (const len of [5, 6]) {
+      for (let attempt = 0; attempt < 25; attempt++) {
+        const claimed = await tryClaim(randCode(len));
+        if (claimed) return claimed;
+      }
     }
     throw new Error('Could not generate a unique referral code');
   });
@@ -2295,14 +2318,14 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     if (!code && await referralRequiredNow())
       return { code: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } };
     if (code) {
-      const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
-      if (refSnap.empty)
+      const refDoc = await findUserByReferralCode(code);
+      if (!refDoc)
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } };
-      if (refSnap.docs[0].id === userId)
+      if (refDoc.id === userId)
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' } };
-      if (refSnap.docs[0].data().status === 'banned')
+      if (refDoc.data().status === 'banned')
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } };
-      referrerId = refSnap.docs[0].id;
+      referrerId = refDoc.id;
     }
 
     const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(userId), nextSequentialPublicId()]);
@@ -2388,6 +2411,19 @@ app.get('/account', async (req, res) => {
     const u = snap.data();
     if (u.status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    // Owner: "no incomplete registration saying code not set." A finished
+    // registration always assigns a referral code, but a member could still
+    // be left without one -- an account created before codes existed, or a
+    // registration that crashed between creating the profile doc and
+    // generateUniqueReferralCode()'s write. Rather than showing that member a
+    // blank Referral tab forever, issue one now. Costs a single extra read on
+    // the rare account that needs it and nothing at all on every other.
+    if (u.registrationDone && !u.referralCode) {
+      try {
+        u.referralCode = await generateUniqueReferralCode(uid);
+        console.warn(`Backfilled missing referral code for ${uid}: ${u.referralCode}`);
+      } catch (e) { console.error('Referral code backfill failed:', e.message); }
+    }
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: u.walletBalance || 0, totalDeposited: u.totalDeposited || 0,
       totalEarned: u.totalEarned || 0, totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
@@ -6452,9 +6488,9 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
     // know referrerId's identity to lock it, and referral codes don't
     // change, so an unlocked read here is safe (re-verified inside the
     // lock below before anything is written).
-    const preSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
-    if (preSnap.empty) return res.status(400).json({ status: 'error', message: 'That referral code does not exist.' });
-    const candidateReferrerId = preSnap.docs[0].id;
+    const preDoc = await findUserByReferralCode(code);
+    if (!preDoc) return res.status(400).json({ status: 'error', message: 'That referral code does not exist.' });
+    const candidateReferrerId = preDoc.id;
     if (candidateReferrerId === userId) return res.status(400).json({ status: 'error', message: 'Cannot refer yourself.' });
     let referrerId;
     // Codex-caught real bug (round 2): this used to lock a bare, unrelated
