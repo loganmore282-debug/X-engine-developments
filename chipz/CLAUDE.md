@@ -202,6 +202,48 @@ banner, a 500x1500 portrait) through the real built admin bundle and checks all 
 store as exactly 1600x900. `test-product-cards.py` measures the rendered card HEIGHT,
 not just the ratio — the complaint was height, so that is what is pinned.
 
+### A real bug: editing product-1 could silently spawn "product1"
+
+Owner: *"when l save image for the product 1 after that what was product 2 changes
+again to 1 and when l change it it changes product 1 again."*
+
+The admin product editor's save handler ran its slug-building regex over
+`(p.key || <new-product fields>)` **unconditionally**. For an existing product `p.key`
+is already the real, validated key — "product-1" — but the regex
+(`.replace(/[^a-z0-9]+/g,'')`) still stripped its hyphen, turning it into "product1".
+That is a *different* key, so the save created a **second** document instead of
+updating the first. The untouched "product-1" default kept existing side by side with
+the new "product1", both named "Product-1". Whichever of the two happened to sort into
+the next slot is what looked like "Product 2" — so editing "Product 2" kept landing back
+on Product-1's data. This has existed since Chipz's product editor was forked from Snow,
+so it likely fired every time any default product (`product-1`..`product-12`) was ever
+individually edited and saved.
+
+Fixed in `admin-src/index.html`: an existing key now passes through untouched —
+`const key = p.key || (<slugify what was typed>)` — the slug logic only ever runs for a
+genuinely new product (`p.key` falsy).
+
+**The damage already done needs a one-time cleanup, which the fix alone cannot do** —
+whatever got saved under a dehyphenated key is already sitting in the live database.
+Admin → Products → **"Fix duplicate keys"** button calls `POST
+/admin/products/fix-legacy-keys`, which finds every `DEFAULT_PRODUCTS` key with a hyphen
+whose stripped form (`product1`, `product2`, ...) also exists as a saved doc — that
+dehyphenated shape can only exist because of this bug, nothing else in the app ever
+derives a key that way. Unambiguous cases (the correct hyphenated key was never
+individually saved) are merged automatically. A genuine conflict — both the correct key
+and the corrupted one were separately edited — is deliberately **left alone and reported
+back**, rather than guessed at; picking a winner automatically could silently discard
+whichever copy the owner actually wanted to keep. The owner needs to run this once from
+the live admin panel after `server.js` redeploys.
+
+`test-product-key-corruption.py` reproduces the original bug against the real built
+admin (a two-product edit-and-save sequence, matching what the owner actually did),
+proves the fix keeps four cards as four cards, and drives the migration route against a
+store seeded exactly as the old bug would have left it — including a genuine conflict,
+checked to survive untouched. `test-product-legacy-key-route.js` pins the route's own
+matching logic and confirms every `DEFAULT_PRODUCTS` key actually has a hyphen (the
+whole premise the route depends on).
+
 ### One payout number, resolved on the server (do not regress)
 
 `productExpectedReturn()` in `server.js` is the ONLY place a product's total payout is

@@ -1711,6 +1711,7 @@ async function renderProducts(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products (${list.length})</h2>
       <button class="btn sm ghost" id="syncProdPricing" title="Updates price/cycle/expectedReturn on any saved product back to the current code defaults -- leaves images, active/coming-soon, and order untouched">Sync pricing to defaults</button>
+      <button class="btn sm ghost" id="fixLegacyKeys" title="A now-fixed bug could turn saving product-1 into a SEPARATE product1 -- this finds and merges any it made">Fix duplicate keys</button>
       <button class="btn sm ghost" id="clearProd">Clear all</button>
       <button class="btn sm" id="newProd">+ New product</button></div>
     <div class="prod-grid">${list.length?list.map(p=>`
@@ -1730,6 +1731,18 @@ async function renderProducts(){
     const d=await api('/admin/products/sync-pricing', {});
     b.disabled=false; b.textContent='Sync pricing to defaults';
     toast(d.status==='success'?`Synced ${d.synced} product${d.synced===1?'':'s'}`:(d.message||'Failed'),d.status==='success'?'ok':'err');
+    renderProducts();
+  });
+  $('fixLegacyKeys').addEventListener('click',async()=>{
+    if(!confirm('Check for duplicate products created by the old key-saving bug (editing "product-1" used to silently create a separate "product1")? Unambiguous duplicates are merged back into the correct product automatically; anything both copies were separately edited is left for you to sort out by hand and listed here.'))return;
+    const b=$('fixLegacyKeys'); b.disabled=true; b.textContent='Checking…';
+    const d=await api('/admin/products/fix-legacy-keys', {});
+    b.disabled=false; b.textContent='Fix duplicate keys';
+    if(d.status!=='success'){ toast(d.message||'Failed','err'); return; }
+    const parts=[];
+    if(d.fixed.length) parts.push(`merged ${d.fixed.length} duplicate${d.fixed.length===1?'':'s'} back into ${d.fixed.map(f=>f.properKey).join(', ')}`);
+    if(d.conflicts.length) parts.push(`${d.conflicts.length} need your review: both ${d.conflicts.map(c=>`${c.properKey}/${c.strippedKey}`).join(', ')} were separately edited -- open each, compare, keep the right one and Delete the other`);
+    toast(parts.length?parts.join('. '):'No duplicates found', d.conflicts.length?'err':(d.fixed.length?'ok':'ok'));
     renderProducts();
   });
   $('clearProd').addEventListener('click',async()=>{
@@ -1818,7 +1831,19 @@ function editProduct(p, order){
   $('pImage').addEventListener('input', ()=>{ imgData=''; setPrev($('pImage').value.trim()); });
   $('pSave').addEventListener('click', async()=>{
     const image = imgData || $('pImage').value.trim();
-    const key = (p.key || $('pKey').value || $('pLabel').value).toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24) || ('item'+Date.now());
+    // BUG (found live): this used to run the slugify regex over
+    // (p.key || ...) UNCONDITIONALLY -- so even an EXISTING key like
+    // "product-1" got fed through .replace(/[^a-z0-9]+/g,''), which strips
+    // the hyphen and silently turns it into "product1". That is a brand-new
+    // key, so the save created a SECOND product doc instead of updating the
+    // first: the untouched "product-1" default kept existing side by side
+    // with the new "product1", both named "Product-1". Whichever of the two
+    // sorted into the next slot is what looked like "Product 2" to the
+    // owner, so editing "Product 2" kept landing back on Product-1's data.
+    // An existing key is already validated (it came from a real saved
+    // product) and must never be re-derived -- only a brand-new product
+    // (no p.key yet) needs a slug built from what was typed.
+    const key = p.key || (($('pKey').value || $('pLabel').value).toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24) || ('item'+Date.now()));
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
       expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, order:$('pOrder').value,
       spinCount:$('pSpinCount').value, spinMin:$('pSpinMin').value, spinMax:$('pSpinMax').value,

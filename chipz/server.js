@@ -6302,6 +6302,56 @@ app.post('/admin/products/sync-pricing', async (req, res) => {
     res.json({ status: 'success', synced });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not sync pricing' }); }
 });
+// One-time cleanup for a real, now-fixed bug: the admin panel's key field
+// used to run its "make a slug" regex on an EXISTING product key too, which
+// strips hyphens -- so saving anything on "product-1" silently created a
+// SECOND doc at "product1" instead of updating the first. The untouched
+// "product-1" default kept existing side by side with it, both named
+// "Product-1" -- which is exactly what the owner saw as "editing product 1
+// makes what looks like product 2 turn into product 1 again": whichever of
+// the two happened to sort into the next slot was the corrupted duplicate.
+//
+// This finds every DEFAULT_PRODUCTS key with a hyphen (product-1 .. -12) and
+// checks whether its hyphen-stripped form (product1 .. ) also exists as a
+// saved doc -- that dehyphenated doc can ONLY have been created by this bug,
+// since nothing else in the app ever derives a key that way.
+//
+//   - If the correctly-hyphenated key was never individually saved (still
+//     the untouched default), the fix is unambiguous: move the corrupted
+//     doc's fields onto the correct key and delete the corrupted one.
+//   - If BOTH the correct key and the corrupted one were separately edited
+//     (e.g. an image saved under each before the owner noticed), picking a
+//     winner automatically could silently discard real data either way --
+//     those are reported back as conflicts for the owner to resolve by hand
+//     in the product list (compare the two, keep the one with the right
+//     image, delete the other) rather than merged blindly.
+app.post('/admin/products/fix-legacy-keys', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('products').limit(100000).get();
+    const byKey = new Map();
+    snap.forEach(d => { if (!d.data().deleted) byKey.set(d.id, d.data()); });
+    const batch = db.batch();
+    const fixed = [], conflicts = [];
+    for (const def of DEFAULT_PRODUCTS) {
+      const properKey = def.key;
+      const strippedKey = properKey.replace(/[^a-zA-Z0-9]+/g, '');
+      if (strippedKey === properKey) continue;   // no hyphen to have been stripped
+      const corrupted = byKey.get(strippedKey);
+      if (!corrupted) continue;                  // this one was never hit by the bug
+      const proper = byKey.get(properKey);
+      if (proper) { conflicts.push({ properKey, strippedKey }); continue; }
+      const { key: _oldKey, ...rest } = corrupted;
+      batch.set(db.collection('products').doc(properKey), { ...rest, key: properKey }, { merge: false });
+      batch.delete(db.collection('products').doc(strippedKey));
+      fixed.push({ properKey, strippedKey });
+    }
+    if (fixed.length) await batch.commit();
+    _productsCacheTs = 0;
+    logAdminAction(req, 'products_legacy_keys_fixed', { fixed: fixed.length, conflicts: conflicts.length });
+    res.json({ status: 'success', fixed, conflicts });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not check for duplicate keys' }); }
+});
 
 // ═══════════════════════════════════════════
 // ADMIN — MESSAGES
