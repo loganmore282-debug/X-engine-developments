@@ -9,17 +9,19 @@ ACCOUNT = {"phone":"0742730382","walletBalance":2000,"totalDeposited":58000,"tot
  "totalWithdrawn":32164,"totalInvested":28000,"checkinStreak":2,"lastCheckinAt":None,
  "referralCode":"ML3Q4X","publicId":"10012","registrationDone":True,
  "team":{"l1":3,"l2":1,"l3":0,"commission":7840}}
-# Owner: "on image frames please set 1200 x 900 px, 4:3 for all P1-P12."
+# The product frame is 16:9 -- see test-product-image-frame.py for why it
+# stopped being 4:3 (the owner's real artwork is 1721x914 and 4:3 cards were
+# far too tall for a phone).
 # Twelve products, the same count DEFAULT_PRODUCTS now ships, so every one of
 # them gets its frame measured rather than just the first two.
-PROD_IMG_W, PROD_IMG_H = 1200, 900
+PROD_IMG_W, PROD_IMG_H = 1600, 900
 PRODUCTS=[{"key":f"product-{i}","name":f"Product-{i}","price":p,"cycle":150,
   "expectedReturn":p*3,"image":"","spinCount":1 if i>1 else 0,"spinMin":200,"spinMax":1000}
   for i,p in enumerate([30000,90000,197000,355000,560000,950000,1000000,
                         1250000,2550000,4500000,6000000,8000000],start=1)]
 
 def _frame_jpeg(w, h):
-    """A 1200x900 photo the admin panel would have produced, with the corners
+    """A 1600x900 photo the admin panel would have produced, with the corners
     marked so a crop or a letterbox in the card frame is detectable."""
     from PIL import Image, ImageDraw
     import io
@@ -126,11 +128,11 @@ async def main():
         frames = await page.evaluate("""()=>[...document.querySelectorAll('.p-card .p-img')]
           .map(e=>{const r=e.getBoundingClientRect(); return +(r.width/r.height).toFixed(3);})""")
         ck(len(frames)==len(PRODUCTS), "all %d product cards rendered (got %d)"%(len(PRODUCTS),len(frames)))
-        bad = [r for r in frames if abs(r-4/3)>0.02]
-        ck(not bad, "every card frame is 4:3 (%d cards, off: %s)"%(len(frames),bad))
+        bad = [r for r in frames if abs(r-16/9)>0.02]
+        ck(not bad, "every card frame is 16:9 (%d cards, off: %s)"%(len(frames),bad))
 
-        # The real 1200x900 photo must arrive at its native size and cover the
-        # frame with nothing letterboxed -- 1200x900 IS 4:3, so object-fit
+        # The real 1600x900 photo must arrive at its native size and cover the
+        # frame with nothing letterboxed -- 1600x900 IS 16:9, so object-fit
         # cover has nothing to crop.
         pic = await page.evaluate("""()=>{const i=document.querySelector('.p-card .p-img img');
           if(!i) return null; const f=i.parentNode.getBoundingClientRect(); const r=i.getBoundingClientRect();
@@ -154,10 +156,23 @@ async def main():
                   brokenKeepsName: !!b.querySelector('.p-name'),
                   brokenNameText: b.querySelector('.p-name')?b.querySelector('.p-name').textContent:null};}""")
         for k,v in f.items(): print("  %-16s %s" % (k,v))
-        ck(abs(f["ratio"]-4/3)<0.02, "image frame is 4:3 (%.3f)" % f["ratio"])
+        ck(abs(f["ratio"]-16/9)<0.02, "image frame is 16:9 (%.3f)" % f["ratio"])
         ck(f["nameInsideImg"], "product name sits on the image, no title bar")
         ck(f["brokenHasGlyph"], "a broken image falls back to the glyph")
         ck(f["brokenKeepsName"] and f["brokenNameText"], "and the name survives it: "+str(f["brokenNameText"]))
+        # The complaint was card HEIGHT, so measure it rather than trusting
+        # the ratio alone: at 4:3 this was 422 px and only two cards fitted.
+        h = await page.evaluate("""()=>{const c=document.querySelector('.p-card');
+          const r=c.getBoundingClientRect();
+          const img=c.querySelector('.p-img').getBoundingClientRect();
+          return {card:+r.height.toFixed(0), width:+r.width.toFixed(0), img:+img.height.toFixed(0),
+                  visible:[...document.querySelectorAll('.p-card')].filter(e=>{
+                    const b=e.getBoundingClientRect(); return b.top<844 && b.bottom>0;}).length};}""")
+        print("  card box:", h)
+        ck(h["card"] < 380, "the card is short enough for a phone (%d px, was 422)" % h["card"])
+        ck(h["img"] < 210, "and the image is the part that shrank (%d px, was 264)" % h["img"])
+        ck(h["visible"] >= 3, "three cards fit on screen now (%d)" % h["visible"])
+
         anims = await page.evaluate("""()=>{const out=[];document.querySelectorAll('#pageHost *').forEach(e=>{
           const cs=getComputedStyle(e); if(cs.animationName && cs.animationName!=='none') out.push(cs.animationName);});
           return [...new Set(out)];}""")

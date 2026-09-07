@@ -129,14 +129,20 @@ a{color:inherit;}
    radius, half the image height, and smaller type -- roughly half the height
    per card, so several are visible at once. */
 /* Owner: no title bar -- the product name sits ON the image. Product photos
-   are stored at exactly 1200x900 px, a 4:3 landscape (the admin panel
-   cover-fits every upload onto that frame -- his own files are 1448x1086,
-   already 4:3, so they only downscale), so the card frame is aspect-ratio
-   driven rather than a fixed pixel height: the image fills it exactly with
-   nothing cropped and no letterboxing, whatever the phone's width. 1200 px
-   wide also covers a 3x phone at the ~400 px card width, so it stays sharp. */
+   are stored at exactly 1600x900 px, 16:9 (the admin panel cover-fits every
+   upload onto that frame), so the card frame is aspect-ratio driven rather
+   than a fixed pixel height: the image fills it exactly, with no letterboxing,
+   whatever the phone's width. 1600 px wide still covers a 3x phone at the
+   ~355 px card width, so it stays sharp.
+
+   This was 4:3 until the owner sent his real artwork -- 1721x914, near enough
+   16:9 -- with "reduce on the size of cards their height is very high, just
+   like you see that resolution it should be that". 4:3 was the cause: at a
+   354 px card the image alone was 264 px tall and the whole card 422 px, so
+   barely two fitted on a phone screen. 16:9 takes the image to 199 px and the
+   card to 357 px. Measured, not estimated. */
 .p-card{background:var(--snow-surface);border-radius:4px;overflow:hidden;box-shadow:0 8px 18px -14px rgba(30,10,5,.3);border:1px solid var(--snow-border);}
-.p-card .p-img{position:relative;aspect-ratio:4/3;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.p-card .p-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}
 .p-card .p-img .glyph{width:44px;height:44px;border-radius:4px;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:19px;font-weight:700;}
 /* A scrim, not a solid bar -- the name has to stay readable over whatever
@@ -238,7 +244,7 @@ a{color:inherit;}
 /* Product card: image block at 4:3, then the 2x2 stat grid and the CTA, laid
    out by the real .p-card rules so the swap is invisible. */
 .sk-pcard{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:4px;overflow:hidden;}
-.sk-pcard .sk-img{aspect-ratio:4/3;border-radius:0;}
+.sk-pcard .sk-img{aspect-ratio:16/9;border-radius:0;}
 .sk-pcard .sk-body{padding:10px;}
 .sk-pcard .sk-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
 .sk-pcard .sk-stat{height:44px;}

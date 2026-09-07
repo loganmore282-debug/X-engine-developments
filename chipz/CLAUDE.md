@@ -160,25 +160,47 @@ values, commission rates like LV1=28%/LV2=1%/LV3=1%) are **admin-editable defaul
 locked values** — the owner's own words: *"those numbers which appeared should be
 edittable in admin panel."*
 
-### Product photos: one 1200 x 900 (4:3) frame
+### Product photos: one 1600 x 900 (16:9) frame
 
-Owner: *"on image frames please set 1200 x 900 px, 4:3 for all P1–P12."* So the admin
-panel does not merely cap an upload's longest side — `fileToFramedDataUrl()` cover-fits
-**every** product photo onto an exact 1200 x 900 canvas before storing it, so the whole
-catalog is one shape. His own files are 1448 x 1086 (already 4:3), which makes it a pure
-downscale with nothing cropped; anything off-shape is centre-cropped rather than squashed
-or letterboxed. The app's card frame (`.p-card .p-img`) is `aspect-ratio:4/3`, so the
-photo fills it exactly, and 1200 px wide still looks sharp on a 3x phone.
+`fileToFramedDataUrl()` in the admin panel cover-fits **every** product photo onto an
+exact **1600 x 900** canvas before storing it, so the whole catalog is one shape.
+Anything off-shape is centre-cropped rather than squashed or letterboxed. The app's card
+frame (`.p-card .p-img`) and the skeleton (`.sk-pcard .sk-img`) are both
+`aspect-ratio:16/9`, so the photo fills it exactly and nothing jumps on load.
 
-The old path was `fileToDataUrl(f, 640, 0.7)` — it shrank his uploads to 640 x 480 and
-re-compressed them, so a sharp photo arrived on the phone soft.
+**It was 4:3 (1200 x 900) first, and that was wrong.** The owner asked for 4:3
+explicitly — *"on image frames please set 1200 x 900 px, 4:3 for all P1–P12"* — and then
+sent his actual product artwork, **1721 x 914** (ratio 1.883, near enough 16:9), with
+*"reduce on the size of cards their height is very high, just like you see that
+resolution it should be that"*. The 4:3 frame was the cause of the height, measured on a
+390 px viewport:
 
-One 1200 x 900 JPEG at quality 0.82 is roughly 140 KB as a data URL, so twelve is about
+| | image | whole card | cards on screen |
+|---|---|---|---|
+| 4:3 | 264 px | 422 px | 2 |
+| 16:9 | 198 px | 356 px | 3 |
+
+His files cover-fit onto 16:9 losing about **2.8% off each side** — on a centred product
+shot with margins that takes nothing. The remaining card height is the body (156 px:
+88 px of stats, a 38 px CTA, 20 px padding); if he ever wants shorter still, that is
+where it is, not the image.
+
+The upload path before any of this was `fileToDataUrl(f, 640, 0.7)` — it caps only the
+LONGEST side, so uploads arrived downscaled and re-compressed, and off-shape ones came
+out some other shape entirely. **Capping a side cannot guarantee a frame**; that is the
+whole reason `fileToFramedDataUrl()` exists.
+
+One 1600 x 900 JPEG at quality 0.82 is roughly 140 KB as a data URL, so twelve is about
 1.6 MB: fine against the 4 MB `bigJsonParser` limit on `/admin/products/save` (which
 saves one product at a time) and the 2,800,000-char per-image cap in
 `sanitizeProductInput()`, but close enough to localStorage's ~5 MB quota that
-`saveCachedState()` now retries with the photo bytes stripped if the full snapshot will
-not fit — otherwise the instant-boot cache would silently stop being written.
+`saveCachedState()` retries with the photo bytes stripped if the full snapshot will not
+fit — otherwise the instant-boot cache would silently stop being written.
+
+`test-product-image-frame.py` feeds four shapes (his 1721x914, a true 16:9, a 4000x1000
+banner, a 500x1500 portrait) through the real built admin bundle and checks all four
+store as exactly 1600x900. `test-product-cards.py` measures the rendered card HEIGHT,
+not just the ratio — the complaint was height, so that is what is pinned.
 
 ### One payout number, resolved on the server (do not regress)
 

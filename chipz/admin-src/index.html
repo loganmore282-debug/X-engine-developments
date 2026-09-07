@@ -342,13 +342,17 @@ function fileToDataUrl(file, maxDim=900, quality=0.82){
 }
 // Every product photo lands in the app inside the SAME frame, so it is worth
 // making every stored file that exact frame rather than hoping each upload
-// happens to be the right shape. Owner: "on image frames please set
-// 1200 x 900 px, 4:3 for all P1-P12." So: cover-fit onto a 1200x900 canvas --
-// a true 4:3 upload (his are 1448x1086) is a pure downscale with nothing
-// cropped, and anything off-shape is centre-cropped to fill instead of being
-// squashed or letterboxed. fileToDataUrl() above can only cap the LONGEST
-// side, which leaves the height free and so cannot guarantee a frame.
-const PRODUCT_IMG_W = 1200, PRODUCT_IMG_H = 900;
+// happens to be the right shape. Cover-fit onto a 1600x900 canvas: a 16:9
+// upload is a pure downscale, and anything off-shape is centre-cropped to
+// fill instead of being squashed or letterboxed. fileToDataUrl() above can
+// only cap the LONGEST side, which leaves the height free and so cannot
+// guarantee a frame at all.
+//
+// 16:9, not the 4:3 asked for earlier: the owner's real artwork turned out to
+// be 1721x914 and 4:3 made the cards far too tall for a phone. His files
+// cover-fit onto 16:9 with about 6% trimmed off the left and right edges,
+// which on a centred product shot with margins takes nothing that matters.
+const PRODUCT_IMG_W = 1600, PRODUCT_IMG_H = 900;
 const NAME_MIME = { mp4:'video/mp4', m4v:'video/mp4', webm:'video/webm', mov:'video/quicktime',
                     png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp' };
 function guessMimeFromName(name){

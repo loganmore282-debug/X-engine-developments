@@ -1,30 +1,36 @@
 #!/usr/bin/env python3
 """Proves the BUILT admin panel stores every product photo at exactly the
-1200 x 900 (4:3) frame the app draws.
+1600 x 900 (16:9) frame the app draws.
 
-Owner: "on image frames please set 1200 x 900 px, 4:3 for all P1-P12."
+The frame was 1200x900 (4:3) until the owner sent his real product artwork --
+1721x914, near enough 16:9 -- with "reduce on the size of cards their height
+is very high, just like you see that resolution it should be that". 4:3 was
+the cause: at a 354 px card the image alone came to 264 px and the whole card
+to 422 px, so barely two fitted on a phone screen. 16:9 puts the image at
+198 px and the card at 356 px, and three fit.
 
 The old upload path was fileToDataUrl(f, 640, 0.7) -- it caps only the
-LONGEST side, so a 1448x1086 upload came out 640x480 (soft, and only half
-the pixels a 3x phone wants) and an off-shape upload came out some other
-shape entirely. This runs the real built admin bundle in Chromium, feeds it
-three differently-shaped images through the actual <input type="file">
-change handler, and reads back the decoded pixel dimensions of what the
-panel would POST to /admin/products/save.
+LONGEST side, so an upload came back downscaled and re-compressed (soft, and
+only half the pixels a 3x phone wants), and an off-shape one came out some
+other shape entirely: capping a side cannot guarantee a frame. This runs the
+real built admin bundle in Chromium, feeds it four differently-shaped images
+through the actual <input type="file"> change handler, and reads back the
+decoded pixel dimensions of what the panel would POST to
+/admin/products/save.
 
 Checks:
-  1. his own 1448x1086 (4:3)  -> exactly 1200x900, nothing cropped
-  2. a 4000x1000 wide banner  -> exactly 1200x900, centre-cropped (cover)
-  3. a 500x1500 tall portrait -> exactly 1200x900, centre-cropped (cover)
+  1. his own 1721x914         -> exactly 1600x900, a tiny side trim
+  2. a 4000x1000 wide banner  -> exactly 1600x900, centre-cropped (cover)
+  3. a 500x1500 tall portrait -> exactly 1600x900, centre-cropped (cover)
   4. the encoded data URL stays well under the 4 MB /admin/products/save cap
-  5. the app-side card frame is still aspect-ratio 4/3, so it matches
+  5. the app-side card frame is aspect-ratio 16/9, so the two agree
 """
 import base64, http.server, io, os, re, socket, sys, threading, functools
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-W, H = 1200, 900
+W, H = 1600, 900
 
 def make_png(w, h):
     """A gradient with a hard centre marker, so a crop is detectable."""
@@ -74,7 +80,7 @@ with sync_playwright() as pw:
         br.close(); httpd.shutdown(); sys.exit(1)
     src_w, src_h = int(m.group(1)), int(m.group(2))
     check((src_w, src_h) == (W, H), f'the declared frame is {W} x {H} (got {src_w} x {src_h})')
-    check(abs(src_w / src_h - 4 / 3) < 1e-9, f'{src_w} x {src_h} is exactly 4:3')
+    check(abs(src_w / src_h - 16 / 9) < 1e-9, f'{src_w} x {src_h} is exactly 16:9')
 
     fn = re.search(r'function fileToFramedDataUrl\(file, W, H, quality=0\.82\)\{[\s\S]*?\n\}\n', src)
     check(bool(fn), 'fileToFramedDataUrl() found in admin-src')
@@ -91,7 +97,8 @@ with sync_playwright() as pw:
     pg.evaluate('() => { ' + fn.group(0) + '; window.fileToFramedDataUrl = fileToFramedDataUrl; }')
 
     cases = [
-        ('his own upload 1448x1086 (4:3)', 1448, 1086, False),
+        ('his own artwork 1721x914',       1721, 914,  True),
+        ('a true 16:9 upload',             1920, 1080, False),
         ('a 4000x1000 wide banner',        4000, 1000, True),
         ('a 500x1500 tall portrait',        500, 1500, True),
     ]
@@ -110,8 +117,10 @@ with sync_playwright() as pw:
         kb = len(url) / 1024
         check(kb < 4096, f'{label} -> data URL {kb:.0f} KB, under the 4 MB save cap')
         if not cropped:
-            # 4:3 in, 4:3 out: a pure downscale. The corner pixels of the
-            # gradient must survive -- nothing may be cropped away.
+            # 16:9 in, 16:9 out: a pure downscale. The corner pixels of the
+            # gradient must survive -- nothing may be cropped away. (His own
+            # 1721x914 is marked cropped: at 1.883 it loses about 2.8% off
+            # each side, which on a centred product shot takes nothing.)
             tl, tr = im.getpixel((2, 2)), im.getpixel((W - 3, 2))
             check(tl[0] < 30 and tr[0] > 225,
                   f'{label} -> full width kept (left R={tl[0]}, right R={tr[0]})')
@@ -120,9 +129,9 @@ with sync_playwright() as pw:
 
     # The app side of the same frame.
     css = open(os.path.join(HERE, 'user-src', 'index.html'), encoding='utf8').read()
-    check('.p-card .p-img{position:relative;aspect-ratio:4/3' in css,
-          'the app product card frame is still aspect-ratio 4/3')
-    check('.sk-pcard .sk-img{aspect-ratio:4/3' in css,
+    check('.p-card .p-img{position:relative;aspect-ratio:16/9' in css,
+          'the app product card frame is aspect-ratio 16/9')
+    check('.sk-pcard .sk-img{aspect-ratio:16/9' in css,
           'the skeleton card frame matches it, so nothing jumps on load')
 
     br.close()
