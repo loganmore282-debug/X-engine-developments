@@ -418,19 +418,25 @@ a{color:inherit;}
 .dep-chip.sel{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:none;}
 .dep-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:4px;height:52px;display:flex;align-items:center;padding:0 16px;margin-bottom:24px;}
 .dep-amt input{border:0;outline:0;background:transparent;font-size:16px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.pay-row{display:flex;align-items:center;justify-content:space-between;background:var(--snow-surface);border:2px solid var(--snow-border);border-radius:4px;height:54px;padding:0 18px;margin-bottom:14px;width:100%;font-family:inherit;color:var(--snow-ink);}
+.pay-row{position:relative;display:flex;align-items:center;justify-content:center;background:var(--snow-surface);border:2px solid var(--snow-border);border-radius:4px;height:56px;padding:0 18px;margin-bottom:14px;width:100%;font-family:inherit;color:var(--snow-ink);}
 .pay-row.on{border-color:var(--snow-ink);}
 .pay-row span{font-weight:600;font-size:15px;letter-spacing:.03em;}
+.pay-row .pay-radio{position:absolute;right:18px;top:50%;transform:translateY(-50%);}
 .pay-radio{width:22px;height:22px;border-radius:50%;border:2px solid var(--snow-ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 0 rgba(26,19,16,.25);}
 .pay-row.on .pay-radio::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--snow-ink);}
-.dep-phone{display:flex;align-items:stretch;border-radius:4px;overflow:hidden;border:1.6px solid var(--snow-border);margin-bottom:8px;background:var(--snow-surface);}
-.dep-phone .prefix{background:var(--snow-ink);color:#fff;font-weight:700;display:flex;align-items:center;padding:0 16px;font-size:15px;flex-shrink:0;}
-.dep-phone input{border:0;outline:0;background:transparent;flex:1;padding:0 14px;font-family:inherit;font-size:15px;color:var(--snow-ink);min-width:0;}
+/* height matters here. Every other field on this screen (.dep-amt, .wit-amt,
+   .wit-pw, .pw-field) sets one; this row alone did not, so it collapsed to
+   its text and rendered 19px tall -- a third the height of the box above it,
+   and a genuinely hard tap target on a phone. Owner: "the number text area is
+   very small". 56px, slightly above the others, because it is the one field
+   on this screen that must be typed into. */
+.dep-phone{display:flex;align-items:stretch;height:56px;border-radius:4px;overflow:hidden;border:1.6px solid var(--snow-border);margin-bottom:8px;background:var(--snow-surface);}
+.dep-phone .prefix{background:var(--snow-ink);color:#fff;font-weight:700;display:flex;align-items:center;padding:0 14px;font-size:15px;flex-shrink:0;}
+.dep-phone input{border:0;outline:0;background:transparent;flex:1;padding:0 12px;font-family:inherit;font-size:15px;color:var(--snow-ink);min-width:0;}
 .dep-hint{font-size:12px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
 .dep-instr{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:4px;padding:18px;}
-.dep-instr .ih{display:flex;align-items:center;gap:9px;margin-bottom:10px;}
-.dep-instr .ih .ic{width:30px;height:30px;border-radius:4px;background:var(--chipz-gold);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.dep-instr .ih span{font-weight:600;font-size:15px;}
+.dep-instr .ih{display:flex;align-items:center;margin-bottom:10px;}
+.dep-instr .ih span{font-weight:700;font-size:17px;}
 .dep-instr .ln{height:1px;background:var(--snow-border);margin-bottom:10px;}
 .dep-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:13px;font-weight:500;line-height:1.9;}
 

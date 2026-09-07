@@ -2849,7 +2849,7 @@ function openAutomaticDepositFormSheet(){
     <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Deposit</button>
 
     <div class="dep-instr">
-      <div class="ih"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a3d00" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"></path></svg></div><span>Deposit Instructions</span></div>
+      <div class="ih"><span>Deposit Instructions</span></div>
       <div class="ln"></div>
       <ol>
         <li>Recharge time: 7*24 hours.</li>
