@@ -395,7 +395,10 @@ const DEFAULT_SETTINGS = {
   // Google Fonts URL and a CSS font-family value client-side, so an
   // allowlist closes off any injection surface the way SETTINGS_URL_FIELDS'
   // http(s)-only check already does for link fields.
-  numberFont: 'Bodoni Moda',
+  // Owner: "remove that number font that of calligraphy letters". The app's
+  // own body face is now the default for money figures; the serif options
+  // below are still selectable here, they are just no longer forced on.
+  numberFont: 'System default',
   // Owner: "let us also add manual payments... make when l can toggle
   // payment method to manual or automatic (marzpay), current one." Only
   // one method is ever live at a time -- MarzPay's own code is completely

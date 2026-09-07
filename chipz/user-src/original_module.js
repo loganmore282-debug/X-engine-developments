@@ -114,6 +114,11 @@ var ICONS = {
 // sync with NUMBER_FONT_OPTIONS in server.js and the admin <select> options
 // -- a value outside this map falls back to Bodoni Moda's stack rather than
 // rendering with no font-family at all.
+// Snow's beer-bottle illustration (ICONS.box) came across with the fork and
+// was still the artwork on Chipz's empty My Products screen -- a different
+// company's product, in a different brand's style. Replaced with a neutral
+// outline box in the app's own ink colour.
+var EMPTY_ICON = '<svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 8h20l-1.5-3.2A1.5 1.5 0 0 0 19.1 4H4.9a1.5 1.5 0 0 0-1.4.8Z"/><path d="M10 12h4"/></svg>';
 var NUMBER_FONT_STACKS = {
   'Bodoni Moda': "'Bodoni Moda',Didot,'Playfair Display',Georgia,serif",
   'Playfair Display': "'Playfair Display',Didot,Georgia,serif",
@@ -122,7 +127,7 @@ var NUMBER_FONT_STACKS = {
   'Roboto Mono': "'Roboto Mono',ui-monospace,'SFMono-Regular',monospace",
   'JetBrains Mono': "'JetBrains Mono',ui-monospace,'SFMono-Regular',monospace",
   'Orbitron': "'Orbitron',ui-sans-serif,sans-serif",
-  'System default': "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+  'System default': "'Barlow Condensed','Arial Narrow',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
 };
 // Chipz's own compact brand mark, used where a small logo is needed and no
 // admin-uploaded image is set (the two manual-deposit screens). A skewed
@@ -479,8 +484,15 @@ async function boot(){
   applyNumberFont();
 }
 function applyNumberFont(){
-  const name = (STATE.settings && STATE.settings.numberFont) || 'Bodoni Moda';
-  const stack = NUMBER_FONT_STACKS[name] || NUMBER_FONT_STACKS['Bodoni Moda'];
+  // Defaults to the app's own face, not the old serif. This line was the
+  // real reason the calligraphy numbers survived the CSS change: the CSS
+  // fallback never gets a chance because --number-font is always set from
+  // here, and it hard-coded 'Bodoni Moda' whenever the setting was absent.
+  const name = (STATE.settings && STATE.settings.numberFont) || 'System default';
+  // Falls back to the app's own body face, not the old serif -- owner asked
+  // for the calligraphy numbers gone, so an unset or unrecognised setting
+  // must not quietly bring them back.
+  const stack = NUMBER_FONT_STACKS[name] || NUMBER_FONT_STACKS['System default'];
   document.documentElement.style.setProperty('--number-font', stack);
 }
 // Admin's "App tagline (shown under the logo)" Settings field has existed
@@ -930,6 +942,11 @@ function startLiveRefresh(){
   }, 8000);
 }
 window.showPage = async function(name){
+  // The bottom bar now stays visible over sheets (Deposit, Withdraw, Wallet
+  // and the rest), so a tab can be tapped while one is open. Close it first,
+  // otherwise the new tab paints underneath a sheet that is still covering
+  // it and the app looks frozen.
+  if (typeof closeSheet === 'function' && document.querySelector('.sheet-bg.show')) closeSheet();
   STATE.page = name;
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
@@ -1202,7 +1219,7 @@ function productCardHtml(p){
         <div class="p-stat"><div class="k">Daily</div><div class="v">${fmtUGXCents(dailyPayout)}</div></div>
         <div class="p-stat warm"><div class="k">Total</div><div class="v">${fmtUGXCents(expected)}</div></div>
       </div>
-      <button class="primary-button p-cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}')">${p.comingSoon?'Coming Soon':'Buy Now'}</button>
+      <button class="primary-button p-cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}',this)">${p.comingSoon?'Coming Soon':'Buy Now'}</button>
     </div>
   </div>`;
 }
@@ -1371,9 +1388,9 @@ function paintProducts(animate){
 <div class="section-title" style="margin:26px 20px 12px;">Active Plans</div>
 <div style="display:flex;flex-direction:column;gap:14px;margin:0 20px;">`;
   if (!investments.length && _investmentsLoadFailed) {
-    html += `<div class="list-empty"><div class="empty-icon">${ICONS.box}</div>Could not load your plans. <button style="background:none;border:none;color:var(--snow-wine);font-weight:700;cursor:pointer;padding:0;font-size:inherit;" onclick="renderProducts()">Tap to retry</button></div>`;
+    html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>Could not load your plans. <button style="background:none;border:none;color:var(--snow-wine);font-weight:600;cursor:pointer;padding:0;font-size:inherit;" onclick="renderProducts()">Tap to retry</button></div>`;
   } else if (!investments.length) {
-    html += `<div class="list-empty"><div class="empty-icon">${ICONS.box}</div>No products yet. Browse plans on Home to get started.</div>`;
+    html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>No plans yet. Open Products and pick one to get started.</div>`;
   } else {
     investments.forEach(inv => {
       const p = (STATE.products||[]).find(x=>x.key===inv.tierKey) || {};
@@ -3549,46 +3566,28 @@ window.submitWithdraw = async function(){
   if (STATE.page==='home') renderHome();
 };
 
-window.openInvestConfirm = function(tierKey){
+// Owner: "investment confirmation dialog should be removed completely."
+// Buy Now now purchases straight away. The card the button sits on is the
+// only place the price and payout are shown before the money moves, which is
+// why productCardHtml() must keep showing both.
+// The button is disabled while the request is in flight -- with no dialog in
+// the way, a double tap would otherwise fire two purchases, and /invest/create
+// has no client-side retry guard of its own.
+window.openInvestConfirm = async function(tierKey, btn){
   const p = (STATE.products||[]).find(x => x.key === tierKey);
   if (!p) return;
-  // Same planFigures() the card uses, so the total quoted on the card, the
-  // total quoted here, and the total the server actually credits are one
-  // number. This dialog is the last thing a member reads before money moves.
-  const { expected, cycle, daily: dailyPayout } = planFigures(p);
-  $('confirmSheet').innerHTML = `
-    <h3>Confirm purchase</h3>
-    <p class="confirm-sub">${esc(p.name)}</p>
-    <div class="confirm-row"><span>Price</span><span class="mono">${fmtUGXCents(p.price)}</span></div>
-    <div class="confirm-row"><span>Daily income</span><span class="mono">${fmtUGXCents(dailyPayout)}</span></div>
-    <div class="confirm-row"><span>Period</span><span class="mono">${cycle} days</span></div>
-    <div class="confirm-row"><span>Total return</span><span class="mono">${fmtUGXCents(expected)}</span></div>
-    <button class="primary-button" id="investConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;" onclick="confirmInvest('${esc(tierKey)}')">Confirm & Buy</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
-  $('confirmBg').classList.add('show');
-  lockBodyScroll(); // subagent-audit-caught: same scroll-chaining gap already fixed for #announceBg/#chestWinBg
-};
-window.closeConfirm = function(){
-  $('confirmBg').classList.remove('show');
-  // subagent-audit-caught: this used to always clear body scroll -- but
-  // deleteWithdrawalAccount() opens this confirm dialog FROM WITHIN the
-  // already-open Withdrawal Accounts sheet, which is still showing (and
-  // still needs scroll locked) after the confirm dialog itself closes.
-  // Unconditionally clearing here unlocked scroll out from under the still-
-  // open sheet, reintroducing the exact scroll-chaining bug this whole
-  // lock/unlock pattern exists to prevent. Only clear it when nothing else
-  // (a sheet) is still relying on the lock; openSheet()/closeSheet() own
-  // the lock in that case.
-  if (!_openSheetTitle) unlockBodyScroll();
-};
-window.confirmInvest = async function(tierKey){
-  const btn = $('investConfirmBtn');
-  btn.disabled = true; btn.textContent = 'Please wait…';
+  const label = btn && btn.textContent;
+  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = 'Please wait…'; }
   const r = await post('/invest/create', { tierKey });
-  closeConfirm();
-  if (r.status !== 'success') return toast(r.message || 'Could not complete purchase', true);
+  if (btn) { btn.disabled = false; btn.textContent = label || 'Buy Now'; }
+  if (r.status !== 'success') return notify(r.message || 'Could not complete purchase');
   toast(r.message || 'Purchase successful');
+  // Repaint whichever screen the purchase was made from, so the new plan and
+  // the reduced balance appear straight away. renderHome()/renderProducts()
+  // both re-fetch the account and investments themselves.
   if (STATE.page === 'home') renderHome();
+  else if (STATE.page === 'products') renderProducts();
+  else if (STATE.page === 'catalog') renderCatalog();
 };
 // Plain yes/no confirm, no PIN -- used where an action doesn't move money
 // (e.g. removing a saved withdrawal account, see deleteWithdrawalAccount()).
