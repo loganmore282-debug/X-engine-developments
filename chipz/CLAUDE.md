@@ -266,6 +266,38 @@ and the mechanical `snow/` -> `chipz/` file copy silently carried Snow's config
 forward over it. When the owner hands over config values, stamp them in immediately
 and grep for the OLD values afterwards to prove nothing survived.
 
+### Signing up: the referral code, and the very first account
+
+The owner's rule is that the Sign Up referral code is a **MUST**. Taken literally that
+makes the platform unlaunchable — the first person has no code to type, and without them
+nobody ever gets one (the owner's own question: *"how to create user account yet no
+referral code???"*). So the requirement is **resolved from two things**:
+
+`referralRequiredNow()` = `settings.requireReferralCode !== false` **AND**
+`anyMemberExists()`. With zero registered members the code is optional (the founder
+account); the moment the first registration commits, `_anyMemberExists` latches true and
+every later sign-up must carry a code. A failed database read returns "required" rather
+than handing out an unearned exemption.
+
+Enforced in `completeRegistrationCore()` on the **server** — it used to be a client-side
+check only (`original_module.js` hard-coded "always required"), which meant two bugs at
+once: nobody could create the first account through the app, and a direct
+`POST /register` with an empty code walked straight past the "must" and created an
+uplineless account. `/public/settings` publishes the resolved answer as
+`referralRequired`; `referralIsRequired()` in the app is the only reader and defaults to
+required if settings never loaded. `loadAuthSettings()` fetches settings while the
+member is still on the auth screen, because `boot()` only runs after sign-in.
+
+Admin toggle: Settings → "Require a referral code to sign up" (`requireReferralCode`,
+default ON). Only for onboarding someone with no upline; the founder case needs no
+toggle.
+
+Note `registerCurrentUser()`'s retry — which drops a bad code and registers without it
+to avoid stranding a member whose Firebase account already exists — now only runs when a
+code is **optional**. When required, the member is told to fix the code; retrying Sign Up
+with the same number and password takes `doRegister()`'s `email-already-in-use` branch,
+which signs them in and finishes the same registration.
+
 ### Home banner: image or video
 
 `banners/home` holds `{ image, video }`. The video is a **URL, never an uploaded blob**
@@ -286,7 +318,7 @@ the Playwright banner test drives a real MediaRecorder-generated webm.
 ### Run this before every push
 ```
 node build-core.js && node build-admin.js && python3 smoke-test.py
-node test-product-config.js && node test-cors-origins.js && node test-banner-video-url.js
+node test-product-config.js && node test-cors-origins.js && node test-banner-video-url.js && node test-referral-required.js
 ```
 `smoke-test.py` boots the BUILT app in a real browser, walks every tab and sheet, and
 fails on any page error, a stuck loading screen, or a bad `API_BASE`. It exists because

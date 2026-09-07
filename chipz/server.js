@@ -288,6 +288,14 @@ const DEFAULT_SETTINGS = {
   // every spin price for each product... also products will have different
   // rates of multipliers so don't fix it in settings." Only the free daily
   // spin's band lives here, because it is not tied to any product.
+  // Owner's rule: the referral code on Sign Up is a MUST, not optional.
+  // Enforced on the server (it used to be a client-side check only, which any
+  // direct POST /register walked straight past). The very first account is
+  // exempt automatically -- see referralRequiredNow(): with no members yet
+  // there is no code in existence to type, so requiring one would make the
+  // platform impossible to launch. Turn this off temporarily if you ever need
+  // to onboard someone with no upline.
+  requireReferralCode: true,
   maintenanceMode: false, maintenanceMsg: '',
   // Owner: "let's establish a timer ie like saying snow opening in
   // 23:59:34... just near maintenance mode." A pre-launch gate, separate
@@ -1965,7 +1973,17 @@ app.get('/public/settings', async (_req, res) => {
   try {
     const s = await getSettings();
     const { maintenanceMsg, ...rest } = s;
-    res.json({ status: 'success', settings: { ...rest, maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '', payoutManual: payoutIsManual(s) } });
+    // referralRequired is the RESOLVED answer (setting AND "a member already
+    // exists"), not the raw setting -- same reasoning as the resolved product
+    // figures below. The Sign Up screen shows the field as required or
+    // optional from this one flag, so it can never disagree with what
+    // /register will actually accept.
+    res.json({ status: 'success', settings: {
+      ...rest,
+      maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
+      payoutManual: payoutIsManual(s),
+      referralRequired: await referralRequiredNow(),
+    } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Members must never be shown a payout the purchase won't actually honour,
@@ -2134,6 +2152,36 @@ app.post('/account/create-profile', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not create your profile' });
   }
 });
+// Is there at least one fully registered member yet? Only ever asked to
+// decide whether a referral code CAN be required, so it latches: once a
+// member exists the answer can never go back to "no", and the query is never
+// run again. Before that it is a single limit(1) read, so an empty platform
+// pays almost nothing for it either.
+let _anyMemberExists = false;
+async function anyMemberExists() {
+  if (_anyMemberExists) return true;
+  try {
+    const snap = await db.collection('users').where('registrationDone', '==', true).limit(1).get();
+    if (!snap.empty) _anyMemberExists = true;
+  } catch (_) {
+    // A read failure must not hand out an unearned exemption -- assume
+    // members exist and keep the code required.
+    return true;
+  }
+  return _anyMemberExists;
+}
+// The owner's rule is that a referral code is a MUST. That cannot apply to
+// the very first account: with no members there is no code in existence to
+// type, so a hard requirement would make the platform impossible to launch
+// (the owner's own question -- "how to create user account yet no referral
+// code???"). So the requirement switches itself on the moment the first
+// member completes registration, and the admin toggle can lift it again if
+// someone ever needs onboarding with no upline.
+async function referralRequiredNow() {
+  const sett = await getSettings();
+  if (sett.requireReferralCode === false) return false;
+  return await anyMemberExists();
+}
 // Shared by the member's own /register — the ONE place that ever assigns a
 // referral code, links a referrer's team counts, sets the Trade Password,
 // or credits the welcome bonus.
@@ -2163,6 +2211,11 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
 
     const code = String(referralCode || '').trim();
     let referrerId = null;
+    // The "referral code is a must" rule lives HERE, not only in the app --
+    // the app's own check is a convenience, and a direct POST /register with
+    // an empty code used to sail past it and create an uplineless account.
+    if (!code && await referralRequiredNow())
+      return { code: 400, body: { status: 'error', code: 'REFERRAL_REQUIRED', message: 'A referral code is required to sign up. Ask the person who invited you for theirs.' } };
     if (code) {
       const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
       if (refSnap.empty)
@@ -2208,6 +2261,10 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     };
     if (referrerId) await withLock('referrer-guard:' + referrerId, commit);
     else await commit();
+    // A member now exists, so the founder exemption above closes from here
+    // on: the next sign-up must carry a code. Latched in memory rather than
+    // re-queried, and anyMemberExists() re-derives it after a restart.
+    _anyMemberExists = true;
     if (WELCOME > 0) {
       const { date, time } = nowStr();
       await db.collection('transactions').add({
@@ -5513,7 +5570,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // that would still read as a legible scroll.
   activityTickerSpeed: [10, 2000],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes

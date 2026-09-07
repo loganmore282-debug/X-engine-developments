@@ -329,7 +329,13 @@ window.doRegister = async function(){
   if (!pass || pass.length < 6) return $('regError').innerHTML = '<div class="auth-error">Password must be at least 6 characters.</div>';
   if (pass !== pass2) return $('regError').innerHTML = '<div class="auth-error">The two login passwords do not match.</div>';
   if (!/^\d{6}$/.test(pin)) return $('regError').innerHTML = '<div class="auth-error">Trade Password must be exactly 6 digits.</div>';
-  if (!referral) return $('regError').innerHTML = '<div class="auth-error">A referral code is required to sign up.</div>';
+  // Required or not is the SERVER's call (settings.referralRequired), which
+  // already accounts for the founder case: on a platform with no members yet
+  // there is no code in existence to type, so the first account is let
+  // through. Hard-coding "always required" here made the app impossible to
+  // sign up to at all on day one.
+  if (!referral && referralIsRequired())
+    return $('regError').innerHTML = '<div class="auth-error">A referral code is required to sign up. Ask the person who invited you for theirs.</div>';
   $('regError').innerHTML = '';
   setBtnLoading('regBtn', true);
   STATE.refCode = referral;
@@ -520,6 +526,39 @@ function captureReferralFromUrl(){
     showAuthTab('register');
   } catch (_) {}
 }
+// Whether Sign Up demands a referral code. The server decides (it resolves
+// the admin setting AND whether any member exists yet) and publishes the
+// answer as settings.referralRequired; this is only the reader.
+// Default TRUE when settings haven't loaded, so a failed settings fetch can
+// never quietly turn the requirement off -- the server would reject the
+// sign-up anyway, and this way the app says so up front.
+// Pulls the public settings while the member is still on the auth screen,
+// purely so the Sign Up form can tell the truth about the referral field.
+// Failure is silent and simply leaves the field required -- the server is
+// the real gate either way.
+async function loadAuthSettings(){
+  try {
+    const s = await api('/public/settings');
+    if (s && s.status === 'success') STATE.settings = s.settings || {};
+  } catch (_) {}
+  updateReferralFieldHint();
+}
+function referralIsRequired(){
+  const st = STATE.settings || {};
+  return st.referralRequired !== false;
+}
+// Says out loud whether the box must be filled, instead of leaving members
+// to discover it by being rejected. Runs whenever the auth screen paints.
+function updateReferralFieldHint(){
+  const input = $('regReferral');
+  if (!input) return;
+  const required = referralIsRequired();
+  input.placeholder = required ? 'Referral code' : 'Referral code (optional)';
+  const hint = $('regReferralHint');
+  if (hint) hint.textContent = required
+    ? 'Referral code is required'
+    : 'No code needed yet — you are among the first to join.';
+}
 
 // Owner: "let's establish a timer ie like saying snow opening in
 // 23:59:34... so it will be after the start up loader, make when l can
@@ -618,6 +657,11 @@ window.addEventListener('snow-auth', async (ev) => {
     $('authScreen').style.display = '';
     setBtnLoading('loginBtn', false, 'Log In');
     setBtnLoading('regBtn', false, 'Sign Up');
+    // Sign Up needs to know whether a referral code is required BEFORE
+    // anyone submits, and boot() (which normally loads settings) only runs
+    // after sign-in. Without this the screen would fall back to "required"
+    // and the very first account could never be created.
+    loadAuthSettings();
     return;
   }
   $('authScreen').style.display = 'none';
@@ -716,7 +760,15 @@ async function enterApp(){
 // bonus) still goes through.
 async function registerCurrentUser(pin, phone){
   let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '' });
-  if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode) {
+  // Dropping the code and carrying on is only valid while a code is
+  // OPTIONAL. Once it is required (the normal state, as soon as the platform
+  // has members) retrying with an empty code just earns a REFERRAL_REQUIRED
+  // rejection, so the member is told to correct the code instead. That is
+  // recoverable rather than a dead end: their Firebase account now exists,
+  // and tapping Sign Up again with the same number and password takes
+  // doRegister()'s email-already-in-use branch, which signs them in and
+  // finishes this same registration with the corrected code.
+  if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
     toast(reg.message || 'That referral code is invalid -- continuing without it.', true);
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });

@@ -2126,6 +2126,9 @@ async function renderSettings(){
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Require a referral code to sign up</b> <span class="muted">(every new member must be invited by an existing one)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sReqReferral" ${s.requireReferralCode!==false?'checked':''} style="width:auto"></label></div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Leave this ON. The very first account is let through automatically no matter what — with nobody registered yet there is no code in existence to type — and the rule starts applying the moment that first member exists. Only switch it OFF if you ever need to sign someone up with no upline, and switch it back on afterwards.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
@@ -2364,7 +2367,7 @@ async function renderSettings(){
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
-      requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
+      requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked, maintenanceMode:$('sMaint').checked,
       maintenanceMsg:$('sMaintMsg').value.trim(), numberFont:$('sNumberFont').value,
       openingCountdownEnabled:$('sOpenCd').checked,
       openingCountdownAt:$('sOpenCdAt').value ? new Date($('sOpenCdAt').value).getTime() : 0,
