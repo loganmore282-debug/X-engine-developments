@@ -94,7 +94,10 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // class space8's CLAUDE.md documents hitting its own home-banner-slides
 // route once, before that route was added here too.
 const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/manual-pay-image/set', '/admin/chipz-image/set']);
-const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set']);
+// The banner video is capped at 4 MB of actual video, which is ~5.5 MB once
+// base64'd, so it needs the huge parser -- bigJsonParser's 4 MB limit would
+// reject a legal upload before the route's own, friendlier size check ran.
+const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/banner/video-upload']);
 app.use((req, res, next) => (HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 
@@ -590,11 +593,82 @@ async function getHomeBanner() {
   try {
     const snap = await db.collection('banners').doc('home').get();
     const d = snap.exists ? snap.data() : {};
-    _bannerCache = { image: d.image || null, video: d.video || null };
-  } catch (_) { _bannerCache = _bannerCache || { image: null, video: null }; }
+    // videoVersion is set when a video FILE has been uploaded into the
+    // database (see getHomeBannerVideo below). The bytes never travel in
+    // this response -- only the marker -- so /public/banner stays the small,
+    // every-boot JSON it has always been; the client turns the marker into a
+    // URL pointing at /public/banner-video, which the browser then caches
+    // like any other media file.
+    _bannerCache = { image: d.image || null, video: d.video || null, videoVersion: d.videoVersion || null };
+  } catch (_) { _bannerCache = _bannerCache || { image: null, video: null, videoVersion: null }; }
   _bannerCacheTs = Date.now();
   return _bannerCache;
 }
+// The uploaded banner video itself, kept in its OWN document.
+//
+// Owner: "why can't we just upload video to database instead of url". This
+// is that -- but the bytes are deliberately kept out of every other payload:
+//   - Mongo caps a document at 16 MB, so the video cannot share the settings
+//     or banner doc without eventually breaking both.
+//   - /public/banner is fetched on EVERY app start. Inlining a few megabytes
+//     of base64 there would make every member re-download the whole clip
+//     every time they open the app, on Ugandan mobile data, before a single
+//     frame could show.
+// Served instead from /public/banner-video with an ETag and an immutable
+// cache header, so a phone downloads it once and replays it from cache, and
+// the video streams (range requests) rather than having to arrive whole.
+const BANNER_VIDEO_MAX_BYTES = 4 * 1024 * 1024;      // 4 MB of actual video
+const BANNER_VIDEO_TYPES = { 'video/mp4': 'mp4', 'video/webm': 'webm' };
+let _bannerVideoCache = null, _bannerVideoCacheTs = 0;
+async function getHomeBannerVideo() {
+  if (Date.now() - _bannerVideoCacheTs < 60 * 1000 && _bannerVideoCache !== null) return _bannerVideoCache;
+  try {
+    const snap = await db.collection('banners').doc('home-video').get();
+    const d = snap.exists ? snap.data() : {};
+    _bannerVideoCache = (d && d.data && d.mime)
+      ? { buf: Buffer.from(d.data, 'base64'), mime: d.mime, version: d.version || '0' }
+      : { buf: null, mime: null, version: null };
+  } catch (_) { _bannerVideoCache = _bannerVideoCache || { buf: null, mime: null, version: null }; }
+  _bannerVideoCacheTs = Date.now();
+  return _bannerVideoCache;
+}
+// Resolves one `Range:` header against a known body length.
+// Returns null for "no range, send the whole thing", 'invalid' for a range
+// that cannot be satisfied (the caller answers 416), or {start,end} inclusive.
+// Only a single range is honoured -- a multi-range request falls back to the
+// full body, which is a legal response and is what video players actually do.
+function parseByteRange(header, total) {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(String(header).trim());
+  if (!m) return null;
+  const hasStart = m[1] !== '', hasEnd = m[2] !== '';
+  if (!hasStart && !hasEnd) return 'invalid';
+  let start, end;
+  if (!hasStart) {
+    // "bytes=-500" means the LAST 500 bytes, not "from 0 to 500".
+    const len = parseInt(m[2], 10);
+    if (!Number.isFinite(len) || len <= 0) return 'invalid';
+    start = Math.max(0, total - len); end = total - 1;
+  } else {
+    start = parseInt(m[1], 10);
+    end = hasEnd ? parseInt(m[2], 10) : total - 1;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return 'invalid';
+    if (end >= total) end = total - 1;
+  }
+  if (start > end || start >= total || start < 0) return 'invalid';
+  return { start, end };
+}
+// A YouTube link cannot be a banner video, and failing loudly here is the
+// whole point: <video src="https://youtube.com/watch?v=..."> loads an HTML
+// page, not a video file, so the banner just sits blank with no error
+// anywhere. The owner hit exactly this. An embedded YouTube player is not
+// the answer either -- it is an iframe that keeps YouTube's own controls,
+// title bar and end-screen, cannot be made non-tappable, and blocks
+// autoplay far more often than a plain file does.
+function isYouTubeLink(url) {
+  return /(^|\/\/|\.)((m|www|music)\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)(\/|$)/i.test(url);
+}
+const YOUTUBE_VIDEO_ERROR = 'A YouTube link cannot play in the banner -- the app would load YouTube\'s web page, not a video, so the banner would sit blank. It also could not autoplay silently or be made untappable. Upload the video file itself (Upload video, mp4 or webm, up to 4 MB) and it will run on its own with no controls.';
 // A banner video URL the browser will actually load, and that can't be used
 // to smuggle script into the page. Relative paths (the EdgeOne-upload case)
 // and https:// are allowed; plain http:// is rejected because the app itself
@@ -604,6 +678,7 @@ function sanitizeBannerVideoUrl(raw) {
   const url = String(raw == null ? '' : raw).trim();
   if (!url) return { video: null };
   if (url.length > 2000) return { error: 'That video link is too long (max 2000 characters).' };
+  if (isYouTubeLink(url)) return { error: YOUTUBE_VIDEO_ERROR };
   if (/^https:\/\/[^\s]+$/i.test(url)) return { video: url };
   if (/^http:\/\//i.test(url)) return { error: 'Use an https:// link. The app is served over https, so a plain http:// video is blocked by the browser and the banner would just show nothing.' };
   if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(url)) return { error: 'Only https:// links, or a file name uploaded alongside the app (for example banner.mp4), are allowed.' };
@@ -2117,6 +2192,39 @@ app.get('/public/products', async (_req, res) => {
 app.get('/public/banner', async (_req, res) => {
   try { res.json({ status: 'success', ...(await getHomeBanner()) }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// The uploaded banner video's bytes. Deliberately NOT part of /public/banner:
+// that JSON is fetched on every app start, this is fetched once and then
+// replayed from the phone's own cache.
+//
+// Range support is not optional here -- iOS Safari refuses to play a video
+// whose server cannot serve byte ranges, so without this the banner would
+// work on Android and silently do nothing on iPhone.
+app.get('/public/banner-video', async (req, res) => {
+  try {
+    const v = await getHomeBannerVideo();
+    if (!v.buf) return res.status(404).end();
+    const etag = '"bv-' + v.version + '"';
+    // The client asks for ?v=<version>, so a new upload is a new URL and the
+    // long cache below can never serve a stale clip.
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.set('ETag', etag);
+    res.set('Content-Type', v.mime);
+    res.set('Accept-Ranges', 'bytes');
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    const total = v.buf.length;
+    const r = parseByteRange(req.headers.range, total);
+    if (r === 'invalid') return res.status(416).set('Content-Range', `bytes */${total}`).end();
+    if (r) {
+      res.status(206).set('Content-Range', `bytes ${r.start}-${r.end}/${total}`);
+      res.set('Content-Length', String(r.end - r.start + 1));
+      if (req.method === 'HEAD') return res.end();
+      return res.end(v.buf.subarray(r.start, r.end + 1));
+    }
+    res.set('Content-Length', String(total));
+    if (req.method === 'HEAD') return res.end();
+    res.end(v.buf);
+  } catch (e) { res.status(500).end(); }
 });
 app.get('/public/help-banner', async (_req, res) => {
   try { res.json({ status: 'success', image: await getHelpBanner() }); }
@@ -5817,6 +5925,7 @@ app.get('/admin/banner', async (req, res) => {
 app.post('/admin/banner/set', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const patch = {};
+  let dropUploadedVideo = false;
   if (req.body.image != null) {
     const image = String(req.body.image || '');
     if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
@@ -5827,12 +5936,19 @@ app.post('/admin/banner/set', async (req, res) => {
     const v = sanitizeBannerVideoUrl(req.body.video);
     if (v.error) return res.status(400).json({ status: 'error', message: v.error });
     patch.video = v.video;
+    // A typed link replaces an uploaded file, the mirror of the upload route
+    // clearing the link -- exactly one of the two is ever the live source, so
+    // there is never a question of which one the banner is playing. The
+    // stored bytes go too rather than lingering unreachable in the database.
+    patch.videoVersion = null;
+    dropUploadedVideo = true;
   }
   if (!Object.keys(patch).length) return res.status(400).json({ status: 'error', message: 'Nothing to save' });
   try {
     const ref = db.collection('banners').doc('home');
     const snap = await ref.get();
     await ref.set({ ...(snap.exists ? snap.data() : {}), ...patch });
+    if (dropUploadedVideo) { await db.collection('banners').doc('home-video').delete(); _bannerVideoCacheTs = 0; }
     _bannerCacheTs = 0;
     logAdminAction(req, 'banner_set', { fields: Object.keys(patch).join(',') });
     res.json({ status: 'success' });
@@ -5844,15 +5960,58 @@ app.post('/admin/banner/clear', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const ref = db.collection('banners').doc('home');
+    // "Remove video" has to clear BOTH sources -- the typed link and the
+    // uploaded file -- or the owner would remove one and still see a video.
     if (String(req.query.what || req.body.what || '') === 'video') {
       const snap = await ref.get();
-      await ref.set({ ...(snap.exists ? snap.data() : {}), video: null });
+      await ref.set({ ...(snap.exists ? snap.data() : {}), video: null, videoVersion: null });
+      await db.collection('banners').doc('home-video').delete();
+      _bannerVideoCacheTs = 0;
     } else {
       await ref.delete();
+      await db.collection('banners').doc('home-video').delete();
+      _bannerVideoCacheTs = 0;
     }
     _bannerCacheTs = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the banner' }); }
+});
+// Upload the video FILE into the database, rather than pointing at one.
+// Owner: "why can't we just upload video to database instead of url".
+//
+// The bytes land in their own `banners/home-video` document and are served
+// from /public/banner-video, so they never ride along in the every-boot
+// /public/banner JSON. The 4 MB cap is not a database limit (Mongo allows
+// 16 MB a document) -- it is a members' data-bill limit: this clip loads on
+// every phone that opens the app, and a banner loop has no business costing
+// someone more than a few seconds of video.
+app.post('/admin/banner/video-upload', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const raw = String(req.body.video || '');
+  const m = /^data:(video\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(raw);
+  if (!m) return res.status(400).json({ status: 'error', message: 'That is not a video file. Choose an .mp4 or .webm.' });
+  const mime = m[1].toLowerCase();
+  if (!BANNER_VIDEO_TYPES[mime]) {
+    return res.status(400).json({ status: 'error', message: `${mime} will not play on every phone. Save the clip as MP4 (H.264) -- that is the one format Android and iPhone both play.` });
+  }
+  let buf;
+  try { buf = Buffer.from(m[2], 'base64'); } catch (_) { buf = null; }
+  if (!buf || !buf.length) return res.status(400).json({ status: 'error', message: 'That video file could not be read.' });
+  if (buf.length > BANNER_VIDEO_MAX_BYTES) {
+    return res.status(400).json({ status: 'error', message: `That video is ${Math.round(buf.length / 1024 / 1024 * 10) / 10} MB. Keep it under 4 MB -- it downloads on every member's phone. A short, silent, muted loop of a few seconds is what fits.` });
+  }
+  try {
+    const version = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
+    await db.collection('banners').doc('home-video').set({ data: buf.toString('base64'), mime, bytes: buf.length, version });
+    const ref = db.collection('banners').doc('home');
+    const snap = await ref.get();
+    // An uploaded file wins over any typed link, and clears it, so there is
+    // never a question of which of the two the banner is actually playing.
+    await ref.set({ ...(snap.exists ? snap.data() : {}), video: null, videoVersion: version });
+    _bannerCacheTs = 0; _bannerVideoCacheTs = 0;
+    logAdminAction(req, 'banner_video_uploaded', { bytes: buf.length, mime });
+    res.json({ status: 'success', bytes: buf.length, version });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the video' }); }
 });
 app.get('/admin/help-banner', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

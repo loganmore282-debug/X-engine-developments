@@ -344,27 +344,67 @@ code is **optional**. When required, the member is told to fix the code; retryin
 with the same number and password takes `doRegister()`'s `email-already-in-use` branch,
 which signs them in and finishes the same registration.
 
-### Home banner: image or video
+### Home banner: uploaded video, or a link
 
-`banners/home` holds `{ image, video }`. The video is a **URL, never an uploaded blob**
-— a base64 video would live inside one Mongo document, be re-sent in full on every cold
-boot with no HTTP caching, and inflate ~33% on the wire; unaffordable on Ugandan mobile
-data for a decorative banner. The owner drops `banner.mp4` into the EdgeOne upload beside
-`index.html` and types the file name, or pastes an `https://` link.
-`sanitizeBannerVideoUrl()` accepts relative paths and `https://` only — plain `http://`
-is rejected (mixed content would be silently blocked), as are other schemes, `..`
-traversal and a leading `//` (protocol-relative to another host).
-The image doubles as the video's poster. `/admin/banner/set` patches only the keys sent,
-so saving one never wipes the other; `/admin/banner/clear?what=video` drops just the
-video. The player is muted+loop+playsinline so mobile autoplays it, with the mockup's
-play ring shown whenever it is paused or autoplay was refused, and a fallback to the
-striped hero if the URL fails to load. `test-banner-video-url.js` covers the validator;
-the Playwright banner test drives a real MediaRecorder-generated webm.
+`banners/home` holds `{ image, video, videoVersion }`, and there are now **two**
+sources for the video. Exactly one is ever live — setting either clears the other, so
+there is never a question of which one is playing.
+
+**Uploaded file (preferred).** Owner: *"why can't we just upload video to database
+instead of url."* `POST /admin/banner/video-upload` stores the bytes in their own
+`banners/home-video` document (`{data, mime, bytes, version}`) and stamps `videoVersion`
+on `banners/home`. MP4 or WebM, **4 MB max** — that cap is about members' data bills,
+not Mongo (16 MB a document): the clip downloads onto every phone that opens the app.
+
+The bytes are deliberately kept **out of `/public/banner`**, which is fetched on every
+app start — inlining them there would re-send the whole clip on every boot, base64'd
+33% larger, with no HTTP caching. They are served from **`/public/banner-video`**
+instead, with an ETag, `Cache-Control: immutable` for a year, and the version in the
+query string (a new upload is a new URL, so the long cache can never go stale). The
+client builds that URL from `videoVersion`. **Byte-range support on that route is not
+optional** — iOS Safari refuses to play video from a server that cannot serve ranges,
+so without it the banner would work on Android and silently do nothing on iPhone.
+`parseByteRange()` handles it and is unit-tested including suffix ranges (`bytes=-100`
+means the LAST 100 bytes) and 416 cases.
+
+**Linked file.** The owner drops `banner.mp4` into the upload beside `index.html` and
+types the file name, or pastes an `https://` link. `sanitizeBannerVideoUrl()` accepts
+relative paths and `https://` only — plain `http://` is rejected (mixed content would
+be silently blocked), as are other schemes, `..` traversal, and a leading `//`
+(protocol-relative to another host).
+
+**YouTube links are refused, on both sides, with an explanation.** A YouTube URL in a
+`<video>` tag loads an HTML page, not a video, so the banner sits blank with no error
+anywhere — the owner hit exactly this. An embedded player is not the answer either: it
+keeps YouTube's controls and end-screen, cannot be made non-tappable, and blocks
+autoplay far more often than a plain file. `isYouTubeLink()` covers youtube.com,
+youtu.be, m./music. subdomains and youtube-nocookie.com, and is tested against
+lookalikes (`myyoutube.com`, `youtube-promo.mp4`) that must NOT be rejected.
+
+**The player runs on its own and cannot be touched.** Owner: *"l dont want it to be
+tappable or pause or play, l want it to go or run on its own."* So there is no play
+ring (the mockup's, removed), no `controls`, and `pointer-events:none` on the video —
+a tap on the banner passes straight through, and there is no long-press or
+picture-in-picture menu. `autoplay muted loop playsinline` is the exact combination
+phone browsers allow to start unprompted; `tryAutoplayHomeBanner()` installs one-time
+retries on `visibilitychange`/`focus`/`pageshow` and on the first tap **anywhere** in
+the app, for the cases a browser refuses the first attempt. A video that fails to load
+falls back to the striped hero.
+
+The image doubles as the poster frame. `/admin/banner/set` patches only the keys sent;
+`/admin/banner/clear?what=video` drops the link **and** the uploaded file.
+
+Tests: `test-banner-video-url.js` (validator + YouTube), `test-banner-video-upload.js`
+(size caps, accepted formats, byte ranges, cache headers, and that the bytes stay out
+of the boot JSON), `test-banner-autoplay.py` (drives the BUILT app against a real
+MediaRecorder-generated webm under the browser's **default** autoplay policy: proves it
+starts alone, keeps looping, has no button, and survives taps without pausing).
 
 ### Run this before every push
 ```
 node build-core.js && node build-admin.js && python3 smoke-test.py
-node test-product-config.js && node test-cors-origins.js && node test-banner-video-url.js && node test-referral-required.js && node test-allowed-origins.js
+for t in test-*.js; do node $t >/dev/null && echo "OK   $t" || echo "FAIL $t"; done
+for t in test-*.py; do python3 $t /tmp/out >/dev/null 2>&1 && echo "OK   $t" || echo "FAIL $t"; done
 ```
 `smoke-test.py` boots the BUILT app in a real browser, walks every tab and sheet, and
 fails on any page error, a stuck loading screen, or a bad `API_BASE`. It exists because

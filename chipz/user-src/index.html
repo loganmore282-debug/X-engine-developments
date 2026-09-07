@@ -321,17 +321,18 @@ a{color:inherit;}
 .home-banner img,.ref-banner img{display:block;width:100%;height:100%;object-fit:cover;}
 .hb-stripes{position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.06) 0 14px,transparent 14px 30px);}
 .hb-cap{position:absolute;bottom:12px;left:16px;right:16px;color:#fff;font-weight:700;font-size:15px;text-shadow:0 2px 8px rgba(0,0,0,.4);}
-/* Admin video banner (Home.dc.html). The play ring sits over the video and
-   is hidden only while it is actually playing, so a paused or
-   autoplay-blocked video always shows something tappable. */
-.home-banner video{display:block;width:100%;height:100%;object-fit:cover;}
-.hb-play{position:absolute;inset:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:none;border:0;padding:0;cursor:pointer;transition:opacity .18s;}
-.hb-play .ring{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);box-shadow:0 6px 18px -6px rgba(0,0,0,.5);}
-.home-banner.playing .hb-play{opacity:0;pointer-events:none;}
+/* Admin video banner (Home.dc.html). Owner: "l dont want it to be tappable
+   or pause or play, l want it to go or run on its own." So the play ring is
+   gone entirely and the video takes NO pointer events -- a tap on the banner
+   passes straight through, it cannot be paused, and there is no long-press
+   menu on it. It starts itself (autoplay+muted+loop+playsinline, with
+   tryAutoplayHomeBanner()'s retries behind it). */
+.home-banner video{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
+.home-banner video::-webkit-media-controls{display:none!important;}
 /* A video URL that 404s or is an unplayable format would otherwise leave a
    flat empty block; fall back to the same striped hero the no-banner state
-   uses, with the ring removed since there is nothing to play. */
-.home-banner.hb-video-failed video,.home-banner.hb-video-failed .hb-play{display:none;}
+   uses. */
+.home-banner.hb-video-failed video{display:none;}
 .home-banner.hb-video-failed{background:var(--chipz-hero);}
 .home-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:0 18px;margin-bottom:16px;}
 .home-action{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;color:var(--snow-ink);}

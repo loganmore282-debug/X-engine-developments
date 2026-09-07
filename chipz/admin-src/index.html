@@ -349,6 +349,13 @@ function fileToDataUrl(file, maxDim=900, quality=0.82){
 // squashed or letterboxed. fileToDataUrl() above can only cap the LONGEST
 // side, which leaves the height free and so cannot guarantee a frame.
 const PRODUCT_IMG_W = 1200, PRODUCT_IMG_H = 900;
+// Mirrors server.js's own cap and check, so the panel can refuse a bad video
+// before uploading it and explain why in the same words the server would.
+const BANNER_VIDEO_MAX_BYTES = 4 * 1024 * 1024;
+function isYouTubeLink(url){
+  return /(^|\/\/|\.)((m|www|music)\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)(\/|$)/i.test(String(url||''));
+}
+const YOUTUBE_VIDEO_ERROR = 'A YouTube link cannot play in the banner -- the app would load YouTube\'s web page, not a video, so the banner would sit blank. Upload the video file itself instead.';
 function fileToFramedDataUrl(file, W, H, quality=0.82){
   return new Promise((resolve,reject)=>{
     if(!file) return reject(new Error('No file'));
@@ -381,10 +388,15 @@ function fileToFramedDataUrl(file, W, H, quality=0.82){
 // means one still frame and no transparency -- the animation would be
 // silently destroyed on upload with nothing to show it had happened. Animated
 // images have to go up byte for byte, so they do.
-function fileToRawDataUrl(file, maxBytes){
+// `accept` and `what` default to images, so the existing GIF/logo callers are
+// unchanged; the banner-video upload passes /^video\// instead. Raw bytes
+// either way -- re-encoding is for photos, and would wreck a video as surely
+// as it wrecks an animated GIF.
+function fileToRawDataUrl(file, maxBytes, accept, what){
+  accept = accept || /^image\//; what = what || 'image';
   return new Promise((resolve,reject)=>{
     if(!file) return reject(new Error('No file'));
-    if(!/^image\//.test(file.type)) return reject(new Error('Please choose an image file'));
+    if(!accept.test(file.type)) return reject(new Error('Please choose a'+(what==='image'?'n ':' ')+what+' file'));
     if(file.size > maxBytes) return reject(new Error('That file is '+Math.round(file.size/1024)+' KB. Keep it under '+Math.round(maxBytes/1024)+' KB -- it loads on every member\'s phone.'));
     const fr=new FileReader();
     fr.onerror=()=>reject(new Error('Could not read the file'));
@@ -2149,6 +2161,10 @@ async function renderSettings(){
   const s = r.settings||{};
   const bannerImage = br.image||'';
   const bannerVideo = br.video||'';
+  // Set when a video FILE has been uploaded into the database (as opposed to
+  // a typed link). The two are mutually exclusive server-side, so the panel
+  // shows exactly one of them as the live source.
+  const bannerVideoUploaded = br.videoVersion||'';
   const helpBannerImage = hbr.image||'';
   const announceImage = air.image||'';
   const referralBannerImage = cir.referral||'';
@@ -2288,12 +2304,23 @@ async function renderSettings(){
         ${bannerImage?`<button class="btn danger sm" id="homeBannerClear">Revert</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeBannerFile" accept="image/*" hidden></label>
-      <label style="margin-top:16px">Video link (optional)</label>
+      <label style="margin-top:16px">Banner video (optional)</label>
+      <div class="banner-row">
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${
+          bannerVideoUploaded ? '<b>Uploaded video file</b> &mdash; playing on Home now'
+          : bannerVideo ? `Linked video: <b>${esc(bannerVideo)}</b>`
+          : '<span class="muted">No video &mdash; the image above is the banner</span>'}</div>
+        ${(bannerVideoUploaded||bannerVideo)?`<button class="btn danger sm" id="homeBannerVideoClear">Remove video</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload video<input type="file" id="homeBannerVideoFile" accept="video/mp4,video/webm" hidden></label>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">The video replaces the image on Home and <b>runs on its own</b> &mdash; muted, looping, no play button, and nothing to tap or pause. The image above is its still frame while it loads.</p>
+      <p class="muted" style="font-size:12px;margin:8px 0 0"><b>MP4 (H.264), up to 4 MB.</b> That cap is about your members, not the database: the clip downloads onto every phone that opens the app. A few silent seconds is what belongs here. Uploaded once, it is then served from its own cached address, so a member downloads it one time and replays it from their phone after that.</p>
+      <p class="muted" style="font-size:12px;margin:8px 0 0"><b>A YouTube link will not work.</b> The app would fetch YouTube's web page, not a video, so the banner would sit blank &mdash; and a YouTube player cannot be silenced, untapped or made to autoplay reliably. Download the clip as MP4 and upload it here instead.</p>
+      <label style="margin-top:16px">…or link a video already uploaded with the app</label>
       <input id="homeBannerVideo" value="${esc(bannerVideo)}" placeholder="banner.mp4">
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Set this and the banner plays a video instead of the image, with a play button over it &mdash; the image above becomes its still frame while it loads. Videos are linked, not uploaded: put the file (for example <b>banner.mp4</b>) in the same upload as the app and just type its name here, or paste a full <b>https://</b> link. Uploading video into the database would make every member re-download it on every app start, which is why it works this way. Keep it short, silent and small &mdash; it autoplays muted on a loop, so anything over a few seconds mostly costs your members data. Leave blank for no video.</p>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Only if you put the file in the same upload as the app &mdash; type its name (for example <b>banner.mp4</b>), or paste a full <b>https://</b> link to a video file. Saving here replaces an uploaded video, and uploading replaces this.</p>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn" id="homeBannerVideoSave" style="flex:1">Save video link</button>
-        ${bannerVideo?`<button class="btn danger" id="homeBannerVideoClear">Remove video</button>`:''}
       </div>
     </div>
 
@@ -2525,10 +2552,34 @@ async function renderSettings(){
   // Saved on its own, never bundled with the image upload -- the server
   // patches only the keys it is sent, so setting one never clears the other.
   $('homeBannerVideoSave').addEventListener('click', async()=>{
+    const link = $('homeBannerVideo').value.trim();
+    // Caught here as well as on the server so the owner gets the explanation
+    // instantly, without a round trip, the moment he pastes a YouTube link --
+    // this is the mistake that leaves the banner mysteriously blank.
+    if (isYouTubeLink(link)) return toast(YOUTUBE_VIDEO_ERROR, 'err');
     await withTabBusy((async()=>{
-      const d = await api('/admin/banner/set', { video: $('homeBannerVideo').value.trim() });
+      const d = await api('/admin/banner/set', { video: link });
       toast(d.status==='success'?'Video link saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderSettings();
+    })());
+  });
+  // Upload the video FILE itself. Read raw (no canvas, no re-encode -- that
+  // is for images and would destroy a video), size-checked here so an
+  // oversized file is refused before megabytes go up the wire.
+  $('homeBannerVideoFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    e.target.value='';
+    if (f.size > BANNER_VIDEO_MAX_BYTES) {
+      return toast('That video is '+(Math.round(f.size/1024/1024*10)/10)+' MB. Keep it under 4 MB -- it downloads on every member\'s phone.', 'err');
+    }
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading video…','ok');
+        const video = await fileToRawDataUrl(f, BANNER_VIDEO_MAX_BYTES, /^video\//, 'video');
+        const d = await api('/admin/banner/video-upload', { video });
+        toast(d.status==='success'?'Video uploaded, playing on Home for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderSettings();
+      } catch(err){ toast(err.message||'Could not read that video','err'); }
     })());
   });
   const homeBannerVideoClear = $('homeBannerVideoClear');

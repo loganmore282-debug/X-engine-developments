@@ -461,9 +461,16 @@ async function boot(){
   STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
   // Optional admin-set banner video (Home.dc.html's "ADMIN VIDEO BANNER").
-  // It is a URL, not an uploaded blob -- see getHomeBanner() in server.js for
-  // why. STATE.homeBanner doubles as its poster frame when both are set.
-  STATE.homeBannerVideo = (b.status === 'success' && b.video) ? b.video : null;
+  // Two sources, and an uploaded file always wins over a typed link:
+  // videoVersion means the owner uploaded the file into the database, and it
+  // is served from /public/banner-video -- its own URL, so the browser caches
+  // and streams it instead of it riding along inside this every-boot JSON.
+  // The version in the query string means a new upload is a new URL, so the
+  // immutable cache header on that endpoint can never serve a stale clip.
+  // STATE.homeBanner doubles as the poster frame when both are set.
+  STATE.homeBannerVideo = (b.status === 'success')
+    ? (b.videoVersion ? API_BASE + '/public/banner-video?v=' + encodeURIComponent(b.videoVersion) : (b.video || null))
+    : null;
   // Same "prefetch alongside settings, zero added visible latency" reasoning
   // as STATE.homeBanner just above -- fetched unconditionally every boot
   // (cheap when unset, matches the existing banner's own tradeoff) so the
@@ -1101,30 +1108,50 @@ async function renderHome(){
 function homeBannerInnerHtml(st){
   if (STATE.homeBannerVideo) {
     const poster = STATE.homeBanner ? ` poster="${esc(STATE.homeBanner)}"` : '';
-    return `<video id="homeBannerVideo" src="${esc(STATE.homeBannerVideo)}"${poster} muted loop playsinline preload="metadata"
-        onplaying="this.parentNode.classList.add('playing')" onpause="this.parentNode.classList.remove('playing')"
-        onerror="this.parentNode.classList.add('hb-video-failed')"></video>
-      <button class="hb-play" onclick="toggleHomeBannerVideo()" aria-label="Play video">
-        <span class="ring"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5l12 7-12 7z"></path></svg></span>
-      </button>`;
+    // Owner: "l dont want it to be tappable or pause or play, l want it to go
+    // or run on its own." So there is no play ring and no controls, and the
+    // element takes no pointer events at all (CSS) -- a tap on the banner
+    // does nothing, it cannot be paused, and there is no picture-in-picture
+    // or long-press download menu either. autoplay+muted+loop+playsinline is
+    // the exact combination phone browsers allow to start on its own.
+    return `<video id="homeBannerVideo" src="${esc(STATE.homeBannerVideo)}"${poster} autoplay muted loop playsinline preload="auto"
+        disablepictureinpicture disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback" tabindex="-1" aria-hidden="true"
+        onerror="this.parentNode.classList.add('hb-video-failed')"></video>`;
   }
   if (STATE.homeBanner) return `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">`;
   return `<div class="hb-stripes"></div><div class="hb-cap">${esc(st.brandTagline || "Uganda's boldest way to grow your money")}</div>`;
 }
-// Autoplay is attempted right after Home paints; a rejected play() is an
-// expected outcome, not an error, so it is swallowed and the ring is simply
-// left showing.
-window.toggleHomeBannerVideo = function(){
-  const v = document.getElementById('homeBannerVideo');
-  if (!v) return;
-  if (v.paused) { const r = v.play(); if (r && r.catch) r.catch(() => {}); }
-  else v.pause();
-};
+// The banner must start itself, with nothing to tap. The autoplay attribute
+// covers the normal case; these retries cover the cases where a phone
+// browser refuses the first attempt -- the tab was in the background when
+// Home painted, the phone was in low-power mode, or the browser wants to see
+// a user gesture somewhere on the page first. Each retry is silent: a
+// rejected play() is an expected outcome, not an error, and while it is
+// refused the poster image simply stays up.
+//
+// The retry hooks are installed once, on window, and outlive any single
+// repaint of Home (paintHome() rebuilds the <video> element every time).
+var _bannerAutoplayHooked = false;
 function tryAutoplayHomeBanner(){
   const v = document.getElementById('homeBannerVideo');
-  if (!v) return;
-  const r = v.play();
-  if (r && r.catch) r.catch(() => {});
+  if (v) { const r = v.play(); if (r && r.catch) r.catch(() => {}); }
+  if (_bannerAutoplayHooked) return;
+  _bannerAutoplayHooked = true;
+  const kick = () => {
+    const el = document.getElementById('homeBannerVideo');
+    if (!el || !el.paused) return;
+    const r = el.play(); if (r && r.catch) r.catch(() => {});
+  };
+  // Coming back to the app, or rotating/resizing, is a fresh chance to start.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
+  window.addEventListener('focus', kick);
+  window.addEventListener('pageshow', kick);
+  // Browsers that want a gesture first will accept one made ANYWHERE -- the
+  // member tapping any part of the app unlocks it, without the banner itself
+  // ever being tappable. Passive and non-capturing so it cannot interfere
+  // with the taps it is listening to.
+  ['touchend', 'click'].forEach(ev =>
+    document.addEventListener(ev, kick, { passive: true }));
 }
 function paintHome(){
   const a = STATE.account || {};
