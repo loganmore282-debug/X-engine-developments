@@ -1043,6 +1043,9 @@ function paintHome(){
 <button aria-label="Open treasure chest" onclick="openChestSheet()" class="chest-float">
   <img src="/treasure-chest.png" alt="">
 </button>
+<button aria-label="Turntable" onclick="openTurntableSheet()" class="chest-float turntable-float">
+  ${ICONS.wheel}
+</button>
 <div style="height:16px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   startActivityTicker();
@@ -1698,6 +1701,11 @@ async function renderAccount(){
   <div class="setting-list">
     ${settingRowHtml('download', 'Download APP', 'Get the mobile app', 'promptInstallApp()')}
     ${settingRowHtml('wallet', 'Wallet', 'Manage your withdrawal wallet', 'openWalletSheet()')}
+    <button class="setting-row" onclick="openTurntableSheet()">
+      <span class="sq" style="color:var(--snow-wine);">${ICONS.wheel}</span>
+      <span class="txt"><span class="t1" style="display:block;">Turntable</span><span class="t2" style="display:block;">Daily spin &amp; bonus wins</span></span>
+      <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
+    </button>
     ${settingRowHtml('balance', 'Balance Record', 'Transaction history', 'openBalanceRecordSheet()')}
     ${settingRowHtml('messages', 'Messages', 'Notifications &amp; mail', 'openMessagesSheet()')}
     ${settingRowHtml('loginpw', 'Login Password', 'Change login password', 'openChangeLoginPasswordSheet()')}
@@ -1824,6 +1832,91 @@ window.submitWallet = async function(){
   _walletEditing = false;
   toast('Wallet saved');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
+};
+
+// ── TURNTABLE (spin wheel) ──
+// Chipz-only; Snow has no equivalent, so none of this is ported. Owner's
+// spec: a free daily spin like check-in, plus extra spins earned by buying
+// products from a given tier upward, those paying a percentage of the
+// product's price. All the amounts and thresholds are admin-set.
+var _ttSpinning = false;
+var _ttAngle = 0;
+window.openTurntableSheet = async function(){
+  _ttSpinning = false;
+  openSheet('TURNTABLE', `<div class="reveal-in tt-stage">
+    <div class="tt-wheel-wrap">
+      <span class="tt-pointer" aria-hidden="true"></span>
+      <div class="tt-wheel" id="ttWheel"><span class="hub">SPIN</span></div>
+    </div>
+    <div class="tt-spins" id="ttSpinCount">&nbsp;</div>
+    <p class="tt-sub" id="ttSub">Loading&hellip;</p>
+    <div style="width:100%;">
+      <button class="primary-button" id="ttSpinBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.1em;" onclick="doTurntableSpin()" disabled>SPIN</button>
+    </div>
+    <div class="tt-rules" style="width:100%;">
+      <h3>How it works</h3>
+      <ul style="margin:0;padding:0;">
+        <li id="ttRuleDaily">One free spin every day, resetting at midnight.</li>
+        <li id="ttRuleProduct">Buying products earns you extra spins.</li>
+        <li>Winnings go straight into your wallet.</li>
+      </ul>
+    </div>
+  </div>`);
+  await refreshTurntable();
+};
+async function refreshTurntable(){
+  const r = await api('/turntable/status');
+  if (_openSheetTitle !== 'TURNTABLE') return;
+  const sub = $('ttSub'), btn = $('ttSpinBtn'), count = $('ttSpinCount');
+  if (!sub || !btn || !count) return;
+  if (r.status !== 'success') { sub.textContent = 'Could not load the turntable. Pull back and try again.'; return; }
+  if (!r.enabled) {
+    count.textContent = '';
+    sub.textContent = 'The turntable is not running right now. Check back soon.';
+    btn.disabled = true;
+    return;
+  }
+  STATE.turntable = r;
+  const total = r.totalSpins || 0;
+  count.textContent = total === 1 ? '1 spin available' : `${total} spins available`;
+  sub.innerHTML = total
+    ? (r.dailyAvailable ? 'Your free daily spin is ready.' : 'Spins earned from your purchases are ready.')
+    : `No spins left. Your next free spin unlocks at midnight.`;
+  btn.disabled = !total;
+  const dailyRule = $('ttRuleDaily');
+  if (dailyRule && (r.dailyMin || r.dailyMax)) {
+    dailyRule.textContent = r.dailyMin === r.dailyMax
+      ? `One free spin every day, worth ${fmtUGX(r.dailyMin)}.`
+      : `One free spin every day, worth between ${fmtUGX(r.dailyMin)} and ${fmtUGX(r.dailyMax)}.`;
+  }
+}
+window.doTurntableSpin = async function(){
+  if (_ttSpinning) return;
+  const btn = $('ttSpinBtn'), wheel = $('ttWheel');
+  if (!btn || !wheel) return;
+  _ttSpinning = true;
+  btn.disabled = true;
+  // Spin the wheel immediately for feedback, then land on the real result
+  // when the server answers. The wheel is decoration -- the amount the
+  // server returns is the truth, and the animation never decides it.
+  _ttAngle += 360 * 5 + Math.floor(Math.random() * 360);
+  wheel.style.transform = `rotate(${_ttAngle}deg)`;
+  const r = await post('/turntable/spin', {});
+  if (r.status !== 'success') {
+    _ttSpinning = false;
+    await refreshTurntable();
+    return notify(r.message || 'The spin could not be completed.');
+  }
+  // Let the wheel finish before the win card lands on top of it.
+  setTimeout(async () => {
+    _ttSpinning = false;
+    const acc = await api('/account');
+    if (acc.status === 'success') STATE.account = acc.account;
+    await refreshTransactionsCache();
+    await refreshTurntable();
+    showChestWin(r.reward, (STATE.account || {}).walletBalance || 0);
+    if (STATE.page === 'account') renderAccount();
+  }, 4000);
 };
 
 // ── NOTIFY DIALOG (Notify.dc.html) ──

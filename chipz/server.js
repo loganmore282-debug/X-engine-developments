@@ -270,6 +270,24 @@ const DEFAULT_SETTINGS = {
   // Not yet confirmed by the owner — a reasonable Snow-scaled default,
   // admin-editable like every other rate here.
   dailyCheckin: 500,
+  // ── Turntable (daily spin wheel) ──
+  // Owner's spec: "spin wheel bonus, so everyday one spins just like daily
+  // check-in and earns the set amount in admin panel, also spin can also be
+  // available from buying products like any vip product like product
+  // 2,3,4,5,6,7,8... one earns the set percentage in admin panel of product
+  // amount bought."
+  // So there are TWO kinds of spin, with different payout rules:
+  //   * the free daily one, paying a random amount in [Min, Max] (set both
+  //     equal for a fixed amount), and
+  //   * spins earned by buying a product from turntableMinTier onward,
+  //     paying turntableProductPct% of THAT product's price.
+  turntableEnabled: false,
+  turntableDailyMin: 200, turntableDailyMax: 1000,
+  turntableProductPct: 2,
+  // 1-based position in the product ladder. 2 = "product 2 upward earns a
+  // spin", matching the owner's own numbering; the cheapest tier grants none.
+  turntableMinTier: 2,
+  turntableSpinsPerPurchase: 1,
   maintenanceMode: false, maintenanceMsg: '',
   // Owner: "let's establish a timer ie like saying snow opening in
   // 23:59:34... just near maintenance mode." A pre-launch gate, separate
@@ -2260,6 +2278,176 @@ app.post('/checkin', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// TURNTABLE (daily spin wheel)
+// ═══════════════════════════════════════════
+// A Chipz-only feature -- Snow has no equivalent, so none of this is a port.
+//
+// Two spin sources, deliberately kept as separate concepts because they pay
+// differently and must not be able to subsidise each other:
+//   1. One FREE spin per EAT calendar day, paying a random amount inside the
+//      admin's [turntableDailyMin, turntableDailyMax] band.
+//   2. Spins EARNED by buying a product at or above turntableMinTier, each
+//      paying turntableProductPct% of that specific product's price.
+//
+// Earned spins are stored as individual `turntableSpins` documents rather
+// than a counter, because each one carries its own payout basis (the price
+// of the product that granted it). A counter would lose that, and a member
+// who bought a cheap tier then an expensive one would be paid the wrong
+// amount on one of them.
+async function grantTurntableSpins(userId, product) {
+  try {
+    const sett = await getSettings();
+    if (!sett.turntableEnabled) return;
+    const perPurchase = Math.max(0, Math.floor(Number(sett.turntableSpinsPerPurchase) || 0));
+    if (!perPurchase) return;
+    // Tier position is the product's own rank in the live ladder, so the
+    // owner's "product 2,3,4..." numbering keeps meaning the same thing even
+    // after products are added, removed or repriced in the admin panel.
+    const products = await getProducts();
+    const rank = products.findIndex(p => p.key === product.key) + 1;
+    if (!rank || rank < (Number(sett.turntableMinTier) || 2)) return;
+    const pct = Number(sett.turntableProductPct) || 0;
+    const basis = round2((Number(product.price) || 0) * pct / 100);
+    if (basis <= 0) return;
+    const { date, time } = nowStr();
+    for (let i = 0; i < perPurchase; i++) {
+      await db.collection('turntableSpins').add({
+        userId, reward: basis, source: 'product', productKey: product.key,
+        productName: product.name, used: false, date, time,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+  } catch (e) {
+    // Never let this break a purchase that has already been paid for. The
+    // member keeps their product; the spin is simply not granted, and the
+    // failure is loud in the logs rather than silently swallowed.
+    console.error(`Turntable: failed to grant spins to ${userId} for ${product && product.key}:`, e.message);
+  }
+}
+function turntableDailyReward(sett) {
+  const lo = Math.max(0, Number(sett.turntableDailyMin) || 0);
+  const hi = Math.max(lo, Number(sett.turntableDailyMax) || 0);
+  if (hi <= lo) return round2(lo);
+  return round2(lo + Math.random() * (hi - lo));
+}
+app.get('/turntable/status', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const sett = await getSettings();
+    const snap = await db.collection('users').doc(uid).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
+    const u = snap.data();
+    if (u.status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const now = Date.now();
+    const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
+    const dailyAvailable = lastKey !== eatDayKey(new Date(now));
+    const earnedSnap = await db.collection('turntableSpins')
+      .where('userId', '==', uid).where('used', '==', false).limit(200).get();
+    res.json({
+      status: 'success',
+      enabled: !!sett.turntableEnabled,
+      dailyAvailable,
+      earnedSpins: earnedSnap.size,
+      totalSpins: (dailyAvailable ? 1 : 0) + earnedSnap.size,
+      nextDailyAt: eatNextMidnight(now),
+      dailyMin: Number(sett.turntableDailyMin) || 0,
+      dailyMax: Number(sett.turntableDailyMax) || 0,
+    });
+  } catch (e) {
+    console.error('Turntable status error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not load the turntable' });
+  }
+});
+app.post('/turntable/spin', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    let result = null;
+    // Same lock discipline as /checkin: one spin at a time per member, with
+    // the balance write nested under bal:<uid>. Without this, two taps
+    // landing together would each see the same unused spin and pay it twice.
+    await withLock('turntable:' + uid, async () => {
+      const sett = await getSettings();
+      if (!sett.turntableEnabled) { result = { code: 400, body: { status: 'error', message: 'The turntable is not available right now.' } }; return; }
+      const ref = db.collection('users').doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      const u = snap.data();
+      if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+
+      const now = Date.now();
+      const todayKey = eatDayKey(new Date(now));
+      const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
+      const dailyAvailable = lastKey !== todayKey;
+
+      let reward, source, label, spinDoc = null;
+      if (dailyAvailable) {
+        reward = turntableDailyReward(sett);
+        source = 'daily';
+        label = 'Turntable daily spin';
+      } else {
+        // Oldest unused earned spin first, so a member cannot hold back a
+        // high-value spin and burn cheap ones on other days.
+        const earned = await db.collection('turntableSpins')
+          .where('userId', '==', uid).where('used', '==', false)
+          .orderBy('createdAt', 'asc').limit(1).get();
+        if (earned.empty) {
+          result = { code: 400, body: { status: 'error', message: 'No spins left. Come back after midnight for your free daily spin.', nextDailyAt: eatNextMidnight(now) } };
+          return;
+        }
+        spinDoc = earned.docs[0];
+        reward = round2(Number(spinDoc.data().reward) || 0);
+        source = 'product';
+        label = `Turntable spin from ${spinDoc.data().productName || 'a purchase'}`;
+      }
+
+      // Burn the spin BEFORE crediting. If the credit then fails, the member
+      // has lost a spin -- annoying but recoverable, and visible in the
+      // logs. Crediting first and burning second would mean a failure paid
+      // real money out and left the spin re-usable, which is unrecoverable.
+      if (spinDoc) {
+        await spinDoc.ref.update({ used: true, usedAt: now });
+      } else {
+        await ref.update({ lastTurntableAt: now });
+      }
+      try {
+        await withLock('bal:' + uid, () => ref.update({
+          walletBalance: FieldValue.increment(reward),
+          totalEarned: FieldValue.increment(reward),
+        }));
+        const { date, time } = nowStr();
+        await db.collection('transactions').add({
+          userId: uid, type: 'turntable', description: label, amount: reward,
+          status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
+        });
+      } catch (creditErr) {
+        // Hand the spin back so the member is not simply robbed of it.
+        if (spinDoc) await spinDoc.ref.update({ used: false, usedAt: null }).catch(() => {});
+        else await ref.update({ lastTurntableAt: u.lastTurntableAt || null }).catch(() => {});
+        throw creditErr;
+      }
+
+      const earnedLeft = await db.collection('turntableSpins')
+        .where('userId', '==', uid).where('used', '==', false).limit(200).get();
+      result = { code: 200, body: {
+        status: 'success', reward, source,
+        walletBalance: (Number(u.walletBalance) || 0) + reward,
+        earnedSpins: earnedLeft.size,
+        dailyAvailable: false,
+        totalSpins: earnedLeft.size,
+        nextDailyAt: eatNextMidnight(now),
+      } };
+    });
+    res.status(result.code).json(result.body);
+  } catch (e) {
+    console.error('Turntable spin error:', e.message);
+    res.status(500).json({ status: 'error', message: 'The spin could not be completed. Your balance is unchanged.' });
+  }
+});
+
+// ═══════════════════════════════════════════
 // INVESTMENTS
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {
@@ -2325,6 +2513,10 @@ app.post('/invest/create', async (req, res) => {
       }
     });
     creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('Commission error:', e.message));
+    // Fire-and-forget, exactly like the commission above: a turntable spin is
+    // a bonus, and failing to grant one must never fail a purchase the member
+    // has already paid for.
+    grantTurntableSpins(userId, liveTier);
     res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtUGX(liveTier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -5243,6 +5435,8 @@ const SETTINGS_CRITICAL_RANGES = {
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
+  turntableDailyMin: [0, MAX_MONEY_AMOUNT], turntableDailyMax: [0, MAX_MONEY_AMOUNT],
+  turntableProductPct: [0, 100], turntableMinTier: [1, 100], turntableSpinsPerPurchase: [0, 20],
   autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
   // real business constraint -- an admin fat-fingering a date shouldn't be
@@ -5255,7 +5449,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // that would still read as a legible scroll.
   activityTickerSpeed: [10, 2000],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
