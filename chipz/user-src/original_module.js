@@ -483,6 +483,8 @@ async function boot(){
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   // Home's lower banner (the one carrying the Go spin button).
   STATE.spinBanner = (ci.status === 'success' && ci.spin) ? ci.spin : null;
+  // Animated logo shown beside the profile icon on Account.
+  STATE.profileGif = (ci.status === 'success' && ci.profilegif) ? ci.profilegif : null;
   applyAuthTagline();
   applyNumberFont();
 }
@@ -1884,10 +1886,11 @@ async function renderAccount(){
   <div class="acct-profile">
     <div class="p-top">
       <div class="acct-logo">${logo}</div>
-      <div style="min-width:0;">
+      <div style="min-width:0;flex:1;">
         <div class="p-id">ID: ${esc(a.publicId || '—')}</div>
         <div class="p-phone">${esc(formatPhoneDisplay(a.phone))}</div>
       </div>
+      ${STATE.profileGif ? `<div class="acct-gif"><img src="${esc(STATE.profileGif)}" alt="" onerror="this.parentNode.remove()"></div>` : ''}
     </div>
     <div class="acct-divider"></div>
     <div class="bal-label">Wallet Balance</div>

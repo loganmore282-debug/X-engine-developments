@@ -340,6 +340,22 @@ function fileToDataUrl(file, maxDim=900, quality=0.82){
     fr.readAsDataURL(file);
   });
 }
+// Reads the file EXACTLY as it is, with no canvas round trip. fileToDataUrl()
+// above draws onto a canvas and exports image/jpeg, which for an animated GIF
+// means one still frame and no transparency -- the animation would be
+// silently destroyed on upload with nothing to show it had happened. Animated
+// images have to go up byte for byte, so they do.
+function fileToRawDataUrl(file, maxBytes){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type)) return reject(new Error('Please choose an image file'));
+    if(file.size > maxBytes) return reject(new Error('That file is '+Math.round(file.size/1024)+' KB. Keep it under '+Math.round(maxBytes/1024)+' KB -- it loads on every member\'s phone.'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>resolve(fr.result);
+    fr.readAsDataURL(file);
+  });
+}
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
@@ -2099,6 +2115,7 @@ async function renderSettings(){
   const referralBannerImage = cir.referral||'';
   const brandLogoImage = cir.logo||'';
   const spinBannerImage = cir.spin||'';
+  const profileGifImage = cir.profilegif||'';
   const manualSelectorImage = mpir.selector||'';
   const manualHeroImage = mpir.hero||'';
   const pushTokenCount = pr.status==='success' ? pr.count : null;
@@ -2292,6 +2309,17 @@ async function renderSettings(){
         ${spinBannerImage?`<button class="btn danger sm" id="spinBannerClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="spinBannerFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Profile animation</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">An animated GIF shown beside the profile icon at the top of the app's Account tab. Transparency is kept. Uploaded exactly as-is so the animation survives &mdash; every other image slot here is re-compressed, which would flatten a GIF to a single still frame. Keep it small: it loads on every member's phone, so aim for well under 400&nbsp;KB (a 300&times;220 GIF of about 94&nbsp;KB is ideal).</p>
+      <div class="banner-row">
+        ${profileGifImage?`<img class="img-thumb" src="${esc(profileGifImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${profileGifImage?'Animation set':'<span class="muted">Nothing set</span>'}</div>
+        ${profileGifImage?`<button class="btn danger sm" id="profileGifClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload GIF<input type="file" id="profileGifFile" accept="image/gif,image/png,image/webp" hidden></label>
     </div>
 
     <h2 class="sec">Brand logo</h2>
@@ -2500,6 +2528,29 @@ async function renderSettings(){
   wireChipzImageSlot('referral', 'refBannerFile', 'refBannerClear', 'Referral banner saved, live for every user', 'Referral banner removed');
   wireChipzImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved, live for every user', 'Brand logo removed');
   wireChipzImageSlot('spin', 'spinBannerFile', 'spinBannerClear', 'Spin banner saved, live for every user', 'Spin banner removed');
+  // Deliberately NOT wireChipzImageSlot(): that helper compresses through
+  // fileToDataUrl(), which would kill the animation. Same endpoint, raw bytes.
+  const profileGifFile = $('profileGifFile');
+  if (profileGifFile) profileGifFile.addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const image = await fileToRawDataUrl(f, 400*1024);
+        const d = await api('/admin/chipz-image/set', { slot:'profilegif', image });
+        toast(d.status==='success'?'Profile animation saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderSettings();
+      } catch(err){ toast(err.message||'Could not read that file','err'); }
+    })());
+  });
+  const profileGifClear = $('profileGifClear');
+  if (profileGifClear) profileGifClear.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/chipz-image/clear', { slot:'profilegif' });
+      toast(d.status==='success'?'Profile animation removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  });
   $('helpBannerFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
     await withTabBusy((async()=>{
