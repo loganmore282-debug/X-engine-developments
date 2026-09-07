@@ -495,15 +495,45 @@ async function getProductByKey(key) {
 // Single admin-configurable Home banner (per snow/CLAUDE.md Nav/IA). Kept
 // deliberately minimal compared to space8's many-slot system — Snow's
 // design has exactly one banner surface right now.
+// The Home banner carries an image AND an optional video (Home.dc.html shows
+// an "ADMIN VIDEO BANNER" with a play ring). The video is stored as a URL,
+// never as an uploaded blob: a base64 video would sit inside a single Mongo
+// document, be re-sent in full on every cold boot of the app with no HTTP
+// caching, and inflate ~33% on the wire -- unaffordable on Ugandan mobile
+// data for a decorative banner. A URL also lets the owner drop `banner.mp4`
+// into the EdgeOne upload beside index.html and just type `banner.mp4`.
+// The image doubles as the video's poster frame, so the banner still looks
+// right for the moment before the video paints (and for members whose
+// browser blocks autoplay).
 let _bannerCache = null, _bannerCacheTs = 0;
 async function getHomeBanner() {
   if (Date.now() - _bannerCacheTs < 60 * 1000 && _bannerCache !== null) return _bannerCache;
   try {
     const snap = await db.collection('banners').doc('home').get();
-    _bannerCache = (snap.exists && snap.data().image) || null;
-  } catch (_) { _bannerCache = _bannerCache || null; }
+    const d = snap.exists ? snap.data() : {};
+    _bannerCache = { image: d.image || null, video: d.video || null };
+  } catch (_) { _bannerCache = _bannerCache || { image: null, video: null }; }
   _bannerCacheTs = Date.now();
   return _bannerCache;
+}
+// A banner video URL the browser will actually load, and that can't be used
+// to smuggle script into the page. Relative paths (the EdgeOne-upload case)
+// and https:// are allowed; plain http:// is rejected because the app itself
+// is served over https, so the browser would block it as mixed content and
+// the owner would see a silently empty banner with no explanation.
+function sanitizeBannerVideoUrl(raw) {
+  const url = String(raw == null ? '' : raw).trim();
+  if (!url) return { video: null };
+  if (url.length > 2000) return { error: 'That video link is too long (max 2000 characters).' };
+  if (/^https:\/\/[^\s]+$/i.test(url)) return { video: url };
+  if (/^http:\/\//i.test(url)) return { error: 'Use an https:// link. The app is served over https, so a plain http:// video is blocked by the browser and the banner would just show nothing.' };
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(url)) return { error: 'Only https:// links, or a file name uploaded alongside the app (for example banner.mp4), are allowed.' };
+  // A leading "//" is protocol-relative, not a relative path -- the browser
+  // would resolve //evil.com/a.mp4 against another host entirely, so it must
+  // not slip through the relative-path branch below.
+  if (url.startsWith('//')) return { error: 'Only https:// links, or a file name uploaded alongside the app (for example banner.mp4), are allowed.' };
+  if (/^[\w.\-/]+$/.test(url) && !url.includes('..')) return { video: url };
+  return { error: 'That does not look like a video link. Use an https:// URL or a file name such as banner.mp4.' };
 }
 // Separate admin-configurable banner for the Help Centre page -- its own
 // doc ('banners'/'help' vs 'banners'/'home') and its own cache, kept fully
@@ -1938,12 +1968,33 @@ app.get('/public/settings', async (_req, res) => {
     res.json({ status: 'success', settings: { ...rest, maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '', payoutManual: payoutIsManual(s) } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Members must never be shown a payout the purchase won't actually honour,
+// so this endpoint publishes RESOLVED figures instead of the raw stored
+// fields. It resolves them with exactly the rules /invest/create uses:
+// productExpectedReturn() (multiplier beats expectedReturn beats the global
+// returnMultiple), then `cycle || sett.cycleDays`, then the same
+// round(expectedReturn / cycle) daily figure that is stamped onto the
+// investment doc. Before this, every client re-derived the payout with its
+// own slightly different formula -- the product card preferred a stored
+// expectedReturn over the multiplier and fell back to x3, the buy-confirm
+// dialog ignored the multiplier entirely and fell back to x30. So setting a
+// multiplier on a product that still had an inherited expectedReturn made
+// the app quote one total and the server credit another.
+// /admin/products deliberately still returns the RAW values, so the editor
+// keeps round-tripping exactly what was typed into it.
+function publicProductView(p, sett) {
+  const cycle = Number(p.cycle) || Number(sett && sett.cycleDays) || 150;
+  const expectedReturn = productExpectedReturn(p, sett);
+  return { ...p, cycle, expectedReturn, dailyPayout: Math.round(expectedReturn / cycle) };
+}
 app.get('/public/products', async (_req, res) => {
-  try { res.json({ status: 'success', products: await getProducts() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  try {
+    const [products, sett] = await Promise.all([getProducts(), getSettings()]);
+    res.json({ status: 'success', products: products.map(p => publicProductView(p, sett)) });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/public/banner', async (_req, res) => {
-  try { res.json({ status: 'success', image: await getHomeBanner() }); }
+  try { res.json({ status: 'success', ...(await getHomeBanner()) }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/public/help-banner', async (_req, res) => {
@@ -5553,25 +5604,49 @@ app.post('/admin/chipz-image/clear', async (req, res) => {
 });
 app.get('/admin/banner', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', image: await getHomeBanner() }); }
+  try { res.json({ status: 'success', ...(await getHomeBanner()) }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Takes image, video, or both, and only touches the keys actually sent --
+// the image and the video are set from two separate controls in the admin
+// panel, and a plain .set({image}) here would silently wipe a configured
+// video the moment the poster was re-uploaded.
 app.post('/admin/banner/set', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const image = String(req.body.image || '');
-  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
-    return res.status(400).json({ status: 'error', message: 'Invalid image' });
+  const patch = {};
+  if (req.body.image != null) {
+    const image = String(req.body.image || '');
+    if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+      return res.status(400).json({ status: 'error', message: 'Invalid image' });
+    patch.image = image;
+  }
+  if (req.body.video != null) {
+    const v = sanitizeBannerVideoUrl(req.body.video);
+    if (v.error) return res.status(400).json({ status: 'error', message: v.error });
+    patch.video = v.video;
+  }
+  if (!Object.keys(patch).length) return res.status(400).json({ status: 'error', message: 'Nothing to save' });
   try {
-    await db.collection('banners').doc('home').set({ image });
+    const ref = db.collection('banners').doc('home');
+    const snap = await ref.get();
+    await ref.set({ ...(snap.exists ? snap.data() : {}), ...patch });
     _bannerCacheTs = 0;
-    logAdminAction(req, 'banner_set', {});
+    logAdminAction(req, 'banner_set', { fields: Object.keys(patch).join(',') });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the banner' }); }
 });
+// `?what=video` clears just the video and leaves the poster image in place;
+// no parameter clears the whole banner, as it always did.
 app.post('/admin/banner/clear', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    await db.collection('banners').doc('home').delete();
+    const ref = db.collection('banners').doc('home');
+    if (String(req.query.what || req.body.what || '') === 'video') {
+      const snap = await ref.get();
+      await ref.set({ ...(snap.exists ? snap.data() : {}), video: null });
+    } else {
+      await ref.delete();
+    }
     _bannerCacheTs = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the banner' }); }

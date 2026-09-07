@@ -448,6 +448,10 @@ async function boot(){
   STATE.products = p.status === 'success' ? p.products : [];
   STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
+  // Optional admin-set banner video (Home.dc.html's "ADMIN VIDEO BANNER").
+  // It is a URL, not an uploaded blob -- see getHomeBanner() in server.js for
+  // why. STATE.homeBanner doubles as its poster frame when both are set.
+  STATE.homeBannerVideo = (b.status === 'success' && b.video) ? b.video : null;
   // Same "prefetch alongside settings, zero added visible latency" reasoning
   // as STATE.homeBanner just above -- fetched unconditionally every boot
   // (cheap when unset, matches the existing banner's own tradeoff) so the
@@ -985,6 +989,42 @@ async function renderHome(){
   if (msgR.status === 'success') STATE.messages = msgR.messages;
   if (STATE.page === 'home') updateMessageBadge();
 }
+// The Home banner has three states, in priority order: an admin-set video
+// (Home.dc.html's "ADMIN VIDEO BANNER"), an admin-set still image, or the
+// built-in striped fallback with the brand tagline.
+// The video is muted+playsinline+loop so mobile browsers will autoplay it;
+// where autoplay is refused (data-saver, low-power mode, some iOS states)
+// the poster image stays up and the mockup's play ring is there to tap. The
+// ring is hidden by the 'playing' class rather than removed, so pausing
+// brings it straight back.
+function homeBannerInnerHtml(st){
+  if (STATE.homeBannerVideo) {
+    const poster = STATE.homeBanner ? ` poster="${esc(STATE.homeBanner)}"` : '';
+    return `<video id="homeBannerVideo" src="${esc(STATE.homeBannerVideo)}"${poster} muted loop playsinline preload="metadata"
+        onplaying="this.parentNode.classList.add('playing')" onpause="this.parentNode.classList.remove('playing')"
+        onerror="this.parentNode.classList.add('hb-video-failed')"></video>
+      <button class="hb-play" onclick="toggleHomeBannerVideo()" aria-label="Play video">
+        <span class="ring"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M8 5l12 7-12 7z"></path></svg></span>
+      </button>`;
+  }
+  if (STATE.homeBanner) return `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">`;
+  return `<div class="hb-stripes"></div><div class="hb-cap">${esc(st.brandTagline || "Uganda's boldest way to grow your money")}</div>`;
+}
+// Autoplay is attempted right after Home paints; a rejected play() is an
+// expected outcome, not an error, so it is swallowed and the ring is simply
+// left showing.
+window.toggleHomeBannerVideo = function(){
+  const v = document.getElementById('homeBannerVideo');
+  if (!v) return;
+  if (v.paused) { const r = v.play(); if (r && r.catch) r.catch(() => {}); }
+  else v.pause();
+};
+function tryAutoplayHomeBanner(){
+  const v = document.getElementById('homeBannerVideo');
+  if (!v) return;
+  const r = v.play();
+  if (r && r.catch) r.catch(() => {});
+}
 function paintHome(){
   const a = STATE.account || {};
   const st = STATE.settings || {};
@@ -1005,11 +1045,7 @@ function paintHome(){
   <div class="top-wordmark">CHIP<b>Z</b></div>
   <div style="width:38px;height:38px;flex-shrink:0;"></div>
 </div>
-<div class="home-banner">
-  ${STATE.homeBanner
-    ? `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">`
-    : `<div class="hb-stripes"></div><div class="hb-cap">${esc(st.brandTagline || "Uganda's boldest way to grow your money")}</div>`}
-</div>
+<div class="home-banner">${homeBannerInnerHtml(st)}</div>
 <div class="home-actions">
   <button class="home-action" onclick="openDepositSheet()">
     <span class="badge"><img src="/act-deposit.png" alt=""></span><span class="lbl">Deposit</span>
@@ -1049,6 +1085,7 @@ function paintHome(){
 <div style="height:16px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   startActivityTicker();
+  tryAutoplayHomeBanner();
 }
 // Which Home product strip is showing. Top-level binding must be `var`
 // (never const/let) -- see this file's own header rule about the
@@ -1065,12 +1102,36 @@ window.switchHomeProductTab = function(tab){
   const host = $('homeProductList');
   if (host) host.innerHTML = shown.length ? shown.map(productCardHtml).join('') : '<div class="list-empty">Nothing here yet.</div>';
 };
+// THE single place this app works out what a product pays. /public/products
+// already sends resolved expectedReturn/cycle/dailyPayout figures computed
+// by the same code that credits the money, so the normal path here is just
+// to read them. The fallback exists only for a client running against an
+// older build of the server, and it mirrors server.js's
+// productExpectedReturn() exactly: the per-product multiplier wins over a
+// stored expectedReturn, which wins over the global x30.
+// Do not re-derive a payout anywhere else. Three screens each had their own
+// slightly different formula before this, and once a multiplier was set on a
+// product that still carried an inherited expectedReturn, the card and the
+// buy-confirm dialog quoted a total the server was never going to pay.
+function planFigures(p){
+  const price = Number(p.price) || 0;
+  const cycle = Number(p.cycle) || 150;
+  const stored = Number(p.expectedReturn);
+  const daily = Number(p.dailyPayout);
+  // dailyPayout is only ever present on the resolved server view, so its
+  // presence is what tells us expectedReturn has already been worked out.
+  if (Number.isFinite(daily) && daily > 0 && Number.isFinite(stored) && stored > 0)
+    return { price, cycle, expected: Math.round(stored), daily };
+  const mult = Number(p.multiplier);
+  const expected = (Number.isFinite(mult) && mult > 0) ? Math.round(price * mult)
+    : (Number.isFinite(stored) && stored > 0) ? Math.round(stored)
+    : Math.round(price * 30);
+  return { price, cycle, expected, daily: Math.round(expected / cycle) };
+}
 // One shared product-card renderer for Home's strip and the Products tab,
 // so the two can never drift apart visually.
 function productCardHtml(p){
-  const expected = p.expectedReturn || Math.round(p.price * (p.multiplier || 3));
-  const cycle = p.cycle || 150;
-  const dailyPayout = Math.round(expected / cycle);
+  const { expected, cycle, daily: dailyPayout } = planFigures(p);
   const initial = esc(String(p.name || '').replace(/[^0-9]/g, '') || String(p.name || '?').trim()[0] || '?');
   const img = p.image
     // The inner quotes must be HTML entities: the browser decodes them before the
@@ -3439,16 +3500,19 @@ window.submitWithdraw = async function(){
 window.openInvestConfirm = function(tierKey){
   const p = (STATE.products||[]).find(x => x.key === tierKey);
   if (!p) return;
-  const dailyPayout = Math.round((p.expectedReturn||p.price*30)/(p.cycle||150));
+  // Same planFigures() the card uses, so the total quoted on the card, the
+  // total quoted here, and the total the server actually credits are one
+  // number. This dialog is the last thing a member reads before money moves.
+  const { expected, cycle, daily: dailyPayout } = planFigures(p);
   $('confirmSheet').innerHTML = `
     <h3>Confirm purchase</h3>
-    <p style="color:rgba(255,255,255,.65);font-size:13px;margin:0 0 12px;">${esc(p.name)}</p>
-    <div class="confirm-row"><span>Price</span><span class="mono">${fmtUGX(p.price)}</span></div>
-    <div class="confirm-row"><span>Daily income</span><span class="mono">${fmtUGX(dailyPayout)}</span></div>
-    <div class="confirm-row"><span>Period</span><span class="mono">${p.cycle||150} days</span></div>
-    <div class="confirm-row"><span>Total return</span><span class="mono">${fmtUGX(p.expectedReturn||p.price*30)}</span></div>
+    <p class="confirm-sub">${esc(p.name)}</p>
+    <div class="confirm-row"><span>Price</span><span class="mono">${fmtUGXCents(p.price)}</span></div>
+    <div class="confirm-row"><span>Daily income</span><span class="mono">${fmtUGXCents(dailyPayout)}</span></div>
+    <div class="confirm-row"><span>Period</span><span class="mono">${cycle} days</span></div>
+    <div class="confirm-row"><span>Total return</span><span class="mono">${fmtUGXCents(expected)}</span></div>
     <button class="primary-button" id="investConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;" onclick="confirmInvest('${esc(tierKey)}')">Confirm & Buy</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
   $('confirmBg').classList.add('show');
   lockBodyScroll(); // subagent-audit-caught: same scroll-chaining gap already fixed for #announceBg/#chestWinBg
 };
@@ -3481,9 +3545,9 @@ window.confirmInvest = async function(tierKey){
 function openSimpleConfirm(title, body, onConfirm){
   $('confirmSheet').innerHTML = `
     <h3>${esc(title)}</h3>
-    <p style="color:rgba(255,255,255,.65);font-size:13px;margin:0 0 14px;">${esc(body)}</p>
+    <p class="confirm-sub" style="margin:0 0 14px;">${esc(body)}</p>
     <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;">Confirm</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
   $('confirmActionBtn').onclick = async () => {
     $('confirmActionBtn').disabled = true; $('confirmActionBtn').textContent = 'Please wait…';
     const ok = await onConfirm();

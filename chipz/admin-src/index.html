@@ -1601,6 +1601,21 @@ async function quietRefreshWithdrawals(){
 
 // ── PRODUCTS ──
 function tintSwatch(){ return '<div class="tint-sw"></div>'; }
+// Mirrors server.js's productExpectedReturn(): the per-product multiplier
+// beats a stored total payout, which beats the global x30. /admin/products
+// deliberately returns the RAW saved fields so the editor round-trips what
+// was typed, which means this list has to resolve the real figure itself --
+// it used to print the raw expectedReturn, so a product with a multiplier
+// set showed a "Pays" figure that was not what members would actually be
+// paid.
+function resolvedPayout(p){
+  const price = Number(p.price)||0;
+  const mult = Number(p.multiplier);
+  if (Number.isFinite(mult) && mult > 0) return Math.round(price*mult);
+  const explicit = Number(p.expectedReturn);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
+  return Math.round(price*30);
+}
 async function renderProducts(){
   const r = await api('/admin/products');
   if(staleTab('products')) return;
@@ -1616,7 +1631,7 @@ async function renderProducts(){
         <div class="pb">
           <div class="pt">${esc(p.name||p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Upcoming</span>':''}</div>
           <div class="pp">${ugx(p.price)} · ${p.cycle||0} days</div>
-          <div class="pr">Pays ${ugx(p.expectedReturn)}</div>
+          <div class="pr">Pays ${ugx(resolvedPayout(p))}${(Number(p.multiplier)>0)?` <span class="muted">(&times;${esc(String(p.multiplier))})</span>`:''}</div>
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
         </div>
       </div>`).join(''):'<div class="empty">No products yet. The app catalogue reverts to defaults until you add one.</div>'}</div>`;
@@ -2078,6 +2093,7 @@ async function renderSettings(){
   if(staleTab('settings')) return;
   const s = r.settings||{};
   const bannerImage = br.image||'';
+  const bannerVideo = br.video||'';
   const helpBannerImage = hbr.image||'';
   const announceImage = air.image||'';
   const referralBannerImage = cir.referral||'';
@@ -2209,6 +2225,13 @@ async function renderSettings(){
         ${bannerImage?`<button class="btn danger sm" id="homeBannerClear">Revert</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeBannerFile" accept="image/*" hidden></label>
+      <label style="margin-top:16px">Video link (optional)</label>
+      <input id="homeBannerVideo" value="${esc(bannerVideo)}" placeholder="banner.mp4">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Set this and the banner plays a video instead of the image, with a play button over it &mdash; the image above becomes its still frame while it loads. Videos are linked, not uploaded: put the file (for example <b>banner.mp4</b>) in the same upload as the app and just type its name here, or paste a full <b>https://</b> link. Uploading video into the database would make every member re-download it on every app start, which is why it works this way. Keep it short, silent and small &mdash; it autoplays muted on a loop, so anything over a few seconds mostly costs your members data. Leave blank for no video.</p>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" id="homeBannerVideoSave" style="flex:1">Save video link</button>
+        ${bannerVideo?`<button class="btn danger" id="homeBannerVideoClear">Remove video</button>`:''}
+      </div>
     </div>
 
     <h2 class="sec">Home announcement dialog</h2>
@@ -2407,6 +2430,23 @@ async function renderSettings(){
     await withTabBusy((async()=>{
       const d = await api('/admin/banner/clear', {});
       toast(d.status==='success'?'Reverted to the default image':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  });
+  // Saved on its own, never bundled with the image upload -- the server
+  // patches only the keys it is sent, so setting one never clears the other.
+  $('homeBannerVideoSave').addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/banner/set', { video: $('homeBannerVideo').value.trim() });
+      toast(d.status==='success'?'Video link saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  });
+  const homeBannerVideoClear = $('homeBannerVideoClear');
+  if (homeBannerVideoClear) homeBannerVideoClear.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/banner/clear', { what:'video' });
+      toast(d.status==='success'?'Video removed, the image banner is back':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderSettings();
     })());
   });

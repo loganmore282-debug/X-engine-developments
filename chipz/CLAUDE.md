@@ -157,6 +157,35 @@ values, commission rates like LV1=28%/LV2=1%/LV3=1%) are **admin-editable defaul
 locked values** — the owner's own words: *"those numbers which appeared should be
 edittable in admin panel."*
 
+### One payout number, resolved on the server (do not regress)
+
+`productExpectedReturn()` in `server.js` is the ONLY place a product's total payout is
+decided: **per-product `multiplier` → explicit `expectedReturn` → global
+`returnMultiple` (default 30)**. `/public/products` runs every product through
+`publicProductView()`, which resolves `expectedReturn`, `cycle` (`cycle || cycleDays`)
+and `dailyPayout` (`round(expectedReturn / cycle)`) with exactly the figures
+`/invest/create` will stamp on the investment and pay out.
+
+**The client must never re-derive a payout.** `planFigures()` in
+`user-src/original_module.js` is the single frontend reader (product card + buy-confirm
+dialog); the admin product list uses `resolvedPayout()`, which mirrors the server rule
+because `/admin/products` deliberately still returns RAW saved fields so the editor
+round-trips what was typed.
+
+This was a real, shipped mismatch: the card preferred a stored `expectedReturn` over the
+multiplier and fell back to ×3; the buy-confirm dialog ignored the multiplier entirely
+and fell back to ×30; the admin list printed the raw `expectedReturn`. Setting a
+multiplier on a product that still carried an inherited `expectedReturn` made all three
+quote **UGX 900,000** on a plan the server would credit **UGX 90,000** for.
+`test-product-config.js` now pins app, admin and server to the same number on a matrix
+of product shapes — run it after touching any of them.
+
+Note the built-in `DEFAULT_PRODUCTS` ladder is Snow's inherited **×30 over 150 days**
+(Product-1: 30,000 → 900,000). It is placeholder pricing, not a Chipz decision. Daily
+cashback IS live in Chipz (unlike Voltra, where it is disabled): `settleInvestmentIfDue()`
+credits `round(expectedReturn × daysDue / cycle) − paidOut` per elapsed day, telescoping
+to exactly `expectedReturn` at maturity, so the "Daily" figure on the card is honest.
+
 ## Design tokens
 
 ```css
@@ -237,9 +266,27 @@ and the mechanical `snow/` -> `chipz/` file copy silently carried Snow's config
 forward over it. When the owner hands over config values, stamp them in immediately
 and grep for the OLD values afterwards to prove nothing survived.
 
+### Home banner: image or video
+
+`banners/home` holds `{ image, video }`. The video is a **URL, never an uploaded blob**
+— a base64 video would live inside one Mongo document, be re-sent in full on every cold
+boot with no HTTP caching, and inflate ~33% on the wire; unaffordable on Ugandan mobile
+data for a decorative banner. The owner drops `banner.mp4` into the EdgeOne upload beside
+`index.html` and types the file name, or pastes an `https://` link.
+`sanitizeBannerVideoUrl()` accepts relative paths and `https://` only — plain `http://`
+is rejected (mixed content would be silently blocked), as are other schemes, `..`
+traversal and a leading `//` (protocol-relative to another host).
+The image doubles as the video's poster. `/admin/banner/set` patches only the keys sent,
+so saving one never wipes the other; `/admin/banner/clear?what=video` drops just the
+video. The player is muted+loop+playsinline so mobile autoplays it, with the mockup's
+play ring shown whenever it is paused or autoplay was refused, and a fallback to the
+striped hero if the URL fails to load. `test-banner-video-url.js` covers the validator;
+the Playwright banner test drives a real MediaRecorder-generated webm.
+
 ### Run this before every push
 ```
 node build-core.js && node build-admin.js && python3 smoke-test.py
+node test-product-config.js && node test-cors-origins.js && node test-banner-video-url.js
 ```
 `smoke-test.py` boots the BUILT app in a real browser, walks every tab and sheet, and
 fails on any page error, a stuck loading screen, or a bad `API_BASE`. It exists because

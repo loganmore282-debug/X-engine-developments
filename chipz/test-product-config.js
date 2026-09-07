@@ -47,5 +47,50 @@ for (const [lo, hi] of [[200, 1000], [5000, 5000], [0, 300]]) {
   check(bad === 0, `band ${lo}-${hi}: 20,000 draws, ${bad} outside`);
 }
 
+// ── The app, the admin panel and the credit must quote ONE number ──
+// A product card, the buy-confirm dialog, the admin product list and the
+// money actually credited at /invest/create used to derive the payout four
+// different ways. With a multiplier set on a product that still carried an
+// inherited expectedReturn they disagreed outright: the app quoted the old
+// stored total, the server paid price x multiplier. This pins all four to
+// the same function by pulling each one out of the file that ships it.
+eval(slice('function publicProductView', "app.get('/public/products'"));
+const userSrc = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+const uslice = (a, b) => userSrc.slice(userSrc.indexOf(a), userSrc.indexOf(b));
+eval(uslice('function planFigures', '// One shared product-card renderer'));
+const adminSrc = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+eval(adminSrc.slice(adminSrc.indexOf('function resolvedPayout'), adminSrc.indexOf('async function renderProducts')));
+
+console.log('\n— app / admin / server quote the same payout —');
+const sett = { returnMultiple: 30, cycleDays: 150 };
+for (const raw of [
+  { key:'a', name:'A', price: 30000, cycle: 150, multiplier: 3, expectedReturn: 900000 }, // the dangerous one
+  { key:'b', name:'B', price: 30000, cycle: 150, expectedReturn: 90000, multiplier: null },
+  { key:'c', name:'C', price: 90000, cycle: 100, multiplier: 2.5, expectedReturn: null },
+  { key:'d', name:'D', price: 30000, cycle: null, multiplier: null, expectedReturn: null },
+  { key:'e', name:'E', price: 197000, cycle: 150, multiplier: 4, expectedReturn: 5910000 },
+]) {
+  // what /invest/create would stamp on the investment and pay out
+  const credited = productExpectedReturn(raw, sett);
+  const creditCycle = Number(raw.cycle) || sett.cycleDays;
+  const creditDaily = Math.round(credited / creditCycle);
+  // what the app shows, fed the resolved server view exactly as it would be
+  const shown = planFigures(publicProductView(raw, sett));
+  // what the admin product list prints, fed the RAW doc as /admin/products sends it
+  const adminShows = resolvedPayout(raw);
+  check(shown.expected === credited && shown.daily === creditDaily && shown.cycle === creditCycle && adminShows === credited,
+    `${raw.name}: app ${shown.expected}/${shown.daily}pd, admin ${adminShows}, credited ${credited}/${creditDaily}pd`);
+}
+
+console.log('\n— the app can still stand alone against an older server —');
+// planFigures() only trusts a pre-resolved expectedReturn when dailyPayout
+// is present, so a raw (unresolved) product must still resolve correctly.
+for (const raw of [
+  { price: 30000, cycle: 150, multiplier: 3, expectedReturn: 900000 },
+  { price: 30000, cycle: 150, expectedReturn: 90000 },
+  { price: 30000, cycle: 150 },
+]) check(planFigures(raw).expected === productExpectedReturn(raw, sett),
+  `raw ${JSON.stringify(raw)} -> ${planFigures(raw).expected}`);
+
 console.log(failed ? `\n${failed} FAILED` : '\nall product-config cases pass');
 process.exit(failed ? 1 : 0);

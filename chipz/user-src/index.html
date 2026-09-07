@@ -195,6 +195,18 @@ a{color:inherit;}
 .home-banner img,.ref-banner img{display:block;width:100%;height:100%;object-fit:cover;}
 .hb-stripes{position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.06) 0 14px,transparent 14px 30px);}
 .hb-cap{position:absolute;bottom:12px;left:16px;right:16px;color:#fff;font-weight:800;font-size:15px;text-shadow:0 2px 8px rgba(0,0,0,.4);}
+/* Admin video banner (Home.dc.html). The play ring sits over the video and
+   is hidden only while it is actually playing, so a paused or
+   autoplay-blocked video always shows something tappable. */
+.home-banner video{display:block;width:100%;height:100%;object-fit:cover;}
+.hb-play{position:absolute;inset:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:none;border:0;padding:0;cursor:pointer;transition:opacity .18s;}
+.hb-play .ring{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);box-shadow:0 6px 18px -6px rgba(0,0,0,.5);}
+.home-banner.playing .hb-play{opacity:0;pointer-events:none;}
+/* A video URL that 404s or is an unplayable format would otherwise leave a
+   flat empty block; fall back to the same striped hero the no-banner state
+   uses, with the ring removed since there is nothing to play. */
+.home-banner.hb-video-failed video,.home-banner.hb-video-failed .hb-play{display:none;}
+.home-banner.hb-video-failed{background:var(--chipz-hero);}
 .home-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:0 18px;margin-bottom:16px;}
 .home-action{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;color:var(--snow-ink);}
 .home-action .badge{width:56px;height:56px;display:flex;align-items:center;justify-content:center;}
@@ -854,13 +866,20 @@ a{color:inherit;}
    (340ms->520ms) plus a short 100ms delay before the ease-in starts, so
    the dialog visibly pauses a beat before settling into place rather than
    beginning to move the instant it's shown. */
-.confirm-bg{position:fixed;inset:0;background:rgba(17,17,17,.5);z-index:300;display:none;align-items:center;justify-content:center;padding:20px;}
+/* Chipz dialog language (Notify.dc.html): white card on a warm dimmed
+   backdrop, dark ink, pill buttons. This card was still Snow's dark glass
+   panel -- the one dialog a member reads immediately before their money
+   moves, in a theme it no longer belongs to. */
+.confirm-bg{position:fixed;inset:0;background:rgba(20,10,5,.45);z-index:300;display:none;align-items:center;justify-content:center;padding:20px;}
 .confirm-bg.show{display:flex;}
-.confirm-sheet{background:rgba(17,17,17,.82);color:#fff;width:100%;max-width:340px;border-radius:16px;padding:22px 20px 24px;transform:scale(.92);opacity:0;transition:transform .52s cubic-bezier(.22,1,.36,1) .1s,opacity .52s cubic-bezier(.22,1,.36,1) .1s;}
+.confirm-sheet{background:var(--snow-surface);color:var(--snow-ink);width:100%;max-width:340px;border-radius:24px;padding:24px 22px 26px;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);transform:scale(.92);opacity:0;transition:transform .52s cubic-bezier(.22,1,.36,1) .1s,opacity .52s cubic-bezier(.22,1,.36,1) .1s;}
 .confirm-bg.show .confirm-sheet{transform:scale(1);opacity:1;}
-.confirm-sheet h3{margin:0 0 6px;font-size:18px;font-weight:800;}
-.confirm-row{display:flex;justify-content:space-between;font-size:13.5px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.14);}
+.confirm-sheet h3{margin:0 0 4px;font-size:19px;font-weight:800;color:var(--snow-wine);}
+.confirm-sheet .confirm-sub{color:var(--snow-muted);font-size:13px;margin:0 0 14px;font-weight:700;}
+.confirm-row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13.5px;padding:10px 0;border-bottom:1px solid var(--snow-border);color:var(--snow-muted);font-weight:700;}
 .confirm-row:last-of-type{border-bottom:none;}
+.confirm-row .mono{color:var(--snow-ink);font-weight:800;font-family:var(--number-font,'Playfair Display',Georgia,serif);font-size:15px;}
+.confirm-sheet .secondary-button{background:var(--snow-green-soft);color:var(--snow-ink);border-radius:22px;font-weight:800;}
 
 /* Centered popup (opens from the middle, not a bottom sheet) -- the
    treasure-chest gift-code entry on Home. */
