@@ -2,7 +2,7 @@ import asyncio, json, os, sys, functools, threading, http.server, socketserver
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
 ROOT = '/home/user/X-engine-developments/chipz/user'
-PORT = 8849
+PORT = 8851
 API = 'https://chipz-server.onrender.com'
 
 ACCOUNT = {"phone":"0742730382","walletBalance":2000,"totalDeposited":58000,"totalEarned":9840,
@@ -100,7 +100,11 @@ async def main():
           const hint=document.querySelector('#witReceiveHint');
           return {chip: chip?{w:chip.getBoundingClientRect().width,h:chip.getBoundingClientRect().height,
                               pads: cs?cs.backgroundImage.split('gradient').length-1:0}:null,
-                  iconRects: icon?icon.querySelectorAll('rect').length:0,
+                  mark:(()=>{const m=document.querySelector('.wallet-card .wc-mark');
+                    if(!m) return null; const b=m.getBoundingClientRect();
+                    return {src:m.getAttribute('src'), w:+b.width.toFixed(0), h:+b.height.toFixed(0),
+                            loaded:m.complete&&m.naturalWidth>0, nat:[m.naturalWidth,m.naturalHeight]};})(),
+                  rowIconSrc:(()=>{const r=[...document.querySelectorAll('.setting-row img')].map(i=>i.getAttribute('src'));return r;})(),
                   provider: (document.querySelector('.wallet-card .provider')||{}).textContent,
                   num: (document.querySelector('.wallet-card .num')||{}).textContent,
                   holder: (document.querySelector('.wallet-card .holder-name')||{}).textContent,
@@ -109,7 +113,8 @@ async def main():
                   witPw: document.querySelector('.wit-pw').getBoundingClientRect().height};}""")
         for k,v in info.items(): print("  %-13s %s" % (k,v))
         ck(info["chip"] and info["chip"]["pads"]>=2, "chip has contact pads drawn, not a flat rectangle")
-        ck(info["iconRects"]>=4, "top-right is a real card graphic (%d shapes), not a blank blob" % info["iconRects"])
+        ck(info["mark"] and info["mark"]["src"]=="/set-wallet.png", "hero card uses the Wallet row's own artwork")
+        ck(info["mark"] and info["mark"]["loaded"], "artwork actually loaded: %s" % (info["mark"] or {}).get("nat"))
         ck(info["provider"]=="MTN", "provider from the bound wallet: "+str(info["provider"]))
         ck("0769968158" in str(info["num"]), "real account number shown")
         ck("MANGALITA" in str(info["holder"]).upper(), "holder name shown")

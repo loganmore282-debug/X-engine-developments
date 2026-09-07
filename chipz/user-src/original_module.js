@@ -1974,12 +1974,7 @@ function walletCardHtml(w){
     <div class="sheen"></div>
     <div class="row1">
       <span class="provider">${esc(provider)}</span>
-      <svg width="30" height="22" viewBox="0 0 30 22" fill="none" aria-hidden="true">
-        <rect x="1" y="4.5" width="21" height="14" rx="2.5" fill="rgba(255,255,255,.28)"></rect>
-        <rect x="7.5" y="2" width="21" height="14" rx="2.5" fill="rgba(255,255,255,.92)"></rect>
-        <rect x="7.5" y="5" width="21" height="3" fill="rgba(60,20,10,.55)"></rect>
-        <rect x="10" y="11" width="8" height="1.6" rx="0.8" fill="rgba(60,20,10,.35)"></rect>
-      </svg>
+      <img class="wc-mark" src="/set-wallet.png" alt="" onerror="this.style.display='none'">
     </div>
     <div class="chip"></div>
     <div class="num">${esc(num)}</div>

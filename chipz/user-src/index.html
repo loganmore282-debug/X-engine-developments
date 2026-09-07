@@ -387,6 +387,9 @@ a{color:inherit;}
 .wallet-card .sheen{position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);pointer-events:none;}
 .wallet-card .row1{position:relative;display:flex;align-items:flex-start;justify-content:space-between;}
 .wallet-card .provider{font-size:19px;font-weight:600;letter-spacing:.02em;}
+/* The same two-cards artwork used by the Wallet row on Account -- the owner's
+   own icon, not a drawn approximation of it, so the two places agree. */
+.wallet-card .wc-mark{width:38px;height:38px;object-fit:contain;display:block;flex-shrink:0;filter:drop-shadow(0 4px 6px rgba(0,0,0,.35));}
 .wallet-card .chip{position:relative;width:42px;height:32px;margin:20px 0 22px;border-radius:5px;background:linear-gradient(135deg,#f6dc95,#c9973a);box-shadow:inset 0 0 0 1px rgba(120,80,10,.35);}
 /* The contact pads. Two hairline grids drawn with gradients rather than an
    image, so the chip reads as a chip at any size. */
