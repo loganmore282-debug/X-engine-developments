@@ -966,10 +966,11 @@ var NAV_ICON_SRC = {
   team: '/nav-team.png',
   account: '/nav-account.png',
 };
-// Owner: "the box is animated ie when tapped the icon it fades in and later
-// out." The box itself is CSS (.navitem::before + @keyframes navTapBox);
-// this only has to put the class on at the right moment and take it off
-// again so it can replay.
+// Owner: "the icon fades in and out when tapped not static and selector
+// doesn't disappear." The selector BOX is pure CSS off .navitem.active and
+// needs no help here -- it stays put. This is only for the ICON's tap
+// animation (@keyframes navIconFade): put the class on when a thumb lands,
+// take it off when the animation ends so it can replay.
 //
 // Bound on the BAR, not on each of the six items -- one listener instead of
 // six, and it keeps working no matter how the items are re-rendered.
@@ -994,7 +995,12 @@ function hookNavTapBox(){
   // Clean the class off once it has played, so the next tap is a fresh run
   // and nothing is left holding a finished animation.
   nav.addEventListener('animationend', e => {
-    if (e.animationName === 'navTapBox' && e.target.classList) e.target.classList.remove('nav-tap');
+    if (e.animationName === 'navIconFade') {
+      // The animation is on the <img> INSIDE the item, so the event target
+      // is the image -- the class to clear is on its .navitem ancestor.
+      const btn = e.target.closest && e.target.closest('.navitem');
+      if (btn) btn.classList.remove('nav-tap');
+    }
   });
 }
 function updateNavIcons(){

@@ -19,6 +19,8 @@ Checks, on real buttons across several screens:
   - the button is still tappable -- the band must not eat clicks
   - it is NOT on the bottom-nav items or the Home action icons, which are
     transparent/artwork and would just flicker
+  - the nav's selector box STAYS on the active tab, and the nav ICON is what
+    fades out and back in when a tab is tapped
   - a disabled button does not glow
   - prefers-reduced-motion switches it off entirely
 """
@@ -229,53 +231,69 @@ async def main():
             ck(r.get("transform") not in (None, "none"),
                "%s carries the sweep too (%s)" % (label, r.get("transform")))
 
-        print("\n— the nav tap box —")
-        # Owner: "there is no box on the nav icon, the box is animated ie when
-        # tapped the icon it fades in and later out." It is a TAP effect, not
-        # a permanent highlight on the active tab, so the resting state must
-        # be invisible and a tap must make it appear and then go again.
-        rest = await page.evaluate("""() => {
-            const el = document.querySelector('.navitem');
-            const b = getComputedStyle(el, '::before');
-            return { opacity: b.opacity, content: b.content, animation: b.animationName,
-                     hasClass: el.classList.contains('nav-tap') };
-        }""")
-        print("   at rest:", rest)
-        ck(rest["content"] not in (None, "none"), "the box exists as a ::before (%s)" % rest["content"])
-        ck(float(rest["opacity"]) == 0, "it is INVISIBLE at rest -- not a permanent box (opacity %s)" % rest["opacity"])
-        ck(not rest["hasClass"], "and no tab is left holding the tap class")
+        print("\n— the nav selector box STAYS on the active tab —")
+        # Owner, correcting an earlier build that had these the wrong way
+        # round: "l said the icon fades in and out when tapped not static and
+        # selector doesn't disappear." So the BOX is the active-tab marker
+        # (persistent), and the ICON is what animates on tap.
+        boxes = await page.evaluate("""() => [...document.querySelectorAll('.navitem')].map(el => ({
+            nav: el.dataset.nav,
+            active: el.classList.contains('active'),
+            boxOpacity: parseFloat(getComputedStyle(el, '::before').opacity),
+        }))""")
+        # NB: not `for b in ...` -- `b` is the browser handle in this scope,
+        # and shadowing it here crashed the reduced-motion section further down.
+        for row in boxes: print("   ", row)
+        active = [row for row in boxes if row["active"]]
+        inactive = [row for row in boxes if not row["active"]]
+        ck(len(active) == 1, "exactly one tab is active (%d)" % len(active))
+        ck(active and active[0]["boxOpacity"] > 0.9,
+           "the active tab's box is fully VISIBLE (opacity %s)" % (active[0]["boxOpacity"] if active else None))
+        ck(all(b["boxOpacity"] == 0 for b in inactive),
+           "and every other tab has none (%s)" % [row["boxOpacity"] for row in inactive])
 
-        # Tap a tab and watch the box's opacity actually rise then fall.
-        await page.evaluate("""() => {
-            const el = document.querySelectorAll('.navitem')[1];
-            el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        }""")
-        seq = []
-        for _ in range(16):
-            o = await page.evaluate("""() => {
-                const el = document.querySelectorAll('.navitem')[1];
-                return parseFloat(getComputedStyle(el, '::before').opacity);
-            }""")
-            seq.append(round(o, 2))
-            await page.wait_for_timeout(80)
-        print("   opacity after tap:", seq)
-        ck(max(seq) > 0.5, "the box FADES IN on tap (peak opacity %.2f)" % max(seq))
-        peak = seq.index(max(seq))
-        ck(any(v < max(seq) - 0.2 for v in seq[peak:]),
-           "and FADES OUT again on its own afterwards (%s)" % seq[peak:])
-        # It has to be re-triggerable: a second tap on the same tab must replay
-        # it, which re-adding an already-present class would NOT do.
-        await page.wait_for_timeout(600)
-        await page.evaluate("""() => {
-            const el = document.querySelectorAll('.navitem')[1];
-            el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        }""")
-        await page.wait_for_timeout(200)
-        again = await page.evaluate("""() => {
-            const el = document.querySelectorAll('.navitem')[1];
+        # And it must STILL be there after the tap animation has long finished
+        # -- the old build faded it away, which is the bug being fixed.
+        await page.wait_for_timeout(1800)
+        still = await page.evaluate("""() => {
+            const el = document.querySelector('.navitem.active');
             return parseFloat(getComputedStyle(el, '::before').opacity);
         }""")
-        ck(again > 0.5, "tapping the SAME tab again replays it (opacity %.2f)" % again)
+        ck(still > 0.9, "it does NOT disappear after the tap settles (opacity %.2f)" % still)
+
+        print("\n— and the ICON fades in and out when tapped —")
+        await page.evaluate("""() => {
+            document.querySelectorAll('.navitem')[1]
+              .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        }""")
+        seq = []
+        for _ in range(12):
+            o = await page.evaluate("""() => {
+                const img = document.querySelectorAll('.navitem')[1].querySelector('.nav-ic img');
+                return img ? parseFloat(getComputedStyle(img).opacity) : null;
+            }""")
+            if o is not None: seq.append(round(o, 2))
+            await page.wait_for_timeout(60)
+        print("   icon opacity after tap:", seq)
+        ck(min(seq) < 0.5, "the icon FADES OUT on tap (dips to %.2f)" % min(seq))
+        dip = seq.index(min(seq))
+        ck(any(v > 0.9 for v in seq[dip:]),
+           "and FADES BACK IN again (%s)" % seq[dip:])
+        ck(seq[-1] > 0.9, "settling fully visible, not left dimmed (%.2f)" % seq[-1])
+
+        # Re-triggerable: tapping the same tab again must replay it, which
+        # re-adding an already-present class would NOT do.
+        await page.wait_for_timeout(700)
+        await page.evaluate("""() => {
+            document.querySelectorAll('.navitem')[1]
+              .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        }""")
+        await page.wait_for_timeout(220)
+        again = await page.evaluate("""() => {
+            const img = document.querySelectorAll('.navitem')[1].querySelector('.nav-ic img');
+            return parseFloat(getComputedStyle(img).opacity);
+        }""")
+        ck(again < 0.9, "tapping the SAME tab again replays it (opacity %.2f)" % again)
 
         ck(not errs, "no page errors: %s" % errs[:3])
         await page.screenshot(path=f"{OUT}/glow.png")

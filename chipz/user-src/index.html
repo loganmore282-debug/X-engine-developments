@@ -135,30 +135,40 @@ a{color:inherit;}
 
 .bottom-nav{z-index:210;background:var(--snow-surface);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;height:68px;position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:0 2px;}
 .navitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--snow-muted);background:none;border:none;padding:6px 2px;flex:1;min-width:0;position:relative;}
-/* Owner: "there is no box on the nav icon, the box is animated ie when tapped
-   the icon it fades in and later out." So it is NOT a permanent highlight on
-   the active tab -- it is a soft rounded box that appears behind the icon the
-   moment a tab is tapped and fades away again on its own.
+/* The bottom nav's selector box and its icon animation are TWO separate
+   things, and an earlier build had them the wrong way round. Owner, putting
+   it straight: "l said the icon fades in and out when tapped not static and
+   selector doesn't disappear."
 
-   Sits BEHIND the icon and label, which is why both are given a z-index: a
-   positioned pseudo-element otherwise paints on top of its own element's
-   text and artwork, and the box would cover the very icon it is meant to
-   sit behind. z-index:-1 is not the answer either -- the bar's own white
-   background would then hide it completely.
+   So:
+     - the BOX is the active-tab marker. It STAYS on whichever tab is
+       selected and does not fade away -- it only eases across as the
+       selection changes (the transition below).
+     - the ICON is what animates on a tap: it fades out and straight back in,
+       so tapping never looks static.
+
+   The box sits BEHIND the icon and label, which is why both are given a
+   z-index: a positioned pseudo-element otherwise paints on top of its own
+   element's text and artwork, and the box would cover the very icon it is
+   meant to sit behind. z-index:-1 is not the answer either -- the bar's own
+   white background would then hide it completely.
 
    Brand-tinted rather than the reference's lavender, per the standing rule:
    copy the shape from a reference, never another app's colours. */
 .navitem::before{content:'';position:absolute;top:3px;left:50%;width:54px;height:40px;margin-left:-27px;
-  border-radius:14px;background:rgba(226,27,42,.13);opacity:0;transform:scale(.72);pointer-events:none;z-index:0;}
+  border-radius:14px;background:rgba(226,27,42,.13);opacity:0;transform:scale(.72);pointer-events:none;z-index:0;
+  transition:opacity .2s ease,transform .2s ease;}
+.navitem.active::before{opacity:1;transform:scale(1);}
 .navitem .nav-ic,.navitem .lbl{position:relative;z-index:1;}
-.navitem.nav-tap::before{animation:navTapBox 1.05s ease-out;}
-@keyframes navTapBox{
-  0%{opacity:0;transform:scale(.72);}
-  18%{opacity:1;transform:scale(1);}
-  52%{opacity:1;transform:scale(1);}
-  100%{opacity:0;transform:scale(1.08);}}
+/* The tap animation lives on the ICON, not the box. */
+.navitem.nav-tap .nav-ic img{animation:navIconFade .52s ease-in-out;}
+@keyframes navIconFade{
+  0%{opacity:1;transform:scale(1);}
+  42%{opacity:0;transform:scale(.82);}
+  100%{opacity:1;transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){
-  .navitem.nav-tap::before{animation:none;}}
+  .navitem::before{transition:none;}
+  .navitem.nav-tap .nav-ic img{animation:none;}}
 .navitem.active{color:var(--snow-wine);}
 .navitem .lbl{font-size:10px;font-weight:600;white-space:nowrap;}
 .navitem.active .lbl{font-weight:700;}

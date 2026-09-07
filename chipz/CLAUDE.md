@@ -333,20 +333,25 @@ and `querySelector` grabs the first match in DOM order, which is often a button 
 hidden screen whose pseudo-element reports `transform:none` — measure the first
 **visible** one instead.
 
-### The bottom nav's tap box
+### The bottom nav: a persistent selector box, and an icon that fades on tap
 
-Owner, with a reference screenshot of another app: *"there is no box on the nav icon,
-the box is animated ie when tapped the icon it fades in and later out."*
+These are **two separate things**, and getting them the wrong way round cost a round.
+The owner's correction, verbatim: *"l said the icon fades in and out when tapped not
+static and selector doesn't disappear."*
 
-So it is **not** a permanent highlight on the active tab, even though the reference
-screenshot happens to show one on its active tab. It is a soft rounded box that fades in
-behind the icon the moment a tab is tapped and fades away again on its own — resting
-opacity is 0, and no tab is ever left holding it.
+- **The BOX is the active-tab selector and it STAYS.** `.navitem.active::before` sits at
+  full opacity for as long as that tab is selected; every other tab has none. It only
+  eases in/out as the selection moves (a 0.2s transition). It is **not** a tap flash.
+- **The ICON is what animates on tap.** `@keyframes navIconFade` takes
+  `.navitem.nav-tap .nav-ic img` from opacity 1 → 0 → 1 with a slight scale, so a tap
+  never looks static.
 
-`.navitem::before` is the box; `@keyframes navTapBox` runs `0 → 1 → 0` over 1.05s
-(quick fade in, brief hold, slower fade out, with a slight scale). Brand-tinted red
-rather than the reference's lavender, per the standing rule: copy the shape from a
-reference, never another app's colours.
+The first build had it backwards — a transient box that faded away, and a static icon —
+which is exactly what the owner pushed back on. If this ever needs revisiting, that is
+the distinction to hold onto.
+
+Brand-tinted red rather than the reference's lavender, per the standing rule: copy the
+shape from a reference, never another app's colours.
 
 Two things that are easy to get wrong here:
 - **The box has to sit BEHIND the icon**, and a positioned pseudo-element paints *above*
@@ -356,17 +361,20 @@ Two things that are easy to get wrong here:
   {position:relative;z-index:1}` with the box at `z-index:0`.
 - **Re-adding a class that is already present does not restart a CSS animation**, so
   tapping the same tab twice would do nothing the second time. `hookNavTapBox()` removes
-  the class, forces a reflow (`void btn.offsetWidth`), then re-adds it.
+  the class, forces a reflow (`void btn.offsetWidth`), then re-adds it. Its `animationend`
+  cleanup listens for `navIconFade` and clears the class off the `.navitem` **ancestor**,
+  because the animation runs on the `<img>` inside it, so `e.target` is the image.
 
 The listener is bound once on the **bar**, not on each of the six items — one listener
-instead of six, and it survives any re-render of the items. It uses `pointerdown` rather
-than `click` so the box appears the instant a thumb lands. `updateNavIcons()` installs
-it (that runs on every `showPage()`, so the bar is definitely in the DOM by then) and a
+instead of six, and it survives any re-render of them. It uses `pointerdown` rather than
+`click` so the icon reacts the instant a thumb lands. `updateNavIcons()` installs it
+(that runs on every `showPage()`, so the bar is definitely in the DOM by then) and a
 module flag makes every later call free.
 
-`test-button-glow.py` covers it by tapping a real tab and sampling the box's opacity
-over time — confirming it rises, then falls back on its own, and that a second tap on
-the same tab replays it.
+`test-button-glow.py` pins both halves against the built app: every tab's box opacity
+(exactly one at 1, the rest at 0, and still 1 well after any tap animation would have
+finished), and the icon's opacity sampled through a real tap — 1 → 0 → 1, settling fully
+visible, and replaying on a second tap of the same tab.
 
 ## Secrets — NEVER commit
 
