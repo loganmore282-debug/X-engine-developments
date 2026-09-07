@@ -171,7 +171,7 @@ async def main():
                "%s stays on ONE line (%dpx tall, line-height %.0f)" % (label, fit["h"], fit["lineH"]))
             ck(fit["left"] >= 0 and fit["right"] <= 390,
                "%s stays inside the screen (%d..%d)" % (label, fit["left"], fit["right"]))
-            if balance == 24000000000:
+            if balance == 240000000:
                 await page.screenshot(path=f"{OUT}/balance-largest.png")
             await ctx.close()
 
