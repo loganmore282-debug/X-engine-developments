@@ -82,6 +82,50 @@ a{color:inherit;}
 .dark-button{background:var(--snow-ink);color:#fff;border:none;border-radius:4px;font-weight:700;letter-spacing:.04em;
   box-shadow:none;transition:opacity .1s;}
 .dark-button:active:not(:disabled){opacity:.85;}
+/* Owner: "let every button have a live glow sweep animation like it runs
+   from left to right." A band of light travels across every filled CTA on a
+   loop, clipped to the button's own rounded box.
+
+   Applied to the FILLED buttons only -- the ones that read as a call to
+   action. Deliberately NOT on the bottom-nav items, the Home action icons,
+   the round icon buttons or the close X: those are transparent or 26-38px
+   artwork, and a shine crossing them reads as flicker, not polish.
+
+   The band is a pseudo-element moved with transform alone, which the browser
+   animates on the compositor -- no layout, no repaint, no per-frame work on
+   the main thread. That matters here because these run forever on cheap
+   Android phones. `will-change` is deliberately NOT set: it would pin a
+   layer per button for the life of the page, and a running transform is
+   auto-promoted anyway.
+
+   The sweep runs for the first 55% of the cycle and rests for the remainder,
+   so it reads as a repeating pass rather than a strobe.
+
+   --sweep is the band's colour, so a pale button can override it: white on
+   white would be invisible, so those get a brand-tinted sheen instead. */
+.primary-button,.secondary-button,.dark-button,.spin-cta,.notify-ok,.btn-bind,
+.wallet-panel .btnrow .cancel,#manualPayFlow .mp-confirm-btn{position:relative;overflow:hidden;}
+.primary-button::after,.secondary-button::after,.dark-button::after,.spin-cta::after,
+.notify-ok::after,.btn-bind::after,.wallet-panel .btnrow .cancel::after,
+#manualPayFlow .mp-confirm-btn::after{
+  content:'';position:absolute;top:0;bottom:0;left:0;width:38%;pointer-events:none;
+  background:linear-gradient(90deg,transparent 0%,var(--sweep,rgba(255,255,255,.45)) 50%,transparent 100%);
+  transform:translateX(-140%) skewX(-20deg);
+  animation:btnGlowSweep 2.8s ease-in-out infinite;}
+/* Pale buttons: a white band on a near-white face shows nothing, so tint it. */
+.secondary-button,.btn-bind,.wallet-panel .btnrow .cancel{--sweep:rgba(226,27,42,.18);}
+/* A disabled button must not look alive. */
+.primary-button:disabled::after,.secondary-button:disabled::after,.dark-button:disabled::after,
+.spin-cta:disabled::after,.notify-ok:disabled::after,.btn-bind:disabled::after,
+.wallet-panel .btnrow .cancel:disabled::after,#manualPayFlow .mp-confirm-btn:disabled::after{display:none;}
+@keyframes btnGlowSweep{
+  0%{transform:translateX(-140%) skewX(-20deg);}
+  55%,100%{transform:translateX(360%) skewX(-20deg);}}
+@media (prefers-reduced-motion:reduce){
+  .primary-button::after,.secondary-button::after,.dark-button::after,.spin-cta::after,
+  .notify-ok::after,.btn-bind::after,.wallet-panel .btnrow .cancel::after,
+  #manualPayFlow .mp-confirm-btn::after{animation:none;display:none;}}
+
 .status-pill{display:inline-block;border-radius:999px;font-size:10.5px;font-weight:500;padding:3px 10px;}
 .status-pill.active{background:var(--snow-green-soft);color:var(--snow-green);}
 .status-pill.pending{background:var(--snow-neutral-soft);color:var(--snow-muted);}

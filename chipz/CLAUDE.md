@@ -295,6 +295,42 @@ box-shadow:0 1px 0 #9e0f1c,0 4px 8px -6px rgba(30,10,5,.4),
   inset 0 1px 0 rgba(255,255,255,.3);
 ```
 
+### Buttons: the live glow sweep
+
+Owner: *"now let every button have a live glow sweep animation like it runs from left
+to right."* A translucent band travels across every **filled CTA** on a 2.8s loop —
+`.primary-button`, `.secondary-button`, `.dark-button`, `.spin-cta`, `.notify-ok`,
+`.btn-bind`, the Wallet Cancel, and the manual-pay confirm.
+
+Deliberately **not** on `.navitem`, `.home-action`, `.icon-btn` or the close X: those are
+transparent or 26–38px artwork, and a shine crossing them reads as flicker, not polish.
+"Every button" means every button that looks like a button.
+
+Mechanics that matter:
+- The band is a `::after` moved with **transform only**, so the browser runs it on the
+  compositor — no layout, no repaint, no per-frame main-thread work. These loop forever
+  on cheap Android phones, so that is the difference between "premium" and "the app feels
+  hot". `will-change` is deliberately **not** set: it would pin a layer per button for
+  the life of the page, and a running transform is auto-promoted anyway.
+- The button gets `overflow:hidden` + `position:relative` so the band is clipped to its
+  own rounded box, and `pointer-events:none` on the band so it never eats a tap.
+- It sweeps for the first 55% of the cycle and rests for the rest, so it reads as a
+  repeating pass rather than a strobe.
+- `--sweep` is the band's colour. Pale buttons (`.secondary-button`, `.btn-bind`, the
+  Wallet Cancel) override it to a brand-tinted sheen — white on near-white shows nothing.
+- Disabled buttons do not glow, and `prefers-reduced-motion:reduce` removes it entirely.
+
+`test-button-glow.py` does **not** assert the CSS exists — a typo'd selector, a
+pseudo-element clipped out of existence, or a keyframe name that never matches would all
+pass a text search. It drives the built app and samples
+`getComputedStyle(el,'::after').transform` over real time, confirming the X translation
+actually changes and that rises outnumber falls (i.e. it runs left→right). Two traps it
+hit while being written, both worth knowing: the sampling window **must span more than
+one full 2.8s cycle** or it only ever sees the rest phase and reports the band as parked;
+and `querySelector` grabs the first match in DOM order, which is often a button inside a
+hidden screen whose pseudo-element reports `transform:none` — measure the first
+**visible** one instead.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase
