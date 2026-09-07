@@ -1069,25 +1069,27 @@ window.switchHomeProductTab = function(tab){
 // so the two can never drift apart visually.
 function productCardHtml(p){
   const expected = p.expectedReturn || Math.round(p.price * (p.multiplier || 3));
-  const dailyPayout = Math.round(expected / (p.cycle || 150));
-  // No image set -> the mockup's own placeholder: a soft gold panel with the
-  // product's position as a glyph, rather than a broken/blank image box.
+  const cycle = p.cycle || 150;
+  const dailyPayout = Math.round(expected / cycle);
   const initial = esc(String(p.name || '').replace(/[^0-9]/g, '') || String(p.name || '?').trim()[0] || '?');
   const img = p.image
-    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.parentNode.innerHTML='<div class=\'glyph\'>${initial}</div>'">`
+    // The inner quotes must be HTML entities: the browser decodes them before the
+    // handler is compiled, so the fallback markup is valid JS. Bare quotes here
+    // would make the whole onerror a syntax error and no glyph would ever show.
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.parentNode.innerHTML='&lt;div class=&quot;glyph&quot;&gt;${initial}&lt;/div&gt;'">`
     : `<div class="glyph">${initial}</div>`;
   return `
   <div class="p-card">
+    <div class="p-name">${esc(p.name)}</div>
     <div class="p-img">${img}</div>
     <div class="p-body">
-      <div class="p-name">${esc(p.name)}</div>
-      <div class="product-card__stats" style="margin-top:10px;">
-        <div><div class="stat-label">Price</div><div class="stat-val mono">${fmtUGX(p.price)}</div></div>
-        <div><div class="stat-label">Daily Income</div><div class="stat-val mono" style="color:var(--snow-green);">${fmtUGX(dailyPayout)}</div></div>
-        <div><div class="stat-label">Period</div><div class="stat-val mono">${p.cycle||150} days</div></div>
-        <div><div class="stat-label">Total Return</div><div class="stat-val mono">${fmtUGX(expected)}</div></div>
+      <div class="p-stats">
+        <div class="p-stat"><div class="k">Price</div><div class="v">${fmtUGXCents(p.price)}</div></div>
+        <div class="p-stat"><div class="k">Days</div><div class="v">${cycle}</div></div>
+        <div class="p-stat"><div class="k">Daily</div><div class="v">${fmtUGXCents(dailyPayout)}</div></div>
+        <div class="p-stat warm"><div class="k">Total</div><div class="v">${fmtUGXCents(expected)}</div></div>
       </div>
-      <button class="primary-button product-card__cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}')">${p.comingSoon?'Coming Soon':'Buy'}</button>
+      <button class="primary-button p-cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}')">${p.comingSoon?'Coming Soon':'Buy Now'}</button>
     </div>
   </div>`;
 }

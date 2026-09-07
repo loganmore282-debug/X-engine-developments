@@ -111,12 +111,24 @@ a{color:inherit;}
 .stat-tile{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-tile);padding:12px;}
 .icon-tile{border-radius:13px;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 
+/* Product card, per the owner's reference screenshot: the NAME sits on top,
+   centred and large, then the full-width image, then a 2x2 grid of tinted
+   stat tiles, then a full-width Buy Now. The reference is a screenshot of
+   an unrelated app in a purple/blue theme -- layout, labels and proportions
+   are copied, the colours are Chipz's own (CLAUDE.md's design-fidelity
+   rule). */
 .p-card{background:var(--snow-surface);border-radius:var(--snow-radius-card);overflow:hidden;box-shadow:0 14px 28px -20px rgba(30,10,5,.35);border:1px solid var(--snow-border);}
-.p-card .p-img{height:120px;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.p-card .p-name{color:var(--snow-wine);font-weight:800;font-size:22px;text-align:center;padding:16px 16px 14px;letter-spacing:.01em;}
+.p-card .p-img{height:170px;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}
-.p-card .p-img .glyph{width:52px;height:52px;border-radius:16px;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,serif;color:#fff;font-size:22px;}
-.p-card .p-body{padding:12px 16px 14px;}
-.p-card .p-name{color:var(--snow-wine);font-weight:700;font-size:14px;}
+.p-card .p-img .glyph{width:60px;height:60px;border-radius:18px;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,serif;color:#fff;font-size:26px;}
+.p-card .p-body{padding:16px;}
+.p-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.p-stat{background:var(--snow-green-soft);border-radius:14px;padding:12px 10px;text-align:center;}
+.p-stat.warm{background:var(--snow-wine-soft);}
+.p-stat .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--snow-muted);font-weight:700;}
+.p-stat .v{font-size:16px;font-weight:800;color:var(--snow-ink);margin-top:5px;font-family:var(--number-font,'Playfair Display',Georgia,serif);}
+.p-card .p-cta{width:100%;height:52px;padding:0;font-size:17px;letter-spacing:.06em;}
 .product-card__stats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:10px 16px;}
 .product-card__cta{width:100%;min-height:44px;margin-top:16px;border-radius:var(--snow-radius-control);font-size:14px;}
 
