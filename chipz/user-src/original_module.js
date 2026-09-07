@@ -1068,17 +1068,24 @@ window.switchHomeProductTab = function(tab){
 // One shared product-card renderer for Home's strip and the Products tab,
 // so the two can never drift apart visually.
 function productCardHtml(p){
-  const dailyPayout = Math.round((p.expectedReturn || p.price*30) / (p.cycle || 150));
+  const expected = p.expectedReturn || Math.round(p.price * (p.multiplier || 3));
+  const dailyPayout = Math.round(expected / (p.cycle || 150));
+  // No image set -> the mockup's own placeholder: a soft gold panel with the
+  // product's position as a glyph, rather than a broken/blank image box.
+  const initial = esc(String(p.name || '').replace(/[^0-9]/g, '') || String(p.name || '?').trim()[0] || '?');
+  const img = p.image
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.parentNode.innerHTML='<div class=\'glyph\'>${initial}</div>'">`
+    : `<div class="glyph">${initial}</div>`;
   return `
-  <div class="product-card">
-    <img class="product-card__thumb" src="${esc(p.image||'')}" alt="${esc(p.name)}" onerror="this.style.visibility='hidden'">
-    <div class="product-card__body">
-      <div style="font-size:15px;font-weight:800;color:var(--snow-wine);">${esc(p.name)}</div>
+  <div class="p-card">
+    <div class="p-img">${img}</div>
+    <div class="p-body">
+      <div class="p-name">${esc(p.name)}</div>
       <div class="product-card__stats" style="margin-top:10px;">
         <div><div class="stat-label">Price</div><div class="stat-val mono">${fmtUGX(p.price)}</div></div>
         <div><div class="stat-label">Daily Income</div><div class="stat-val mono" style="color:var(--snow-green);">${fmtUGX(dailyPayout)}</div></div>
         <div><div class="stat-label">Period</div><div class="stat-val mono">${p.cycle||150} days</div></div>
-        <div><div class="stat-label">Total Return</div><div class="stat-val mono">${fmtUGX(p.expectedReturn||p.price*30)}</div></div>
+        <div><div class="stat-label">Total Return</div><div class="stat-val mono">${fmtUGX(expected)}</div></div>
       </div>
       <button class="primary-button product-card__cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}')">${p.comingSoon?'Coming Soon':'Buy'}</button>
     </div>
@@ -1321,6 +1328,12 @@ function activityRowText(row){
   const verb = row.kind === 'deposit' ? 'just deposited' : 'just withdrew';
   return row.phone + ' ' + verb + ' ' + fmtUGX(row.amount);
 }
+// Home.dc.html styles the phone number white against the amber rest of the
+// line, so the eye lands on who rather than on the sentence.
+function activityRowHtml(row){
+  const verb = row.kind === 'deposit' ? 'just deposited' : 'just withdrew';
+  return `<b>${esc(row.phone)}</b> ${esc(verb)} ${esc(fmtUGX(row.amount))}`;
+}
 async function renderActivityTicker(){
   const track = $('activityTickerTrack');
   if (!track) return;
@@ -1352,7 +1365,7 @@ async function renderActivityTicker(){
     rows = (r.status === 'success' && Array.isArray(r.feed)) ? r.feed : [];
   }
   if (!rows.length) return;
-  const joined = rows.map(row => esc(activityRowText(row))).join('&nbsp;&nbsp;&nbsp;&middot;&nbsp;&nbsp;&nbsp;');
+  const joined = rows.map(activityRowHtml).join('<span class="sep">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>');
   track.style.animation = 'none';
   track.innerHTML = `<span style="padding-right:48px;">${joined}</span><span style="padding-right:48px;" aria-hidden="true">${joined}</span>`;
   const singleWidth = track.scrollWidth / 2;
@@ -2600,23 +2613,54 @@ window.openDepositSheet = function(){
 // phone number, no network selector needed at all: "leave number, it is
 // neutral and also network is detected by the marzpay system api" -- the
 // gateway itself figures out MTN vs Airtel from the number.
+// Deposit.dc.html. Replaces the Recharge form inherited from Snow: title
+// "Deposit", red-bar section headers, a 3-column chip grid with the picked
+// amount filled, the amount field UNDER the chips (Snow had it above), an
+// explicit payment-method row, a dark-prefixed phone field, and the
+// numbered instruction card.
+var _depChosenAmount = 0;
 function openAutomaticDepositFormSheet(){
   const s = STATE.settings || {};
-  openSheet('Recharge', `<div class="reveal-in">
-    <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
-    ${depositQuickAmountsHtml(s)}
-    <div class="form-field"><label>Mobile-money phone number</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this)"></div></div>
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Recharge</button>
-    <div class="instr-card">
-      <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Recharge instructions</span></div>
+  openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">
+    <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
+    <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
+    <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
+
+    <div class="dep-sec"><span class="bar"></span><span>Select Payment Method</span></div>
+    <button class="pay-row on" type="button"><span>PAY-A</span><span class="pay-radio"></span></button>
+
+    <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
+    <div class="dep-phone">
+      <span class="prefix">+256</span>
+      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (7XXXXXXXX)" oninput="sanitizePhoneInput(this)">
+    </div>
+    <div class="dep-hint">Phone number must start with 0 and be 10 digits</div>
+
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Deposit</button>
+
+    <div class="dep-instr">
+      <div class="ih"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a3d00" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"></path></svg></div><span>Deposit Instructions</span></div>
+      <div class="ln"></div>
       <ol>
-        <li>Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount above.</li>
-        <li>Confirm your mobile-money number -- the network is detected automatically.</li>
-        <li>Tap Recharge, then approve the prompt on your phone.</li>
-        <li>Your wallet updates automatically once payment is confirmed.</li>
+        <li>Recharge time: 7*24 hours.</li>
+        <li>If deposit is not received, please contact TG customer service.</li>
+        <li>Minimum deposit amount: ${fmtUGX(s.minDeposit)}</li>
+        <li>Please do not save old account recharge.</li>
       </ol>
     </div>
   </div>`);
+}
+// The chip values still come from the live product prices (owner: "juck put
+// quick amounts basing on products prices"), so they stay correct when
+// products are repriced -- only the chip's LOOK follows the mockup now.
+function depositChipsHtml(s){
+  const amounts = Array.from(new Set((STATE.products || [])
+    .map(p => Number(p.price) || 0)
+    .filter(p => p >= (Number(s.minDeposit) || 0))))
+    .sort((a, b) => a - b);
+  return amounts.map(a =>
+    `<button type="button" class="dep-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${Number(a).toLocaleString('en-US')}</button>`
+  ).join('');
 }
 // Shown only when both PAY A and PAY B are enabled -- a genuine choice,
 // so neither box starts selected (this app's own established "no
@@ -3177,10 +3221,15 @@ window.pickDepositAmount = function(amt){
   syncDepositQuickAmt();
 };
 function syncDepositQuickAmt(){
-  const box = $('depQuickAmts');
-  if (!box) return;
-  const val = parseMoneyInput($('depAmount').value);
-  box.querySelectorAll('.quick-amt').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.amt) === val));
+  // Deposit.dc.html's own chip grid (#depChips/.dep-chip). The manual PAY B
+  // form still uses the older .quick-amt row, so both are handled here
+  // rather than leaving one of them silently unhighlightable.
+  const val = parseMoneyInput(($('depAmount') || {}).value);
+  _depChosenAmount = val;
+  const chips = $('depChips');
+  if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
+  const legacy = $('depQuickAmts');
+  if (legacy) legacy.querySelectorAll('.quick-amt').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.amt) === val));
 }
 // Live deposit-status modal -- reuses the .chest-modal-bg/.chest-modal dark/
 // centered/thin pop-up convention. Opens the instant a recharge is accepted
@@ -3298,29 +3347,43 @@ window.openWithdrawSheet = async function(){
   else if (!hadCache) STATE.bankAccounts = [];
   if (!hadCache && _openSheetTitle === 'Withdraw') paintWithdrawSheet(s);
 };
+// Withdraw.dc.html. Replaces the form inherited from Snow: a tinted balance
+// card, a UGX-prefixed amount field, the bound wallet shown as the same
+// bank-card tile the Wallet screen uses (not a <select> of several), the
+// trade-password field, the fee line, and the instruction card.
 function paintWithdrawSheet(s){
-  const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)}, ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
   const balance = (STATE.account && STATE.account.walletBalance) || 0;
-  $('sheetBody').innerHTML = `<div class="reveal-in">
-    <div class="form-hint" style="margin:-6px 0 14px;line-height:1.6;">Available balance: <strong>${fmtUGX(balance)}</strong></div>
-    <div class="form-field"><label>Amount (min ${fmtUGX(s.minWithdraw)}, ${s.withdrawFeePct||15}% fee applies)</label><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncWithdrawReceiveAmt()"></div>
-    <div class="form-hint" id="witReceiveHint" style="margin:-10px 0 14px;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
-    <div class="form-field"><label>Withdrawal account</label>
-      ${STATE.bankAccounts.length
-        ? `<select id="witAccount" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">${acctOptions}</select>`
-        : `<div class="form-hint">No wallet bound yet.</div><button class="secondary-button" style="width:100%;padding:12px 0;margin-top:8px;" onclick="openWalletSheet()">Bind your wallet</button>`}
+  const w = (STATE.bankAccounts || [])[0] || null;
+  const fee = s.withdrawFeePct || 15;
+  $('sheetBody').innerHTML = `<div class="reveal-in" style="padding-top:18px;">
+    <div class="wit-bal">
+      <div class="lbl">Available Balance</div>
+      <div class="val">${fmtUGX2(balance)}</div>
     </div>
-    <div class="form-field"><label>Trade Password</label><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="6 digits" autocomplete="one-time-code"></div>
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button>
-    <div class="instr-card">
-      <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Withdrawal instructions</span></div>
+    <div class="wit-amt">
+      <span>UGX</span>
+      <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="syncWithdrawReceiveAmt()">
+    </div>
+
+    <div class="dep-sec"><span class="bar"></span><span>Withdrawal Wallet</span></div>
+    ${walletCardHtml(w)}
+    <button class="btn-bind" type="button" onclick="openWalletSheet()">${w ? 'Change Wallet' : 'Bind Wallet'}</button>
+
+    <div class="dep-sec"><span class="bar"></span><span>Trade Password</span></div>
+    <div class="wit-pw"><input id="witPin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="one-time-code"></div>
+    <div class="wit-fee">Fee: ${fee}%</div>
+    <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
+
+    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${w?'':'disabled'} onclick="submitWithdraw()">Confirm Withdraw</button>
+
+    <div class="wit-instr">
+      <h3>Withdrawal Instructions</h3>
+      <div class="ln"></div>
       <ol>
-        <li>Enter an amount (min ${fmtUGX(s.minWithdraw)}). A ${s.withdrawFeePct||15}% fee applies.</li>
-        <li>Select a saved withdrawal account.</li>
-        <li>Enter your Trade Password and tap Request Withdrawal.</li>
-        <li>${s.payoutManual
-              ? 'We have received your withdrawal request, it will be processed as soon as possible.'
-              : 'Funds are sent to your mobile-money number once processed.'}</li>
+        <li>Fee: ${fee}%.</li>
+        <li>Withdrawal amounts should be between ${Number(s.minWithdraw||0).toLocaleString('en-US')} and ${Number(s.maxWithdraw||1000000).toLocaleString('en-US')}.</li>
+        <li>There is no limit to the number of withdrawals.</li>
+        <li>${s.withdrawHours ? esc(s.withdrawHours) : 'Withdrawal time: 06:00:00 - 17:00:00.'}</li>
       </ol>
     </div>
   </div>`;
@@ -3358,15 +3421,16 @@ async function refreshTransactionsCache(){
 window.submitWithdraw = async function(){
   const amount = parseMoneyInput($('witAmount').value);
   const pin = $('witPin').value.trim();
-  const acctSel = $('witAccount');
-  const acct = acctSel ? STATE.bankAccounts.find(a => a.id === acctSel.value) : null;
-  if (!amount || amount <= 0) return toast('Enter a valid amount', true);
-  if (!acct) return toast('Select a withdrawal account', true);
-  if (!/^\d{6}$/.test(pin)) return toast('Enter your 6-digit Trade Password', true);
+  // Chipz binds exactly ONE wallet, so there is no account picker to read --
+  // the withdrawal always goes to the bound wallet the screen is showing.
+  const acct = (STATE.bankAccounts || [])[0] || null;
+  if (!amount || amount <= 0) return notify('Enter a valid amount.');
+  if (!acct) return notify('Bind your wallet before withdrawing.');
+  if (!/^\d{6}$/.test(pin)) return notify('Enter your 6-digit Trade Password.');
   $('witSubmitBtn').disabled = true; $('witSubmitBtn').textContent = 'Please wait…';
   const r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin });
-  $('witSubmitBtn').disabled = false; $('witSubmitBtn').textContent = 'Request Withdrawal';
-  if (r.status !== 'success') return toast(r.message || 'Could not request withdrawal', true);
+  $('witSubmitBtn').disabled = false; $('witSubmitBtn').textContent = 'Confirm Withdraw';
+  if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
   toast(r.message || 'Cash-out requested');
   await refreshTransactionsCache();
   closeSheet({ fromAction: true });
