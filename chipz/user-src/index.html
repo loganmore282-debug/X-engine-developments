@@ -955,7 +955,15 @@ a{color:inherit;}
    each one starts fully hidden (animation-fill-mode:both) so there's no
    flash of unanimated content before its delay elapses. */
 @keyframes revealIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
-.reveal-in > *{animation:revealIn .42s cubic-bezier(.22,1,.36,1) both;}
+/* :not(.chest-float) matters. The floating chest is a direct child of this
+   wrapper, and this rule sits LATER in the file at the same specificity, so
+   it replaced the chest's own `animation:chestBounce` outright and the chest
+   sat dead still. This file has now been bitten by that exact cascade three
+   times (see the removed bottom-pill toast's note above, and
+   .chest-float.turntable-float). Floating buttons are not part of the page
+   flow and have no business in the entrance stagger, so they are excluded
+   here rather than patched one by one. */
+.reveal-in > *:not(.chest-float){animation:revealIn .42s cubic-bezier(.22,1,.36,1) both;}
 .reveal-in > *:nth-child(1){animation-delay:0ms;}
 .reveal-in > *:nth-child(2){animation-delay:35ms;}
 .reveal-in > *:nth-child(3){animation-delay:70ms;}
