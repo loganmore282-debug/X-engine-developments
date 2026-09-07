@@ -1974,7 +1974,12 @@ function walletCardHtml(w){
     <div class="sheen"></div>
     <div class="row1">
       <span class="provider">${esc(provider)}</span>
-      <svg width="24" height="18" viewBox="0 0 24 18" fill="none"><rect x="0" y="2" width="18" height="12" rx="2" fill="rgba(255,255,255,.35)"></rect><rect x="5" y="4" width="18" height="12" rx="2" fill="rgba(255,255,255,.9)"></rect></svg>
+      <svg width="30" height="22" viewBox="0 0 30 22" fill="none" aria-hidden="true">
+        <rect x="1" y="4.5" width="21" height="14" rx="2.5" fill="rgba(255,255,255,.28)"></rect>
+        <rect x="7.5" y="2" width="21" height="14" rx="2.5" fill="rgba(255,255,255,.92)"></rect>
+        <rect x="7.5" y="5" width="21" height="3" fill="rgba(60,20,10,.55)"></rect>
+        <rect x="10" y="11" width="8" height="1.6" rx="0.8" fill="rgba(60,20,10,.35)"></rect>
+      </svg>
     </div>
     <div class="chip"></div>
     <div class="num">${esc(num)}</div>
@@ -3582,7 +3587,7 @@ function paintWithdrawSheet(s){
     <div class="dep-sec"><span class="bar"></span><span>Trade Password</span></div>
     <div class="wit-pw"><input id="witPin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="one-time-code"></div>
     <div class="wit-fee">Fee: ${fee}%</div>
-    <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
+    <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
 
     <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${w?'':'disabled'} onclick="submitWithdraw()">Confirm Withdraw</button>
 
@@ -3606,6 +3611,11 @@ window.syncWithdrawReceiveAmt = function(){
   const fee = Math.round(amount * (s.withdrawFeePct||15) / 100);
   const net = Math.max(0, amount - fee);
   el.textContent = fmtUGX(net);
+  // Hidden until there is an amount, so the resting screen shows just
+  // "Fee: 15%" like the mockup, and the net figure appears exactly when it
+  // becomes meaningful.
+  const hint = $('witReceiveHint');
+  if (hint) hint.style.display = amount > 0 ? '' : 'none';
 };
 // Balance Record (openBalanceRecordSheet()) is cache-first: it paints from
 // whatever STATE.transactions already holds, and per Round 55's own fix,

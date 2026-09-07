@@ -387,7 +387,13 @@ a{color:inherit;}
 .wallet-card .sheen{position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);pointer-events:none;}
 .wallet-card .row1{position:relative;display:flex;align-items:flex-start;justify-content:space-between;}
 .wallet-card .provider{font-size:19px;font-weight:600;letter-spacing:.02em;}
-.wallet-card .chip{position:relative;width:38px;height:28px;margin:20px 0 22px;border-radius:4px;background:linear-gradient(135deg,#f4d78a,#c99a3c);}
+.wallet-card .chip{position:relative;width:42px;height:32px;margin:20px 0 22px;border-radius:5px;background:linear-gradient(135deg,#f6dc95,#c9973a);box-shadow:inset 0 0 0 1px rgba(120,80,10,.35);}
+/* The contact pads. Two hairline grids drawn with gradients rather than an
+   image, so the chip reads as a chip at any size. */
+.wallet-card .chip::before{content:'';position:absolute;inset:5px 3px;
+  background:linear-gradient(to right,transparent 0 32%,rgba(120,80,10,.5) 32% 34%,transparent 34% 66%,rgba(120,80,10,.5) 66% 68%,transparent 68%),
+             linear-gradient(to bottom,transparent 0 45%,rgba(120,80,10,.5) 45% 55%,transparent 55%);}
+.wallet-card .chip::after{content:'';position:absolute;left:34%;right:34%;top:5px;bottom:5px;border:1px solid rgba(120,80,10,.5);border-radius:2px;}
 .wallet-card .num{position:relative;font-size:24px;letter-spacing:.06em;margin-bottom:16px;}
 .wallet-card .holder-lbl{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;font-weight:500;}
 .wallet-card .holder-name{position:relative;font-size:15px;font-weight:500;margin-top:3px;}
