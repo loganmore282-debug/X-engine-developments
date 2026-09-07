@@ -854,20 +854,37 @@ async function bootFromNetwork(uid){
   // genuinely slower than the other tabs) -- owner: "mission centers takes
   // long to load." Prefetching it here means that wait happens once, during
   // the loading screen the member already sits through, not again per open.
-  const [invR, teamR, bankR, txR, missionR] = await Promise.all([
-    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions'), api('/mission/status'),
-    withTimeout(_bootPromise, 6000) // settings/products/activity-feed -- runs concurrently, not sequentially, since boot() already started at module load
-  ]);
-  if (invR.status === 'success') STATE.investments = invR.investments;
-  if (teamR.status === 'success') STATE.teamStats = teamR;
-  if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
-  if (txR.status === 'success') { STATE.transactions = txR.transactions; STATE.transactionsTruncated = !!txR.truncated; }
-  if (missionR.status === 'success') STATE.mission = missionR;
-  saveCachedState(uid);
+  // Only what the shell itself needs is awaited: the account (fetched above)
+  // and _bootPromise, which carries settings -- Home cannot paint its
+  // announcement or tagline without them. The five per-screen datasets are
+  // fired here and allowed to land underneath.
+  //
+  // This is why the skeleton loaders were never seen. Awaiting all five meant
+  // that by the time the app became visible, every dataset a skeleton covers
+  // was already in memory, so the "nothing cached yet" branch could not fire
+  // on any screen. Blocking on them also made the loading screen as slow as
+  // the slowest of six calls -- /mission/status does two sequential DB lookups
+  // server-side -- for data most members never look at in that session.
+  await withTimeout(_bootPromise, 6000);
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   maybeResumeManualPayment();
   showPage(STATE.page || 'home');
+  // Still prefetched, just not in front of the member. Each screen's own
+  // render() re-fetches what it needs anyway, so whichever tab is open
+  // repaints itself when its data arrives -- nothing here has to push to it.
+  Promise.all([
+    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions'), api('/mission/status')
+  ]).then(([invR, teamR, bankR, txR, missionR]) => {
+    // Signed out, or switched account, while these were in flight.
+    if (!STATE.user || STATE.user.uid !== uid) return;
+    if (invR.status === 'success') STATE.investments = invR.investments;
+    if (teamR.status === 'success') STATE.teamStats = teamR;
+    if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
+    if (txR.status === 'success') { STATE.transactions = txR.transactions; STATE.transactionsTruncated = !!txR.truncated; }
+    if (missionR.status === 'success') STATE.mission = missionR;
+    saveCachedState(uid);
+  }).catch(() => {});
 }
 // Runs right after painting instantly from cache -- reconciles with the
 // real server state silently, no spinner, no repaint flicker (only patches
