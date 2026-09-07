@@ -211,6 +211,51 @@ a{color:inherit;}
 /* Owner: "home video banner should not have frames, it should complete the
    margin" -- edge to edge, no side gutters and no rounding. */
 .home-banner,.ref-banner{margin:0 0 14px;height:190px;border-radius:0;position:relative;overflow:hidden;background:var(--chipz-hero);}
+/* ── SKELETON LOADERS ──
+   Owner: "use skeleton loaders exactly how the screen contents will appear
+   after load." So these are not generic grey bars -- each one is built from
+   the same measurements as the real thing it stands in for, so nothing jumps
+   when the data lands. Before this, a first-ever visit with nothing cached
+   painted the real screen with empty data: "0 plans", zeroed totals, an empty
+   member list -- indistinguishable from a member who genuinely has none.
+   The shimmer stays. It is what makes a block read as "loading" rather than
+   as a broken empty box, and it is not the content-entrance animation that
+   was removed earlier. */
+/* A tint, not a flat colour: --snow-neutral-soft was so close to the cream
+   page that the blocks were invisible on it. An alpha tint reads at the same
+   strength on the page AND on the white cards the skeletons sit inside. */
+.sk{position:relative;overflow:hidden;background:rgba(60,26,14,.09);border-radius:4px;}
+.sk::after{content:'';position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);
+  animation:skShimmer 1.25s ease-in-out infinite;}
+@keyframes skShimmer{100%{transform:translateX(100%);}}
+.sk-line{height:12px;margin-bottom:8px;}
+.sk-line.sm{height:10px;}
+.sk-line.lg{height:22px;}
+/* Product card: image block at 4:3, then the 2x2 stat grid and the CTA, laid
+   out by the real .p-card rules so the swap is invisible. */
+.sk-pcard{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:4px;overflow:hidden;}
+.sk-pcard .sk-img{aspect-ratio:4/3;border-radius:0;}
+.sk-pcard .sk-body{padding:10px;}
+.sk-pcard .sk-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
+.sk-pcard .sk-stat{height:44px;}
+.sk-pcard .sk-cta{height:38px;}
+/* My Products: the full-bleed band, the filter row, then plan rows. */
+.sk-band{height:150px;border-radius:0;margin-bottom:14px;}
+.sk-filters{display:flex;gap:8px;margin:0 16px 12px;}
+.sk-filters .sk{flex:1;height:34px;}
+.sk-row{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:4px;padding:13px 14px;}
+.sk-row .sk-top{display:flex;align-items:center;gap:11px;margin-bottom:13px;}
+.sk-row .sk-thumb{width:38px;height:38px;flex-shrink:0;}
+.sk-row .sk-bar{height:5px;margin-bottom:6px;}
+.sk-row .sk-figs{display:flex;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--snow-border);}
+.sk-row .sk-figs > div{flex:1;}
+/* Team: two stat cards over the level switcher and member rows. */
+.sk-tcards{display:flex;gap:12px;margin:0 18px 16px;}
+.sk-tcards .sk{flex:1;height:104px;}
+.sk-member{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--snow-border);}
+.sk-member .sk-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;}
+
 /* ── MY PRODUCTS ──
    Deliberately not Snow's layout. Snow leads with three white count tiles
    and a flat "Active Plans" list; this leads with the one figure a member
@@ -257,7 +302,8 @@ a{color:inherit;}
 /* Activity card: a notification line, led by a bell, rather than the old
    dark pill. Sits on the app surface like every other card now. */
 .act-card{margin:0 16px 14px;display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:4px;overflow:hidden;}
-.act-bell{flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;}
+.act-bell{flex-shrink:0;width:30px;height:30px;display:flex;align-items:center;justify-content:center;}
+.act-bell img{width:100%;height:100%;object-fit:contain;display:block;}
 .act-track-wrap{overflow:hidden;flex:1;min-width:0;}
 .act-track{display:inline-flex;white-space:nowrap;color:var(--snow-muted);font-size:12.5px;font-weight:500;}
 .act-track b{color:var(--snow-ink);font-weight:600;}
@@ -404,6 +450,19 @@ a{color:inherit;}
 .wallet-panel .lbl{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 6px;}
 .wallet-panel .field{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:4px;height:50px;display:flex;align-items:center;padding:0 15px;margin-bottom:16px;gap:8px;}
 .wallet-panel .field input,.wallet-panel .field select{border:0;outline:0;background:transparent;font-size:15px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+/* Wallet provider picker -- a field that drops a plain list under it, as the
+   mockup shows, instead of handing off to Android's own system picker. */
+.prov-pick{position:relative;}
+.prov-pick .prov-input{cursor:pointer;}
+.prov-pick .prov-input input{cursor:pointer;}
+.prov-caret{color:var(--snow-muted);flex-shrink:0;transition:transform .15s;}
+.prov-pick.open .prov-caret{transform:rotate(180deg);}
+.prov-list{display:none;position:absolute;left:0;right:0;top:52px;z-index:5;background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:4px;overflow:hidden;box-shadow:0 14px 28px -14px rgba(30,10,5,.35);}
+.prov-pick.open .prov-list{display:block;}
+.prov-opt{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--snow-border);padding:14px 15px;font-family:inherit;font-size:15px;color:var(--snow-ink);cursor:pointer;}
+.prov-opt:last-child{border-bottom:0;}
+.prov-opt:active{background:var(--snow-neutral-soft);}
+.prov-opt.on{color:var(--snow-wine);font-weight:600;}
 .wallet-panel .btnrow{display:flex;gap:12px;}
 .wallet-panel .btnrow button{flex:1;height:48px;font-size:14px;padding:0;}
 .wallet-panel .btnrow .cancel{border:0;border-radius:4px;background:#f3e2ee;color:#6b2f56;font-weight:600;font-family:inherit;box-shadow:none;}

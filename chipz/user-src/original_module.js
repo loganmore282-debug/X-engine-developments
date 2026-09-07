@@ -1135,7 +1135,7 @@ function paintHome(){
   </button>
 </div>
 <div class="act-card">
-  <span class="act-bell">${ICONS.bell}</span>
+  <span class="act-bell"><img src="/act-bell.png" alt=""></span>
   <div class="act-track-wrap">
     <div id="activityTickerTrack" class="act-track">Loading activity&hellip;</div>
   </div>
@@ -1244,8 +1244,77 @@ window.openChannelLink = function(){
 };
 
 // ── PRODUCTS (full catalog tab) ──
+// ── SKELETON LOADERS ──
+// Each of these mirrors the real markup it replaces, so the swap when data
+// lands is a change of content, not of layout. Shown ONLY when there is
+// nothing cached to paint -- with a cache the app still paints real data
+// immediately and refreshes underneath, which is faster than any skeleton.
+function skProductCards(n){
+  return Array.from({length:n}, () => `
+  <div class="sk-pcard">
+    <div class="sk sk-img"></div>
+    <div class="sk-body">
+      <div class="sk-stats">
+        <div class="sk sk-stat"></div><div class="sk sk-stat"></div>
+        <div class="sk sk-stat"></div><div class="sk sk-stat"></div>
+      </div>
+      <div class="sk sk-cta"></div>
+    </div>
+  </div>`).join('');
+}
+function paintCatalogSkeleton(){
+  $('pageHost').innerHTML = `
+<div class="page-head"><h2>Products</h2><span class="sk sk-line sm" style="width:54px;display:inline-block;"></span></div>
+<div style="display:flex;flex-direction:column;gap:12px;margin:0 16px;">${skProductCards(3)}</div>
+<div style="height:12px;"></div>`;
+}
+function paintProductsSkeleton(){
+  const row = `
+  <div class="sk-row">
+    <div class="sk-top">
+      <div class="sk sk-thumb"></div>
+      <div style="flex:1;min-width:0;">
+        <div class="sk sk-line" style="width:52%;"></div>
+        <div class="sk sk-line sm" style="width:38%;margin-bottom:0;"></div>
+      </div>
+    </div>
+    <div class="sk sk-bar"></div>
+    <div class="sk sk-line sm" style="width:44%;margin-bottom:0;"></div>
+    <div class="sk-figs">
+      <div><div class="sk sk-line sm" style="width:50%;"></div><div class="sk sk-line" style="width:76%;margin-bottom:0;"></div></div>
+      <div><div class="sk sk-line sm" style="width:50%;"></div><div class="sk sk-line" style="width:76%;margin-bottom:0;"></div></div>
+    </div>
+  </div>`;
+  $('pageHost').innerHTML = `
+<div class="page-head"><h2>My Products</h2></div>
+<div class="sk sk-band"></div>
+<div class="sk-filters"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
+<div class="mp-list">${row}${row}</div>
+<div style="height:12px;"></div>`;
+}
+function paintTeamSkeleton(){
+  const member = `
+  <div class="sk-member">
+    <div class="sk sk-av"></div>
+    <div style="flex:1;min-width:0;">
+      <div class="sk sk-line" style="width:46%;"></div>
+      <div class="sk sk-line sm" style="width:30%;margin-bottom:0;"></div>
+    </div>
+    <div class="sk sk-line" style="width:64px;margin-bottom:0;"></div>
+  </div>`;
+  $('pageHost').innerHTML = `
+<div class="page-head"><h2>Team</h2></div>
+<div class="sk-tcards"><div class="sk"></div><div class="sk"></div></div>
+<div style="display:flex;gap:8px;margin:0 18px 14px;">
+  <div class="sk" style="flex:1;height:36px;"></div>
+  <div class="sk" style="flex:1;height:36px;"></div>
+  <div class="sk" style="flex:1;height:36px;"></div>
+</div>
+<div style="margin:0 18px;">${member}${member}${member}</div>
+<div style="height:12px;"></div>`;
+}
 async function renderCatalog(){
-  paintCatalog();
+  if ((STATE.products || []).length) paintCatalog(); else paintCatalogSkeleton();
   const r = await api('/public/products');
   if (r.status === 'success' && Array.isArray(r.products)) {
     STATE.products = r.products;
@@ -1367,7 +1436,7 @@ function patchHomeBalances(){
 var _investmentsLoadFailed = false;
 async function renderProducts(){
   const hadCache = Array.isArray(STATE.investments);
-  if (hadCache) paintProducts(true);
+  if (hadCache) paintProducts(true); else paintProductsSkeleton();
   const r = await api('/investments');
   if (r.status === 'success') { STATE.investments = r.investments; _investmentsLoadFailed = false; }
   else if (!hadCache) { STATE.investments = []; _investmentsLoadFailed = true; }
@@ -1648,7 +1717,7 @@ function renderTeamMembers(level){
 }
 async function renderTeam(){
   const hadCache = !!STATE.teamStats;
-  if (hadCache) paintTeam();
+  if (hadCache) paintTeam(); else paintTeamSkeleton();
   const r = await api('/team/stats');
   if (r.status === 'success') STATE.teamStats = r;
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
@@ -1989,10 +2058,20 @@ function renderWalletSheet(){
   <div class="wallet-panel">
     <div class="sec-head" style="margin:0 0 16px;"><span class="bar"></span><h2 style="font-size:17px;font-weight:700;">Edit Wallet</h2></div>
     <div class="lbl">Wallet Provider</div>
-    <div class="field"><select id="walProvider">
-      <option value="" ${w && w.network ? '' : 'selected'} disabled>Select wallet provider</option>
-      ${providers.map(p => `<option value="${p}" ${w && w.network === p ? 'selected' : ''}>${p}</option>`).join('')}
-    </select></div>
+    <!-- Not a <select>. A native select hands the whole thing to Android's own
+         grey system picker, which is what the owner objected to. This is a
+         read-only field that drops a plain list underneath it, exactly as the
+         mockup shows. Read-only, not a free-text box, because the value has to
+         be one of the providers the backend accepts. -->
+    <div class="prov-pick" id="walProviderPick">
+      <div class="field prov-input" onclick="toggleProviderList()">
+        <input id="walProvider" type="text" readonly placeholder="Select wallet provider" value="${w && w.network ? esc(w.network) : ''}">
+        <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="prov-list" id="walProviderList">
+        ${providers.map(p => `<button type="button" class="prov-opt${w && w.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
+      </div>
+    </div>
     <div class="lbl">Wallet Account</div>
     <div class="field"><input id="walPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${w ? esc(w.phone || '') : ''}" oninput="sanitizePhoneInput(this)"></div>
     <div class="lbl">Account Holder Name</div>
@@ -2017,6 +2096,30 @@ function renderWalletSheet(){
   </div>`;
 }
 window.toggleWalletEdit = function(on){ _walletEditing = !!on; renderWalletSheet(); };
+// The provider list from the mockup: tap the field, a plain list drops under
+// it, tap a row, it closes. Deliberately small and self-contained -- the
+// alternative was a native <select>, which on Android replaces the screen
+// with the OS picker.
+window.toggleProviderList = function(){
+  const box = $('walProviderPick');
+  if (box) box.classList.toggle('open');
+};
+window.pickProvider = function(name){
+  const inp = $('walProvider');
+  if (inp) inp.value = name;
+  const box = $('walProviderPick');
+  if (box) box.classList.remove('open');
+  document.querySelectorAll('#walProviderList .prov-opt').forEach(b => {
+    b.classList.toggle('on', b.textContent.trim() === name);
+  });
+};
+// Tapping anywhere else closes it, the way a real picker behaves. Bound once
+// on the document rather than per-render so repainting the panel cannot leave
+// duplicate listeners behind.
+document.addEventListener('click', function(e){
+  const box = document.getElementById('walProviderPick');
+  if (box && box.classList.contains('open') && !box.contains(e.target)) box.classList.remove('open');
+});
 window.submitWallet = async function(){
   const network = $('walProvider').value;
   const phone = $('walPhone').value;
