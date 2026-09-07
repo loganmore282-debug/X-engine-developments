@@ -276,6 +276,17 @@ Chipz when the admin panel landed on `*.edgeone.dev` (only `.edgeone.app` and
 `.edgeone.site` were listed). EdgeOne hands out `.edgeone.app`, `.edgeone.site` AND
 `.edgeone.dev`; all three are listed now, plus `.onrender.com` and `.pages.dev`.
 
+**Custom domains are admin-editable** — Settings → "Allowed website domains"
+(`settings.allowedOrigins`, one host per line). They are **added to** the two built-in
+lists and can never replace or remove them, which is the whole safety property: a typo
+here cannot CORS-block the admin panel, which is the only place to undo it. Matching is
+EXACT hostname (no wildcards, no suffixes) so `chipz-platform.com` never admits
+`chipz-platform.com.evil.com`; `sanitizeAllowedOrigins()` rejects wildcards, bare TLDs
+and single labels, naming the offending line. `_corsExtraHosts` is a synchronous
+snapshot refreshed by `getSettings()` and immediately on save, because the CORS check
+runs on every request and must never await a database read. `allowedOrigins` is stripped
+from `/public/settings` — operator config, not app content.
+
 **If any Chipz screen reports a network error while the server is fine, check this list
 FIRST** — before suspecting the host, the database, or the deploy. `test-cors-origins.js`
 covers the real domains and the suffix-spoofing attempts (`edgeone.dev.evil.com` must
@@ -333,7 +344,7 @@ the Playwright banner test drives a real MediaRecorder-generated webm.
 ### Run this before every push
 ```
 node build-core.js && node build-admin.js && python3 smoke-test.py
-node test-product-config.js && node test-cors-origins.js && node test-banner-video-url.js && node test-referral-required.js
+node test-product-config.js && node test-cors-origins.js && node test-banner-video-url.js && node test-referral-required.js && node test-allowed-origins.js
 ```
 `smoke-test.py` boots the BUILT app in a real browser, walks every tab and sheet, and
 fails on any page error, a stuck loading screen, or a bad `API_BASE`. It exists because

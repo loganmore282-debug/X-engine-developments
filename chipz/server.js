@@ -123,6 +123,53 @@ const CORS_ALLOWED_ORIGINS = new Set([
 // above warns about, hit for real a second time. If a Chipz screen ever
 // reports a network error while the server is fine, check this list FIRST.
 const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.edgeone.dev', '.onrender.com', '.pages.dev'];
+// Extra hostnames the owner adds from the admin panel (settings.allowedOrigins),
+// for custom domains that no built-in suffix covers. Kept as a plain
+// synchronous snapshot, refreshed by getSettings() whenever its own 60s cache
+// refreshes and immediately on save, because the CORS check runs on EVERY
+// request including preflights -- it must never wait on a database read.
+//
+// These are ADDED to the two lists above; they can never replace or remove
+// them. That is deliberate. If a typo here could drop the built-in hosts, one
+// bad save would CORS-block the admin panel itself, and the only place to
+// undo it is... the admin panel. The baseline guarantees a way back in.
+let _corsExtraHosts = [];
+// One hostname, as the CORS check will compare it: lowercased, scheme and any
+// path/port stripped, so the owner can paste "https://chipz-platform.com/" or
+// type "chipz-platform.com" and get the same result.
+// Matching is EXACT hostname only -- no wildcards, no suffix matching. A
+// suffix entry typed as ".com" would hand every site on the internet access
+// to this backend, and there is no phrasing of that field that makes the
+// mistake obvious enough to risk.
+function normalizeAllowedHost(raw) {
+  let s = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (!s) return { skip: true };
+  s = s.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+  if (!s) return { error: 'Enter a domain such as chipz-platform.com' };
+  if (s.length > 253) return { error: `"${raw}" is too long to be a domain.` };
+  if (s.includes('*')) return { error: `Wildcards are not allowed ("${raw}"). Add each domain on its own line.` };
+  const labels = s.split('.');
+  if (labels.length < 2) return { error: `"${raw}" is not a full domain. Use something like chipz-platform.com.` };
+  if (!labels.every(l => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(l)))
+    return { error: `"${raw}" is not a valid domain name.` };
+  return { host: s };
+}
+// Accepts the raw admin input (an array of lines, or one newline/comma
+// separated string) and returns a clean, de-duplicated host list, or the
+// first problem found so the owner is told exactly which line is wrong
+// instead of having the whole save silently drop it.
+function sanitizeAllowedOrigins(raw) {
+  const lines = Array.isArray(raw) ? raw : String(raw == null ? '' : raw).split(/[\n,]/);
+  if (lines.length > 50) return { error: 'That is more domains than this list is meant to hold (max 50).' };
+  const hosts = [];
+  for (const line of lines) {
+    const r = normalizeAllowedHost(line);
+    if (r.skip) continue;
+    if (r.error) return { error: r.error };
+    if (!hosts.includes(r.host)) hosts.push(r.host);
+  }
+  return { hosts };
+}
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
@@ -130,6 +177,10 @@ app.use(cors({
     try {
       const h = new URL(origin).hostname.toLowerCase();
       if (CORS_ALLOWED_SUFFIXES.some(sfx => h.endsWith(sfx))) return cb(null, true);
+      // Owner-added custom domains, checked LAST and only ever additive --
+      // see _corsExtraHosts. Exact hostname match, so "chipz-platform.com"
+      // never accidentally admits "chipz-platform.com.evil.com".
+      if (_corsExtraHosts.includes(h)) return cb(null, true);
       if (h === 'localhost' || h === '127.0.0.1') return cb(null, true);
     } catch (_) {}
     cb(null, false);
@@ -301,6 +352,10 @@ const DEFAULT_SETTINGS = {
   // platform impossible to launch. Turn this off temporarily if you ever need
   // to onboard someone with no upline.
   requireReferralCode: true,
+  // Extra frontend domains allowed to call this backend, set from the admin
+  // panel (Settings -> Allowed website domains). ADDED to the built-in
+  // allowlist, never replacing it -- see _corsExtraHosts.
+  allowedOrigins: [],
   maintenanceMode: false, maintenanceMsg: '',
   // Owner: "let's establish a timer ie like saying snow opening in
   // 23:59:34... just near maintenance mode." A pre-launch gate, separate
@@ -445,6 +500,12 @@ async function getSettings() {
     _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored);
   } catch (_) { _settingsCache = _settingsCache || DEFAULT_SETTINGS; }
   _settingsCacheTs = Date.now();
+  // Keep the CORS check's synchronous snapshot in step with the settings it
+  // came from. Refreshed here rather than read per-request so the allowlist
+  // check never awaits anything (see _corsExtraHosts). Already sanitized at
+  // save time; re-sanitized here so a value written directly into the
+  // database, or left over from an older format, still can't widen access.
+  _corsExtraHosts = (sanitizeAllowedOrigins(_settingsCache.allowedOrigins).hosts) || [];
   return _settingsCache;
 }
 // Normalizes a raw stored depositMethod/withdrawMethod value to one of
@@ -1977,7 +2038,10 @@ app.get('/health', async (_req, res) => {
 app.get('/public/settings', async (_req, res) => {
   try {
     const s = await getSettings();
-    const { maintenanceMsg, ...rest } = s;
+    // allowedOrigins is operator configuration, not app content -- there is
+    // no reason to hand every member's phone the list of domains that can
+    // reach this backend, so it is dropped here alongside maintenanceMsg.
+    const { maintenanceMsg, allowedOrigins, ...rest } = s;
     // referralRequired is the RESOLVED answer (setting AND "a member already
     // exists"), not the raw setting -- same reasoning as the resolved product
     // figures below. The Sign Up screen shows the field as required or
@@ -5609,6 +5673,11 @@ app.post('/admin/settings/update', async (req, res) => {
       if (key in updates && !isSafeExternalUrl(updates[key]))
         return res.status(400).json({ status: 'error', message: `${key} must be a valid http(s) link, or left blank.` });
     }
+    if ('allowedOrigins' in updates) {
+      const r = sanitizeAllowedOrigins(updates.allowedOrigins);
+      if (r.error) return res.status(400).json({ status: 'error', message: r.error });
+      updates.allowedOrigins = r.hosts;
+    }
     if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
       return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });
     // 'automatic' is deliberately NOT accepted here anymore (Round 102) --
@@ -5628,6 +5697,11 @@ app.post('/admin/settings/update', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'lipapay' or 'manual'` });
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
+    // Apply a domain change NOW rather than up to 60s later: the owner saves
+    // this field precisely because a site is currently being refused, and
+    // being told "wait a minute" while staring at a broken page is how a
+    // working fix gets mistaken for a broken one.
+    if ('allowedOrigins' in updates) _corsExtraHosts = updates.allowedOrigins;
     logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save settings' }); }

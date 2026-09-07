@@ -2136,6 +2136,9 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="sOpenCd" ${s.openingCountdownEnabled?'checked':''} style="width:auto"></label></div>
       <label>Opening date &amp; time</label><input id="sOpenCdAt" type="datetime-local" value="${msToDatetimeLocal(s.openingCountdownAt)}">
       <p class="muted" style="margin:4px 0 0">While enabled and this time is still in the future, every user (new or existing) sees the countdown instead of the login/app -- it turns off on its own once the time passes, or uncheck it here to open early.</p>
+      <label style="margin-top:14px">Allowed website domains</label>
+      <textarea id="sAllowedOrigins" rows="4" placeholder="chipz-platform.com&#10;www.chipz-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Only websites listed here may talk to the backend. Add your own custom domain when you buy one &mdash; <b>one per line</b>, and add the <b>www.</b> version too if you use it. If a site is not allowed, its pages show "Network error" even though the server is perfectly fine, so this is the first place to look when that happens.<br><br>You do <b>not</b> need to add the Render or EdgeOne addresses: <b>onrender.com</b>, <b>edgeone.app</b>, <b>edgeone.site</b> and <b>edgeone.dev</b> are permanently built in and cannot be removed from here. That is on purpose &mdash; it means a mistake in this box can never lock you out of this admin panel. Exact domains only, no <b>*</b> wildcards.</p>
       <h2 class="sec" style="margin:14px 0 4px">Appearance</h2>
       <label>Number/digit font (every UGX figure in the app)</label>
       <select id="sNumberFont">${NUMBER_FONT_OPTIONS.map(f=>`<option value="${esc(f)}" ${v('numberFont','Bodoni Moda')===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
@@ -2367,7 +2370,11 @@ async function renderSettings(){
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
-      requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked, maintenanceMode:$('sMaint').checked,
+      requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
+      // Sent as raw text; the server splits, validates and de-duplicates it,
+      // and rejects the whole save naming the bad line rather than silently
+      // dropping it.
+      allowedOrigins:$('sAllowedOrigins').value, maintenanceMode:$('sMaint').checked,
       maintenanceMsg:$('sMaintMsg').value.trim(), numberFont:$('sNumberFont').value,
       openingCountdownEnabled:$('sOpenCd').checked,
       openingCountdownAt:$('sOpenCdAt').value ? new Date($('sOpenCdAt').value).getTime() : 0,
