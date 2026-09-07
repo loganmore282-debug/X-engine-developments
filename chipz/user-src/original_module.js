@@ -471,6 +471,13 @@ async function boot(){
   STATE.homeBannerVideo = (b.status === 'success')
     ? (b.videoVersion ? API_BASE + '/public/banner-video?v=' + encodeURIComponent(b.videoVersion) : (b.video || null))
     : null;
+  // The instant-boot path paints Home from the saved snapshot before this
+  // fetch lands, and nothing else repaints Home afterwards -- so without this
+  // a member who had opened the app before would keep seeing the PREVIOUS
+  // banner video (or none) for the whole session after the owner changed it.
+  // Cheap and self-limiting: it only touches the DOM when the URL actually
+  // differs from what is on screen.
+  refreshHomeBannerIfChanged();
   // Same "prefetch alongside settings, zero added visible latency" reasoning
   // as STATE.homeBanner just above -- fetched unconditionally every boot
   // (cheap when unset, matches the existing banner's own tradeoff) so the
@@ -736,6 +743,13 @@ function _cachedStateBlob(uid, withImages){
     uid, account: STATE.account, investments: STATE.investments, teamStats: STATE.teamStats,
     bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, transactionsTruncated: STATE.transactionsTruncated, mission: STATE.mission,
     products, settings: STATE.settings,
+    // Just the URL, never the clip. The video FILE lives in the browser's own
+    // HTTP cache (immutable, a year, versioned URL), so knowing the URL at
+    // paint time is all the instant-boot path needs to start it right away
+    // instead of leaving the banner blank until /public/banner comes back.
+    // A poster image would be a data: URL worth hundreds of KB, so it is
+    // deliberately NOT kept here -- with the video cached it is barely seen.
+    homeBannerVideo: STATE.homeBannerVideo || null,
   });
 }
 function saveCachedState(uid){
@@ -766,6 +780,9 @@ async function enterApp(){
   // possibly-stale cached copy, only fill the gap while waiting for it.
   STATE.products = STATE.products || cached.products;
   STATE.settings = STATE.settings || cached.settings;
+  // Same `||` reasoning as the two above: fill the gap until boot()'s live
+  // /public/banner lands, never overwrite it once it has.
+  STATE.homeBannerVideo = STATE.homeBannerVideo || cached.homeBannerVideo || null;
   // subagent-audit-caught real regression: Round 57 added a wait on
   // _bootPromise right here to stop the announcement dialog/activity
   // ticker popping in after the spinner -- but THIS is the cache-hit
@@ -883,6 +900,10 @@ async function bootFromNetwork(uid){
   // the slowest of six calls -- /mission/status does two sequential DB lookups
   // server-side -- for data most members never look at in that session.
   await withTimeout(_bootPromise, 6000);
+  // _bootPromise carries /public/banner, so STATE.homeBannerVideo is known by
+  // here -- which is what makes it possible to have the clip downloaded
+  // BEFORE the loading screen comes down rather than after.
+  await preloadBannerVideo(BANNER_PRELOAD_MS);
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   maybeResumeManualPayment();
@@ -1116,10 +1137,108 @@ function homeBannerInnerHtml(st){
     // the exact combination phone browsers allow to start on its own.
     return `<video id="homeBannerVideo" src="${esc(STATE.homeBannerVideo)}"${poster} autoplay muted loop playsinline preload="auto"
         disablepictureinpicture disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback" tabindex="-1" aria-hidden="true"
-        onerror="this.parentNode.classList.add('hb-video-failed')"></video>`;
+        onerror="this.parentNode&&this.parentNode.classList.add('hb-video-failed')"></video>`;
   }
   if (STATE.homeBanner) return `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">`;
   return `<div class="hb-stripes"></div><div class="hb-cap">${esc(st.brandTagline || "Uganda's boldest way to grow your money")}</div>`;
+}
+// Puts the element that was preloaded during the loading screen INTO the
+// banner, in place of the fresh <video> paintHome() just wrote.
+//
+// Without this the preload only warms the HTTP cache: paintHome() builds a
+// brand-new <video>, and at the instant the loading screen goes that element
+// has readyState 0 and still has to go and read the file, so the banner shows
+// its poster for a beat first -- exactly the "show up after the loader" the
+// owner did not want. Moving the already-decoded element across closes that
+// gap: it is mid-playback the moment it lands.
+//
+// Every attribute is copied off the node being replaced rather than restated
+// here, so this cannot drift from homeBannerInnerHtml() -- add an attribute
+// there and it comes along automatically.
+function adoptPreloadedBannerVideo(){
+  const el = _bannerPreloadEl;
+  if (!el || !_bannerPreloadOk || !STATE.homeBannerVideo) return;
+  if (el.getAttribute('src') !== STATE.homeBannerVideo) return;   // a stale preload
+  const cur = document.getElementById('homeBannerVideo');
+  if (!cur || cur === el) return;
+  for (const a of Array.from(cur.attributes)) {
+    if (a.name === 'src') continue;                                // identical by the check above
+    try { el.setAttribute(a.name, a.value); } catch (_) {}
+  }
+  const parent = cur.parentNode;
+  if (!parent) return;
+  parent.replaceChild(el, cur);
+  const r = el.play(); if (r && r.catch) r.catch(() => {});
+}
+// Swaps the Home banner in place when the admin-set video URL has changed
+// under a Home that is already painted. A no-op when Home is not on screen,
+// or when what is rendered already matches.
+function refreshHomeBannerIfChanged(){
+  const wrap = document.querySelector('.home-banner');
+  if (!wrap) return;
+  const cur = wrap.querySelector('#homeBannerVideo');
+  const shown = cur ? cur.getAttribute('src') : null;
+  if (shown === (STATE.homeBannerVideo || null)) return;
+  wrap.classList.remove('hb-video-failed');
+  wrap.innerHTML = homeBannerInnerHtml(STATE.settings || {});
+  adoptPreloadedBannerVideo();
+  tryAutoplayHomeBanner();
+}
+// Owner: "make when the start up loader must have loaded also the video
+// before it waiting to load, so video must show up after loader."
+//
+// Downloads the banner video WHILE the loading screen is still up, so Home
+// paints with it already playing instead of showing the poster (or the
+// striped hero) and popping the video in a second or two later.
+//
+// This costs real time only ONCE. The video is served with a year-long
+// immutable cache under a versioned URL, so every later open resolves from
+// the phone's own cache and `canplaythrough` fires almost immediately -- the
+// wait below is effectively first-open-after-an-upload only.
+//
+// It is capped all the same. A member on slow Ugandan mobile data must never
+// be held on a spinner by a decorative clip: when the cap is hit the app
+// opens anyway and the element keeps buffering in the background, so the
+// banner starts as soon as it can. Same for a video that errors -- that path
+// resolves immediately rather than burning the whole cap.
+//
+// The element is kept in a module-level reference on purpose: a detached
+// <video> that gets garbage-collected mid-download would abandon the very
+// fetch this is waiting on.
+var _bannerPreloadEl = null;
+// Only a preload that actually reached "can play" is worth adopting. A failed
+// one must be left alone so the banner's own fresh <video> loads, errors, and
+// trips the hb-video-failed fallback -- adopting the dead element instead
+// meant the error had already fired while it was detached, so the fallback
+// never ran and the banner sat blank.
+var _bannerPreloadOk = false;
+var BANNER_PRELOAD_MS = 10000;
+function preloadBannerVideo(ms){
+  const src = STATE.homeBannerVideo;
+  if (!src) return Promise.resolve('none');
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = (why) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(why);
+    };
+    const v = document.createElement('video');
+    _bannerPreloadEl = v; _bannerPreloadOk = false;
+    // Muted + playsinline so a browser treats this like the real banner and
+    // is willing to buffer it without a gesture.
+    v.muted = true; v.defaultMuted = true; v.playsInline = true;
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+    v.preload = 'auto';
+    v.addEventListener('canplaythrough', () => { _bannerPreloadOk = true; finish('ready'); }, { once: true });
+    v.loop = true; v.autoplay = true;
+    v.setAttribute('loop', ''); v.setAttribute('autoplay', '');
+    v.addEventListener('error', () => finish('error'), { once: true });
+    const timer = setTimeout(() => finish('timeout'), ms || BANNER_PRELOAD_MS);
+    v.src = src;
+    try { v.load(); } catch (_) { finish('error'); }
+  });
 }
 // The banner must start itself, with nothing to tap. The autoplay attribute
 // covers the normal case; these retries cover the cases where a phone
@@ -1201,6 +1320,9 @@ ${spinBannerHtml()}
 <div style="height:8px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   startActivityTicker();
+  // Before tryAutoplayHomeBanner(), so the element it then nudges is the
+  // preloaded one rather than the blank node this paint just created.
+  adoptPreloadedBannerVideo();
   tryAutoplayHomeBanner();
 }
 // Home's lower banner. Replaces the product strip the owner asked to be

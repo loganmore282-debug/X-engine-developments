@@ -432,12 +432,45 @@ browser reports an empty `file.type` (some Android pickers do), and rewrites the
 `application/octet-stream` prefix the FileReader then produces — otherwise a perfectly
 good `.mp4` would be refused by the server's type gate.
 
+**The loading screen waits for the video, and hands the element over.** Owner: *"make
+when the start up loader must have loaded also the video before it waiting to load, so
+video must show up after loader."* `bootFromNetwork()` awaits `preloadBannerVideo()`
+after `_bootPromise` (which is what carries `/public/banner`, so the URL is known by
+then) and before hiding `#loadingScreen`.
+
+Warming the HTTP cache is **not enough on its own**: `paintHome()` builds a brand-new
+`<video>`, so at the instant the loader goes that element is at `readyState 0` and still
+has to go and read the file — the poster shows for a beat first, which is the exact gap
+the owner was complaining about. `adoptPreloadedBannerVideo()` moves the already-decoded
+element into the banner in place of the fresh node, copying every attribute off the node
+it replaces so it can never drift from `homeBannerInnerHtml()`. Measured at the handoff:
+`readyState 4`, playing.
+
+Only a preload that reached `canplaythrough` is adopted (`_bannerPreloadOk`). Adopting a
+FAILED one was a real bug caught by `test-banner-autoplay.py`: its `error` had already
+fired while the element was detached, so `hb-video-failed` never got set and the striped
+fallback never appeared. The inline `onerror` is null-guarded for the same reason.
+
+The wait is capped at `BANNER_PRELOAD_MS` (10s) and the element is kept alive in a
+module-level reference — a member on slow mobile data opens the app anyway while the
+clip keeps buffering, and a GC'd detached `<video>` would abandon the very fetch being
+waited on. An erroring video resolves immediately rather than burning the cap. The cost
+is a first-open-after-upload one: the year-long immutable cache makes every later open
+resolve from the phone.
+
+`saveCachedState()` also keeps `homeBannerVideo` (the URL only — a poster data: URL
+would eat the quota), so the instant-boot path paints the banner straight away instead
+of leaving it blank until `/public/banner` returns. Because that path can therefore
+paint a STALE video, `boot()` calls `refreshHomeBannerIfChanged()` — without it a
+returning member would keep seeing the previous clip for the whole session after an
+upload, since nothing else repaints Home.
+
 The image doubles as the poster frame. `/admin/banner/set` patches only the keys sent;
 `/admin/banner/clear?what=video` drops the link **and** the uploaded file.
 
 Tests: `test-banner-video-url.js` (validator + YouTube), `test-banner-video-upload.js`
 (size caps, accepted formats, byte ranges, cache headers, and that the bytes stay out
-of the boot JSON), `test-banner-video-corp.py` (the cross-site block above), `test-banner-autoplay.py` (drives the BUILT app against a real
+of the boot JSON), `test-banner-video-corp.py` (the cross-site block above), `test-banner-preload.py` (the video is decoded and playing at the exact tick the loader hides, measured with a MutationObserver on the #app hand-off -- NOT on the first `display:none`, which is the sign-in screen appearing and fires long before boot), `test-banner-autoplay.py` (drives the BUILT app against a real
 MediaRecorder-generated webm under the browser's **default** autoplay policy: proves it
 starts alone, keeps looping, has no button, and survives taps without pausing).
 
