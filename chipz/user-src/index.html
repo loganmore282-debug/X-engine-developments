@@ -346,11 +346,17 @@ a{color:inherit;}
 .acct-logo{width:60px;height:60px;border-radius:50%;background:var(--chipz-grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;box-shadow:0 10px 20px -12px rgba(226,27,42,.5);}
 .acct-logo img{width:100%;height:100%;object-fit:cover;}
 .acct-logo span{color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:17px;letter-spacing:.06em;}
-/* Animated logo beside the profile icon. Sized by the source GIF's own 300x220
-   (about 15:11), so it is never stretched; it just scales to fit the row. The
-   file carries transparency, so nothing is painted behind it. */
-.acct-gif{flex-shrink:0;width:60px;height:44px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
-.acct-gif img{max-width:100%;max-height:100%;width:auto;height:auto;display:block;object-fit:contain;}
+/* When an animated logo is set it becomes the profile mark itself, and the
+   circle has to give way: the source is 300x220 landscape, and cropping that
+   to a 60px circle would cut roughly a quarter of its width off the sides.
+   So the slot takes the source's own aspect ratio, contains rather than
+   covers (nothing cropped, nothing stretched), and drops the gradient
+   backing so the file's transparency shows through.
+   Resolution: 66px tall renders at 132-198 device pixels on a 2x/3x phone,
+   comfortably inside the source's 220px height, so it is always downscaled
+   and stays crisp -- it is never blown up past its native size. */
+.acct-logo.has-gif{width:auto;height:66px;aspect-ratio:300/220;border-radius:4px;background:none;box-shadow:none;}
+.acct-logo.has-gif img{width:100%;height:100%;object-fit:contain;image-rendering:auto;}
 .acct-profile .p-id{font-weight:600;font-size:16px;}
 .acct-profile .p-phone{color:var(--snow-muted);font-size:14px;font-weight:500;}
 .acct-divider{height:1px;background:var(--snow-border);margin:18px 0;}

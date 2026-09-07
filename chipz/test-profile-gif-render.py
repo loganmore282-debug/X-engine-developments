@@ -2,7 +2,7 @@ import asyncio, json, os, sys, functools, threading, http.server, socketserver
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
 ROOT = '/home/user/X-engine-developments/chipz/user'
-PORT = 8839
+PORT = 8841
 API = 'https://chipz-server.onrender.com'
 
 ACCOUNT = {"phone":"0742730382","walletBalance":2000,"totalDeposited":58000,"totalEarned":9840,
@@ -93,29 +93,30 @@ async def main():
         await page.wait_for_timeout(2600)
         await page.evaluate("closeAnnounce()")
         await page.evaluate("showPage('account')"); await page.wait_for_timeout(1200)
-        info = await page.evaluate("""()=>{const g=document.querySelector('.acct-gif img');
+        info = await page.evaluate("""()=>{const w=document.querySelector('.acct-logo');
+          const g=w?w.querySelector('img'):null;
           if(!g) return {missing:true};
-          const b=g.getBoundingClientRect();
-          const logo=document.querySelector('.acct-logo').getBoundingClientRect();
-          return {w:+b.width.toFixed(1),h:+b.height.toFixed(1),nat:[g.naturalWidth,g.naturalHeight],
-                  complete:g.complete, rightOfLogo: b.left > logo.right, insideViewport: b.right<=innerWidth+1};}""")
-        for k,v in info.items(): print("  %-14s %s" % (k,v))
-        ck(not info.get("missing"), "gif rendered on the Account card")
-        ck(info.get("nat")==[300,220], "loaded at its real 300x220")
-        ck(abs(info["w"]/info["h"] - 300/220) < 0.03, "kept its aspect ratio (%.2f vs %.2f)" % (info["w"]/info["h"], 300/220))
-        ck(info.get("rightOfLogo"), "sits beside the profile icon, not over it")
-        ck(info.get("insideViewport"), "fits inside the card")
-        # prove it is ANIMATING: screenshot the same region twice and compare
-        clip={"x":0,"y":int(info and 0)+60,"width":390,"height":140}
-        a=await page.screenshot(clip=clip); await page.wait_for_timeout(700)
-        c=await page.screenshot(clip=clip)
-        ck(a!=c, "frames actually change on screen (animation running)")
+          const b=g.getBoundingClientRect(); const wb=w.getBoundingClientRect();
+          const cs=getComputedStyle(g); const ws=getComputedStyle(w);
+          const dpr=devicePixelRatio||1;
+          return {hasGifCls:w.classList.contains('has-gif'),
+                  boxW:+wb.width.toFixed(1), boxH:+wb.height.toFixed(1),
+                  imgW:+b.width.toFixed(1), imgH:+b.height.toFixed(1),
+                  nat:[g.naturalWidth,g.naturalHeight], fit:cs.objectFit,
+                  wrapBg:ws.backgroundColor, radius:ws.borderTopLeftRadius,
+                  devicePx:[+(b.width*dpr).toFixed(0), +(b.height*dpr).toFixed(0)], dpr:dpr};}""")
+        for k,v in info.items(): print("  %-12s %s" % (k,v))
+        ck(not info.get("missing"), "gif is the profile mark")
+        ck(info.get("hasGifCls"), "slot switched out of circle mode")
+        ck(abs(info["imgW"]/info["imgH"] - 300/220) < 0.02, "native aspect kept, nothing stretched (%.3f vs %.3f)" % (info["imgW"]/info["imgH"], 300/220))
+        ck(info["fit"] == "contain", "contain, not cover -- nothing cropped off the sides")
+        ck(info["devicePx"][0] <= info["nat"][0] and info["devicePx"][1] <= info["nat"][1],
+           "always downscaled, never blown up: %s device px from a %s source" % (info["devicePx"], info["nat"]))
+        ck(info["wrapBg"] in ('rgba(0, 0, 0, 0)','transparent'), "no backing painted, transparency shows through")
+        a=await page.screenshot(clip={"x":0,"y":60,"width":390,"height":140}); await page.wait_for_timeout(700)
+        c=await page.screenshot(clip={"x":0,"y":60,"width":390,"height":140})
+        ck(a!=c, "still animating in that position")
         await page.screenshot(path=f"{OUT}/account-gif.png",full_page=False)
-        bg = await page.evaluate("""()=>{const w=document.querySelector('.acct-gif');const i=w.querySelector('img');
-          return {wrap:getComputedStyle(w).backgroundColor, img:getComputedStyle(i).backgroundColor};}""")
-        print("  backgrounds:", bg)
-        ck(bg["wrap"] in ('rgba(0, 0, 0, 0)','transparent') and bg["img"] in ('rgba(0, 0, 0, 0)','transparent'),
-           "app paints nothing behind the gif, so real transparency shows through")
         ck(not errs,"no page errors: "+str(errs))
         await b.close()
     print(("\n%d FAILED" % len(fails)) if fails else "\nprofile gif: all cases pass")

@@ -1878,19 +1878,27 @@ function settingRowHtml(icon, title, sub, onclick){
 }
 async function renderAccount(){
   const a = STATE.account || {};
-  const logo = STATE.brandLogo
-    ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.remove()">`
+  // The profile mark, in priority order: the admin's animated GIF, then a
+  // static brand logo, then the CHIPZ wordmark. The GIF takes this same
+  // position rather than sitting next to it -- it IS the profile logo.
+  // It gets its own class because it must NOT be cropped to a circle the
+  // way a square logo is: a 300x220 landscape forced into a 60px circle
+  // loses about a quarter of its width off the sides.
+  const logoCls = STATE.profileGif ? 'acct-logo has-gif' : 'acct-logo';
+  const logo = STATE.profileGif
+    ? `<img src="${esc(STATE.profileGif)}" alt="" onerror="this.closest('.acct-logo').classList.remove('has-gif');this.outerHTML='<span>CHIPZ</span>'">`
+    : STATE.brandLogo
+    ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.outerHTML='<span>CHIPZ</span>'">`
     : '<span>CHIPZ</span>';
   const html = `
 <div style="padding:18px 18px 0;">
   <div class="acct-profile">
     <div class="p-top">
-      <div class="acct-logo">${logo}</div>
+      <div class="${logoCls}">${logo}</div>
       <div style="min-width:0;flex:1;">
         <div class="p-id">ID: ${esc(a.publicId || '—')}</div>
         <div class="p-phone">${esc(formatPhoneDisplay(a.phone))}</div>
       </div>
-      ${STATE.profileGif ? `<div class="acct-gif"><img src="${esc(STATE.profileGif)}" alt="" onerror="this.parentNode.remove()"></div>` : ''}
     </div>
     <div class="acct-divider"></div>
     <div class="bal-label">Wallet Balance</div>
