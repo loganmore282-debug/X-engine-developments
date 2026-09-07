@@ -279,15 +279,15 @@ const DEFAULT_SETTINGS = {
   // So there are TWO kinds of spin, with different payout rules:
   //   * the free daily one, paying a random amount in [Min, Max] (set both
   //     equal for a fixed amount), and
-  //   * spins earned by buying a product from turntableMinTier onward,
-  //     paying turntableProductPct% of THAT product's price.
+  //   * spins earned by buying a product, paying from THAT product's own
+  //     spinMin/spinMax band -- configured per product, not here.
   turntableEnabled: false,
   turntableDailyMin: 200, turntableDailyMax: 1000,
-  turntableProductPct: 2,
-  // 1-based position in the product ladder. 2 = "product 2 upward earns a
-  // spin", matching the owner's own numbering; the cheapest tier grants none.
-  turntableMinTier: 2,
-  turntableSpinsPerPurchase: 1,
+  // Spins earned from purchases are configured PER PRODUCT (spinCount,
+  // spinMin, spinMax on each product) -- owner: "make when l can configure
+  // every spin price for each product... also products will have different
+  // rates of multipliers so don't fix it in settings." Only the free daily
+  // spin's band lives here, because it is not tied to any product.
   maintenanceMode: false, maintenanceMsg: '',
   // Owner: "let's establish a timer ie like saying snow opening in
   // 23:59:34... just near maintenance mode." A pre-launch gate, separate
@@ -2286,8 +2286,10 @@ app.post('/checkin', async (req, res) => {
 // differently and must not be able to subsidise each other:
 //   1. One FREE spin per EAT calendar day, paying a random amount inside the
 //      admin's [turntableDailyMin, turntableDailyMax] band.
-//   2. Spins EARNED by buying a product at or above turntableMinTier, each
-//      paying turntableProductPct% of that specific product's price.
+//   2. Spins EARNED by buying a product, each paying a random amount from
+//      that product's own spinMin/spinMax band. Configured per product
+//      (spinCount/spinMin/spinMax) because the owner wants every product to
+//      be able to pay differently.
 //
 // Earned spins are stored as individual `turntableSpins` documents rather
 // than a counter, because each one carries its own payout basis (the price
@@ -2298,23 +2300,25 @@ async function grantTurntableSpins(userId, product) {
   try {
     const sett = await getSettings();
     if (!sett.turntableEnabled) return;
-    const perPurchase = Math.max(0, Math.floor(Number(sett.turntableSpinsPerPurchase) || 0));
-    if (!perPurchase) return;
-    // Tier position is the product's own rank in the live ladder, so the
-    // owner's "product 2,3,4..." numbering keeps meaning the same thing even
-    // after products are added, removed or repriced in the admin panel.
-    const products = await getProducts();
-    const rank = products.findIndex(p => p.key === product.key) + 1;
-    if (!rank || rank < (Number(sett.turntableMinTier) || 2)) return;
-    const pct = Number(sett.turntableProductPct) || 0;
-    const basis = round2((Number(product.price) || 0) * pct / 100);
-    if (basis <= 0) return;
+    // Per-product config: how many spins this purchase grants, and the band
+    // each of those spins pays from. A product with no spinCount grants
+    // none, which is how "the cheapest product earns nothing" is expressed --
+    // there is no global tier threshold any more.
+    const count = Math.max(0, Math.floor(Number(product && product.spinCount) || 0));
+    if (!count) return;
+    const lo = Math.max(0, Number(product.spinMin) || 0);
+    const hi = Math.max(lo, Number(product.spinMax) || 0);
+    if (hi <= 0) return;
     const { date, time } = nowStr();
-    for (let i = 0; i < perPurchase; i++) {
+    for (let i = 0; i < count; i++) {
+      // The band is SNAPSHOT onto the spin, not looked up when it is spun.
+      // A member who earned a spin under one configuration keeps that deal
+      // even if the admin retunes the product afterwards -- and an admin
+      // lowering a payout cannot retroactively shrink spins already earned.
       await db.collection('turntableSpins').add({
-        userId, reward: basis, source: 'product', productKey: product.key,
-        productName: product.name, used: false, date, time,
-        createdAt: FieldValue.serverTimestamp(),
+        userId, spinMin: lo, spinMax: hi, source: 'product',
+        productKey: product.key, productName: product.name,
+        used: false, date, time, createdAt: FieldValue.serverTimestamp(),
       });
     }
   } catch (e) {
@@ -2324,11 +2328,16 @@ async function grantTurntableSpins(userId, product) {
     console.error(`Turntable: failed to grant spins to ${userId} for ${product && product.key}:`, e.message);
   }
 }
-function turntableDailyReward(sett) {
-  const lo = Math.max(0, Number(sett.turntableDailyMin) || 0);
-  const hi = Math.max(lo, Number(sett.turntableDailyMax) || 0);
+// One shared roll for both spin kinds -- the daily band from settings, or a
+// product spin's own snapshot band.
+function rollSpinReward(lo, hi) {
+  lo = Math.max(0, Number(lo) || 0);
+  hi = Math.max(lo, Number(hi) || 0);
   if (hi <= lo) return round2(lo);
   return round2(lo + Math.random() * (hi - lo));
+}
+function turntableDailyReward(sett) {
+  return rollSpinReward(sett.turntableDailyMin, sett.turntableDailyMax);
 }
 app.get('/turntable/status', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -2398,7 +2407,12 @@ app.post('/turntable/spin', async (req, res) => {
           return;
         }
         spinDoc = earned.docs[0];
-        reward = round2(Number(spinDoc.data().reward) || 0);
+        const d = spinDoc.data();
+        // Older spins (granted before per-product bands) carry a flat
+        // `reward` instead of a band -- honour it rather than paying 0.
+        reward = (d.spinMin != null || d.spinMax != null)
+          ? rollSpinReward(d.spinMin, d.spinMax)
+          : round2(Number(d.reward) || 0);
         source = 'product';
         label = `Turntable spin from ${spinDoc.data().productName || 'a purchase'}`;
       }
@@ -2469,7 +2483,7 @@ app.post('/invest/create', async (req, res) => {
       liveTier = await getProductByKey(tier.key);
       if (!liveTier || liveTier.active === false || liveTier.comingSoon) throw new Error('This product is not available right now.');
       cycle = Number(liveTier.cycle) || sett.cycleDays;
-      expectedReturn = Number(liveTier.expectedReturn) || Math.round(liveTier.price * sett.returnMultiple);
+      expectedReturn = productExpectedReturn(liveTier, sett);
       dailyPayout = Math.round(expectedReturn / cycle);
       const uRef = db.collection('users').doc(userId);
       const fresh = await uRef.get();
@@ -5436,7 +5450,6 @@ const SETTINGS_CRITICAL_RANGES = {
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
   turntableDailyMin: [0, MAX_MONEY_AMOUNT], turntableDailyMax: [0, MAX_MONEY_AMOUNT],
-  turntableProductPct: [0, 100], turntableMinTier: [1, 100], turntableSpinsPerPurchase: [0, 20],
   autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
   // real business constraint -- an admin fat-fingering a date shouldn't be
@@ -5678,6 +5691,22 @@ app.post('/admin/about-content/set', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the About page' }); }
 });
+// A product's total payout, in priority order:
+//   1. its own multiplier (price x multiplier) -- the owner's preferred
+//      control, since repricing then updates the payout automatically;
+//   2. an explicit expectedReturn typed in for that product;
+//   3. the global returnMultiple, kept only as a fallback for products that
+//      predate per-product multipliers.
+// Everything that needs a payout figure must go through this, so the app,
+// the admin panel and the actual credit can never disagree about it.
+function productExpectedReturn(p, sett) {
+  const price = Number(p && p.price) || 0;
+  const mult = Number(p && p.multiplier);
+  if (Number.isFinite(mult) && mult > 0) return Math.round(price * mult);
+  const explicit = Number(p && p.expectedReturn);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
+  return Math.round(price * ((sett && sett.returnMultiple) || 30));
+}
 function sanitizeProductInput(p, fallbackOrder) {
   const key = String(p?.key || '').trim();
   if (!key || key.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(key)) return null;
@@ -5695,9 +5724,40 @@ function sanitizeProductInput(p, fallbackOrder) {
     expectedReturn = Math.round(Number(p.expectedReturn));
     if (!Number.isFinite(expectedReturn) || expectedReturn < 1 || expectedReturn > MAX_MONEY_AMOUNT) return null;
   }
+  // Owner: "products will have different rates of multipliers so don't fix
+  // it in settings." So the multiple lives on the PRODUCT. When set it wins
+  // over expectedReturn (see productExpectedReturn), which lets the admin
+  // reprice a product and have its payout follow automatically instead of
+  // having to recompute the total by hand every time.
+  let multiplier = null;
+  if (p?.multiplier != null && p.multiplier !== '') {
+    multiplier = Number(p.multiplier);
+    if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1000) return null;
+  }
+  // Owner: "make when l can configure every spin price for each product like
+  // product 2 buying, amount 200 to 1000 number of spins like that." Each
+  // product carries its own turntable band and spin count -- there is no
+  // global percentage or tier threshold any more.
+  let spinMin = null, spinMax = null;
+  if (p?.spinMin != null && p.spinMin !== '') {
+    spinMin = Math.round(Number(p.spinMin));
+    if (!Number.isFinite(spinMin) || spinMin < 0 || spinMin > MAX_MONEY_AMOUNT) return null;
+  }
+  if (p?.spinMax != null && p.spinMax !== '') {
+    spinMax = Math.round(Number(p.spinMax));
+    if (!Number.isFinite(spinMax) || spinMax < 0 || spinMax > MAX_MONEY_AMOUNT) return null;
+  }
+  // A band that runs backwards would silently pay the wrong amount, so it is
+  // rejected at save time rather than clamped quietly at spin time.
+  if (spinMin != null && spinMax != null && spinMax < spinMin) return null;
+  let spinCount = 0;
+  if (p?.spinCount != null && p.spinCount !== '') {
+    spinCount = Math.round(Number(p.spinCount));
+    if (!Number.isFinite(spinCount) || spinCount < 0 || spinCount > 20) return null;
+  }
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
   const order = p?.order != null ? Number(p.order) : fallbackOrder;
-  return { key, name, price, cycle, expectedReturn, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  return { key, name, price, cycle, expectedReturn, multiplier, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 app.get('/admin/products', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

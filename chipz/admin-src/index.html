@@ -1647,11 +1647,22 @@ function editProduct(p, order){
     <label>Key (slug, lowercase, leave blank to auto)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="blackhole" ${p.key?'disabled':''}>
     <div class="row">
       <div><label>Price (UGX)</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="500000"></div>
-      <div><label>Total payout (UGX)</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
+      <div><label>Multiplier (&times;)</label><input id="pMult" type="number" step="0.1" min="0" value="${p.multiplier!=null?p.multiplier:''}" placeholder="3"></div>
     </div>
     <div class="row">
+      <div><label>Total payout (UGX)</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
       <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||180}"></div>
+    </div>
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
+    <div class="row">
       <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
+    </div>
+    <h4 style="margin:16px 0 4px;font-size:14px">Turntable spins from this product</h4>
+    <p class="muted" style="margin:0 0 8px;font-size:11.5px">How many spins buying THIS product earns, and what each of those spins can win. Leave spins at 0 for products that earn none. Each spin pays a random amount between the two figures — set them the same for a fixed amount.</p>
+    <div class="row">
+      <div><label>Spins per purchase</label><input id="pSpinCount" type="number" min="0" max="20" value="${p.spinCount||0}"></div>
+      <div><label>Win from (UGX)</label><input id="pSpinMin" type="number" min="0" value="${p.spinMin!=null?p.spinMin:''}" placeholder="200"></div>
+      <div><label>Win to (UGX)</label><input id="pSpinMax" type="number" min="0" value="${p.spinMax!=null?p.spinMax:''}" placeholder="1000"></div>
     </div>
     <label>Product image</label>
     <div class="img-picker">
@@ -1680,14 +1691,38 @@ function editProduct(p, order){
     catch(err){ toast(err.message||'Could not read image','err'); }
   });
   $('pImgClear').addEventListener('click', ()=>{ imgData=''; $('pImage').value=''; setPrev(''); });
+  // Multiplier and total payout are two views of the same number, so typing
+  // in either fills the other. Guarded against feeding each other in a loop.
+  let _syncing = false;
+  const syncFromMult = ()=>{
+    if(_syncing) return; _syncing = true;
+    const price = parseFloat($('pPrice').value), mult = parseFloat($('pMult').value);
+    if(price > 0 && mult > 0) $('pRet').value = Math.round(price * mult);
+    _syncing = false;
+  };
+  const syncFromRet = ()=>{
+    if(_syncing) return; _syncing = true;
+    const price = parseFloat($('pPrice').value), ret = parseFloat($('pRet').value);
+    if(price > 0 && ret > 0) $('pMult').value = Math.round((ret / price) * 100) / 100;
+    _syncing = false;
+  };
+  $('pMult').addEventListener('input', syncFromMult);
+  $('pRet').addEventListener('input', syncFromRet);
+  $('pPrice').addEventListener('input', ()=>{ if(parseFloat($('pMult').value) > 0) syncFromMult(); else syncFromRet(); });
   $('pImage').addEventListener('input', ()=>{ imgData=''; setPrev($('pImage').value.trim()); });
   $('pSave').addEventListener('click', async()=>{
     const image = imgData || $('pImage').value.trim();
     const key = (p.key || $('pKey').value || $('pLabel').value).toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
-      expectedReturn:$('pRet').value, cycle:$('pCycle').value, order:$('pOrder').value,
+      expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, order:$('pOrder').value,
+      spinCount:$('pSpinCount').value, spinMin:$('pSpinMin').value, spinMax:$('pSpinMax').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked };
     if(!parseFloat(body.price)) return toast('Enter a price','err');
+    const sMin = parseFloat(body.spinMin), sMax = parseFloat(body.spinMax);
+    if(Number.isFinite(sMin) && Number.isFinite(sMax) && sMax < sMin)
+      return toast('Spin "win to" cannot be less than "win from"','err');
+    if(parseFloat(body.spinCount) > 0 && !(sMax > 0))
+      return toast('Set what a spin can win, or set spins per purchase to 0','err');
     const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';
     const d=await api('/admin/products/save', { products:[body] });
     $('pSave').disabled=false; $('pSave').textContent=restore;
@@ -2203,12 +2238,7 @@ async function renderSettings(){
         <div><label>Maximum win (UGX)</label><input id="ttMax" type="number" min="0" value="${esc(v('turntableDailyMax',1000))}"></div>
       </div>
       <h4 style="margin:16px 0 6px;font-size:14px">Spins earned by buying products</h4>
-      <p class="muted" style="margin:0 0 8px;font-size:12px">Buying a product at or above the position below earns extra spins. Each of those spins pays the percentage of THAT product's price -- so a bigger product means a bigger win. Position 2 means "the 2nd cheapest product and everything above it"; set it to 1 to include every product.</p>
-      <div class="row">
-        <div><label>Percentage of product price (%)</label><input id="ttPct" type="number" min="0" max="100" step="0.1" value="${esc(v('turntableProductPct',2))}"></div>
-        <div><label>Earns from product position</label><input id="ttTier" type="number" min="1" value="${esc(v('turntableMinTier',2))}"></div>
-        <div><label>Spins per purchase</label><input id="ttSpins" type="number" min="0" max="20" value="${esc(v('turntableSpinsPerPurchase',1))}"></div>
-      </div>
+      <p class="muted" style="margin:0 0 8px;font-size:12px">Set per product, not here — open <b>Products</b>, edit a product, and use its "Turntable spins from this product" section to set how many spins it earns and what each can win. That way every product can pay differently.</p>
       <button class="btn block" id="saveTurntable" style="margin-top:6px">Save turntable settings</button>
     </div>
 
@@ -2352,9 +2382,6 @@ async function renderSettings(){
     const upd = {
       turntableEnabled: $('ttOn').checked,
       turntableDailyMin: min, turntableDailyMax: max,
-      turntableProductPct: +$('ttPct').value,
-      turntableMinTier: +$('ttTier').value,
-      turntableSpinsPerPurchase: +$('ttSpins').value,
     };
     const d = await api('/admin/settings/update', { settings: upd });
     toast(d.status==='success'?'Turntable settings saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
