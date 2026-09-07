@@ -1399,7 +1399,7 @@ function startActivityTicker(){
 var _activeTeamLevel = null;
 window.switchTeamLevel = async function(level){
   _activeTeamLevel = level;
-  document.querySelectorAll('.team-level-switcher .seg').forEach(s => s.classList.toggle('active', Number(s.dataset.level)===level));
+  document.querySelectorAll('.lv-switcher .lv').forEach(s => s.classList.toggle('on', Number(s.dataset.level)===level));
   // Keep the Commission Rate card in step with the selected level -- it
   // shows that level's own rate and member count in the mockup, not L1's.
   const t = STATE.teamStats || {}, rates = t.commRates || {}, team = t.team || {};
@@ -1415,8 +1415,11 @@ window.switchTeamLevel = async function(level){
 };
 function maskPhone(phone){
   const s = String(phone||'').replace(/\D/g,'');
-  if (s.length < 6) return phone || '';
-  return '+' + s.slice(0,6) + ' *** ' + s.slice(-3);
+  if (s.length < 7) return phone || '';
+  // "756****0296" -- Team.dc.html's own shape: a few leading digits, four
+  // stars, the last four. Enough to recognise your own referral, not enough
+  // to be a usable number.
+  return s.slice(0, s.length - 7) + '****' + s.slice(-4);
 }
 function timeAgo(ts){
   if (!ts) return '';
@@ -1431,8 +1434,6 @@ function timeAgo(ts){
 }
 function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
-  $('teamMembersHeading').textContent = `Level ${level} members`;
-  $('teamMembersCount').textContent = `${members.length} member${members.length===1?'':'s'}`;
   const box = $('teamMembersBox');
   if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">No members at this level yet.</div>'; return; }
   // Member card layout per Team.dc.html: gradient avatar, masked phone,
@@ -1445,7 +1446,7 @@ function renderTeamMembers(level){
         <div class="name">User</div>
         <div class="phone mono">${esc(maskPhone(m.phone))}</div>
       </div>
-      <div class="amt3 mono">${fmtUGX(m.invested || 0)}</div>
+      <div class="amt3 mono">${fmtUGXCents(m.invested || 0)}</div>
     </div>
     <div class="joined">Joined ${esc(timeAgo(m.createdAt) || '—')}</div>
     <div class="ln2"></div>
@@ -1464,8 +1465,8 @@ async function renderTeam(){
 function patchTeamStats(){
   const t = STATE.teamStats || {};
   const tt = $('teamTotalCount'); if (tt) tt.textContent = t.totalTeam;
-  const tc = $('teamCommissionAmt'); if (tc) tc.textContent = fmtUGX(t.teamCommission);
-  const td = $('teamDepositsAmt'); if (td) td.textContent = fmtUGX(t.teamDeposits);
+  const tc = $('teamCommissionAmt'); if (tc) tc.textContent = fmtUGXCents(t.teamCommission);
+  const td = $('teamDepositsAmt'); if (td) td.textContent = fmtUGXCents(t.teamDeposits);
 }
 function paintTeam(){
   const t = STATE.teamStats || { referralCode:'', commRates:{l1:28,l2:1,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
@@ -1475,30 +1476,26 @@ function paintTeam(){
   // link / Invitation Reward blocks that used to live here now have their own
   // Referral tab (owner: "remove them from team and they come here to this tab").
   let html = `
-<div class="page-head"><h2>Team</h2></div>
+<div style="height:18px;"></div>
 <div class="team-gcard" style="margin:0 18px;">
   <div class="row1"><span class="lbl">Total Team</span><span class="num mono" id="teamTotalCount">${t.totalTeam || 0}</span></div>
   <div class="ln"></div>
-  <div class="amt mono" id="teamDepositsAmt">${fmtUGX(t.teamDeposits)}</div>
+  <div class="amt mono" id="teamDepositsAmt">${fmtUGXCents(t.teamDeposits)}</div>
   <div class="cap">Purchase</div>
 </div>
 <h2 class="plain-head">Commission Rate</h2>
 <div class="team-gcard comm" style="margin:0 18px;">
   <div class="lvl" id="teamCommLevelLabel">Level 1</div>
   <div class="pct" id="teamCommPct">${rates.l1 != null ? rates.l1 : 28}%</div>
-  <div class="amt2 mono" id="teamCommissionAmt">${fmtUGX(t.teamCommission)}</div>
+  <div class="amt2 mono" id="teamCommissionAmt">${fmtUGXCents(t.teamCommission)}</div>
   <div class="mem" id="teamCommMembers">${(t.team && t.team.l1) || 0} Members</div>
 </div>
-<div class="team-level-switcher" style="margin:16px 18px 14px;">
-  <div class="seg active" data-level="1" onclick="switchTeamLevel(1)">Level 1</div>
-  <div class="seg" data-level="2" onclick="switchTeamLevel(2)">Level 2</div>
-  <div class="seg" data-level="3" onclick="switchTeamLevel(3)">Level 3</div>
+<div class="lv-switcher">
+  <button class="lv on" data-level="1" onclick="switchTeamLevel(1)">Level 1</button>
+  <button class="lv" data-level="2" onclick="switchTeamLevel(2)">Level 2</button>
+  <button class="lv" data-level="3" onclick="switchTeamLevel(3)">Level 3</button>
 </div>
 <div style="margin:0 18px;">
-  <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 2px 10px;">
-    <div id="teamMembersHeading" style="font-size:15px;font-weight:800;color:var(--snow-ink);">Level 1 members</div>
-    <div id="teamMembersCount" style="font-size:12px;color:var(--snow-muted);font-weight:600;"></div>
-  </div>
   <div id="teamMembersBox"></div>
 </div>
 <button class="dark-button" style="width:calc(100% - 36px);margin:16px 18px 0;padding:15px 0;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="openMissionCenterSheet()">${ICONS.people2}Mission Center</button>

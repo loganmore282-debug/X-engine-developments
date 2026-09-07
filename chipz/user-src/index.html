@@ -229,6 +229,13 @@ a{color:inherit;}
 .team-member .ln2{height:1px;background:var(--snow-border);margin-bottom:8px;}
 .team-member .foot{font-size:11px;color:var(--snow-muted);font-weight:600;}
 
+/* Team.dc.html's level switcher: three separate pills, the active one filled
+   with the brand gradient and its own 3D shelf -- not the soft segmented
+   control inherited from Snow. */
+.lv-switcher{display:flex;gap:10px;margin:16px 18px 14px;}
+.lv-switcher .lv{flex:1;text-align:center;padding:11px 0;border-radius:999px;font-weight:800;font-size:14px;border:1.5px solid var(--snow-border);color:var(--snow-muted);background:var(--snow-surface);font-family:inherit;}
+.lv-switcher .lv.on{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:0 4px 0 var(--chipz-shelf);}
+
 /* ── Account (Account.dc.html) ──
    A profile card (logo / ID / phone / wallet balance / Deposit+Withdraw)
    above a plain white SETTINGS list, then a black Log Out button. This
