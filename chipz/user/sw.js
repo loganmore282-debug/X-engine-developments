@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'chipz-shell-v24';
+const CACHE = 'chipz-shell-v25';
 const VENDOR_CACHE = 'chipz-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/treasure-chest.png', '/turntable.png',
   '/nav-home.png', '/nav-products.png', '/nav-myproducts.png', '/nav-referral.png', '/nav-team.png', '/nav-account.png',
@@ -47,7 +47,13 @@ self.addEventListener('fetch', e => {
   }
   const reqUrl = new URL(e.request.url);
   if (reqUrl.origin !== self.location.origin) {
-    e.respondWith(fetch(e.request));
+    // Do NOT respondWith here. Returning without responding hands the request
+    // back to the browser untouched, which is what respondWith(fetch(...))
+    // was approximating anyway -- minus a service-worker round trip, and
+    // minus the worker sitting in the middle of media streaming. The Home
+    // banner video is served from chipz-server with byte ranges; a worker
+    // relaying 206 responses is a known source of stalled video, and there is
+    // nothing to gain here since none of this is cached.
     return;
   }
   if (e.request.mode === 'navigate') {

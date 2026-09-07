@@ -2205,6 +2205,21 @@ app.get('/public/banner-video', async (req, res) => {
     const v = await getHomeBannerVideo();
     if (!v.buf) return res.status(404).end();
     const etag = '"bv-' + v.version + '"';
+    // THIS LINE IS WHY THE VIDEO SHOWS AT ALL. helmet sets
+    // Cross-Origin-Resource-Policy: same-site globally (see the top of this
+    // file), and *.onrender.com subdomains are NOT same-site: onrender.com is
+    // on the Public Suffix List, so chipz-app.onrender.com and
+    // chipz-server.onrender.com are separate registrable domains. A <video>
+    // is a no-cors subresource load, so CORP applies to it -- and the browser
+    // dropped the response with ERR_BLOCKED_BY_RESPONSE.NotSameSite, silently:
+    // the owner uploaded a video and Home just showed the fallback hero.
+    //
+    // API calls were unaffected (CORP does not gate CORS-mode fetches), which
+    // is why this was the FIRST thing to break -- the banner video is the
+    // app's only cross-origin subresource. The global same-site default stays
+    // as it is; it is a real protection for the money endpoints. Only this
+    // route, which serves a public decorative clip and nothing else, opts out.
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     // The client asks for ?v=<version>, so a new upload is a new URL and the
     // long cache below can never serve a stale clip.
     res.set('Cache-Control', 'public, max-age=31536000, immutable');

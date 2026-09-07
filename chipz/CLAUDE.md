@@ -126,6 +126,9 @@ setup:
   Snow's `snow-beer-cbf65` config is fully gone from both. This is the public client
   config only; the matching `FIREBASE_SERVICE_ACCOUNT` for the backend is a real
   secret and belongs in the host's env vars, never here.
+- **All three services `autoDeploy: true`** (see `render.yaml`) — pushing to the branch
+  redeploys `chipz-server`, `chipz-app` and `chipz-admin` on its own. Unlike Voltra,
+  the owner does NOT hand-copy `server.js` anywhere; do not tell him to.
 - **Backend is LIVE**: `https://chipz-server.onrender.com` (Render web service
   `chipz-server`, paid $7 instance so it never sleeps). `API_BASE` at the top of
   `user-src/original_module.js` and `SERVER` in `admin-src/index.html` both point at
@@ -391,12 +394,50 @@ retries on `visibilitychange`/`focus`/`pageshow` and on the first tap **anywhere
 the app, for the cases a browser refuses the first attempt. A video that fails to load
 falls back to the striped hero.
 
+**The banner video is the app's ONLY cross-origin subresource, and that broke it.**
+The owner uploaded a video and Home showed nothing. `server.js` sets
+`Cross-Origin-Resource-Policy: same-site` globally (helmet), and
+`chipz-app.onrender.com` / `chipz-server.onrender.com` *look* same-site but are not:
+**onrender.com is on the Public Suffix List**, so every `*.onrender.com` is its own
+registrable domain. A `<video src>` is a no-cors subresource load, so CORP gates it —
+the browser dropped the response with `ERR_BLOCKED_BY_RESPONSE.NotSameSite`, the
+`<video>` fired `error`, the app's own fallback swapped in the striped hero, and
+nothing said why. API calls never showed it because **CORP does not gate CORS-mode
+fetches**.
+
+`/public/banner-video` now sets `Cross-Origin-Resource-Policy: cross-origin` for itself
+only; the global `same-site` default stays, and is a real protection for the money
+endpoints. `test-banner-video-corp.py` pins it, loading `localhost` → `127.0.0.1`
+(different sites, same relationship as the two Render subdomains) with the headers
+**parsed out of the real route**, and asserts both directions — that `cross-origin`
+plays and that `same-site` really does block with `NotSameSite`, so the passing case
+cannot go vacuous. Each case runs in its own browser context with its own `?v=`,
+because the route's year-long `immutable` cache otherwise replays the first (allowed)
+response and the blocked case silently "passes" — the first version of that test did
+exactly that.
+
+**Anything else this app ever loads directly from `chipz-server` (`<img src>`,
+`<audio>`, a font, a `<script>`) will hit the same wall** and needs the same per-route
+override. Everything else today is a data: URL inside JSON, which is why nothing else
+has tripped it.
+
+The service worker no longer intercepts cross-origin requests at all — it returns
+without `respondWith`, handing them back to the browser. That is what
+`respondWith(fetch(e.request))` was approximating anyway, minus a worker round-trip and
+minus the worker relaying 206 range responses for media, which is a known source of
+stalled video.
+
+`fileToRawDataUrl()` in the admin panel falls back to the file EXTENSION when the
+browser reports an empty `file.type` (some Android pickers do), and rewrites the
+`application/octet-stream` prefix the FileReader then produces — otherwise a perfectly
+good `.mp4` would be refused by the server's type gate.
+
 The image doubles as the poster frame. `/admin/banner/set` patches only the keys sent;
 `/admin/banner/clear?what=video` drops the link **and** the uploaded file.
 
 Tests: `test-banner-video-url.js` (validator + YouTube), `test-banner-video-upload.js`
 (size caps, accepted formats, byte ranges, cache headers, and that the bytes stay out
-of the boot JSON), `test-banner-autoplay.py` (drives the BUILT app against a real
+of the boot JSON), `test-banner-video-corp.py` (the cross-site block above), `test-banner-autoplay.py` (drives the BUILT app against a real
 MediaRecorder-generated webm under the browser's **default** autoplay policy: proves it
 starts alone, keeps looping, has no button, and survives taps without pausing).
 

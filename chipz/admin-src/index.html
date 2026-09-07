@@ -349,6 +349,12 @@ function fileToDataUrl(file, maxDim=900, quality=0.82){
 // squashed or letterboxed. fileToDataUrl() above can only cap the LONGEST
 // side, which leaves the height free and so cannot guarantee a frame.
 const PRODUCT_IMG_W = 1200, PRODUCT_IMG_H = 900;
+const NAME_MIME = { mp4:'video/mp4', m4v:'video/mp4', webm:'video/webm', mov:'video/quicktime',
+                    png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp' };
+function guessMimeFromName(name){
+  const m = /\.([a-z0-9]+)$/i.exec(String(name||''));
+  return (m && NAME_MIME[m[1].toLowerCase()]) || '';
+}
 // Mirrors server.js's own cap and check, so the panel can refuse a bad video
 // before uploading it and explain why in the same words the server would.
 const BANNER_VIDEO_MAX_BYTES = 4 * 1024 * 1024;
@@ -396,11 +402,25 @@ function fileToRawDataUrl(file, maxBytes, accept, what){
   accept = accept || /^image\//; what = what || 'image';
   return new Promise((resolve,reject)=>{
     if(!file) return reject(new Error('No file'));
-    if(!accept.test(file.type)) return reject(new Error('Please choose a'+(what==='image'?'n ':' ')+what+' file'));
+    // Some Android file pickers hand back a File with an EMPTY type. Judging
+    // only by file.type would then refuse a perfectly good .mp4, so fall back
+    // to the extension -- the server re-checks the real type either way.
+    const typed = file.type || guessMimeFromName(file.name);
+    if(!accept.test(typed)) return reject(new Error('Please choose a'+(what==='image'?'n ':' ')+what+' file'));
     if(file.size > maxBytes) return reject(new Error('That file is '+Math.round(file.size/1024)+' KB. Keep it under '+Math.round(maxBytes/1024)+' KB -- it loads on every member\'s phone.'));
     const fr=new FileReader();
     fr.onerror=()=>reject(new Error('Could not read the file'));
-    fr.onload=()=>resolve(fr.result);
+    fr.onload=()=>{
+      // With an empty file.type the reader emits
+      // "data:application/octet-stream;base64,..." -- which the server's
+      // video/image gate would reject. Rewrite the prefix to the type we
+      // resolved above so a blank-type pick still uploads.
+      let out = String(fr.result||'');
+      if (typed && /^data:(application\/octet-stream)?;?base64,/.test(out)) {
+        out = 'data:' + typed + ';base64,' + out.slice(out.indexOf('base64,') + 7);
+      }
+      resolve(out);
+    };
     fr.readAsDataURL(file);
   });
 }
