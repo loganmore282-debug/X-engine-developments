@@ -2098,6 +2098,7 @@ async function renderSettings(){
   const announceImage = air.image||'';
   const referralBannerImage = cir.referral||'';
   const brandLogoImage = cir.logo||'';
+  const spinBannerImage = cir.spin||'';
   const manualSelectorImage = mpir.selector||'';
   const manualHeroImage = mpir.hero||'';
   const pushTokenCount = pr.status==='success' ? pr.count : null;
@@ -2280,6 +2281,17 @@ async function renderSettings(){
         ${referralBannerImage?`<button class="btn danger sm" id="refBannerClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="refBannerFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Home spin banner</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The lower banner on the app's Home tab, carrying the <b>Go spin</b> button that opens the turntable. It replaced the product list that used to sit there &mdash; products now live on their own tab. Full width, roughly 3:1 (for example 1200&times;400). An empty slot shows the brand gradient behind the button.</p>
+      <div class="banner-row">
+        ${spinBannerImage?`<img class="img-thumb" src="${esc(spinBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${spinBannerImage?'Custom image':'<span class="muted">Default artwork</span>'}</div>
+        ${spinBannerImage?`<button class="btn danger sm" id="spinBannerClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="spinBannerFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Brand logo</h2>
@@ -2487,6 +2499,7 @@ async function renderSettings(){
   }
   wireChipzImageSlot('referral', 'refBannerFile', 'refBannerClear', 'Referral banner saved, live for every user', 'Referral banner removed');
   wireChipzImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved, live for every user', 'Brand logo removed');
+  wireChipzImageSlot('spin', 'spinBannerFile', 'spinBannerClear', 'Spin banner saved, live for every user', 'Spin banner removed');
   $('helpBannerFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
     await withTabBusy((async()=>{

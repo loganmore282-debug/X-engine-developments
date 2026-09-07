@@ -630,7 +630,7 @@ async function getHelpBanner() {
 // 60s cache shape as getHomeBanner()/getHelpBanner() above, but written
 // once generically rather than copy-pasted per slot: `chipz-<slot>` doc ids
 // keep them from colliding with Snow's inherited 'home'/'help' docs.
-const CHIPZ_IMAGE_SLOTS = ['referral', 'logo'];
+const CHIPZ_IMAGE_SLOTS = ['referral', 'logo', 'spin'];
 const _chipzImageCache = {};
 async function getChipzImage(slot) {
   if (!CHIPZ_IMAGE_SLOTS.includes(slot)) return null;
@@ -2105,8 +2105,8 @@ app.get('/public/announcement-image', async (_req, res) => {
 // in boot()'s own Promise.all alongside the Home banner so neither pops in.
 app.get('/public/chipz-images', async (_req, res) => {
   try {
-    const [referral, logo] = await Promise.all([getChipzImage('referral'), getChipzImage('logo')]);
-    res.json({ status: 'success', referral, logo });
+    const [referral, logo, spin] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin')]);
+    res.json({ status: 'success', referral, logo, spin });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Both slots in one call (not two round trips) -- fetched unconditionally
@@ -5712,8 +5712,8 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/chipz-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [referral, logo] = await Promise.all([getChipzImage('referral'), getChipzImage('logo')]);
-    res.json({ status: 'success', referral, logo });
+    const [referral, logo, spin] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin')]);
+    res.json({ status: 'success', referral, logo, spin });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/chipz-image/set', async (req, res) => {

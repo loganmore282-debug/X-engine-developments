@@ -72,6 +72,7 @@ var ICONS = {
   telegram: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 3.5 2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5Z"/></svg>',
   warnTriangle: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M12 3 2 20h20L12 3Z" fill="#f4b400" stroke="#a66a00" stroke-width="1"/><path d="M12 10v4" stroke="#5a3d00" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="#5a3d00"/></svg>',
   wheel: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
   bell:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>',
   deposit: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8"/><path d="M8.5 12 12 15.5 15.5 12"/></svg>',
   withdraw: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-8"/><path d="M8.5 12 12 8.5 15.5 12"/></svg>',
@@ -480,6 +481,8 @@ async function boot(){
   // page banner and the brand logo on the Account profile card.
   STATE.referralBanner = (ci.status === 'success' && ci.referral) ? ci.referral : null;
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
+  // Home's lower banner (the one carrying the Go spin button).
+  STATE.spinBanner = (ci.status === 'success' && ci.spin) ? ci.spin : null;
   applyAuthTagline();
   applyNumberFont();
 }
@@ -1129,32 +1132,35 @@ function paintHome(){
     <span class="badge"><img src="/act-service.png" alt=""></span><span class="lbl">Service</span>
   </button>
 </div>
-<div id="activityTicker" style="margin:14px 18px 0;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:#171213;box-shadow:0 6px 16px -8px rgba(0,0,0,.35);overflow:hidden;">
-  <span style="width:6px;height:6px;border-radius:50%;background:var(--chipz-orange);flex-shrink:0;"></span>
-  <div style="overflow:hidden;flex:1;min-width:0;">
-    <div id="activityTickerTrack" class="mono" style="display:inline-flex;white-space:nowrap;color:#f2c078;font-size:11.5px;">Loading activity&hellip;</div>
+<div class="act-card">
+  <span class="act-bell">${ICONS.bell}</span>
+  <div class="act-track-wrap">
+    <div id="activityTickerTrack" class="act-track">Loading activity&hellip;</div>
   </div>
 </div>
-<div class="home-tabs">
-  <button class="ht ${tab==='hot'?'active':'off'}" onclick="switchHomeProductTab('hot')">Hot Products</button>
-  <button class="ht ${tab==='new'?'active':'off'}" onclick="switchHomeProductTab('new')">New Arrivals</button>
-</div>
-<div id="homeProductList" style="display:flex;flex-direction:column;gap:12px;margin:0 18px;">
-  ${shown.length ? shown.map(productCardHtml).join('') : '<div class="list-empty">Nothing here yet.</div>'}
-</div>
-<div style="text-align:center;margin:16px 0 0;">
-  <button style="background:none;border:none;color:var(--snow-wine);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;" onclick="showPage('catalog')">See all products &rsaquo;</button>
-</div>
+${spinBannerHtml()}
 <button aria-label="Open treasure chest" onclick="openChestSheet()" class="chest-float">
   <img src="/treasure-chest.png" alt="">
 </button>
-<button aria-label="Turntable" onclick="openTurntableSheet()" class="chest-float turntable-float">
-  ${ICONS.wheel}
-</button>
-<div style="height:16px;"></div>`;
+<div style="height:8px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   startActivityTicker();
   tryAutoplayHomeBanner();
+}
+// Home's lower banner. Replaces the product strip the owner asked to be
+// taken off Home entirely (products live on their own tab now). The artwork
+// is admin-uploadable like every other banner; with none set it falls back
+// to the brand gradient so the "Go spin" call to action is never stranded on
+// a blank block.
+function spinBannerHtml(){
+  const img = STATE.spinBanner
+    ? `<img src="${esc(STATE.spinBanner)}" alt="" onerror="this.style.display='none'">`
+    : '';
+  return `
+<div class="spin-banner">
+  ${img}
+  <button class="spin-cta" onclick="openTurntableSheet()">Go spin</button>
+</div>`;
 }
 // Which Home product strip is showing. Top-level binding must be `var`
 // (never const/let) -- see this file's own header rule about the
@@ -1248,7 +1254,7 @@ function paintCatalog(){
 <div style="display:flex;flex-direction:column;gap:12px;margin:0 18px;">
   ${products.length ? products.map(productCardHtml).join('') : '<div class="list-empty">No products yet.</div>'}
 </div>
-<div style="height:16px;"></div>`;
+`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
 
@@ -1290,7 +1296,7 @@ function paintReferral(){
   <div class="lv-line">LV3 = ${st.commL3 != null ? st.commL3 : 1}%</div>
   <p style="font-size:13px;color:var(--snow-muted);font-weight:600;line-height:1.6;margin:8px 0 0;">Earn daily wages by inviting members to invest.</p>
 </div>
-<div style="height:16px;"></div>`;
+`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
 // Owner: "balance takes long to load ie when you login it can say
@@ -1418,7 +1424,7 @@ function paintProducts(animate){
   </div>`;
     });
   }
-  html += `</div><div style="height:16px;"></div>`;
+  html += `</div>`;
   $('pageHost').innerHTML = animate ? '<div class="reveal-in">' + html + '</div>' : html;
   startPlanCountdowns();
 }
@@ -1462,9 +1468,11 @@ function activityRowText(row){
 }
 // Home.dc.html styles the phone number white against the amber rest of the
 // line, so the eye lands on who rather than on the sentence.
+// Owner asked for different wording in the activity card. Reads as a short
+// notification line rather than a running commentary: who, what, how much.
 function activityRowHtml(row){
-  const verb = row.kind === 'deposit' ? 'just deposited' : 'just withdrew';
-  return `<b>${esc(row.phone)}</b> ${esc(verb)} ${esc(fmtUGX(row.amount))}`;
+  const verb = row.kind === 'deposit' ? 'topped up' : 'cashed out';
+  return `<b>${esc(row.phone)}</b> ${esc(verb)} <b>${esc(fmtUGX(row.amount))}</b>`;
 }
 async function renderActivityTicker(){
   const track = $('activityTickerTrack');
@@ -1631,7 +1639,7 @@ function paintTeam(){
   <div id="teamMembersBox"></div>
 </div>
 <button class="dark-button" style="width:calc(100% - 36px);margin:16px 18px 0;padding:15px 0;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="openMissionCenterSheet()">${ICONS.people2}Mission Center</button>
-<div style="height:16px;"></div>`;
+`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   STATE.teamMembers = {1:null,2:null,3:null};
   switchTeamLevel(1);
@@ -1844,7 +1852,7 @@ async function renderAccount(){
     ${settingRowHtml('download', 'Download APP', 'Get the mobile app', 'promptInstallApp()')}
     ${settingRowHtml('wallet', 'Wallet', 'Manage your withdrawal wallet', 'openWalletSheet()')}
     <button class="setting-row" onclick="openTurntableSheet()">
-      <span class="sq" style="color:var(--snow-wine);">${ICONS.wheel}</span>
+      <span class="sq"><img src="/turntable.png" alt="" style="width:26px;height:26px;object-fit:contain;"></span>
       <span class="txt"><span class="t1" style="display:block;">Turntable</span><span class="t2" style="display:block;">Daily spin &amp; bonus wins</span></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
     </button>
