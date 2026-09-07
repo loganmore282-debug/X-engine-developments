@@ -2670,7 +2670,13 @@ app.post('/invest/create', async (req, res) => {
       if (!fresh.exists) throw new Error('User not found');
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       const bal = fresh.data().walletBalance || 0;
-      if (bal < liveTier.price) throw new Error(`Need ${fmtUGX(liveTier.price)}, have ${fmtUGX(bal)}`);
+      // Carries a code so the app can react to this specific failure (send
+      // the member to Deposit) instead of string-matching the message.
+      if (bal < liveTier.price) {
+        const shortErr = new Error(`Need ${fmtUGX(liveTier.price)}, have ${fmtUGX(bal)}`);
+        shortErr.code = 'INSUFFICIENT_BALANCE';
+        throw shortErr;
+      }
       const wasFirstInvestmentDone = fresh.data().firstInvestmentDone === true;
       const isFirstInvestment = !(wasFirstInvestmentDone || (fresh.data().totalInvested || 0) > 0);
       const invRef = db.collection('investments').doc();

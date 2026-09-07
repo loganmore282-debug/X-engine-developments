@@ -2136,11 +2136,22 @@ window.doTurntableSpin = async function(){
 // message, one pill OK. Replaces toast() for anything the member must
 // acknowledge before continuing (toast is still used for confirmations
 // that need no acknowledgement, e.g. "Copied", "Wallet saved").
-window.notify = function(message){
+// `onClose` lets a caller do something once the member has acknowledged the
+// dialog -- used by the insufficient-balance path to send them to Deposit.
+// It is one-shot and cleared on close, so a later plain notify() can never
+// inherit a stale callback.
+var _notifyOnClose = null;
+window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
+  _notifyOnClose = typeof onClose === 'function' ? onClose : null;
   $('notifyBg').classList.add('show');
 };
-window.closeNotify = function(){ $('notifyBg').classList.remove('show'); };
+window.closeNotify = function(){
+  $('notifyBg').classList.remove('show');
+  const fn = _notifyOnClose;
+  _notifyOnClose = null;
+  if (fn) fn();
+};
 
 // ── BALANCE RECORD (BalanceRecord.dc.html) ──
 // Current-balance band + All / Deposit / Withdraw / Turntable tabs over the
@@ -3650,7 +3661,23 @@ window.openInvestConfirm = async function(tierKey, btn){
   if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = 'Please wait…'; }
   const r = await post('/invest/create', { tierKey });
   if (btn) { btn.disabled = false; btn.textContent = label || 'Buy Now'; }
-  if (r.status !== 'success') return notify(r.message || 'Could not complete purchase');
+  if (r.status !== 'success') {
+    // Not enough money is not really an error to read and dismiss -- it is a
+    // signal to go and top up, so the app says so and takes them there.
+    // Matched on the server's code, with a fallback to the old "Need X, have
+    // Y" message shape so this still works against a backend that has not
+    // been redeployed yet.
+    const short = r.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(r.message || ''));
+    if (short) {
+      notify('Insufficient balance, redirecting to deposit…', () => openDepositSheet());
+      // "Redirecting" has to actually redirect, whether or not they tap OK.
+      // closeNotify() clears the callback, so whichever happens first wins
+      // and Deposit can never open twice.
+      setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
+      return;
+    }
+    return notify(r.message || 'Could not complete purchase');
+  }
   toast(r.message || 'Purchase successful');
   // Repaint whichever screen the purchase was made from, so the new plan and
   // the reduced balance appear straight away. renderHome()/renderProducts()
