@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""The Account wallet balance: large, bold, and in the brand orange.
+"""The Account wallet balance: large, bold, and in the brand gradient.
 
 Owner, against a reference screenshot of another app whose balance is big and
 in that app's own brand colour: "l told you that the number of account balance
 is large and UGX and colored in the colour of site, so ours should be that
-orange."
+orange." Then, seeing it flat next to the Deposit button: "but has no gradient
+just like you see buttons, other side is conc another is half conc" -- the
+button runs deep red at one end into orange at the other, and the figure has
+to do the same.
 
 So the WHOLE figure -- the "UGX" as well as the digits -- carries the brand
-orange, and it is visibly bigger and heavier than ordinary text.
+gradient, and it is visibly bigger and heavier than ordinary text. The gradient
+claim is checked by SAMPLING THE RENDERED PIXELS, not by reading the
+stylesheet: background-clip:text silently paints nothing on a box that doesn't
+hug its text, and a declared gradient proves only that it was declared.
 
 The size is not a matter of taste alone: it has to survive the longest figure
 a real member can actually hold. Product-12 pays UGX 240,000,000, so
@@ -82,6 +88,29 @@ def serve():
     threading.Thread(target=s.serve_forever, daemon=True).start()
     return s
 
+def ink_bands(png, frac=0.22):
+    """Mean colour of the GLYPH pixels in the left and right ends of the figure.
+
+    Antialiasing means most pixels in the crop are card-white or a blend, so
+    this keeps only solid ink -- warm (red clearly above blue) and not washed
+    out -- and averages those. Returns (left_rgb, right_rgb, n_per_band).
+    """
+    from PIL import Image
+    im = Image.open(png).convert('RGB')
+    w, h = im.size
+    px = im.load()
+    def band(x0, x1):
+        acc, n = [0, 0, 0], 0
+        for x in range(x0, x1):
+            for y in range(h):
+                r, g, bl = px[x, y]
+                if r > 150 and r - bl > 80:       # solid warm ink, not the card
+                    acc[0] += r; acc[1] += g; acc[2] += bl; n += 1
+        return (tuple(v // n for v in acc), n) if n else (None, 0)
+    lo, ln = band(0, max(1, int(w * frac)))
+    hi, hn = band(int(w * (1 - frac)), w)
+    return lo, hi, min(ln, hn)
+
 def parse_rgb(css):
     nums = [int(float(n)) for n in css.replace('rgba(', '').replace('rgb(', '')
             .replace(')', '').split(',')[:3]]
@@ -113,31 +142,64 @@ async def main():
     async with async_playwright() as pw:
         b = await pw.chromium.launch(executable_path="/opt/pw-browsers/chromium")
 
-        print("— it is large, bold, and the brand orange —")
+        print("— it is large, bold, and carries the brand gradient —")
         ctx, page = await open_account(b, 520782)
         style = await page.evaluate("""() => {
             const el = document.querySelector('.bal-value');
             if (!el) return null;
             const cs = getComputedStyle(el);
-            const brand = getComputedStyle(document.documentElement)
-                            .getPropertyValue('--chipz-orange').trim();
+            const root = getComputedStyle(document.documentElement);
+            const r = el.getBoundingClientRect();
+            const cardW = el.parentElement.clientWidth;
             return { text: el.textContent.trim(), size: parseFloat(cs.fontSize),
-                     weight: cs.fontWeight, color: cs.color, brandToken: brand };
+                     weight: cs.fontWeight, fill: cs.webkitTextFillColor || cs.color,
+                     bgImage: cs.backgroundImage,
+                     clip: cs.webkitBackgroundClip || cs.backgroundClip,
+                     boxW: Math.round(r.width), cardW,
+                     gradToken: root.getPropertyValue('--chipz-grad').trim(),
+                     btnBg: getComputedStyle(document.querySelector('.acct-btnrow .primary-button'))
+                              .backgroundImage };
         }""")
-        print("   ", style)
+        print("   ", {k: v for k, v in style.items() if k != 'gradToken'})
         ck(style is not None, "the balance element exists")
         ck(style["size"] >= 40, "it is LARGE (%.0fpx, was 34px)" % style["size"])
         ck(int(style["weight"]) >= 700, "and bold (weight %s)" % style["weight"])
-        ck(parse_rgb(style["color"]) == BRAND_ORANGE_RGB,
-           "and painted in the brand orange #ff8a1f (%s)" % style["color"])
-        ck(style["brandToken"].lower() == '#ff8a1f',
-           "which really is the site's own --chipz-orange token (%s)" % style["brandToken"])
+        ck(style["clip"] == "text", "it is clipped to the glyphs (background-clip:%s)" % style["clip"])
+        ck(parse_rgb(style["fill"])[:3] == (0, 0, 0) and style["fill"].startswith("rgba"),
+           "with a transparent fill so the gradient shows through (%s)" % style["fill"])
+        # The very point of the change: the SAME gradient the buttons use.
+        ck(style["bgImage"] == style["btnBg"],
+           "and it is the exact gradient the Deposit button uses")
+        # background-clip:text paints across the ELEMENT's box, so a
+        # full-width box would waste both ends of the gradient on empty card.
+        ck(style["boxW"] < style["cardW"],
+           "the box hugs the digits (%dpx figure in a %dpx card) so the gradient "
+           "spans the number, not the card" % (style["boxW"], style["cardW"]))
         # "UGX and colored" -- the currency word must carry the colour too, not
         # just the digits. It is one text node, so this is really a check that
         # nothing inside it overrides the colour.
         ck(style["text"].startswith("UGX"),
            "the UGX is part of the same coloured figure (%r)" % style["text"])
         await page.screenshot(path=f"{OUT}/balance.png")
+
+        # --- the pixel proof -------------------------------------------------
+        # Everything above could hold while the figure still rendered flat (or
+        # invisible). This crops the actual figure out of a screenshot and
+        # measures the ink at each end: the brand gradient goes #e21b2a (green
+        # channel 27) to #ff8a1f (green channel 138), so a real gradient shows
+        # a clearly GREENER right end. A flat fill shows no difference.
+        el = page.locator('.bal-value')
+        await el.screenshot(path=f"{OUT}/balance-figure.png")
+        L, R, band = ink_bands(f"{OUT}/balance-figure.png")
+        print("    ink: left end %s  right end %s  (%d ink pixels per band)"
+              % (L, R, band))
+        ck(L is not None and R is not None,
+           "the figure actually renders ink (not invisible)")
+        ck(R[1] - L[1] > 40,
+           "it runs deep red into orange like the button: green channel %d on the "
+           "left end vs %d on the right" % (L[1], R[1]))
+        ck(L[0] > 150 and R[0] > 150,
+           "both ends stay warm/brand (red channel %d and %d)" % (L[0], R[0]))
         await ctx.close()
 
         print("\n— and the longest realistic balance still fits on one line —")

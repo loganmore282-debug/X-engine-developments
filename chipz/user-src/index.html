@@ -508,12 +508,31 @@ a{color:inherit;}
    without wrapping (see test-balance-style.py, which measures the real
    rendered width rather than trusting the number here). */
 .acct-profile .bal-value{font-size:44px;font-weight:700;color:var(--chipz-orange);
-  text-align:center;margin:2px 0 18px;line-height:1.1;letter-spacing:-.01em;
+  text-align:center;line-height:1.1;letter-spacing:-.01em;
   /* Pinned to one line on purpose: a balance broken across two lines reads
      as two numbers. fitBalanceText() steps the size down only as far as the
      measured width actually demands, so an ordinary balance keeps all 44px
      and only a very large one shrinks. */
-  white-space:nowrap;}
+  white-space:nowrap;
+  /* fit-content so the box HUGS the digits, which is what makes the gradient
+     below span the figure itself instead of the full-width card. max-width
+     keeps the overflow test (scrollWidth > clientWidth) working: the box is
+     capped at the card's width, so a too-long figure still reports overflow
+     and gets stepped down. */
+  width:fit-content;max-width:100%;margin:2px auto 18px;}
+/* Owner: "but has no gradient just like you see buttons, other side is conc
+   another is half conc" -- the Deposit button runs deep red on one end into
+   orange on the other, and the figure was a single flat orange next to it.
+   Same --chipz-grad, same 135deg, painted through the glyphs.
+   Guarded by @supports because the fallback for an unsupported
+   background-clip is an INVISIBLE balance -- the flat orange above stays as
+   the fallback, and only browsers that can actually clip to text get the
+   gradient. -webkit-text-fill-color is the one WebKit honours. */
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  .acct-profile .bal-value{background:var(--chipz-grad);
+    -webkit-background-clip:text;background-clip:text;
+    color:transparent;-webkit-text-fill-color:transparent;}
+}
 .acct-btnrow{display:flex;gap:10px;}
 .acct-btnrow button{flex:1;height:50px;font-size:15px;padding:0;}
 .sec-head{display:flex;align-items:center;gap:9px;margin:26px 0 12px;}

@@ -376,13 +376,28 @@ module flag makes every later call free.
 finished), and the icon's opacity sampled through a real tap — 1 → 0 → 1, settling fully
 visible, and replaying on a second tap of the same tab.
 
-### The Account wallet balance: big, orange, and auto-fitted
+### The Account wallet balance: big, gradient, and auto-fitted
 
 Owner: *"l told you that the number of account balance is large and UGX and colored in
-the colour of site, so ours should be that orange."* So `.acct-profile .bal-value` is
-44px / weight 700 / `var(--chipz-orange)`, and the **whole** figure carries the colour —
-the `UGX` as well as the digits (it is one text node; nothing inside may override it).
-It was 34px in the ordinary ink colour, which is what made it read as body text.
+the colour of site, so ours should be that orange"*, then, seeing it sitting flat above
+the Deposit button: *"but has no gradient just like you see buttons, other side is conc
+another is half conc."* So `.acct-profile .bal-value` is 44px / weight 700 and painted
+with **`var(--chipz-grad)` — the identical gradient the buttons use** (deep red
+`#e21b2a` into orange `#ff8a1f` at 135deg), clipped through the glyphs. The **whole**
+figure carries it, the `UGX` as well as the digits (it is one text node; nothing inside
+may override it). It was 34px in the ordinary ink colour, which is what made it read as
+body text.
+
+Two things make the gradient actually work, and both are easy to lose:
+- **The box must hug the digits.** `background-clip:text` paints the gradient across the
+  ELEMENT's box; on a full-width block, both ends of the ramp land on empty card and the
+  digits only ever sample the middle. `width:fit-content;max-width:100%;margin:… auto`
+  fixes it — and `max-width` is what keeps the overflow test below working, since the box
+  is still capped at the card width.
+- **It is wrapped in `@supports`**, because the fallback for a browser that can't clip to
+  text is an *invisible balance*. The flat `color:var(--chipz-orange)` stays as the
+  declared fallback and only a browser that can do the clip gets the gradient.
+  `-webkit-text-fill-color:transparent` is the one WebKit honours.
 
 The size cannot simply be hard-coded, because the figure's **length is not ours to
 choose**: `UGX 5,000.00` and `UGX 240,000,000.00` (product-12's full payout, so a
@@ -406,9 +421,18 @@ balances rather than trusting the number in the stylesheet — which is how the 
 caught in the first place. Note when writing amounts for it: `fmtUGXCents` only appends
 `.00`; it does **not** divide by 100, so `walletBalance` is already whole UGX.
 
-Caveat worth remembering: `#ff8a1f` on the white card measures **2.36:1** contrast, under
-the 3:1 bar for large text. It is the brand colour the owner asked for by name, so it
-ships — but if it ever reads washed out in sunlight, `#e0670a` is the same hue at 3.44:1.
+It also proves the gradient **from pixels**, not from CSS: it screenshots the figure
+itself, keeps only solid warm ink (`r>150 and r-b>80`, which discards the antialiasing
+against the white card) and averages each end. A real ramp shows the green channel around
+**56 on the left and 129 on the right**; a flat fill shows no spread, and an unsupported
+clip shows no ink at all. A declared `background-image` proves only that it was declared —
+`background-clip:text` on a box that doesn't hug its text renders flat while every
+computed-style assertion still passes.
+
+Contrast note: the orange end (`#ff8a1f`) is only **2.36:1** on the white card, under the
+3:1 bar for large text — but the gradient's red end (`#e21b2a`) is 4.4:1, so the figure
+now reads better than the flat orange did. If it ever needs to be legible end-to-end,
+darkening the orange stop toward `#e0670a` (3.44:1) is the lever.
 
 ## Secrets — NEVER commit
 
