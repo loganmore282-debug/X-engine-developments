@@ -1610,7 +1610,31 @@ var _homeBalanceVals = { wallet: null, earned: null, invested: null };
 // `fmt` is the formatter that painted the element in the first place --
 // Account's wallet figure carries cents ("UGX 2,000.00"), the rest don't,
 // and a live-refresh tick must not silently reformat what it re-writes.
-function animateBalanceEl(el, key, toValue, fmt){
+// The wallet figure is the largest text on the screen and its LENGTH is not
+// ours to choose: "UGX 5,000.00" and "UGX 240,000,000.00" (product-12's full
+// payout, so a genuinely reachable balance) differ by more than double in
+// width. At the 44px the design asks for, anything past roughly seven digits
+// wraps onto a second line or spills out of the card on a 390px phone. So the
+// figure is nowrap in CSS and the size steps down here only as far as the
+// real measured width demands -- an ordinary balance still renders at 44px.
+var BAL_MAX_PX = 44, BAL_MIN_PX = 22;
+function fitBalanceText(el, sample){
+  if (!el) return;
+  // Measure against `sample` when the text about to be shown isn't in the
+  // element yet (mid-animation), then put back what was there.
+  const prev = sample == null ? null : el.textContent;
+  if (sample != null) el.textContent = sample;
+  let px = BAL_MAX_PX;
+  el.style.fontSize = px + 'px';
+  // clientWidth is 0 on a page that hasn't been laid out yet; there is
+  // nothing to measure, so leave the size at its maximum.
+  while (el.clientWidth > 0 && px > BAL_MIN_PX && el.scrollWidth > el.clientWidth){
+    px -= 1;
+    el.style.fontSize = px + 'px';
+  }
+  if (prev != null) el.textContent = prev;
+}
+function animateBalanceEl(el, key, toValue, fmt, autoFit){
   // Chipz's Home no longer carries the balance figures (they live on
   // Account, per the mockups), so the element genuinely may not exist on
   // the page the live-refresh tick happens to fire on.
@@ -1619,6 +1643,12 @@ function animateBalanceEl(el, key, toValue, fmt){
   toValue = Number(toValue) || 0;
   const fromValue = _homeBalanceVals[key];
   _homeBalanceVals[key] = toValue;
+  if (autoFit){
+    // Size to whichever END of the count is the longer string, so the figure
+    // can't briefly overflow while it is animating between the two.
+    const to = fmt(toValue), from = fromValue === null ? to : fmt(fromValue);
+    fitBalanceText(el, to.length >= from.length ? to : from);
+  }
   // Nothing to animate on a genuinely first paint (no prior value yet) or
   // when the figure hasn't actually changed -- avoids needless motion on
   // every routine live-refresh tick, where balances usually sit still.
@@ -1637,7 +1667,7 @@ function patchHomeBalances(){
   const a = STATE.account || {};
   // Account is where the wallet figure lives in Chipz; these all no-op
   // safely on a page that doesn't carry the element.
-  animateBalanceEl($('acctWallet'), 'wallet', a.walletBalance, fmtUGXCents);
+  animateBalanceEl($('acctWallet'), 'wallet', a.walletBalance, fmtUGXCents, true);
   animateBalanceEl($('homeTotalEarned'), 'earned', a.totalEarned);
   animateBalanceEl($('homeTotalInvested'), 'invested', a.totalInvested);
 }
@@ -2217,6 +2247,8 @@ async function renderAccount(){
   <div style="height:20px;"></div>
 </div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  // The figure is in the DOM now, so it can be measured and sized to fit.
+  fitBalanceText($('acctWallet'));
 }
 // "+256 742 730 382" -- the shape the mockups show, from whatever the
 // server stored (0742730382 / 256742730382 / +256742730382 all normalise).

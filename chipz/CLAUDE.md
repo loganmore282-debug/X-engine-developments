@@ -376,6 +376,40 @@ module flag makes every later call free.
 finished), and the icon's opacity sampled through a real tap — 1 → 0 → 1, settling fully
 visible, and replaying on a second tap of the same tab.
 
+### The Account wallet balance: big, orange, and auto-fitted
+
+Owner: *"l told you that the number of account balance is large and UGX and colored in
+the colour of site, so ours should be that orange."* So `.acct-profile .bal-value` is
+44px / weight 700 / `var(--chipz-orange)`, and the **whole** figure carries the colour —
+the `UGX` as well as the digits (it is one text node; nothing inside may override it).
+It was 34px in the ordinary ink colour, which is what made it read as body text.
+
+The size cannot simply be hard-coded, because the figure's **length is not ours to
+choose**: `UGX 5,000.00` and `UGX 240,000,000.00` (product-12's full payout, so a
+reachable balance) differ by more than double in width, and past roughly seven digits
+44px wraps onto a second line or spills out of the card on a 390px phone. A balance
+broken across two lines reads as two numbers. So:
+
+- CSS pins it to `white-space:nowrap`.
+- `fitBalanceText(el, sample)` in `original_module.js` starts at `BAL_MAX_PX` (44) and
+  steps down 1px at a time while `scrollWidth > clientWidth`, floor `BAL_MIN_PX` (22).
+  An ordinary balance therefore still gets essentially the full size; only a very large
+  one shrinks. It no-ops when `clientWidth` is 0 (page not laid out yet).
+- Both writers of `#acctWallet` call it: `renderAccount()` right after it sets
+  `pageHost.innerHTML`, and `animateBalanceEl(..., autoFit=true)` from
+  `patchHomeBalances()`. The animated one fits against **whichever end of the count is
+  the longer string**, so the figure can't briefly overflow mid-animation.
+
+`test-balance-style.py` measures the RENDERED geometry (`scrollWidth` vs `clientWidth`,
+box height vs one line-height, and left/right against the 390px viewport) at three real
+balances rather than trusting the number in the stylesheet — which is how the wrap was
+caught in the first place. Note when writing amounts for it: `fmtUGXCents` only appends
+`.00`; it does **not** divide by 100, so `walletBalance` is already whole UGX.
+
+Caveat worth remembering: `#ff8a1f` on the white card measures **2.36:1** contrast, under
+the 3:1 bar for large text. It is the brand colour the owner asked for by name, so it
+ships — but if it ever reads washed out in sunlight, `#e0670a` is the same hue at 3.44:1.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

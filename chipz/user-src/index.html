@@ -498,7 +498,22 @@ a{color:inherit;}
 .acct-profile .p-phone{color:var(--snow-muted);font-size:14px;font-weight:500;}
 .acct-divider{height:1px;background:var(--snow-border);margin:18px 0;}
 .acct-profile .bal-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--snow-muted);font-weight:500;text-align:center;}
-.acct-profile .bal-value{font-size:34px;color:var(--snow-ink);text-align:center;margin:4px 0 18px;}
+/* Owner, against a reference screenshot: "the number of account balance is
+   large and UGX and colored in the colour of site, so ours should be that
+   orange." So the whole figure -- the UGX too, not just the digits -- is the
+   brand orange, big and bold, exactly as the reference treats its own brand
+   colour. It was 34px in the app's default text weight and ink colour, which
+   is what made it read as ordinary body text next to the reference.
+   Size is capped by the longest figure that has to fit on a 390px phone
+   without wrapping (see test-balance-style.py, which measures the real
+   rendered width rather than trusting the number here). */
+.acct-profile .bal-value{font-size:44px;font-weight:700;color:var(--chipz-orange);
+  text-align:center;margin:2px 0 18px;line-height:1.1;letter-spacing:-.01em;
+  /* Pinned to one line on purpose: a balance broken across two lines reads
+     as two numbers. fitBalanceText() steps the size down only as far as the
+     measured width actually demands, so an ordinary balance keeps all 44px
+     and only a very large one shrinks. */
+  white-space:nowrap;}
 .acct-btnrow{display:flex;gap:10px;}
 .acct-btnrow button{flex:1;height:50px;font-size:15px;padding:0;}
 .sec-head{display:flex;align-items:center;gap:9px;margin:26px 0 12px;}
