@@ -1209,15 +1209,18 @@ function productCardHtml(p){
   const { expected, cycle, daily: dailyPayout } = planFigures(p);
   const initial = esc(String(p.name || '').replace(/[^0-9]/g, '') || String(p.name || '?').trim()[0] || '?');
   const img = p.image
+    // outerHTML, NOT parentNode.innerHTML: the product name now lives inside
+    // .p-img alongside this image, so replacing the parent's contents would
+    // take the name down with the broken image. This swaps out the <img>
+    // alone.
     // The inner quotes must be HTML entities: the browser decodes them before the
     // handler is compiled, so the fallback markup is valid JS. Bare quotes here
     // would make the whole onerror a syntax error and no glyph would ever show.
-    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.parentNode.innerHTML='&lt;div class=&quot;glyph&quot;&gt;${initial}&lt;/div&gt;'">`
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.outerHTML='&lt;div class=&quot;glyph&quot;&gt;${initial}&lt;/div&gt;'">`
     : `<div class="glyph">${initial}</div>`;
   return `
   <div class="p-card">
-    <div class="p-name">${esc(p.name)}</div>
-    <div class="p-img">${img}</div>
+    <div class="p-img">${img}<div class="p-name">${esc(p.name)}</div></div>
     <div class="p-body">
       <div class="p-stats">
         <div class="p-stat"><div class="k">Price</div><div class="v">${fmtUGXCents(p.price)}</div></div>
