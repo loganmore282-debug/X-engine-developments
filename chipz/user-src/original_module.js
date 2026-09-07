@@ -1,3 +1,9 @@
+// Chipz backend (Render web service `chipz-server`). The frontend is hosted
+// separately on Tencent EdgeOne Pages, so every call here is cross-origin --
+// this host must stay in server.js's CORS allowlist, and that allowlist must
+// keep matching *.edgeone.app / *.edgeone.site for the reverse direction.
+var API_BASE = 'https://chipz-server.onrender.com';
+
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
 
 // Every money amount elsewhere is always a whole shilling -- only a

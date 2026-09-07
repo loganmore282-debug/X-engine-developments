@@ -126,11 +126,21 @@ setup:
   Snow's `snow-beer-cbf65` config is fully gone from both. This is the public client
   config only; the matching `FIREBASE_SERVICE_ACCOUNT` for the backend is a real
   secret and belongs in the host's env vars, never here.
-- **`API_BASE` still points at Snow's backend** (`mylifeismyhappiness.onrender.com`,
-  top of `user-src/original_module.js`, mirrored in `admin-src/index.html`). The owner
-  has not given a Chipz backend URL yet — swap it the moment they do, or nothing the
-  app does will reach a Chipz database.
-- MongoDB database and payment-provider credentials are still **not provisioned**.
+- **Backend is LIVE**: `https://chipz-server.onrender.com` (Render web service
+  `chipz-server`, paid $7 instance so it never sleeps). `API_BASE` at the top of
+  `user-src/original_module.js` and `SERVER` in `admin-src/index.html` both point at
+  it. No `mylifeismyhappiness` (Snow's backend) reference survives anywhere.
+- **MongoDB Atlas Flex**, cluster `cluster0.wblvntm.mongodb.net`, database **`chipz`**,
+  user `chipz`. The cluster is SHARED with the owner's other apps, so the `/chipz`
+  path segment in `MONGODB_URI` is load-bearing — `db.js` now refuses to boot without
+  it rather than defaulting (see its own comment).
+- Flex, unlike the M0 free tier, **does support real transactions**. `db.js`'s
+  `runTransaction` is still Snow's fake (runs the fn, commits writes individually), and
+  the money paths still rely on in-process locks + atomic `$inc`. That is correct and
+  safe as-is; making deposits/withdrawals genuinely atomic is now *possible* and is a
+  worthwhile follow-up, but must not be attempted casually — it is the money path.
+- Payment-provider credentials (MarzPay/LipaPay) are still **not provisioned**, so no
+  real money can move yet.
 
 ## Product config (not yet finalized — do not invent real numbers)
 
@@ -217,16 +227,32 @@ Known gaps / next up:
   percentage still need building (see the Turntable bullet above for the spec).
 - Product catalog is still placeholder ("Product-1".."Product-10") — the owner has
   not supplied real names/prices/images.
-- **`API_BASE` still points at Snow's Render URL** — the Chipz Firebase config IS now
-  stamped in (project `chipz-23a4c`), but the backend URL, MongoDB cluster and
-  payment-provider keys are still outstanding. Nothing reaches a Chipz database until
-  the backend URL is swapped.
+- **Payment providers not connected.** Everything else is live end to end (EdgeOne
+  frontend -> Render backend -> Atlas `chipz` database), but no real deposit or
+  withdrawal can complete until MarzPay/LipaPay keys are set in Render's env vars.
 
 A note on how the Firebase config got missed the first time: the owner supplied it
 mid-session with "now stamp in this config in admin and userpanel and start building",
 and the mechanical `snow/` -> `chipz/` file copy silently carried Snow's config
 forward over it. When the owner hands over config values, stamp them in immediately
 and grep for the OLD values afterwards to prove nothing survived.
+
+### Run this before every push
+```
+node build-core.js && node build-admin.js && python3 smoke-test.py
+```
+`smoke-test.py` boots the BUILT app in a real browser, walks every tab and sheet, and
+fails on any page error, a stuck loading screen, or a bad `API_BASE`. It exists because
+three separate still-used declarations (`NUMBER_FONT_STACKS`, `chipzMarkHtml`, `ICONS`,
+and later `API_BASE`) were silently deleted along with neighbouring dead code in this
+session. `node --check` passes on all of those and the obfuscated build round-trips
+fine — the only symptom is the deployed app hanging forever on its loading screen.
+
+Its `API_BASE` assertion was added after the first version of the test passed a build
+whose every API call was broken: with `API_BASE` undefined, `fetch(API_BASE + path)`
+silently requests `<origin>/undefined/account`, which 404s without throwing. **"No page
+errors" is not the same as "reaching the server"** — assert on destinations, not just
+on the absence of exceptions. Both failure modes are verified to trip the test.
 
 ### Testing notes (reusable)
 Playwright verification runs against the **built** `user/index.html` served over

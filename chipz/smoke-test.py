@@ -21,7 +21,7 @@ import asyncio, json, os, subprocess, sys, threading, http.server, socketserver,
 
 PORT = int(os.environ.get('SMOKE_PORT', '8791'))
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'user')
-API = 'https://mylifeismyhappiness.onrender.com'
+API = 'https://chipz-server.onrender.com'
 
 ACCOUNT = {"phone": "0742730382", "walletBalance": 2000, "totalDeposited": 58000,
            "totalEarned": 9840, "totalWithdrawn": 32164, "totalInvested": 28000,
@@ -120,6 +120,18 @@ async def main():
 
         await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
         await page.wait_for_timeout(2500)
+
+        # API_BASE must be a real absolute URL pointing at the Chipz backend.
+        # Checked explicitly because the first version of this test missed a
+        # deleted API_BASE entirely: with it undefined every fetch() went to
+        # "<page origin>/undefined/account", which 404s quietly and throws no
+        # page error, so the test passed on a build whose every API call was
+        # broken. "No errors" is not the same as "reaching the server".
+        api_base = await page.evaluate("typeof API_BASE !== 'undefined' ? API_BASE : null")
+        if not api_base or not str(api_base).startswith("https://"):
+            errors.append(f"API_BASE is not a valid absolute URL: {api_base!r}")
+        elif "mylifeismyhappiness" in str(api_base):
+            errors.append(f"API_BASE still points at Snow's backend: {api_base}")
 
         # The app must actually get past the loading screen. A missing global
         # leaves it stuck here forever, which is the exact bug this catches.
