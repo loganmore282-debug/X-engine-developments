@@ -298,7 +298,9 @@ box-shadow:0 1px 0 #9e0f1c,0 4px 8px -6px rgba(30,10,5,.4),
 ### Buttons: the live glow sweep
 
 Owner: *"now let every button have a live glow sweep animation like it runs from left
-to right."* A translucent band travels across every **filled CTA** on a 2.8s loop —
+to right"*, then corrected: *"bro, let it move from right to left."* **It runs
+right-to-left** — the band enters at the right edge and exits left. A translucent band
+travels across every **filled CTA** on a 2.8s loop —
 `.primary-button`, `.secondary-button`, `.dark-button`, `.spin-cta`, `.notify-ok`,
 `.btn-bind`, the Wallet Cancel, and the manual-pay confirm.
 
@@ -324,12 +326,47 @@ Mechanics that matter:
 pseudo-element clipped out of existence, or a keyframe name that never matches would all
 pass a text search. It drives the built app and samples
 `getComputedStyle(el,'::after').transform` over real time, confirming the X translation
-actually changes and that rises outnumber falls (i.e. it runs left→right). Two traps it
+actually changes and that FALLS outnumber rises (i.e. it runs right→left). Two traps it
 hit while being written, both worth knowing: the sampling window **must span more than
 one full 2.8s cycle** or it only ever sees the rest phase and reports the band as parked;
 and `querySelector` grabs the first match in DOM order, which is often a button inside a
 hidden screen whose pseudo-element reports `transform:none` — measure the first
 **visible** one instead.
+
+### The bottom nav's tap box
+
+Owner, with a reference screenshot of another app: *"there is no box on the nav icon,
+the box is animated ie when tapped the icon it fades in and later out."*
+
+So it is **not** a permanent highlight on the active tab, even though the reference
+screenshot happens to show one on its active tab. It is a soft rounded box that fades in
+behind the icon the moment a tab is tapped and fades away again on its own — resting
+opacity is 0, and no tab is ever left holding it.
+
+`.navitem::before` is the box; `@keyframes navTapBox` runs `0 → 1 → 0` over 1.05s
+(quick fade in, brief hold, slower fade out, with a slight scale). Brand-tinted red
+rather than the reference's lavender, per the standing rule: copy the shape from a
+reference, never another app's colours.
+
+Two things that are easy to get wrong here:
+- **The box has to sit BEHIND the icon**, and a positioned pseudo-element paints *above*
+  its own element's content by default — so it would cover the very icon it belongs
+  behind. `z-index:-1` is not the fix either: the nav bar's own white background would
+  then hide it completely. The working answer is `.navitem .nav-ic, .navitem .lbl
+  {position:relative;z-index:1}` with the box at `z-index:0`.
+- **Re-adding a class that is already present does not restart a CSS animation**, so
+  tapping the same tab twice would do nothing the second time. `hookNavTapBox()` removes
+  the class, forces a reflow (`void btn.offsetWidth`), then re-adds it.
+
+The listener is bound once on the **bar**, not on each of the six items — one listener
+instead of six, and it survives any re-render of the items. It uses `pointerdown` rather
+than `click` so the box appears the instant a thumb lands. `updateNavIcons()` installs
+it (that runs on every `showPage()`, so the bar is definitely in the DOM by then) and a
+module flag makes every later call free.
+
+`test-button-glow.py` covers it by tapping a real tab and sampling the box's opacity
+over time — confirming it rises, then falls back on its own, and that a second tap on
+the same tab replays it.
 
 ## Secrets — NEVER commit
 

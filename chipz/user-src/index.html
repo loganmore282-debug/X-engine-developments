@@ -82,9 +82,10 @@ a{color:inherit;}
 .dark-button{background:var(--snow-ink);color:#fff;border:none;border-radius:4px;font-weight:700;letter-spacing:.04em;
   box-shadow:none;transition:opacity .1s;}
 .dark-button:active:not(:disabled){opacity:.85;}
-/* Owner: "let every button have a live glow sweep animation like it runs
-   from left to right." A band of light travels across every filled CTA on a
-   loop, clipped to the button's own rounded box.
+/* A band of light travels across every filled CTA on a loop, clipped to the
+   button's own rounded box. Owner asked for it "left to right" first, then
+   corrected to "let it move from right to left" -- it now enters at the
+   right edge and exits left.
 
    Applied to the FILLED buttons only -- the ones that read as a call to
    action. Deliberately NOT on the bottom-nav items, the Home action icons,
@@ -110,7 +111,7 @@ a{color:inherit;}
 #manualPayFlow .mp-confirm-btn::after{
   content:'';position:absolute;top:0;bottom:0;left:0;width:38%;pointer-events:none;
   background:linear-gradient(90deg,transparent 0%,var(--sweep,rgba(255,255,255,.45)) 50%,transparent 100%);
-  transform:translateX(-140%) skewX(-20deg);
+  transform:translateX(360%) skewX(-20deg);
   animation:btnGlowSweep 2.8s ease-in-out infinite;}
 /* Pale buttons: a white band on a near-white face shows nothing, so tint it. */
 .secondary-button,.btn-bind,.wallet-panel .btnrow .cancel{--sweep:rgba(226,27,42,.18);}
@@ -118,9 +119,11 @@ a{color:inherit;}
 .primary-button:disabled::after,.secondary-button:disabled::after,.dark-button:disabled::after,
 .spin-cta:disabled::after,.notify-ok:disabled::after,.btn-bind:disabled::after,
 .wallet-panel .btnrow .cancel:disabled::after,#manualPayFlow .mp-confirm-btn:disabled::after{display:none;}
+/* Owner: "let it move from right to left." Starts off the RIGHT edge and
+   travels off the left. */
 @keyframes btnGlowSweep{
-  0%{transform:translateX(-140%) skewX(-20deg);}
-  55%,100%{transform:translateX(360%) skewX(-20deg);}}
+  0%{transform:translateX(360%) skewX(-20deg);}
+  55%,100%{transform:translateX(-140%) skewX(-20deg);}}
 @media (prefers-reduced-motion:reduce){
   .primary-button::after,.secondary-button::after,.dark-button::after,.spin-cta::after,
   .notify-ok::after,.btn-bind::after,.wallet-panel .btnrow .cancel::after,
@@ -131,7 +134,31 @@ a{color:inherit;}
 .status-pill.pending{background:var(--snow-neutral-soft);color:var(--snow-muted);}
 
 .bottom-nav{z-index:210;background:var(--snow-surface);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;height:68px;position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:0 2px;}
-.navitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--snow-muted);background:none;border:none;padding:6px 2px;flex:1;min-width:0;}
+.navitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--snow-muted);background:none;border:none;padding:6px 2px;flex:1;min-width:0;position:relative;}
+/* Owner: "there is no box on the nav icon, the box is animated ie when tapped
+   the icon it fades in and later out." So it is NOT a permanent highlight on
+   the active tab -- it is a soft rounded box that appears behind the icon the
+   moment a tab is tapped and fades away again on its own.
+
+   Sits BEHIND the icon and label, which is why both are given a z-index: a
+   positioned pseudo-element otherwise paints on top of its own element's
+   text and artwork, and the box would cover the very icon it is meant to
+   sit behind. z-index:-1 is not the answer either -- the bar's own white
+   background would then hide it completely.
+
+   Brand-tinted rather than the reference's lavender, per the standing rule:
+   copy the shape from a reference, never another app's colours. */
+.navitem::before{content:'';position:absolute;top:3px;left:50%;width:54px;height:40px;margin-left:-27px;
+  border-radius:14px;background:rgba(226,27,42,.13);opacity:0;transform:scale(.72);pointer-events:none;z-index:0;}
+.navitem .nav-ic,.navitem .lbl{position:relative;z-index:1;}
+.navitem.nav-tap::before{animation:navTapBox 1.05s ease-out;}
+@keyframes navTapBox{
+  0%{opacity:0;transform:scale(.72);}
+  18%{opacity:1;transform:scale(1);}
+  52%{opacity:1;transform:scale(1);}
+  100%{opacity:0;transform:scale(1.08);}}
+@media (prefers-reduced-motion:reduce){
+  .navitem.nav-tap::before{animation:none;}}
 .navitem.active{color:var(--snow-wine);}
 .navitem .lbl{font-size:10px;font-weight:600;white-space:nowrap;}
 .navitem.active .lbl{font-weight:700;}

@@ -966,7 +966,42 @@ var NAV_ICON_SRC = {
   team: '/nav-team.png',
   account: '/nav-account.png',
 };
+// Owner: "the box is animated ie when tapped the icon it fades in and later
+// out." The box itself is CSS (.navitem::before + @keyframes navTapBox);
+// this only has to put the class on at the right moment and take it off
+// again so it can replay.
+//
+// Bound on the BAR, not on each of the six items -- one listener instead of
+// six, and it keeps working no matter how the items are re-rendered.
+// pointerdown rather than click, so the box appears the instant a thumb
+// lands rather than after the tap completes.
+var _navTapHooked = false;
+function hookNavTapBox(){
+  if (_navTapHooked) return;
+  const nav = document.querySelector('.bottom-nav');
+  if (!nav) return;
+  _navTapHooked = true;
+  nav.addEventListener('pointerdown', e => {
+    const btn = e.target.closest && e.target.closest('.navitem');
+    if (!btn) return;
+    // Re-adding a class that is ALREADY on the element does not restart a
+    // CSS animation, so tapping the same tab twice in a row would do
+    // nothing the second time. Take it off and force a reflow to replay it.
+    btn.classList.remove('nav-tap');
+    void btn.offsetWidth;
+    btn.classList.add('nav-tap');
+  }, { passive: true });
+  // Clean the class off once it has played, so the next tap is a fresh run
+  // and nothing is left holding a finished animation.
+  nav.addEventListener('animationend', e => {
+    if (e.animationName === 'navTapBox' && e.target.classList) e.target.classList.remove('nav-tap');
+  });
+}
 function updateNavIcons(){
+  // Installed from here because this runs on every showPage() -- by the
+  // first one the bar is definitely in the DOM, and the guard above makes
+  // every later call free.
+  hookNavTapBox();
   document.querySelectorAll('.navitem').forEach(btn => {
     const key = btn.dataset.nav;
     const active = key === STATE.page;

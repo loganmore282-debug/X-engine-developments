@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Every filled CTA carries a live left-to-right glow sweep.
+"""Every filled CTA carries a live right-to-left glow sweep.
 
-Owner: "now let every button have a live glow sweep animation like it runs
-from left to right."
+Owner asked for it "left to right" first, then corrected: "bro, let it move
+from right to left." The band now enters at the right edge and exits left.
 
 Asserting the CSS exists would prove nothing -- a typo'd selector, a
 pseudo-element the button's own `overflow` clips away entirely, or a
@@ -13,7 +13,7 @@ time, which is the only way to see whether the band is actually travelling.
 Checks, on real buttons across several screens:
   - the sweep exists on the filled CTAs and its X translation genuinely
     CHANGES over successive frames (it is running, not parked)
-  - it travels LEFT TO RIGHT, not right to left
+  - it travels RIGHT TO LEFT, not the other way
   - it is clipped inside the button (overflow:hidden) so it cannot smear
     across the screen
   - the button is still tappable -- the band must not eat clicks
@@ -161,15 +161,15 @@ async def main():
         print("   translateX samples:", xs)
         ck(len(set(xs)) >= 4, "the band's X position genuinely changes over time -- it is running (%d distinct of %d)"
            % (len(set(xs)), len(xs)))
-        ck(min(xs) < 0, "it starts off the LEFT edge (min %.1f)" % min(xs))
-        ck(max(xs) > 0, "and travels past the right (max %.1f)" % max(xs))
-        # Left-to-right: over one pass the value must rise. Sampling can
-        # straddle a loop restart, so check that rises dominate falls rather
-        # than demanding a strictly increasing series.
+        ck(max(xs) > 0, "it starts off the RIGHT edge (max %.1f)" % max(xs))
+        ck(min(xs) < 0, "and travels off past the left (min %.1f)" % min(xs))
+        # Right-to-left: over one pass the value must FALL. Sampling can
+        # straddle a loop restart, so check that falls dominate rises rather
+        # than demanding a strictly decreasing series.
         rises = sum(1 for i in range(1, len(xs)) if xs[i] > xs[i - 1])
         falls = sum(1 for i in range(1, len(xs)) if xs[i] < xs[i - 1])
         print("   rises=%d falls=%d" % (rises, falls))
-        ck(rises > falls, "it runs LEFT to RIGHT, not backwards (%d rises vs %d falls)" % (rises, falls))
+        ck(falls > rises, "it runs RIGHT to LEFT, not backwards (%d falls vs %d rises)" % (falls, rises))
 
         print("\n— it is contained and does not break the button —")
         box = await page.evaluate("""() => {
@@ -195,6 +195,7 @@ async def main():
 
         print("\n— the buttons that must NOT glow —")
         for sel, why in [
+            # ::after only -- the nav's tap box is a ::before, checked below.
             ('.navitem', 'bottom-nav items'),
             ('.home-action', 'Home action icons'),
             ('.icon-btn', 'the round icon buttons'),
@@ -227,6 +228,54 @@ async def main():
                 continue
             ck(r.get("transform") not in (None, "none"),
                "%s carries the sweep too (%s)" % (label, r.get("transform")))
+
+        print("\n— the nav tap box —")
+        # Owner: "there is no box on the nav icon, the box is animated ie when
+        # tapped the icon it fades in and later out." It is a TAP effect, not
+        # a permanent highlight on the active tab, so the resting state must
+        # be invisible and a tap must make it appear and then go again.
+        rest = await page.evaluate("""() => {
+            const el = document.querySelector('.navitem');
+            const b = getComputedStyle(el, '::before');
+            return { opacity: b.opacity, content: b.content, animation: b.animationName,
+                     hasClass: el.classList.contains('nav-tap') };
+        }""")
+        print("   at rest:", rest)
+        ck(rest["content"] not in (None, "none"), "the box exists as a ::before (%s)" % rest["content"])
+        ck(float(rest["opacity"]) == 0, "it is INVISIBLE at rest -- not a permanent box (opacity %s)" % rest["opacity"])
+        ck(not rest["hasClass"], "and no tab is left holding the tap class")
+
+        # Tap a tab and watch the box's opacity actually rise then fall.
+        await page.evaluate("""() => {
+            const el = document.querySelectorAll('.navitem')[1];
+            el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        }""")
+        seq = []
+        for _ in range(16):
+            o = await page.evaluate("""() => {
+                const el = document.querySelectorAll('.navitem')[1];
+                return parseFloat(getComputedStyle(el, '::before').opacity);
+            }""")
+            seq.append(round(o, 2))
+            await page.wait_for_timeout(80)
+        print("   opacity after tap:", seq)
+        ck(max(seq) > 0.5, "the box FADES IN on tap (peak opacity %.2f)" % max(seq))
+        peak = seq.index(max(seq))
+        ck(any(v < max(seq) - 0.2 for v in seq[peak:]),
+           "and FADES OUT again on its own afterwards (%s)" % seq[peak:])
+        # It has to be re-triggerable: a second tap on the same tab must replay
+        # it, which re-adding an already-present class would NOT do.
+        await page.wait_for_timeout(600)
+        await page.evaluate("""() => {
+            const el = document.querySelectorAll('.navitem')[1];
+            el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        }""")
+        await page.wait_for_timeout(200)
+        again = await page.evaluate("""() => {
+            const el = document.querySelectorAll('.navitem')[1];
+            return parseFloat(getComputedStyle(el, '::before').opacity);
+        }""")
+        ck(again > 0.5, "tapping the SAME tab again replays it (opacity %.2f)" % again)
 
         ck(not errs, "no page errors: %s" % errs[:3])
         await page.screenshot(path=f"{OUT}/glow.png")
