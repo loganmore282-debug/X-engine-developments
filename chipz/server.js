@@ -794,13 +794,19 @@ function finiteMoney(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; // no I/l/O/0/1
 // Gift codes keep this original mixed-case alphabet, now at 8 characters
 // (was 5, owner request 2026-08-27). Still can't collide with a referral
 // code by construction — referral codes are 6 chars from a DIFFERENT
 // (uppercase-only) alphabet below, so length alone already told the two
 // apart and still does.
-const GIFTCODE_CHARS = CODE_CHARS;
+// Owner 2026-09-07: "treasure chest codes are 12 character alphanumeric
+// random letters and numbers ie HDG27RHRFT64, NO PUTTING SMALL LETTERS."
+// So gift codes now use the SAME uppercase-only, unambiguous alphabet as
+// referral codes below (no I/l/O/0/1 -- a member reading a code off a
+// screenshot must not have to guess O from 0). Length still tells the two
+// kinds apart by construction: gift 12, referral 6.
+const GIFTCODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const GIFTCODE_LENGTH = 12;
 // Referral codes, changed 2026-08-27 (owner: uppercase letters + numbers
 // only, e.g. "FTD6GH", "fully recognized, encrypted, safeguarded and
 // global so no repetition"). Same unambiguous-character philosophy as
@@ -817,7 +823,7 @@ function randFromAlphabet(alphabet, n) {
   return s;
 }
 function randCode(n = 6) { return randFromAlphabet(REFERRAL_CHARS, n); }
-function genGiftCode() { return randFromAlphabet(GIFTCODE_CHARS, 8); }
+function genGiftCode() { return randFromAlphabet(GIFTCODE_CHARS, GIFTCODE_LENGTH); }
 async function generateUniqueGiftCode() {
   return withLock('giftcode-gen', async () => {
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -5238,11 +5244,25 @@ app.post('/redeem', async (req, res) => {
   if (!raw || !/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Enter a gift code' });
   try {
     let result = null;
-    await withLock('redeem:' + raw, async () => {
+    // Lock on the uppercased code, not the raw input: two members submitting
+    // the same code in different casing must serialise against each other,
+    // and after the fallback lookup above they can now both reach the same
+    // document. Uppercasing an old mixed-case code only ever widens the lock,
+    // which is the safe direction.
+    await withLock('redeem:' + raw.toUpperCase(), async () => {
       const userSnap = await db.collection('users').doc(userId).get();
       if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
       if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      const codeSnap = await db.collection('promoCodes').where('code', '==', raw).limit(1).get();
+      // Exact match first, so a code already issued under the old mixed-case
+      // alphabet still matches only itself. Codes are uppercase-only now, so
+      // a member who types or pastes one in lowercase is not making a
+      // different code -- fall back to the uppercased form rather than
+      // telling them a real code is invalid.
+      let codeSnap = await db.collection('promoCodes').where('code', '==', raw).limit(1).get();
+      const upper = raw.toUpperCase();
+      if (codeSnap.empty && upper !== raw) {
+        codeSnap = await db.collection('promoCodes').where('code', '==', upper).limit(1).get();
+      }
       if (codeSnap.empty) {
         // A code that doesn't exist at all is the actual "guessing" signal --
         // an already-used or usage-capped code below is a REAL code, not a

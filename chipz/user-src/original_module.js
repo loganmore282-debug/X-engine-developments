@@ -2544,7 +2544,7 @@ window.openChestSheet = function(){
     <h2>Mystery Treasure</h2>
     <p class="sub">Enter your key to unlock the reward</p>
     <div style="width:100%;">
-      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter treasure chest key" autocapitalize="characters" autocomplete="off"></div>
+      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
       <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.1em;" onclick="submitChestKey()">OPEN CHEST</button>
     </div>
     <div class="chest-rule bottom"></div>
@@ -2552,7 +2552,9 @@ window.openChestSheet = function(){
   setTimeout(() => { const el = $('chestKey'); if (el) el.focus(); }, 60);
 };
 window.submitChestKey = async function(){
-  const raw = ($('chestKey').value || '').trim();
+  // Codes are issued uppercase-only, so normalise here as well as in the
+  // field: a paste does not always fire the input handler on every browser.
+  const raw = ($('chestKey').value || '').trim().toUpperCase();
   if (!raw) return notify('Enter your treasure chest key.');
   const btn = $('chestOpenBtn');
   btn.disabled = true; btn.textContent = 'OPENING…';
