@@ -1369,62 +1369,110 @@ async function renderProducts(){
   if (STATE.page !== 'products') return; // navigated away while awaiting
   paintProducts(!hadCache);
 }
+// Which plan filter is showing. Top-level binding must be `var` (never
+// const/let) -- see this file's own header rule about the obfuscated build.
+var _planFilter = 'running';
+window.switchPlanFilter = function(f){
+  _planFilter = f;
+  paintProducts(false);
+};
+// Every figure this screen shows about one plan, worked out in one place so
+// the summary band, the row and the progress bar can never disagree.
+function planStats(inv){
+  const total = Number(inv.payoutsTotal) || 150;
+  const made = Math.min(Number(inv.payoutsMade) || 0, total);
+  const expected = Number(inv.expectedReturn) || 0;
+  const earned = Number(inv.paidOut) || 0;
+  const matured = inv.status === 'matured' || made >= total;
+  return {
+    total, made, expected, earned, matured,
+    amount: Number(inv.amount) || 0,
+    daily: Number(inv.dailyPayout) || 0,
+    // What is still to come. Clamped at zero so a plan that over-paid by a
+    // rounding shilling never shows a negative "left to earn".
+    remaining: Math.max(0, expected - earned),
+    daysLeft: Math.max(0, total - made),
+    pct: total ? Math.min(100, Math.round(made / total * 100)) : 0,
+    createdMs: new Date(inv.createdAt || Date.now()).getTime(),
+  };
+}
 function paintProducts(animate){
   const investments = STATE.investments || [];
-  const active = investments.filter(i => i.status === 'active' || i.status === 'matured');
+  const all = investments.filter(i => i.status === 'active' || i.status === 'matured');
   // Number(...) coercion matters here -- subagent-audit-caught: without it,
   // a single string-typed amount/paidOut in the /investments response turns
   // every "+" from here on into string concatenation instead of addition,
   // the exact "1,000,000,500"-class corruption Round 52 already found and
-  // fixed server-side. This is the one spot on My Products that read the
-  // raw field straight into a sum without going through fmtUGX() (which
-  // already coerces) or an explicit Number() first.
-  const totalInvested = active.reduce((s,i)=>s+(Number(i.amount)||0),0);
-  const totalEarned = active.reduce((s,i)=>s+(Number(i.paidOut)||0),0);
+  // fixed server-side.
+  const stats = all.map(planStats);
+  const running = all.filter((_, i) => !stats[i].matured);
+  const matured = all.filter((_, i) => stats[i].matured);
+  const totalInvested = stats.reduce((s, x) => s + x.amount, 0);
+  const totalEarned = stats.reduce((s, x) => s + x.earned, 0);
+  // Genuinely new on this screen: what the running plans have still to pay
+  // out, and what they bring in per day between them. A member's real
+  // question is "what am I owed and when", which the old three tiles
+  // (count / invested / earned) never answered.
+  const stillToEarn = stats.reduce((s, x) => s + (x.matured ? 0 : x.remaining), 0);
+  const perDay = stats.reduce((s, x) => s + (x.matured ? 0 : x.daily), 0);
+
+  const shown = _planFilter === 'matured' ? matured : _planFilter === 'all' ? all : running;
+  const counts = { running: running.length, matured: matured.length, all: all.length };
+
   let html = `
 <div class="page-head"><h2>My Products</h2></div>
-<div style="margin:4px 20px 0;">
-  <div style="font-size:13px;color:var(--snow-muted);margin-top:3px;">${active.length} active plan${active.length===1?'':'s'} &middot; ${fmtUGX(totalEarned)} earned so far</div>
+<div class="mp-band">
+  <div class="mp-band-k">Still to earn</div>
+  <div class="mp-band-v">${fmtUGXCents(stillToEarn)}</div>
+  <div class="mp-band-sub">${perDay > 0 ? `${fmtUGXCents(perDay)} a day across ${counts.running} running plan${counts.running===1?'':'s'}` : 'No plans running right now'}</div>
+  <div class="mp-band-row">
+    <div><span>Invested</span><b>${fmtUGXCents(totalInvested)}</b></div>
+    <div><span>Earned so far</span><b>${fmtUGXCents(totalEarned)}</b></div>
+  </div>
 </div>
-<div style="display:flex;gap:10px;margin:16px 20px 0;">
-  <div class="stat-tile" style="flex:1;"><div style="font-size:10.5px;color:var(--snow-muted);">Active Plans</div><div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">${active.length}</div></div>
-  <div class="stat-tile" style="flex:1;"><div style="font-size:10.5px;color:var(--snow-muted);">Total Invested</div><div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">${fmtUGX(totalInvested)}</div></div>
-  <div class="stat-tile" style="flex:1;"><div style="font-size:10.5px;color:var(--snow-muted);">Total Earned</div><div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;color:var(--snow-green);">${fmtUGX(totalEarned)}</div></div>
+<div class="mp-filters">
+  ${['running','matured','all'].map(f => `<button class="mp-f ${_planFilter===f?'on':''}" onclick="switchPlanFilter('${f}')">${f==='running'?'Running':f==='matured'?'Matured':'All'} <i>${counts[f]}</i></button>`).join('')}
 </div>
-<div class="section-title" style="margin:26px 20px 12px;">Active Plans</div>
-<div style="display:flex;flex-direction:column;gap:14px;margin:0 20px;">`;
+<div class="mp-list">`;
+
   if (!investments.length && _investmentsLoadFailed) {
     html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>Could not load your plans. <button style="background:none;border:none;color:var(--snow-wine);font-weight:600;cursor:pointer;padding:0;font-size:inherit;" onclick="renderProducts()">Tap to retry</button></div>`;
-  } else if (!investments.length) {
-    html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>No plans yet. Open Products and pick one to get started.</div>`;
+  } else if (!shown.length) {
+    const msg = _planFilter === 'matured'
+      ? 'Nothing has matured yet. Plans move here once they finish paying out.'
+      : _planFilter === 'all'
+      ? 'No plans yet. Open Products and pick one to get started.'
+      : counts.all ? 'No plans running. Check Matured to see the ones that finished.'
+                   : 'No plans yet. Open Products and pick one to get started.';
+    html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>${msg}</div>`;
   } else {
-    investments.forEach(inv => {
+    shown.forEach(inv => {
+      const st = planStats(inv);
       const p = (STATE.products||[]).find(x=>x.key===inv.tierKey) || {};
-      const createdMs = new Date(inv.createdAt||Date.now()).getTime();
-      const pct = Math.round((inv.payoutsMade||0)/(inv.payoutsTotal||150)*100);
-      const matured = inv.status === 'matured' || (inv.payoutsMade||0) >= (inv.payoutsTotal||150);
+      const thumb = p.image
+        ? `<img src="${esc(p.image)}" alt="" onerror="this.style.display='none'">`
+        : `<span>${esc(String(inv.tierLabel||'?').replace(/[^0-9]/g,'') || String(inv.tierLabel||'?').trim()[0])}</span>`;
       html += `
-  <div class="plan-card">
-    <div style="display:flex;align-items:center;gap:12px;">
-      <img class="product-card__thumb" style="width:40px;height:40px;border-radius:12px;" src="${esc(p.image||'')}" alt="" onerror="this.style.display='none'">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">${esc(inv.tierLabel)}</div>
-        <div style="font-size:12px;color:var(--snow-muted);margin-top:1px;">${fmtUGX(inv.amount)} invested &middot; ${fmtUGX(inv.dailyPayout)}/day</div>
+  <div class="mp-row ${st.matured?'done':''}">
+    <div class="mp-top">
+      <div class="mp-thumb">${thumb}</div>
+      <div class="mp-id">
+        <div class="mp-name">${esc(inv.tierLabel)}</div>
+        <div class="mp-meta">${fmtUGXCents(st.amount)} invested</div>
       </div>
-      <div class="status-pill ${matured?'active':'pending'}">${matured?'Matured':'Active'}</div>
+      <span class="mp-chip ${st.matured?'done':''}">${st.matured?'Matured':'Running'}</span>
     </div>
-    <div style="margin-top:16px;">
-      <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--snow-muted);margin-bottom:6px;">
-        <span>Day ${Math.min(inv.payoutsMade||0, inv.payoutsTotal||150)} of ${inv.payoutsTotal||150}</span>
-        <span class="mono" style="color:var(--snow-green);font-weight:600;">+${fmtUGX(inv.paidOut)} earned</span>
-      </div>
-      <div style="height:8px;border-radius:999px;background:var(--snow-neutral-soft);overflow:hidden;"><div style="height:100%;border-radius:999px;background:var(--snow-green);width:${pct}%;"></div></div>
+    <div class="mp-bar"><i style="width:${st.pct}%"></i></div>
+    <div class="mp-days"><span>Day ${st.made} of ${st.total}</span><span>${st.matured ? 'Finished' : st.daysLeft + ' day' + (st.daysLeft===1?'':'s') + ' left'}</span></div>
+    <div class="mp-figs">
+      <div><span>Earned</span><b class="up">${fmtUGXCents(st.earned)}</b></div>
+      <div><span>${st.matured ? 'Total paid' : 'Still to come'}</span><b>${fmtUGXCents(st.matured ? st.expected : st.remaining)}</b></div>
     </div>
-    ${matured ? '' : `<div style="display:flex;align-items:center;gap:6px;margin-top:14px;color:var(--snow-muted);font-size:12px;" data-countdown data-created="${createdMs}" data-payouts-made="${inv.payoutsMade||0}">${ICONS.clock} Next cashback in <span class="mono countdown-val" style="color:var(--snow-ink);font-weight:600;">--:--:--</span></div>`}
+    ${st.matured ? '' : `<div class="mp-next" data-countdown data-created="${st.createdMs}" data-payouts-made="${st.made}">${ICONS.clock} <b>${fmtUGXCents(st.daily)}</b> in <span class="countdown-val">--:--:--</span></div>`}
   </div>`;
     });
   }
-  html += `</div>`;
+  html += `</div><div style="height:12px;"></div>`;
   $('pageHost').innerHTML = animate ? '<div class="reveal-in">' + html + '</div>' : html;
   startPlanCountdowns();
 }
