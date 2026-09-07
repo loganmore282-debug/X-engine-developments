@@ -128,10 +128,13 @@ a{color:inherit;}
    four money tiles under them each card filled a whole phone screen. Tighter
    radius, half the image height, and smaller type -- roughly half the height
    per card, so several are visible at once. */
-/* Owner: no title bar -- the product name sits ON the image. And the images
-   he uploads are 1448x1086, a 4:3 landscape, so the frame is aspect-ratio
-   driven rather than a fixed pixel height: any 4:3 upload fills it exactly
-   with nothing cropped and no letterboxing, whatever the phone's width. */
+/* Owner: no title bar -- the product name sits ON the image. Product photos
+   are stored at exactly 1200x900 px, a 4:3 landscape (the admin panel
+   cover-fits every upload onto that frame -- his own files are 1448x1086,
+   already 4:3, so they only downscale), so the card frame is aspect-ratio
+   driven rather than a fixed pixel height: the image fills it exactly with
+   nothing cropped and no letterboxing, whatever the phone's width. 1200 px
+   wide also covers a 3x phone at the ~400 px card width, so it stays sharp. */
 .p-card{background:var(--snow-surface);border-radius:4px;overflow:hidden;box-shadow:0 8px 18px -14px rgba(30,10,5,.3);border:1px solid var(--snow-border);}
 .p-card .p-img{position:relative;aspect-ratio:4/3;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}

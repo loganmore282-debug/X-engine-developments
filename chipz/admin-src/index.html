@@ -340,6 +340,42 @@ function fileToDataUrl(file, maxDim=900, quality=0.82){
     fr.readAsDataURL(file);
   });
 }
+// Every product photo lands in the app inside the SAME frame, so it is worth
+// making every stored file that exact frame rather than hoping each upload
+// happens to be the right shape. Owner: "on image frames please set
+// 1200 x 900 px, 4:3 for all P1-P12." So: cover-fit onto a 1200x900 canvas --
+// a true 4:3 upload (his are 1448x1086) is a pure downscale with nothing
+// cropped, and anything off-shape is centre-cropped to fill instead of being
+// squashed or letterboxed. fileToDataUrl() above can only cap the LONGEST
+// side, which leaves the height free and so cannot guarantee a frame.
+const PRODUCT_IMG_W = 1200, PRODUCT_IMG_H = 900;
+function fileToFramedDataUrl(file, W, H, quality=0.82){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type)) return reject(new Error('Please choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That image could not be loaded'));
+      img.onload=()=>{
+        const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+        if(!iw||!ih) return reject(new Error('That image could not be loaded'));
+        const s=Math.max(W/iw,H/ih);           // cover, never letterbox
+        const dw=iw*s, dh=ih*s;
+        const c=document.createElement('canvas'); c.width=W; c.height=H;
+        const ctx=c.getContext('2d');
+        ctx.imageSmoothingQuality='high';
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);   // PNG transparency -> white, not black
+        ctx.drawImage(img,(W-dw)/2,(H-dh)/2,dw,dh);
+        try{ resolve(c.toDataURL('image/jpeg',quality)); }
+        catch(e){ reject(new Error('Could not process the image')); }
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
 // Reads the file EXACTLY as it is, with no canvas round trip. fileToDataUrl()
 // above draws onto a canvas and exports image/jpeg, which for an animated GIF
 // means one still frame and no transparency -- the animation would be
@@ -1695,7 +1731,7 @@ function editProduct(p, order){
       <div><label>Win from (UGX)</label><input id="pSpinMin" type="number" min="0" value="${p.spinMin!=null?p.spinMin:''}" placeholder="200"></div>
       <div><label>Win to (UGX)</label><input id="pSpinMax" type="number" min="0" value="${p.spinMax!=null?p.spinMax:''}" placeholder="1000"></div>
     </div>
-    <label>Product image</label>
+    <label>Product image <span class="muted" style="font-weight:400">— saved at ${PRODUCT_IMG_W} × ${PRODUCT_IMG_H} px (4:3)</span></label>
     <div class="img-picker">
       <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
       <div class="img-picker-actions">
@@ -1718,7 +1754,10 @@ function editProduct(p, order){
   const setPrev = (src)=>{ $('pImgPrev').innerHTML = src?`<img src="${esc(src)}" alt="">`:'<span class="muted">No image</span>'; $('pImgClear').style.display = src?'':'none'; };
   $('pFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
-    try{ imgData = await fileToDataUrl(f,640,0.7); $('pImage').value=''; setPrev(imgData); toast('Image ready, tap Save product','ok'); }
+    // 1200x900 (4:3) is the product frame, the same shape .p-card .p-img draws
+    // in the app. The old 640/0.7 here shrank his 1448x1086 uploads to 640x480
+    // and re-compressed them, so a sharp photo arrived on the phone soft.
+    try{ imgData = await fileToFramedDataUrl(f,PRODUCT_IMG_W,PRODUCT_IMG_H,0.82); $('pImage').value=''; setPrev(imgData); toast('Image ready at '+PRODUCT_IMG_W+' × '+PRODUCT_IMG_H+', tap Save product','ok'); }
     catch(err){ toast(err.message||'Could not read image','err'); }
   });
   $('pImgClear').addEventListener('click', ()=>{ imgData=''; $('pImage').value=''; setPrev(''); });

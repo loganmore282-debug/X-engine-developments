@@ -712,23 +712,33 @@ function loadCachedState(uid){
     return parsed;
   } catch (_) { return null; }
 }
+// Product photos are stored as data: URLs inside STATE.products, and at the
+// 1200x900 frame the admin now saves them at, twelve of them is a few
+// megabytes on its own -- enough to blow localStorage's ~5 MB quota. The
+// setItem below is in a try/catch, so that failure is SILENT: the snapshot
+// simply stops being written and every boot goes back to a cold network
+// wait, with nothing on screen to say why. So build the snapshot once, and
+// if it will not fit, save it again with the image bytes stripped out --
+// everything else here (balance, plans, team, transactions, minimums) is
+// what the instant-boot path actually paints, and the photos refill from
+// the live /products fetch a moment later behind the skeleton cards.
+function _cachedStateBlob(uid, withImages){
+  const products = withImages ? STATE.products
+    : (STATE.products || []).map(p => Object.assign({}, p, { image: '' }));
+  return JSON.stringify({
+    uid, account: STATE.account, investments: STATE.investments, teamStats: STATE.teamStats,
+    bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, transactionsTruncated: STATE.transactionsTruncated, mission: STATE.mission,
+    products, settings: STATE.settings,
+  });
+}
 function saveCachedState(uid){
   try {
-    localStorage.setItem(CACHED_STATE_KEY, JSON.stringify({
-      uid, account: STATE.account, investments: STATE.investments, teamStats: STATE.teamStats,
-      bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, transactionsTruncated: STATE.transactionsTruncated, mission: STATE.mission,
-      // subagent-audit-caught: products/settings were never part of this
-      // snapshot, so the cache-hit "instant boot" path (which restores
-      // everything else here with zero network wait) still showed My
-      // Products as empty ("0 plans") and Deposit/Withdraw's minimum-
-      // amount hints as "UGX 0" until boot()'s own live fetch happened to
-      // catch up. By the time this function is first ever called (bootFromNetwork
-      // awaits _bootPromise before its own prefetch resolves), these are
-      // already populated in STATE, so this alone closes the gap -- no new
-      // call site needed.
-      products: STATE.products, settings: STATE.settings,
-    }));
-  } catch (_) {}
+    localStorage.setItem(CACHED_STATE_KEY, _cachedStateBlob(uid, true));
+    return;
+  } catch (_) {
+    try { localStorage.setItem(CACHED_STATE_KEY, _cachedStateBlob(uid, false)); } catch (_2) {}
+    return;
+  }
 }
 function clearCachedState(){
   try { localStorage.removeItem(CACHED_STATE_KEY); } catch (_) {}

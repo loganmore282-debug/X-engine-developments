@@ -478,6 +478,8 @@ const DEFAULT_PRODUCTS = [
   { key: 'product-8',  name: 'Product-8',  price: 1250000,  cycle: 150, expectedReturn: 37500000,   image: '/products/product-8.jpg' },
   { key: 'product-9',  name: 'Product-9',  price: 2550000,  cycle: 150, expectedReturn: 76500000,   image: '/products/product-9.jpg' },
   { key: 'product-10', name: 'Product-10', price: 4500000,  cycle: 150, expectedReturn: 135000000,  image: '/products/product-10.jpg' },
+  { key: 'product-11', name: 'Product-11', price: 6000000,  cycle: 150, expectedReturn: 180000000,  image: '/products/product-11.jpg' },
+  { key: 'product-12', name: 'Product-12', price: 8000000,  cycle: 150, expectedReturn: 240000000,  image: '/products/product-12.jpg' },
 ];
 
 let _settingsCache = null, _settingsCacheTs = 0;

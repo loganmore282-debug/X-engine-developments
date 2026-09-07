@@ -94,14 +94,25 @@ async def main():
         await page.evaluate("closeAnnounce()")
         await page.wait_for_timeout(400)
 
-        # floats must not sit on top of each other
-        boxes = await page.evaluate("""()=>{const c=document.querySelector('.chest-float:not(.turntable-float)');
-          const t=document.querySelector('.turntable-float');
-          const r=e=>{const b=e.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height,b:b.bottom,r:b.right};};
-          return {chest:r(c), tt:r(t)};}""")
-        print("  chest:",boxes["chest"],"\n  turntable:",boxes["tt"])
-        overlap = not (boxes["chest"]["y"] >= boxes["tt"]["b"] or boxes["tt"]["y"] >= boxes["chest"]["b"])
-        ck(not overlap, "treasure chest and turntable no longer overlap")
+        # Home carries ONE float now. The owner: "remove spin icon on home
+        # screen" -- so the turntable float is gone and the overlap this
+        # block used to guard against cannot happen. What still has to hold
+        # is that the chest is there, is the only float, and clears the nav
+        # bar rather than sitting behind it.
+        boxes = await page.evaluate("""()=>{const all=[...document.querySelectorAll('.chest-float')];
+          const c=document.querySelector('.chest-float:not(.turntable-float)');
+          const nav=document.querySelector('.bottom-nav');
+          const r=e=>{if(!e) return null;const b=e.getBoundingClientRect();
+            return {x:+b.x.toFixed(1),y:+b.y.toFixed(1),w:+b.width.toFixed(1),h:+b.height.toFixed(1),b:+b.bottom.toFixed(1),r:+b.right.toFixed(1)};};
+          return {count:all.length, spin:!!document.querySelector('.turntable-float'),
+                  chest:r(c), nav:r(nav)};}""")
+        print("  floats:",boxes["count"],"spin float:",boxes["spin"],"\n  chest:",boxes["chest"],"\n  nav:",boxes["nav"])
+        ck(not boxes["spin"], "the spin float is off Home, as asked")
+        ck(boxes["count"]==1 and boxes["chest"], "the treasure chest is the one float left")
+        if boxes["chest"] and boxes["nav"]:
+            ck(boxes["chest"]["b"] <= boxes["nav"]["y"] + 1,
+               "and it sits clear of the nav bar (chest bottom %.0f vs nav top %.0f)"
+               % (boxes["chest"]["b"], boxes["nav"]["y"]))
 
         # nav visible on every sub-screen
         for fn,name in [("openDepositSheet()","Deposit"),("openWithdrawSheet()","Withdraw"),

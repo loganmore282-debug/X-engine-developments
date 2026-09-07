@@ -157,6 +157,26 @@ values, commission rates like LV1=28%/LV2=1%/LV3=1%) are **admin-editable defaul
 locked values** — the owner's own words: *"those numbers which appeared should be
 edittable in admin panel."*
 
+### Product photos: one 1200 x 900 (4:3) frame
+
+Owner: *"on image frames please set 1200 x 900 px, 4:3 for all P1–P12."* So the admin
+panel does not merely cap an upload's longest side — `fileToFramedDataUrl()` cover-fits
+**every** product photo onto an exact 1200 x 900 canvas before storing it, so the whole
+catalog is one shape. His own files are 1448 x 1086 (already 4:3), which makes it a pure
+downscale with nothing cropped; anything off-shape is centre-cropped rather than squashed
+or letterboxed. The app's card frame (`.p-card .p-img`) is `aspect-ratio:4/3`, so the
+photo fills it exactly, and 1200 px wide still looks sharp on a 3x phone.
+
+The old path was `fileToDataUrl(f, 640, 0.7)` — it shrank his uploads to 640 x 480 and
+re-compressed them, so a sharp photo arrived on the phone soft.
+
+One 1200 x 900 JPEG at quality 0.82 is roughly 140 KB as a data URL, so twelve is about
+1.6 MB: fine against the 4 MB `bigJsonParser` limit on `/admin/products/save` (which
+saves one product at a time) and the 2,800,000-char per-image cap in
+`sanitizeProductInput()`, but close enough to localStorage's ~5 MB quota that
+`saveCachedState()` now retries with the photo bytes stripped if the full snapshot will
+not fit — otherwise the instant-boot cache would silently stop being written.
+
 ### One payout number, resolved on the server (do not regress)
 
 `productExpectedReturn()` in `server.js` is the ONLY place a product's total payout is
@@ -254,7 +274,7 @@ Known gaps / next up:
 - **Turntable has no backend yet.** The Balance Record tab exists and renders empty;
   the daily-spin mechanic, its admin-set win amount, and the per-product extra-spin
   percentage still need building (see the Turntable bullet above for the spec).
-- Product catalog is still placeholder ("Product-1".."Product-10") — the owner has
+- Product catalog is still placeholder ("Product-1".."Product-12") — the owner has
   not supplied real names/prices/images.
 - **Payment providers not connected.** Everything else is live end to end (EdgeOne
   frontend -> Render backend -> Atlas `chipz` database), but no real deposit or

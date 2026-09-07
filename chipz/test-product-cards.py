@@ -9,9 +9,31 @@ ACCOUNT = {"phone":"0742730382","walletBalance":2000,"totalDeposited":58000,"tot
  "totalWithdrawn":32164,"totalInvested":28000,"checkinStreak":2,"lastCheckinAt":None,
  "referralCode":"ML3Q4X","publicId":"10012","registrationDone":True,
  "team":{"l1":3,"l2":1,"l3":0,"commission":7840}}
+# Owner: "on image frames please set 1200 x 900 px, 4:3 for all P1-P12."
+# Twelve products, the same count DEFAULT_PRODUCTS now ships, so every one of
+# them gets its frame measured rather than just the first two.
+PROD_IMG_W, PROD_IMG_H = 1200, 900
 PRODUCTS=[{"key":f"product-{i}","name":f"Product-{i}","price":p,"cycle":150,
   "expectedReturn":p*3,"image":"","spinCount":1 if i>1 else 0,"spinMin":200,"spinMax":1000}
-  for i,p in enumerate([30000,90000,180000,300000,600000,900000,1500000],start=1)]
+  for i,p in enumerate([30000,90000,197000,355000,560000,950000,1000000,
+                        1250000,2550000,4500000,6000000,8000000],start=1)]
+
+def _frame_jpeg(w, h):
+    """A 1200x900 photo the admin panel would have produced, with the corners
+    marked so a crop or a letterbox in the card frame is detectable."""
+    from PIL import Image, ImageDraw
+    import io
+    im = Image.new('RGB', (w, h))
+    px = im.load()
+    for y in range(h):
+        for x in range(w):
+            px[x, y] = ((x*255)//(w-1), (y*255)//(h-1), 90)
+    d = ImageDraw.Draw(im)
+    d.rectangle([0, 0, 40, 40], fill=(255, 0, 0))
+    d.rectangle([w-41, h-41, w-1, h-1], fill=(0, 255, 0))
+    b = io.BytesIO(); im.save(b, 'JPEG', quality=82); return b.getvalue()
+
+PROD_JPEG = _frame_jpeg(PROD_IMG_W, PROD_IMG_H)
 TX=[
  {"id":"1","type":"deposit","amount":28000,"displayAmount":28000,"description":"Deposit: Pending (UGX 28,000)","date":"05/09/2026","time":"23:21"},
  {"id":"2","type":"deposit","amount":28000,"displayAmount":28000,"description":"Deposit: Pending (UGX 28,000)","date":"05/09/2026","time":"19:41"},
@@ -88,6 +110,11 @@ async def main():
             body=next((v for k,v in ROUTES.items() if path.endswith(k)),{"status":"success"})
             await r.fulfill(status=200,content_type="application/json",body=json.dumps(body))
         await page.route(f"{API}/**",api)
+        # The real 1200x900 file the admin panel now stores, served as the
+        # product-1 photo -- a 404 here would have quietly tested the glyph
+        # fallback instead of a real image, which is what used to happen.
+        await page.route("**/testprod.jpg",lambda r:asyncio.ensure_future(
+            r.fulfill(status=200,content_type="image/jpeg",body=PROD_JPEG)))
         await page.route("https://fonts.googleapis.com/**",lambda r:asyncio.ensure_future(r.fulfill(status=200,content_type="text/css",body="")))
         await page.route("https://www.gstatic.com/firebasejs/**/firebase-app.js",lambda r:asyncio.ensure_future(r.fulfill(status=200,content_type="text/javascript",body=FB_APP)))
         await page.route("https://www.gstatic.com/firebasejs/**/firebase-auth.js",lambda r:asyncio.ensure_future(r.fulfill(status=200,content_type="text/javascript",body=FB_AUTH)))
@@ -95,6 +122,27 @@ async def main():
         await page.wait_for_timeout(2600)
         await page.evaluate("closeAnnounce()")
         await page.evaluate("showPage('catalog')"); await page.wait_for_timeout(1400)
+        # Every card, not just the first: all twelve frames must be 4:3.
+        frames = await page.evaluate("""()=>[...document.querySelectorAll('.p-card .p-img')]
+          .map(e=>{const r=e.getBoundingClientRect(); return +(r.width/r.height).toFixed(3);})""")
+        ck(len(frames)==len(PRODUCTS), "all %d product cards rendered (got %d)"%(len(PRODUCTS),len(frames)))
+        bad = [r for r in frames if abs(r-4/3)>0.02]
+        ck(not bad, "every card frame is 4:3 (%d cards, off: %s)"%(len(frames),bad))
+
+        # The real 1200x900 photo must arrive at its native size and cover the
+        # frame with nothing letterboxed -- 1200x900 IS 4:3, so object-fit
+        # cover has nothing to crop.
+        pic = await page.evaluate("""()=>{const i=document.querySelector('.p-card .p-img img');
+          if(!i) return null; const f=i.parentNode.getBoundingClientRect(); const r=i.getBoundingClientRect();
+          return {nw:i.naturalWidth,nh:i.naturalHeight,complete:i.complete,
+                  fit:getComputedStyle(i).objectFit,
+                  dw:+(r.width-f.width).toFixed(1), dh:+(r.height-f.height).toFixed(1)};}""")
+        print("  product-1 image:", pic)
+        ck(bool(pic) and pic["complete"] and pic["nw"]==PROD_IMG_W and pic["nh"]==PROD_IMG_H,
+           "the photo loads at its stored %dx%d"%(PROD_IMG_W,PROD_IMG_H))
+        ck(bool(pic) and pic["fit"]=="cover" and abs(pic["dw"])<1 and abs(pic["dh"])<1,
+           "and fills the frame exactly, no letterbox")
+
         f = await page.evaluate("""()=>{const c=document.querySelectorAll('.p-card');
           const a=c[0].querySelector('.p-img').getBoundingClientRect();
           const nm=c[0].querySelector('.p-name');

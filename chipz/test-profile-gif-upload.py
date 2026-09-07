@@ -3,7 +3,23 @@ from playwright.async_api import async_playwright
 from PIL import Image
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
 ADMIN = '/home/user/X-engine-developments/chipz/admin'
-GIF = open('logo.gif','rb').read()
+# The fixture is generated rather than checked in: it has to match the
+# owner's stated spec exactly (300 x 220, 30 frames, ~80 ms each, ~2.4 s,
+# transparent) and a binary in the repo would drift from that silently.
+GIF_PATH = os.path.join(OUT, 'logo.gif')
+def _make_gif(path):
+    frames = []
+    for i in range(30):
+        im = Image.new('RGBA', (300, 220), (0, 0, 0, 0))
+        d = __import__('PIL.ImageDraw', fromlist=['ImageDraw']).Draw(im)
+        x = 20 + i * 8
+        d.ellipse([x, 70, x + 80, 150], fill=(226, 27, 42, 255))
+        frames.append(im.convert('P', palette=Image.ADAPTIVE, colors=255))
+    frames[0].save(path, save_all=True, append_images=frames[1:],
+                   duration=80, loop=0, disposal=2, transparency=255)
+if not os.path.exists(GIF_PATH):
+    _make_gif(GIF_PATH)
+GIF = open(GIF_PATH, 'rb').read()
 GIF_DATA_URL = 'data:image/gif;base64,' + base64.b64encode(GIF).decode()
 
 fails=[]
@@ -23,7 +39,7 @@ async def main():
         await pg.add_script_tag(content=fn)
         await pg.set_content('<input type="file" id="f">')
         await pg.add_script_tag(content=fn)
-        await pg.set_input_files('#f', '/tmp/claude-0/-home-user-X-engine-developments/608a1fd5-90c5-5713-b5aa-495705d07d8e/scratchpad/logo.gif')
+        await pg.set_input_files('#f', GIF_PATH)
         out = await pg.evaluate("async()=>{const f=document.getElementById('f').files[0];"
                                 "try{return {ok:true, url: await fileToRawDataUrl(f, 400*1024)};}"
                                 "catch(e){return {ok:false, err:e.message};}}")
