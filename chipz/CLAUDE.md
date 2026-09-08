@@ -951,6 +951,38 @@ Two things were measured rather than guessed:
 
 The strip is `pointer-events:none` so it can never swallow a tap meant for the chest.
 
+### The scrollbar is orange, and it takes two properties
+
+Owner: *"l want the scroll bar to be orange not dull color."*
+
+The file said `::-webkit-scrollbar{display:none;}`, and that rule was not being disobeyed
+— **it does not reach the scrollbar he is looking at**. Android always draws *overlay*
+scrollbars, and since Chromium 121 overlay scrollbars are painted natively and ignore the
+`::-webkit-scrollbar` pseudo-elements entirely, so the phone fell back to the system grey
+thumb. The standard `scrollbar-color` is the one thing overlay scrollbars obey.
+
+Both are set, because they cover two different scrollbars:
+```css
+html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
+::-webkit-scrollbar-thumb{background:var(--chipz-orange);border-radius:var(--r-pill);}
+```
+`scrollbar-color` is an **inherited** property, so the root covers every scroller in the
+app — sheets, the announcement body, the message detail, the manual-pay overlay —
+without naming any of them. Naming them is how the next one added gets missed. The track
+is transparent on purpose: a filled track on a phone is a grey stripe down the edge of
+every screen, which is the thing being removed. The admin panel carries the same rules.
+
+**The painted pixels cannot be verified in this container, and the test says so.** This
+Chromium always draws overlay scrollbars — every documented flag for turning that off
+(`--disable-features=OverlayScrollbar` / `OverlayScrollbars` / `FluentOverlayScrollbar`,
+`--disable-overlay-scrollbar`) still reports a 0px gutter — and headless does not
+composite overlay scrollbars into a screenshot at all: sampling the thumb's strip
+immediately after a scroll, and again at 50/200/600ms, finds zero non-background pixels.
+A first version of the check probed a 0px-wide strip, found nothing, and reported a
+cheerful pass having photographed empty space. `test-card-quality.py` now asserts the
+computed `scrollbar-color` on the root **and on an inherited scroller**, plus the source
+rules, and records the reason inline so nobody re-adds the screenshot check.
+
 ### The name is remembered on the device, and the manifest is rewritten
 
 Owner: *"let's not make chipz to be default name, let's make it to be backend such that

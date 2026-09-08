@@ -125,7 +125,35 @@ h1,h2,h3,.section-title,.stat-val,.bal-value{}
 button{cursor:pointer;font-family:inherit;}
 input{font-family:inherit;}
 a{color:inherit;}
-::-webkit-scrollbar{display:none;}
+/* Owner: "l want the scroll bar to be orange not dull color."
+ *
+ * This needs BOTH properties, and only one of them is the one he can see.
+ *
+ * The file used to say `::-webkit-scrollbar{display:none}`, which is why the
+ * bar he is looking at is grey: Android always draws OVERLAY scrollbars, and
+ * since Chromium 121 overlay scrollbars are painted natively and ignore the
+ * ::-webkit-scrollbar pseudo-elements entirely. The rule was not being
+ * disobeyed -- it simply does not reach that scrollbar, so the phone fell
+ * back to the system thumb. The standard `scrollbar-color` is the one thing
+ * overlay scrollbars do obey.
+ *
+ * ::-webkit-scrollbar is kept for the classic (non-overlay) scrollbars an
+ * older Chromium or a desktop browser still draws, where `scrollbar-color`
+ * alone would leave a default-width grey track around an orange thumb.
+ *
+ * scrollbar-color is an INHERITED property, so setting it on the root covers
+ * every scroller in the app -- the sheets, the announcement body, the message
+ * detail, the manual-pay overlay -- without naming any of them. Naming them
+ * is how the next one added gets missed.
+ *
+ * The track is transparent on purpose: a filled track on a phone is a grey
+ * stripe down the edge of every screen, which is the thing being removed. */
+html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--chipz-orange);border-radius:var(--r-pill);}
+::-webkit-scrollbar-thumb:hover{background:var(--snow-wine);}
+::-webkit-scrollbar-corner{background:transparent;}
 
 .app-card{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);box-shadow:var(--sh-card);}
 /* Owner: "l also need 3d buttons" -- a solid darker shelf under every primary

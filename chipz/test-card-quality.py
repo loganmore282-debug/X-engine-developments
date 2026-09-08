@@ -357,8 +357,69 @@ async def main():
         ck(labels.get("registerIdle") == "Sign Up",
            "the idle label still comes back (%r)" % labels.get("registerIdle"))
 
+        # ── The scrollbar is orange ──
+        # Owner: "l want the scroll bar to be orange not dull color."
+        #
+        # Two mechanisms, and the one that matters on his phone is the one the
+        # old CSS could not reach: `::-webkit-scrollbar{display:none}` has no
+        # effect on an OVERLAY scrollbar, which is all Android draws, because
+        # Chromium 121+ paints those natively. The standard `scrollbar-color`
+        # is what overlay scrollbars obey. Both are asserted -- the computed
+        # property for the overlay path, and rendered PIXELS for the classic
+        # path, because a colour that is declared and never painted is exactly
+        # the failure being fixed.
+        print("\n— the scrollbar —")
+        sb = await page.evaluate("""()=>{const cs=getComputedStyle(document.documentElement);
+          return {color:cs.scrollbarColor, width:cs.scrollbarWidth};}""")
+        print("  ", sb)
+        ck("255, 138, 31" in sb["color"] or "#ff8a1f" in sb["color"].lower(),
+           "the root declares the brand orange as the thumb colour (%s)" % sb["color"])
+        # Chromium serialises `transparent` as rgba(0, 0, 0, 0); matching the
+        # literal word would fail a correct implementation.
+        ck("rgba(0, 0, 0, 0)" in sb["color"] or "transparent" in sb["color"],
+           "over a transparent track, so there is no grey stripe down the edge (%s)" % sb["color"])
+        # scrollbar-color is inherited, so a scroller nested inside a sheet
+        # must pick it up without being named. Naming them is how the next
+        # scroller added gets missed.
+        await page.evaluate("openBalanceRecordSheet()")
+        await page.wait_for_timeout(1000)
+        inner = await page.evaluate("""()=>{const el=document.querySelector('.sheet-bg.show');
+          return el ? getComputedStyle(el).scrollbarColor : null;}""")
+        ck(inner is not None and "255, 138, 31" in inner,
+           "and the sheet scroller inherits it rather than being listed by hand (%s)" % inner)
+        await page.evaluate("closeSheet()")
+        await page.wait_for_timeout(400)
+
         ck(not errs, "no page errors: " + str(errs))
         await b.close()
+
+        # ── What CANNOT be checked here, and why ──
+        #
+        # Not the painted pixels. This Chromium always draws OVERLAY
+        # scrollbars -- every documented flag for turning that off
+        # (--disable-features=OverlayScrollbar / OverlayScrollbars /
+        # FluentOverlayScrollbar, --disable-overlay-scrollbar) still reports a
+        # 0px-wide scrollbar gutter -- and headless does not composite overlay
+        # scrollbars into a screenshot at all: sampling the thumb's strip
+        # immediately after a scroll, and again at 50/200/600ms, finds zero
+        # non-background pixels.
+        #
+        # A first version of this block probed a 0px-wide strip, found nothing,
+        # and reported a cheerful pass having photographed empty space. That is
+        # the trap: an assertion that cannot fail is worse than no assertion,
+        # because it reads like coverage. So the computed properties above are
+        # the check, and the source rule below guards the other path.
+        css = open(os.path.join(HERE, 'user-src', 'index.html'), encoding='utf-8').read()
+        # Comments in this file quote the old rule while explaining it, so they
+        # are stripped before asking whether the rule itself is still present.
+        import re as _re
+        css_only = _re.sub(r'/\*[\s\S]*?\*/', '', css)
+        ck("::-webkit-scrollbar{display:none;}" not in css_only,
+           "the blanket hide-the-scrollbar rule is gone")
+        ck(_re.search(r'::-webkit-scrollbar-thumb\{background:var\(--chipz-orange\)', css_only) is not None,
+           "and the classic-scrollbar thumb is painted with the brand orange")
+        ck(_re.search(r'html\{scrollbar-width:thin;scrollbar-color:var\(--chipz-orange\)', css_only) is not None,
+           "with scrollbar-color on the root for the overlay scrollbars a phone actually draws")
 
     print(("\n%d FAILED" % len(fails)) if fails else "\ncard quality: all cases pass")
     sys.exit(1 if fails else 0)
