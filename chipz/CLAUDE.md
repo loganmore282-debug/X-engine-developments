@@ -512,6 +512,74 @@ correct 113px radius as 102px and failed a correct implementation; `test-admin-b
 drives the **built** admin panel, because the source is obfuscated into `admin/index.html`
 and grepping the deployed file proves nothing.
 
+### Mission Center — REMOVED
+
+Owner: *"remove mission center."* Gone from the client (Team button, sheet, both claim
+flows, `STATE.mission`, the cached field) **and** from the server: `/mission/status`,
+`/mission/salary/claim` and `/mission/deposit/claim` are deleted, not merely unlinked.
+**Two of them credited money** — a removed feature whose payout endpoints stay reachable
+still pays anyone who knows the URL; the client is not the access control. The
+`MISSION_*` constants went with them.
+
+Deliberately kept: the `mission_salary` / `mission_deposit_reward` entries in
+`TX_TYPE_LABELS` (and the admin's copy of that map). Members who claimed these were
+really paid, and their Records must keep reading properly — dropping the labels turns old
+rows into raw type keys. `activeL1Count()` / `wholeTeamDeposits()` also stay: the **Task
+Center**, a different feature that is NOT removed, uses both. Boot lost a
+`/mission/status` call, so every launch is one round trip lighter.
+
+### The Download APP screen
+
+Owner: *"make when one taps download, it opens and middle there is a button download, and
+in background there is image uploaded from admin panel."* Account → Download APP now
+opens `openDownloadSheet()` instead of firing the browser install prompt directly.
+
+- New admin slot **`downloadbg`** (Admin → Settings → *Download screen background*),
+  portrait **1080 × 1920**, riding the existing `CHIPZ_IMAGE_SLOTS` / `/public/chipz-images`
+  machinery. It resizes to 1600 on the long side, not the banners' 1280 — a portrait image
+  capped at 1280 is only 720 wide and visibly soft full-bleed.
+- The image is a real `<img class="dl-bg">`, not a CSS background, so a slow or broken one
+  degrades to the brand gradient rather than a blank panel. A fixed dark scrim sits over
+  it because the artwork is the owner's and could be pale, busy or white.
+- **The BUTTON is what sits in the middle**, not the card containing it. Centring the
+  whole block put the heading and blurb above the button and pushed it ~60px below the
+  real centre; `.dl-body` is a `1fr auto 1fr` grid so the button itself is dead centre
+  (verified at 422 vs 422 on a 390×844 viewport).
+- It uses the ordinary sheet overlay, so the phone Back button closes it for free.
+
+### The nav icon bounces; "Loading…" waves
+
+Two animation corrections, both after the owner rejected an earlier attempt.
+
+- **Nav icon (third pass).** *"the nav icons when tapped be live bounce in and out … it is
+  like tapping something and bounces 1 in and out 1."* `@keyframes navIconBounce` scales
+  .74 → 1.18 → settle, at **full opacity throughout**. The previous `navIconFade` is gone:
+  he rejected the fade twice, and an icon that dims mid-press reads as a loading state.
+  The overshoot past 1.0 is what makes it feel physical — without it this is a scale
+  transition and the bounce is gone. `hookNavTapBox()`'s `animationend` listener matches
+  on the keyframe NAME, so renaming the keyframe means renaming it there too.
+- **Loading text.** *"the letters on 'Loading...' and dots are in like wavy moving
+  animations."* Each letter and each dot is its own `<i>` running `loadWave` on a 55ms
+  stagger, so motion travels along the word. It was the whole word bobbing as one block.
+  `display:inline-block` is required — transform does nothing to an inline box.
+
+**Measuring the loading wave is a trap.** During real boot the main thread is busy
+inflating and running the ~265KB core, so no frames are produced and
+`document.timeline.currentTime` stays at **0** — every letter reads as untransformed and a
+perfectly good wave measures as motionless. `test-round-fixes.py` therefore re-shows
+`#loadingScreen` *after* boot and samples it with the thread idle.
+
+### Copy invite link copies
+
+Owner: *"copying invite link just copys not sharing."* The button labelled **COPY INVITE
+LINK** was calling `shareReferral()`, which opened the phone's share sheet. It now goes
+through `copyText()` like the small copy icon above it, and `shareReferral()` is deleted.
+
+It was also broken in a way the label hid: the button called `shareReferral()` **with no
+argument**, so the shared message read `...sign up with my link: undefined`. Nothing
+inside the app would have shown this — the wrong text only appeared after it had been
+sent to someone.
+
 ### No Snow branding reaches a member
 
 Chipz is a fork of **Snow**, so inherited wording is not hypothetical. Found and fixed

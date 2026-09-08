@@ -711,7 +711,10 @@ async function getHelpBanner() {
 // 60s cache shape as getHomeBanner()/getHelpBanner() above, but written
 // once generically rather than copy-pasted per slot: `chipz-<slot>` doc ids
 // keep them from colliding with Snow's inherited 'home'/'help' docs.
-const CHIPZ_IMAGE_SLOTS = ['referral', 'logo', 'spin', 'profilegif'];
+// 'downloadbg' backs the Download APP screen (owner: "make when one taps
+// download, it opens and middle there is a button download, and in
+// background there is image uploaded from admin panel").
+const CHIPZ_IMAGE_SLOTS = ['referral', 'logo', 'spin', 'profilegif', 'downloadbg'];
 const _chipzImageCache = {};
 async function getChipzImage(slot) {
   if (!CHIPZ_IMAGE_SLOTS.includes(slot)) return null;
@@ -1123,40 +1126,11 @@ async function activeL1Count(userId) {
   return n;
 }
 
-// MISSION CENTER — owner-supplied 2026-08-26, deliberately a SEPARATE system
-// from the Task Center above (owner: "it is aside"), reached via its own
-// screen/button. Two independent rewards, both MANUALLY claimed (owner:
-// "one has to claim it manually"):
-//  1. Referral "daily salary" — RECURRING, resets every day at 00:00 EAT
-//     (owner: "just like every day ie resets at 00:00"). Unclaimed on a
-//     given day is forfeited, not banked/stacked — a calendar-midnight
-//     one-shot-per-day gate (missionSalaryLastClaim/nowStr().date), same
-//     shape /checkin itself used before Round 87 switched check-in to a
-//     rolling 24h cooldown instead (owner: "checkin will be resetting
-//     24hrs not midnight") — Mission Center's own salary was never asked
-//     to change and stays midnight-based, per the owner's own explicit
-//     "resets at 00:00" spec quoted above. Amount is a flat
-//     MISSION_SALARY_RATE per active L1 referral, scaling continuously with
-//     the live count, capped at MISSION_SALARY_REFERRAL_CAP referrals (owner:
-//     "Maximum eligible cap for referral tiers scales up to 1,000 total
-//     referrals"). Rate changed 2026-08-27 (owner: "daily per referral change
-//     it from 200 to 750ugx") — was 200, now 750 (1,000×750 = 750,000 at the
-//     cap). Purely a constant change, no other code depends on the old
-//     value — every consumer (salaryAmount here, /team/stats,
-//     /mission/claim) already computes off this constant live, nothing
-//     hardcodes 200 anywhere else in server.js or the frontend.
-//  2. Team deposit reward — ONE-TIME per cumulative-whole-team-deposit
-//     threshold (owner confirmed "on time" or one-time, same shape as the
-//     Task Center's own deposit ladder, just a separate claim-flag
-//     namespace and different numbers), all exactly 5% of the threshold
-//     (owner's own worked examples: 150,000 -> 7,500, 300,000 -> 15,000;
-//     every other tier scaled from those two the same way).
-const MISSION_SALARY_RATE = 750;
-const MISSION_SALARY_REFERRAL_CAP = 1000;
-const MISSION_DEPOSIT_REWARDS = [
-  { target: 150000, reward: 7500 }, { target: 300000, reward: 15000 }, { target: 600000, reward: 30000 },
-  { target: 1000000, reward: 50000 }, { target: 2500000, reward: 125000 }, { target: 5000000, reward: 250000 },
-];
+// MISSION CENTER's constants lived here and are gone with the feature
+// (owner: "remove mission center"). activeL1Count() above and
+// wholeTeamDeposits() below STAY -- they are shared with the Task Center,
+// which is a different feature and is not being removed.
+
 // Sum of the WHOLE team's (L1+L2+L3) deposits — powers Team's "Team
 // deposits" stat card.
 async function wholeTeamDeposits(userId) {
@@ -2160,89 +2134,21 @@ app.post('/team/milestone/claim', async (req, res) => {
   } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
 });
 
-// ── MISSION CENTER (separate from Task Center above — see the constants'
-// own comment for the full owner-supplied spec) ──
-app.get('/mission/status', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const [uSnap, l1ActiveCount, teamDeposits] = await Promise.all([
-      db.collection('users').doc(userId).get(), activeL1Count(userId), wholeTeamDeposits(userId)
-    ]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    const u = uSnap.data();
-    const today = nowStr().date;
-    const salaryAmount = Math.min(l1ActiveCount, MISSION_SALARY_REFERRAL_CAP) * MISSION_SALARY_RATE;
-    const salaryClaimedToday = u.missionSalaryLastClaim === today;
-    const depositRewards = MISSION_DEPOSIT_REWARDS.map(m => ({
-      target: m.target, reward: m.reward, current: teamDeposits, achieved: teamDeposits >= m.target,
-      claimed: !!u['missionDepositClaimed_' + m.target],
-    }));
-    res.json({ status: 'success', l1ActiveCount, salaryRate: MISSION_SALARY_RATE, salaryCap: MISSION_SALARY_REFERRAL_CAP,
-      salaryAmount, salaryClaimedToday, teamDeposits, depositRewards });
-  } catch (e) { console.error('Mission status error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load Mission Center right now' }); }
-});
-app.post('/mission/salary/claim', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  try {
-    let result = null;
-    await withLock('mission-salary:' + userId, async () => {
-      const uRef = db.collection('users').doc(userId);
-      const uSnap = await uRef.get();
-      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      const u = uSnap.data();
-      if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      const today = nowStr().date;
-      if (u.missionSalaryLastClaim === today) { result = { code: 400, body: { status: 'error', message: "Already claimed today's salary. Come back after 00:00." } }; return; }
-      const count = await activeL1Count(userId);
-      const amount = Math.min(count, MISSION_SALARY_REFERRAL_CAP) * MISSION_SALARY_RATE;
-      if (amount <= 0) { result = { code: 400, body: { status: 'error', message: 'You need at least one active referral to claim a daily salary.' } }; return; }
-      // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
-      await withLock('bal:' + userId, () => uRef.update({ walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), missionSalaryLastClaim: today }));
-      const { date, time } = nowStr();
-      await db.collection('transactions').add({
-        userId, type: 'mission_salary', description: `Mission Center: daily referral salary (${count} active referrals)`,
-        amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-      });
-      result = { code: 200, body: { status: 'success', amount, message: `${fmtUGX(amount)} added to your wallet` } };
-    });
-    res.status(result.code).json(result.body);
-  } catch (e) { console.error('Mission salary claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim your daily salary right now' }); }
-});
-app.post('/mission/deposit/claim', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const target = Number(req.body.target);
-  const m = MISSION_DEPOSIT_REWARDS.find(x => x.target === target);
-  if (!m) return res.status(400).json({ status: 'error', message: 'Unknown reward tier' });
-  try {
-    const progress = await wholeTeamDeposits(userId);
-    if (progress < m.target) return res.status(400).json({ status: 'error', message: `You need ${fmtUGX(m.target)} in team deposits to claim this, you have ${fmtUGX(progress)}.` });
-    const claimFlag = 'missionDepositClaimed_' + m.target;
-    let done = false, stillShort = false;
-    await withLock('mission-deposit:' + userId + ':' + claimFlag, async () => {
-      const liveProgress = await wholeTeamDeposits(userId);
-      if (liveProgress < m.target) { stillShort = true; return; }
-      // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
-      await withLock('bal:' + userId, () => db.runTransaction(async t => {
-        const uRef = db.collection('users').doc(userId);
-        const fresh = await t.get(uRef);
-        if (!fresh.exists || fresh.data()[claimFlag] || fresh.data().status === 'banned') return;
-        const { date, time } = nowStr();
-        t.update(uRef, { walletBalance: FieldValue.increment(m.reward), totalEarned: FieldValue.increment(m.reward), [claimFlag]: true });
-        t.set(db.collection('transactions').doc(), {
-          userId, type: 'mission_deposit_reward', description: `Mission Center: team deposits reached ${fmtUGX(m.target)}`,
-          amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-        });
-        done = true;
-      }));
-    });
-    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now. Please try again.' });
-    if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
-    res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
-  } catch (e) { console.error('Mission deposit claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
-});
+// ── MISSION CENTER — REMOVED ──
+// Owner: "remove mission center". The three routes that lived here
+// (/mission/status, /mission/salary/claim, /mission/deposit/claim) are gone,
+// not merely unlinked from the app. Two of them CREDITED MONEY, so leaving
+// them reachable after the screen was taken out of the UI would have meant a
+// removed feature that still pays out to anyone who knows the URL -- the
+// client is not the access control.
+//
+// Deliberately KEPT: the mission_salary / mission_deposit_reward transaction
+// rows already in the database, and the labels that render them. Members who
+// claimed these really were paid, and their Records must keep reading
+// correctly; deleting the labels would turn old rows into raw type keys.
+// The MISSION_* constants are gone too (see where they were declared).
+// activeL1Count()/wholeTeamDeposits() stay: the Task Center, a different
+// feature that is NOT being removed, uses both.
 
 // ═══════════════════════════════════════════
 // PUBLIC
@@ -2405,8 +2311,8 @@ app.get('/public/announcement-image', async (_req, res) => {
 // in boot()'s own Promise.all alongside the Home banner so neither pops in.
 app.get('/public/chipz-images', async (_req, res) => {
   try {
-    const [referral, logo, spin, profilegif] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif')]);
-    res.json({ status: 'success', referral, logo, spin, profilegif });
+    const [referral, logo, spin, profilegif, downloadbg] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg')]);
+    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Both slots in one call (not two round trips) -- fetched unconditionally
@@ -6045,8 +5951,8 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/chipz-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [referral, logo, spin, profilegif] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif')]);
-    res.json({ status: 'success', referral, logo, spin, profilegif });
+    const [referral, logo, spin, profilegif, downloadbg] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg')]);
+    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/chipz-image/set', async (req, res) => {

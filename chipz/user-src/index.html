@@ -188,12 +188,22 @@ a{color:inherit;}
   transition:opacity .2s ease,transform .2s ease;}
 .navitem.active::before{opacity:1;transform:scale(1);}
 .navitem .nav-ic,.navitem .lbl{position:relative;z-index:1;}
-/* The tap animation lives on the ICON, not the box. */
-.navitem.nav-tap .nav-ic img{animation:navIconFade .52s ease-in-out;}
-@keyframes navIconFade{
-  0%{opacity:1;transform:scale(1);}
-  42%{opacity:0;transform:scale(.82);}
-  100%{opacity:1;transform:scale(1);}}
+/* The tap animation lives on the ICON, not the box.
+   Owner, third pass: "the nav icons when tapped be live bounce in and out
+   ... it is like tapping something and bounces 1 in and out 1." So it is a
+   BOUNCE now, not the fade it was: the icon presses IN (squashes down),
+   springs back OUT past its own size, then settles. One in, one out.
+   Opacity stays at 1 the whole way -- a fade was what he was rejecting, and
+   an icon that dims mid-bounce reads as a loading state, not a press.
+   The overshoot to 1.18 is what makes it feel physical; without it this is
+   just a scale transition and the "bounce" is gone. */
+.navitem.nav-tap .nav-ic img{animation:navIconBounce .46s cubic-bezier(.34,1.56,.64,1);}
+@keyframes navIconBounce{
+  0%{transform:scale(1);}
+  28%{transform:scale(.74);}   /* in  */
+  62%{transform:scale(1.18);}  /* out */
+  82%{transform:scale(.95);}
+  100%{transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){
   .navitem::before{transition:none;}
   .navitem.nav-tap .nav-ic img{animation:none;}}
@@ -293,8 +303,50 @@ a{color:inherit;}
 #loadingScreen{position:fixed;inset:0;background:linear-gradient(165deg,#0b0b0c 0%,#3a0e12 55%,#7c0a1c 100%);background-size:cover;background-position:center;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;}
 #loadingScreen .ls-wordmark{font-family:'Playfair Display',Georgia,serif;font-size:34px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;margin-bottom:36px;}
 #loadingScreen .ls-wordmark b{color:var(--chipz-orange);font-weight:400;}
-#loadingScreen .ls-text{font-family:'Playfair Display',Georgia,serif;font-size:18px;letter-spacing:.06em;color:#fff;animation:loadBob 1.2s ease-in-out infinite;}
-@keyframes loadBob{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+/* Owner: "the letters on 'Loading...' and dots are in like wavy moving
+   animations". It was the whole word bobbing as one block, which reads as a
+   bounce, not a wave. Each letter AND each dot is now its own span running
+   the same keyframe on a staggered delay (set inline in the markup below),
+   so the motion travels along the word left to right like a ripple.
+   inline-block is required: transform does nothing to an inline box. */
+#loadingScreen .ls-text{font-family:'Playfair Display',Georgia,serif;font-size:18px;letter-spacing:.06em;color:#fff;display:flex;}
+#loadingScreen .ls-text i{display:inline-block;font-style:normal;animation:loadWave 1.15s ease-in-out infinite;}
+/* A space collapses to nothing inside a flex row, so any gap in the word has
+   to hold its own width. "Loading..." has none today, but this keeps the
+   effect intact if the wording ever changes. */
+#loadingScreen .ls-text i.sp{width:.32em;}
+@keyframes loadWave{
+  0%,60%,100%{transform:translateY(0);}
+  30%{transform:translateY(-9px);}}
+/* ── Download APP screen ──
+   Owner: "make when one taps download, it opens and middle there is a button
+   download, and in background there is image uploaded from admin panel."
+   The admin image fills the panel; the button sits dead centre on top of it.
+   min-height uses the sheet's own visible box (the sheet stops 68px short of
+   the bottom for the nav bar), so "middle" is the middle of what is actually
+   on screen -- 100vh here would push the button below the fold. */
+/* Bleeds to the sheet's own edges: .sheet-body is padded 4px 20px 40px, and
+   .sheet-bg itself stops 68px short of the bottom for the nav bar, under a
+   ~66px .sheet-head. So the panel spans exactly what is visible. */
+.dl-screen{position:relative;min-height:calc(100vh - 134px);display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--chipz-grad);margin:-4px -20px -40px;}
+.dl-screen .dl-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+/* The image is uploaded by the owner and could be anything -- pale, busy,
+   white. The scrim is what guarantees the white title and the button edge
+   stay legible on top of whatever lands here, rather than hoping. */
+.dl-screen .dl-scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,4,.32) 0%,rgba(10,6,4,.62) 100%);}
+/* Owner: "middle there is a button download" -- the BUTTON is what has to sit
+   in the middle, not the block of text that happens to contain it. Centring
+   the whole card puts the heading and blurb above it, which pushes the button
+   about 60px below the real centre. Three rows with equal 1fr top and bottom
+   put the button itself dead centre, with the text hanging off it either way. */
+.dl-screen .dl-body{position:relative;z-index:1;width:100%;max-width:320px;padding:0 22px;text-align:center;color:#fff;
+  display:grid;grid-template-rows:1fr auto 1fr;min-height:calc(100vh - 134px);}
+.dl-screen .dl-top{align-self:end;padding-bottom:26px;}
+.dl-screen .dl-mark{display:flex;justify-content:center;margin-bottom:18px;}
+.dl-screen .dl-title{font-size:24px;font-weight:700;margin:0 0 10px;color:#fff;}
+.dl-screen .dl-sub{font-size:14px;line-height:1.6;margin:0 0 26px;color:rgba(255,255,255,.86);}
+.dl-screen .dl-btn{width:100%;padding:16px 0;font-size:16px;font-weight:700;letter-spacing:.04em;}
+.dl-screen .dl-note{font-size:12.5px;line-height:1.6;margin:16px 0 0;color:rgba(255,255,255,.78);}
 #loadingScreen .spin{width:40px;height:40px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;animation:sp .8s linear infinite;}
 @keyframes sp{to{transform:rotate(360deg);}}
 /* Owner: "when one taps recharge after having select amount it should
@@ -1277,7 +1329,7 @@ a{color:inherit;}
 
 <div id="loadingScreen">
   <div class="ls-wordmark">CHIP<b>Z</b></div>
-  <div class="ls-text">Loading...</div>
+  <div class="ls-text" aria-label="Loading"><i style="animation-delay:0ms">L</i><i style="animation-delay:55ms">o</i><i style="animation-delay:110ms">a</i><i style="animation-delay:165ms">d</i><i style="animation-delay:220ms">i</i><i style="animation-delay:275ms">n</i><i style="animation-delay:330ms">g</i><i style="animation-delay:385ms">.</i><i style="animation-delay:440ms">.</i><i style="animation-delay:495ms">.</i></div>
 </div>
 
 <div id="openingGate">

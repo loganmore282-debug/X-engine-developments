@@ -70,12 +70,13 @@ ck(hits === 0, `${FILES.length} source files carry no leftover Snow wording (${h
 // The two that were actually wrong, pinned by name so a revert is loud.
 console.log('\n— the two that were live —');
 const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-ck(/Join Chipz and start earning/.test(mod),
-   'the referral share text invites people to Chipz');
-// Comments stripped: the line above the share text quotes the old wording to
-// explain what was wrong, and matching that quote would fail the check on
-// prose while the shipped string is already right.
-ck(!/Join Snow/.test(stripComments(mod)), 'and not to Snow');
+// The referral invite SENTENCE is gone with shareReferral() -- the owner
+// asked for copy, not share, so the button now copies the bare link and no
+// product name travels into WhatsApp at all. That removes the worst place
+// this could regress rather than fixing it.
+ck(!/shareReferral/.test(stripComments(mod)),
+   'shareReferral, which carried the "Join Snow" sentence, no longer exists');
+ck(!/Join Snow/.test(stripComments(mod)), 'and no "Join Snow" anywhere');
 ck(/openSheet\('About Chipz'/.test(mod), "the About sheet is titled 'About Chipz'");
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 ck(!/snowflake mark/.test(stripComments(admin)),
@@ -104,9 +105,9 @@ ck(/snow_state_cache/.test(mod), 'and snow_state_cache is still the storage key'
 //
 // The shipped WORDING is therefore checked where the built app actually
 // runs -- see the Snow-branding block at the end of test-nav-sheets.py,
-// which stubs navigator.share, calls the real shareReferral() out of the
-// built bundle and reads what it would have sent. That also catches the
-// failure this section was reaching for: a source fixed but never rebuilt.
+// which reads the rendered text of four real screens out of the built
+// bundle. That also catches the failure this section was reaching for:
+// a source fixed but never rebuilt.
 console.log('\n— the deployed build is a real, inflatable payload —');
 const zlib = require('zlib');
 const built = fs.readFileSync(__dirname + '/user/index.html', 'utf8');

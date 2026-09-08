@@ -136,27 +136,21 @@ async def main():
         ck(await page.evaluate("()=>STATE.page")=="team", "and actually switches to that tab")
 
         # ── no Snow wording in the BUILT app ──
-        # Chipz is a fork of Snow, and the referral share text still read
-        # "Join Snow and start earning" -- the single most widely-seen
-        # sentence the app produces, since it is what every member's own
-        # WhatsApp invite carries. test-no-snow-branding.js checks the
-        # sources; the obfuscator encodes string literals, so this is the
-        # only place the SHIPPED wording can actually be read. It also
+        # Chipz is a fork of Snow. test-no-snow-branding.js checks the
+        # sources; the obfuscator encodes string literals, so a rendered
+        # screen is the only place the SHIPPED wording can be read. It also
         # catches a source fixed but never rebuilt.
-        shared = await page.evaluate("""async () => {
-            let captured = null;
-            const real = navigator.share;
-            Object.defineProperty(navigator, 'share',
-              { configurable: true, value: async o => { captured = o; } });
-            shareReferral('https://chipz.example/r/ML3Q4X');
-            await new Promise(r => setTimeout(r, 50));
-            if (real) Object.defineProperty(navigator, 'share', { configurable: true, value: real });
-            return captured;
-        }""")
-        ck(shared and 'Chipz' in shared.get('text', ''),
-           "the referral share invites people to Chipz: %r" % (shared or {}).get('text'))
-        ck(shared and 'Snow' not in shared.get('text', ''),
-           "and never to Snow")
+        #
+        # This used to drive shareReferral() -- the referral invite text was
+        # the worst offender, reading "Join Snow and start earning". That
+        # function is gone now (the owner asked for copy, not share), and
+        # with it the only sentence that carried a product name into
+        # WhatsApp, so what is left to check is the screens themselves.
+        for tab in ('home', 'referral', 'team', 'account'):
+            await page.evaluate(f"showPage('{tab}')"); await page.wait_for_timeout(450)
+            txt = await page.inner_text('#pageHost')
+            ck('Snow' not in txt and 'snow' not in txt.lower().replace('snowflake', ''),
+               f"the {tab} screen shows no Snow wording")
         await page.evaluate("openAboutSheet()"); await page.wait_for_timeout(500)
         title = await page.evaluate("()=>{const t=document.querySelector('.sheet-title,.sheet-head h2,#sheetTitle');return t?t.textContent.trim():null;}")
         ck(title == 'About Chipz', "the About sheet is titled About Chipz (%r)" % title)

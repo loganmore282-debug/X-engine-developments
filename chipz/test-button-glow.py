@@ -261,39 +261,55 @@ async def main():
         }""")
         ck(still > 0.9, "it does NOT disappear after the tap settles (opacity %.2f)" % still)
 
-        print("\n— and the ICON fades in and out when tapped —")
-        await page.evaluate("""() => {
-            document.querySelectorAll('.navitem')[1]
-              .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        # Owner, after seeing the fade: "the nav icons when tapped be live
+        # bounce in and out ... it is like tapping something and bounces 1 in
+        # and out 1." So this used to assert the icon DIMS on tap, and now
+        # asserts it does not: it scales in, overshoots out, and settles, at
+        # full opacity throughout. A dimming icon reads as a loading state.
+        print("\n— and the ICON bounces when tapped —")
+        seq = await page.evaluate("""async () => {
+            const btn = document.querySelectorAll('.navitem')[1];
+            const img = btn.querySelector('.nav-ic img');
+            btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            const out = [];
+            const t0 = performance.now();
+            while (performance.now() - t0 < 520) {
+                const cs = getComputedStyle(img);
+                out.push([Math.round(new DOMMatrixReadOnly(cs.transform).a * 1000) / 1000,
+                          Math.round(parseFloat(cs.opacity) * 100) / 100]);
+                await new Promise(r => requestAnimationFrame(r));
+            }
+            return out;
         }""")
-        seq = []
-        for _ in range(12):
-            o = await page.evaluate("""() => {
-                const img = document.querySelectorAll('.navitem')[1].querySelector('.nav-ic img');
-                return img ? parseFloat(getComputedStyle(img).opacity) : null;
-            }""")
-            if o is not None: seq.append(round(o, 2))
-            await page.wait_for_timeout(60)
-        print("   icon opacity after tap:", seq)
-        ck(min(seq) < 0.5, "the icon FADES OUT on tap (dips to %.2f)" % min(seq))
-        dip = seq.index(min(seq))
-        ck(any(v > 0.9 for v in seq[dip:]),
-           "and FADES BACK IN again (%s)" % seq[dip:])
-        ck(seq[-1] > 0.9, "settling fully visible, not left dimmed (%.2f)" % seq[-1])
+        scales = [r[0] for r in seq]
+        opacities = [r[1] for r in seq]
+        print("   icon scale after tap: min %.2f  max %.2f  end %.2f  (%d samples)"
+              % (min(scales), max(scales), scales[-1], len(scales)))
+        ck(min(scales) < 0.85, "it presses IN below its own size (%.2f)" % min(scales))
+        ck(max(scales) > 1.05, "then springs OUT past it — the overshoot IS the bounce (%.2f)" % max(scales))
+        ck(abs(scales[-1] - 1.0) < 0.06, "and settles back to normal (%.2f)" % scales[-1])
+        ck(min(opacities) > 0.95,
+           "at full opacity throughout — the fade is what he rejected (min %.2f)" % min(opacities))
 
         # Re-triggerable: tapping the same tab again must replay it, which
         # re-adding an already-present class would NOT do.
         await page.wait_for_timeout(700)
-        await page.evaluate("""() => {
-            document.querySelectorAll('.navitem')[1]
-              .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        again = await page.evaluate("""async () => {
+            const btn = document.querySelectorAll('.navitem')[1];
+            const img = btn.querySelector('.nav-ic img');
+            const settled = new DOMMatrixReadOnly(getComputedStyle(img).transform).a;
+            btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            let moved = settled;
+            const t0 = performance.now();
+            while (performance.now() - t0 < 260) {
+                const a = new DOMMatrixReadOnly(getComputedStyle(img).transform).a;
+                if (Math.abs(a - 1) > Math.abs(moved - 1)) moved = a;
+                await new Promise(r => requestAnimationFrame(r));
+            }
+            return { settled: Math.round(settled * 1000) / 1000, moved: Math.round(moved * 1000) / 1000 };
         }""")
-        await page.wait_for_timeout(220)
-        again = await page.evaluate("""() => {
-            const img = document.querySelectorAll('.navitem')[1].querySelector('.nav-ic img');
-            return parseFloat(getComputedStyle(img).opacity);
-        }""")
-        ck(again < 0.9, "tapping the SAME tab again replays it (opacity %.2f)" % again)
+        ck(abs(again["moved"] - 1.0) > 0.08,
+           "tapping the SAME tab again replays it (scale reached %.2f)" % again["moved"])
 
         ck(not errs, "no page errors: %s" % errs[:3])
         await page.screenshot(path=f"{OUT}/glow.png")

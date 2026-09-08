@@ -157,7 +157,7 @@ function togglePw(id, btn){
 
 // ── STATE ──
 var STATE = { user: null, account: null, settings: null, products: null, investments: null,
-  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, refCode: null, page: 'home', mission: null,
+  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, refCode: null, page: 'home',
   // Codex-caught real bug: on a shared device, a request started by member A
   // (e.g. the live-refresh poll, or a tab opened right before logout) could
   // still be in flight when A logs out and B logs in on the same page load --
@@ -173,7 +173,7 @@ var STATE = { user: null, account: null, settings: null, products: null, investm
 // Real bug fixed: every toast() call used to just append another element,
 // with no limit on how many could be stacked up on screen at once -- a
 // burst of rapid calls (see copyText()/shareReferral()'s own fix below, and
-// Mission Center's Round 34 fix) piled up a wall of overlapping "Copied"
+// the Round 34 copy fix) piled up a wall of overlapping "Copied"
 // pills covering the whole screen (owner screenshot). Owner: "only one
 // notify is enough." A new toast now removes whatever's currently showing
 // first, so at most one is ever visible -- the latest call always wins.
@@ -397,7 +397,7 @@ window.doLogout = async function(){
   // session either.
   if (_checkinCountdownTimer) { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; }
   STATE.authEpoch++;
-  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, mission: null });
+  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null });
   clearCachedState();
   // Without this, an explicit logout would immediately silently sign the
   // member right back in on the next boot via tryAutoSignIn() -- Chrome
@@ -499,6 +499,10 @@ async function boot(){
   STATE.spinBanner = (ci.status === 'success' && ci.spin) ? ci.spin : null;
   // Animated logo shown beside the profile icon on Account.
   STATE.profileGif = (ci.status === 'success' && ci.profilegif) ? ci.profilegif : null;
+  // Backdrop for the Download APP screen. Fetched here with the rest rather
+  // than when the screen opens: it is a full-bleed image, and loading it on
+  // open would show an empty dark panel for the moment it takes to arrive.
+  STATE.downloadBg = (ci.status === 'success' && ci.downloadbg) ? ci.downloadbg : null;
   applyAuthTagline();
   applyNumberFont();
 }
@@ -704,7 +708,7 @@ window.addEventListener('snow-auth', async (ev) => {
 // changed since last time. Owner (relaying a friend's advice on instant-
 // loading sites): "it loads basic ui features as backend loads user data
 // through api... no delays." The app already does this cache-first pattern
-// per-sheet (Withdraw, Records, Mission Center); this extends it to the
+// per-sheet (Withdraw, Records); this extends it to the
 // boot sequence itself using a small persisted snapshot (localStorage
 // survives a full page reload, unlike STATE, which doesn't) -- a RETURNING
 // visit paints instantly from last-known data with zero network wait, then
@@ -741,7 +745,7 @@ function _cachedStateBlob(uid, withImages){
     : (STATE.products || []).map(p => Object.assign({}, p, { image: '' }));
   return JSON.stringify({
     uid, account: STATE.account, investments: STATE.investments, teamStats: STATE.teamStats,
-    bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, transactionsTruncated: STATE.transactionsTruncated, mission: STATE.mission,
+    bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, transactionsTruncated: STATE.transactionsTruncated,
     products, settings: STATE.settings,
     // Just the URL, never the clip. The video FILE lives in the browser's own
     // HTTP cache (immutable, a year, versioned URL), so knowing the URL at
@@ -770,7 +774,7 @@ async function enterApp(){
   if (!cached) return bootFromNetwork(uid);
   STATE.account = cached.account; STATE.investments = cached.investments;
   STATE.teamStats = cached.teamStats; STATE.bankAccounts = cached.bankAccounts;
-  STATE.transactions = cached.transactions; STATE.transactionsTruncated = !!cached.transactionsTruncated; STATE.mission = cached.mission;
+  STATE.transactions = cached.transactions; STATE.transactionsTruncated = !!cached.transactionsTruncated;
   // subagent-audit-caught: products/settings used to never be part of this
   // cache-hit restore, so My Products showed "0 plans" and Deposit/
   // Withdraw's min-amount hints showed "UGX 0" until boot()'s own live
@@ -878,27 +882,19 @@ async function bootFromNetwork(uid){
   STATE.account = r.account;
   // Prefetch everything every tab needs, all in parallel, before the loading
   // screen ever comes down -- so the very first tab switch (and opening
-  // Withdraw/Withdrawal Accounts/Records/Mission Center) is already
-  // cache-first-instant instead of only becoming fast after a first visit to
-  // each one. This adds no real time over the account fetch alone since it's
-  // parallel, not sequential -- one network round trip's worth of latency,
-  // not five. Mission Center specifically used to open blank and block on
-  // its own /mission/status round trip every single time (it does two
-  // sequential-ish DB lookups server-side, activeL1Count + wholeTeamDeposits,
-  // genuinely slower than the other tabs) -- owner: "mission centers takes
-  // long to load." Prefetching it here means that wait happens once, during
-  // the loading screen the member already sits through, not again per open.
+  // Withdraw/Withdrawal Accounts/Records) is already cache-first-instant
+  // instead of only becoming fast after a first visit to each one. This adds
+  // no real time over the account fetch alone since it's parallel, not
+  // sequential -- one network round trip's worth of latency, not four.
   // Only what the shell itself needs is awaited: the account (fetched above)
   // and _bootPromise, which carries settings -- Home cannot paint its
-  // announcement or tagline without them. The five per-screen datasets are
-  // fired here and allowed to land underneath.
+  // announcement or tagline without them. The per-screen datasets are fired
+  // here and allowed to land underneath.
   //
-  // This is why the skeleton loaders were never seen. Awaiting all five meant
+  // This is why the skeleton loaders were never seen. Awaiting them all meant
   // that by the time the app became visible, every dataset a skeleton covers
   // was already in memory, so the "nothing cached yet" branch could not fire
-  // on any screen. Blocking on them also made the loading screen as slow as
-  // the slowest of six calls -- /mission/status does two sequential DB lookups
-  // server-side -- for data most members never look at in that session.
+  // on any screen.
   await withTimeout(_bootPromise, 6000);
   // _bootPromise carries /public/banner, so STATE.homeBannerVideo is known by
   // here -- which is what makes it possible to have the clip downloaded
@@ -912,15 +908,14 @@ async function bootFromNetwork(uid){
   // render() re-fetches what it needs anyway, so whichever tab is open
   // repaints itself when its data arrives -- nothing here has to push to it.
   Promise.all([
-    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions'), api('/mission/status')
-  ]).then(([invR, teamR, bankR, txR, missionR]) => {
+    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions')
+  ]).then(([invR, teamR, bankR, txR]) => {
     // Signed out, or switched account, while these were in flight.
     if (!STATE.user || STATE.user.uid !== uid) return;
     if (invR.status === 'success') STATE.investments = invR.investments;
     if (teamR.status === 'success') STATE.teamStats = teamR;
     if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
     if (txR.status === 'success') { STATE.transactions = txR.transactions; STATE.transactionsTruncated = !!txR.truncated; }
-    if (missionR.status === 'success') STATE.mission = missionR;
     saveCachedState(uid);
   }).catch(() => {});
 }
@@ -933,8 +928,8 @@ async function bootFromNetwork(uid){
 // try again on the next open, never a forced sign-out.
 async function refreshAppDataInBackground(uid){
   try {
-    const [accR, invR, teamR, bankR, txR, missionR] = await Promise.all([
-      api('/account'), api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions'), api('/mission/status')
+    const [accR, invR, teamR, bankR, txR] = await Promise.all([
+      api('/account'), api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions')
     ]);
     // Signed out, or switched to a different account, while this was in
     // flight -- api()'s own authEpoch guard already turns each response
@@ -947,7 +942,6 @@ async function refreshAppDataInBackground(uid){
     if (teamR.status === 'success') STATE.teamStats = teamR;
     if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
     if (txR.status === 'success') { STATE.transactions = txR.transactions; STATE.transactionsTruncated = !!txR.truncated; }
-    if (missionR.status === 'success') STATE.mission = missionR;
     saveCachedState(uid);
     if (STATE.page === 'home') patchHomeBalances();
   } catch (_) {}
@@ -969,7 +963,7 @@ var NAV_ICON_SRC = {
 // Owner: "the icon fades in and out when tapped not static and selector
 // doesn't disappear." The selector BOX is pure CSS off .navitem.active and
 // needs no help here -- it stays put. This is only for the ICON's tap
-// animation (@keyframes navIconFade): put the class on when a thumb lands,
+// animation (@keyframes navIconBounce): put the class on when a thumb lands,
 // take it off when the animation ends so it can replay.
 //
 // Bound on the BAR, not on each of the six items -- one listener instead of
@@ -995,7 +989,7 @@ function hookNavTapBox(){
   // Clean the class off once it has played, so the next tap is a fresh run
   // and nothing is left holding a finished animation.
   nav.addEventListener('animationend', e => {
-    if (e.animationName === 'navIconFade') {
+    if (e.animationName === 'navIconBounce') {
       // The animation is on the <img> INSIDE the item, so the event target
       // is the image -- the class to clear is on its .navitem ancestor.
       const btn = e.target.closest && e.target.closest('.navitem');
@@ -1577,7 +1571,7 @@ function paintReferral(){
     <span>${esc(link || 'Your link appears once your code is ready')}</span>
     <button class="copy-ic" onclick="copyText('${esc(link)}')" aria-label="Copy link">${ICONS.copy}</button>
   </div>
-  <button class="primary-button" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="shareReferral()">COPY INVITE LINK</button>
+  <button class="primary-button" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="copyText('${esc(link)}')">COPY INVITE LINK</button>
 </div>
 <div class="app-card" style="margin:16px 18px 0;padding:20px;">
   <h3 style="font-size:17px;font-weight:700;margin:0 0 10px;">Invitation Reward</h3>
@@ -1901,7 +1895,7 @@ function startActivityTicker(){
 
 // ── TEAM ──
 // subagent-audit-caught: same stale-deferred-repaint class Round 59 fixed
-// for Withdraw/Withdrawal Accounts/Mission Center, here on Team -- tapping
+// for Withdraw/Withdrawal Accounts, here on Team -- tapping
 // a not-yet-cached level then quickly tapping back to an already-cached
 // one used to let the first tap's slow fetch land later and silently
 // replace the visible (different) level's member list.
@@ -2007,148 +2001,26 @@ function paintTeam(){
 <div style="margin:0 18px;">
   <div id="teamMembersBox"></div>
 </div>
-<button class="dark-button" style="width:calc(100% - 36px);margin:16px 18px 0;padding:15px 0;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="openMissionCenterSheet()">${ICONS.people2}Mission Center</button>
 `;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   STATE.teamMembers = {1:null,2:null,3:null};
   switchTeamLevel(1);
 }
-// Cache-first, same reasoning as openWalletSheet() -- STATE.mission
-// is already populated during enterApp()'s boot prefetch, so this paints
-// instantly from that on every open after the first, then quietly refreshes
-// in the background instead of blocking the sheet on a fresh round trip.
-// Real bug fixed: this used to always repaint sheetBody once the background
-// /mission/status refetch resolved, even when there was already a cached
-// copy shown instantly on open -- every other cache-first sheet
-// (openWithdrawSheet, openWalletSheet, openBalanceRecordSheet) only
-// repaints from that refetch when there was NO cache to show initially,
-// otherwise it just updates STATE silently for next time. Owner: "it opens
-// very well but I think again it reloads silently" -- that second,
-// unnecessary repaint replayed the .reveal-in entrance animation a moment
-// after opening, which read as the sheet quietly reloading itself. Now
-// matches the same guarded pattern as the others.
-window.openMissionCenterSheet = async function(){
-  const hadCache = !!STATE.mission;
-  openSheet('Mission Center', '');
-  if (hadCache) renderMissionCenter();
-  else $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Loading…</div>';
-  const r = await api('/mission/status');
-  if (r.status === 'success') STATE.mission = r;
-  if (!hadCache && _openSheetTitle === 'Mission Center') {
-    if (r.status === 'success') renderMissionCenter();
-    else $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>';
-  }
-};
-function renderMissionCenter(){
-  const m = STATE.mission;
-  if (!m) return;
-  const salaryBtn = m.salaryClaimedToday
-    ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Claimed today, resets at midnight</button>`
-    : !m.l1ActiveCount
-      ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Need at least 1 active referral</button>`
-      : `<button class="primary-button" id="missionSalaryBtn" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;" onclick="claimMissionSalary()">Claim ${fmtUGX(m.salaryAmount)}</button>`;
-  // Owner sent a reference screenshot of a rival app's referral-milestone
-  // list (a colored "Lv#" rail on the left, a Current/Target/Progress
-  // 3-column stat row, a thin progress bar, then a full-width status
-  // button) and asked for Team Deposit Rewards "organized like that" --
-  // matching that STRUCTURE with Snow's own wine/green palette rather than
-  // the reference's navy-blue theme, since "no blue" is this app's own
-  // locked brand rule (Design status section above) and the ask was about
-  // layout/arrangement, not a palette change. Same 3-state button logic as
-  // before (not yet reached / reached-unclaimed / claimed), just restyled
-  // into this card shape.
-  const depositCards = m.depositRewards.map((d, i) => {
-    const current = Math.min(m.teamDeposits, d.target);
-    const pct = d.target > 0 ? Math.min(100, Math.round(m.teamDeposits / d.target * 100)) : 0;
-    const done = d.claimed || d.achieved;
-    const btn = d.claimed
-      ? `<button class="secondary-button" style="width:100%;margin-top:12px;padding:12px 0;font-size:13.5px;opacity:.6;" disabled>Received</button>`
-      : d.achieved
-        ? `<button class="primary-button" id="missionDepositBtn_${d.target}" style="width:100%;margin-top:12px;padding:12px 0;font-size:13.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
-        : `<button class="secondary-button" style="width:100%;margin-top:12px;padding:12px 0;font-size:13.5px;opacity:.55;" disabled>In progress</button>`;
-    return `
-    <div class="milestone-card">
-      <div class="milestone-rail${done ? ' done' : ''}">Lv${i + 1}</div>
-      <div class="milestone-body">
-        <div class="milestone-title">Team deposits reach ${fmtUGX(d.target)} to get: ${fmtUGX(d.reward)}</div>
-        <div class="milestone-stats">
-          <div><div class="stat-num mono">${fmtUGX(current)}</div><div class="stat-lbl">Current</div></div>
-          <div><div class="stat-num mono">${fmtUGX(d.target)}</div><div class="stat-lbl">Target</div></div>
-          <div><div class="stat-num mono">${current.toLocaleString('en-UG')}/${d.target.toLocaleString('en-UG')}</div><div class="stat-lbl">Progress</div></div>
-        </div>
-        <div class="milestone-track"><div class="milestone-fill${done ? ' done' : ''}" style="width:${pct}%;"></div></div>
-        ${btn}
-      </div>
-    </div>`;
-  }).join('');
-  $('sheetBody').innerHTML = `<div class="reveal-in">
-    <div class="app-card" style="padding:18px;">
-      <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-muted);font-weight:700;">Daily Referral Salary</div>
-      <div style="font-size:13px;color:var(--snow-muted);margin-top:6px;">${fmtUGX(m.salaryRate)} per active referral, up to ${(m.salaryCap||0).toLocaleString('en-UG')} referrals. Claim once a day, resets at 00:00.</div>
-      <div style="display:flex;align-items:baseline;gap:8px;margin-top:14px;">
-        <div class="mono" style="font-size:26px;font-weight:800;color:var(--snow-wine);">${fmtUGX(m.salaryAmount)}</div>
-        <div style="font-size:12px;color:var(--snow-muted);">${m.l1ActiveCount} active referral${m.l1ActiveCount===1?'':'s'}</div>
-      </div>
-      ${salaryBtn}
-    </div>
-    <div style="margin-top:22px;padding:0 2px;">
-      <div style="font-size:15px;font-weight:800;color:var(--snow-ink);">Team Deposit Rewards</div>
-      <div style="font-size:12px;color:var(--snow-muted);margin-top:4px;">One-time reward per threshold, claim manually once your whole team's deposits reach it.</div>
-    </div>
-    ${depositCards}
-    <p style="font-size:11.5px;color:var(--snow-muted);line-height:1.6;margin:16px 2px 0;">Daily salaries are credited once referrals meet the active-account criteria. Team deposit rewards are available to claim instantly once your team's deposits confirm.</p></div>`;
-}
-// Both claim buttons disable themselves for the duration of the request --
-// without this, a fast double/triple-tap (or an impatient tap while the
-// first request is still in flight) fired several concurrent requests, each
-// with its own toast(), stacking up a pile of identical messages. Matches
-// the same disable-during-request pattern every other submit button in this
-// app already follows (witSubmitBtn, bankSaveBtn, confirmActionBtn, etc.).
-window.claimMissionSalary = async function(){
-  const btn = $('missionSalaryBtn');
-  if (!btn || btn.disabled) return;
-  const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Claiming…';
-  const r = await post('/mission/salary/claim', {});
-  if (r.status !== 'success') {
-    if (btn) { btn.disabled = false; btn.textContent = label; }
-    return toast(r.message || 'Could not claim', true);
-  }
-  toast(r.message || 'Claimed');
-  const s2 = await api('/mission/status');
-  // subagent-audit-caught: this repaint wasn't gated by _openSheetTitle,
-  // unlike the sibling fix Round 59 applied to this same sheet's initial
-  // open -- if the member closed Mission Center and opened a different
-  // sheet (e.g. Withdraw) while this claim was still in flight, this would
-  // overwrite whatever they're now looking at with Mission Center content.
-  if (s2.status === 'success') { STATE.mission = s2; if (_openSheetTitle === 'Mission Center') renderMissionCenter(); }
-  const acc = await api('/account');
-  if (acc.status === 'success') STATE.account = acc.account;
-  // Same stale-Records fix as submitCheckin()/submitChestKey() -- the
-  // claim already wrote a real ledger row server-side by this point.
-  await refreshTransactionsCache();
-};
-window.claimMissionDeposit = async function(target){
-  const btn = $('missionDepositBtn_' + target);
-  if (!btn || btn.disabled) return;
-  const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Claiming…';
-  const r = await post('/mission/deposit/claim', { target });
-  if (r.status !== 'success') {
-    if (btn) { btn.disabled = false; btn.textContent = label; }
-    return toast(r.message || 'Could not claim', true);
-  }
-  toast(r.message || 'Claimed');
-  const s2 = await api('/mission/status');
-  if (s2.status === 'success') { STATE.mission = s2; if (_openSheetTitle === 'Mission Center') renderMissionCenter(); }
-  const acc = await api('/account');
-  if (acc.status === 'success') STATE.account = acc.account;
-  // Same stale-Records fix as claimMissionSalary() above.
-  await refreshTransactionsCache();
-};
+// ── MISSION CENTER — REMOVED ──
+// Owner: "remove mission center". The screen, both claim flows and the
+// /mission/status fetch that used to run on every boot are gone, and so are
+// the three server routes behind them (see server.js) -- two of those
+// credited money, so unlinking the button alone would have left a removed
+// feature still paying out to anyone who knew the URL.
+//
+// What deliberately STAYS: the mission_salary / mission_deposit_reward
+// labels in TX_TYPE_LABELS. Members who claimed these were really paid, and
+// their Records must keep reading properly; dropping the labels would show
+// old rows as raw type keys.
+
 // Real bug fixed: these had no guard against firing more than once per tap
 // -- unlike every other button in this app (witSubmitBtn, bankSaveBtn,
-// missionSalaryBtn, etc.) neither disables itself, so a double-registered
+// etc.) neither disables itself, so a double-registered
 // tap (common on touchscreens -- synthetic mouse+touch click events, or an
 // actual accidental double-tap) called navigator.share()/clipboard.writeText
 // again immediately, which is what the owner saw as "many share requests."
@@ -2168,16 +2040,15 @@ window.copyText = function(text){
   if (!text || !rapidTapGuardOk('copy:' + text)) return;
   writeClipboard(text);
 };
-window.shareReferral = function(link){
-  if (!rapidTapGuardOk('share')) return;
-  // This is the text a member's own referral share carries into WhatsApp, so
-  // it is the single most widely-seen sentence the app produces -- and it
-  // still said "Join Snow", the app Chipz was forked from. Every referral
-  // any member had ever sent invited people to a different product.
-  const text = `Join Chipz and start earning, sign up with my link: ${link}`;
-  if (navigator.share) navigator.share({ text }).catch(()=>{});
-  else writeClipboard(link);
-};
+// shareReferral() was here and is gone. Owner: "copying invite link just
+// copys not sharing" -- the button is labelled COPY INVITE LINK and was
+// opening the phone's share sheet instead, so it now goes through copyText()
+// like the small copy icon directly above it.
+//
+// It was also broken in a way the label hid: the button called
+// shareReferral() with NO argument, so the shared message read "...sign up
+// with my link: undefined". Nobody would have noticed from inside the app --
+// the wrong text only appeared after it had already been sent to someone.
 
 // ── ACCOUNT ──
 // Account.dc.html: a profile card (admin logo, member ID, phone, wallet
@@ -2231,7 +2102,7 @@ async function renderAccount(){
 
   <div class="sec-head"><span class="bar"></span><h2>SETTINGS</h2><span class="ln"></span></div>
   <div class="setting-list">
-    ${settingRowHtml('download', 'Download APP', 'Get the mobile app', 'promptInstallApp()')}
+    ${settingRowHtml('download', 'Download APP', 'Get the mobile app', 'openDownloadSheet()')}
     ${settingRowHtml('wallet', 'Wallet', 'Manage your withdrawal wallet', 'openWalletSheet()')}
     <button class="setting-row" onclick="openTurntableSheet()">
       <span class="sq"><img src="/turntable.png" alt="" style="width:26px;height:26px;object-fit:contain;"></span>
@@ -2841,7 +2712,7 @@ function unlockBodyScroll(){
 // #sheetBody -- every deferred (post-await) repaint in a sheet's own open*
 // function should check this, not merely "does #sheetBody exist" (it
 // always does, it's a static element whose innerHTML just gets replaced).
-// See openWithdrawSheet/openWalletSheet/openMissionCenterSheet.
+// See openWithdrawSheet/openWalletSheet.
 var _openSheetTitle = null;
 // Used by showPage()'s deferred maybeShowAnnouncement() call to check whether
 // the member has since opened a sheet, the gift-code chest, or a confirm
@@ -4077,6 +3948,40 @@ window.addEventListener('beforeinstallprompt', (e) => {
   window._installPrompt = e;
 });
 window.addEventListener('appinstalled', () => { window._installPrompt = null; });
+// Owner: "make when one taps download, it opens and middle there is a button
+// download, and in background there is image uploaded from admin panel."
+//
+// So Download APP is now a screen, not a straight-to-the-browser-prompt row.
+// It uses the ordinary sheet overlay, which means the phone Back button
+// closes it like every other screen for free. The admin image is a real <img>
+// rather than a CSS background so a slow or missing one degrades to the brand
+// gradient underneath instead of a blank panel.
+window.openDownloadSheet = function(){
+  const bg = STATE.downloadBg
+    ? `<img class="dl-bg" src="${esc(STATE.downloadBg)}" alt="" onerror="this.remove()">`
+    : '';
+  openSheet('Download APP', `
+  <div class="dl-screen reveal-in">
+    ${bg}
+    <div class="dl-scrim"></div>
+    <div class="dl-body">
+      <div class="dl-top">
+        <div class="dl-mark">${chipzMarkHtml(72)}</div>
+        <h2 class="dl-title">Get the Chipz app</h2>
+        <p class="dl-sub">Install it on your phone for faster access, and open it straight from your home screen.</p>
+      </div>
+      <button class="primary-button dl-btn" id="dlInstallBtn" onclick="promptInstallApp()">Download</button>
+      <p class="dl-note" id="dlNote"></p>
+    </div>
+  </div>`);
+  // Written after the sheet is in the DOM, and only when there is genuinely
+  // nothing to install -- saying "already installed" underneath a button
+  // that WILL work would be worse than saying nothing.
+  if (!window._installPrompt) {
+    const n = $('dlNote');
+    if (n) n.textContent = 'If nothing happens, the app is already installed — open it from your home screen. On iPhone, use Share then "Add to Home Screen".';
+  }
+};
 window.promptInstallApp = async function(){
   if (!window._installPrompt) { toast('Already installed, or your browser doesn\'t support installing Chipz.'); return; }
   window._installPrompt.prompt();
