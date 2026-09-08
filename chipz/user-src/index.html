@@ -811,7 +811,11 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .wallet-card{position:relative;border-radius:var(--r-card);padding:22px 22px 20px;color:#fff;overflow:hidden;margin-bottom:18px;box-shadow:0 18px 34px -18px rgba(30,10,5,.55);background:linear-gradient(120deg,#1a0d08 0%,#7c0a1c 42%,#e21b2a 62%,#ff8a1f 100%);}
 .wallet-card .sheen{position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);pointer-events:none;}
 .wallet-card .row1{position:relative;display:flex;align-items:flex-start;justify-content:space-between;}
-.wallet-card .provider{font-size:19px;font-weight:600;letter-spacing:.02em;}
+/* The card number measured bigger than the mockup's (32 against 24 device
+   px of ink), so what reads as "small" here is TRACKING, not size: his
+   digits are widely spaced and ours were nearly touching. Widened rather
+   than enlarged. The provider label is genuinely bigger in his. */
+.wallet-card .provider{font-size:24px;font-weight:600;letter-spacing:.02em;}
 /* The same two-cards artwork used by the Wallet row on Account -- the owner's
    own icon, not a drawn approximation of it, so the two places agree. */
 .wallet-card .wc-mark{width:38px;height:38px;object-fit:contain;display:block;flex-shrink:0;filter:drop-shadow(0 4px 6px rgba(0,0,0,.35));}
@@ -822,7 +826,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   background:linear-gradient(to right,transparent 0 32%,rgba(120,80,10,.5) 32% 34%,transparent 34% 66%,rgba(120,80,10,.5) 66% 68%,transparent 68%),
              linear-gradient(to bottom,transparent 0 45%,rgba(120,80,10,.5) 45% 55%,transparent 55%);}
 .wallet-card .chip::after{content:'';position:absolute;left:34%;right:34%;top:5px;bottom:5px;border:1px solid rgba(120,80,10,.5);border-radius:2px;}
-.wallet-card .num{position:relative;font-size:24px;letter-spacing:.06em;margin-bottom:16px;}
+.wallet-card .num{position:relative;font-size:24px;letter-spacing:.16em;margin-bottom:16px;}
 .wallet-card .holder-lbl{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;font-weight:500;}
 .wallet-card .holder-name{position:relative;font-size:15px;font-weight:500;margin-top:3px;}
 .wallet-panel{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:20px;margin-bottom:20px;}
@@ -863,8 +867,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .dep-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px;}
 .dep-chip{text-align:center;padding:17px 4px;border-radius:var(--r-ctl);font-weight:700;font-size:17px;border:1.6px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;box-shadow:0 3px 0 var(--snow-border);}
 .dep-chip.sel{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:none;}
-.dep-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:52px;display:flex;align-items:center;padding:0 16px;margin-bottom:24px;}
-.dep-amt input{border:0;outline:0;background:transparent;font-size:16px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+/* Kept in step with .wit-amt on purpose -- same control, sibling screen. */
+.dep-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:24px;}
+.dep-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .pay-row{position:relative;display:flex;align-items:center;justify-content:center;background:var(--snow-surface);border:2px solid var(--snow-border);border-radius:var(--r-ctl);height:56px;padding:0 18px;margin-bottom:14px;width:100%;font-family:inherit;color:var(--snow-ink);}
 .pay-row.on{border-color:var(--snow-ink);}
 .pay-row span{font-weight:600;font-size:15px;letter-spacing:.03em;}
@@ -889,14 +894,27 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 /* ── Withdraw (Withdraw.dc.html) ── */
 .wit-bal{background:linear-gradient(120deg,#eaf7ee 0%,#fdf0da 55%,#fbe6ea 100%);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:18px 20px;margin-bottom:20px;box-shadow:var(--sh-card);}
-.wit-bal .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--snow-muted);font-weight:500;}
-.wit-bal .val{font-size:28px;color:var(--snow-ink);margin-top:6px;}
-.wit-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:52px;display:flex;align-items:center;padding:0 16px;margin-bottom:22px;gap:8px;}
-.wit-amt span{color:var(--snow-muted);font-weight:700;}
-.wit-amt input{border:0;outline:0;background:transparent;font-size:16px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+/* Owner: "you see the difference on withdrawal screen with my mockups,
+   things are small even see number, it is small in size, and words."
+   Measured rather than guessed: his mockup and a screenshot of the live
+   screen are both 720px wide, so glyph heights compare directly. Three
+   things came back genuinely undersized, all by the same ~1.45x --
+   the balance figure (38 -> 55 device px of ink), the amount you type
+   (19 -> 28) and the trade-password field (14 -> 21). Everything else on
+   the screen already matched or beat the mockup: the section headings are
+   23 against his 24, and the instruction list is 18-23 against his 16.
+   Those are left alone deliberately -- scaling them too would overshoot
+   the thing he actually pointed at. */
+.wit-bal .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--snow-muted);font-weight:500;}
+.wit-bal .val{font-size:40px;color:var(--snow-ink);margin-top:6px;}
+/* The field grows with its text. Leaving the 52px height while the type
+   goes 16 -> 23px puts the digits hard against the border. */
+.wit-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:22px;gap:10px;}
+.wit-amt span{color:var(--snow-muted);font-weight:700;font-size:21px;}
+.wit-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .btn-bind{display:block;width:100%;height:52px;border:0;border-radius:var(--r-ctl);background:#f3e2ee;color:#6b2f56;font-weight:700;font-size:15px;margin-bottom:22px;font-family:inherit;}
-.wit-pw{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:52px;display:flex;align-items:center;padding:0 16px;margin-bottom:12px;}
-.wit-pw input{border:0;outline:0;background:transparent;font-size:15px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+.wit-pw{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:12px;}
+.wit-pw input{border:0;outline:0;background:transparent;font-size:22px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .wit-fee{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
 .wit-instr{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:18px;}
 .wit-instr h3{font-size:17px;font-weight:700;margin:0 0 10px;}
@@ -925,15 +943,26 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 /* ── Notify dialog (Notify.dc.html) ── */
 .notify-bg{position:fixed;inset:0;background:rgba(20,10,5,.45);display:none;align-items:center;justify-content:center;padding:36px;z-index:400;}
 .notify-bg.show{display:flex;}
-.notify-card{width:100%;max-width:330px;background:var(--snow-surface);border-radius:var(--r-card);box-shadow:0 30px 60px -20px rgba(0,0,0,.4);overflow:hidden;text-align:center;animation:notifyPop .16s ease-out;}
+/* Owner, holding his mockup up against this: "see the dialog message should
+   be like that in that height that size."
+   Every number here is measured off his mockup as a FRACTION OF SCREEN WIDTH,
+   which is the only dpr-independent way to compare a phone screenshot with a
+   CSS rule. His alert card is 532/720 = 74% of the screen wide and 384/720
+   tall, i.e. about half as tall as it is wide. Ours was 330px on a 390px
+   screen -- 85% -- and taller with it. At 390px the mockup works out to a
+   288x208 card, which is what these produce.
+   The triangle is 79/720 = 11% of the width (43px), and it sits 38px below
+   the card's top edge; the message is ~15.5px; the OK is a 76x43 PILL, not
+   the rounded rectangle it was. */
+.notify-card{width:100%;max-width:288px;background:var(--snow-surface);border-radius:var(--r-card);box-shadow:0 30px 60px -20px rgba(0,0,0,.4);overflow:hidden;text-align:center;animation:notifyPop .16s ease-out;}
 @keyframes notifyPop{from{transform:scale(.92);opacity:0;}to{transform:scale(1);opacity:1;}}
-.notify-icon{padding:26px 0 12px;}
-.notify-msg{padding:0 22px 22px;font-size:16px;font-weight:600;color:var(--snow-ink);line-height:1.5;}
+.notify-icon{padding:34px 0 14px;line-height:0;}
+.notify-msg{padding:0 24px 20px;font-size:15.5px;font-weight:700;color:var(--snow-ink);line-height:1.45;}
 /* Owner: "your button is long, it doesn't match words." It was stretched to
    the card width regardless of its label, so a two-letter "OK" sat in a bar
    the width of the dialog. It now sizes to its own text with comfortable
-   padding, and is centred. */
-.notify-ok{display:block;width:auto;min-width:120px;margin:0 auto 26px;padding:0 34px;height:44px;border:0;border-radius:var(--r-ctl);background:var(--chipz-grad);color:#fff;font-weight:700;font-size:15px;letter-spacing:.03em;font-family:inherit;box-shadow:none;transition:opacity .1s;}
+   padding, and is centred -- and it is a pill, matching his mockup. */
+.notify-ok{display:block;width:auto;min-width:76px;margin:0 auto 22px;padding:0 26px;height:43px;border:0;border-radius:var(--r-pill);background:var(--chipz-grad);color:#fff;font-weight:700;font-size:15px;letter-spacing:.03em;font-family:inherit;box-shadow:none;transition:opacity .1s;}
 .notify-ok:active{opacity:.85;}
 
 /* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
@@ -1529,10 +1558,24 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
 /* Home announcement dialog (Announcement.dc.html) -- a near-fullscreen
    white sheet inset on a red-to-orange ground, NOT a small centred card. */
-.announce-bg{position:fixed;inset:0;background:linear-gradient(160deg,#ff8a1f,#e21b2a);display:none;z-index:260;}
-.announce-bg.show{display:block;}
-.announce-wrap{position:absolute;inset:14px;max-width:466px;margin:0 auto;background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);display:flex;flex-direction:column;}
-.announce-close{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;border:1.8px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-ink);display:flex;align-items:center;justify-content:center;z-index:2;padding:0;}
+/* Owner: "our dialog is too high."
+   It was `inset:14px` -- a card filling 96% of the viewport height, edge to
+   edge. His mockup's card is 1050/1402 = 75% of the screen tall and centred,
+   with real backdrop showing above and below it. So the backdrop centres
+   instead of being a frame, and the card takes its height from its content up
+   to a 76vh ceiling. max-height, not height: a short announcement should make
+   a short dialog rather than a tall one padded with nothing. */
+.announce-bg{position:fixed;inset:0;background:linear-gradient(160deg,#ff8a1f,#e21b2a);display:none;align-items:center;justify-content:center;padding:16px;z-index:260;}
+.announce-bg.show{display:flex;}
+.announce-wrap{position:relative;width:100%;max-width:392px;max-height:76vh;margin:0 auto;background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);display:flex;flex-direction:column;}
+/* Owner: "the X plus circle is different from that in my mockup."
+   Measured off a 3x crop of his: a 77-device-px ring (10.7% of screen width,
+   so 42px here) drawn as a ~1px LIGHT GREY hairline over the card's own
+   white -- not a filled button with a border token -- and an X that spans 41%
+   of the ring's diameter in a thin near-black stroke. Ours was a 38px ring
+   with a 1.8px border and an X spanning only ~20% of it, which is why his
+   reads as an outlined close control and ours read as a small dense glyph. */
+.announce-close{position:absolute;top:16px;right:16px;width:42px;height:42px;border-radius:50%;border:1px solid #b9b2ac;background:transparent;color:#33302e;display:flex;align-items:center;justify-content:center;z-index:2;padding:0;}
 .announce-title{text-align:center;font-size:24px;font-weight:700;margin:26px 0 18px;flex-shrink:0;}
 .announce-banner{margin:0 20px 18px;height:150px;border-radius:var(--r-card);background:var(--chipz-hero);position:relative;overflow:hidden;flex-shrink:0;}
 .announce-banner img{width:100%;height:100%;object-fit:cover;display:block;}
@@ -1770,7 +1813,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
      not a small centred card -- see chipz/CLAUDE.md. -->
 <div class="announce-bg" id="announceBg">
   <div class="announce-wrap">
-    <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l14 14M17 3 3 17"/></svg></button>
     <h1 class="announce-title" id="announceTitle">Welcome</h1>
     <div class="announce-banner" id="announceBanner"><div class="wm" data-brandmark></div></div>
     <div class="announce-scroll"><p id="announceBody"></p></div>
@@ -1789,7 +1832,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 <div class="notify-bg" id="notifyBg" onclick="if(event.target===this)closeNotify()">
   <div class="notify-card">
     <div class="notify-icon">
-      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3L2 20h20L12 3z" fill="var(--chipz-gold)" stroke="#a66a00" stroke-width="1"></path><path d="M12 10v4" stroke="#5a3d00" stroke-width="2" stroke-linecap="round"></path><circle cx="12" cy="17" r="1.1" fill="#5a3d00"></circle></svg>
+      <svg width="43" height="43" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3L2 20h20L12 3z" fill="var(--chipz-gold)" stroke="#a66a00" stroke-width="1"></path><path d="M12 10v4" stroke="#5a3d00" stroke-width="2" stroke-linecap="round"></path><circle cx="12" cy="17" r="1.1" fill="#5a3d00"></circle></svg>
     </div>
     <div class="notify-msg" id="notifyMsg"></div>
     <button class="notify-ok" onclick="closeNotify()">OK</button>

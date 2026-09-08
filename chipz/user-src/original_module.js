@@ -2958,7 +2958,9 @@ window.submitChestKey = async function(){
   // Codes are issued uppercase-only, so normalise here as well as in the
   // field: a paste does not always fire the input handler on every browser.
   const raw = ($('chestKey').value || '').trim().toUpperCase();
-  if (!raw) return notify('Enter your treasure chest key.');
+  // Owner named these two exactly: "so on 'please enter the treasure chest
+  // key', 'wrong treasure chest password'."
+  if (!raw) return notify('Please enter the treasure chest key');
   const btn = $('chestOpenBtn');
   btn.disabled = true; btn.textContent = 'OPENING…';
   const r = await post('/redeem', { code: raw });

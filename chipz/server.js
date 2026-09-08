@@ -5590,7 +5590,12 @@ app.post('/redeem', async (req, res) => {
         // an already-used or usage-capped code below is a REAL code, not a
         // guess, so those aren't logged here.
         logSecurityEvent(userId, 'giftcode_invalid_attempt', { code: raw });
-        result = { code: 400, body: { status: 'error', message: "That code isn't valid" } };
+        // Owner's own wording. This is the "the key you typed is not a key"
+        // case; the branches below (inactive / expired / already used) are
+        // real codes in a wrong STATE and keep saying so, because telling
+        // someone their correct code is "wrong" would send them hunting for
+        // a typo that isn't there.
+        result = { code: 400, body: { status: 'error', message: 'Wrong treasure chest password' } };
         return;
       }
       const codeDoc = codeSnap.docs[0];

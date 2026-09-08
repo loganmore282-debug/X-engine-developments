@@ -951,6 +951,64 @@ Two things were measured rather than guessed:
 
 The strip is `pointer-events:none` so it can never swallow a tap meant for the chest.
 
+### Measuring against a mockup screenshot (do this, don't eyeball)
+
+Owner: *"you see the difference on withdrawal screen with my mockups, things are small
+even see number… see the dialog message should be like that in that height that size…
+our dialog is too high."*
+
+**The method.** His mockup screenshots and screenshots of the live app are both 720px
+wide, so *glyph ink heights compare directly* even though the CSS pixel size behind each
+is unknown. Scan a band of rows for dark pixels, take the runs, compare. For boxes, work
+in **fractions of screen width** — the only dpr-independent unit available.
+
+**What that turned up, and why it matters:** only three things on Withdraw were actually
+undersized, all by the same ~1.45×. Several things he might have meant were *already
+bigger than his mockup*, and scaling them "to be safe" would have overshot — which is
+exactly how the nav icons ended up wrong in both directions.
+
+| Withdraw element | ours | mockup | verdict |
+|---|---|---|---|
+| Balance figure | 38 | 55 | **1.45× too small** → 28 → 40px |
+| Amount input | 19 | 28 | **1.47× too small** → 16 → 23px |
+| Trade-password field | 14 | 21 | **1.50× too small** → 15 → 22px |
+| "Withdrawal Wallet" / "Trade Password" | 23 | 24 | already right — untouched |
+| Instruction list | 18–23 | 16 | **ours is bigger** — untouched |
+| Wallet card number | 32 | 24 | **ours is bigger** — the difference was *tracking*, so `.06em → .16em` |
+
+Deposit's amount field was moved with Withdraw's: same control, sibling screen, and a
+16px one beside a 23px one is the next complaint.
+
+**Dialog proportions**, all measured as a share of screen width unless noted:
+
+| | mockup | before |
+|---|---|---|
+| Alert card | 73.9% wide, 53.3% tall | 85% wide, taller |
+| Warning triangle | 11.0% | — |
+| OK button | 19.3% × 11.0%, **pill** | 120px min, rounded rect |
+| Announcement card | **74.9% of viewport HEIGHT** | 96% (`inset:14px`) |
+| Close ring | 10.7% wide, 1px hairline, no fill | 38px, 1.8px border, filled |
+| X inside the ring | 41% of its diameter | ~20% |
+
+The announcement now centres in the backdrop with a `max-height` **ceiling** rather than
+a fixed height — a short announcement should make a short dialog, not a tall one padded
+with nothing.
+
+`test-mockup-proportions.py` pins every one of these as a ratio with the mockup's own
+figure in the assertion text, and it asserts in **both directions**: that the three
+undersized items grew, *and* that the already-correct headings and instruction list did
+not get dragged up with them.
+
+**The one deliberate departure** is colour. His mockups are a purple/green theme; Chipz
+is red/orange, so the OK and Join Channel buttons use the brand gradient. Every
+proportion is his.
+
+**Owner's exact wording, at both ends:** *"Please enter the treasure chest key"* (client,
+empty field) and *"Wrong treasure chest password"* (server, `/redeem`, code not found).
+The other `/redeem` failures — inactive, expired, already used — deliberately keep saying
+what is actually wrong: those are *real* codes in a wrong state, and calling them "wrong"
+would send someone hunting for a typo that isn't there.
+
 ### The About page was blank — a duplicate CSS rule, and how it hid
 
 Found during a health check, live in production. The About page rendered **nothing**.
