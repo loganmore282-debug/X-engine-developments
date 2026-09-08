@@ -5704,7 +5704,26 @@ app.post('/redeem', async (req, res) => {
           amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
       }
-      result = { code: 200, body: { status: 'success', reward } };
+      // The win card prints "New Balance" the instant it opens, so hand the
+      // post-credit figure back with the reward. Without it the client had to
+      // come back for /account before it could show anything -- a whole extra
+      // round trip between a successful claim and any sign that it worked,
+      // which is the delay the owner reported. One local read here replaces a
+      // network round trip on a phone. /turntable/spin already does this.
+      //
+      // Read AFTER the increment, not computed from the pre-credit snapshot:
+      // this is the real stored balance, so it is also right on the
+      // idempotent-retry path above where no increment was applied at all.
+      const body = { status: 'success', reward };
+      try {
+        const fresh = await db.collection('users').doc(userId).get();
+        const bal = fresh.exists ? Number(fresh.data().walletBalance) : NaN;
+        // Omitted rather than sent as null when unreadable -- the client
+        // falls back to its own arithmetic, and a null would have to be
+        // special-cased there to avoid reading as a balance of zero.
+        if (Number.isFinite(bal)) body.walletBalance = bal;
+      } catch (_) { /* the reward is credited; the figure is a convenience */ }
+      result = { code: 200, body };
     });
     res.status(result.code).json(result.body);
   } catch (e) {

@@ -1308,6 +1308,71 @@ recorded above.
 `.mp-bar` also picked up `--r-pill` here; it was the last track in the app still square
 after the surface pass.
 
+### The congratulations card: what was slow, and the balance that grows
+
+Owner: *"why does the congratulations card delay to appear when one has claimed
+treasure code and also when has got spin rewards"* and *"l want when congratulations
+card comes let the balance also have a live growing animation."*
+
+**Nothing was slow to render. Both paths were queuing round trips ahead of the card.**
+
+- **Chest key.** After `/redeem` came back a winner, the client fetched `/account`
+  and then the transactions cache *before* calling `showChestWin` — purely so the
+  card could print "New Balance". Two extra round trips on mobile data with a cold
+  backend, during which the app showed nothing at all after a successful claim.
+- **The spin.** Worse, and for a second reason. The wheel's transition is **4s and
+  starts at the tap**, but the wait was a flat `setTimeout(…, 4000)` measured from
+  **when the server answered** — so the whole request time was served twice, and the
+  member watched a wheel that had already stopped. Then the same three refreshes
+  ran before the card.
+
+The credit is already confirmed by the time either response lands, so the card opens
+immediately now and the refreshes happen behind it (`refreshAfterWin()`, deliberately
+un-awaited). The spin waits only for **what is left** of the 4s transition, so the
+card lands as the wheel settles however long the network took — zero remainder if the
+request outlived the spin. `/turntable/spin` already returned the post-credit
+`walletBalance`; **`/redeem` now does too** (one local read replacing a network round
+trip), with `before + reward` as the client-side fallback for a backend that has not
+redeployed yet.
+
+**The growing balance.** `countUpEl()` was refactored into `countBetweenEl(el, from,
+to, …)` — it is now that with `from` pinned to zero — and the card counts from the
+balance held *before* the reward up to the one held after. Counting from zero would
+animate the member's entire savings, which says nothing about what they just won.
+
+One rule worth keeping: `correctChestWinBalance()` (the live `/account` figure
+landing behind the open card) **only ever corrects upward**. A lower figure is either
+a read that has not caught up with the credit or a debit unrelated to this win, and a
+congratulations card that visibly takes money back off the member is worse than one
+that is a few seconds behind — `STATE.account` already holds the truth and Home shows
+it the moment they close the card.
+
+`test-win-and-purchase.py` is the standing check. It only means anything against a
+**slow** backend — on a fast connection the old code looked fine — so it stalls
+`/account` by 3s and `/turntable/spin` by 1.5s and asserts wall-clock time from the
+tap: card in **under 1.5s** for the key (measured 74ms), and **under 4.9s** for the
+spin (measured 4344ms, i.e. the wheel and nothing more). The balance is sampled by an
+in-page rAF recorder **armed before the tap** — reading it after awaiting the card
+from Python misses the opening frames, and with ease-out cubic it is already 5% along
+by then, so "did it start at the old balance?" becomes unanswerable.
+
+### Buying a product goes to My Products, and says so in the alert dialog
+
+Owner: *"l want when one buys a product he is immediately redirected to my products
+page to see his products, l nolonger need those ugly notifys that bought product 1, l
+need what we are using with this ⚠️."*
+
+The "ugly notify" was `toast()` carrying the **server's own sentence** —
+`Bought ${name} for ${price}`, from `/invest/create`. It is gone from this path.
+`openInvestConfirm()` now calls `showPage('products')` and then `notify()`, in that
+order: My Products starts its own fetch immediately and is painting the new plan while
+the dialog is still being read, so dismissing it reveals a finished screen rather than
+a loading one.
+
+The dialog is the ordinary app-wide alert card — amber triangle and one pill OK — not
+a bespoke success dialog, because that is the component he pointed at. The server's
+message is left untouched; it is simply no longer what the member reads.
+
 ### Snow residues that were still live (round 2)
 
 The first sweep covered wording a member reads. These were *functional*, and each one

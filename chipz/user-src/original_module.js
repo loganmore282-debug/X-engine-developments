@@ -1851,13 +1851,19 @@ var _homeBalanceVals = { wallet: null, earned: null, invested: null };
 // requestAnimationFrame, not setInterval: the count is tied to real frames,
 // so it takes the same 1.1s on a fast phone and a slow one instead of
 // running long wherever timers are throttled.
-function countUpEl(el, to, fmt, ms){
+// Counts one element from any figure to any other. countUpEl() below is this
+// with `from` pinned at zero; the win card counts from the balance the member
+// had BEFORE the reward landed up to the one they have after, so the growth
+// they are being shown is the actual size of the win.
+function countBetweenEl(el, from, to, fmt, ms){
   if (!el) return;
   fmt = fmt || fmtUGX2;
+  from = Number(from) || 0;
   to = Number(to) || 0;
-  // Nothing to count to, or the phone asked for less motion. Counting 0 up to
-  // 0 is a second of a member staring at a zero that was never going to move.
-  const still = to <= 0 ||
+  // Nowhere to travel, or the phone asked for less motion. Counting a figure
+  // to itself is a second of a member staring at a number that was never
+  // going to move.
+  const still = from === to ||
     (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   if (still) { el.textContent = fmt(to); return; }
   const duration = ms || 1100;
@@ -1866,18 +1872,21 @@ function countUpEl(el, to, fmt, ms){
   // keep writing over it and land on a stale figure.
   const token = (el._countToken = (el._countToken || 0) + 1);
   const start = performance.now();
-  el.textContent = fmt(0);
+  el.textContent = fmt(from);
   function tick(now){
     if (el._countToken !== token || !el.isConnected) return;
     const t = Math.min(1, (now - start) / duration);
     // ease-out cubic: quick off the mark, gentle into the real figure, so it
     // settles onto the number rather than stopping dead on it.
     const eased = 1 - Math.pow(1 - t, 3);
-    el.textContent = fmt(to * eased);
+    el.textContent = fmt(from + (to - from) * eased);
     if (t < 1) requestAnimationFrame(tick);
     else el.textContent = fmt(to);
   }
   requestAnimationFrame(tick);
+}
+function countUpEl(el, to, fmt, ms){
+  countBetweenEl(el, 0, to, fmt, ms);
 }
 // `fmt` is the formatter that painted the element in the first place --
 // Account's wallet figure carries cents ("UGX 2,000.00"), the rest don't,
@@ -2635,6 +2644,8 @@ window.doTurntableSpin = async function(){
   // Spin the wheel immediately for feedback, then land on the real result
   // when the server answers. The wheel is decoration -- the amount the
   // server returns is the truth, and the animation never decides it.
+  // Timed from HERE, because this is when the wheel starts moving.
+  const wheelStartedAt = performance.now();
   _ttAngle += 360 * 5 + Math.floor(Math.random() * 360);
   wheel.style.transform = `rotate(${_ttAngle}deg)`;
   const r = await post('/turntable/spin', {});
@@ -2643,16 +2654,33 @@ window.doTurntableSpin = async function(){
     await refreshTurntable();
     return notify(r.message || 'The spin could not be completed.');
   }
-  // Let the wheel finish before the win card lands on top of it.
-  setTimeout(async () => {
+  // Owner: "why does the congratulations card delay to appear ... when has got
+  // spin rewards." Two reasons, both fixed here.
+  //
+  // First, the wheel's own transition is 4s (.tt-wheel in index.html) and it
+  // begins at the tap -- but the wait used to be a flat 4000ms measured from
+  // when the SERVER answered, so every millisecond the request took was spent
+  // again staring at a wheel that had already stopped. Waiting only for what
+  // is LEFT of the transition means the card lands exactly as the wheel
+  // settles, however long the network took. If the request outlived the spin
+  // the remainder is zero and the card is immediate.
+  //
+  // Second, it then awaited three more round trips before showing anything.
+  // /turntable/spin already returns the post-credit walletBalance, so there
+  // is nothing to fetch -- the refreshes now happen behind the open card.
+  const WHEEL_MS = 4000;
+  const remaining = Math.max(0, WHEEL_MS - (performance.now() - wheelStartedAt));
+  setTimeout(() => {
     _ttSpinning = false;
-    const acc = await api('/account');
-    if (acc.status === 'success') STATE.account = acc.account;
-    await refreshTransactionsCache();
-    await refreshTurntable();
-    showChestWin(r.reward, (STATE.account || {}).walletBalance || 0, 'spin');
-    if (STATE.page === 'account') renderAccount();
-  }, 4000);
+    const before = Number((STATE.account || {}).walletBalance) || 0;
+    const reward = Number(r.reward) || 0;
+    const after = Number.isFinite(Number(r.walletBalance)) && r.walletBalance !== null
+      ? Number(r.walletBalance) : before + reward;
+    if (STATE.account) STATE.account.walletBalance = after;
+    showChestWin(reward, before, after, 'spin');
+    refreshAfterWin();
+    refreshTurntable();
+  }, remaining);
 };
 
 // ── NOTIFY DIALOG (Notify.dc.html) ──
@@ -2978,14 +3006,44 @@ window.submitChestKey = async function(){
   const r = await post('/redeem', { code: raw });
   btn.disabled = false; btn.textContent = 'OPEN CHEST';
   if (r.status !== 'success') return notify(r.message || 'That key did not open the chest.');
-  // Refresh the wallet BEFORE showing the win card so "New Balance" is the
-  // real post-credit figure, not the stale pre-redeem one.
-  const acc = await api('/account');
-  if (acc.status === 'success') STATE.account = acc.account;
-  await refreshTransactionsCache();
+  // Owner: "why does the congratulations card delay to appear when one has
+  // claimed treasure code." Because it used to wait on TWO more round trips
+  // after the redeem itself -- /account and the transactions cache -- purely
+  // to print "New Balance". On a phone on mobile data with the backend cold,
+  // that is seconds of nothing happening after a successful claim, which
+  // reads as a failure.
+  //
+  // The credit is already confirmed by the time we are here, and the new
+  // balance is simple arithmetic on a figure the app already holds, so the
+  // card can open NOW. `walletBalance` comes back from /redeem itself where
+  // the deployed backend sends it; the sum is the fallback for a backend
+  // that has not been redeployed yet.
+  const before = Number((STATE.account || {}).walletBalance) || 0;
+  const reward = Number(r.reward) || 0;
+  const after = Number.isFinite(Number(r.walletBalance)) && r.walletBalance !== null
+    ? Number(r.walletBalance) : before + reward;
+  if (STATE.account) STATE.account.walletBalance = after;
   closeSheet({ fromAction: true });
-  showChestWin(r.reward, (STATE.account || {}).walletBalance || 0);
+  showChestWin(reward, before, after);
+  // Now catch the app up, behind the card the member is already reading.
+  refreshAfterWin();
 };
+// The two network refreshes a win needs, moved off the path between the
+// server saying "you won" and the card saying so. Deliberately not awaited by
+// its callers: nothing on the win card depends on either result, and the
+// balance correction below is the only thing that ever writes to it.
+async function refreshAfterWin(){
+  try {
+    const acc = await api('/account');
+    if (acc.status === 'success') {
+      STATE.account = acc.account;
+      correctChestWinBalance(Number(acc.account.walletBalance) || 0);
+    }
+    await refreshTransactionsCache();
+    if (STATE.page === 'home') renderHome();
+    if (STATE.page === 'account') renderAccount();
+  } catch (_) { /* the card is already correct; a failed refresh changes nothing */ }
+}
 // One win card, two sources -- and the blurred artwork behind it names which.
 // Owner: "when one spins it shows that spin icon background icon l generated
 // my own instead of chest box." A spin is not a treasure chest, and showing a
@@ -2995,18 +3053,48 @@ window.submitChestKey = async function(){
 // The source is passed in rather than read off whatever screen happens to be
 // open: the spin's own win lands four seconds after the tap, by which time the
 // member may well have moved.
-function showChestWin(reward, balance, source){
+//
+// Owner: "l want when congratulations card comes let the balance also have a
+// live growing animation." It counts from the balance held BEFORE the reward
+// landed up to the one held after, so what grows on screen is the size of the
+// win itself -- counting up from zero would animate the member's whole
+// savings, which says nothing about what they just won.
+var _chestWinBalFrom = 0;
+function chestWinBalFmt(v){ return 'New Balance: ' + fmtUGX2(v); }
+function showChestWin(reward, balanceBefore, balanceAfter, source){
   const ghost = $('chestWinGhost');
   if (ghost) {
     const spin = source === 'spin';
     ghost.src = spin ? '/spin-wheel.png' : '/treasure-chest.png';
     ghost.classList.toggle('spin', spin);
   }
+  _chestWinBalFrom = Number(balanceBefore) || 0;
   $('chestWinAmount').textContent = fmtUGX2(reward);
-  $('chestWinBalance').textContent = 'New Balance: ' + fmtUGX2(balance);
   $('chestWinBg').classList.add('show');
+  // Counted only once the card is actually showing: an element inside a
+  // display:none layer has no frames to animate over, and the count would be
+  // finished before the member ever saw it.
+  countBetweenEl($('chestWinBalance'), _chestWinBalFrom, balanceAfter, chestWinBalFmt, 1200);
   lockBodyScroll();
 }
+// The card opens on the balance the app can work out on the spot; the live
+// /account refresh that follows is what confirms it. When the two differ (a
+// payout that matured in the same moment, say), re-aim the count at the real
+// figure instead of snapping to it -- but only while the card is still up.
+window.correctChestWinBalance = function(real){
+  const el = $('chestWinBalance');
+  if (!el || !$('chestWinBg').classList.contains('show')) return;
+  real = Number(real) || 0;
+  const showing = parseFloat(String(el.textContent).replace(/[^0-9.]/g, '')) || _chestWinBalFrom;
+  // Upward only. A figure LOWER than what the card is showing is either a read
+  // that has not caught up with the credit yet, or a debit that has nothing to
+  // do with this win -- and a congratulations card that visibly takes money
+  // back off the member is worse than one that is a few seconds behind. The
+  // real balance is on Home and Account the moment they close this, and
+  // STATE.account already holds it, so nothing is lost by leaving the card be.
+  if (real <= showing + 0.005) return;
+  countBetweenEl(el, showing, real, chestWinBalFmt, 600);
+};
 window.closeChestWin = function(){
   $('chestWinBg').classList.remove('show');
   if (!_openSheetTitle) unlockBodyScroll();
@@ -4247,13 +4335,18 @@ window.openInvestConfirm = async function(tierKey, btn){
     }
     return notify(r.message || 'Could not complete purchase');
   }
-  toast(r.message || 'Purchase successful');
-  // Repaint whichever screen the purchase was made from, so the new plan and
-  // the reduced balance appear straight away. renderHome()/renderProducts()
-  // both re-fetch the account and investments themselves.
-  if (STATE.page === 'home') renderHome();
-  else if (STATE.page === 'products') renderProducts();
-  else if (STATE.page === 'catalog') renderCatalog();
+  // Owner: "l want when one buys a product he is immediately redirected to my
+  // products page to see his products, l nolonger need those ugly notifys that
+  // bought product 1, l need what we are using with this [warning dialog]."
+  //
+  // So: the tab switches first, then the acknowledgement lands on top of it.
+  // That ordering matters -- My Products starts its own fetch immediately and
+  // is painting the new plan while the dialog is still being read, so
+  // dismissing it reveals a finished screen rather than a loading one.
+  // The toast is gone: it was the server's "Bought Product-1 for UGX 30,000"
+  // sentence in a small transient pill, which is what he is describing.
+  showPage('products');
+  notify(`${p.name} is now running. You will find it under My Products.`);
 };
 // Plain yes/no confirm, no PIN -- used where an action doesn't move money
 // (e.g. removing a saved withdrawal account, see deleteWithdrawalAccount()).
