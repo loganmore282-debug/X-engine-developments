@@ -1373,6 +1373,36 @@ The dialog is the ordinary app-wide alert card — amber triangle and one pill O
 a bespoke success dialog, because that is the component he pointed at. The server's
 message is left untouched; it is simply no longer what the member reads.
 
+### `.screen` in a .dc.html is the CANVAS, not a background — the announcement
+
+Owner: *"l don't need an announcement dialog to be having yellow background l need it
+to show dashboard just like my mock ups."*
+
+`.announce-bg` was painted `linear-gradient(160deg,#ff8a1f,#e21b2a)`. That is
+`Announcement.dc.html`'s `.screen` rule, copied literally when the dialog was ported.
+
+**Every single .dc.html carries that same gradient on `.screen`.** It is the design
+canvas — the mockup file's stand-in for whatever is behind the phone's content — not
+any screen's background. Adopting it as paint made the announcement the one overlay in
+the app that hides everything under it behind flat orange. What is actually under it
+is Home: `maybeShowAnnouncement()` is reached only from `showPage('home')`.
+
+It is now `rgba(20,10,5,.45)` — the same scrim `.notify-bg` already uses, so there is
+one backdrop treatment for every dialog rather than a second one invented here — and
+the dashboard shows above and below the card, which is what the mockup's centred,
+76vh-tall framing was always implying.
+
+**If another screen is ever ported from a .dc.html, do not carry `.screen`'s
+background with it.** Take the `.wrap`/card rules and leave the canvas behind.
+
+`test-announcement-backdrop.py` checks this in **pixels**, not CSS: a backdrop rule
+can be corrected and the dashboard still be invisible behind an opaque wrapper or a
+stacking context. It samples the strip of screen above the card, asserts none of it is
+the orange gradient, then screenshots the same strip with the dialog closed and
+requires the colours behind to **track what Home actually paints there** — because a
+flat scrim over a blank page would satisfy "not orange" while showing no dashboard at
+all.
+
 ### Snow residues that were still live (round 2)
 
 The first sweep covered wording a member reads. These were *functional*, and each one

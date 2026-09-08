@@ -1606,7 +1606,19 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    instead of being a frame, and the card takes its height from its content up
    to a 76vh ceiling. max-height, not height: a short announcement should make
    a short dialog rather than a tall one padded with nothing. */
-.announce-bg{position:fixed;inset:0;background:linear-gradient(160deg,#ff8a1f,#e21b2a);display:none;align-items:center;justify-content:center;padding:16px;z-index:260;}
+/* Owner: "l don't need an announcement dialog to be having yellow background l
+   need it to show dashboard just like my mock ups."
+   The orange-to-red gradient here was Announcement.dc.html's `.screen` rule
+   copied literally -- but that rule is the design CANVAS, the mockup file's
+   stand-in for whatever screen the dialog is sitting on top of. It was never
+   the dialog's own background. Every other .dc.html has the same gradient for
+   the same reason, and this is the only overlay that ever adopted it as paint.
+   The real thing underneath is Home, since maybeShowAnnouncement() only ever
+   fires from showPage('home') -- so a dim scrim, and the dashboard shows
+   through above and below the card exactly as the mockup's framing implies.
+   rgba(20,10,5,.45) is the same scrim .notify-bg uses: one backdrop treatment
+   for every dialog in the app, rather than a second one invented here. */
+.announce-bg{position:fixed;inset:0;background:rgba(20,10,5,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:260;}
 .announce-bg.show{display:flex;}
 .announce-wrap{position:relative;width:100%;max-width:392px;max-height:76vh;margin:0 auto;background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);display:flex;flex-direction:column;}
 /* Owner: "the X plus circle is different from that in my mockup."
