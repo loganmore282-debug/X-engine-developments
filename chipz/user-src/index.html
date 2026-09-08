@@ -188,7 +188,25 @@ a{color:inherit;}
   transition:opacity .2s ease,transform .2s ease;}
 .navitem.active::before{opacity:1;transform:scale(1);}
 .navitem .nav-ic,.navitem .lbl{position:relative;z-index:1;}
-/* The tap animation lives on the ICON, not the box.
+/* Owner: "not only the nav icon bounces in and out but also the selector
+   should do so." So the box presses with the icon -- same curve, so the two
+   read as ONE press rather than two things moving near each other.
+   opacity stays pinned at 1 for the whole animation: the box is the active-tab
+   selector and it must never look like it is going away ("selector doesn't
+   disappear"), so only the scale moves. Slightly gentler than the icon's
+   (.78/1.14 against .74/1.18) because it is a 54x40 slab rather than a 26px
+   glyph, and the same numbers on that area read as a wobble.
+   It is .42s to the icon's .46s deliberately -- hookNavTapBox() ends the tap
+   by watching for navIconBounce, and removing the class kills any animation
+   still running, so the box has to finish FIRST or it gets cut off. */
+.navitem.nav-tap.active::before{animation:navBoxBounce .42s cubic-bezier(.34,1.56,.64,1);}
+@keyframes navBoxBounce{
+  0%{opacity:1;transform:scale(1);}
+  28%{opacity:1;transform:scale(.78);}   /* in  */
+  62%{opacity:1;transform:scale(1.14);}  /* out */
+  82%{opacity:1;transform:scale(.97);}
+  100%{opacity:1;transform:scale(1);}}
+/* The other half of the tap animation lives on the ICON.
    Owner, third pass: "the nav icons when tapped be live bounce in and out
    ... it is like tapping something and bounces 1 in and out 1." So it is a
    BOUNCE now, not the fade it was: the icon presses IN (squashes down),
@@ -206,6 +224,7 @@ a{color:inherit;}
   100%{transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){
   .navitem::before{transition:none;}
+  .navitem.nav-tap.active::before{animation:none;}
   .navitem.nav-tap .nav-ic img{animation:none;}}
 .navitem.active{color:var(--snow-wine);}
 .navitem .lbl{font-size:10px;font-weight:600;white-space:nowrap;}

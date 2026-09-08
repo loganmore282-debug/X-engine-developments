@@ -291,6 +291,59 @@ async def main():
         ck(min(opacities) > 0.95,
            "at full opacity throughout — the fade is what he rejected (min %.2f)" % min(opacities))
 
+        # Owner: "not only the nav icon bounces in and out but also the
+        # selector should do so." The box has to press WITH the icon -- and
+        # still never look like it is going away, which is the older
+        # correction ("selector doesn't disappear") this must not undo. So
+        # its scale moves and its opacity does not.
+        print("\n— and so does the SELECTOR box —")
+        await page.wait_for_timeout(700)
+        box = await page.evaluate("""async () => {
+            const btn = document.querySelector('.navitem.active');
+            btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            const out = [];
+            const t0 = performance.now();
+            while (performance.now() - t0 < 520) {
+                const cs = getComputedStyle(btn, '::before');
+                out.push([Math.round(new DOMMatrixReadOnly(cs.transform).a * 1000) / 1000,
+                          Math.round(parseFloat(cs.opacity) * 100) / 100]);
+                await new Promise(r => requestAnimationFrame(r));
+            }
+            return out;
+        }""")
+        bs = [r[0] for r in box]; bo = [r[1] for r in box]
+        print("   box scale after tap: min %.2f  max %.2f  end %.2f  (%d samples)"
+              % (min(bs), max(bs), bs[-1], len(bs)))
+        ck(min(bs) < 0.9, "the box presses IN too (%.2f)" % min(bs))
+        ck(max(bs) > 1.05, "and springs OUT past its own size (%.2f)" % max(bs))
+        ck(abs(bs[-1] - 1.0) < 0.06, "settling back to normal (%.2f)" % bs[-1])
+        ck(min(bo) > 0.95,
+           "and it NEVER fades while doing it — it is the selector (min opacity %.2f)" % min(bo))
+        # The icon drives cleanup (hookNavTapBox watches navIconBounce), and
+        # removing the class kills any animation still running, so the box's
+        # must be the shorter of the two or it gets cut off mid-bounce.
+        #
+        # Read DURING a tap, not after: the durations come from a rule gated
+        # on .nav-tap, so once the class is cleaned off both report "0s" and
+        # the comparison is meaningless -- which is exactly what the first
+        # version of this check did.
+        await page.wait_for_timeout(700)
+        durs = await page.evaluate("""async () => {
+            const btn = document.querySelector('.navitem.active');
+            btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            await new Promise(r => requestAnimationFrame(r));
+            return { box: getComputedStyle(btn, '::before').animationDuration,
+                     icon: getComputedStyle(btn.querySelector('.nav-ic img')).animationDuration,
+                     tapClass: btn.classList.contains('nav-tap') };
+        }""")
+        ck(durs["tapClass"], "the tap class is on while this is read (%s)" % durs["tapClass"])
+        ck(float(durs["box"].replace('s','')) > 0 and float(durs["icon"].replace('s','')) > 0,
+           "both animations are actually running (box %s, icon %s)" % (durs["box"], durs["icon"]))
+        ck(float(durs["box"].replace('s','')) < float(durs["icon"].replace('s','')),
+           "and the box finishes before the icon, which is what ends the tap (box %s vs icon %s)"
+           % (durs["box"], durs["icon"]))
+        await page.wait_for_timeout(700)
+
         # Re-triggerable: tapping the same tab again must replay it, which
         # re-adding an already-present class would NOT do.
         await page.wait_for_timeout(700)

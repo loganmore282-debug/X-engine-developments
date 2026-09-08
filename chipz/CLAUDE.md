@@ -558,6 +558,15 @@ Two animation corrections, both after the owner rejected an earlier attempt.
   The overshoot past 1.0 is what makes it feel physical — without it this is a scale
   transition and the bounce is gone. `hookNavTapBox()`'s `animationend` listener matches
   on the keyframe NAME, so renaming the keyframe means renaming it there too.
+- **The selector box bounces with it.** *"not only the nav icon bounces in and out but
+  also the selector should do so."* `@keyframes navBoxBounce` on
+  `.navitem.nav-tap.active::before`, same curve so the two read as one press, but gentler
+  (.78/1.14 vs .74/1.18) — it is a 54×40 slab, not a 26px glyph, and the icon's numbers on
+  that area read as a wobble. **Opacity is pinned at 1 in every keyframe**: this is the
+  active-tab selector and it must never look like it is leaving (the earlier *"selector
+  doesn't disappear"* correction). Its duration is **.42s against the icon's .46s on
+  purpose** — the icon's `animationend` is what ends the tap, and removing `nav-tap` kills
+  anything still running, so the box has to finish first or it gets cut off mid-bounce.
 - **Loading text.** *"the letters on 'Loading...' and dots are in like wavy moving
   animations."* Each letter and each dot is its own `<i>` running `loadWave`, so motion
   travels along the word instead of the whole word bobbing as one block.
