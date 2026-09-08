@@ -1579,7 +1579,17 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .reveal-word{display:inline-block;opacity:1;transform:none;}
 .about-block{margin-bottom:18px;}
 .about-block:last-child{margin-bottom:0;}
-.reveal-word{display:inline-block;opacity:0;transform:translateY(10px);}
+/* The stale `.reveal-word{opacity:0}` that used to sit here is DELETED, not
+   overridden. It was the old animation's starting frame, left behind when the
+   reveal was removed -- and because it came AFTER the replacement rule at the
+   same specificity, it won: every word of the About page rendered at opacity
+   0 and translated 10px down. The page was not blank because the text was
+   missing; the text was all there, invisible.
+   The comment two rules up literally warned about this ("Its old `opacity:0`
+   default is the thing to be careful about: leaving that behind while
+   removing the transition would hide the About page outright") and the
+   duplicate was left in anyway. Adding a third rule to win the cascade would
+   have kept the trap loaded; there is now exactly one .reveal-word rule. */
 
 </style>
 </head>

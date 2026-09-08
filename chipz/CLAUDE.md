@@ -951,6 +951,43 @@ Two things were measured rather than guessed:
 
 The strip is `pointer-events:none` so it can never swallow a tap meant for the chest.
 
+### The About page was blank — a duplicate CSS rule, and how it hid
+
+Found during a health check, live in production. The About page rendered **nothing**.
+Not empty: every word was in the DOM, wrapped in `<span class="reveal-word">`, and every
+one of them computed to `opacity: 0`.
+
+The word-by-word reveal was removed on request (*"remove live appearing animation
+everywhere"*). The removal added `.reveal-word{opacity:1;transform:none}` — and left the
+animation's old starting frame, `.reveal-word{opacity:0;transform:translateY(10px)}`,
+**four lines further down**. Same selector, same specificity, later in the source: the
+stale rule won. The comment two rules above it warned about exactly this hazard ("Its old
+`opacity:0` default is the thing to be careful about: leaving that behind while removing
+the transition would hide the About page outright") and the duplicate was left in anyway.
+
+It is **deleted**, not overridden — adding a third rule to win the cascade keeps the trap
+loaded for the next edit. There is now exactly one `.reveal-word` rule.
+
+**Why nothing caught it:** every existing check asserted on `textContent`, which was
+correct throughout. What was wrong was whether any of it reached a pixel.
+`test-visible-text.py` closes that gap three ways: the structural guard (exactly one
+`.reveal-word` rule), the computed opacity of every rendered word, and an **ink
+fraction** — the proportion of the article's screenshot that is not the background
+colour. Verified by re-introducing the bug: the ink fraction reads **0.00%** and five
+assertions fail. A test that would have passed against the broken app is worth nothing.
+
+It also sweeps all six main screens for *any* text-bearing element rendered at opacity 0
+with no hidden ancestor, so the next instance of this class is caught wherever it lands.
+
+**Static analysis that was wrong, recorded so it is not repeated:**
+- Grepping the inflated core for `window.X =` property names to check inline
+  `onclick`/`onerror` handlers still resolve. The obfuscator encodes property names as
+  strings, so every name reads as "missing" — including ones the app demonstrably uses.
+  Proven at runtime instead: a deliberately broken logo URL fires the inline `onerror`,
+  and the badge falls back to the admin-set name with no page errors.
+- Flagging `--auth-hero-op` and friends as "used in CSS, never defined". They are set via
+  a computed name (`'--auth-' + prefix + '-op'`), and every CSS use carries a fallback.
+
 ### The scrollbar is orange, and it takes two properties
 
 Owner: *"l want the scroll bar to be orange not dull color."*
