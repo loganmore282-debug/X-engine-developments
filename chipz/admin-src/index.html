@@ -393,6 +393,45 @@ function fileToFramedDataUrl(file, W, H, quality=0.82){
     fr.readAsDataURL(file);
   });
 }
+// The app icon, rendered to one exact square size as a PNG.
+//
+// Three things make this its own function rather than a call to one of the
+// two above. It must CONTAIN, not cover: an icon that gets centre-cropped
+// loses the edges of the logo, which is the opposite of what a launcher
+// icon needs. It must stay PNG: manifest icons are declared image/png, and
+// a JPEG cannot hold transparency, so a logo meant to sit on the launcher's
+// own background would arrive on an opaque white tile. And the size has to
+// be EXACT -- server.js reads the PNG header and refuses anything that is
+// not precisely 512x512 / 192x192, because a wrong-sized icon is not an
+// error the owner would ever see, just a permanently blurry home screen.
+function fileToSquarePng(file, size){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type||guessMimeFromName(file.name))) return reject(new Error('Please choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That image could not be loaded'));
+      img.onload=()=>{
+        const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+        if(!iw||!ih) return reject(new Error('That image could not be loaded'));
+        const s=Math.min(size/iw,size/ih);      // contain, never crop
+        const dw=iw*s, dh=ih*s;
+        const c=document.createElement('canvas'); c.width=size; c.height=size;
+        const ctx=c.getContext('2d');
+        ctx.imageSmoothingQuality='high';
+        // No fillRect: the canvas starts transparent and stays that way, so a
+        // logo with a transparent background keeps it.
+        ctx.drawImage(img,(size-dw)/2,(size-dh)/2,dw,dh);
+        try{ resolve(c.toDataURL('image/png')); }
+        catch(e){ reject(new Error('Could not process the image')); }
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
 // Reads the file EXACTLY as it is, with no canvas round trip. fileToDataUrl()
 // above draws onto a canvas and exports image/jpeg, which for an animated GIF
 // means one still frame and no transparency -- the animation would be
@@ -2203,8 +2242,8 @@ window.addEventListener('beforeunload', (e) => {
 });
 let _manualNumbers = [];
 async function renderSettings(){
-  const [r, br, hbr, air, abr, pr, mnr, mpir, cir] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list'), api('/admin/manual-numbers/list', {}), api('/admin/manual-pay-images'), api('/admin/chipz-images')
+  const [r, br, hbr, air, abr, pr, mnr, mpir, cir, bar] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list'), api('/admin/manual-numbers/list', {}), api('/admin/manual-pay-images'), api('/admin/chipz-images'), api('/admin/brand-assets')
   ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
@@ -2222,6 +2261,14 @@ async function renderSettings(){
   const profileGifImage = cir.profilegif||'';
   const manualSelectorImage = mpir.selector||'';
   const manualHeroImage = mpir.hero||'';
+  // The app icon and the share card always HAVE an image live (the icon falls
+  // back to the one built into the app), so the panel needs the separate
+  // `custom` flags to say whether it is the owner's or the stock one --
+  // otherwise a never-uploaded icon looks identical to an uploaded one.
+  const appIconImage = bar.appIcon||'';
+  const appIconCustom = !!bar.appIconCustom;
+  const linkPreviewImage = bar.linkPreview||'';
+  const linkPreviewCustom = !!bar.linkPreviewCustom;
   const pushTokenCount = pr.status==='success' ? pr.count : null;
   _manualNumbers = mnr.numbers||[];
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
@@ -2402,6 +2449,34 @@ async function renderSettings(){
       <h4 style="margin:16px 0 6px;font-size:14px">Spins earned by buying products</h4>
       <p class="muted" style="margin:0 0 8px;font-size:12px">Set per product, not here — open <b>Products</b>, edit a product, and use its "Turntable spins from this product" section to set how many spins it earns and what each can win. That way every product can pay differently.</p>
       <button class="btn block" id="saveTurntable" style="margin-top:6px">Save turntable settings</button>
+    </div>
+
+    <h2 class="sec">App icon</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The icon members see on their phone's home screen after they install the app, and in the browser tab.
+        Upload a <b>square PNG, 1024&nbsp;&times;&nbsp;1024</b> (512&nbsp;&times;&nbsp;512 also works &mdash; anything square does; it is resized here to the exact 512 and 192 sizes Android asks for).
+        Transparency is kept. Keep the logo clear of the outer edges: Android rounds the corners, and some launchers crop it to a circle.</p>
+      <div class="banner-row">
+        ${appIconImage?`<img class="img-thumb" style="border-radius:22%" src="${esc(appIconImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:22%"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${appIconCustom?'Custom icon':'<span class="muted">Built-in Chipz icon</span>'}</div>
+        ${appIconCustom?`<button class="btn danger sm" id="appIconClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload icon<input type="file" id="appIconFile" accept="image/*" hidden></label>
+      <p class="muted" style="margin:10px 0 0;font-size:12px"><b>Phones that already installed the app keep the old icon.</b> Android copies the icon onto the home screen at install time and does not go back for it. To see a new icon on a phone that already has the app, remove it and install it again. New installs get the new icon straight away.</p>
+    </div>
+
+    <h2 class="sec">Link preview</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The picture that appears when the app's link is pasted into WhatsApp, Telegram or Facebook.
+        Upload <b>1200&nbsp;&times;&nbsp;630</b> (landscape, just under 2:1). Any size is accepted and centre-cropped to fit, but anything far off that shape loses its edges.
+        Put the logo and any words in the middle &mdash; WhatsApp crops the sides on some phones.</p>
+      <div class="banner-row">
+        ${linkPreviewImage?`<img class="img-thumb" style="border-radius:6px" src="${esc(linkPreviewImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:6px"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${linkPreviewCustom?'Custom preview':'<span class="muted">Nothing set — links share with no picture</span>'}</div>
+        ${linkPreviewCustom?`<button class="btn danger sm" id="linkPreviewClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload preview<input type="file" id="linkPreviewFile" accept="image/*" hidden></label>
+      <p class="muted" style="margin:10px 0 0;font-size:12px"><b>WhatsApp and Facebook remember the old picture.</b> Once a link has been shared, they keep the preview they first fetched for a while, so a link you have already sent may keep showing the previous image. Sharing the link with anything after it &mdash; for example <code>?x=2</code> on the end &mdash; forces them to fetch it again.</p>
     </div>
 
     <h2 class="sec">Referral banner</h2>
@@ -2664,6 +2739,54 @@ async function renderSettings(){
       })());
     });
   }
+  // ── App icon ── one chosen file becomes BOTH renditions Android wants, in
+  // one request, so the 512 and the 192 can never end up showing two
+  // different logos. The server validates both before writing either.
+  const appIconFile = $('appIconFile');
+  if (appIconFile) appIconFile.addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const [png512, png192] = await Promise.all([fileToSquarePng(f,512), fileToSquarePng(f,192)]);
+        const d = await api('/admin/app-icon/set', { png512, png192 });
+        toast(d.status==='success'?'App icon saved — new installs will use it':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderSettings();
+      } catch(err){ toast(err.message||'Could not read that image','err'); }
+    })());
+  });
+  const appIconClear = $('appIconClear');
+  if (appIconClear) appIconClear.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/app-icon/clear', {});
+      toast(d.status==='success'?'App icon reset to the built-in Chipz icon':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  });
+  // ── Link preview ── 1200x630 is the size WhatsApp, Telegram and Facebook
+  // all read; cover-fit, because a share card is artwork that should fill
+  // the frame rather than sit letterboxed inside it.
+  const linkPreviewFile = $('linkPreviewFile');
+  if (linkPreviewFile) linkPreviewFile.addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const image = await fileToFramedDataUrl(f,1200,630,0.85);
+        const d = await api('/admin/link-preview/set', { image });
+        toast(d.status==='success'?'Link preview saved — new shares will show it':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderSettings();
+      } catch(err){ toast(err.message||'Could not read that image','err'); }
+    })());
+  });
+  const linkPreviewClear = $('linkPreviewClear');
+  if (linkPreviewClear) linkPreviewClear.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/link-preview/clear', {});
+      toast(d.status==='success'?'Link preview removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  });
   wireChipzImageSlot('referral', 'refBannerFile', 'refBannerClear', 'Referral banner saved, live for every user', 'Referral banner removed');
   wireChipzImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved, live for every user', 'Brand logo removed');
   wireChipzImageSlot('spin', 'spinBannerFile', 'spinBannerClear', 'Spin banner saved, live for every user', 'Spin banner removed');

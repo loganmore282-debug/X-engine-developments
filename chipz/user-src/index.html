@@ -6,8 +6,36 @@
 <title>Chipz</title>
 <meta name="theme-color" content="#e21b2a">
 <link rel="manifest" href="/manifest.json">
-<link rel="icon" href="/icon-192.png">
-<link rel="apple-touch-icon" href="/icon-192.png">
+<!-- The app icon and the share card are both admin-uploadable, which is why
+     these point at chipz-server rather than at the files sitting next to
+     this one. Neither consumer can be reached from our JavaScript: Chrome
+     reads the icon out of manifest.json when a member installs the app, and
+     the WhatsApp / Telegram / Facebook crawler reads the og: tags below when
+     someone pastes the link -- crawlers do not run scripts. So both have to
+     be real files at fixed URLs, and the server swaps what sits behind them.
+     It falls back to the bundled icon-192/512.png, so these never 404.
+     THESE URLS ARE PERMANENT. Changing a path here breaks the installed
+     icon and every previously-shared link at the same time. -->
+<link rel="icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
+<meta name="description" content="Chipz — invest, earn daily income, and grow your team.">
+<!-- og:url is deliberately absent. A crawler falls back to the URL it
+     actually fetched, so the card keeps working on any domain the app is
+     served from; a hard-coded one would silently go stale the day a custom
+     domain is added. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Chipz">
+<meta property="og:title" content="Chipz">
+<meta property="og:description" content="Invest, earn daily income, and grow your team.">
+<meta property="og:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Chipz">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Chipz">
+<meta name="twitter:description" content="Invest, earn daily income, and grow your team.">
+<meta name="twitter:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in

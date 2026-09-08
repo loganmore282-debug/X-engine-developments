@@ -434,6 +434,72 @@ Contrast note: the orange end (`#ff8a1f`) is only **2.36:1** on the white card, 
 now reads better than the flat orange did. If it ever needs to be legible end-to-end,
 darkening the orange stop toward `#e0670a` (3.44:1) is the lever.
 
+### Brand assets: the installed-app icon and the link-preview card
+
+Owner: *"make when l can upload app icon which will be appearing when downloaded, also
+l want to upload link preview."* Admin → Settings → **App icon** and **Link preview**.
+
+**Sizes:** app icon **1024 × 1024** square PNG (anything square works — the panel
+renders it to the exact 512 and 192 Android asks for). Link preview **1200 × 630**.
+
+These two are architecturally unlike every other admin image in the project, and the
+difference is the whole design. Every other slot is fetched by the app's own JavaScript
+as a data URL inside JSON. **These two are not read by our code at all** — Chrome reads
+the icon out of `manifest.json` at install time, and the WhatsApp/Telegram/Facebook
+crawler reads the `og:` tags out of the page `<head>`. Neither consumer can use a data
+URI and neither runs a line of script, so both must be **real image files at fixed,
+permanent URLs**:
+
+- `GET /public/app-icon-512.png`, `/public/app-icon-192.png`, `/public/link-preview.jpg`
+  serve raw bytes out of `banners/brand-<slot>` docs. **These paths are permanent** —
+  they are hard-coded in `user/manifest.json` and in `index.html`'s head, so renaming one
+  breaks the installed icon and every previously-shared link at once.
+- **The same CORP trap the banner video hit applies here**, and it is the reason an icon
+  would silently never appear: helmet sets `Cross-Origin-Resource-Policy: same-site`
+  globally, `onrender.com` is on the Public Suffix List so chipz-app and chipz-server are
+  separate *sites*, and a manifest icon is a no-cors subresource. Each route sets
+  `cross-origin` explicitly.
+- Cached `max-age=300, must-revalidate` with an ETag — **not** the video's immutable year.
+  The video's URL carries a `?v=<version>` the client appends; a static manifest and
+  static `og:` tags cannot, so the URL is fixed forever and the cache is the only thing
+  that decides how long a stale icon survives.
+- The icon falls back to the bundled `user/icon-512.png` / `icon-192.png` read off disk
+  (chipz-server's rootDir is `chipz/`, so they sit right beside server.js). The manifest
+  URL therefore always resolves, even before anything is uploaded and even if Mongo is
+  down. The **link preview deliberately has no fallback** — an unset share card must show
+  *no* picture, never a wrong one.
+- `imageSize()` reads dimensions out of the PNG IHDR chunk / JPEG SOFn segment, no image
+  library, and the routes refuse anything not *exactly* the target size. A wrong-sized
+  icon is not an error anyone would ever be shown — just a permanently blurry home screen.
+- One chosen file becomes **both** icon renditions in **one** request, and both are
+  validated before either is written: writing the 512 then rejecting the 192 would leave
+  two different logos live, which on Android shows as the icon changing between the
+  launcher and the task switcher.
+- `fileToSquarePng()` in the admin **contains** (never covers — a cropped icon loses the
+  ends of a wordmark), exports **PNG** (a JPEG cannot hold transparency), and draws onto
+  an unfilled canvas so a transparent logo stays transparent. The link preview reuses
+  `fileToFramedDataUrl(f,1200,630,.85)` — cover-fit, because a share card is artwork that
+  should fill its frame.
+- No `og:url` on purpose: a crawler falls back to the URL it fetched, so the card keeps
+  working on any domain, where a hard-coded one goes stale the day a custom domain lands.
+
+**Two caveats the panel states in its own copy, because they otherwise come back as bug
+reports:** a phone that already installed the app **keeps its old icon** (Android copies
+it at install time and never returns for it — reinstall to see a new one), and WhatsApp
+/ Facebook **remember a preview they have already fetched** for an already-shared link
+(appending anything, e.g. `?x=2`, forces a refetch).
+
+Three tests cover this, and they split along what each can actually prove:
+`test-brand-assets.js` pins the wiring *between* files that nothing else would catch
+(manifest URL → a route that exists, `og:image` → the same, declared dimensions ==
+enforced dimensions, panel field names == server field names) and then **runs the real
+route handler** against a stub database for the headers, ETag/304 and the disk fallback;
+`test-app-icon-resize.py` runs the real `fileToSquarePng()` in Chromium against generated
+artwork and decodes the result — exact size, transparent padding, and markers at the far
+left/right of a 900 × 300 wordmark proving nothing was cropped; `test-admin-brand-panel.py`
+drives the **built** admin panel, because the source is obfuscated into `admin/index.html`
+and grepping the deployed file proves nothing.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

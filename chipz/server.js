@@ -2,6 +2,8 @@ const express     = require('express');
 const admin       = require('firebase-admin');
 const cors        = require('cors');
 const crypto      = require('crypto');
+const fs          = require('fs');
+const path        = require('path');
 const helmet      = require('helmet');
 const compression = require('compression');
 const rateLimit   = require('express-rate-limit');
@@ -93,7 +95,9 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // hitting the small parser and failing with "request too large." Same bug
 // class space8's CLAUDE.md documents hitting its own home-banner-slides
 // route once, before that route was added here too.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/manual-pay-image/set', '/admin/chipz-image/set']);
+// /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
+// needs the image parser even though each one on its own is small.
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/manual-pay-image/set', '/admin/chipz-image/set', '/admin/app-icon/set', '/admin/link-preview/set']);
 // The banner video is capped at 4 MB of actual video, which is ~5.5 MB once
 // base64'd, so it needs the huge parser -- bigJsonParser's 4 MB limit would
 // reject a legal upload before the route's own, friendlier size check ran.
@@ -720,6 +724,109 @@ async function getChipzImage(slot) {
   } catch (_) { image = c ? c.image : null; }
   _chipzImageCache[slot] = { image, ts: Date.now() };
   return image;
+}
+// ── BRAND ASSETS: the installed-app icon, and the link-preview card ──
+//
+// These two are unlike every other admin image in this file, and the
+// difference drives the whole design: they are NOT read by the app's own
+// JavaScript. The icon is read by Android/Chrome out of manifest.json when a
+// member installs the app; the preview is read by the WhatsApp / Telegram /
+// Facebook crawler out of the page's <meta> tags when someone pastes the
+// link. Neither consumer can use a data: URI, and neither runs a line of our
+// code -- so both have to be real image FILES at fixed, permanent URLs.
+// That is what these serve, and it is why they cannot just be two more
+// slots on /public/chipz-images.
+//
+// The bytes live in their own documents and are never part of any per-boot
+// payload, for the same two reasons the banner video isn't: Mongo caps a
+// document at 16 MB, and no member's phone should download them on app
+// start. Members' phones never fetch these at all.
+const BRAND_ASSET_SLOTS = {
+  'app-icon-512': { mime: 'image/png',  w: 512,  h: 512, max: 600 * 1024, file: 'icon-512.png' },
+  'app-icon-192': { mime: 'image/png',  w: 192,  h: 192, max: 300 * 1024, file: 'icon-192.png' },
+  'link-preview': { mime: 'image/jpeg', w: 1200, h: 630, max: 900 * 1024, file: null }
+};
+const _brandAssetCache = {}, _bundledAssetCache = {};
+// The icon that ships inside the static build, read off disk. chipz-server's
+// rootDir is `chipz/`, so `user/icon-512.png` is right there beside this
+// file. It exists so the manifest's icon URL ALWAYS resolves to a real PNG:
+// before the owner has ever uploaded one, and if the database is unreachable.
+// An install prompt with a broken icon is worse than one with the old icon.
+function bundledBrandAsset(slot) {
+  if (slot in _bundledAssetCache) return _bundledAssetCache[slot];
+  const spec = BRAND_ASSET_SLOTS[slot];
+  let a = null;
+  try {
+    const buf = fs.readFileSync(path.join(__dirname, 'user', spec.file));
+    a = { buf, mime: spec.mime, version: 'stock-' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12) };
+  } catch (_) { a = null; }
+  _bundledAssetCache[slot] = a;
+  return a;
+}
+async function getBrandAsset(slot) {
+  const spec = BRAND_ASSET_SLOTS[slot];
+  if (!spec) return null;
+  const c = _brandAssetCache[slot];
+  if (c && Date.now() - c.ts < 60 * 1000) return c.a;
+  let a = null, custom = false;
+  try {
+    const snap = await db.collection('banners').doc('brand-' + slot).get();
+    const d = snap.exists ? snap.data() : null;
+    if (d && d.data) { a = { buf: Buffer.from(d.data, 'base64'), mime: d.mime || spec.mime, version: d.version || '0' }; custom = true; }
+  } catch (_) { if (c) return c.a; }
+  if (!a && spec.file) a = bundledBrandAsset(slot);
+  if (a) a.custom = custom;
+  _brandAssetCache[slot] = { a, ts: Date.now() };
+  return a;
+}
+// Pixel dimensions read straight out of the file header -- PNG's IHDR chunk,
+// or a JPEG's SOFn segment. Worth the twenty lines: without it the only thing
+// between a wrong-sized upload and a blurry launcher icon is the admin
+// panel's own canvas, and a size rule that exists only in the client is not
+// a rule. No image library needed for either format.
+function imageSize(buf) {
+  if (!buf || buf.length < 24) return null;
+  if (buf.readUInt32BE(0) === 0x89504e47 && buf.toString('ascii', 12, 16) === 'IHDR')
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  if (buf[0] === 0xff && buf[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < buf.length) {
+      if (buf[i] !== 0xff) { i++; continue; }
+      const marker = buf[i + 1];
+      // SOF0..SOF15 carry the frame size. c4/c8/cc sit in the same numeric
+      // range but are DHT/JPG/DAC, which do not.
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
+        return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+      const len = buf.readUInt16BE(i + 2);
+      if (len < 2) return null;
+      i += 2 + len;
+    }
+  }
+  return null;
+}
+const BRAND_SLOT_LABEL = { 'app-icon-512': 'app icon', 'app-icon-192': 'app icon', 'link-preview': 'link preview' };
+function readBrandUpload(raw, slot) {
+  const spec = BRAND_ASSET_SLOTS[slot], what = BRAND_SLOT_LABEL[slot];
+  const m = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(String(raw || ''));
+  if (!m) return { error: `The ${what} must be a PNG or JPEG image.` };
+  const mime = m[1].toLowerCase();
+  if (mime !== spec.mime)
+    return { error: `The ${what} must be a ${spec.mime === 'image/png' ? 'PNG' : 'JPEG'}.` };
+  let buf; try { buf = Buffer.from(m[2], 'base64'); } catch (_) { buf = null; }
+  if (!buf || !buf.length) return { error: 'That image could not be read.' };
+  if (buf.length > spec.max)
+    return { error: `That ${what} is ${Math.round(buf.length / 1024)} KB. Keep it under ${Math.round(spec.max / 1024)} KB.` };
+  const size = imageSize(buf);
+  if (!size) return { error: 'That image could not be read.' };
+  if (size.w !== spec.w || size.h !== spec.h)
+    return { error: `That image is ${size.w} × ${size.h}. The ${what} must be exactly ${spec.w} × ${spec.h}.` };
+  return { buf, mime };
+}
+async function writeBrandAsset(slot, buf, mime) {
+  const version = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
+  await db.collection('banners').doc('brand-' + slot).set({ data: buf.toString('base64'), mime, bytes: buf.length, version });
+  delete _brandAssetCache[slot];
+  return version;
 }
 // Optional image for the Home announcement dialog (owner: "introduce
 // announcement dialog image, it will be up of dialog message and
@@ -2241,6 +2348,45 @@ app.get('/public/banner-video', async (req, res) => {
     res.end(v.buf);
   } catch (e) { res.status(500).end(); }
 });
+// The installed-app icon and the link-preview card, as real image files.
+// Nothing in the app fetches these -- Chrome does, out of manifest.json at
+// install time, and the WhatsApp/Telegram/Facebook crawlers do, out of the
+// page's og: tags. Their URLs are hard-coded in manifest.json and in
+// index.html's <head>, so they must stay exactly what they are forever;
+// changing a path here silently breaks the icon and the share card at once.
+function serveBrandAsset(slot) {
+  return async (req, res) => {
+    try {
+      const a = await getBrandAsset(slot);
+      if (!a || !a.buf) return res.status(404).end();
+      const etag = '"ba-' + slot + '-' + a.version + '"';
+      // The same trap the banner video hit, and for the same reason. helmet
+      // sets Cross-Origin-Resource-Policy: same-site globally; onrender.com
+      // is on the Public Suffix List, so chipz-app and chipz-server are
+      // different SITES; and a manifest icon is a no-cors subresource load,
+      // which CORP gates. Without this line the browser drops the icon
+      // silently -- API calls keep working, so nothing looks wrong except an
+      // install prompt with no icon on it.
+      res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+      // Five minutes and revalidate, NOT the banner video's immutable year.
+      // The video gets a ?v=<version> from the client so a new upload is a
+      // new URL; these two cannot -- manifest.json and the og: tags are
+      // static files with fixed hrefs -- so the cache is the ONLY thing that
+      // decides how long a stale icon survives. ETag keeps the repeat cost
+      // at a 304 anyway.
+      res.set('Cache-Control', 'public, max-age=300, must-revalidate');
+      res.set('ETag', etag);
+      res.set('Content-Type', a.mime);
+      if (req.headers['if-none-match'] === etag) return res.status(304).end();
+      res.set('Content-Length', String(a.buf.length));
+      if (req.method === 'HEAD') return res.end();
+      res.end(a.buf);
+    } catch (e) { res.status(500).end(); }
+  };
+}
+app.get('/public/app-icon-512.png', serveBrandAsset('app-icon-512'));
+app.get('/public/app-icon-192.png', serveBrandAsset('app-icon-192'));
+app.get('/public/link-preview.jpg', serveBrandAsset('link-preview'));
 app.get('/public/help-banner', async (_req, res) => {
   try { res.json({ status: 'success', image: await getHelpBanner() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -5927,6 +6073,69 @@ app.post('/admin/chipz-image/clear', async (req, res) => {
     logAdminAction(req, 'chipz_image_cleared', { slot });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear this image' }); }
+});
+// ── BRAND ASSETS (admin) ──
+// The panel shows what is live, which for an un-uploaded icon is the stock
+// one that ships in the build -- so `custom` is reported separately from the
+// image itself, or the owner could not tell "my icon" from "the default".
+app.get('/admin/brand-assets', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [icon, prev] = await Promise.all([getBrandAsset('app-icon-512'), getBrandAsset('link-preview')]);
+    const url = a => (a && a.buf) ? `data:${a.mime};base64,${a.buf.toString('base64')}` : null;
+    res.json({
+      status: 'success',
+      appIcon: url(icon), appIconCustom: !!(icon && icon.custom),
+      linkPreview: url(prev), linkPreviewCustom: !!(prev && prev.custom),
+      sizes: { appIcon: '512 × 512', linkPreview: '1200 × 630' }
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/app-icon/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  // BOTH renditions come from one upload and are validated before EITHER is
+  // written. Writing the 512 and then rejecting the 192 would leave two
+  // different logos live at once -- on Android that shows as the icon
+  // changing between the launcher and the task switcher.
+  const big = readBrandUpload(req.body.png512, 'app-icon-512');
+  if (big.error) return res.status(400).json({ status: 'error', message: big.error });
+  const small = readBrandUpload(req.body.png192, 'app-icon-192');
+  if (small.error) return res.status(400).json({ status: 'error', message: small.error });
+  try {
+    await writeBrandAsset('app-icon-512', big.buf, big.mime);
+    await writeBrandAsset('app-icon-192', small.buf, small.mime);
+    logAdminAction(req, 'app_icon_set', { bytes: big.buf.length + small.buf.length });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the app icon' }); }
+});
+app.post('/admin/app-icon/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    await db.collection('banners').doc('brand-app-icon-512').delete();
+    await db.collection('banners').doc('brand-app-icon-192').delete();
+    delete _brandAssetCache['app-icon-512']; delete _brandAssetCache['app-icon-192'];
+    logAdminAction(req, 'app_icon_cleared', {});
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the app icon' }); }
+});
+app.post('/admin/link-preview/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const img = readBrandUpload(req.body.image, 'link-preview');
+  if (img.error) return res.status(400).json({ status: 'error', message: img.error });
+  try {
+    await writeBrandAsset('link-preview', img.buf, img.mime);
+    logAdminAction(req, 'link_preview_set', { bytes: img.buf.length });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the link preview' }); }
+});
+app.post('/admin/link-preview/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    await db.collection('banners').doc('brand-link-preview').delete();
+    delete _brandAssetCache['link-preview'];
+    logAdminAction(req, 'link_preview_cleared', {});
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the link preview' }); }
 });
 app.get('/admin/banner', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
