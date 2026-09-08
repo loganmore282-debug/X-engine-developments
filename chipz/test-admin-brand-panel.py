@@ -80,6 +80,8 @@ async def main():
         # The resolutions have to be ON the screen -- this is where the owner
         # will read them from.
         ck('1024' in body and '512' in body, "the icon card states the size to upload (1024 / 512)")
+        ck('corners are rounded for you' in body,
+           "and says the corners get rounded, so a plain square is fine to upload")
         ck('1200' in body and '630' in body, "the preview card states 1200 × 630")
 
         # The two things that otherwise come back as bug reports.

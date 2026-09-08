@@ -226,6 +226,31 @@ ck(!/fillRect/.test(squarePngCode),
    'and onto a transparent canvas, so a transparent logo stays transparent');
 ck(/Math\.min\(size\/iw,size\/ih\)/.test(admin),
    'the icon is CONTAINed, not cropped — an icon must not lose its edges');
+// Owner: "but l wanted round corners of app icon please". The rounding has
+// to be cut into the FILE's alpha -- a launcher is handed the PNG, not our
+// stylesheet, so a CSS border-radius on the preview would look right in the
+// panel and change nothing on the phone. (test-app-icon-resize.py measures
+// the actual radius in the decoded pixels; this only pins the wiring.)
+const roundFn = (() => {
+  const a = admin.indexOf('function roundIconCorners');
+  const b = admin.indexOf('// The app icon, rendered to one exact square size');
+  return a >= 0 && b > a ? admin.slice(a, b) : '';
+})();
+ck(roundFn.length > 200, 'roundIconCorners was found in the admin source');
+ck(/roundIconCorners\(ctx,size\)/.test(squarePngFn),
+   'the icon renderer actually calls it');
+ck(/globalCompositeOperation = 'destination-in'/.test(roundFn),
+   'and it CUTS the corners out of the alpha (destination-in), not paints over them');
+ck(/const ICON_CORNER_RADIUS = 0\.22/.test(admin),
+   'the radius is 22% of the side — the proportion phone icons use');
+ck(/Math\.round\(size \* ICON_CORNER_RADIUS\)/.test(roundFn),
+   'taken as a SHARE of the size, so the 192 and the 512 match');
+// Comments stripped, for the same reason as squarePngCode above: the
+// function's own comment explains why it avoids roundRect, and matching that
+// sentence would fail the check on prose while the code is already right.
+const roundCode = roundFn.replace(/^\s*\/\/.*$/gm, '');
+ck(/arcTo\(/.test(roundCode) && !/roundRect/.test(roundCode),
+   'drawn with arcTo, not roundRect — an older browser would throw and read as "upload broken"');
 // The one thing the owner will otherwise report as a bug.
 ck(/already installed the app keep the old icon/i.test(admin),
    'the panel warns that already-installed phones keep the old icon');

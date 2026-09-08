@@ -477,9 +477,17 @@ permanent URLs**:
   launcher and the task switcher.
 - `fileToSquarePng()` in the admin **contains** (never covers — a cropped icon loses the
   ends of a wordmark), exports **PNG** (a JPEG cannot hold transparency), and draws onto
-  an unfilled canvas so a transparent logo stays transparent. The link preview reuses
-  `fileToFramedDataUrl(f,1200,630,.85)` — cover-fit, because a share card is artwork that
-  should fill its frame.
+  an unfilled canvas so a transparent logo stays transparent.
+- **Rounded corners** (owner: *"but l wanted round corners of app icon please"*).
+  `roundIconCorners()` cuts them into the PNG's **own alpha** with a `destination-in`
+  composite — a launcher is handed the file, not our stylesheet, so a CSS `border-radius`
+  on the panel preview would look right and change nothing on the phone. Radius is
+  `ICON_CORNER_RADIUS = 0.22` of the side (iOS's squircle sits near 22.5%), taken as a
+  *share* so the 192 and 512 stay the same icon. Path drawn with `arcTo`, not `roundRect`
+  — a browser too old for `roundRect` would throw, and that reads as "the upload is
+  broken", not "your browser is old".
+- The link preview reuses `fileToFramedDataUrl(f,1200,630,.85)` — cover-fit, because a
+  share card is artwork that should fill its frame.
 - No `og:url` on purpose: a crawler falls back to the URL it fetched, so the card keeps
   working on any domain, where a hard-coded one goes stale the day a custom domain lands.
 
@@ -495,8 +503,12 @@ Three tests cover this, and they split along what each can actually prove:
 enforced dimensions, panel field names == server field names) and then **runs the real
 route handler** against a stub database for the headers, ETag/304 and the disk fallback;
 `test-app-icon-resize.py` runs the real `fileToSquarePng()` in Chromium against generated
-artwork and decodes the result — exact size, transparent padding, and markers at the far
-left/right of a 900 × 300 wordmark proving nothing was cropped; `test-admin-brand-panel.py`
+artwork and decodes the result — exact size, transparent padding, markers at the far
+left/right of a 900 × 300 wordmark proving nothing was cropped, and the corner radius
+measured **by area** (a rounded square of side S loses exactly `(4−π)r²`). Measure the
+radius by walking the top row inward instead and you get a number about `√r` px short —
+the arc crosses the pixel-centre line y=0.5 well inside the true corner — which read a
+correct 113px radius as 102px and failed a correct implementation; `test-admin-brand-panel.py`
 drives the **built** admin panel, because the source is obfuscated into `admin/index.html`
 and grepping the deployed file proves nothing.
 

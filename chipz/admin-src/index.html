@@ -393,6 +393,38 @@ function fileToFramedDataUrl(file, W, H, quality=0.82){
     fr.readAsDataURL(file);
   });
 }
+// Owner: "but l wanted round corners of app icon please". So the corners are
+// cut out of the finished square, into the PNG's own alpha channel -- a
+// genuinely round-cornered file, not a square one that merely LOOKS round
+// behind a CSS border-radius in a preview. A launcher gets the file, not our
+// stylesheet, so the rounding has to be in the pixels.
+//
+// 22% of the side is the proportion phone icons actually use (iOS's squircle
+// sits near 22.5%), and taking it as a SHARE of the size rather than a fixed
+// pixel count is what keeps the 192 and the 512 looking like the same icon.
+const ICON_CORNER_RADIUS = 0.22;
+function roundIconCorners(ctx, size){
+  const r = Math.round(size * ICON_CORNER_RADIUS);
+  // destination-in keeps only what falls inside the path just drawn and
+  // makes everything else transparent -- so this cuts the corners off
+  // whatever was rendered, instead of painting rounded corners on top of it.
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.beginPath();
+  // Written with arcTo rather than roundRect: roundRect is recent enough
+  // that an older browser on the owner's machine would throw, and a thrown
+  // error here reads as "the upload is broken", not "your browser is old".
+  ctx.moveTo(r, 0);
+  ctx.lineTo(size - r, 0);    ctx.arcTo(size, 0, size, r, r);
+  ctx.lineTo(size, size - r); ctx.arcTo(size, size, size - r, size, r);
+  ctx.lineTo(r, size);        ctx.arcTo(0, size, 0, size - r, r);
+  ctx.lineTo(0, r);           ctx.arcTo(0, 0, r, 0, r);
+  ctx.closePath();
+  // Only the alpha of this fill matters to destination-in; the colour never
+  // reaches the output.
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+}
 // The app icon, rendered to one exact square size as a PNG.
 //
 // Three things make this its own function rather than a call to one of the
@@ -424,6 +456,7 @@ function fileToSquarePng(file, size){
         // No fillRect: the canvas starts transparent and stays that way, so a
         // logo with a transparent background keeps it.
         ctx.drawImage(img,(size-dw)/2,(size-dh)/2,dw,dh);
+        roundIconCorners(ctx,size);
         try{ resolve(c.toDataURL('image/png')); }
         catch(e){ reject(new Error('Could not process the image')); }
       };
@@ -2455,7 +2488,7 @@ async function renderSettings(){
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The icon members see on their phone's home screen after they install the app, and in the browser tab.
         Upload a <b>square PNG, 1024&nbsp;&times;&nbsp;1024</b> (512&nbsp;&times;&nbsp;512 also works &mdash; anything square does; it is resized here to the exact 512 and 192 sizes Android asks for).
-        Transparency is kept. Keep the logo clear of the outer edges: Android rounds the corners, and some launchers crop it to a circle.</p>
+        Transparency is kept, and the <b>corners are rounded for you</b> &mdash; upload a plain square and it comes out with the rounded shape an app icon has. Keep the logo away from the very edges so the rounding does not cut into it.</p>
       <div class="banner-row">
         ${appIconImage?`<img class="img-thumb" style="border-radius:22%" src="${esc(appIconImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:22%"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${appIconCustom?'Custom icon':'<span class="muted">Built-in Chipz icon</span>'}</div>

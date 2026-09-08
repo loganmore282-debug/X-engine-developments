@@ -45,6 +45,21 @@ def wordmark(w, h):
     d.ellipse([w // 2 - h // 4, h // 4, w // 2 + h // 4, h * 3 // 4], fill=(20, 20, 20, 255))
     return im
 
+def radius_from_area(im):
+    """Recover the corner radius from how much of the square was cut away.
+
+    A square of side S with its corners rounded to radius r loses exactly the
+    four corner off-cuts, (4 - pi) * r^2 in total. Summing the alpha channel
+    (rather than counting hard pixels) also folds the antialiased edge in at
+    its real coverage, so this is accurate to well under a pixel -- and,
+    unlike walking a row inward, it has no half-pixel bias.
+    """
+    import math
+    w, h = im.size
+    # Via the alpha histogram rather than getdata(), which Pillow deprecated.
+    filled = sum(i * n for i, n in enumerate(im.getchannel('A').histogram())) / 255.0
+    return math.sqrt(max(0.0, (w * h - filled)) / (4 - math.pi))
+
 def as_data_url(im, fmt='PNG'):
     b = io.BytesIO(); im.save(b, fmt)
     mime = 'image/png' if fmt == 'PNG' else 'image/jpeg'
@@ -56,7 +71,10 @@ def decode(data_url):
 
 async def main():
     src = open(ADMIN_SRC).read()
-    a = src.index('function fileToSquarePng')
+    # Starts at ICON_CORNER_RADIUS, not at fileToSquarePng: roundIconCorners
+    # sits above it and is called from inside it, so lifting only the second
+    # function would blow up with a ReferenceError in the page.
+    a = src.index('const ICON_CORNER_RADIUS')
     b = src.index('// Reads the file EXACTLY')
     fn = src[a:b]
     # guessMimeFromName is referenced by the type check inside it.
@@ -112,13 +130,46 @@ async def main():
         ck(px[2, 256][3] == 0 and px[509, 256][3] == 0,
            "with the transparent padding on the left and right this time")
 
-        print("\n— an already-square 1024 × 1024 upload —")
+        print("\n— an already-square 1024 × 1024 upload, and the rounded corners —")
+        # Owner: "but l wanted round corners of app icon please". A solid
+        # square is the only shape that can prove the rounding happened: with
+        # any padded artwork the corners would be transparent anyway.
         sq = Image.new('RGBA', (1024, 1024), (226, 27, 42, 255))
-        head, im = decode(await run(sq, 512))
-        px = im.load()
-        ck(im.size == (512, 512), "downscales to 512 × 512")
-        ck(px[2, 2][3] == 255 and px[509, 509][3] == 255,
-           "and fills the frame edge to edge — no padding added to a square")
+        for size in (512, 192):
+            head, im = decode(await run(sq, size))
+            px = im.load()
+            im.save(os.path.join(OUT, 'square-%d.png' % size))
+            ck(im.size == (size, size), "%d: downscales to %d × %d" % (size, size, size))
+            # The corners are GONE from the file itself, not merely hidden by
+            # a CSS border-radius in a preview -- a launcher gets the file.
+            ck(px[0, 0][3] == 0 and px[size - 1, 0][3] == 0 and
+               px[0, size - 1][3] == 0 and px[size - 1, size - 1][3] == 0,
+               "%d: all four corners are cut out of the PNG's own alpha" % size)
+            # ...but only the corners: the middle of every edge is still solid,
+            # so the icon still fills its frame instead of shrinking.
+            mid = size // 2
+            ck(px[mid, 0][3] == 255 and px[mid, size - 1][3] == 255 and
+               px[0, mid][3] == 255 and px[size - 1, mid][3] == 255,
+               "%d: the middle of each edge is still solid — it was rounded, not shrunk" % size)
+            # And the cut is the right SIZE, measured by AREA rather than by
+            # walking the top row. Walking the row reports where the arc
+            # crosses the pixel-centre line y=0.5, which sits about
+            # sqrt(r) pixels inside the true corner -- a real effect that made
+            # a correct 113px radius read as 102px. Area has no such bias:
+            # a rounded square of side S loses exactly (4 - pi) * r^2.
+            r = radius_from_area(im)
+            want = size * 0.22
+            ck(abs(r - want) <= size * 0.015,
+               "%d: the corner radius measures %.0fpx, %.1f%% of the side (wanted ~%.0fpx)"
+               % (size, r, r / size * 100, want))
+        # The same proportion at both sizes, or the two renditions would not
+        # look like the same icon.
+        _, im512 = decode(await run(sq, 512))
+        _, im192 = decode(await run(sq, 192))
+        s512 = radius_from_area(im512) / 512
+        s192 = radius_from_area(im192) / 192
+        ck(abs(s512 - s192) < 0.015,
+           "the 512 and the 192 round by the same proportion (%.3f vs %.3f)" % (s512, s192))
 
         print("\n— a JPEG photo (no alpha) still works —")
         head, im = decode(await run(Image.new('RGB', (800, 800), (10, 90, 200)), 512, 'JPEG', 'photo.jpg'))
