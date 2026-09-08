@@ -1052,8 +1052,17 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .rec-pill.fail{background:linear-gradient(135deg,#ef5f52,#c0182a);box-shadow:0 5px 12px -6px rgba(192,24,42,.7);}
 
 /* ── Messages (MessagesList.dc.html / Messages.dc.html) ── */
-.msg-row{display:flex;align-items:flex-start;gap:14px;background:var(--snow-surface);border:1px solid var(--line-soft);border-left:3px solid var(--snow-wine);border-radius:var(--r-card);padding:16px;margin-bottom:12px;width:100%;text-align:left;font-family:inherit;color:var(--snow-ink);box-shadow:var(--sh-card);}
-.msg-row.read{border-left-color:var(--snow-border);}
+/* Owner: "they have design ... the mock up has a very clean css, high
+   quality and definition." His unread row is not a flat white rectangle: it
+   is a soft gradient card carrying a TINTED glow in the accent hue, so an
+   unread message looks lit rather than merely outlined. Ours had the accent
+   only as a 3px bar on the left edge, which is a marker, not a design.
+   The glow is the brand's warm one for the same reason the backdrop is --
+   his green belongs to his theme. */
+.msg-row{display:flex;align-items:flex-start;gap:14px;background:linear-gradient(135deg,#ffffff 0%,#fff6ef 100%);border:1px solid var(--line-soft);border-left:3px solid var(--snow-wine);border-radius:var(--r-card);padding:16px;margin-bottom:12px;width:100%;text-align:left;font-family:inherit;color:var(--snow-ink);box-shadow:0 1px 2px rgba(30,10,5,.05),0 12px 26px -14px rgba(226,27,42,.42);}
+/* A read message loses the lift as well as the bar -- it is done with, and
+   should sit back rather than keep competing with the unread ones. */
+.msg-row.read{background:var(--snow-surface);border-left-color:var(--snow-border);box-shadow:var(--sh-card);}
 /* Same raised disc as the Balance Record avatars -- one avatar treatment
    across the app, not two that nearly match. */
 .msg-row .av{width:44px;height:44px;border-radius:50%;flex-shrink:0;background:linear-gradient(145deg,#eafaee 0%,#b8e6c6 100%);color:#116434;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;
@@ -1063,10 +1072,38 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .msg-row .t1{font-weight:600;font-size:15px;line-height:1.35;}
 .msg-row .date{font-size:11px;color:var(--snow-muted);font-weight:500;text-align:right;flex-shrink:0;white-space:nowrap;}
 .msg-row .t2{font-size:12px;color:var(--snow-muted);font-weight:500;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.msg-detail-bg{position:fixed;inset:0;background:rgba(20,10,5,.5);display:none;align-items:flex-end;z-index:305;}
+/* Owner, holding his mockup's before/after beside ours: "you can see blurry
+   green, and message doesn't slide from down."
+   Both halves measured off the two screenshots at matched width.
+
+   THE BACKDROP. His reads rgb(163,218,186) -- luminance 189, a LIGHT tinted
+   wash with the list visibly blurred behind it. Ours read rgb(134,125,118),
+   luminance 126: a flat grey-brown dim, no blur, no hue. The difference is
+   not "a bit darker", it is the opposite operation -- his lifts and tints the
+   page, ours drops a dirty sheet over it.
+   The tint here is the BRAND's warm one, not his green. His mockups are drawn
+   in a purple/green theme; a green wash is the right answer in that app and
+   would be the only green surface in this one. The effect is his, the hue is
+   Chipz's -- say the word and it goes green.
+   backdrop-filter is what does the blurring; the rgba on top does the tint.
+   Both are needed: the blur alone leaves the colour of whatever is behind it,
+   and the tint alone is what we already had. */
+.msg-detail-bg{position:fixed;inset:0;background:rgba(238,112,34,.42);
+  -webkit-backdrop-filter:blur(14px) saturate(1.15);backdrop-filter:blur(14px) saturate(1.15);
+  display:none;align-items:flex-end;z-index:305;}
 .msg-detail-bg.show{display:flex;}
-.msg-detail{width:100%;max-width:480px;margin:0 auto;background:var(--snow-surface);border-radius:var(--r-card);padding:24px 20px 28px;position:relative;box-shadow:0 -18px 40px -20px rgba(20,10,5,.4);animation:sheetUp .22s ease-out;max-height:80vh;overflow-y:auto;}
-@keyframes sheetUp{from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+/* Rounded at the TOP only. It is anchored to the bottom of the screen, so the
+   lower corners were being rounded against an edge nobody can see, which is
+   what stops a bottom sheet reading as a sheet.
+   min-height so a two-line message still arrives as a panel rather than a
+   strip: his sits at 86% of the screen, ours was 24%. Kept as a minimum, not
+   a fixed height, so a long message can still grow to the 88vh ceiling. */
+.msg-detail{width:100%;max-width:480px;margin:0 auto;background:var(--snow-surface);border-radius:26px 26px 0 0;padding:26px 22px 30px;position:relative;box-shadow:0 -18px 44px -18px rgba(20,10,5,.45);animation:sheetUp .42s cubic-bezier(.22,1,.36,1);min-height:58vh;max-height:88vh;overflow-y:auto;}
+/* It really slides now. It was translateY(24px) over .22s -- a nudge you have
+   to be looking for, which is exactly "message doesn't slide from down". From
+   100% of its own height means it starts fully below the fold and travels the
+   whole way up. */
+@keyframes sheetUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
 .msg-detail .xbtn{position:absolute;top:18px;right:18px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;color:var(--snow-ink);}
 .msg-detail .head{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px;padding-right:30px;}
 .msg-detail .av{width:44px;height:44px;border-radius:50%;flex-shrink:0;background:linear-gradient(145deg,#eafaee 0%,#b8e6c6 100%);color:#116434;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;

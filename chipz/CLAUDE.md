@@ -951,6 +951,44 @@ Two things were measured rather than guessed:
 
 The strip is `pointer-events:none` so it can never swallow a tap meant for the chest.
 
+### Messages: a blurred tinted backdrop, and a sheet that actually slides
+
+Owner: *"you can see blurry green, and message doesn't slide from down… the mock up has a
+very clean css, high quality and definition."*
+
+Measured off the two screenshots at matched width, both halves were real:
+
+**The backdrop was the opposite operation, not a shade off.** His reads
+`rgb(163,218,186)` — **luminance 189**, a *light* tinted wash with the list visibly
+blurred behind it. Ours read `rgb(134,125,118)` — **luminance 126**: a flat grey-brown
+dim, no blur, no hue. His *lifts and tints* the page; ours dropped a dirty sheet over it.
+That is why "make it lighter" would never have got there. Now
+`backdrop-filter: blur(14px) saturate(1.15)` plus a warm `rgba(238,112,34,.42)`, tuned by
+measuring the **rendered** result until it landed at luminance **190** against his 189 —
+the tint and the blur composite, so only the result is comparable.
+
+**The tint is the brand's warm one, not his green.** His mockups are drawn in a
+purple/green theme; a green wash is right in that app and would be the only green surface
+in this one. The effect is his, the hue is Chipz's.
+
+**"Doesn't slide from down" was literal.** The animation was `translateY(24px)` over
+`.22s` — a nudge you have to be looking for. It now starts at `translateY(100%)`, so it
+begins fully below the fold and travels its whole height (measured: 490px of a 489px
+sheet, settling at 0).
+
+Also: rounded **top corners only** (it is anchored to the screen edge, so the lower
+corners were being rounded against something nobody can see, which is what stops a bottom
+sheet reading as a sheet), a `min-height:58vh` so a two-line message arrives as a panel
+rather than a strip (his sits at 86% of the screen, ours was 24%), and the unread row
+gets a gradient card with a brand-tinted glow instead of a flat white rectangle with an
+accent bar — an unread message should look *lit*, not merely outlined.
+
+**A duplicate-selector trap was created and caught in the same edit.** Splitting
+`.msg-row` into unread/read states first produced two full `.msg-row.read` rules — the
+exact shape that blanked the About page. The audit from that fix (`re.findall` for
+repeated selectors) was re-run immediately and the duplicate collapsed to a
+three-property override. Run that audit after any rule-splitting edit.
+
 ### Measuring against a mockup screenshot (do this, don't eyeball)
 
 Owner: *"you see the difference on withdrawal screen with my mockups, things are small

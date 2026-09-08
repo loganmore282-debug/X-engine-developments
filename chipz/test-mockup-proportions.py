@@ -38,8 +38,9 @@ The one deliberate departure from the mockups is colour: they are drawn in a
 purple/green theme and Chipz is red/orange, so the OK button and the Join
 Channel button use the brand gradient. Every proportion is his.
 """
-import asyncio, json, os, re, sys, functools, threading, http.server, socketserver
+import asyncio, io, json, os, re, sys, functools, threading, http.server, socketserver
 from playwright.async_api import async_playwright
+from PIL import Image
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/mockup-proportions'
 os.makedirs(OUT, exist_ok=True)
@@ -76,7 +77,11 @@ ROUTES = {
     "/account": {"status": "success", "account": ACCOUNT},
     "/investments": {"status": "success", "investments": []},
     "/transactions": {"status": "success", "transactions": [], "truncated": False},
-    "/messages": {"status": "success", "messages": []},
+    "/messages": {"status": "success", "messages": [
+        {"id": "welcome", "title": "Welcome to the Chipz Investment Returns app!",
+         "body": "You can earn daily income through investments via the app.\n\n"
+                 "You can also earn commission by sharing your referral link.",
+         "date": "31/08/2026", "time": "08:59", "createdAt": 0, "read": False}]},
     "/bank/list": {"status": "success", "accounts": [
         {"id": "b1", "holder": "Mangalita Namugabwe", "network": "MTN Mobile Money",
          "phone": "0769968158"}]},
@@ -99,6 +104,14 @@ FB_AUTH = """
  export const EmailAuthProvider={credential:()=>({})};
  export const onAuthStateChanged=(a,cb)=>{setTimeout(()=>cb(user),0);};
 """
+
+
+def median_colour(png_bytes):
+    """The region's own colour, as the median pixel. A mean would be pulled
+    around by whatever text or card edges fall inside the crop."""
+    im = Image.open(io.BytesIO(png_bytes)).convert('RGB')
+    px = list(im.getdata())
+    return tuple(sorted(p[i] for p in px)[len(px) // 2] for i in range(3))
 
 
 def serve():
@@ -250,6 +263,75 @@ async def main():
         ck(dep > 0, "the Deposit sheet rendered its amount field at all (%.0fpx)" % dep)
         ck(abs(dep - w["amount"]) < 0.6,
            "and it matches Withdraw's (%.0f vs %.0f)" % (dep, w["amount"]))
+
+        # ── Messages: the backdrop, and the slide ──
+        # Owner: "you can see blurry green, and message doesn't slide from
+        # down." Measured off the two screenshots at matched width: his
+        # backdrop is rgb(163,218,186) -- luminance 189, a LIGHT tinted wash
+        # with the list blurred behind it. Ours was rgb(134,125,118),
+        # luminance 126: a flat grey-brown dim. Those are opposite operations,
+        # not a shade apart, which is why a "make it darker/lighter" tweak
+        # would never have got there.
+        print("\n— messages —")
+        await page.evaluate("closeSheet()")
+        await page.wait_for_timeout(500)
+        await page.evaluate("openMessagesSheet()")
+        await page.wait_for_timeout(1200)
+        row = await page.evaluate(
+            "()=>{const r=document.querySelector('.msg-row');"
+            "return r?{shadow:getComputedStyle(r).boxShadow,"
+            "bg:getComputedStyle(r).backgroundImage}:null;}")
+        if row:
+            # His unread row is lit, not merely outlined: a tinted glow and a
+            # gradient rather than a flat white rectangle.
+            ck("gradient" in row["bg"], "the unread row is a gradient card, not flat white")
+            ck("rgba(226, 27, 42" in row["shadow"] or "rgb(226, 27, 42" in row["shadow"],
+               "and carries a brand-tinted glow rather than the neutral card shadow")
+
+        # The slide, sampled over real frames.
+        frames = await page.evaluate(
+            "async ()=>{ openMessageDetail(0);"
+            " const seen=[]; const t0=performance.now();"
+            " while(performance.now()-t0 < 620){"
+            "  const el=document.querySelector('.msg-detail');"
+            "  if(el){const t=getComputedStyle(el).transform;"
+            "   const m=t&&t!=='none'?t.match(/matrix\\(([^)]*)\\)/):null;"
+            "   seen.push(m?Math.round(parseFloat(m[1].split(',')[5])):0);}"
+            "  await new Promise(r=>requestAnimationFrame(r));}"
+            " return seen;}")
+        await page.wait_for_timeout(600)
+        det = await page.evaluate(
+            "()=>{const bg=document.querySelector('.msg-detail-bg');"
+            "const d=document.querySelector('.msg-detail');"
+            "const r=d.getBoundingClientRect(); const cs=getComputedStyle(bg);"
+            "const ds=getComputedStyle(d);"
+            "return {h:+r.height.toFixed(1), vh:innerHeight,"
+            " filter:(cs.backdropFilter||cs.webkitBackdropFilter||'none'),"
+            " topR:ds.borderTopLeftRadius, botR:ds.borderBottomLeftRadius};}")
+        print("   slide max %d, settles %d | %s" % (max(frames), frames[-1], det))
+        # It was translateY(24px) over .22s -- a nudge, i.e. "doesn't slide
+        # from down". A real slide starts at roughly the sheet's own height.
+        ck(max(frames) >= det["h"] * 0.85,
+           "the sheet really slides up from below (travels %dpx of its %dpx height)"
+           % (max(frames), det["h"]))
+        ck(frames[-1] == 0, "and settles flush at the bottom (%d)" % frames[-1])
+        ck("blur" in det["filter"],
+           "the backdrop is blurred, which is what 'blurry' meant (%s)" % det["filter"])
+        ck(det["topR"] != det["botR"] and det["botR"] == "0px",
+           "rounded at the top only -- it is anchored to the screen edge (%s / %s)"
+           % (det["topR"], det["botR"]))
+        # Rendered pixels, not the declared colour: the tint and the blur
+        # composite, and only the result can be compared with his screenshot.
+        shot = await page.screenshot(clip={"x": 40, "y": 60, "width": 300, "height": 120})
+        avg = median_colour(shot)
+        lumin = sum(avg) / 3
+        print("   backdrop %s luminance %.0f (his: (163,218,186) luminance 189)" % (avg, lumin))
+        ck(lumin > 160,
+           "the backdrop LIGHTENS the page like his (%.0f) instead of dimming it (was 126)"
+           % lumin)
+        ck(avg[0] > avg[2] + 40,
+           "and it is clearly tinted, not grey %s" % (avg,))
+        await page.screenshot(path=f"{OUT}/prop-messages.png")
 
         ck(not errs, "no page errors: " + str(errs))
         await b.close()
