@@ -558,6 +558,13 @@ Two animation corrections, both after the owner rejected an earlier attempt.
   The overshoot past 1.0 is what makes it feel physical — without it this is a scale
   transition and the bounce is gone. `hookNavTapBox()`'s `animationend` listener matches
   on the keyframe NAME, so renaming the keyframe means renaming it there too.
+- **Selector width.** *"the nav tab is still small in width can you extend it abit."*
+  The box went from a fixed `width:54px` + `left:50%` + `margin-left:-27px` to
+  `left:3px;right:3px;max-width:62px;margin:0 auto` — as wide as the tab allows, capped.
+  The inset-and-auto-margin form is not just tidier: centring by transform would **collide
+  with `navBoxBounce`**, whose keyframes set `transform` to a bare `scale()` and would
+  throw the translate away. `transform` now belongs entirely to the animation. Measures
+  58px in a 64px tab on a 390px viewport (was 54).
 - **The selector box bounces with it.** *"not only the nav icon bounces in and out but
   also the selector should do so."* `@keyframes navBoxBounce` on
   `.navitem.nav-tap.active::before`, same curve so the two read as one press, but gentler
@@ -578,7 +585,39 @@ Two animation corrections, both after the owner rejected an earlier attempt.
   including the last, which hung a quarter-em off the right and pushed the word visibly
   off-centre — `.ls-text i:last-child{letter-spacing:0}` re-centres it. The reference's
   cream-and-purple palette was deliberately not copied; shape from the reference, colours
-  from Chipz.
+  from Chipz. Fourth pass: *"even loader animation word is small make it abit big"* —
+  **25px**, up from 18px, and the wave's rise grew with it (9px → 12px), because the same
+  travel against larger type reads as a weaker motion.
+
+### Balance Record counts up from zero
+
+Owner: *"when one taps balance records l need a live animation of balancing increase from
+0 to that current amount the user has."* `countUpEl(el, to, fmt, ms)` in
+`original_module.js`, called from `openBalanceRecordSheet()`.
+
+Distinct from `animateBalanceEl()`, which corrects a *stale* figure to a fresh one and
+only moves when the two differ. This always starts at zero and always runs — it fires on
+an OPEN, so it is the entrance the screen makes, not a data correction.
+
+- The band is **rendered as `fmtUGX2(0)`** and counted up after the sheet is in the DOM.
+  Rendering the real figure and then resetting to zero would flash the true balance for a
+  frame before the count began.
+- `requestAnimationFrame`, not `setInterval`: the count is tied to real frames, so it
+  takes the same 1.1s on a slow phone instead of running long wherever timers throttle.
+- A `_countToken` on the element guards against two counts racing — reopening the sheet
+  mid-animation starts a second one, and without it the first keeps writing and lands on
+  a stale figure.
+- A zero balance, or `prefers-reduced-motion`, skips straight to the value; counting 0 up
+  to 0 is a second of watching a number that was never going to move.
+
+`test-round-fixes.py` samples the band every frame through a real open: starts at 0, ends
+at the true balance, and **68 distinct figures in between** — a straight jump from 0 to the
+total would satisfy the first two checks on its own.
+
+Note while you are in here: `fmtUGX2()` renders **`UGX520,782.00` with no space**, unlike
+`fmtUGX()`'s `UGX 520,782.00`. It is pre-existing, and it is used by the whole Balance
+Record screen (band and every row), so changing it is a screen-wide decision, not a
+one-line fix. Not changed unasked.
 
 **Measuring the loading wave is a trap.** During real boot the main thread is busy
 inflating and running the ~265KB core, so no frames are produced and

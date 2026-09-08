@@ -183,7 +183,17 @@ a{color:inherit;}
 
    Brand-tinted rather than the reference's lavender, per the standing rule:
    copy the shape from a reference, never another app's colours. */
-.navitem::before{content:'';position:absolute;top:3px;left:50%;width:54px;height:40px;margin-left:-27px;
+/* Owner: "the nav tab is still small in width can you extend it abit."
+   Widened from a fixed 54px to as wide as the tab allows, capped at 62px.
+   Sized with left/right insets + margin:auto rather than the old
+   left:50% / margin-left:-27px, because that older trick pinned the width to
+   a hard-coded number AND, more importantly, centring via transform would
+   collide with navBoxBounce: the keyframes set transform to a bare scale(),
+   which would throw away any translate the centring depended on. This way
+   `transform` belongs entirely to the animation.
+   The cap matters on a wide phone: 6 tabs across a 430px screen give ~71px
+   each, and a box that grew to fill it would nearly touch its neighbours. */
+.navitem::before{content:'';position:absolute;top:3px;left:3px;right:3px;max-width:62px;margin:0 auto;height:40px;
   border-radius:14px;background:rgba(226,27,42,.13);opacity:0;transform:scale(.72);pointer-events:none;z-index:0;
   transition:opacity .2s ease,transform .2s ease;}
 .navitem.active::before{opacity:1;transform:scale(1);}
@@ -332,10 +342,12 @@ a{color:inherit;}
    should be slow and words spaced like that and 6 dots". So: letters set
    wide apart, six dots instead of three, and the ripple slowed right down --
    a 2s cycle with a 95ms step between letters, where it was 1.15s and 55ms.
+   Then, fourth pass: "even loader animation word is small make it abit big"
+   -- 25px, up from 18px.
    The reference's own cream-and-purple palette is deliberately NOT copied;
    the standing rule is to take the shape from a reference and keep Chipz's
    colours. */
-#loadingScreen .ls-text{font-family:'Playfair Display',Georgia,serif;font-size:18px;letter-spacing:.24em;color:#fff;display:flex;}
+#loadingScreen .ls-text{font-family:'Playfair Display',Georgia,serif;font-size:25px;letter-spacing:.24em;color:#fff;display:flex;}
 #loadingScreen .ls-text i{display:inline-block;font-style:normal;animation:loadWave 2s ease-in-out infinite;}
 /* letter-spacing adds its gap AFTER every character, including the last one,
    which would hang a quarter-em of empty space off the right and leave the
@@ -345,9 +357,11 @@ a{color:inherit;}
    to hold its own width. "Loading......" has none today, but this keeps the
    effect intact if the wording ever changes. */
 #loadingScreen .ls-text i.sp{width:.32em;}
+/* The rise grew with the type (9px -> 12px): kept at 9 against 25px letters
+   the same wave reads as a smaller, weaker motion than it did at 18px. */
 @keyframes loadWave{
   0%,60%,100%{transform:translateY(0);}
-  30%{transform:translateY(-9px);}}
+  30%{transform:translateY(-12px);}}
 /* ── Download APP screen ──
    Owner: "make when one taps download, it opens and middle there is a button
    download, and in background there is image uploaded from admin panel."

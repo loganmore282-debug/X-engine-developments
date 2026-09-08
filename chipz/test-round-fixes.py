@@ -131,6 +131,10 @@ async def main():
         space = await page.evaluate(
             "()=>getComputedStyle(document.querySelector('#loadingScreen .ls-text')).letterSpacing")
         ck(float(space.replace('px','')) >= 3.5, "the letters are set wide apart (%s)" % space)
+        # "even loader animation word is small make it abit big"
+        size = await page.evaluate(
+            "()=>getComputedStyle(document.querySelector('#loadingScreen .ls-text')).fontSize")
+        ck(float(size.replace('px','')) >= 24, "and set bigger (%s, was 18px)" % size)
         centring = await page.evaluate("""() => {
             const t = document.querySelector('#loadingScreen .ls-text').getBoundingClientRect();
             const last = getComputedStyle(document.querySelector('#loadingScreen .ls-text i:last-child')).letterSpacing;
@@ -226,6 +230,47 @@ async def main():
            "and vertically in the middle, not pushed off (%d vs %d)" % (dl["btnCentreY"], dl["screenCentreY"]))
         ck(dl["btnOnTop"], "and it is the thing a thumb actually hits — the image is not over it")
         await page.screenshot(path=f"{OUT}/download-screen.png")
+        await page.evaluate("closeSheet()"); await page.wait_for_timeout(400)
+
+        # ── 6. the nav selector is wider ──
+        # Owner: "the nav tab is still small in width can you extend it abit."
+        print("\n— 6. the nav selector box is wider —")
+        boxw = await page.evaluate("""() => {
+            const it = document.querySelector('.navitem.active');
+            const b = it.getBoundingClientRect();
+            const cs = getComputedStyle(it, '::before');
+            // width from the pseudo-element's own computed box.
+            return { box: Math.round(parseFloat(cs.width)), tab: Math.round(b.width),
+                     maxW: cs.maxWidth };
+        }""")
+        print("   ", boxw)
+        ck(boxw["box"] > 54, "the box is wider than the old fixed 54px (%dpx)" % boxw["box"])
+        # ...but not so wide it touches the next tab's box.
+        ck(boxw["box"] <= boxw["tab"] - 4,
+           "with a gap left to its neighbours (%dpx box in a %dpx tab)" % (boxw["box"], boxw["tab"]))
+
+        # ── 7. Balance Record counts up from zero ──
+        print("\n— 7. Balance Record counts up from 0 —")
+        await page.evaluate("showPage('account')"); await page.wait_for_timeout(500)
+        counted = await page.evaluate("""async () => {
+            openBalanceRecordSheet();
+            const seen = [];
+            const t0 = performance.now();
+            while (performance.now() - t0 < 1500) {
+                const el = document.getElementById('balBandValue');
+                if (el) seen.push(el.textContent.trim());
+                await new Promise(r => requestAnimationFrame(r));
+            }
+            return { first: seen[0], last: seen[seen.length - 1], n: seen.length,
+                     distinct: [...new Set(seen)].length };
+        }""")
+        print("   ", counted)
+        num = lambda t: float(t.replace('UGX', '').replace(',', '').strip() or 0)
+        ck(num(counted["first"]) == 0, "it starts at zero (%r)" % counted["first"])
+        ck(num(counted["last"]) == 520782, "and lands on the real balance (%r)" % counted["last"])
+        # A jump straight from 0 to the total would satisfy both of the above.
+        ck(counted["distinct"] > 20,
+           "having actually counted through the values between (%d distinct figures)" % counted["distinct"])
         await page.evaluate("closeSheet()"); await page.wait_for_timeout(400)
 
         # ── 5. copy, not share ──

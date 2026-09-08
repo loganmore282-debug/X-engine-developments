@@ -1601,6 +1601,45 @@ function paintReferral(){
 // (or down) to the real one instead of snapping, so 388,600 becoming
 // 456,709 reads as money visibly counting up, not a flash of wrong data.
 var _homeBalanceVals = { wallet: null, earned: null, invested: null };
+// Owner: "when one taps balance records l need a live animation of balancing
+// increase from 0 to that current amount the user has."
+//
+// Distinct from animateBalanceEl() below, which corrects a stale figure to a
+// fresh one and only moves when the two differ. This always starts at zero
+// and always runs, because it fires on an OPEN -- it is the entrance the
+// screen makes, not a data correction.
+//
+// requestAnimationFrame, not setInterval: the count is tied to real frames,
+// so it takes the same 1.1s on a fast phone and a slow one instead of
+// running long wherever timers are throttled.
+function countUpEl(el, to, fmt, ms){
+  if (!el) return;
+  fmt = fmt || fmtUGX2;
+  to = Number(to) || 0;
+  // Nothing to count to, or the phone asked for less motion. Counting 0 up to
+  // 0 is a second of a member staring at a zero that was never going to move.
+  const still = to <= 0 ||
+    (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  if (still) { el.textContent = fmt(to); return; }
+  const duration = ms || 1100;
+  // Token guards against two counts racing on the same element: reopening the
+  // sheet mid-animation starts a second one, and without this the first would
+  // keep writing over it and land on a stale figure.
+  const token = (el._countToken = (el._countToken || 0) + 1);
+  const start = performance.now();
+  el.textContent = fmt(0);
+  function tick(now){
+    if (el._countToken !== token || !el.isConnected) return;
+    const t = Math.min(1, (now - start) / duration);
+    // ease-out cubic: quick off the mark, gentle into the real figure, so it
+    // settles onto the number rather than stopping dead on it.
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = fmt(to * eased);
+    if (t < 1) requestAnimationFrame(tick);
+    else el.textContent = fmt(to);
+  }
+  requestAnimationFrame(tick);
+}
 // `fmt` is the formatter that painted the element in the first place --
 // Account's wallet figure carries cents ("UGX 2,000.00"), the rest don't,
 // and a live-refresh tick must not silently reformat what it re-writes.
@@ -2444,7 +2483,7 @@ window.openBalanceRecordSheet = async function(){
   openSheet('Balance Record', `
     <div class="bal-band">
       <div class="lbl">Current Balance</div>
-      <div class="val" id="balBandValue">${fmtUGX2(bal)}</div>
+      <div class="val" id="balBandValue">${fmtUGX2(0)}</div>
     </div>
     <div class="rec-tabs" id="balTabs">
       <button class="tb on" data-cat="all" onclick="switchBalTab('all')">All</button>
@@ -2453,6 +2492,10 @@ window.openBalanceRecordSheet = async function(){
       <button class="tb" data-cat="turntable" onclick="switchBalTab('turntable')">Turntable</button>
     </div>
     <div id="balBody"></div>`);
+  // Painted as zero above and counted up here, once the sheet is in the DOM.
+  // Rendering the real figure first and then resetting it to zero would flash
+  // the true balance for a frame before the count started.
+  countUpEl($('balBandValue'), bal, fmtUGX2);
   if (hadCache) renderBalTab(_balTab);
   const r = await api('/transactions');
   if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
