@@ -598,6 +598,38 @@ Two animation corrections, both after the owner rejected an earlier attempt.
   **25px**, up from 18px, and the wave's rise grew with it (9px → 12px), because the same
   travel against larger type reads as a weaker motion.
 
+### The type scale is bigger than it looks in a mockup file
+
+Owner, with his purple mockups next to the live build: *"as you see in my mock ups
+everything is abit big but see yours, your cards your digits your deposit withdrawal
+buttons and others, small tiny words, cards buttons and numbers."* He was right; the
+whole app was drawn a size or two down from the mockups. Roughly a **+20% uplift** across
+Balance Record, Account and Deposit:
+
+| | was | now |
+|---|---|---|
+| Balance Record band figure | 30px | **40px** |
+| Records tabs (All/Deposit/…) | 13px | **16px** |
+| Record row title / amount | 14 / 15px | **16.5 / 16.5px** |
+| Record row avatar | 38px | **44px** |
+| Settings row title / sub | 15 / 12px | **17.5 / 14px** |
+| Settings row icon tile | 42 / 30px | **52 / 38px** |
+| Section heads (SETTINGS, Select Amount) | 19 / 14px | **22 / 17px** |
+| Account ID / phone | 16 / 14px | **20 / 16px** |
+| Deposit & Withdraw buttons | 50px / 15px | **58px / 17px** |
+| Quick-amount chips | 15px, pad 13 | **17px, pad 17** |
+| Sheet & page titles | 20px | **23px** |
+| Form labels / inputs | 13 / 15px | **15 / 17px** |
+
+**The trap:** bumping type alone broke the Balance Record rows. A bigger amount
+(`+UGX30,000.00` at 18px bold) widened the right-hand column enough to squeeze the title
+and the timestamp onto **two lines each** — "Welcome Bonus" wrapped, and a date split
+across two lines reads as two dates. Fixed by giving the text column its width back
+rather than by shrinking the type back down: tighter card gutter (18 → 14px), gap 14 → 11,
+avatar 46 → 44, amount 18 → 16.5, and `white-space:nowrap` on both the timestamp and the
+amount. **Check the widest row, not just the font size** — this is a three-column row and
+the columns compete.
+
 ### Login / Sign Up backdrops (2 images + opacity + blur)
 
 Owner: *"make when l can put background image on those screens of login tab and

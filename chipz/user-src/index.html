@@ -160,7 +160,7 @@ a{color:inherit;}
   .notify-ok::after,.btn-bind::after,.wallet-panel .btnrow .cancel::after,
   #manualPayFlow .mp-confirm-btn::after{animation:none;display:none;}}
 
-.status-pill{display:inline-block;border-radius:999px;font-size:10.5px;font-weight:500;padding:3px 10px;}
+.status-pill{display:inline-block;border-radius:999px;font-size:12.5px;font-weight:500;padding:5px 12px;}
 .status-pill.active{background:var(--snow-green-soft);color:var(--snow-green);}
 .status-pill.pending{background:var(--snow-neutral-soft);color:var(--snow-muted);}
 
@@ -570,7 +570,7 @@ a{color:inherit;}
 .chest-float img{width:100%;display:block;filter:drop-shadow(0 12px 16px rgba(30,10,5,.35));}
 @keyframes chestBounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
 .page-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 18px 12px;}
-.page-head h2{margin:0;font-size:20px;font-weight:400;letter-spacing:.02em;}
+.page-head h2{margin:0;font-size:23px;font-weight:400;letter-spacing:.02em;}
 .page-head span{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
 .url-row{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:4px;padding:0 14px;height:48px;margin-bottom:14px;}
 .url-row span{flex:1;min-width:0;font-size:12px;color:var(--snow-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -614,9 +614,9 @@ a{color:inherit;}
    replaces Snow's coloured card matrix entirely. */
 .acct-profile{background:var(--snow-surface);border-radius:4px;padding:22px;box-shadow:0 16px 32px -22px rgba(30,10,5,.4);border:1px solid var(--snow-border);}
 .acct-profile .p-top{display:flex;align-items:center;gap:14px;}
-.acct-logo{width:60px;height:60px;border-radius:50%;background:var(--chipz-grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;box-shadow:0 10px 20px -12px rgba(226,27,42,.5);}
+.acct-logo{width:68px;height:68px;border-radius:50%;background:var(--chipz-grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;box-shadow:0 10px 20px -12px rgba(226,27,42,.5);}
 .acct-logo img{width:100%;height:100%;object-fit:cover;}
-.acct-logo span{color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:17px;letter-spacing:.06em;}
+.acct-logo span{color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:19px;letter-spacing:.06em;}
 /* When an animated logo is set it becomes the profile mark itself, and the
    circle has to give way: the source is 300x220 landscape, and cropping that
    to a 60px circle would cut roughly a quarter of its width off the sides.
@@ -628,8 +628,8 @@ a{color:inherit;}
    and stays crisp -- it is never blown up past its native size. */
 .acct-logo.has-gif{width:auto;height:66px;aspect-ratio:300/220;border-radius:4px;background:none;box-shadow:none;}
 .acct-logo.has-gif img{width:100%;height:100%;object-fit:contain;image-rendering:auto;}
-.acct-profile .p-id{font-weight:600;font-size:16px;}
-.acct-profile .p-phone{color:var(--snow-muted);font-size:14px;font-weight:500;}
+.acct-profile .p-id{font-weight:600;font-size:20px;}
+.acct-profile .p-phone{color:var(--snow-muted);font-size:16px;font-weight:500;}
 .acct-divider{height:1px;background:var(--snow-border);margin:18px 0;}
 .acct-profile .bal-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--snow-muted);font-weight:500;text-align:center;}
 /* Owner, against a reference screenshot: "the number of account balance is
@@ -668,19 +668,19 @@ a{color:inherit;}
     color:transparent;-webkit-text-fill-color:transparent;}
 }
 .acct-btnrow{display:flex;gap:10px;}
-.acct-btnrow button{flex:1;height:50px;font-size:15px;padding:0;}
+.acct-btnrow button{flex:1;height:58px;font-size:17px;padding:0;}
 .sec-head{display:flex;align-items:center;gap:9px;margin:26px 0 12px;}
-.sec-head .bar{width:4px;height:18px;border-radius:4px;background:var(--chipz-grad);flex-shrink:0;}
-.sec-head h2{font-size:19px;font-weight:400;margin:0;flex-shrink:0;}
+.sec-head .bar{width:4px;height:21px;border-radius:4px;background:var(--chipz-grad);flex-shrink:0;}
+.sec-head h2{font-size:22px;font-weight:400;margin:0;flex-shrink:0;}
 .sec-head .ln{flex:1;height:1px;background:var(--snow-border);}
 .setting-list{background:var(--snow-surface);border-radius:4px;overflow:hidden;border:1px solid var(--snow-border);box-shadow:0 14px 28px -22px rgba(30,10,5,.35);}
-.setting-row{display:flex;align-items:center;gap:13px;padding:15px 16px;border-bottom:1px solid var(--snow-border);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left;color:var(--snow-ink);font-family:inherit;}
+.setting-row{display:flex;align-items:center;gap:14px;padding:18px 16px;border-bottom:1px solid var(--snow-border);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left;color:var(--snow-ink);font-family:inherit;}
 .setting-row:last-child{border-bottom:0;}
-.setting-row .sq{width:42px;height:42px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--snow-neutral-soft);}
-.setting-row .sq img{width:30px;height:30px;object-fit:contain;}
+.setting-row .sq{width:52px;height:52px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--snow-neutral-soft);}
+.setting-row .sq img{width:38px;height:38px;object-fit:contain;}
 .setting-row .txt{flex:1;min-width:0;}
-.setting-row .t1{font-weight:600;font-size:15px;}
-.setting-row .t2{font-size:12px;color:var(--snow-muted);font-weight:500;}
+.setting-row .t1{font-weight:600;font-size:17.5px;}
+.setting-row .t2{font-size:14px;color:var(--snow-muted);font-weight:500;}
 .setting-row .chev{flex-shrink:0;color:var(--snow-muted);}
 .logout-btn{display:flex;width:100%;height:54px;align-items:center;justify-content:center;gap:8px;margin-top:22px;font-size:16px;letter-spacing:.08em;padding:0;}
 
@@ -738,10 +738,10 @@ a{color:inherit;}
    payment-method row, a dark-prefixed phone field, and the numbered
    instruction card. */
 .dep-sec{display:flex;align-items:center;gap:9px;margin:0 0 12px;}
-.dep-sec .bar{width:4px;height:16px;border-radius:4px;background:var(--chipz-grad);flex-shrink:0;}
-.dep-sec span{font-size:14px;font-weight:600;letter-spacing:.02em;}
+.dep-sec .bar{width:4px;height:19px;border-radius:4px;background:var(--chipz-grad);flex-shrink:0;}
+.dep-sec span{font-size:17px;font-weight:600;letter-spacing:.02em;}
 .dep-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px;}
-.dep-chip{text-align:center;padding:13px 4px;border-radius:4px;font-weight:700;font-size:15px;border:1.6px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;box-shadow:0 3px 0 var(--snow-border);}
+.dep-chip{text-align:center;padding:17px 4px;border-radius:4px;font-weight:700;font-size:17px;border:1.6px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;box-shadow:0 3px 0 var(--snow-border);}
 .dep-chip.sel{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:none;}
 .dep-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:4px;height:52px;display:flex;align-items:center;padding:0 16px;margin-bottom:24px;}
 .dep-amt input{border:0;outline:0;background:transparent;font-size:16px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
@@ -845,26 +845,26 @@ a{color:inherit;}
 
 /* ── Balance Record (BalanceRecord.dc.html) ── */
 /* Bleeds to the sheet's own edges: .sheet-body is padded 4px 20px 40px. */
-.bal-band{background:var(--chipz-hero);padding:22px 18px;text-align:center;margin:-4px -20px 0;}
-.bal-band .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.7);font-weight:600;}
-.bal-band .val{font-size:30px;color:#fff;margin-top:4px;}
+.bal-band{background:var(--chipz-hero);padding:26px 18px;text-align:center;margin:-4px -20px 0;}
+.bal-band .lbl{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.7);font-weight:600;}
+.bal-band .val{font-size:40px;color:#fff;margin-top:6px;}
 .rec-tabs{display:flex;margin:16px 0;border-bottom:1.5px solid var(--snow-border);}
-.rec-tabs .tb{flex:1;text-align:center;padding:0 0 10px;font-size:13px;font-weight:700;color:var(--snow-muted);position:relative;background:none;border:none;font-family:inherit;}
+.rec-tabs .tb{flex:1;text-align:center;padding:0 0 12px;font-size:16px;font-weight:700;color:var(--snow-muted);position:relative;background:none;border:none;font-family:inherit;}
 .rec-tabs .tb.on{color:var(--snow-ink);}
 .rec-tabs .tb.on::after{content:'';position:absolute;left:20%;right:20%;bottom:-1.5px;height:2.5px;background:var(--snow-wine);border-radius:4px;}
-.rec{display:flex;align-items:center;gap:12px;background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:4px;padding:14px 16px;margin-bottom:10px;box-shadow:0 8px 18px -16px rgba(30,10,5,.3);}
-.rec .av{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;}
+.rec{display:flex;align-items:center;gap:11px;background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:4px;padding:16px 14px;margin-bottom:12px;box-shadow:0 8px 18px -16px rgba(30,10,5,.3);}
+.rec .av{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;}
 .rec .av.g{background:var(--snow-green-soft);color:var(--snow-green);}
 .rec .av.w{background:linear-gradient(135deg,#f1d9dd,#c98a9a);color:#6b1530;}
 .rec .txt{flex:1;min-width:0;}
-.rec .t1{font-weight:600;font-size:14px;}
-.rec .t2{font-size:11px;color:var(--snow-muted);font-weight:500;margin-top:3px;}
-.rec .t3{font-size:11px;font-weight:500;margin-top:5px;color:var(--snow-muted);}
+.rec .t1{font-weight:600;font-size:16.5px;line-height:1.25;}
+.rec .t2{font-size:12.5px;color:var(--snow-muted);font-weight:500;margin-top:3px;white-space:nowrap;}
+.rec .t3{font-size:13px;font-weight:500;margin-top:5px;color:var(--snow-muted);}
 .rec .right{text-align:right;flex-shrink:0;}
-.rec .amt{font-size:15px;font-weight:700;}
+.rec .amt{font-size:16.5px;font-weight:700;white-space:nowrap;}
 .rec .amt.pos{color:var(--snow-green);}
 .rec .amt.neg{color:var(--chipz-neg);}
-.rec-pill{display:inline-block;margin-top:5px;font-size:10px;font-weight:600;letter-spacing:.02em;padding:3px 10px;border-radius:999px;}
+.rec-pill{display:inline-block;margin-top:6px;font-size:12.5px;font-weight:600;letter-spacing:.02em;padding:5px 13px;border-radius:999px;}
 .rec-pill.pend{background:#ffe3b0;color:#8a5a00;}
 .rec-pill.paid{background:var(--snow-green-soft);color:var(--snow-green);}
 .rec-pill.fail{background:#f7dede;color:#9e0f1c;}
@@ -985,9 +985,9 @@ a{color:inherit;}
 .auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--snow-muted);font-weight:500;}
 .auth-switch a{font-weight:600;color:var(--chipz-link);text-decoration:none;}
 .form-field{margin:0 0 14px;}
-.form-field label{display:block;font-size:13px;font-weight:500;color:var(--snow-ink);margin-bottom:8px;}
+.form-field label{display:block;font-size:15px;font-weight:500;color:var(--snow-ink);margin-bottom:8px;}
 .form-field .input-wrap{position:relative;}
-.form-field input{width:100%;padding:15px 44px 15px 16px;border:1px solid var(--snow-border);border-radius:4px;font-size:15px;background:var(--snow-surface);color:var(--snow-ink);}
+.form-field input{width:100%;padding:17px 44px 17px 16px;border:1px solid var(--snow-border);border-radius:4px;font-size:17px;background:var(--snow-surface);color:var(--snow-ink);}
 .form-field input:focus{outline:none;border-color:var(--snow-wine);}
 .form-field .eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--snow-muted);background:none;border:none;padding:4px;display:flex;align-items:center;justify-content:center;}
 /* Owner: "make (+256) static, so one can type 07xxxxxxxx or 7xxxxxxxx... just
@@ -1318,7 +1318,7 @@ a{color:inherit;}
    no circular icon button behind it. */
 .sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:linear-gradient(180deg,#ffe3d1,var(--snow-canvas));border-bottom:1px solid var(--snow-border);z-index:1;}
 .sheet-head .back{background:none;border:none;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:20px;font-weight:400;letter-spacing:.03em;}
+.sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:23px;font-weight:400;letter-spacing:.03em;}
 .sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
 
 #toastHost{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:600;pointer-events:none;padding:20px;}
@@ -1395,10 +1395,10 @@ a{color:inherit;}
 .dep-status-icon.success{background:rgba(47,107,71,.18);color:var(--snow-green);}
 .dep-status-icon.failed{background:rgba(148,24,39,.18);color:var(--snow-wine);}
 
-.list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:13px;}
+.list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
 .list-empty .empty-icon{display:flex;justify-content:center;margin-bottom:14px;opacity:.85;}
 .list-empty .empty-icon svg{width:64px;height:64px;}
-.list-end{padding:16px 4px 4px;text-align:center;color:var(--snow-muted);font-size:12px;}
+.list-end{padding:18px 4px 4px;text-align:center;color:var(--snow-muted);font-size:14px;}
 
 /* Real content fades/lifts into place once it's ready -- no shimmer
    placeholders. Freshly-inserted DOM (a fresh innerHTML assignment) always
