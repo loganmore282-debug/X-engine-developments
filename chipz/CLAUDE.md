@@ -624,6 +624,26 @@ handed back if the credit throws.
 3. **`/turntable/spin` joined the strict per-user rate limiter** (60/min), next to
    `/checkin` and `/withdraw/request`. It had only the 400/min global cap.
 
+**The GRANT path (spins earned by buying a product), audited separately.** Sound and
+unchanged: the client sends only a product **key**, the server looks the product up and
+re-reads it **live inside the purchase lock**, so no spin figure ever comes from the
+request; the payout band is snapshot onto each spin; a grant failure is caught and logged
+rather than thrown into a purchase the member has already paid for. Three things changed:
+
+- **`MAX_SPINS_PER_PURCHASE = 20` is now one shared constant**, used by
+  `sanitizeProductInput()` (refuse at save) **and** by `grantTurntableSpins()` (clamp at
+  grant). The second is not redundant — it is the **loop bound**, and it reads a value out
+  of the database. **Not every write to `products/` goes through the validator**: the
+  legacy-key migration re-writes stored docs directly. A loop that writes a money document
+  per iteration must not depend on the validator having been the only writer. The band is
+  clamped to `MAX_MONEY_AMOUNT` at grant time for the same reason.
+- **The grant is idempotent per purchase.** Each spin now records `investmentId`, and the
+  grant returns early if spins already exist for that investment. Nothing calls it twice
+  today — it is fire-and-forget from `/invest/create` — but a bonus that re-pays on a
+  retry is exactly what a later caller adds by accident.
+- `investmentId` also makes a spin **auditable**: it answers "where did this spin come
+  from" for a member's account, which `productKey` alone could not.
+
 `test-spin-and-withdraw.js` runs the real `rollSpinReward` 4,000 times (inside the band,
 whole band reachable, mean centred, backwards/negative bands clamped) and pins the route's
 properties. Note when lifting that function into a test: it now needs `crypto` **and**

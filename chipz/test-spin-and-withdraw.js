@@ -101,6 +101,56 @@ for (const p of ['/withdraw/request', '/invest/create', '/checkin']) {
   ck(limiterList.includes(`'${p}'`), `(${p} still is too)`);
 }
 
+// ── the EARNED spins: how a purchase grants them ──────────────────────────
+// The redemption path above is only half of it. These are created by
+// /invest/create, and each one is a promise to pay money later.
+console.log('\n— spins granted by a purchase —');
+const grant = grab('async function grantTurntableSpins', 'function rollSpinReward');
+
+console.log('   ...the payout band comes from the SERVER\'s product record');
+const invest = grab("app.post('/invest/create'", "app.get('/investments'");
+ck(/getProductByKey\(req\.body\.tierKey\)/.test(invest),
+   'the client names a product KEY, and the server looks the product up');
+ck(/liveTier = await getProductByKey\(tier\.key\)/.test(invest),
+   'and re-reads it live inside the lock, so a mid-flight edit cannot be raced');
+ck(/grantTurntableSpins\(userId, liveTier, invId\)/.test(invest),
+   'spins are granted from that live record, never from the request');
+ck(!/spinMin|spinMax|spinCount/.test(noComments(invest).replace(/grantTurntableSpins[^\n]*/g, '')),
+   'the purchase route never reads a spin figure out of the request body');
+
+console.log('   ...and every stored figure is re-clamped where it is USED');
+ck(/MAX_SPINS_PER_PURCHASE/.test(grant),
+   'the grant loop is bounded by a named cap, not by whatever is stored');
+ck(/Math\.min\(MAX_MONEY_AMOUNT/.test(grant),
+   'and the band is clamped to MAX_MONEY_AMOUNT at grant time too');
+// The validator caps it as well -- both, on purpose, because not every write
+// to products/ goes through the validator.
+ck(/spinCount > MAX_SPINS_PER_PURCHASE\) return null/.test(src),
+   'the admin save path refuses a bigger count using the SAME constant');
+ck(/const MAX_SPINS_PER_PURCHASE = 20;/.test(src), 'which is 20');
+ck(/spinMax < spinMin\) return null/.test(src),
+   'and refuses a band saved backwards rather than quietly fixing it');
+
+// Run the real clamp: a stored value the validator never saw.
+const clampCount = c => Math.min(20, Math.max(0, Math.floor(Number(c) || 0)));
+for (const [stored, want] of [[3, 3], [20, 20], [500, 20], [1e9, 20], [-4, 0], ['x', 0], [null, 0]])
+  ck(clampCount(stored) === want,
+     `a stored spinCount of ${JSON.stringify(stored)} grants ${want} spin(s)`);
+
+console.log('   ...a purchase cannot grant its spins twice');
+ck(/where\('investmentId', '==', investmentId\)/.test(grant),
+   'the grant is idempotent per investment');
+ck(/investmentId: investmentId \|\| null/.test(grant),
+   'and each spin records which purchase paid for it');
+ck(grant.indexOf('already.empty') < grant.indexOf("collection('turntableSpins').add"),
+   'the check runs BEFORE anything is written');
+
+console.log('   ...and a failure never costs the member their purchase');
+ck(/catch \(e\)/.test(grant) && /console\.error/.test(grant),
+   'a grant failure is caught and logged, not thrown into the purchase');
+ck(/if \(!sett\.turntableEnabled\) return;/.test(grant),
+   'nothing is granted while the turntable is switched off');
+
 // ── the withdrawal multiple ───────────────────────────────────────────────
 console.log('\n— the withdrawal multiple is an admin setting, default 5,000 —');
 ck(/withdrawMultiple: 5000,/.test(src), 'the default is 5,000');

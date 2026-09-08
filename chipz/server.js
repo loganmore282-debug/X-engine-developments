@@ -998,6 +998,14 @@ function cleanPhone(raw) {
 }
 const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
 const MAX_MONEY_AMOUNT = 999_999_999;
+// The most spins one purchase can ever grant. Used in TWO places that must
+// agree: sanitizeProductInput() refuses a bigger number at save time, and
+// grantTurntableSpins() clamps its loop to it at grant time. The second is
+// not redundant -- it is the LOOP BOUND, and it reads a value out of the
+// database. Not every write to products/ goes through the validator (the
+// legacy-key migration re-writes stored docs directly), so the loop must
+// not depend on the validator having been the only writer.
+const MAX_SPINS_PER_PURCHASE = 20;
 function finiteMoney(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -2716,18 +2724,32 @@ app.post('/checkin', async (req, res) => {
 // of the product that granted it). A counter would lose that, and a member
 // who bought a cheap tier then an expensive one would be paid the wrong
 // amount on one of them.
-async function grantTurntableSpins(userId, product) {
+async function grantTurntableSpins(userId, product, investmentId) {
   try {
     const sett = await getSettings();
     if (!sett.turntableEnabled) return;
+    // Idempotent per purchase. This is fire-and-forget from /invest/create,
+    // so nothing today calls it twice -- but a bonus that pays out again on
+    // a retry is the kind of thing a later caller adds by accident, and one
+    // query is cheap next to silently double-granting.
+    if (investmentId) {
+      const already = await db.collection('turntableSpins')
+        .where('investmentId', '==', investmentId).limit(1).get();
+      if (!already.empty) return;
+    }
     // Per-product config: how many spins this purchase grants, and the band
     // each of those spins pays from. A product with no spinCount grants
     // none, which is how "the cheapest product earns nothing" is expressed --
     // there is no global tier threshold any more.
-    const count = Math.max(0, Math.floor(Number(product && product.spinCount) || 0));
+    // Every one of these is re-clamped from the STORED product rather than
+    // trusted: this loop writes a document per iteration and each document
+    // is money, so the bound and the band are validated where they are used,
+    // not only where they were saved.
+    const count = Math.min(MAX_SPINS_PER_PURCHASE,
+      Math.max(0, Math.floor(Number(product && product.spinCount) || 0)));
     if (!count) return;
-    const lo = Math.max(0, Number(product.spinMin) || 0);
-    const hi = Math.max(lo, Number(product.spinMax) || 0);
+    const lo = Math.min(MAX_MONEY_AMOUNT, Math.max(0, Number(product.spinMin) || 0));
+    const hi = Math.min(MAX_MONEY_AMOUNT, Math.max(lo, Number(product.spinMax) || 0));
     if (hi <= 0) return;
     const { date, time } = nowStr();
     for (let i = 0; i < count; i++) {
@@ -2736,7 +2758,11 @@ async function grantTurntableSpins(userId, product) {
       // even if the admin retunes the product afterwards -- and an admin
       // lowering a payout cannot retroactively shrink spins already earned.
       await db.collection('turntableSpins').add({
-        userId, spinMin: lo, spinMax: hi, source: 'product',
+        // investmentId ties the spin to the purchase that paid for it: it is
+        // what makes the guard above work, and it is the only way to answer
+        // "where did this spin come from" when auditing a member's account.
+        userId, investmentId: investmentId || null,
+        spinMin: lo, spinMax: hi, source: 'product',
         productKey: product.key, productName: product.name,
         used: false, date, time, createdAt: FieldValue.serverTimestamp(),
       });
@@ -2990,7 +3016,7 @@ app.post('/invest/create', async (req, res) => {
     // Fire-and-forget, exactly like the commission above: a turntable spin is
     // a bonus, and failing to grant one must never fail a purchase the member
     // has already paid for.
-    grantTurntableSpins(userId, liveTier);
+    grantTurntableSpins(userId, liveTier, invId);
     res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtUGX(liveTier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -6396,7 +6422,7 @@ function sanitizeProductInput(p, fallbackOrder) {
   let spinCount = 0;
   if (p?.spinCount != null && p.spinCount !== '') {
     spinCount = Math.round(Number(p.spinCount));
-    if (!Number.isFinite(spinCount) || spinCount < 0 || spinCount > 20) return null;
+    if (!Number.isFinite(spinCount) || spinCount < 0 || spinCount > MAX_SPINS_PER_PURCHASE) return null;
   }
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
   const order = p?.order != null ? Number(p.order) : fallbackOrder;

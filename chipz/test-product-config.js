@@ -12,7 +12,11 @@
  */
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
-const MAX_MONEY_AMOUNT = 1e12;
+// Both restated from server.js. Keep them in step with it: these feed the
+// real sanitizeProductInput() lifted below, so a wrong value here tests a
+// validator that does not exist.
+const MAX_MONEY_AMOUNT = 999_999_999;
+const MAX_SPINS_PER_PURCHASE = 20;
 const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
 // rollSpinReward() below is lifted out of server.js and now leans on two
 // more things from that file's scope: crypto (it draws the payout from a
