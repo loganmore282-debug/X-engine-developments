@@ -197,6 +197,37 @@ async def main():
         ck(cardPx[1] > cardPx[0] and cardPx[1] > cardPx[2],
            "the form card is showing the GREEN image %s" % (cardPx,))
 
+        # ── no dead strip under the card ──
+        # Owner: "there is a white space down the login screen, why is it
+        # there? please remove it". The hero is a fixed 280px and the card was
+        # only as tall as its own fields, so the page canvas showed through
+        # underneath. Log In is the worse of the two: three fewer fields.
+        print("\n— the card reaches the bottom of the screen —")
+        fill = await page.evaluate("""() => {
+            const card = document.querySelector('.auth-card');
+            const b = card.getBoundingClientRect();
+            return { gap: Math.round(innerHeight - b.bottom),
+                     bottom: Math.round(b.bottom), vh: innerHeight,
+                     scroll: Math.round(document.documentElement.scrollHeight - innerHeight) };
+        }""")
+        print("   ", fill)
+        ck(fill["gap"] <= 1,
+           "no strip left under the card on Log In (%dpx gap)" % fill["gap"])
+        # ...and it did not overshoot into a scrollbar instead, which is the
+        # obvious wrong way to close a gap.
+        ck(fill["scroll"] <= 1,
+           "and the screen still does not scroll (%dpx of overflow)" % fill["scroll"])
+        # Pixel proof: the last row of the screen belongs to the card, not to
+        # the page canvas behind it. With the green test image at 25% that is
+        # green-dominant; the canvas is cream (245,235,226) and never is.
+        shot = await page.screenshot()
+        low = Image.open(io.BytesIO(shot)).convert('RGB')
+        band = low.crop((0, low.height - 6, low.width, low.height))
+        med = tuple(sorted(list(c.getdata()))[len(list(c.getdata())) // 2] for c in band.split())
+        print("    bottom row:", med)
+        ck(med[1] > med[0] and med[1] > med[2],
+           "the very bottom row is the card, not the cream canvas %s" % (med,))
+
         print("\n— and the same pair backs the Sign Up tab —")
         await page.evaluate("showAuthTab('register')")
         await page.wait_for_timeout(600)

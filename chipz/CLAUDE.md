@@ -624,6 +624,16 @@ existing `SETTINGS_CRITICAL_RANGES` validation: `authHeroOpacity`/`authCardOpaci
   `position:absolute` explicitly on `.auth-card > #authCardBg`, and the test now measures
   the element's real box.
 
+**No dead strip under the card.** Owner: *"there is a white space down the login screen,
+why is it there?"* The hero is a fixed 280px and the card was only as tall as its own
+fields, so on any screen taller than the two together the page canvas showed through as a
+pale strip — worst on **Log In**, which has three fewer fields than Sign Up.
+`#authScreen > .wrap` is now a flex column with `.auth-card{flex:1 0 auto}`, so the card
+takes the slack and runs to the bottom. Height is **`100dvh` where supported**, not
+`100vh`: on a phone `100vh` is the viewport with the address bar *hidden*, so on first
+paint it overshoots and trades the gap for a scrollbar. The test asserts both — zero gap
+**and** zero overflow — because closing the gap by overshooting is the obvious wrong fix.
+
 `test-auth-backgrounds.py` renders the signed-out screen with a **blue** hero image and a
 **green** card image — flatly different colours, so "which image landed where" is answered
 from pixels rather than markup, and a swapped pair cannot pass. It takes the **median** of
