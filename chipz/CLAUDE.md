@@ -630,6 +630,32 @@ avatar 46 → 44, amount 18 → 16.5, and `white-space:nowrap` on both the times
 amount. **Check the widest row, not just the font size** — this is a three-column row and
 the columns compete.
 
+### Product & plan figures, and the plan counters
+
+Owner: *"what about numbers, on the products values and other words they are small also
+remove counter showing number of plans, it is in userpanel so remove it."*
+
+Second uplift, on the two product screens: catalog card name 16 → 19px, its stat labels
+9 → 10.5 and **values 13 → 16px**, Buy Now 38 → 44px tall / 14 → 16px; My Products band
+figure 32 → 38, its sub-lines 11/12.5/15 → 13/14.5/17, plan row name 14.5 → 17, meta
+12 → 14, thumb 38 → 46, day counters 11.5 → 13.5, and the Running/Matured/All chips
+12.5 → 15px on a 34 → 42px control.
+
+**Two counters, both gone.** There were two things showing a plan count and he did not
+say which: the `<i>3</i>` badges on the My Products filter chips, and a literal
+**"4 plans"** beside the *Products* page title. Both removed — along with the `.mp-f i`
+rules that styled the badge, and the **skeleton placeholder** that stood in for the "4
+plans" label while loading (leaving that behind would reflow the header the moment the
+real content painted). `counts` is still computed: the empty-state copy uses it.
+
+**The conflict worth knowing about:** the bigger figures pushed the catalog card back over
+the height ceiling an earlier round set — *"reduce on the size of cards their height is
+very high"*, pinned by `test-product-cards.py` at **card < 380px with three visible**. Both
+asks can hold at once, but only by taking the height out of the PADDING, not the type:
+body 13 → 10, stat padding 10 → 8, stats gap/margin 7/12 → 6/9, CTA 46 → 44. Lands at
+**375px, three cards visible**. If a later round grows this type again, trim spacing —
+don't shrink the numbers back.
+
 ### Login / Sign Up backdrops (2 images + opacity + blur)
 
 Owner: *"make when l can put background image on those screens of login tab and

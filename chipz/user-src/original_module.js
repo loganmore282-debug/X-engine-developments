@@ -1509,7 +1509,7 @@ function skProductCards(n){
 }
 function paintCatalogSkeleton(){
   $('pageHost').innerHTML = `
-<div class="page-head"><h2>Products</h2><span class="sk sk-line sm" style="width:54px;display:inline-block;"></span></div>
+<div class="page-head"><h2>Products</h2></div>
 <div style="display:flex;flex-direction:column;gap:12px;margin:0 16px;">${skProductCards(3)}</div>
 <div style="height:12px;"></div>`;
 }
@@ -1569,7 +1569,7 @@ async function renderCatalog(){
 function paintCatalog(){
   const products = STATE.products || [];
   let html = `
-<div class="page-head"><h2>Products</h2><span>${products.length} plan${products.length===1?'':'s'}</span></div>
+<div class="page-head"><h2>Products</h2></div>
 <div style="display:flex;flex-direction:column;gap:12px;margin:0 18px;">
   ${products.length ? products.map(productCardHtml).join('') : '<div class="list-empty">No products yet.</div>'}
 </div>
@@ -1819,7 +1819,7 @@ function paintProducts(animate){
   </div>
 </div>
 <div class="mp-filters">
-  ${['running','matured','all'].map(f => `<button class="mp-f ${_planFilter===f?'on':''}" onclick="switchPlanFilter('${f}')">${f==='running'?'Running':f==='matured'?'Matured':'All'} <i>${counts[f]}</i></button>`).join('')}
+  ${['running','matured','all'].map(f => `<button class="mp-f ${_planFilter===f?'on':''}" onclick="switchPlanFilter('${f}')">${f==='running'?'Running':f==='matured'?'Matured':'All'}</button>`).join('')}
 </div>
 <div class="mp-list">`;
 

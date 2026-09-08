@@ -302,18 +302,18 @@ a{color:inherit;}
 .p-card{background:var(--snow-surface);border-radius:4px;overflow:hidden;box-shadow:0 8px 18px -14px rgba(30,10,5,.3);border:1px solid var(--snow-border);}
 .p-card .p-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}
-.p-card .p-img .glyph{width:44px;height:44px;border-radius:4px;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:19px;font-weight:700;}
+.p-card .p-img .glyph{width:52px;height:52px;border-radius:4px;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;}
 /* A scrim, not a solid bar -- the name has to stay readable over whatever
    photo is uploaded without hiding the top of it. */
-.p-card .p-name{position:absolute;left:0;right:0;bottom:0;padding:22px 12px 9px;color:#fff;font-weight:700;font-size:16px;letter-spacing:.01em;
+.p-card .p-name{position:absolute;left:0;right:0;bottom:0;padding:24px 13px 10px;color:#fff;font-weight:700;font-size:19px;letter-spacing:.01em;
   background:linear-gradient(to top,rgba(20,8,4,.72) 0%,rgba(20,8,4,.42) 55%,rgba(20,8,4,0) 100%);text-shadow:0 1px 4px rgba(0,0,0,.5);}
 .p-card .p-body{padding:10px;}
-.p-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
-.p-stat{background:var(--snow-green-soft);border-radius:4px;padding:7px 6px;text-align:center;}
+.p-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:9px;}
+.p-stat{background:var(--snow-green-soft);border-radius:4px;padding:8px 6px;text-align:center;}
 .p-stat.warm{background:var(--snow-wine-soft);}
-.p-stat .k{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);font-weight:600;}
-.p-stat .v{font-size:13px;font-weight:700;color:var(--snow-ink);margin-top:2px;font-family:var(--number-font,inherit);white-space:nowrap;}
-.p-card .p-cta{width:100%;height:38px;padding:0;font-size:14px;letter-spacing:.04em;border-radius:4px;}
+.p-stat .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);font-weight:600;}
+.p-stat .v{font-size:16px;font-weight:700;color:var(--snow-ink);margin-top:2px;font-family:var(--number-font,inherit);white-space:nowrap;}
+.p-card .p-cta{width:100%;height:44px;padding:0;font-size:16px;letter-spacing:.04em;border-radius:4px;}
 .product-card__stats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:10px 16px;}
 .product-card__cta{width:100%;min-height:44px;margin-top:16px;border-radius:4px;font-size:14px;}
 
@@ -488,36 +488,37 @@ a{color:inherit;}
    rows that carry a progress bar, days remaining, earned-vs-still-to-come
    and a live next-payout countdown. */
 .mp-band{margin:0 0 14px;padding:20px 18px 16px;background:var(--chipz-hero);color:#fff;}
-.mp-band-k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;font-weight:600;}
-.mp-band-v{font-size:32px;font-weight:700;margin-top:4px;line-height:1.05;}
-.mp-band-sub{font-size:12.5px;opacity:.8;margin-top:6px;}
+.mp-band-k{font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;font-weight:600;}
+.mp-band-v{font-size:38px;font-weight:700;margin-top:4px;line-height:1.05;}
+.mp-band-sub{font-size:14.5px;opacity:.8;margin-top:6px;}
 .mp-band-row{display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.22);}
 .mp-band-row > div{flex:1;min-width:0;}
-.mp-band-row span{display:block;font-size:11px;opacity:.75;}
-.mp-band-row b{display:block;font-size:15px;font-weight:700;margin-top:2px;white-space:nowrap;}
+.mp-band-row span{display:block;font-size:13px;opacity:.75;}
+.mp-band-row b{display:block;font-size:17px;font-weight:700;margin-top:2px;white-space:nowrap;}
 .mp-filters{display:flex;gap:8px;margin:0 16px 12px;}
-.mp-f{flex:1;min-width:0;height:34px;border:1px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-muted);border-radius:4px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:none;}
-.mp-f i{font-style:normal;opacity:.7;font-size:11px;}
+/* Owner: "remove counter showing number of plans, it is in userpanel so
+   remove it." The `<i>3</i>` badge is gone from the markup, so its two
+   rules go with it rather than styling an element that no longer exists. */
+.mp-f{flex:1;min-width:0;height:42px;border:1px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-muted);border-radius:4px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;box-shadow:none;}
 .mp-f.on{background:var(--chipz-grad);color:#fff;border-color:transparent;}
-.mp-f.on i{opacity:.85;}
 .mp-list{display:flex;flex-direction:column;gap:10px;margin:0 16px;}
-.mp-row{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:4px;padding:13px 14px;}
+.mp-row{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:4px;padding:16px 15px;}
 .mp-row.done{opacity:.85;}
 .mp-top{display:flex;align-items:center;gap:11px;}
-.mp-thumb{width:38px;height:38px;flex-shrink:0;border-radius:4px;background:var(--chipz-hero);display:flex;align-items:center;justify-content:center;overflow:hidden;color:#fff;font-weight:700;font-size:15px;}
+.mp-thumb{width:46px;height:46px;flex-shrink:0;border-radius:4px;background:var(--chipz-hero);display:flex;align-items:center;justify-content:center;overflow:hidden;color:#fff;font-weight:700;font-size:18px;}
 .mp-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
 .mp-id{flex:1;min-width:0;}
-.mp-name{font-size:14.5px;font-weight:600;color:var(--snow-ink);}
-.mp-meta{font-size:12px;color:var(--snow-muted);margin-top:1px;}
-.mp-chip{flex-shrink:0;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--snow-green-soft);color:var(--snow-green);}
+.mp-name{font-size:17px;font-weight:600;color:var(--snow-ink);}
+.mp-meta{font-size:14px;color:var(--snow-muted);margin-top:1px;}
+.mp-chip{flex-shrink:0;font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--snow-green-soft);color:var(--snow-green);}
 .mp-chip.done{background:var(--snow-neutral-soft);color:var(--snow-muted);}
 .mp-bar{height:5px;background:var(--snow-neutral-soft);margin-top:13px;overflow:hidden;}
 .mp-bar i{display:block;height:100%;background:var(--chipz-grad);}
-.mp-days{display:flex;justify-content:space-between;font-size:11.5px;color:var(--snow-muted);margin-top:6px;}
+.mp-days{display:flex;justify-content:space-between;font-size:13.5px;color:var(--snow-muted);margin-top:6px;}
 .mp-figs{display:flex;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--snow-border);}
 .mp-figs > div{flex:1;min-width:0;}
-.mp-figs span{display:block;font-size:11px;color:var(--snow-muted);}
-.mp-figs b{display:block;font-size:14px;font-weight:700;color:var(--snow-ink);margin-top:2px;white-space:nowrap;}
+.mp-figs span{display:block;font-size:13px;color:var(--snow-muted);}
+.mp-figs b{display:block;font-size:16px;font-weight:700;color:var(--snow-ink);margin-top:2px;white-space:nowrap;}
 .mp-figs b.up{color:var(--snow-green);}
 .mp-next{display:flex;align-items:center;gap:6px;margin-top:11px;font-size:12px;color:var(--snow-muted);}
 .mp-next b{color:var(--snow-ink);font-weight:700;}
