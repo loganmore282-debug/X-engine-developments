@@ -1271,42 +1271,54 @@ picture everywhere instead of an emoji in one place and artwork in another.
 `align-items` moved from `baseline` to `center`: an image has no baseline and hung low
 against the text.
 
-### The running-plan progress bar, and the denominator that was wrong
+### How far along a plan is — no bar, and the denominator that was wrong
 
-Owner: *"does the progress bar on running investment work properly?"*
+Owner, first: *"does the progress bar on running investment work properly?"*
+Owner, later: *"remove progress bar on running products so on you will see how you'll
+organize it but remove progress bar."*
 
-It does — and the answer is now checkable rather than a reading of the code.
-`test-plan-progress.py` drives the built app with six investments and measures the
-**rendered geometry** of `.mp-bar i` against its track (a width the browser never
-applied is not a progress bar).
+**The bar is gone. What it was drawing is not.** `.mp-bar` was the only place it
+existed (the plan rows — there is no bar in the detail sheet or on Home), and
+`planStats().pct` went with it.
+
+**How the row was reorganised.** The `.mp-days` line under the bar was its *caption* —
+two muted greys 6px beneath the track. Left alone after the bar was deleted, it reads
+as a label for something that is no longer there. So it takes over the bar's own slot
+(13px below the header, where the eye already expects the next thing) and the day count
+is promoted to ink at 15px: **the fact the bar was drawing is now simply stated.** The
+right-hand half ("26 days left" / "Finished") stays muted at 13.5px, because it is the
+same arithmetic said a second way and must not compete with the count.
+
+`test-plan-progress.py` kept all six cases and changed what it reads — the rendered
+**text** instead of the fill's geometry. It also asserts, on the rendered rows, that no
+row draws a bar at all: grepping the built file would prove nothing, since the
+obfuscator encodes class names as strings.
 
 **What drives the width.** `planStats()` is the single source for every plan figure on
 both the My Products row and the detail sheet: `pct = payoutsMade / payoutsTotal`.
 `payoutsMade` is the count of daily payouts the **server has actually credited**, not
-elapsed wall-clock time, so the bar can never claim a day that was not paid. And
+elapsed wall-clock time, so the row can never claim a day that was not paid. And
 `/investments` calls `settleAllForUser(uid)` *before* it responds, so opening the screen
-settles everything that has come due first — the bar is current at the moment it is
+settles everything that has come due first — the count is current at the moment it is
 looked at, not as of the last cron tick. That is why it is honest to answer "yes" here:
 the number on screen and the money in the ledger come from the same field.
 
-**The one thing that was wrong.** The denominator fell back to a bare `|| 150` when an
+**The one thing that was wrong.** The cycle length fell back to a bare `|| 150` when an
 investment document carried no `payoutsTotal`. `/invest/create` always stamps that field,
 so anything bought through the app was fine — but a document written before the field
 existed measured itself against 150 days regardless of the cycle it was sold on. A 30-day
-plan four days in read **3% instead of 13%**: a bar that looks stuck on a plan that is
-running perfectly. The fallback is now a chain — `payoutsTotal` → the product's own
-`cycle` → `settings.cycleDays` → 150 — and the fixture uses **30-day products on purpose**,
-because a 150-day fixture cannot tell a correct denominator from the old hardcoded one.
+plan four days in read 3% on the old bar; in today's wording it would say **"Day 4 of
+150"** and claim 146 days left, on a plan sold as a 30-day one. The fallback is now a
+chain — `payoutsTotal` → the product's own `cycle` → `settings.cycleDays` → 150 — and the
+fixture uses **30-day products on purpose**, because a 150-day fixture cannot tell a
+correct cycle from the old hardcoded one.
 
-The other five states all passed before the fix and still do: 0% on the day of purchase,
-exactly 50% at half, 100% + "Matured" + countdown stopped at maturity, **clamped** to
-100% when the ledger pays one rounding day past the total (that has happened), and
-correct when every number arrives from the API as a **string** — the same JSON-typing
-that once turned a `+` into concatenation and produced the "1,000,000,500"-class figure
-recorded above.
-
-`.mp-bar` also picked up `--r-pill` here; it was the last track in the app still square
-after the surface pass.
+The other five states all passed before the fix and still do: Day 0 on the day of
+purchase, the exact half-way count, "Finished" + "Matured" + countdown stopped at
+maturity, **clamped** (not "Day 31 of 30") when the ledger pays one rounding day past the
+total (that has happened), and correct when every number arrives from the API as a
+**string** — the same JSON-typing that once turned a `+` into concatenation and produced
+the "1,000,000,500"-class figure recorded above.
 
 ### The congratulations card: what was slow, and the balance that grows
 

@@ -1988,16 +1988,16 @@ window.switchPlanFilter = function(f){
   paintProducts(false);
 };
 // Every figure this screen shows about one plan, worked out in one place so
-// the summary band, the row and the progress bar can never disagree.
+// the summary band and the row can never disagree.
 function planStats(inv){
-  // The DENOMINATOR of the progress bar. /invest/create always stamps
-  // payoutsTotal onto the investment, so that is the answer for anything
-  // bought through the app -- but a document written before that field
-  // existed has none, and a bare `|| 150` would then measure a plan against
-  // 150 days regardless of the cycle it was actually sold on. A 30-day plan
-  // four days in would read 3% instead of 13%, and the bar would look stuck.
-  // Fall back through the product's own cycle and the platform default
-  // before resorting to a constant.
+  // The CYCLE LENGTH -- the "of 30" in "Day 4 of 30", and what daysLeft counts
+  // down from. /invest/create always stamps payoutsTotal onto the investment,
+  // so that is the answer for anything bought through the app -- but a document
+  // written before that field existed has none, and a bare `|| 150` would then
+  // measure a plan against 150 days regardless of the cycle it was actually
+  // sold on: a 30-day plan four days in would say "Day 4 of 150" and claim 146
+  // days left. Fall back through the product's own cycle and the platform
+  // default before resorting to a constant.
   const prod = (STATE.products || []).find(p => p.key === inv.tierKey);
   const total = Number(inv.payoutsTotal)
     || (prod && Number(prod.cycle))
@@ -2015,7 +2015,6 @@ function planStats(inv){
     // rounding shilling never shows a negative "left to earn".
     remaining: Math.max(0, expected - earned),
     daysLeft: Math.max(0, total - made),
-    pct: total ? Math.min(100, Math.round(made / total * 100)) : 0,
     createdMs: new Date(inv.createdAt || Date.now()).getTime(),
   };
 }
@@ -2085,8 +2084,7 @@ function paintProducts(animate){
       </div>
       <span class="mp-chip ${st.matured?'done':''}">${st.matured?'Matured':'Running'}</span>
     </div>
-    <div class="mp-bar"><i style="width:${st.pct}%"></i></div>
-    <div class="mp-days"><span>Day ${st.made} of ${st.total}</span><span>${st.matured ? 'Finished' : st.daysLeft + ' day' + (st.daysLeft===1?'':'s') + ' left'}</span></div>
+    <div class="mp-days"><b>Day ${st.made} of ${st.total}</b><span>${st.matured ? 'Finished' : st.daysLeft + ' day' + (st.daysLeft===1?'':'s') + ' left'}</span></div>
     <div class="mp-figs">
       <div><span>Earned</span><b class="up">${fmtUGXCents(st.earned)}</b></div>
       <div><span>${st.matured ? 'Total paid' : 'Still to come'}</span><b>${fmtUGXCents(st.matured ? st.expected : st.remaining)}</b></div>

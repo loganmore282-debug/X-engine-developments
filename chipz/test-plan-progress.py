@@ -1,21 +1,26 @@
 """
-The running-investment progress bar, across the states it actually meets.
+How far along a running investment is, across the states it actually meets.
 
-Owner: "does the progress bar on running investment work properly?"
+Owner, first: "does the progress bar on running investment work properly?"
+Owner, later: "remove progress bar on running products."
 
-It does, and this is what makes that answer checkable rather than a reading of
-the code. The bar's width comes from planStats(): `payoutsMade / payoutsTotal`,
-where payoutsMade is the number of daily payouts the server has actually
-credited. /investments calls settleAllForUser() before responding, so opening
-the screen settles every day that has come due first -- the bar is current at
-the moment it is looked at, not as of the last cron tick.
+The bar is gone; the thing it was drawing is not. planStats() still works out
+`payoutsMade` of `payoutsTotal`, and the row now states it in words -- "Day 4 of
+30" with "26 days left" beside it. So this file kept every case and changed what
+it reads: the rendered TEXT instead of the fill's geometry. The arithmetic
+underneath, and every way it can go wrong, is identical.
+
+payoutsMade is the number of daily payouts the server has actually credited, and
+/investments calls settleAllForUser() before responding, so opening the screen
+settles every day that has come due first -- the count is current at the moment
+it is looked at, not as of the last cron tick.
 
 The six cases below are the ones that can actually turn up in the database:
 
-  new         bought today, nothing credited yet          -> 0%
-  mid         75 of 150 credited                          -> exactly 50%
-  matured     150 of 150, status matured                  -> 100%, no countdown
-  over-paid   151 of 150 (a rounding day)                 -> CLAMPED to 100%
+  new         bought today, nothing credited yet          -> Day 0
+  mid         half the cycle credited                     -> Day 15 of 30
+  matured     whole cycle credited, status matured        -> Finished, no countdown
+  over-paid   one day past the total (a rounding day)     -> CLAMPED, not "Day 31"
   legacy      no payoutsTotal field at all                -> falls back to the
                                                               product's own cycle
   strings     every number arrived as a JSON string       -> still correct
@@ -26,9 +31,12 @@ an API response is what turned a "+" into concatenation and produced the
 "1,000,000,500"-class corruption recorded in CLAUDE.md.
 
 The legacy case is the one that was WRONG until this file was written:
-planStats() fell back to a bare `|| 150`, so a 30-day plan four days in
-measured itself against 150 days and read 3% instead of 13% -- a bar that
-looks stuck on a plan that is running fine.
+planStats() fell back to a bare `|| 150`, so a 30-day plan four days in measured
+itself against 150 days. That used to read as a bar stuck at 3%; it would now
+read as "Day 4 of 150" on a plan sold as a 30-day one, and claim 146 days left.
+Same defect, more legible -- which is why the fixture still uses 30-day products
+on purpose. A 150-day fixture cannot tell a correct cycle from the old
+hardcoded 150.
 """
 import asyncio, datetime, json, os, sys, functools, threading, http.server, socketserver
 from playwright.async_api import async_playwright
@@ -69,15 +77,17 @@ def inv(iid, label, made, total, days, status="active", paid=0, strings=False):
                 d[k] = str(d[k])
     return d
 
-# label -> (expected fill %, expected "Day X of Y")
+# label -> (expected "Day X of Y", expected right-hand half)
 CASES = [
-    (inv("a", "New",       0,  CYCLE, 0),                                  0.0, f"Day 0 of {CYCLE}"),
-    (inv("b", "Mid",       15, CYCLE, 15, paid=45000),                    50.0, f"Day 15 of {CYCLE}"),
+    (inv("a", "New",       0,  CYCLE, 0),                    f"Day 0 of {CYCLE}",  "30 days left"),
+    (inv("b", "Mid",       15, CYCLE, 15, paid=45000),       f"Day 15 of {CYCLE}", "15 days left"),
     (inv("c", "Matured",   CYCLE, CYCLE, CYCLE, status="matured", paid=90000),
-                                                                         100.0, f"Day {CYCLE} of {CYCLE}"),
-    (inv("d", "Overpaid",  CYCLE + 1, CYCLE, CYCLE + 1, paid=93000),      100.0, f"Day {CYCLE} of {CYCLE}"),
-    (inv("e", "Legacy",    4,  None,  4, paid=12000),                     13.3, f"Day 4 of {CYCLE}"),
-    (inv("f", "Strings",   6,  CYCLE, 6, paid=18000, strings=True),        20.0, f"Day 6 of {CYCLE}"),
+                                                             f"Day {CYCLE} of {CYCLE}", "Finished"),
+    (inv("d", "Overpaid",  CYCLE + 1, CYCLE, CYCLE + 1, paid=93000),
+                                                             f"Day {CYCLE} of {CYCLE}", "Finished"),
+    (inv("e", "Legacy",    4,  None,  4, paid=12000),        f"Day 4 of {CYCLE}",  "26 days left"),
+    (inv("f", "Strings",   6,  CYCLE, 6, paid=18000, strings=True),
+                                                             f"Day 6 of {CYCLE}",  "24 days left"),
 ]
 ROUTES = {
     "/public/settings": {"status": "success", "settings": {
@@ -169,45 +179,59 @@ async def main():
         await page.wait_for_timeout(900)
 
         rows = await page.evaluate("""()=>[...document.querySelectorAll('.mp-row')].map(r=>{
-          const bar=r.querySelector('.mp-bar'), fill=r.querySelector('.mp-bar i');
-          const br=bar?bar.getBoundingClientRect():null, fr=fill?fill.getBoundingClientRect():null;
+          const d=r.querySelector('.mp-days');
+          const cs=d?getComputedStyle(d.querySelector('b')):null;
+          const ls=d&&d.querySelector('span')?getComputedStyle(d.querySelector('span')):null;
           return {name:(r.querySelector('.mp-name')||{}).textContent||'',
                   chip:((r.querySelector('.mp-chip')||{}).textContent||'').trim(),
-                  days:((r.querySelector('.mp-days span')||{}).textContent||'').trim(),
-                  barW:br?+br.width.toFixed(2):0, fillW:fr?+fr.width.toFixed(2):0,
-                  pct:(br&&br.width)?+(100*fr.width/br.width).toFixed(1):null,
-                  radius:bar?getComputedStyle(bar).borderTopLeftRadius:null,
+                  days:((d&&d.querySelector('b'))||{}).textContent||'',
+                  left:((d&&d.querySelector('span'))||{}).textContent||'',
+                  dayPx:cs?parseFloat(cs.fontSize):0, dayColor:cs?cs.color:'',
+                  leftPx:ls?parseFloat(ls.fontSize):0, leftColor:ls?ls.color:'',
+                  bars:r.querySelectorAll('.mp-bar').length,
                   countdown:!!r.querySelector('[data-countdown]')};})""")
         ck(len(rows) == len(CASES),
            "every plan rendered a row (%d of %d)" % (len(rows), len(CASES)))
         by_name = {r["name"].strip(): r for r in rows}
 
-        for src, want_pct, want_days in CASES:
+        # Owner: "remove progress bar on running products." Asserted on the
+        # rendered rows, not by grepping the source -- the obfuscated build
+        # encodes class names as strings, so a grep proves nothing here.
+        ck(sum(r["bars"] for r in rows) == 0,
+           "no plan row draws a progress bar (%d found)" % sum(r["bars"] for r in rows))
+
+        for src, want_days, want_left in CASES:
             name = src["tierLabel"]
             r = by_name.get(name)
             if not r:
                 ck(False, "%s: no row rendered" % name)
                 continue
-            print("   %-9s %5.1f%%  (%.1f/%.1fpx)  %-16s chip=%-8s countdown=%s"
-                  % (name, r["pct"], r["fillW"], r["barW"], r["days"], r["chip"], r["countdown"]))
-            # The bar is measured from RENDERED geometry, not the inline style:
-            # a width the browser never applied is not a progress bar.
-            ck(abs(r["pct"] - want_pct) <= 1.2,
-               "%s fills %.1f%% where %.1f%% is due" % (name, r["pct"], want_pct))
-            ck(r["days"] == want_days,
-               "%s reads %r" % (name, r["days"]))
+            print("   %-9s %-16s %-14s chip=%-8s countdown=%s"
+                  % (name, r["days"], r["left"], r["chip"], r["countdown"]))
+            ck(r["days"] == want_days, "%s reads %r" % (name, r["days"]))
+            ck(r["left"] == want_left, "%s and %r beside it" % (name, r["left"]))
 
-        # The two states that must differ in more than width.
+        # The two states that must differ in more than wording.
         ck(by_name["Matured"]["chip"] == "Matured" and not by_name["Matured"]["countdown"],
            "a finished plan says Matured and stops its next-payout countdown")
         ck(by_name["Mid"]["chip"] == "Running" and by_name["Mid"]["countdown"],
            "a running plan says Running and keeps counting down")
-        # Over-paying by a day must not produce a bar wider than its track.
-        ck(by_name["Overpaid"]["fillW"] <= by_name["Overpaid"]["barW"] + 0.5,
-           "an over-paid plan clamps to the track (%.1f <= %.1f)"
-           % (by_name["Overpaid"]["fillW"], by_name["Overpaid"]["barW"]))
-        ck(by_name["Mid"]["radius"] == "999px",
-           "the track is rounded like every other bar in the app (%s)" % by_name["Mid"]["radius"])
+        # Over-paying by a day must not produce "Day 31 of 30".
+        ck(by_name["Overpaid"]["days"] == f"Day {CYCLE} of {CYCLE}",
+           "an over-paid plan clamps rather than counting past its cycle (%s)"
+           % by_name["Overpaid"]["days"])
+        # With the bar gone this line is the row's own content, not a caption
+        # under a track: it has to be set in ink at the row's weight, or it
+        # reads as a label for something that is no longer there.
+        mid = by_name["Mid"]
+        print("   day count %.1fpx %s   |   days-left %.1fpx %s"
+              % (mid["dayPx"], mid["dayColor"], mid["leftPx"], mid["leftColor"]))
+        ck(mid["dayPx"] > mid["leftPx"],
+           "the day count outsizes the half beside it (%.1f vs %.1fpx)"
+           % (mid["dayPx"], mid["leftPx"]))
+        ck(mid["dayColor"] != mid["leftColor"],
+           "and is set in ink, not the muted grey its neighbour uses (%s vs %s)"
+           % (mid["dayColor"], mid["leftColor"]))
 
         await page.screenshot(path=f"{OUT}/plan-progress.png", full_page=True)
         ck(not errs, "no page errors: " + str(errs))

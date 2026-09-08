@@ -612,13 +612,17 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .mp-meta{font-size:14px;color:var(--snow-muted);margin-top:1px;}
 .mp-chip{flex-shrink:0;font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:var(--r-pill);background:var(--snow-green-soft);color:var(--snow-green);}
 .mp-chip.done{background:var(--snow-neutral-soft);color:var(--snow-muted);}
-/* The plan progress bar. It was the one track in the app with no radius at
-   all -- the surface pass tokenised every `border-radius:4px` and this rule
-   had none to tokenise, so a sharp 5px rectangle survived beside the
-   rounded milestone track it sits next to. */
-.mp-bar{height:6px;background:var(--snow-neutral-soft);margin-top:13px;overflow:hidden;border-radius:var(--r-pill);}
-.mp-bar i{display:block;height:100%;background:var(--chipz-grad);border-radius:var(--r-pill);}
-.mp-days{display:flex;justify-content:space-between;font-size:13.5px;color:var(--snow-muted);margin-top:6px;}
+/* Owner: "remove progress bar on running products so on you will see how
+   you'll organize it but remove progress bar."
+   The bar is gone. This line used to be its CAPTION -- two muted greys sitting
+   6px under the track, which without the bar above them read as a leftover
+   label rather than content. So it takes over the bar's own slot (13px, where
+   the eye already expects the next thing after the header) and the day count
+   is promoted to ink at the row's weight: the fact the bar was drawing is now
+   simply stated. The right-hand half stays muted, because "26 days left" is
+   the same arithmetic said a second way and should not compete with it. */
+.mp-days{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;color:var(--snow-muted);margin-top:13px;}
+.mp-days b{font-size:15px;font-weight:600;color:var(--snow-ink);}
 .mp-figs{display:flex;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--snow-border);}
 .mp-figs > div{flex:1;min-width:0;}
 .mp-figs span{display:block;font-size:13px;color:var(--snow-muted);}
