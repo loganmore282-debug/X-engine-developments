@@ -559,9 +559,17 @@ Two animation corrections, both after the owner rejected an earlier attempt.
   transition and the bounce is gone. `hookNavTapBox()`'s `animationend` listener matches
   on the keyframe NAME, so renaming the keyframe means renaming it there too.
 - **Loading text.** *"the letters on 'Loading...' and dots are in like wavy moving
-  animations."* Each letter and each dot is its own `<i>` running `loadWave` on a 55ms
-  stagger, so motion travels along the word. It was the whole word bobbing as one block.
+  animations."* Each letter and each dot is its own `<i>` running `loadWave`, so motion
+  travels along the word instead of the whole word bobbing as one block.
   `display:inline-block` is required — transform does nothing to an inline box.
+  Second pass, against a reference screenshot: *"the wave should be slow and words spaced
+  like that and 6 dots."* So **`Loading......` (six dots, 13 elements)**, `letter-spacing
+  .24em`, and the ripple slowed to a **2s** cycle with a **95ms** step (was 1.15s / 55ms),
+  taking 1.14s to cross the word. `letter-spacing` adds its gap *after* every character
+  including the last, which hung a quarter-em off the right and pushed the word visibly
+  off-centre — `.ls-text i:last-child{letter-spacing:0}` re-centres it. The reference's
+  cream-and-purple palette was deliberately not copied; shape from the reference, colours
+  from Chipz.
 
 **Measuring the loading wave is a trap.** During real boot the main thread is busy
 inflating and running the ~265KB core, so no frames are produced and

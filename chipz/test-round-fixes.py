@@ -111,13 +111,35 @@ async def main():
         await page.evaluate("()=>{document.getElementById('loadingScreen').style.display='flex';}")
         await page.wait_for_timeout(120)
         letters = await page.evaluate("()=>[...document.querySelectorAll('#loadingScreen .ls-text i')].map(e=>e.textContent)")
-        ck(''.join(letters) == 'Loading...', "every letter and dot is its own element (%r)" % ''.join(letters))
-        ck(len(letters) == 10, "10 of them, so the dots animate too (%d)" % len(letters))
+        # Six dots, per the reference screenshot the owner sent.
+        ck(''.join(letters) == 'Loading......', "every letter and dot is its own element (%r)" % ''.join(letters))
+        ck(len(letters) == 13, "13 of them: 7 letters and 6 dots (%d)" % len(letters))
+        ck(''.join(letters).count('.') == 6, "six dots, not three")
         delays = await page.evaluate(
             "()=>[...document.querySelectorAll('#loadingScreen .ls-text i')].map(e=>getComputedStyle(e).animationDelay)")
         secs = [float(d.replace('s','')) for d in delays]
         ck(secs == sorted(secs) and secs[-1] > secs[0],
            "each one starts later than the last, which is what makes it a wave not a bob (%s…%s)" % (delays[0], delays[-1]))
+        # "the loader animation wave should be slow" -- both halves of that:
+        # the per-letter bob AND how long the ripple takes to cross the word.
+        dur = await page.evaluate(
+            "()=>getComputedStyle(document.querySelector('#loadingScreen .ls-text i')).animationDuration")
+        ck(float(dur.replace('s','')) >= 1.8, "the bob itself is slow (%s a cycle, was 1.15s)" % dur)
+        ck(secs[-1] >= 1.0,
+           "and the ripple takes over a second to cross the word (%.2fs, was 0.5s)" % secs[-1])
+        # Wider spacing, and still centred despite it.
+        space = await page.evaluate(
+            "()=>getComputedStyle(document.querySelector('#loadingScreen .ls-text')).letterSpacing")
+        ck(float(space.replace('px','')) >= 3.5, "the letters are set wide apart (%s)" % space)
+        centring = await page.evaluate("""() => {
+            const t = document.querySelector('#loadingScreen .ls-text').getBoundingClientRect();
+            const last = getComputedStyle(document.querySelector('#loadingScreen .ls-text i:last-child')).letterSpacing;
+            return { offset: Math.round((t.left + t.width/2) - innerWidth/2), lastSpacing: last };
+        }""")
+        ck(centring['lastSpacing'] in ('normal', '0px'),
+           "with no trailing gap after the final dot (%s)" % centring['lastSpacing'])
+        ck(abs(centring['offset']) <= 1,
+           "so the word sits centred, not pushed left by it (%dpx off)" % centring['offset'])
         # Sampled geometry: at one instant the letters must be at DIFFERENT
         # heights. A block bob has them all equal, and would pass every
         # stylesheet check above.

@@ -309,10 +309,21 @@ a{color:inherit;}
    the same keyframe on a staggered delay (set inline in the markup below),
    so the motion travels along the word left to right like a ripple.
    inline-block is required: transform does nothing to an inline box. */
-#loadingScreen .ls-text{font-family:'Playfair Display',Georgia,serif;font-size:18px;letter-spacing:.06em;color:#fff;display:flex;}
-#loadingScreen .ls-text i{display:inline-block;font-style:normal;animation:loadWave 1.15s ease-in-out infinite;}
+/* Second pass, against a reference screenshot: "the loader animation wave
+   should be slow and words spaced like that and 6 dots". So: letters set
+   wide apart, six dots instead of three, and the ripple slowed right down --
+   a 2s cycle with a 95ms step between letters, where it was 1.15s and 55ms.
+   The reference's own cream-and-purple palette is deliberately NOT copied;
+   the standing rule is to take the shape from a reference and keep Chipz's
+   colours. */
+#loadingScreen .ls-text{font-family:'Playfair Display',Georgia,serif;font-size:18px;letter-spacing:.24em;color:#fff;display:flex;}
+#loadingScreen .ls-text i{display:inline-block;font-style:normal;animation:loadWave 2s ease-in-out infinite;}
+/* letter-spacing adds its gap AFTER every character, including the last one,
+   which would hang a quarter-em of empty space off the right and leave the
+   word visibly off-centre. Dropping it on the final dot re-centres it. */
+#loadingScreen .ls-text i:last-child{letter-spacing:0;}
 /* A space collapses to nothing inside a flex row, so any gap in the word has
-   to hold its own width. "Loading..." has none today, but this keeps the
+   to hold its own width. "Loading......" has none today, but this keeps the
    effect intact if the wording ever changes. */
 #loadingScreen .ls-text i.sp{width:.32em;}
 @keyframes loadWave{
@@ -1329,7 +1340,7 @@ a{color:inherit;}
 
 <div id="loadingScreen">
   <div class="ls-wordmark">CHIP<b>Z</b></div>
-  <div class="ls-text" aria-label="Loading"><i style="animation-delay:0ms">L</i><i style="animation-delay:55ms">o</i><i style="animation-delay:110ms">a</i><i style="animation-delay:165ms">d</i><i style="animation-delay:220ms">i</i><i style="animation-delay:275ms">n</i><i style="animation-delay:330ms">g</i><i style="animation-delay:385ms">.</i><i style="animation-delay:440ms">.</i><i style="animation-delay:495ms">.</i></div>
+  <div class="ls-text" aria-label="Loading"><i style="animation-delay:0ms">L</i><i style="animation-delay:95ms">o</i><i style="animation-delay:190ms">a</i><i style="animation-delay:285ms">d</i><i style="animation-delay:380ms">i</i><i style="animation-delay:475ms">n</i><i style="animation-delay:570ms">g</i><i style="animation-delay:665ms">.</i><i style="animation-delay:760ms">.</i><i style="animation-delay:855ms">.</i><i style="animation-delay:950ms">.</i><i style="animation-delay:1045ms">.</i><i style="animation-delay:1140ms">.</i></div>
 </div>
 
 <div id="openingGate">
