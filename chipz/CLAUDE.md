@@ -932,6 +932,76 @@ Two things were measured rather than guessed:
 
 The strip is `pointer-events:none` so it can never swallow a tap meant for the chest.
 
+### The surface pass: three radii, real shadows, solid pills
+
+Owner, holding a mockup next to the live app: *"the mock up has very clean CSS, well
+ultra definition and quality cards and colour ... clean cards, well defined and high
+quality ... make sure it is enhanced through out the app."*
+
+What actually separated the two was not colour:
+
+- **91 rules hardcoded `border-radius:4px`.** At that size a corner reads as an
+  unfinished edge, not a decision. They now resolve to one of three tokens, and those
+  are the only radii in the file: `--r-card:16px` (panels, rows, sheets),
+  `--r-ctl:12px` (buttons, inputs, chips, tiles — tighter, so a control reads as
+  pressable rather than as a small card), `--r-pill:999px` (status pills, accent bars,
+  progress tracks). The one deliberate 4px left is the copy-button glyph, which is a
+  15px square drawn with borders.
+- **Every card leaned on a 1px hairline plus a shadow that never drew a pixel** — the
+  spreads were `-16px`/`-24px` against blurs of 18–34px, so nothing reached outside the
+  box. A hairline with no shadow is a wireframe. `--sh-card` is two layers: a 1–2px
+  contact shadow that defines the edge, and a wide soft one that lifts the card off the
+  cream canvas. The hairline stayed but dropped to `--line-soft`, an edge highlight
+  rather than the only thing holding the card together.
+- **Status pills** were pale tints with same-hue text. Now solid gradients with white
+  text and a shadow in their own hue. `.status-pill.active` on Team matches `.rec-pill`
+  exactly — one pill vocabulary, so a status looks like a status wherever it appears.
+  Pending on Team stays quiet on purpose: it is the absence of a thing.
+- **The D / W / T discs** were one flat wash with the letter in a darker tone of the
+  same colour. Three things give a 44px disc definition: a gradient so it has a lit
+  side, an inset 1px top highlight so it reads as raised, and a drop shadow tinted with
+  its **own** colour rather than grey. Green for money in, rose for money out — the
+  app's colours, not the mockup's purple. `.msg-row .av` and `.msg-detail .av` got the
+  same treatment; two avatars that nearly match is worse than one that does.
+
+**The pending orange is deliberately a stop deeper than the mockup's.** White on
+`#ffa726` measures **2.35:1** — a label you squint at outdoors, which matters for a
+Uganda mobile app. `#fb8c00 → #dd6b00` measures 2.77:1 and still lands as orange beside
+the green and the red. Saturating a pill is only an improvement if you can still read it,
+so `test-card-quality.py` asserts **both** directions: pill-vs-card ≥ 2.5 (the "defined"
+claim — pending went from 1.27:1 to 2.77:1) and text-on-pill ≥ 2.7 (the legibility floor).
+It samples the **rendered pixels**, because every pill and disc is a gradient and
+`background-color` on those computes to `rgba(0,0,0,0)` — an assertion against that value
+would pass no matter what the member sees.
+
+### The spin win shows the wheel, not a chest
+
+Owner: *"l want when one spins it shows that spin icon background icon l generated my
+own instead of chest box, so it will show that inside background blur."* His artwork is
+`user/spin-wheel.png`, cut out of the JPEG he sent by flood-filling the white **page**
+inward from the border — a global "white → transparent" would have punched holes in the
+wheel's own white segments, which are the same colour and only survive because they are
+enclosed by the yellow ring.
+
+`showChestWin(reward, balance, source)` takes the source as an argument rather than
+reading whichever screen is open: the spin's win lands four seconds after the tap, by
+which time the member may have moved. A gift-code win still shows the chest.
+
+The `.spin` variant carries its own filter. The chest is warm brown and the shared
+`brightness(1.3)` on the green flash just made it glow; the wheel is red and white, and
+the same treatment turned the red to mud and let green through the white segments until
+it read as mint. Verified by screenshot, not by reasoning about it.
+
+### Total Team wears the app's own team icon
+
+Owner: *"you failed to put that icon total team icon just as the same team icon on our
+app, dont use that in mockup."* The card had no icon at all, and the mockup he was
+holding up marks it with a bare emoji. It is now `/nav-team.png` — literally the same
+file the bottom nav loads, asserted as such in `test-card-quality.py`, so "team" is one
+picture everywhere instead of an emoji in one place and artwork in another.
+`align-items` moved from `baseline` to `center`: an image has no baseline and hung low
+against the text.
+
 ### Snow residues that were still live (round 2)
 
 The first sweep covered wording a member reads. These were *functional*, and each one

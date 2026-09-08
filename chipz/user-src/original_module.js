@@ -2205,7 +2205,7 @@ function paintTeam(){
   let html = `
 <div style="height:18px;"></div>
 <div class="team-gcard" style="margin:0 18px;">
-  <div class="row1"><span class="lbl">Total Team</span><span class="num mono" id="teamTotalCount">${t.totalTeam || 0}</span></div>
+  <div class="row1"><img class="ic" src="/nav-team.png" alt="" onerror="this.remove()"><span class="lbl">Total Team</span><span class="num mono" id="teamTotalCount">${t.totalTeam || 0}</span></div>
   <div class="ln"></div>
   <div class="amt mono" id="teamDepositsAmt">${fmtUGXCents(t.teamDeposits)}</div>
   <div class="cap">Purchase</div>
@@ -2584,7 +2584,7 @@ window.doTurntableSpin = async function(){
     if (acc.status === 'success') STATE.account = acc.account;
     await refreshTransactionsCache();
     await refreshTurntable();
-    showChestWin(r.reward, (STATE.account || {}).walletBalance || 0);
+    showChestWin(r.reward, (STATE.account || {}).walletBalance || 0, 'spin');
     if (STATE.page === 'account') renderAccount();
   }, 4000);
 };
@@ -2918,7 +2918,22 @@ window.submitChestKey = async function(){
   closeSheet({ fromAction: true });
   showChestWin(r.reward, (STATE.account || {}).walletBalance || 0);
 };
-function showChestWin(reward, balance){
+// One win card, two sources -- and the blurred artwork behind it names which.
+// Owner: "when one spins it shows that spin icon background icon l generated
+// my own instead of chest box." A spin is not a treasure chest, and showing a
+// chest behind a turntable win was the screen telling the member the wrong
+// story about where their money came from.
+//
+// The source is passed in rather than read off whatever screen happens to be
+// open: the spin's own win lands four seconds after the tap, by which time the
+// member may well have moved.
+function showChestWin(reward, balance, source){
+  const ghost = $('chestWinGhost');
+  if (ghost) {
+    const spin = source === 'spin';
+    ghost.src = spin ? '/spin-wheel.png' : '/treasure-chest.png';
+    ghost.classList.toggle('spin', spin);
+  }
   $('chestWinAmount').textContent = fmtUGX2(reward);
   $('chestWinBalance').textContent = 'New Balance: ' + fmtUGX2(balance);
   $('chestWinBg').classList.add('show');
