@@ -1522,6 +1522,63 @@ the same sage as the rings and the wash, which is why that block reads as one th
 his and read as a plain grey box in ours. Only this field is greened — it is the one
 that belongs to the chest.
 
+### A stray `*/` silently ate one CSS rule — read this before editing the stylesheet
+
+This is the most dangerous mistake available in `user-src/index.html`, and it happened
+here. A round appended a new explanatory paragraph *after* a comment that had already
+closed with its own `*/`, leaving the prose as raw text at the top level of the
+stylesheet with a second `*/` after it. CSS error recovery treated the prose as a
+selector and swallowed **the very next rule** as part of it: `.msg-detail-bg` lost its
+background, its blur and its bottom inset, while every rule after it kept working
+normally.
+
+No parse error, no console warning, no build failure, one rule missing. It was caught
+only because a screenshot assertion noticed the backdrop had no colour — otherwise it
+would have shipped looking exactly like the bug the owner had just reported.
+
+**`test-css-comments.js` now guards both stylesheets** (user and admin, in the SOURCE
+files, since that is where the editing happens) and includes a poisoned fixture proving
+the checker catches this exact shape. When adding to an existing comment block, extend
+the block — do not start writing after its `*/`.
+
+### The message sheet, round 2: real blur, and the nav left alone
+
+Owner: *"the mockup shows good blur very well but see yours, not even blur … see the
+message when tapped, it leaves a nav icons but see yours how you did it and you poorly
+designed it."*
+
+Two faults, both measured off his screenshot.
+
+1. **The blur was applying; the tint was hiding it.** At `.42` the wash was opaque
+   enough that the blurred page beneath stopped being legible as content — and you
+   cannot see a blur you cannot see through. Tint down to `.26`, blur up to `20px`. An
+   `@supports not` fallback raises the tint to `.62` where `backdrop-filter` is
+   unsupported (older Android WebViews), so the card never floats on nothing.
+2. **His overlay stops above the bottom bar.** Sampling his left gutter, the tint runs
+   to y=1841 of 2085 and the nav below is untinted and sharp. Ours covered the whole
+   screen. It is now `bottom:var(--nav-h)` — the same rule `.sheet-bg` already uses, so
+   this is the app's own convention rather than a number invented here.
+
+**The card floats.** Measured: it spans x=45..1035 of 1080 (a 4.2% side inset = 16px at
+390), its bottom sits ~16px above the overlay's own bottom, every corner is rounded, and
+its height is 898 of 2085 = **43% of the screen** — the previous `58vh` minimum made a
+short message noticeably taller than his. It still rises from below; it now comes to
+rest 16px up instead of against the screen edge.
+
+### The red band above the app was `theme-color`
+
+Owner: *"why app still have red upper title color? it takes space even."*
+
+Android paints the status bar with `theme-color`, and at `#e21b2a` it read as a separate
+red title bar sitting on top of the app rather than as part of it — which is exactly why
+it looked like it was taking space. Both `<meta name="theme-color">` and
+`manifest.json`'s `theme_color` are now the app's own paper `#fbf1e8`, so the status bar
+becomes the top of the page. Chrome picks dark status icons for a light theme colour, so
+the clock stays readable.
+
+**An already-installed app keeps the colour it was installed with** until it is
+reinstalled — reopening is not enough for this one.
+
 ### Snow residues that were still live (round 2)
 
 The first sweep covered wording a member reads. These were *functional*, and each one

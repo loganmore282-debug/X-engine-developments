@@ -6,7 +6,7 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#fbf1e8",
-  "theme_color": "#e21b2a",
+  "theme_color": "#fbf1e8",
   "icons": [
     {
       "src": "https://chipz-server.onrender.com/public/app-icon-192.png",

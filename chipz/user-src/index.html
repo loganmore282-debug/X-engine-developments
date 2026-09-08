@@ -4,7 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Chipz</title>
-<meta name="theme-color" content="#e21b2a">
+<!-- Owner: "why app still have red upper title color? it takes space even."
+     That red band above the app is Android painting the status bar with
+     theme-color, and at #e21b2a it reads as a separate red title bar sitting
+     on top of the app rather than as part of it -- which is exactly why it
+     looks like it is taking space. Set to the app's own paper, the status bar
+     becomes the top of the page and the band disappears. Chrome picks dark
+     status icons for a light theme colour, so the clock stays readable.
+     NOTE: manifest.json's theme_color must match, and an ALREADY-INSTALLED
+     app keeps the colour it was installed with until it is reinstalled. -->
+<meta name="theme-color" content="#fbf1e8">
 <link rel="manifest" href="/manifest.json">
 <!-- The app icon and the share card are both admin-uploadable, which is why
      these point at chipz-server rather than at the files sitting next to
@@ -1181,18 +1190,44 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    Chipz's -- say the word and it goes green.
    backdrop-filter is what does the blurring; the rgba on top does the tint.
    Both are needed: the blur alone leaves the colour of whatever is behind it,
-   and the tint alone is what we already had. */
-.msg-detail-bg{position:fixed;inset:0;background:rgba(238,112,34,.42);
-  -webkit-backdrop-filter:blur(14px) saturate(1.15);backdrop-filter:blur(14px) saturate(1.15);
+   and the tint alone is what we already had.
+
+   ROUND 2, owner: "the mockup shows good blur very well but see yours, not
+   even blur ... see the message when tapped, it leaves a nav icons but see
+   yours how you did it."
+   Two separate faults, both measured off his latest screenshot.
+   (1) The blur WAS applying -- the tint was hiding it. At .42 the wash was
+       opaque enough that the blurred page underneath stopped being legible as
+       content, which is what "not even blur" describes: you cannot see a blur
+       you cannot see through. His backdrop keeps the list's shapes plainly
+       visible behind the glass. Tint down to .26, blur up to 20px, so there is
+       something recognisable behind it.
+   (2) His overlay STOPS ABOVE THE BOTTOM BAR -- sampling his left gutter, the
+       tint runs to y=1841 of 2085 and the nav below it is untinted and sharp.
+       Ours covered the whole screen. `bottom:var(--nav-h)` is the same rule
+       .sheet-bg already uses, so this is the app's own convention rather than
+       a number invented here. */
+.msg-detail-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
+  background:rgba(238,112,34,.26);
+  -webkit-backdrop-filter:blur(20px) saturate(1.2);backdrop-filter:blur(20px) saturate(1.2);
   display:none;align-items:flex-end;z-index:305;}
+/* No backdrop-filter (older Android WebViews): a light tint alone would leave
+   the page behind fully legible and the card floating on nothing, so lean on
+   opacity instead. Deliberate, not accidental. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .msg-detail-bg{background:rgba(238,112,34,.62);}
+}
 .msg-detail-bg.show{display:flex;}
-/* Rounded at the TOP only. It is anchored to the bottom of the screen, so the
-   lower corners were being rounded against an edge nobody can see, which is
-   what stops a bottom sheet reading as a sheet.
-   min-height so a two-line message still arrives as a panel rather than a
-   strip: his sits at 86% of the screen, ours was 24%. Kept as a minimum, not
-   a fixed height, so a long message can still grow to the 88vh ceiling. */
-.msg-detail{width:100%;max-width:480px;margin:0 auto;background:var(--snow-surface);border-radius:26px 26px 0 0;padding:26px 22px 30px;position:relative;box-shadow:0 -18px 44px -18px rgba(20,10,5,.45);animation:sheetUp .42s cubic-bezier(.22,1,.36,1);min-height:58vh;max-height:88vh;overflow-y:auto;}
+/* A FLOATING card, not a sheet welded to the screen edge -- that is what
+   "poorly designed it" is pointing at. Measured off his screenshot: the card
+   spans x=45..1035 of 1080, so a 4.2% side inset (16px at 390), its bottom
+   edge sits 39px above the overlay's own bottom (another ~16px), and every
+   corner is rounded. Its height is 898 of 2085 = 43% of the screen; the old
+   58vh minimum made a short message noticeably taller than his.
+   It still rises from below -- the owner asked for that in an earlier round
+   and this does not undo it; it now travels to a resting place 16px up rather
+   than to the screen edge. */
+.msg-detail{width:calc(100% - 32px);max-width:448px;margin:0 auto 16px;background:var(--snow-surface);border-radius:26px;padding:26px 22px 30px;position:relative;box-shadow:0 18px 44px -14px rgba(20,10,5,.42);animation:sheetUp .42s cubic-bezier(.22,1,.36,1);min-height:43vh;max-height:calc(100% - 32px);overflow-y:auto;}
 /* It really slides now. It was translateY(24px) over .22s -- a nudge you have
    to be looking for, which is exactly "message doesn't slide from down". From
    100% of its own height means it starts fully below the fold and travels the

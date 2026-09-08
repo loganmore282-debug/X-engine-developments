@@ -312,21 +312,46 @@ async def main():
             "const d=document.querySelector('.msg-detail');"
             "const r=d.getBoundingClientRect(); const cs=getComputedStyle(bg);"
             "const ds=getComputedStyle(d);"
+            "const br=bg.getBoundingClientRect();"
+            "const nav=document.querySelector('.bottom-nav');"
+            "const nr=nav?nav.getBoundingClientRect():null;"
             "return {h:+r.height.toFixed(1), vh:innerHeight,"
             " filter:(cs.backdropFilter||cs.webkitBackdropFilter||'none'),"
-            " topR:ds.borderTopLeftRadius, botR:ds.borderBottomLeftRadius};}")
+            " tint:cs.backgroundColor,"
+            " topR:ds.borderTopLeftRadius, botR:ds.borderBottomLeftRadius,"
+            " left:+r.left.toFixed(1), right:+(innerWidth-r.right).toFixed(1),"
+            " bgBottom:+br.bottom.toFixed(1), navTop:nr?+nr.top.toFixed(1):null,"
+            " gapUnderCard:+(br.bottom-r.bottom).toFixed(1)};}")
         print("   slide max %d, settles %d | %s" % (max(frames), frames[-1], det))
         # It was translateY(24px) over .22s -- a nudge, i.e. "doesn't slide
         # from down". A real slide starts at roughly the sheet's own height.
         ck(max(frames) >= det["h"] * 0.85,
            "the sheet really slides up from below (travels %dpx of its %dpx height)"
            % (max(frames), det["h"]))
-        ck(frames[-1] == 0, "and settles flush at the bottom (%d)" % frames[-1])
+        ck(frames[-1] == 0, "and settles at rest (%d)" % frames[-1])
         ck("blur" in det["filter"],
            "the backdrop is blurred, which is what 'blurry' meant (%s)" % det["filter"])
-        ck(det["topR"] != det["botR"] and det["botR"] == "0px",
-           "rounded at the top only -- it is anchored to the screen edge (%s / %s)"
+        # Owner, round 2: "see the message when tapped, it leaves a nav icons
+        # but see yours how you did it and you poorly designed it." In his the
+        # overlay stops above the bottom bar and the card floats clear of every
+        # edge; ours covered the screen and welded the card to the bottom.
+        ck(det["navTop"] is not None and abs(det["bgBottom"] - det["navTop"]) <= 1.5,
+           "the backdrop stops at the bottom bar, leaving the nav sharp (%.0f vs %.0f)"
+           % (det["bgBottom"], det["navTop"]))
+        ck(det["topR"] == det["botR"] and det["botR"] != "0px",
+           "the card is rounded on every corner -- it floats, not welded to an edge (%s / %s)"
            % (det["topR"], det["botR"]))
+        ck(det["left"] >= 12 and det["right"] >= 12,
+           "and is inset from both sides like his (%.0f / %.0fpx)"
+           % (det["left"], det["right"]))
+        ck(det["gapUnderCard"] >= 12,
+           "with the same gap beneath it (%.0fpx)" % det["gapUnderCard"])
+        # "not even blur" was the tint drowning it: a wash opaque enough to
+        # hide the page hides the blur too. Read off the declared alpha, since
+        # the composite is checked in pixels just below.
+        alpha = float(det["tint"].rstrip(")").split(",")[-1]) if "rgba" in det["tint"] else 1.0
+        ck(alpha <= 0.34,
+           "the tint stays see-through enough for the blur to read (alpha %.2f)" % alpha)
         # Rendered pixels, not the declared colour: the tint and the blur
         # composite, and only the result can be compared with his screenshot.
         shot = await page.screenshot(clip={"x": 40, "y": 60, "width": 300, "height": 120})
