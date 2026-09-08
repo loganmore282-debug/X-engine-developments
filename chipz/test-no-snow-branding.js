@@ -85,8 +85,18 @@ ck(!/Join Snow/.test(stripComments(mod)), 'and no "Join Snow" anywhere');
 // -- that nothing in the file spells a platform name out by hand any more.
 ck(/openSheet\('About ' \+ brandName\(\)/.test(mod),
    'the About sheet title is built from the admin-set app name');
-ck(/function brandName\(\)/.test(mod) && /return n \|\| 'Chipz'/.test(mod),
-   "and brandName() still falls back to 'Chipz' when nothing is set");
+// brandNameKnown() answers "what is this app called, if anything knows yet"
+// and is allowed to answer nothing; brandName() is the sentence-safe wrapper
+// that has a last-resort fallback. The wordmark must go through the FIRST of
+// those -- a hardcoded wordmark is exactly what kept the loading screen on
+// the old name after a rename.
+ck(/function brandNameKnown\(\)/.test(mod), 'brandNameKnown() exists');
+ck(/return cached \|\| ''/.test(mod),
+   'and it is allowed to return nothing rather than guess a name');
+ck(/function brandName\(\)\s*\{\s*return brandNameKnown\(\) \|\| 'Chipz';/.test(mod),
+   "brandName() keeps a last-resort fallback, for sentences only");
+ck(/const n = brandNameKnown\(\)\.toUpperCase\(\);\s*\n\s*if \(!n\) return '';/.test(mod),
+   'and the wordmark renders nothing at all when the name is not known yet');
 // No hardcoded name left anywhere in the module's actual CODE. Comments are
 // stripped first: this file's own explanations say "Chipz" constantly, and
 // an assertion that matched them would fail for a reason that has nothing to

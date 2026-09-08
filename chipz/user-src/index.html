@@ -75,7 +75,7 @@
   /* Chipz-specific additions (no Snow equivalent) */
   /* Bottom nav height. Grew from 68px when the icons did -- owner, twice:
      "the nav icons are small". */
-  --nav-h:76px;
+  --nav-h:68px;
   --chipz-orange:#ff8a1f;
   --chipz-grad:linear-gradient(135deg,#e21b2a 0%,#ff8a1f 100%);
   --chipz-hero:linear-gradient(120deg,#1a0d08 0%,#7c0a1c 45%,#ff8a1f 100%);
@@ -235,7 +235,7 @@ a{color:inherit;}
    `transform` belongs entirely to the animation.
    The cap matters on a wide phone: 6 tabs across a 430px screen give ~71px
    each, and a box that grew to fill it would nearly touch its neighbours. */
-.navitem::before{content:'';position:absolute;top:3px;left:3px;right:3px;max-width:62px;margin:0 auto;height:48px;
+.navitem::before{content:'';position:absolute;top:3px;left:3px;right:3px;max-width:56px;margin:0 auto;height:42px;
   border-radius:14px;background:rgba(226,27,42,.13);opacity:0;transform:scale(.72);pointer-events:none;z-index:0;
   transition:opacity .2s ease,transform .2s ease;}
 .navitem.active::before{opacity:1;transform:scale(1);}
@@ -289,14 +289,16 @@ a{color:inherit;}
    same id -- the colours just had to follow the card. */
 #activityTickerTrack b{color:var(--snow-ink);font-weight:600;}
 #activityTickerTrack .sep{color:var(--snow-border);}
-/* 38px, not the mockup's 23px, and not the 30px this sat at for a while.
-   The mockup was drawn at desk size; on a real phone with six tabs sharing
-   the width they read as specks. The owner has now asked twice -- "nav icons
-   are too small" both times -- so this is the second bump, and the bar grew
-   with it (--nav-h) rather than squeezing a bigger glyph into the old height
-   and clipping the label under it. */
-.navitem .nav-ic{display:flex;align-items:center;justify-content:center;height:38px;}
-.navitem .nav-ic img{width:38px;height:38px;object-fit:contain;filter:grayscale(1) opacity(.55);transition:filter .15s;}
+/* 31px. The history matters, because this has now been wrong in both
+   directions: the mockup drew these at 23px, which read as specks on a real
+   phone with six tabs sharing the width, so two rounds of "the nav icons are
+   small" pushed them to 38 -- and 38 turned out to be too far the other way
+   ("reduce on sizes of nav icons, they are too big eeh"). 31 is between the
+   two, nearer the smaller end because that is the direction of the last
+   complaint. The bar comes down with it (--nav-h 76 -> 68) rather than
+   leaving a shrunken glyph floating in the old height. */
+.navitem .nav-ic{display:flex;align-items:center;justify-content:center;height:31px;}
+.navitem .nav-ic img{width:31px;height:31px;object-fit:contain;filter:grayscale(1) opacity(.55);transition:filter .15s;}
 .navitem.active .nav-ic img{filter:none;}
 
 
@@ -404,7 +406,13 @@ a{color:inherit;}
    the admin-settable background image is applied over the gradient by
    applyLoadingBackground() when one is configured. */
 #loadingScreen{position:fixed;inset:0;background:linear-gradient(165deg,#0b0b0c 0%,#3a0e12 55%,#7c0a1c 100%);background-size:cover;background-position:center;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;}
-#loadingScreen .ls-wordmark{font-family:'Playfair Display',Georgia,serif;font-size:34px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;margin-bottom:36px;}
+/* The pre-launch gate's wordmark. It used to be styled inline on the
+   element, which stopped working the moment the mark became generated
+   markup -- the generated <b> had no way to inherit an inline rule from the
+   node it replaced. */
+#openingGate .og-mark{font-family:'Playfair Display',Georgia,serif;font-size:36px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;}
+#openingGate .og-mark b{color:var(--chipz-gold);font-weight:400;}
+#loadingScreen .ls-wordmark{font-family:'Playfair Display',Georgia,serif;font-size:34px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;margin-bottom:36px;min-height:42px;}
 #loadingScreen .ls-wordmark b{color:var(--chipz-orange);font-weight:400;}
 /* Owner: "the letters on 'Loading...' and dots are in like wavy moving
    animations". It was the whole word bobbing as one block, which reads as a
@@ -1550,12 +1558,69 @@ a{color:inherit;}
 <body>
 
 <div id="loadingScreen">
-  <div class="ls-wordmark" data-brandmark>CHIP<b>Z</b></div>
+  <div class="ls-wordmark" data-brandmark></div>
   <div class="ls-text" aria-label="Loading"><i style="animation-delay:0ms">L</i><i style="animation-delay:95ms">o</i><i style="animation-delay:190ms">a</i><i style="animation-delay:285ms">d</i><i style="animation-delay:380ms">i</i><i style="animation-delay:475ms">n</i><i style="animation-delay:570ms">g</i><i style="animation-delay:665ms">.</i><i style="animation-delay:760ms">.</i><i style="animation-delay:855ms">.</i><i style="animation-delay:950ms">.</i><i style="animation-delay:1045ms">.</i><i style="animation-delay:1140ms">.</i></div>
 </div>
 
+<script>
+/* THE APP'S NAME, PAINTED BEFORE ANYTHING ELSE.
+ *
+ * Owner: "l had made a little bit changes in names but on start up loader it
+ * was still saying chipz."
+ *
+ * He is describing a real gap, not a bug in the rename. The name lives in
+ * Admin -> Settings and reaches the app over the network, but the loading
+ * screen is on screen precisely while that request is in flight -- so the
+ * loader could only ever show whatever was compiled into this file, and what
+ * was compiled in was the old name. Every boot, forever.
+ *
+ * So the name is remembered on the device the first time it is known, and
+ * this runs before the 250KB core inflates: every launch after the very first
+ * paints the real name in the first frame. It sits here rather than in the
+ * head because the loading screen has to exist for it to write into, and the
+ * DOMContentLoaded pass catches the marks further down the document (the
+ * sign-in header, the announcement banner, the pre-launch gate).
+ *
+ * Nothing here falls back to a hard-coded name. Owner: "let's not make chipz
+ * to be default name" -- on a genuinely first-ever launch the mark stays
+ * blank for the moment it takes settings to land, which is why .ls-wordmark
+ * carries a min-height. A blank that fills in is honest; the wrong name is
+ * not.
+ *
+ * The mark is built with createTextNode/createElement rather than innerHTML.
+ * The server already refuses < and > in the name, but this value has been
+ * through localStorage, and building nodes is injection-proof by
+ * construction instead of by remembering to escape.
+ */
+(function(){
+  var KEY = 'chipz_brand_name';
+  var name = '';
+  try { name = (localStorage.getItem(KEY) || '').trim(); } catch (e) {}
+  // The module reads this instead of its own localStorage: one read, one
+  // place that knows the key.
+  window.__brandCached = name;
+  if (!name) return;
+  document.title = name;
+  var up = name.toUpperCase();
+  window.__paintBrandMarks = function(){
+    var els = document.querySelectorAll('[data-brandmark]');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      el.textContent = '';
+      if (up.length > 1) el.appendChild(document.createTextNode(up.slice(0, -1)));
+      var b = document.createElement('b');
+      b.textContent = up.slice(-1);
+      el.appendChild(b);
+    }
+  };
+  window.__paintBrandMarks();
+  document.addEventListener('DOMContentLoaded', window.__paintBrandMarks);
+})();
+</script>
+
+
 <div id="openingGate">
-  <div style="font-family:'Playfair Display',Georgia,serif;font-size:36px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;">CHIP<b style="color:var(--chipz-gold);font-weight:400;">Z</b></div>
+  <div class="og-mark" data-brandmark></div>
   <div class="og-label">Opening in</div>
   <div class="og-countdown" id="openingGateCountdown">--:--:--</div>
   <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
@@ -1570,7 +1635,7 @@ a{color:inherit;}
       <span class="auth-tri t2" aria-hidden="true"></span>
       <div class="mark-row">
         <span class="mark-tri" aria-hidden="true"></span>
-        <span class="auth-wordmark" data-brandmark>CHIP<b>Z</b></span>
+        <span class="auth-wordmark" data-brandmark></span>
       </div>
       <div id="authTagline" style="position:relative;z-index:2;text-align:center;font-size:14px;color:rgba(255,255,255,.92);font-weight:600;padding:0 40px;display:none;"></div>
     </div>
@@ -1669,7 +1734,7 @@ a{color:inherit;}
   <div class="announce-wrap">
     <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h1 class="announce-title" id="announceTitle">Welcome</h1>
-    <div class="announce-banner" id="announceBanner"><div class="wm" data-brandmark>CHIP<b>Z</b></div></div>
+    <div class="announce-banner" id="announceBanner"><div class="wm" data-brandmark></div></div>
     <div class="announce-scroll"><p id="announceBody"></p></div>
     <div class="announce-footer">
       <button class="primary-button" id="announceTelegramBtn" style="width:100%;height:52px;padding:0;font-size:16px;display:none;align-items:center;justify-content:center;gap:8px;" onclick="openAnnounceTelegram()">

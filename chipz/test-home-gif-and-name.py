@@ -265,14 +265,110 @@ async def main():
         await page.screenshot(path=f"{OUT}/renamed.png")
         await ctx.close()
 
-        # ── 4. Never set: the shipped default still reads Chipz ──
+        # ── 4. Nothing known: the mark stays BLANK, it does not guess ──
+        # Owner: "let's not make chipz to be default name ... l had made a
+        # little bit changes in names but on start up loader it was still
+        # saying chipz." A hardcoded fallback is what produced that: the
+        # loading screen is up while /public/settings is still in flight, so
+        # the fallback was the only thing it could ever show. A blank that
+        # fills in is honest; the wrong name is not.
         ctx = await b.new_context(viewport={"width": 390, "height": 844},
                                   device_scale_factor=2, service_workers="block")
         page = await open_app(ctx, routes(None, None), errs)
         n4 = await page.evaluate(NAMES)
-        ck(n4["wordmark"] == "CHIPZ",
-           "with the setting never saved it still says CHIPZ (%s)" % n4["wordmark"])
-        ck(n4["title"] == "Chipz", "and the tab still says Chipz (%s)" % n4["title"])
+        print("  ", n4)
+        ck((n4["wordmark"] or "").strip() == "",
+           "with no name known the wordmark is blank, not a guess (%r)" % n4["wordmark"])
+        ck((n4["loadingWordmark"] or "").strip() == "",
+           "and so is the loading screen's (%r)" % n4["loadingWordmark"])
+        await ctx.close()
+
+        # The blank must not collapse the layout it sits in, or the loader's
+        # dots jump up the screen and back down when the name lands. Measured
+        # on a page where the loading screen is genuinely UP -- a fresh context
+        # (so nothing is remembered) with the settings response held open.
+        # Reading the height after boot would measure a display:none element
+        # and report 0 for a correct implementation.
+        ctx = await b.new_context(viewport={"width": 390, "height": 844},
+                                  device_scale_factor=2, service_workers="block")
+        cold = await ctx.new_page()
+        cold.on("pageerror", lambda e: errs.append(str(e)))
+
+        async def held_api(r):
+            path = "/" + r.request.url.split("://", 1)[-1].split("/", 1)[-1].split("?")[0]
+            if path.endswith("/public/settings"):
+                await asyncio.sleep(3)
+            body = next((v for k, v in routes(None, None).items() if path.endswith(k)),
+                        {"status": "success"})
+            await r.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+        await cold.route(f"{API}/**", held_api)
+        await cold.route("https://fonts.googleapis.com/**",
+                         lambda r: asyncio.ensure_future(r.fulfill(status=200, content_type="text/css", body="")))
+        await cold.route("https://www.gstatic.com/firebasejs/**/firebase-app.js",
+                         lambda r: asyncio.ensure_future(r.fulfill(status=200, content_type="text/javascript", body=FB_APP)))
+        await cold.route("https://www.gstatic.com/firebasejs/**/firebase-auth.js",
+                         lambda r: asyncio.ensure_future(r.fulfill(status=200, content_type="text/javascript", body=FB_AUTH)))
+        await cold.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="commit")
+        await cold.wait_for_timeout(700)
+        loader = await cold.evaluate("""()=>{const ls=document.getElementById('loadingScreen');
+          const el=document.querySelector('.ls-wordmark');
+          const dots=document.querySelector('.ls-text');
+          return {up: !!ls && getComputedStyle(ls).display !== 'none',
+                  mark: el ? el.textContent : null,
+                  h: el ? +el.getBoundingClientRect().height.toFixed(1) : 0,
+                  dotsY: dots ? +dots.getBoundingClientRect().top.toFixed(1) : 0};}""")
+        print("  ", loader)
+        ck(loader["up"], "the loading screen is genuinely on screen for this measurement")
+        ck((loader["mark"] or "").strip() == "",
+           "a first-ever launch shows no name at all (%r)" % loader["mark"])
+        ck(loader["h"] >= 40,
+           "and the empty mark still holds its height, so nothing jumps (%.1fpx)" % loader["h"])
+        await ctx.close()
+
+        # ── 5. The name is remembered, so the NEXT launch paints it first ──
+        # This is the actual fix for the loader complaint. The first launch
+        # learns the name over the network; every launch after paints it
+        # before the core has even inflated.
+        print("\n— remembered across launches —")
+        ctx = await b.new_context(viewport={"width": 390, "height": 844},
+                                  device_scale_factor=2, service_workers="block")
+        page = await open_app(ctx, routes("Voltrix", None), errs)
+        stored = await page.evaluate("()=>localStorage.getItem('chipz_brand_name')")
+        ck(stored == "Voltrix", "the name is written to the device (%r)" % stored)
+        # Same browser context = same localStorage, so this second page is a
+        # relaunch of an app that has already run once.
+        page2 = await ctx.new_page()
+        early = []
+        page2.on("pageerror", lambda e: errs.append(str(e)))
+        # Hold the settings request open: this proves the mark is painted from
+        # the remembered name and NOT from the response, which is exactly the
+        # window the loading screen lives in.
+        async def slow_api(r):
+            path = "/" + r.request.url.split("://", 1)[-1].split("/", 1)[-1].split("?")[0]
+            if path.endswith("/public/settings"):
+                await asyncio.sleep(3)
+            body = next((v for k, v in routes("Voltrix", None).items() if path.endswith(k)),
+                        {"status": "success"})
+            await r.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+        await page2.route(f"{API}/**", slow_api)
+        await page2.route("https://fonts.googleapis.com/**",
+                          lambda r: asyncio.ensure_future(r.fulfill(status=200, content_type="text/css", body="")))
+        await page2.route("https://www.gstatic.com/firebasejs/**/firebase-app.js",
+                          lambda r: asyncio.ensure_future(r.fulfill(status=200, content_type="text/javascript", body=FB_APP)))
+        await page2.route("https://www.gstatic.com/firebasejs/**/firebase-auth.js",
+                          lambda r: asyncio.ensure_future(r.fulfill(status=200, content_type="text/javascript", body=FB_AUTH)))
+        await page2.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="commit")
+        await page2.wait_for_timeout(700)
+        onload = await page2.evaluate("""()=>{const el=document.querySelector('.ls-wordmark');
+          return {mark: el ? el.textContent : null, title: document.title,
+                  settingsIn: !!(window.STATE && STATE.settings && STATE.settings.brandName)};}""")
+        print("  ", onload)
+        ck(not onload["settingsIn"],
+           "settings have deliberately NOT arrived yet -- this is the loader's own window")
+        ck(onload["mark"] == "VOLTRIX",
+           "and the loading screen already shows the remembered name (%r)" % onload["mark"])
+        ck(onload["title"] == "Voltrix", "as does the tab title (%r)" % onload["title"])
         await ctx.close()
 
         ck(not errs, "no page errors: " + str(errs))

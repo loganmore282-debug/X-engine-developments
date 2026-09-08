@@ -951,6 +951,91 @@ Two things were measured rather than guessed:
 
 The strip is `pointer-events:none` so it can never swallow a tap meant for the chest.
 
+### The name is remembered on the device, and the manifest is rewritten
+
+Owner: *"let's not make chipz to be default name, let's make it to be backend such that
+the set name abides every functions except others like api, callback curls but system
+visuals should be backend, ie l had made a little bit changes in names but on start up
+loader it was still saying chipz, also on app even if l had uninstall and installed."*
+
+Two separate gaps, and neither was a bug in the rename:
+
+**The loading screen.** It is on screen *precisely while `/public/settings` is in
+flight*, so it could only ever paint what was compiled into `index.html` — and that was
+the old name, on every launch, forever. Fixed by remembering the name on the device:
+`applyBrandName()` writes `localStorage['chipz_brand_name']`, and a small plain
+`<script>` sitting immediately after the loading-screen markup reads it back and paints
+the mark **before the 250KB core inflates**. Every launch after the first shows the real
+name in the first frame. Proven in `test-home-gif-and-name.py` by holding the settings
+response open for three seconds and asserting the loader already reads `VOLTRIX` while
+`STATE.settings.brandName` is still undefined.
+
+**Nothing falls back to a hardcoded wordmark any more.** `brandNameKnown()` may return
+`''`; `brandWordmarkHtml()` renders nothing when it does, and the static markup ships
+empty. On a genuinely first-ever launch the mark is blank for the moment settings take
+to land — `.ls-wordmark` carries a `min-height` so the dots don't jump — because a blank
+that fills in is honest and the wrong name is not. `brandName()` keeps a `'Chipz'` last
+resort **for sentences only** ("Welcome to the  app" is worse than a stale name), and
+`brandTextMark()` uses it deliberately: that one is the fallback for a *broken image*,
+where an empty badge would be a hole in the card.
+
+**The install prompt.** `manifest.json`'s `name` is what Android prints under the icon
+and what Chrome's "Install app" sheet shows — a static file on a static host, so the
+rename could not reach it. The **service worker** now rewrites it: it owns this origin's
+responses, so it can hand Chrome a manifest built from the live setting while keeping it
+same-origin. A cross-origin or `data:` manifest is not an alternative — `scope` and
+`start_url` resolve against the manifest's own origin, so either breaks installing
+outright.
+
+It is best-effort by construction, and `test-brand-manifest.js` runs `sw.js` in a `vm`
+to prove each failure path: backend offline, setting unset, a non-JSON body (captive
+portal wifi), and fully offline all fall back to the file **as shipped, icons intact** —
+a phone that cannot install the app is far worse than one that installs under last
+week's name. A known name is served immediately with the refresh running behind it,
+because a manifest fetch happens while Chrome is deciding whether to offer the prompt
+and blocking it on a cold Render backend is how the prompt never appears. The interception
+must sit **before** the navigate and cache-first branches (`/manifest.json` is in
+`SHELL`), and `activate()` spares `BRAND_CACHE` or every deploy would forget the name.
+
+Playwright cannot test this: every Playwright test here runs `service_workers="block"`,
+because an unblocked worker intercepts the stubbed API calls and the rest of the suite
+goes dark.
+
+**What a rename still does NOT reach:** the `og:`/`twitter:` link-preview title, which a
+crawler reads out of the static file. That is a share card, not a system visual, and it
+needs a redeploy.
+
+### Busy buttons say what they are doing
+
+Owner: *"on login it should not say please wait, it should say logging in..., so
+everywhere saying please wait... it should be removed."* "Please wait" tells the member
+the app is busy — which the disabled button already says — and nothing about *what* is
+happening, which is the one thing that makes a two-second pause on a money screen feel
+safe rather than stuck.
+
+`setBtnLoading(id, loading, label, busy)` now takes the busy label as a **required
+argument** rather than defaulting: a new loading button with no label is a visible blank,
+not a silent fall back to the wrong words. Login → *Logging in…*, Sign Up → *Creating
+your account…*, wallet → *Saving wallet…*, deposit → *Sending request…*, withdraw →
+*Submitting…*, purchase → *Purchasing…*, confirm → *Working…*, admin credit/debit →
+*Crediting… / Debiting…*.
+
+Checked by driving the real button in `test-card-quality.py`, not by grepping: the
+obfuscator replaces every string literal with a lookup into an encoded array, so
+"Logging in…" is not present as text at **any** layer of `user/index.html` and a grep
+would pass whether the label were right, wrong, or missing.
+
+### The nav icon size has now been wrong in both directions
+
+The mockup drew them at 23px, which read as specks with six tabs sharing a phone's
+width. Two rounds of *"the nav icons are small"* pushed them to 38px — and 38 drew
+*"reduce on sizes of nav icons, they are too big eeh"*. They are **31px** now, with
+`--nav-h` 76 → 68 and the active-tab slab 48 → 42 so the bar comes down with the glyph
+instead of leaving it floating in the old height.
+
+`test-round-fixes.py` asserts a **band** (28–34), not a floor. The old check was
+`>= 36`, which is exactly how it drifted to 38 with nothing objecting.
+
 ### The surface pass: three radii, real shadows, solid pills
 
 Owner, holding a mockup next to the live app: *"the mock up has very clean CSS, well

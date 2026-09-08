@@ -284,7 +284,14 @@ async def main():
                          return !!(t && t.closest('.chest-float')); })() : null };
         }""")
         print("   ", size)
-        ck(size["icon"] >= 36, "the nav icon is %dpx (was 30, and 23 before that)" % size["icon"])
+        # This number has now been wrong in BOTH directions: the mockup's 23px
+        # read as specks, two rounds of "the nav icons are small" pushed it to
+        # 38, and 38 drew "reduce on sizes of nav icons, they are too big eeh".
+        # So the check is a band, not a floor -- a floor is what let it drift
+        # to 38 without anything objecting.
+        ck(28 <= size["icon"] <= 34,
+           "the nav icon is %dpx -- inside the band that satisfied both complaints "
+           "(23 too small, 38 too big)" % size["icon"])
         ck(size["lblBottom"] <= size["barBottom"],
            "the label still fits inside the bar (%d <= %d)" % (size["lblBottom"], size["barBottom"]))
         ck(size["itemH"] <= size["barH"],

@@ -140,16 +140,40 @@ var NUMBER_FONT_STACKS = {
 // The fallback is not decoration: settings arrive over the network, and the
 // login screen paints before they land. Without it the very first frame of a
 // cold open would have a blank space where the name goes.
-function brandName(){
+// What the app is CALLED, if anything actually knows yet. Three sources, in
+// order of freshness: the settings this session fetched, then the name this
+// device remembered from the last session (written by index.html's own early
+// script, which runs before this file inflates), then nothing.
+//
+// "Nothing" is a real answer and callers must handle it. Owner: "let's not
+// make chipz to be default name" -- a hardcoded default is exactly what made
+// the loading screen keep saying the old name after he had renamed the app,
+// because the loader is on screen while the settings request is still in
+// flight, so the default was all it could ever show.
+function brandNameKnown(){
   const n = STATE.settings && typeof STATE.settings.brandName === 'string'
     ? STATE.settings.brandName.trim() : '';
-  return n || 'Chipz';
+  if (n) return n;
+  const cached = typeof window.__brandCached === 'string' ? window.__brandCached.trim() : '';
+  return cached || '';
 }
+// For SENTENCES, where a blank would read as a broken string ("Welcome to
+// the  app"). The wordmark deliberately does NOT use this -- see
+// brandWordmarkHtml().
+function brandName(){
+  return brandNameKnown() || 'Chipz';
+}
+var BRAND_CACHE_KEY = 'chipz_brand_name';
 // The wordmark: the whole name in caps with the LAST letter in the accent
 // colour -- the CHIP+Z treatment, expressed as a rule instead of two literals
 // so it survives a rename. A one-letter name has no lead, hence the guard.
+// The wordmark shows the name or NOTHING. It is the one place a guess is
+// worse than a blank: a blank for the half-second before settings land reads
+// as the logo loading, while the wrong name reads as the rename not having
+// worked -- which is precisely the report that started this.
 function brandWordmarkHtml(){
-  const n = brandName().toUpperCase();
+  const n = brandNameKnown().toUpperCase();
+  if (!n) return '';
   return n.length < 2 ? `<b>${esc(n)}</b>` : esc(n.slice(0, -1)) + '<b>' + esc(n.slice(-1)) + '</b>';
 }
 // Paints the name into the places that are NOT re-rendered from JavaScript:
@@ -163,15 +187,31 @@ function brandWordmarkHtml(){
 // code, so those two carry the name at deploy time and a rename needs a
 // frontend redeploy to reach them.
 function applyBrandName(){
-  const mark = brandWordmarkHtml();
-  document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = mark; });
-  try { document.title = brandName(); } catch (_) {}
+  const known = brandNameKnown();
+  if (!known) return;   // nothing to say yet; leave the blanks blank
+  document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = brandWordmarkHtml(); });
+  try { document.title = known; } catch (_) {}
+  // Remember it for the next launch. This is the whole fix for "on start up
+  // loader it was still saying chipz": the loading screen paints long before
+  // /public/settings answers, so the only way it can show the right name is
+  // to already know it. Written on every apply, so a rename reaches the
+  // loader on the boot AFTER the one that learned it -- there is no earlier
+  // moment available to a screen that is up before the network answers.
+  try {
+    if (window.__brandCached !== known) {
+      localStorage.setItem(BRAND_CACHE_KEY, known);
+      window.__brandCached = known;
+    }
+  } catch (_) {}
 }
 // The name as plain text inside the round profile badge on Account. On
 // `window` because two inline onerror="" attributes call it -- see
 // renderAccount(). Font size divides by the name's length for the same reason
 // chipzMarkHtml()'s does: the badge is a fixed 68px circle with overflow
 // hidden, so a longer name at 19px would simply have its ends cut off.
+// Uses brandName(), not brandNameKnown(): this is the fallback shown when the
+// profile image itself failed to load, so an empty badge would be a hole in
+// the card rather than a graceful blank.
 window.brandTextMark = function(){
   const name = brandName().toUpperCase();
   const fs = Math.min(19, Math.max(9, Math.round(95 / Math.max(1, name.length))));
@@ -312,10 +352,20 @@ function showAuthTab(tab){
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
   $('loginError').innerHTML = ''; $('regError').innerHTML = '';
 }
-function setBtnLoading(id, loading, label){
+// Owner: "on login it should not say please wait, it should say logging
+// in... so everywhere saying please wait... it should be removed."
+//
+// "Please wait" tells the member the app is busy, which they can already see
+// from the disabled button -- and tells them nothing about WHAT is happening,
+// which is the one thing that makes a two-second pause on a money screen feel
+// safe rather than stuck. Every busy button in this file now names its own
+// action, so `busy` is a required argument, not a default: adding a new
+// loading button and forgetting the label is now a visible blank rather than
+// a silent fall back to the wrong words.
+function setBtnLoading(id, loading, label, busy){
   const btn = $(id);
   btn.disabled = loading;
-  btn.textContent = loading ? 'Please wait…' : label;
+  btn.textContent = loading ? (busy || '') : label;
 }
 function fbErrMsg(e){
   const code = e && e.code || '';
@@ -362,7 +412,7 @@ window.doLogin = async function(){
   if (!phone) return $('loginError').innerHTML = '<div class="auth-error">Enter a valid Uganda mobile number.</div>';
   if (!pass) return $('loginError').innerHTML = '<div class="auth-error">Enter your password.</div>';
   $('loginError').innerHTML = '';
-  setBtnLoading('loginBtn', true);
+  setBtnLoading('loginBtn', true, 'Log In', 'Logging in…');
   try {
     const email = phoneToEmail(phone);
     await window.fbSignIn(email, pass);
@@ -396,7 +446,7 @@ window.doRegister = async function(){
   if (!referral && referralIsRequired())
     return $('regError').innerHTML = '<div class="auth-error">A referral code is required to sign up. Ask the person who invited you for theirs.</div>';
   $('regError').innerHTML = '';
-  setBtnLoading('regBtn', true);
+  setBtnLoading('regBtn', true, 'Sign Up', 'Creating your account…');
   STATE.refCode = referral;
   window._pendingRegPin = pin;
   window._pendingRegPhone = phone;
@@ -2487,7 +2537,7 @@ window.submitWallet = async function(){
   if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
   if (!holder) return notify('Enter the account holder name.');
   const btn = $('walSaveBtn');
-  btn.disabled = true; btn.textContent = 'Please wait…';
+  btn.disabled = true; btn.textContent = 'Saving wallet…';
   const r = await post('/bank/save', { holder, network, phone });
   btn.disabled = false; btn.textContent = 'Submit';
   if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
@@ -4008,7 +4058,7 @@ window.submitDeposit = async function(){
   const amount = parseMoneyInput($('depAmount').value);
   const phone = $('depPhone').value;
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
-  $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Please wait…';
+  $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Sending request…';
   // No network field on this form (Round 145) -- the gateway detects it
   // from the phone number itself; server.js already treats `network` as
   // optional here.
@@ -4142,7 +4192,7 @@ window.submitWithdraw = async function(){
   }
   if (!acct) return notify('Bind your wallet before withdrawing.');
   if (!/^\d{6}$/.test(pin)) return notify('Enter your 6-digit Trade Password.');
-  $('witSubmitBtn').disabled = true; $('witSubmitBtn').textContent = 'Please wait…';
+  $('witSubmitBtn').disabled = true; $('witSubmitBtn').textContent = 'Submitting…';
   const r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin });
   $('witSubmitBtn').disabled = false; $('witSubmitBtn').textContent = 'Confirm Withdraw';
   if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
@@ -4163,7 +4213,7 @@ window.openInvestConfirm = async function(tierKey, btn){
   const p = (STATE.products||[]).find(x => x.key === tierKey);
   if (!p) return;
   const label = btn && btn.textContent;
-  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = 'Please wait…'; }
+  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = 'Purchasing…'; }
   const r = await post('/invest/create', { tierKey });
   if (btn) { btn.disabled = false; btn.textContent = label || 'Buy Now'; }
   if (r.status !== 'success') {
@@ -4202,7 +4252,7 @@ function openSimpleConfirm(title, body, onConfirm){
     <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;">Confirm</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
   $('confirmActionBtn').onclick = async () => {
-    $('confirmActionBtn').disabled = true; $('confirmActionBtn').textContent = 'Please wait…';
+    $('confirmActionBtn').disabled = true; $('confirmActionBtn').textContent = 'Working…';
     const ok = await onConfirm();
     $('confirmActionBtn').disabled = false; $('confirmActionBtn').textContent = 'Confirm';
     if (ok) closeConfirm();

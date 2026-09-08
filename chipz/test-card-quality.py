@@ -313,6 +313,50 @@ async def main():
         ck(c["src"] == "/treasure-chest.png" and not c["spin"],
            "a gift-code win still shows the chest (%s)" % c["src"])
 
+        # ── Busy buttons say what they are doing ──
+        # Owner: "on login it should not say please wait, it should say logging
+        # in... so everywhere saying please wait... it should be removed."
+        #
+        # Driven through the real button rather than grepped: the obfuscator
+        # replaces every string literal with a lookup into an encoded array, so
+        # "Logging in…" is not present as text at ANY layer of the built file.
+        # A grep against user/index.html would pass whether the label were right,
+        # wrong, or missing entirely.
+        print("\n— busy buttons name their own action —")
+        labels = await page.evaluate("""async ()=>{
+          // Sign out to reach the auth screen, then hold the login request open
+          // so the busy state is observable instead of a single frame.
+          const seen = {};
+          window.fbSignIn = () => new Promise(()=>{});
+          if (typeof showAuth === 'function') showAuth();
+          const login = document.getElementById('loginBtn');
+          const reg = document.getElementById('regBtn');
+          if (login) {
+            document.getElementById('loginPhone').value = '0742730382';
+            document.getElementById('loginPassword').value = 'secret123';
+            doLogin();
+            await new Promise(r=>setTimeout(r,150));
+            seen.login = login.textContent.trim();
+          }
+          if (reg) {
+            setBtnLoading('regBtn', true, 'Sign Up', 'Creating your account…');
+            seen.register = reg.textContent.trim();
+            setBtnLoading('regBtn', false, 'Sign Up');
+            seen.registerIdle = reg.textContent.trim();
+          }
+          return seen;
+        }""")
+        print("  ", labels)
+        if labels.get("login") is not None:
+            ck("please wait" not in labels["login"].lower(),
+               "the login button does not say Please wait (%r)" % labels["login"])
+            ck("logging in" in labels["login"].lower(),
+               "it says what it is doing (%r)" % labels["login"])
+        ck(labels.get("register", "").lower().startswith("creating"),
+           "and Sign Up names its own action (%r)" % labels.get("register"))
+        ck(labels.get("registerIdle") == "Sign Up",
+           "the idle label still comes back (%r)" % labels.get("registerIdle"))
+
         ck(not errs, "no page errors: " + str(errs))
         await b.close()
 

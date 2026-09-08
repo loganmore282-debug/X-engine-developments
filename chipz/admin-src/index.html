@@ -1391,7 +1391,7 @@ async function openUser(uid){
   $('creditBtn')?.addEventListener('click', async()=>{
     if(!amt())return toast('Enter an amount','err');
     if(!confirm(`Credit ${ugx(amt())} to ${u.phone}'s wallet? This immediately increases their real balance.`)) return;
-    const b=$('creditBtn'); if(b.disabled)return; b.disabled=true; const lbl=b.textContent; b.innerHTML=btnBusyHtml('Please wait…');
+    const b=$('creditBtn'); if(b.disabled)return; b.disabled=true; const lbl=b.textContent; b.innerHTML=btnBusyHtml('Crediting…');
     const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()});
     toast(d.message||d.status, d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } else { b.disabled=false; b.textContent=lbl; }
@@ -1399,7 +1399,7 @@ async function openUser(uid){
   $('debitBtn')?.addEventListener('click', async()=>{
     if(!amt())return toast('Enter an amount','err');
     if(!confirm(`Debit ${ugx(amt())} from ${u.phone}'s wallet? This immediately reduces their real balance.`)) return;
-    const b=$('debitBtn'); if(b.disabled)return; b.disabled=true; const lbl=b.textContent; b.innerHTML=btnBusyHtml('Please wait…');
+    const b=$('debitBtn'); if(b.disabled)return; b.disabled=true; const lbl=b.textContent; b.innerHTML=btnBusyHtml('Debiting…');
     const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()});
     toast(d.message||d.status, d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } else { b.disabled=false; b.textContent=lbl; }
