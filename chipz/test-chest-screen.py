@@ -1,4 +1,4 @@
-import asyncio, json, os, sys, functools, threading, http.server, socketserver
+import asyncio, json, os, re, sys, functools, threading, http.server, socketserver
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
 ROOT = '/home/user/X-engine-developments/chipz/user'
@@ -96,18 +96,37 @@ async def main():
         info = await page.evaluate("""()=>{const inp=document.querySelector('#chestKey');
           const rules=[...document.querySelectorAll('.chest-rule')];
           const ring=document.querySelector('.glow-ring');
-          const rb=getComputedStyle(ring,'::before');
+          const rb=getComputedStyle(ring,'::before'), ra=getComputedStyle(ring,'::after');
           const img=document.querySelector('.glow-ring img');
           return {align:getComputedStyle(inp).textAlign, fontSize:getComputedStyle(inp).fontSize,
                   rules:rules.length, ruleClasses:rules.map(r=>r.className),
                   ruleW:rules.length?+rules[0].getBoundingClientRect().width.toFixed(0):0,
                   ringStyle:rb.borderTopStyle, ringWidth:rb.borderTopWidth,
+                  outerInset:rb.top, innerStyle:ra.borderTopStyle, innerInset:ra.top,
+                  innerColor:ra.borderTopColor, wash:getComputedStyle(ring).backgroundImage,
                   chestLoaded: img && img.complete && img.naturalWidth>0,
                   chestAnim: getComputedStyle(img).animationName};}""")
         for k,v in info.items(): print("  %-12s %s" % (k,v))
         ck(info["align"]=="center", "key text is centred like the mockup")
         ck(info["rules"]==2 and set(['chest-rule top','chest-rule bottom'])<=set(info["ruleClasses"]), "hairline above and below the block")
-        ck(info["ringStyle"]=="dotted", "ring is fine dots, not heavy dashes")
+        # Owner: "on treasure chest there are 2 linings circulating the chest
+        # box, you can even see clearly that one inside is solid and one outside
+        # is dotted ... also some greener background on that chest box."
+        ck(info["ringStyle"]=="dotted", "the OUTER ring is fine dots, not heavy dashes")
+        ck(info["innerStyle"]=="solid", "and the INNER one is solid (%s)" % info["innerStyle"])
+        # Inside, not outside: a solid ring drawn wider than the dotted one
+        # would satisfy "two rings" and still be the wrong picture.
+        outer = float(info["outerInset"].replace("px",""))
+        inner = float(info["innerInset"].replace("px",""))
+        ck(inner > outer,
+           "the solid ring sits inside the dotted one (%.0f > %.0fpx)" % (inner, outer))
+        # The wash behind the chest was orange; his is a green one. Read off the
+        # computed gradient so a later re-theme cannot quietly undo it.
+        g = info["wash"]
+        stops = re.findall(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", g)
+        first = [int(n) for n in stops[0]] if stops else None
+        ck(first is not None and first[1] > first[0] and first[1] > first[2],
+           "the wash behind the chest is green, not the old orange (%s)" % (first,))
         ck(info["chestLoaded"], "chest artwork loaded")
         ck(info["chestAnim"]=="chestBounce", "chest still animates here too")
         await page.screenshot(path=f"{OUT}/chest.png",full_page=False)

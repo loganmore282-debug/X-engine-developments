@@ -1987,6 +1987,25 @@ window.switchPlanFilter = function(f){
   _planFilter = f;
   paintProducts(false);
 };
+// "12 Aug 2026". Owner: "make sure that one running investment, it shows Date
+// bought." Written out rather than toLocaleDateString(): the month name is
+// spelled the same on every phone regardless of its locale, and a numeric date
+// would be read as 12/08 by some members and 08/12 by others.
+//
+// An investment whose createdAt is missing or unparseable gets an em dash, not
+// today's date -- planStats() falls back to Date.now() for the countdown, which
+// is the right guess for "when is the next payout" and completely the wrong one
+// for "when did I buy this".
+// Takes the RAW createdAt (an ISO string, or ms), never planStats().createdMs
+// -- that one falls back to Date.now(), which is the right guess for "when is
+// the next payout due" and completely the wrong one for "when did I buy this".
+var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDay(value){
+  if (!value) return '—';
+  const d = new Date(typeof value === 'number' ? value : String(value));
+  if (isNaN(d.getTime())) return '—';
+  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear();
+}
 // The owner's orbiting-chips animation, marking a plan that is still ongoing.
 // Built once as a constant rather than per row: it is fixed markup, and
 // paintProducts() re-renders the whole list on every filter tap and every
@@ -2094,6 +2113,7 @@ function paintProducts(animate){
       <span class="mp-chip ${st.matured?'done':''}">${st.matured?'Matured':'Ongoing'}</span>
     </div>
     <div class="mp-days"><span class="lead">${st.matured ? '' : PLAN_SPIN}<b>Day ${st.made} of ${st.total}</b></span><span>${st.matured ? 'Finished' : st.daysLeft + ' day' + (st.daysLeft===1?'':'s') + ' left'}</span></div>
+    <div class="mp-bought">Bought ${fmtDay(inv.createdAt)}</div>
     <div class="mp-figs">
       <div><span>Earned</span><b class="up">${fmtUGXCents(st.earned)}</b></div>
       <div><span>${st.matured ? 'Total paid' : 'Still to come'}</span><b>${fmtUGXCents(st.matured ? st.expected : st.remaining)}</b></div>

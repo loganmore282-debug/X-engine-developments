@@ -195,10 +195,15 @@ async def main():
         await page.evaluate("notify('Please enter the treasure chest key')")
         await page.wait_for_timeout(500)
         al = await page.evaluate("""()=>{const c=document.querySelector('.notify-card');
-          const ic=document.querySelector('.notify-icon svg'), ok=document.querySelector('.notify-ok');
-          const r=c.getBoundingClientRect(), ir=ic.getBoundingClientRect(), orr=ok.getBoundingClientRect();
+          // The warning sign is the emoji glyph now, not an <svg> -- the owner
+          // compared ours against his and his is the system emoji. Its ink is
+          // measured off the font-size, since a text node has no box of its own.
+          const ic=document.querySelector('.notify-icon'), ok=document.querySelector('.notify-ok');
+          const r=c.getBoundingClientRect(), orr=ok.getBoundingClientRect();
+          const ics=getComputedStyle(ic);
           return {w:+r.width.toFixed(1), h:+r.height.toFixed(1), vw:innerWidth,
-                  icon:+ir.width.toFixed(1), okW:+orr.width.toFixed(1), okH:+orr.height.toFixed(1),
+                  icon:parseFloat(ics.fontSize), glyph:(ic.textContent||'').trim(),
+                  okW:+orr.width.toFixed(1), okH:+orr.height.toFixed(1),
                   radius:getComputedStyle(ok).borderTopLeftRadius,
                   msg:document.getElementById('notifyMsg').textContent};}""")
         print("  ", al)
@@ -208,6 +213,8 @@ async def main():
         # message wraps too, which is why 53.3 is the reference.
         near(100 * al["h"] / al["vw"], 53.3, 6.0, "  card height")
         near(100 * al["icon"] / al["vw"], 11.0, 1.5, "  warning triangle")
+        ck(al["glyph"] == "⚠️",
+           "the warning sign is the emoji glyph, not a flat drawn triangle (%r)" % al["glyph"])
         near(100 * al["okW"] / al["vw"], 19.3, 2.5, "  OK button width")
         near(100 * al["okH"] / al["vw"], 11.0, 1.5, "  OK button height")
         ck(al["radius"] == "999px", "the OK is a pill, as in the mockup (%s)" % al["radius"])

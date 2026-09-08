@@ -624,6 +624,12 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .mp-days{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;color:var(--snow-muted);margin-top:13px;}
 .mp-days .lead{display:flex;align-items:center;gap:9px;min-width:0;}
 .mp-days b{font-size:15px;font-weight:600;color:var(--snow-ink);}
+/* Owner: "make sure that one running investment, it shows Date bought."
+   Its own quiet line rather than a third column in .mp-figs: those columns
+   would drop from 161px to 104px each, and "UGX 571,300.00" at 16px does not
+   fit in 104. Shown on matured rows too -- when a finished plan was bought is
+   the same fact, and hiding it there would be an odd gap. */
+.mp-bought{font-size:12.5px;color:var(--snow-muted);margin-top:5px;}
 
 /* ── THE ONGOING MARK ──
    Owner sent this as a 180px standalone loader ("put this animation on aside of
@@ -1017,7 +1023,11 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    the rounded rectangle it was. */
 .notify-card{width:100%;max-width:288px;background:var(--snow-surface);border-radius:var(--r-card);box-shadow:0 30px 60px -20px rgba(0,0,0,.4);overflow:hidden;text-align:center;animation:notifyPop .16s ease-out;}
 @keyframes notifyPop{from{transform:scale(.92);opacity:0;}to{transform:scale(1);opacity:1;}}
-.notify-icon{padding:34px 0 14px;line-height:0;}
+/* line-height:1 (not 0) now that this holds a glyph rather than an <svg>: a
+   zero line box clips an emoji's ascender. 43px keeps the ink the same height
+   the SVG occupied, measured against his reference. */
+.notify-icon{padding:32px 0 14px;line-height:1;font-size:43px;
+  font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;}
 .notify-msg{padding:0 24px 20px;font-size:15.5px;font-weight:700;color:var(--snow-ink);line-height:1.45;}
 /* Owner: "your button is long, it doesn't match words." It was stretched to
    the card width regardless of its label, so a two-letter "OK" sat in a bar
@@ -1034,10 +1044,25 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .chest-rule{width:64%;height:1px;flex-shrink:0;background:linear-gradient(to right,transparent,var(--snow-border) 22%,var(--snow-border) 78%,transparent);}
 .chest-rule.top{margin-bottom:22px;}
 .chest-rule.bottom{margin-top:24px;}
-.glow-ring{width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,138,31,.32),rgba(255,138,31,0) 70%);display:flex;align-items:center;justify-content:center;position:relative;}
-/* Fine dots, matching the mockup's ring -- the old 1.5px dashes read as a
-   drawn border rather than the faint guide circle it should be. */
-.glow-ring::before{content:'';position:absolute;inset:14px;border-radius:50%;border:1px dotted rgba(226,27,42,.22);}
+/* Owner: "on treasure chest there are 2 linings circulating the chest box, you
+   can even see clearly that one inside is solid and one outside is dotted ...
+   also some greener background on that chest box."
+   We had ONE dotted ring and an orange wash. All three values below were
+   sampled off his screenshot rather than eyeballed -- scanning the vertical
+   centre line through the circle finds the outer dotted ring at rgb(166,206,180)
+   (a muted mint), the inner solid one 27 image-px inside it at rgb(234,227,209)
+   (a warm tan), and the field between them tinted rgb(198,227,199) against
+   rgb(250,248,240) paper, which is the green wash. At his 1080px capture on a
+   ~393pt screen that is a 191px outer circle, a 172px inner one, and roughly
+   10px between them. */
+.glow-ring{width:230px;height:230px;border-radius:50%;
+  background:radial-gradient(circle,rgba(76,196,140,.34) 0%,rgba(76,196,140,.13) 45%,rgba(76,196,140,0) 70%);
+  display:flex;align-items:center;justify-content:center;position:relative;}
+/* OUTER: dotted, mint. Fine dots, not the 1.5px dashes an earlier round had --
+   those read as a drawn border rather than the faint guide circle it should be. */
+.glow-ring::before{content:'';position:absolute;inset:16px;border-radius:50%;border:1px dotted rgba(126,178,148,.75);}
+/* INNER: solid, warm tan, ~10px further in. */
+.glow-ring::after{content:'';position:absolute;inset:26px;border-radius:50%;border:1px solid rgba(208,180,132,.72);}
 .glow-ring img{width:140px;filter:drop-shadow(0 18px 20px rgba(30,10,5,.35));animation:chestBounce 1.8s ease-in-out infinite;}
 .chest-stage h2{font-size:26px;font-weight:700;text-align:center;margin:26px 0 6px;}
 .chest-stage .sub{color:var(--snow-muted);font-size:14px;font-style:italic;font-weight:500;text-align:center;margin:0 0 26px;}
@@ -1941,9 +1966,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
      Used app-wide for validation errors -- see notify() in the core. -->
 <div class="notify-bg" id="notifyBg" onclick="if(event.target===this)closeNotify()">
   <div class="notify-card">
-    <div class="notify-icon">
-      <svg width="43" height="43" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3L2 20h20L12 3z" fill="var(--chipz-gold)" stroke="#a66a00" stroke-width="1"></path><path d="M12 10v4" stroke="#5a3d00" stroke-width="2" stroke-linecap="round"></path><circle cx="12" cy="17" r="1.1" fill="#5a3d00"></circle></svg>
-    </div>
+    <!-- Owner: "first check how well defined and realistic and quality the
+         warning sign is" -- comparing his reference against ours. His IS the
+         system emoji: Noto Color Emoji's warning sign, with rounded corners, a
+         gold-to-amber gradient and a real drop shadow. Ours was a hand-drawn
+         flat SVG triangle with a hard 1px stroke, which is what looked cheap
+         beside it. This project already uses real emoji glyphs (see the
+         Login/Register fields), so the honest match is the glyph itself --
+         redrawing it in SVG would be an imitation of a picture the phone
+         already has. -->
+    <div class="notify-icon" aria-hidden="true">⚠️</div>
     <div class="notify-msg" id="notifyMsg"></div>
     <button class="notify-ok" onclick="closeNotify()">OK</button>
   </div>

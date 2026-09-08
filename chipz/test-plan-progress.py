@@ -198,6 +198,7 @@ async def main():
                   chips:sp?sp.querySelectorAll('.pspin-chip').length:0,
                   coreW:core?+core.getBoundingClientRect().width.toFixed(1):0,
                   hidden:sp?sp.getAttribute('aria-hidden'):null,
+                  bought:((r.querySelector('.mp-bought')||{}).textContent||'').trim(),
                   countdown:!!r.querySelector('[data-countdown]')};})""")
         ck(len(rows) == len(CASES),
            "every plan rendered a row (%d of %d)" % (len(rows), len(CASES)))
@@ -266,6 +267,31 @@ async def main():
            "the centre chip has real size, so the shape is not mush (%.1fpx)" % mid["coreW"])
         ck(mid["hidden"] == "true",
            "it is hidden from screen readers -- the row already says Ongoing")
+
+        # ── DATE BOUGHT ──
+        # Owner: "make sure that one running investment, it shows Date bought."
+        # The fixture's createdAt is `days` ago, so the expected date is
+        # computed the same way rather than hardcoded.
+        print("   bought lines: %s" % [r["bought"] for r in rows])
+        for src, _wd, _wl in CASES:
+            r = by_name.get(src["tierLabel"])
+            if not r:
+                continue
+            ck(r["bought"].startswith("Bought "),
+               "%s states when it was bought (%r)" % (src["tierLabel"], r["bought"]))
+            # Spelled month, never a numeric date: 12/08 is read two different
+            # ways by two different members.
+            ck(any(m in r["bought"] for m in
+                   ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']),
+               "%s spells the month rather than numbering it (%r)"
+               % (src["tierLabel"], r["bought"]))
+        # The exact day, checked once against the fixture's own arithmetic.
+        d = datetime.datetime.utcnow() - datetime.timedelta(days=15)   # the "Mid" case
+        expect = "Bought %d %s %d" % (
+            d.day, ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month-1],
+            d.year)
+        ck(mid["bought"] == expect,
+           "and gets the day right (%r vs %r)" % (mid["bought"], expect))
 
         await page.screenshot(path=f"{OUT}/plan-progress.png", full_page=True)
         ck(not errs, "no page errors: " + str(errs))

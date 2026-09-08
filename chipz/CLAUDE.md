@@ -1460,6 +1460,52 @@ requires the colours behind to **track what Home actually paints there** — bec
 flat scrim over a blank page would satisfy "not orange" while showing no dashboard at
 all.
 
+### The warning sign is the emoji, and the chest gets its second ring
+
+Owner: *"first check how well defined and realistic and quality ⚠️ that sign is … on
+treasure chest there are 2 linings circulating the chest box, you can even see clearly
+that one inside is solid and one outside is dotted … also some greener background on
+that chest box."*
+
+**The warning sign.** His reference's triangle is the system emoji — Noto Color Emoji's
+⚠️, with rounded corners, a gold-to-amber gradient and a real drop shadow. Ours was a
+hand-drawn flat SVG with a hard 1px stroke, which is exactly what looked cheap beside
+it. It is now the glyph itself. Redrawing it in SVG would be an imitation of a picture
+the phone already ships, and this project already uses real emoji glyphs (Login /
+Register). `.notify-icon` needs `line-height:1`, not the `0` the SVG used — a zero line
+box clips an emoji's ascender.
+
+**The chest rings.** Every value was **sampled off his screenshot**, not eyeballed:
+scanning the vertical centre line through the circle finds the outer dotted ring at
+`rgb(166,206,180)` (a muted mint), the inner solid one 27 image-px further in at
+`rgb(234,227,209)` (a warm tan), and the field between them tinted `rgb(198,227,199)`
+against `rgb(250,248,240)` paper — that tint is the green wash. At his 1080px capture on
+a ~393pt screen: a 191px outer circle, a 172px inner one, about 10px apart. Implemented
+as `::before` (dotted, inset 16px) and `::after` (solid, inset 26px) with a mint radial
+gradient replacing the old orange one.
+
+`test-chest-screen.py` asserts the outer is dotted, the inner is **solid**, the solid
+one sits **inside** the dotted one (a solid ring drawn wider would satisfy "two rings"
+and still be the wrong picture), and that the wash's first colour stop is green.
+
+### Date bought
+
+Owner: *"make sure that one running investment, it shows Date bought."*
+
+Its own quiet line under the day count, not a third column in `.mp-figs`: three columns
+would drop each from 161px to 104px, and `UGX 571,300.00` at 16px does not fit in 104.
+Shown on matured rows too — when a finished plan was bought is the same fact, and hiding
+it there would be an odd gap.
+
+`fmtDay()` takes the **raw `createdAt`**, never `planStats().createdMs`. That one falls
+back to `Date.now()`, which is the right guess for "when is the next payout due" and
+completely the wrong one for "when did I buy this" — a plan with no stored date would
+have claimed it was bought today. Missing or unparseable gives an em dash instead.
+
+The month is spelled (`24 Aug 2026`), not numbered: `12/08` is read as two different
+dates by two different members, and `toLocaleDateString` would order it by whatever
+locale the phone happens to be set to.
+
 ### Snow residues that were still live (round 2)
 
 The first sweep covered wording a member reads. These were *functional*, and each one

@@ -271,8 +271,9 @@ async def main():
         # It is the SAME dialog as every other alert -- the warning card with
         # the amber triangle, not a bespoke one.
         icon = await page.evaluate(
-            "!!document.querySelector('#notifyBg .notify-card .notify-icon svg')")
-        ck(icon, "it is the standard alert card, triangle and all")
+            "((document.querySelector('#notifyBg .notify-card .notify-icon')||{})"
+            ".textContent||'').trim()")
+        ck(icon == "⚠️", "it is the standard alert card, warning sign and all (%r)" % icon)
         # After notifyPop has finished, or the shot catches the card
         # mid-entrance at partial opacity and reads as a see-through dialog.
         await page.wait_for_timeout(400)
