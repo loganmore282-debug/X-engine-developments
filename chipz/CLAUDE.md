@@ -1294,6 +1294,38 @@ same arithmetic said a second way and must not compete with the count.
 row draws a bar at all: grepping the built file would prove nothing, since the
 obfuscator encodes class names as strings.
 
+### "Ongoing", and the orbiting-chips mark
+
+Owner: *"instead of running use ongoing, also put this animation on aside of running
+product, it should be well defined"* — with a 180px standalone loader: three chips
+orbiting a pulsing centre one.
+
+**Ongoing replaces Running everywhere a member reads it** — the row chip, the filter
+tab, "2 ongoing plans", and both empty states. The internal filter KEY stays
+`'running'`; it is never displayed, and renaming it would churn `switchPlanFilter`,
+`counts.running` and the tests for nothing.
+
+**Where the mark went, and why not beside the status pill.** Beside "Ongoing" was the
+obvious spot, but the header's width is already spoken for: thumb + name + pill leaves
+about 186px for the meta line, and a 32px mark plus its gap takes 38px of that —
+enough to start truncating *"UGX 197,000.00 invested"*, which is money information. It
+sits at the head of the day line instead, where there is room to spare, and only on
+ongoing rows — a matured plan has nothing in motion, and an animation there would
+contradict the "Finished" beside it.
+
+**Sizing is measured, not guessed.** Rendered at 24/30/36/44 side by side, the three
+triangles stop being separately readable below about 30px. It is set at **32**.
+
+Two implementation notes worth keeping:
+- Every length is a fraction of `--s`, so the shape is identical at any size.
+  Shrinking his 180px original with `transform:scale()` would drop the 2px speckle
+  highlights to a third of a pixel, where they stop reading as texture and start
+  reading as dirt. For the same reason the speckles are **dropped** at this size — his
+  gold-to-ember gradient is what actually carries the chip.
+- Everything is namespaced `pspin-*`, keyframes included. A bare `.chip` would have
+  collided with `.wallet-card .chip`, and a bare `spin` keyframe is exactly the kind of
+  name a later screen would reuse.
+
 **What drives the width.** `planStats()` is the single source for every plan figure on
 both the My Products row and the detail sheet: `pct = payoutsMade / payoutsTotal`.
 `payoutsMade` is the count of daily payouts the **server has actually credited**, not

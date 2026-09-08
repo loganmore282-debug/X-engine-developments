@@ -181,14 +181,23 @@ async def main():
         rows = await page.evaluate("""()=>[...document.querySelectorAll('.mp-row')].map(r=>{
           const d=r.querySelector('.mp-days');
           const cs=d?getComputedStyle(d.querySelector('b')):null;
-          const ls=d&&d.querySelector('span')?getComputedStyle(d.querySelector('span')):null;
+          const tail=d?d.querySelector(':scope > span:last-child'):null;
+          const ls=tail?getComputedStyle(tail):null;
+          const sp=r.querySelector('.pspin');
+          const spr=sp?sp.getBoundingClientRect():null;
+          const core=sp?sp.querySelector('.pspin-core'):null;
           return {name:(r.querySelector('.mp-name')||{}).textContent||'',
                   chip:((r.querySelector('.mp-chip')||{}).textContent||'').trim(),
                   days:((d&&d.querySelector('b'))||{}).textContent||'',
-                  left:((d&&d.querySelector('span'))||{}).textContent||'',
+                  left:tail?tail.textContent:'',
                   dayPx:cs?parseFloat(cs.fontSize):0, dayColor:cs?cs.color:'',
                   leftPx:ls?parseFloat(ls.fontSize):0, leftColor:ls?ls.color:'',
                   bars:r.querySelectorAll('.mp-bar').length,
+                  spin:!!sp, spinW:spr?+spr.width.toFixed(1):0,
+                  spinH:spr?+spr.height.toFixed(1):0,
+                  chips:sp?sp.querySelectorAll('.pspin-chip').length:0,
+                  coreW:core?+core.getBoundingClientRect().width.toFixed(1):0,
+                  hidden:sp?sp.getAttribute('aria-hidden'):null,
                   countdown:!!r.querySelector('[data-countdown]')};})""")
         ck(len(rows) == len(CASES),
            "every plan rendered a row (%d of %d)" % (len(rows), len(CASES)))
@@ -214,8 +223,8 @@ async def main():
         # The two states that must differ in more than wording.
         ck(by_name["Matured"]["chip"] == "Matured" and not by_name["Matured"]["countdown"],
            "a finished plan says Matured and stops its next-payout countdown")
-        ck(by_name["Mid"]["chip"] == "Running" and by_name["Mid"]["countdown"],
-           "a running plan says Running and keeps counting down")
+        ck(by_name["Mid"]["chip"] == "Ongoing" and by_name["Mid"]["countdown"],
+           "an ongoing plan says Ongoing and keeps counting down")
         # Over-paying by a day must not produce "Day 31 of 30".
         ck(by_name["Overpaid"]["days"] == f"Day {CYCLE} of {CYCLE}",
            "an over-paid plan clamps rather than counting past its cycle (%s)"
@@ -232,6 +241,31 @@ async def main():
         ck(mid["dayColor"] != mid["leftColor"],
            "and is set in ink, not the muted grey its neighbour uses (%s vs %s)"
            % (mid["dayColor"], mid["leftColor"]))
+
+        # ── THE ONGOING MARK ──
+        # Owner: "instead of running use ongoing, also put this animation on
+        # aside of running product, it should be well defined."
+        for r in rows:
+            ck(r["chip"] in ("Ongoing", "Matured"),
+               "%s is labelled %r, never 'Running'" % (r["name"].strip(), r["chip"]))
+        print("   ongoing mark: %.1fx%.1fpx, %d chips, core %.1fpx, aria-hidden=%s"
+              % (mid["spinW"], mid["spinH"], mid["chips"], mid["coreW"], mid["hidden"]))
+        ck(mid["spin"] and by_name["New"]["spin"] and by_name["Legacy"]["spin"],
+           "every ongoing plan carries the animation")
+        # A finished plan has nothing in motion; an animation there would be
+        # saying the opposite of the "Matured"/"Finished" beside it.
+        ck(not by_name["Matured"]["spin"] and not by_name["Overpaid"]["spin"],
+           "and a matured one does not")
+        ck(mid["chips"] == 3, "all three orbiting chips are there (%d)" % mid["chips"])
+        # "well defined": rendered at 24/30/36/44 side by side, the three
+        # triangles stop being separable below about 30px. Asserted on the
+        # RENDERED box, so a stylesheet that failed to load fails here too.
+        ck(mid["spinW"] >= 30 and mid["spinH"] >= 30,
+           "drawn big enough to read as three chips (%.1fx%.1f)" % (mid["spinW"], mid["spinH"]))
+        ck(mid["coreW"] > 10,
+           "the centre chip has real size, so the shape is not mush (%.1fpx)" % mid["coreW"])
+        ck(mid["hidden"] == "true",
+           "it is hidden from screen readers -- the row already says Ongoing")
 
         await page.screenshot(path=f"{OUT}/plan-progress.png", full_page=True)
         ck(not errs, "no page errors: " + str(errs))
