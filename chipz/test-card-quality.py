@@ -291,7 +291,12 @@ async def main():
 
         # ── The win backdrop ──
         print("\n— spin win backdrop —")
-        await page.evaluate("showChestWin(207.82, 5207.82, 'spin')")
+        # showChestWin(reward, balanceBefore, balanceAfter, source) -- the
+        # balance pair is what the card counts BETWEEN, so the source has to be
+        # the fourth argument. Passing 'spin' third (the old signature) silently
+        # made it the target balance and left the source undefined, which is a
+        # chest: exactly what this assertion then caught.
+        await page.evaluate("showChestWin(207.82, 5000, 5207.82, 'spin')")
         await page.wait_for_timeout(800)
         g = await page.evaluate("""()=>{const el=document.getElementById('chestWinGhost');
           const r=el.getBoundingClientRect(); const cs=getComputedStyle(el);
@@ -306,7 +311,7 @@ async def main():
         await page.screenshot(path=f"{OUT}/cards-spin-win.png")
         await page.evaluate("closeChestWin()")
         await page.wait_for_timeout(400)
-        await page.evaluate("showChestWin(2000, 7207.82)")
+        await page.evaluate("showChestWin(2000, 5207.82, 7207.82)")
         await page.wait_for_timeout(600)
         c = await page.evaluate("""()=>{const el=document.getElementById('chestWinGhost');
           return {src:el.getAttribute('src'), spin:el.classList.contains('spin')};}""")
