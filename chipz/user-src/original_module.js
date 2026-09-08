@@ -1972,7 +1972,19 @@ window.switchPlanFilter = function(f){
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band, the row and the progress bar can never disagree.
 function planStats(inv){
-  const total = Number(inv.payoutsTotal) || 150;
+  // The DENOMINATOR of the progress bar. /invest/create always stamps
+  // payoutsTotal onto the investment, so that is the answer for anything
+  // bought through the app -- but a document written before that field
+  // existed has none, and a bare `|| 150` would then measure a plan against
+  // 150 days regardless of the cycle it was actually sold on. A 30-day plan
+  // four days in would read 3% instead of 13%, and the bar would look stuck.
+  // Fall back through the product's own cycle and the platform default
+  // before resorting to a constant.
+  const prod = (STATE.products || []).find(p => p.key === inv.tierKey);
+  const total = Number(inv.payoutsTotal)
+    || (prod && Number(prod.cycle))
+    || Number((STATE.settings || {}).cycleDays)
+    || 150;
   const made = Math.min(Number(inv.payoutsMade) || 0, total);
   const expected = Number(inv.expectedReturn) || 0;
   const earned = Number(inv.paidOut) || 0;

@@ -612,8 +612,12 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .mp-meta{font-size:14px;color:var(--snow-muted);margin-top:1px;}
 .mp-chip{flex-shrink:0;font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:var(--r-pill);background:var(--snow-green-soft);color:var(--snow-green);}
 .mp-chip.done{background:var(--snow-neutral-soft);color:var(--snow-muted);}
-.mp-bar{height:5px;background:var(--snow-neutral-soft);margin-top:13px;overflow:hidden;}
-.mp-bar i{display:block;height:100%;background:var(--chipz-grad);}
+/* The plan progress bar. It was the one track in the app with no radius at
+   all -- the surface pass tokenised every `border-radius:4px` and this rule
+   had none to tokenise, so a sharp 5px rectangle survived beside the
+   rounded milestone track it sits next to. */
+.mp-bar{height:6px;background:var(--snow-neutral-soft);margin-top:13px;overflow:hidden;border-radius:var(--r-pill);}
+.mp-bar i{display:block;height:100%;background:var(--chipz-grad);border-radius:var(--r-pill);}
 .mp-days{display:flex;justify-content:space-between;font-size:13.5px;color:var(--snow-muted);margin-top:6px;}
 .mp-figs{display:flex;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--snow-border);}
 .mp-figs > div{flex:1;min-width:0;}
