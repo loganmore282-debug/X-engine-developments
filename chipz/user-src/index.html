@@ -342,14 +342,27 @@ a{color:inherit;}
    the Buy Now button alone -- tapping a card must never start a purchase,
    which is why this is a class toggled by a listener rather than any kind of
    onclick handler on the card itself.
-   The fade dips to .62 and comes back; it deliberately does NOT touch
-   transform, so it reads as a different gesture from the nav icon's bounce
-   and nobody mistakes it for something that navigated. */
-.p-card.card-tap{animation:cardTapFade .42s ease-in-out;}
-@keyframes cardTapFade{
-  0%{opacity:1;}
-  45%{opacity:.62;}
-  100%{opacity:1;}}
+
+   The first version dipped OPACITY to .62 and left transform alone. Owner:
+   "you failed to understand, cozy when l tap it just cause faint image
+   instead of make product card bounce in or fade in and out minimumly." He is
+   right, and the reason is worth keeping: fading a card does not read as the
+   card responding, it reads as the card briefly failing to draw. A press is a
+   physical event, so the acknowledgement has to be physical -- the card gives
+   under the finger and springs back.
+
+   Same spring curve as the nav icon, a fraction of its amplitude. The nav
+   icon squashes to .74 and overshoots to 1.18, which is right for a 30px
+   glyph and would look like the whole screen lurching on a 360px-wide card.
+   "Minimumly": 2.8% in, under 1% out -- enough to see, not enough to move the
+   layout under the finger. Nothing here changes opacity, so the card never
+   goes faint again. */
+.p-card.card-tap{animation:cardTapBounce .34s cubic-bezier(.34,1.56,.64,1);}
+@keyframes cardTapBounce{
+  0%{transform:scale(1);}
+  34%{transform:scale(.972);}   /* in  */
+  68%{transform:scale(1.008);}  /* out */
+  100%{transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){.p-card.card-tap{animation:none;}}
 .p-card .p-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}

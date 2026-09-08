@@ -1100,7 +1100,11 @@ function hookProductCardTap(){
     card.classList.add('card-tap');
   }, { passive: true });
   host.addEventListener('animationend', e => {
-    if (e.animationName === 'cardTapFade' && e.target.classList)
+    // Must name the CURRENT keyframes. It read 'cardTapFade' while the
+    // animation was renamed to cardTapBounce, and the failure is silent in
+    // the worst way: the first tap animates, the class is never taken off,
+    // and every tap after that does nothing at all.
+    if (e.animationName === 'cardTapBounce' && e.target.classList)
       e.target.classList.remove('card-tap');
   });
 }

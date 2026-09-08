@@ -298,10 +298,18 @@ async def main():
         ck(size["chest"]["top"] >= 0, "and stays on screen (top %d)" % size["chest"]["top"])
         ck(size["chestOnTop"], "and it is still what a thumb lands on")
 
-        # ── 9. tapping a product card animates, and buys nothing ──
-        # Owner: "when l tap on the product card it fades in then out, but no
-        # action ... no action should be there on triggering buy."
-        print("\n— 9. a product card fades on tap, and does nothing else —")
+        # ── 9. tapping a product card bounces it, and buys nothing ──
+        # Owner, on the first version, which dipped opacity: "you failed to
+        # understand, cozy when l tap it just cause faint image instead of make
+        # product card bounce in or fade in and out minimumly." So the card now
+        # gives under the finger and springs back; nothing touches opacity.
+        #
+        # This block used to assert the opacity dip -- i.e. exactly the
+        # behaviour being removed -- and failed here for the right reason when
+        # it changed. Rewritten to measure SCALE, read out of the computed
+        # transform matrix (matrix(a,...) -> a is scaleX) rather than trusting
+        # the class name.
+        print("\n— 9. a product card bounces on tap, and does nothing else —")
         await page.evaluate("showPage('catalog')")
         await page.wait_for_timeout(900)
         tap = await page.evaluate("""async () => {
@@ -312,23 +320,42 @@ async def main():
             window.fetch = (u, o) => { calls.push(String(u)); return realFetch(u, o); };
             const card = document.querySelector('.p-card');
             const img = card.querySelector('.p-img');
+            const scaleOf = () => {
+                const t = getComputedStyle(card).transform;
+                if (!t || t === 'none') return 1;
+                const m = t.match(/matrix\(([^,]+),/);
+                return m ? parseFloat(m[1]) : 1;
+            };
             img.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
             img.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            const seen = [];
+            const scales = [], opacities = [];
             const t0 = performance.now();
             while (performance.now() - t0 < 520) {
-                seen.push(Math.round(parseFloat(getComputedStyle(card).opacity) * 100) / 100);
+                scales.push(scaleOf());
+                opacities.push(parseFloat(getComputedStyle(card).opacity));
                 await new Promise(r => requestAnimationFrame(r));
             }
             window.fetch = realFetch;
-            return { min: Math.min(...seen), last: seen[seen.length - 1], n: seen.length,
+            return { min: Math.min(...scales), max: Math.max(...scales),
+                     last: scales[scales.length - 1], n: scales.length,
+                     minOpacity: Math.min(...opacities),
                      calls: calls.filter(u => /invest|buy|purchase/i.test(u)),
-                     sheet: !!document.querySelector('.sheet-bg.show'),
-                     hadClass: card.className };
+                     sheet: !!document.querySelector('.sheet-bg.show') };
         }""")
         print("   ", tap)
-        ck(tap["min"] < 0.9, "it fades in and out (dips to %.2f)" % tap["min"])
-        ck(abs(tap["last"] - 1.0) < 0.05, "and comes back to full (%.2f)" % tap["last"])
+        ck(tap["n"] > 8, "the animation was sampled over real frames (%d)" % tap["n"])
+        # In, then out: a press that only shrinks is a dim, not a bounce.
+        ck(tap["min"] < 0.995, "the card gives under the finger (down to %.4f)" % tap["min"])
+        ck(tap["max"] > 1.001, "and springs back past its own size (up to %.4f)" % tap["max"])
+        # "Minimumly" -- big enough to see, small enough not to shove the
+        # layout around. A whole card at the nav icon's amplitude would lurch.
+        ck(tap["min"] > 0.93 and tap["max"] < 1.05,
+           "and stays subtle: %.1f%% in, %.1f%% out"
+           % ((1 - tap["min"]) * 100, (tap["max"] - 1) * 100))
+        ck(abs(tap["last"] - 1.0) < 0.005, "it settles back to exactly 1 (%.4f)" % tap["last"])
+        # The complaint itself: no faint image. Opacity must never move.
+        ck(tap["minOpacity"] > 0.99,
+           "and it never goes faint -- opacity held at %.2f throughout" % tap["minOpacity"])
         # The half that actually matters.
         ck(tap["calls"] == [], "no purchase call was made: %s" % tap["calls"])
         ck(not tap["sheet"], "and nothing opened — the tap is pure acknowledgement")
@@ -341,7 +368,30 @@ async def main():
                      btn: btn.textContent.trim() };
         }""")
         ck(not untouched["cardAnimating"],
-           "a tap on %r does NOT fade the card under it" % untouched["btn"])
+           "a tap on %r does NOT bounce the card under it" % untouched["btn"])
+
+        # A second tap must animate too. The class is taken off by an
+        # animationend listener that matches on the keyframes NAME, so a rename
+        # that misses it leaves the class stuck and every tap after the first
+        # does nothing -- silent, and invisible to a single-tap test.
+        again = await page.evaluate("""async () => {
+            const card = document.querySelector('.p-card');
+            const img = card.querySelector('.p-img');
+            const stuck = card.classList.contains('card-tap');
+            img.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            let min = 1;
+            const t0 = performance.now();
+            while (performance.now() - t0 < 460) {
+                const t = getComputedStyle(card).transform;
+                const m = t && t !== 'none' ? t.match(/matrix\(([^,]+),/) : null;
+                if (m) min = Math.min(min, parseFloat(m[1]));
+                await new Promise(r => requestAnimationFrame(r));
+            }
+            return { stuck, min };
+        }""")
+        ck(not again["stuck"],
+           "the class is cleaned up after the first tap, so it can replay")
+        ck(again["min"] < 0.995, "and a second tap bounces too (%.4f)" % again["min"])
 
         # ── 7. Balance Record counts up from zero ──
         print("\n— 7. Balance Record counts up from 0 —")

@@ -670,14 +670,33 @@ animation but no action should be there on triggering buy."*
 
 `hookProductCardTap()` — one delegated `pointerdown` on `#pageHost` (the catalog
 re-renders whenever products load, so per-card handlers would need re-attaching).
-`@keyframes cardTapFade` dips opacity to .62 and back; it deliberately does **not** touch
-`transform`, so it reads as a different gesture from the nav icon's bounce.
+
+**It is a bounce, not a fade.** The first version read the word "fades" literally and
+dipped opacity to .62. Owner: *"you failed to understand, cozy when l tap it just cause
+faint image instead of make product card bounce in or fade in and out minimumly."* He is
+right about the reason, and it is worth keeping: fading a card does not read as the card
+responding, it reads as the card briefly failing to draw. A press is physical, so the
+acknowledgement has to be — the card gives under the finger and springs back.
+
+`@keyframes cardTapBounce` uses the **same spring curve as the nav icon at a fraction of
+its amplitude**: the nav glyph squashes to .74 and overshoots to 1.18, which suits a 30px
+icon and would look like the screen lurching on a 360px card. Measured on a real phone
+viewport: **3.1% in, 1.2% out**, settling at exactly 1. Nothing touches opacity, so it can
+never go faint again — the test asserts that explicitly.
 
 The card has **no `onclick`, and the handler bails the moment the tap came from a
 `button, a, input, select, textarea`** — so Buy Now is untouched and the acknowledgement
 can never be confused with a purchase. `test-round-fixes.py` proves the negative properly:
 it wraps `window.fetch`, taps the card, and asserts **no purchase call was made and no
-sheet opened** — not merely that the fade happened.
+sheet opened** — not merely that something animated.
+
+**Two traps this block has already hit.** The class is removed by an `animationend`
+listener that matches on the *keyframes name*, so renaming the animation without updating
+that string leaves the class stuck: the first tap animates and every tap afterwards does
+nothing, silently. The test now taps **twice** for exactly that reason. And the old
+assertions measured the opacity dip — the behaviour being removed — so they failed when it
+changed, which is correct; they were rewritten to read `scaleX` out of the computed
+transform matrix rather than to trust a class name.
 
 ### The type scale is bigger than it looks in a mockup file
 
