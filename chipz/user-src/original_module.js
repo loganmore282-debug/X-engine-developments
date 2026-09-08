@@ -1005,6 +1005,42 @@ var NAV_ICON_SRC = {
 // pointerdown rather than click, so the box appears the instant a thumb
 // lands rather than after the tap completes.
 var _navTapHooked = false;
+// Owner: "l also want when l tap on the product card it fades in then out,
+// but no action just it is animation but no action should be there on
+// triggering buy."
+//
+// One delegated listener on #pageHost rather than a handler per card: the
+// catalog re-renders whenever products load or refresh, and per-card
+// handlers would have to be re-attached every time.
+//
+// The card deliberately has NO onclick. Buying stays behind the Buy Now
+// button alone, and this listener bails out the moment the tap came from
+// that button (or any other control), so the acknowledgement and the
+// purchase can never be confused for one another.
+var _cardTapHooked = false;
+function hookProductCardTap(){
+  if (_cardTapHooked) return;
+  const host = $('pageHost');
+  if (!host) return;
+  _cardTapHooked = true;
+  host.addEventListener('pointerdown', e => {
+    if (!e.target.closest) return;
+    // A tap on Buy Now is a purchase, not a card acknowledgement -- let it
+    // through untouched rather than animating the whole card under it.
+    if (e.target.closest('button, a, input, select, textarea')) return;
+    const card = e.target.closest('.p-card');
+    if (!card) return;
+    // Re-adding a class already present does not restart a CSS animation
+    // (same reason hookNavTapBox() forces a reflow).
+    card.classList.remove('card-tap');
+    void card.offsetWidth;
+    card.classList.add('card-tap');
+  }, { passive: true });
+  host.addEventListener('animationend', e => {
+    if (e.animationName === 'cardTapFade' && e.target.classList)
+      e.target.classList.remove('card-tap');
+  });
+}
 function hookNavTapBox(){
   if (_navTapHooked) return;
   const nav = document.querySelector('.bottom-nav');
@@ -1036,6 +1072,9 @@ function updateNavIcons(){
   // first one the bar is definitely in the DOM, and the guard above makes
   // every later call free.
   hookNavTapBox();
+  // Same reasoning, same lifecycle: #pageHost is in the DOM by the first
+  // showPage(), and the hook's own guard makes every later call free.
+  hookProductCardTap();
   document.querySelectorAll('.navitem').forEach(btn => {
     const key = btn.dataset.nav;
     const active = key === STATE.page;
@@ -3900,6 +3939,7 @@ function paintWithdrawSheet(s){
       <ol>
         <li>Fee: ${fee}%.</li>
         <li>Withdrawal amounts should be between ${Number(s.minWithdraw||0).toLocaleString('en-US')} and ${Number(s.maxWithdraw||1000000).toLocaleString('en-US')}.</li>
+        ${Number(s.withdrawMultiple) > 0 ? `<li>Amounts must be a multiple of ${Number(s.withdrawMultiple).toLocaleString('en-US')} &mdash; for example ${[1,2,5,6].map(n=>(n*Number(s.withdrawMultiple)).toLocaleString('en-US')).join(', ')}.</li>` : ''}
         <li>There is no limit to the number of withdrawals.</li>
         <li>${s.withdrawHours ? esc(s.withdrawHours) : 'Withdrawal time: 06:00:00 - 17:00:00.'}</li>
       </ol>
@@ -3948,6 +3988,13 @@ window.submitWithdraw = async function(){
   // the withdrawal always goes to the bound wallet the screen is showing.
   const acct = (STATE.bankAccounts || [])[0] || null;
   if (!amount || amount <= 0) return notify('Enter a valid amount.');
+  // Mirrors the server's rule so the member is told BEFORE a round trip.
+  // The server checks it again -- this is a courtesy, not the enforcement.
+  const wMult = Math.max(0, Math.floor(Number((STATE.settings || {}).withdrawMultiple) || 0));
+  if (wMult > 0 && amount % wMult !== 0) {
+    const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
+    return notify(`Cash-out must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
+  }
   if (!acct) return notify('Bind your wallet before withdrawing.');
   if (!/^\d{6}$/.test(pin)) return notify('Enter your 6-digit Trade Password.');
   $('witSubmitBtn').disabled = true; $('witSubmitBtn').textContent = 'Please wait…';

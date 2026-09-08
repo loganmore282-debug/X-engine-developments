@@ -300,6 +300,22 @@ a{color:inherit;}
    barely two fitted on a phone screen. 16:9 takes the image to 199 px and the
    card to 357 px. Measured, not estimated. */
 .p-card{background:var(--snow-surface);border-radius:4px;overflow:hidden;box-shadow:0 8px 18px -14px rgba(30,10,5,.3);border:1px solid var(--snow-border);}
+/* Owner: "l also want when l tap on the product card it fades in then out,
+   but no action just it is animation but no action should be there on
+   triggering buy."
+   So the CARD acknowledges a tap and does nothing else. Buying stays behind
+   the Buy Now button alone -- tapping a card must never start a purchase,
+   which is why this is a class toggled by a listener rather than any kind of
+   onclick handler on the card itself.
+   The fade dips to .62 and comes back; it deliberately does NOT touch
+   transform, so it reads as a different gesture from the nav icon's bounce
+   and nobody mistakes it for something that navigated. */
+.p-card.card-tap{animation:cardTapFade .42s ease-in-out;}
+@keyframes cardTapFade{
+  0%{opacity:1;}
+  45%{opacity:.62;}
+  100%{opacity:1;}}
+@media (prefers-reduced-motion:reduce){.p-card.card-tap{animation:none;}}
 .p-card .p-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}
 .p-card .p-img .glyph{width:52px;height:52px;border-radius:4px;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;}

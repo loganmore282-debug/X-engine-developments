@@ -14,6 +14,15 @@ const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const MAX_MONEY_AMOUNT = 1e12;
 const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+// rollSpinReward() below is lifted out of server.js and now leans on two
+// more things from that file's scope: crypto (it draws the payout from a
+// CSPRNG rather than Math.random) and finiteMoney (it clamps the band).
+// Both are restated here exactly as server.js defines them.
+const crypto = require('crypto');
+// Restated EXACTLY as server.js defines it -- it rejects NaN/Infinity and
+// nothing else. An earlier copy here added `&& n > 0`, which would have
+// made this test exercise a stricter function than the one that ships.
+const finiteMoney = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const slice = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
 eval(slice('function productExpectedReturn', 'function sanitizeProductInput'));
 eval(slice('function sanitizeProductInput', "app.get('/admin/products'"));

@@ -74,9 +74,13 @@ app.use('/admin/', async (req, _res, next) => {
   }
   next();
 });
+// '/turntable/spin' belongs here for the same reason '/checkin' does: it
+// pays real money on an unauthenticated-body POST, so it gets the strict
+// 60/min per-user cap rather than only the 400/min global one.
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/bank/delete',
  '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
- '/team/milestone/claim', '/checkin', '/deposit/manual/init', '/deposit/manual/paste-sms']
+ '/team/milestone/claim', '/checkin', '/turntable/spin', '/deposit/manual/init',
+ '/deposit/manual/paste-sms']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -333,6 +337,11 @@ const DEFAULT_SETTINGS = {
   // Not yet confirmed by the owner — a reasonable Snow-scaled default,
   // admin-editable like every other rate here.
   dailyCheckin: 500,
+  // Owner: "let the withdrawal multiple be set from admin, so default
+  // multiple should be 5000, ie one withdrawals 5000,10000,25000,30000,
+  // 35000 like that." Set to 0 to turn the rule off entirely and allow any
+  // amount above the minimum.
+  withdrawMultiple: 5000,
   // Login / Sign Up backdrops: fully opaque and unblurred, so an
   // uploaded image shows exactly as supplied until the owner dials it
   // back. With no image set these do nothing at all.
@@ -2741,11 +2750,24 @@ async function grantTurntableSpins(userId, product) {
 }
 // One shared roll for both spin kinds -- the daily band from settings, or a
 // product spin's own snapshot band.
+// This decides how much money a member is paid, so it does NOT use
+// Math.random(). V8's Math.random is a seeded xorshift128+ whose internal
+// state can be recovered from a modest run of outputs -- and a member sees
+// every one of their own spin results, which is exactly such a run. The
+// exposure was bounded (nobody can win past spinMax either way), but a
+// predictable generator has no business deciding payouts when the fix is
+// one line. crypto.randomInt is a CSPRNG and draws from a uniform range
+// with no modulo bias.
+//
+// Resolution is 1/100 of a shilling, matching round2()'s own precision, so
+// nothing is lost by working in integer cents here.
 function rollSpinReward(lo, hi) {
-  lo = Math.max(0, Number(lo) || 0);
-  hi = Math.max(lo, Number(hi) || 0);
+  lo = Math.max(0, finiteMoney(lo));
+  hi = Math.max(lo, finiteMoney(hi));
   if (hi <= lo) return round2(lo);
-  return round2(lo + Math.random() * (hi - lo));
+  const loC = Math.round(lo * 100), hiC = Math.round(hi * 100);
+  if (hiC <= loC) return round2(lo);
+  return round2(crypto.randomInt(loC, hiC + 1) / 100);
 }
 function turntableDailyReward(sett) {
   return rollSpinReward(sett.turntableDailyMin, sett.turntableDailyMax);
@@ -2804,6 +2826,21 @@ app.post('/turntable/spin', async (req, res) => {
 
       let reward, source, label, spinDoc = null;
       if (dailyAvailable) {
+        // The day is CLAIMED here, atomically, before anything is paid.
+        // withLock() is an in-process promise chain -- it serialises taps
+        // inside ONE server process and nothing more, so if this app is ever
+        // run on more than one instance two simultaneous taps could each
+        // read lastTurntableAt, each see the day as free, and each pay a
+        // daily spin. updateIf() is a single conditional Mongo write: only
+        // the request whose read matched the stored value wins, whichever
+        // process it came from.
+        const claimed = await ref.updateIf(
+          { lastTurntableAt: u.lastTurntableAt == null ? null : u.lastTurntableAt },
+          { lastTurntableAt: now });
+        if (!claimed) {
+          result = { code: 400, body: { status: 'error', message: 'That spin was already used. Come back after midnight for your free daily spin.', nextDailyAt: eatNextMidnight(now) } };
+          return;
+        }
         reward = turntableDailyReward(sett);
         source = 'daily';
         label = 'Turntable daily spin';
@@ -2832,10 +2869,16 @@ app.post('/turntable/spin', async (req, res) => {
       // has lost a spin -- annoying but recoverable, and visible in the
       // logs. Crediting first and burning second would mean a failure paid
       // real money out and left the spin re-usable, which is unrecoverable.
+      // The daily spin was already claimed atomically above; only an earned
+      // spin still needs burning. Same order as before -- burn, then credit --
+      // because a failed credit that left the spin re-usable would pay real
+      // money out twice, while a burnt spin with no credit is recoverable.
       if (spinDoc) {
-        await spinDoc.ref.update({ used: true, usedAt: now });
-      } else {
-        await ref.update({ lastTurntableAt: now });
+        const burnt = await spinDoc.ref.updateIf({ used: false }, { used: true, usedAt: now });
+        if (!burnt) {
+          result = { code: 400, body: { status: 'error', message: 'That spin was already used.' } };
+          return;
+        }
       }
       try {
         await withLock('bal:' + uid, () => ref.update({
@@ -4657,6 +4700,16 @@ app.post('/withdraw/request', async (req, res) => {
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
+    // Checked HERE, not only in the app: the client's own check is a
+    // courtesy so a member sees the rule before submitting, but /withdraw/
+    // request is a plain authenticated POST and the amount in its body is
+    // whatever the caller chose to send.
+    const wMult = Math.max(0, Math.floor(Number(sett.withdrawMultiple) || 0));
+    if (wMult > 0 && amt % wMult !== 0) {
+      const low = Math.floor(amt / wMult) * wMult, high = low + wMult;
+      return res.status(400).json({ status: 'error',
+        message: `Cash-out must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(Math.max(low, sett.minWithdraw))} or ${fmtUGX(high)}.` });
+    }
     const check = await pinCheck(userId, req.body.pin);
     if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
 
@@ -5897,6 +5950,10 @@ const SETTINGS_CRITICAL_RANGES = {
   // this panel is a whole number, and Math.round() below would flatten
   // 0.45 to 0. Blur is in px, capped at 40 -- past that the image is
   // indistinguishable from a flat colour wash and only costs GPU time.
+  // 0 disables the rule. The upper bound is a sanity cap, not a business
+  // one -- a multiple larger than the maximum withdrawal would make every
+  // amount invalid, which the admin panel warns about rather than forbids.
+  withdrawMultiple: [0, MAX_MONEY_AMOUNT],
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
 };

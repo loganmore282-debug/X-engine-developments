@@ -598,6 +598,67 @@ Two animation corrections, both after the owner rejected an earlier attempt.
   **25px**, up from 18px, and the wave's rise grew with it (9px → 12px), because the same
   travel against larger type reads as a weaker motion.
 
+### Turntable spins: what makes them safe
+
+Owner: *"make sure that spins are perfectly secure."* Audited, and three things changed.
+
+**Already sound, and must stay that way:** `/turntable/spin` reads **nothing from the
+request body** — the reward is decided entirely server-side, so a member cannot name their
+own prize; it requires a token, refuses a banned account, refuses when the turntable is
+off; a product spin's payout band is **snapshot onto the spin at grant time**, so retuning
+a product cannot shrink spins already earned; the spin is burnt **before** the credit, and
+handed back if the credit throws.
+
+**Changed:**
+1. **`Math.random()` → `crypto.randomInt()`** in `rollSpinReward()`. V8's `Math.random` is
+   a seeded xorshift128+ whose internal state is recoverable from a run of outputs — and a
+   member sees every one of their own spin results, which is exactly such a run. Exposure
+   was bounded (nobody wins past `spinMax` either way), but a predictable generator should
+   not be deciding payouts. Works in integer cents, matching `round2()`'s precision.
+2. **The daily spin is now claimed atomically.** It was read `lastTurntableAt` → decide →
+   write, guarded only by `withLock()` — which is an **in-process promise chain**, so it
+   serialises taps inside ONE server process and nothing more. On two instances, two taps
+   could each see the day free and each pay. It now uses `updateIf()` (one conditional
+   Mongo write); only the request whose read matched wins, whichever process it came from.
+   The earned-spin burn uses `updateIf({used:false})` for the same reason.
+3. **`/turntable/spin` joined the strict per-user rate limiter** (60/min), next to
+   `/checkin` and `/withdraw/request`. It had only the 400/min global cap.
+
+`test-spin-and-withdraw.js` runs the real `rollSpinReward` 4,000 times (inside the band,
+whole band reachable, mean centred, backwards/negative bands clamped) and pins the route's
+properties. Note when lifting that function into a test: it now needs `crypto` **and**
+`finiteMoney` in scope — `test-product-config.js` broke on exactly that.
+
+### The withdrawal multiple is an admin setting
+
+Owner: *"let the withdrawal multiple be set from admin, so default multiple should be
+5000, ie one withdrawals 5000,10000,25000,30000,35000 like that."* New setting
+**`withdrawMultiple`, default 5000**, range `[0, MAX_MONEY_AMOUNT]` — **0 turns the rule
+off** entirely.
+
+Enforced in `/withdraw/request` **after** the minimum check (so the more useful message
+wins), reading the live setting rather than a constant, and the refusal names the two
+nearest valid amounts. The app checks it too, but that is a **courtesy so the member sees
+the rule before a round trip** — `/withdraw/request` is a plain authenticated POST and the
+amount in its body is whatever the caller sent. Admin field: *Rates & limits → Withdrawal
+multiple*.
+
+### Tapping a product card acknowledges, and does nothing
+
+Owner: *"when l tap on the product card it fades in then out, but no action just it is
+animation but no action should be there on triggering buy."*
+
+`hookProductCardTap()` — one delegated `pointerdown` on `#pageHost` (the catalog
+re-renders whenever products load, so per-card handlers would need re-attaching).
+`@keyframes cardTapFade` dips opacity to .62 and back; it deliberately does **not** touch
+`transform`, so it reads as a different gesture from the nav icon's bounce.
+
+The card has **no `onclick`, and the handler bails the moment the tap came from a
+`button, a, input, select, textarea`** — so Buy Now is untouched and the acknowledgement
+can never be confused with a purchase. `test-round-fixes.py` proves the negative properly:
+it wraps `window.fetch`, taps the card, and asserts **no purchase call was made and no
+sheet opened** — not merely that the fade happened.
+
 ### The type scale is bigger than it looks in a mockup file
 
 Owner, with his purple mockups next to the live build: *"as you see in my mock ups

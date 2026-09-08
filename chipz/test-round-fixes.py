@@ -33,7 +33,13 @@ ACCOUNT = {"phone":"0742730382","walletBalance":520782,"totalDeposited":0,"total
 ROUTES = {
  "/public/settings":{"status":"success","settings":{"minDeposit":30000,"minWithdraw":20000,
    "annEnabled":False,"turntableEnabled":True}},
- "/public/products":{"status":"success","products":[]},
+ # Section 9 taps a product card, so the catalog has to have one. Nothing
+ # earlier in this file depends on the list being empty.
+ "/public/products":{"status":"success","products":[
+   {"key":"product-1","name":"Product-1","price":28000,"cycle":150,"expectedReturn":840000,
+    "dailyIncome":5600,"image":"","spinCount":0,"spinMin":200,"spinMax":1000},
+   {"key":"product-2","name":"Product-2","price":58000,"cycle":150,"expectedReturn":1740000,
+    "dailyIncome":11600,"image":"","spinCount":1,"spinMin":200,"spinMax":1000}]},
  "/public/activity-feed":{"status":"success","feed":[]},
  "/public/banner":{"status":"success","image":None,"video":None,"videoVersion":None},
  "/public/announcement-image":{"status":"success","image":None},
@@ -291,6 +297,51 @@ async def main():
            "it clears the nav bar (%d <= %d)" % (size["chest"]["bottom"], size["barTop"]))
         ck(size["chest"]["top"] >= 0, "and stays on screen (top %d)" % size["chest"]["top"])
         ck(size["chestOnTop"], "and it is still what a thumb lands on")
+
+        # ── 9. tapping a product card animates, and buys nothing ──
+        # Owner: "when l tap on the product card it fades in then out, but no
+        # action ... no action should be there on triggering buy."
+        print("\n— 9. a product card fades on tap, and does nothing else —")
+        await page.evaluate("showPage('catalog')")
+        await page.wait_for_timeout(900)
+        tap = await page.evaluate("""async () => {
+            // Watch for ANY call that could buy something, not just the one we
+            // expect -- a stray handler is the whole risk here.
+            const calls = [];
+            const realFetch = window.fetch;
+            window.fetch = (u, o) => { calls.push(String(u)); return realFetch(u, o); };
+            const card = document.querySelector('.p-card');
+            const img = card.querySelector('.p-img');
+            img.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            img.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            const seen = [];
+            const t0 = performance.now();
+            while (performance.now() - t0 < 520) {
+                seen.push(Math.round(parseFloat(getComputedStyle(card).opacity) * 100) / 100);
+                await new Promise(r => requestAnimationFrame(r));
+            }
+            window.fetch = realFetch;
+            return { min: Math.min(...seen), last: seen[seen.length - 1], n: seen.length,
+                     calls: calls.filter(u => /invest|buy|purchase/i.test(u)),
+                     sheet: !!document.querySelector('.sheet-bg.show'),
+                     hadClass: card.className };
+        }""")
+        print("   ", tap)
+        ck(tap["min"] < 0.9, "it fades in and out (dips to %.2f)" % tap["min"])
+        ck(abs(tap["last"] - 1.0) < 0.05, "and comes back to full (%.2f)" % tap["last"])
+        # The half that actually matters.
+        ck(tap["calls"] == [], "no purchase call was made: %s" % tap["calls"])
+        ck(not tap["sheet"], "and nothing opened — the tap is pure acknowledgement")
+
+        # ...while Buy Now is left completely alone.
+        untouched = await page.evaluate("""() => {
+            const btn = document.querySelector('.p-card .p-cta');
+            btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            return { cardAnimating: document.querySelector('.p-card').classList.contains('card-tap'),
+                     btn: btn.textContent.trim() };
+        }""")
+        ck(not untouched["cardAnimating"],
+           "a tap on %r does NOT fade the card under it" % untouched["btn"])
 
         # ── 7. Balance Record counts up from zero ──
         print("\n— 7. Balance Record counts up from 0 —")
