@@ -558,6 +558,15 @@ Two animation corrections, both after the owner rejected an earlier attempt.
   The overshoot past 1.0 is what makes it feel physical — without it this is a scale
   transition and the bounce is gone. `hookNavTapBox()`'s `animationend` listener matches
   on the keyframe NAME, so renaming the keyframe means renaming it there too.
+- **Icon size, and `--nav-h`.** The owner has asked twice — *"nav icons are too small"*,
+  then *"the nav icons are small also the treasure chest box at home screen is small"*.
+  Icons are **38px** now (23 in the mockup → 30 → 38), and the **bar grew with them**
+  rather than a bigger glyph being squeezed into the old 68px and clipping the label.
+  The bar height is now the single token **`--nav-h:76px`**; four rules depend on it
+  (`.wrap` bottom padding, `.sheet-bg` bottom inset, and the Download panel's two height
+  calcs) and each used to repeat `68` as a literal. Change the one token, not five places.
+  The treasure chest float went **64px → 86px** and the turntable float moved up to 212px
+  so the taller chest doesn't run into it.
 - **Selector width.** *"the nav tab is still small in width can you extend it abit."*
   The box went from a fixed `width:54px` + `left:50%` + `margin-left:-27px` to
   `left:3px;right:3px;max-width:62px;margin:0 auto` — as wide as the tab allows, capped.

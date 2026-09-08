@@ -249,6 +249,49 @@ async def main():
         ck(boxw["box"] <= boxw["tab"] - 4,
            "with a gap left to its neighbours (%dpx box in a %dpx tab)" % (boxw["box"], boxw["tab"]))
 
+        # ── 8. the icons and the chest are big enough ──
+        # Owner has asked twice: "the nav icons are small also the treasure
+        # chest box at home screen is small". The bar grew with the icons
+        # (--nav-h) rather than a bigger glyph being squeezed into the old
+        # height, so the thing to prove is that nothing CLIPS as a result --
+        # a label cut off at the bottom of the bar is the obvious failure.
+        print("\n— 8. nav icons and the treasure chest are bigger —")
+        # The chest float only exists on Home, so go there first -- measuring
+        # it from whatever tab the previous section left open returns None
+        # and reads as "the chest is gone".
+        await page.evaluate("showPage('home')")
+        await page.wait_for_timeout(600)
+        size = await page.evaluate("""() => {
+            const bar = document.querySelector('.bottom-nav').getBoundingClientRect();
+            const it = document.querySelector('.navitem');
+            const img = it.querySelector('.nav-ic img').getBoundingClientRect();
+            const lbl = it.querySelector('.lbl').getBoundingClientRect();
+            const chest = document.querySelector('.chest-float');
+            const cb = chest ? chest.getBoundingClientRect() : null;
+            return { icon: Math.round(img.width), barH: Math.round(bar.height),
+                     barTop: Math.round(bar.top), barBottom: Math.round(bar.bottom),
+                     lblBottom: Math.round(lbl.bottom), itemH: Math.round(it.getBoundingClientRect().height),
+                     chest: cb && { w: Math.round(cb.width), top: Math.round(cb.top),
+                                    bottom: Math.round(cb.bottom) },
+                     chestOnTop: cb ? (() => { const t = document.elementFromPoint(
+                         cb.left + cb.width/2, cb.top + cb.height/2);
+                         return !!(t && t.closest('.chest-float')); })() : null };
+        }""")
+        print("   ", size)
+        ck(size["icon"] >= 36, "the nav icon is %dpx (was 30, and 23 before that)" % size["icon"])
+        ck(size["lblBottom"] <= size["barBottom"],
+           "the label still fits inside the bar (%d <= %d)" % (size["lblBottom"], size["barBottom"]))
+        ck(size["itemH"] <= size["barH"],
+           "and so does the whole tab (%dpx in a %dpx bar)" % (size["itemH"], size["barH"]))
+        ck(size["chest"] and size["chest"]["w"] >= 80,
+           "the treasure chest is %spx (was 64)" % (size["chest"] or {}).get("w"))
+        # It floats over the page, so the two ways it can go wrong are running
+        # under the nav bar or off the top of the screen.
+        ck(size["chest"]["bottom"] <= size["barTop"],
+           "it clears the nav bar (%d <= %d)" % (size["chest"]["bottom"], size["barTop"]))
+        ck(size["chest"]["top"] >= 0, "and stays on screen (top %d)" % size["chest"]["top"])
+        ck(size["chestOnTop"], "and it is still what a thumb lands on")
+
         # ── 7. Balance Record counts up from zero ──
         print("\n— 7. Balance Record counts up from 0 —")
         await page.evaluate("showPage('account')"); await page.wait_for_timeout(500)
