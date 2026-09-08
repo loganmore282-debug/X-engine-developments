@@ -104,6 +104,7 @@ async def main():
                   ringStyle:rb.borderTopStyle, ringWidth:rb.borderTopWidth,
                   outerInset:rb.top, innerStyle:ra.borderTopStyle, innerInset:ra.top,
                   innerColor:ra.borderTopColor, wash:getComputedStyle(ring).backgroundImage,
+                  keyBorder:getComputedStyle(document.querySelector('.key-field')).borderTopColor,
                   chestLoaded: img && img.complete && img.naturalWidth>0,
                   chestAnim: getComputedStyle(img).animationName};}""")
         for k,v in info.items(): print("  %-12s %s" % (k,v))
@@ -127,6 +128,12 @@ async def main():
         first = [int(n) for n in stops[0]] if stops else None
         ck(first is not None and first[1] > first[0] and first[1] > first[2],
            "the wash behind the chest is green, not the old orange (%s)" % (first,))
+        # Owner: "the chest box password input card, it has green on it, don't
+        # you see the mockup image." Sampled off his screenshot at
+        # rgb(184,213,195) on the border rows.
+        kb = [int(n) for n in re.findall(r"\d+", info["keyBorder"])[:3]]
+        ck(kb[1] > kb[0] and kb[1] > kb[2],
+           "the key field is outlined in green, not plain grey (%s)" % info["keyBorder"])
         ck(info["chestLoaded"], "chest artwork loaded")
         ck(info["chestAnim"]=="chestBounce", "chest still animates here too")
         await page.screenshot(path=f"{OUT}/chest.png",full_page=False)

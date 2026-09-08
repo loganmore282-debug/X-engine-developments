@@ -2004,7 +2004,13 @@ function fmtDay(value){
   if (!value) return '—';
   const d = new Date(typeof value === 'number' ? value : String(value));
   if (isNaN(d.getTime())) return '—';
-  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear();
+  // Owner: "even bought should carry the time bought at."
+  // 24-hour, matching the ledger's own "23:21" and the plan countdown's
+  // HH:MM:SS -- one clock across the app, and no am/pm to misread. The
+  // getters are LOCAL, so a member in Kampala sees the moment they tapped
+  // Buy, not the UTC instant the server wrote down.
+  const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
 // The owner's orbiting-chips animation, marking a plan that is still ongoing.
 // Built once as a constant rather than per row: it is fixed markup, and

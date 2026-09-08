@@ -38,9 +38,10 @@ Same defect, more legible -- which is why the fixture still uses 30-day products
 on purpose. A 150-day fixture cannot tell a correct cycle from the old
 hardcoded 150.
 """
-import asyncio, datetime, json, os, sys, functools, threading, http.server, socketserver
+import asyncio, datetime, json, os, re, sys, functools, threading, http.server, socketserver
 from playwright.async_api import async_playwright
 
+_time_re = re.compile(r' at (?:[01]\d|2[0-3]):[0-5]\d$')
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/plan-progress'
 os.makedirs(OUT, exist_ok=True)
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -285,13 +286,25 @@ async def main():
                    ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']),
                "%s spells the month rather than numbering it (%r)"
                % (src["tierLabel"], r["bought"]))
-        # The exact day, checked once against the fixture's own arithmetic.
-        d = datetime.datetime.utcnow() - datetime.timedelta(days=15)   # the "Mid" case
-        expect = "Bought %d %s %d" % (
+        # Owner: "even bought should carry the time bought at."
+        # Checked against the exact ISO the fixture sent, converted to the
+        # BROWSER's local zone the way the app does -- not recomputed from
+        # utcnow(), which drifts by a minute if the clock ticks over between
+        # building the fixture and asserting on it.
+        off = await page.evaluate("new Date().getTimezoneOffset()")   # minutes, west-positive
+        iso = next(c[0]["createdAt"] for c in CASES if c[0]["tierLabel"] == "Mid")
+        d = (datetime.datetime.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")
+             - datetime.timedelta(minutes=off))
+        expect = "Bought %d %s %d at %02d:%02d" % (
             d.day, ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month-1],
-            d.year)
+            d.year, d.hour, d.minute)
         ck(mid["bought"] == expect,
-           "and gets the day right (%r vs %r)" % (mid["bought"], expect))
+           "and gets the day and the time right (%r vs %r)" % (mid["bought"], expect))
+        # 24-hour, like the ledger's own "23:21" and the plan countdown --
+        # one clock across the app, and no am/pm to misread.
+        ck(_time_re.search(mid["bought"]) and "am" not in mid["bought"].lower()
+           and "pm" not in mid["bought"].lower(),
+           "the time is 24-hour (%r)" % mid["bought"])
 
         await page.screenshot(path=f"{OUT}/plan-progress.png", full_page=True)
         ck(not errs, "no page errors: " + str(errs))

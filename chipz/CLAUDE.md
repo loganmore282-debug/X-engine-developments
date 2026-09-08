@@ -1502,9 +1502,25 @@ back to `Date.now()`, which is the right guess for "when is the next payout due"
 completely the wrong one for "when did I buy this" — a plan with no stored date would
 have claimed it was bought today. Missing or unparseable gives an em dash instead.
 
-The month is spelled (`24 Aug 2026`), not numbered: `12/08` is read as two different
-dates by two different members, and `toLocaleDateString` would order it by whatever
-locale the phone happens to be set to.
+The month is spelled (`24 Aug 2026 at 21:13`), not numbered: `12/08` is read as two
+different dates by two different members, and `toLocaleDateString` would order it by
+whatever locale the phone happens to be set to. The time (owner: *"even bought should
+carry the time bought at"*) is **24-hour**, matching the ledger's own `23:21` and the
+plan countdown's `HH:MM:SS` — one clock across the app, no am/pm to misread — and comes
+from the LOCAL getters, so a member in Kampala sees the moment they tapped Buy rather
+than the UTC instant the server wrote down.
+
+Its test asserts against the exact ISO the fixture sent, converted by the browser's own
+`getTimezoneOffset()` — recomputing from `utcnow()` at assert time drifts by a minute
+whenever the clock ticks over mid-run, which is a flake waiting to happen.
+
+**The key field is green too.** Owner: *"the chest box password input card, it has green
+on it, don't you see the mockup image."* Sampling down its left edge in his screenshot
+gives `rgb(184,213,195)` on the border rows against a `rgb(254,253,251)` fill; undoing
+the JPEG's blend against the paper puts the real border near `rgb(156,197,174)`. It is
+the same sage as the rings and the wash, which is why that block reads as one thing in
+his and read as a plain grey box in ours. Only this field is greened — it is the one
+that belongs to the chest.
 
 ### Snow residues that were still live (round 2)
 

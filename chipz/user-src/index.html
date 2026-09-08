@@ -1066,7 +1066,15 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .glow-ring img{width:140px;filter:drop-shadow(0 18px 20px rgba(30,10,5,.35));animation:chestBounce 1.8s ease-in-out infinite;}
 .chest-stage h2{font-size:26px;font-weight:700;text-align:center;margin:26px 0 6px;}
 .chest-stage .sub{color:var(--snow-muted);font-size:14px;font-style:italic;font-weight:500;text-align:center;margin:0 0 26px;}
-.key-field{width:100%;height:54px;border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);background:var(--snow-surface);display:flex;align-items:center;padding:0 18px;margin-bottom:16px;}
+/* Owner: "l want you to see the chest box password input card, it has green on
+   it, don't you see the mockup image."
+   It does -- sampling down the field's left edge in his screenshot gives
+   rgb(184,213,195) on the border rows against a rgb(254,253,251) fill. Undoing
+   the JPEG's blend against the paper puts the real border near rgb(156,197,174).
+   It is the same sage the rings and the wash use, which is why the whole block
+   reads as one thing there and read as a plain grey box here. Only this field
+   is greened: it is the one that belongs to the chest. */
+.key-field{width:100%;height:54px;border:1.6px solid rgba(150,196,172,.9);border-radius:var(--r-ctl);background:var(--snow-surface);display:flex;align-items:center;padding:0 18px;margin-bottom:16px;}
 .key-field input{border:0;outline:0;background:transparent;font-size:16px;text-align:center;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .chest-win-bg{position:fixed;inset:0;background:#2ecc71;display:none;align-items:center;justify-content:center;padding:28px;z-index:320;}
 .chest-win-bg.show{display:flex;animation:winFlash .5s ease-out;}
