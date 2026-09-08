@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -32,7 +32,7 @@ import java.nio.charset.StandardCharsets;
  */
 public final class NumberCheck {
 
-    private static final String FILE = "snow_numcheck";
+    private static final String FILE = "chipz_numcheck";
 
     /** What we currently believe about one typed number. */
     public enum State { UNKNOWN_YET, VALID, DISABLED, NOT_FOUND }

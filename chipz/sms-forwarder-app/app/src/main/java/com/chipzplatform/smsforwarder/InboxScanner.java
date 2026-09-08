@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.content.Context;
 import android.database.Cursor;
@@ -25,7 +25,7 @@ import android.util.Log;
  * WHEN a message is submitted, only what it says.
  */
 final class InboxScanner {
-    private static final String TAG = "SnowSMS";
+    private static final String TAG = "ChipzSMS";
 
     // Bounds one scan pass so a phone with a very large inbox can't block the
     // service startup path for an unreasonable time. Harmless if it's ever

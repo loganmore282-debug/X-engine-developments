@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -9,7 +9,7 @@ import java.util.Iterator;
 
 /** Tiny wrapper around SharedPreferences for the app's settings. */
 public final class Prefs {
-    private static final String FILE = "snow_sms";
+    private static final String FILE = "chipz_sms";
     private static final String K_URL = "url";
     private static final String K_SECRET = "secret";
     private static final String K_ACTIVE = "active";
@@ -18,7 +18,7 @@ public final class Prefs {
     // v2: JSON object mapping SIM slot index -> that SIM's receiving number,
     // e.g. {"0":"+256770000001","1":"+256750000001"}. One install can now
     // cover every SIM in a dual/triple-SIM phone instead of needing one
-    // phone per Snow payment number.
+    // phone per Chipz payment number.
     private static final String K_NUMBERS = "numbersBySlot";
 
     private final SharedPreferences sp;
@@ -105,7 +105,7 @@ public final class Prefs {
      * MONEY SAFETY -- the single most important method in this app.
      *
      * The server matches an incoming SMS to a pending deposit by
-     * (receivingNumber, amount). Snow's own assignManualNumber() deliberately
+     * (receivingNumber, amount). Chipz's own assignManualNumber() deliberately
      * hands DIFFERENT payment numbers the SAME amount at the same time (that
      * is exactly what its collision-skip does), so reporting the wrong
      * receiving number does not fail safe: it can match a genuine live order
@@ -117,13 +117,13 @@ public final class Prefs {
      * the app, on the assumption that meant a single-SIM install -- but
      * MainActivity's own setup screen always shows 2+ slot rows and its own
      * hint text explicitly invites leaving one blank ("Leave a slot blank if
-     * that SIM is not a Snow payment number"). A genuinely dual-SIM phone
-     * with only ONE Snow number configured (the other slot is the admin's
+     * that SIM is not a Chipz payment number"). A genuinely dual-SIM phone
+     * with only ONE Chipz number configured (the other slot is the admin's
      * own personal line) would have configuredCount()==1 and so forward ANY
      * qualifying money SMS -- including a real payment landing on the
-     * admin's own unrelated personal SIM -- tagged with the one Snow number
+     * admin's own unrelated personal SIM -- tagged with the one Chipz number
      * regardless of which physical SIM actually received it. If that
-     * mis-tagged amount happens to match a live order on the real Snow
+     * mis-tagged amount happens to match a live order on the real Chipz
      * number, a member gets credited for money the platform never actually
      * received.
      *

@@ -130,12 +130,65 @@ var NUMBER_FONT_STACKS = {
   'Orbitron': "'Orbitron',ui-sans-serif,sans-serif",
   'System default': "'Barlow Condensed','Arial Narrow',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
 };
-// Chipz's own compact brand mark, used where a small logo is needed and no
-// admin-uploaded image is set (the two manual-deposit screens). A skewed
-// CHIPZ wordmark on the brand gradient -- replaces Snow's snowflake mark.
+// ── THE APP'S NAME ──
+// Owner: "l would like to also to edit the app name chipz, so make it when it
+// can be editable everywhere." It is one admin setting (Settings -> App name)
+// and every screen reads it from here. Nothing in this file spells the name
+// out any more, so a rename cannot half-land -- which is precisely how the
+// last one went, leaving the old name on the screens nobody thought to check.
+//
+// The fallback is not decoration: settings arrive over the network, and the
+// login screen paints before they land. Without it the very first frame of a
+// cold open would have a blank space where the name goes.
+function brandName(){
+  const n = STATE.settings && typeof STATE.settings.brandName === 'string'
+    ? STATE.settings.brandName.trim() : '';
+  return n || 'Chipz';
+}
+// The wordmark: the whole name in caps with the LAST letter in the accent
+// colour -- the CHIP+Z treatment, expressed as a rule instead of two literals
+// so it survives a rename. A one-letter name has no lead, hence the guard.
+function brandWordmarkHtml(){
+  const n = brandName().toUpperCase();
+  return n.length < 2 ? `<b>${esc(n)}</b>` : esc(n.slice(0, -1)) + '<b>' + esc(n.slice(-1)) + '</b>';
+}
+// Paints the name into the places that are NOT re-rendered from JavaScript:
+// index.html's own static markup (the loading screen, the auth header, the
+// announcement banner placeholder) and the browser/tab title. Called once the
+// settings land, and safe to call again -- it only ever writes.
+//
+// The document title is as far as a running app can go. manifest.json's own
+// `name` and the og: tags are read by Chrome at install time and by link
+// crawlers, both of which see the STATIC file and never run a line of this
+// code, so those two carry the name at deploy time and a rename needs a
+// frontend redeploy to reach them.
+function applyBrandName(){
+  const mark = brandWordmarkHtml();
+  document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = mark; });
+  try { document.title = brandName(); } catch (_) {}
+}
+// The name as plain text inside the round profile badge on Account. On
+// `window` because two inline onerror="" attributes call it -- see
+// renderAccount(). Font size divides by the name's length for the same reason
+// chipzMarkHtml()'s does: the badge is a fixed 68px circle with overflow
+// hidden, so a longer name at 19px would simply have its ends cut off.
+window.brandTextMark = function(){
+  const name = brandName().toUpperCase();
+  const fs = Math.min(19, Math.max(9, Math.round(95 / Math.max(1, name.length))));
+  return `<span style="font-size:${fs}px;">${esc(name)}</span>`;
+};
+// The compact brand mark, used where a small logo is needed and no
+// admin-uploaded image is set (the two manual-deposit screens, the Download
+// screen). A skewed wordmark on the brand gradient.
+//
+// The font size divides by the NAME'S OWN length rather than the constant 3.4
+// that suited five letters: at a fixed size a longer name simply ran out past
+// the rounded square it sits in.
 function chipzMarkHtml(size){
   const px = Number(size) || 44;
-  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--chipz-grad);color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:${Math.round(px/3.4)}px;letter-spacing:.02em;transform:skewX(-6deg);">CHIPZ</span>`;
+  const name = brandName().toUpperCase();
+  const fs = Math.max(7, Math.round(px / (0.68 * Math.max(3, name.length))));
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--chipz-grad);color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:${fs}px;letter-spacing:.02em;transform:skewX(-6deg);">${esc(name)}</span>`;
 }
 function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
@@ -457,6 +510,11 @@ window.doLogout = async function(){
 async function boot(){
   const [s, p, f, b, ai, mpi, ci] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner'), api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images') ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
+  // The name has just arrived; paint it into the static markup and the tab
+  // title. Three call sites in all -- here, the auth-screen prefetch, and the
+  // cached instant-boot path -- because each is a way STATE.settings gets
+  // filled, and whichever one wins the race has to be the one that applies it.
+  applyBrandName();
   STATE.products = p.status === 'success' ? p.products : [];
   STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
@@ -497,7 +555,11 @@ async function boot(){
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   // Home's lower banner (the one carrying the Go spin button).
   STATE.spinBanner = (ci.status === 'success' && ci.spin) ? ci.spin : null;
-  // Animated logo shown beside the profile icon on Account.
+  // The animated brand mark. It is the profile logo on Account AND the thing
+  // that fills the dead strip between Home's spin banner and the bottom nav
+  // (owner: "this white space is idle we need to put the gif which is in
+  // profile also to show up here ... it should appear there in middle too").
+  // One slot, two places, so uploading it once lands in both.
   STATE.profileGif = (ci.status === 'success' && ci.profilegif) ? ci.profilegif : null;
   // Backdrop for the Download APP screen. Fetched here with the rest rather
   // than when the screen opens: it is a full-bleed image, and loading it on
@@ -608,7 +670,7 @@ function captureReferralFromUrl(){
 async function loadAuthSettings(){
   try {
     const s = await api('/public/settings');
-    if (s && s.status === 'success') STATE.settings = s.settings || {};
+    if (s && s.status === 'success') { STATE.settings = s.settings || {}; applyBrandName(); }
   } catch (_) {}
   updateReferralFieldHint();
 }
@@ -818,6 +880,7 @@ async function enterApp(){
   // possibly-stale cached copy, only fill the gap while waiting for it.
   STATE.products = STATE.products || cached.products;
   STATE.settings = STATE.settings || cached.settings;
+  applyBrandName();
   // Same `||` reasoning as the two above: fill the gap until boot()'s live
   // /public/banner lands, never overwrite it once it has.
   STATE.homeBannerVideo = STATE.homeBannerVideo || cached.homeBannerVideo || null;
@@ -1186,7 +1249,7 @@ function maybeShowAnnouncement(){
   const banner = $('announceBanner');
   banner.innerHTML = STATE.announceImage
     ? `<img src="${esc(STATE.announceImage)}" alt="" onerror="this.remove()">`
-    : '<div class="wm">CHIP<b>Z</b></div>';
+    : `<div class="wm">${brandWordmarkHtml()}</div>`;
   window._announceUrl = url;
   // Same "blank field hides its button" convention as Help Centre's own
   // Telegram links -- no channel configured, no Join Channel button.
@@ -1397,7 +1460,7 @@ function paintHome(){
   <button class="icon-btn" onclick="openMessagesSheet()" aria-label="Messages">
     ${ICONS.envelope}${unread ? '<span class="dot"></span>' : ''}
   </button>
-  <div class="top-wordmark">CHIP<b>Z</b></div>
+  <div class="top-wordmark">${brandWordmarkHtml()}</div>
   <div style="width:38px;height:38px;flex-shrink:0;"></div>
 </div>
 <div class="home-banner">${homeBannerInnerHtml(st)}</div>
@@ -1422,6 +1485,7 @@ function paintHome(){
   </div>
 </div>
 ${spinBannerHtml()}
+${homeGifHtml()}
 <button aria-label="Open treasure chest" onclick="openChestSheet()" class="chest-float">
   <img src="/treasure-chest.png" alt="">
 </button>
@@ -1433,6 +1497,54 @@ ${spinBannerHtml()}
   adoptPreloadedBannerVideo();
   tryAutoplayHomeBanner();
 }
+// The animated brand mark, centred in the strip Home has left over between
+// the spin banner and the bottom nav. Home's content stops short of the nav
+// on a tall phone, and that gap was simply empty.
+//
+// Same STATE.profileGif the Account profile card uses -- uploading the GIF
+// once in Admin -> Chipz images -> Profile animation fills both. With no GIF
+// set this renders nothing at all rather than a placeholder box, so the
+// screen looks exactly as it does today until the owner uploads one.
+//
+// Sized against the VIEWPORT, not the image: a GIF is whatever pixels it was
+// exported at, and letting one set its own height is how a tall upload turns
+// a screen that fits into a screen that scrolls. max-height keeps it inside
+// the gap it is meant to fill on any phone.
+function homeGifHtml(){
+  if (!STATE.profileGif) return '';
+  return `
+<div class="home-gif">
+  <img src="${esc(STATE.profileGif)}" alt="" onload="fitHomeGif()" onerror="this.closest('.home-gif').remove()">
+</div>`;
+}
+// Shrinks the mark to exactly the space that is free, by MEASURING the
+// overflow it caused rather than guessing a cap.
+//
+// The CSS cap (20vh) was a guess, and a guess is wrong by definition here:
+// how much room is left depends on the phone's height minus a fixed stack of
+// content above, so on a 390x844 screen a 20vh GIF overshot by 23px and put a
+// scrollbar on a Home screen that had never had one -- the opposite of
+// filling idle space. This reads the actual overflow and takes exactly that
+// much off, which is right on every screen size without knowing any of them.
+//
+// Runs on the image's own load event because at paint time it has no
+// intrinsic size yet, so there is nothing to measure; and on resize, because
+// rotating the phone changes the answer. The 60px floor stops a genuinely
+// tiny screen from shrinking it to nothing -- there, scrolling a little is
+// the better outcome.
+window.fitHomeGif = function(){
+  const box = document.querySelector('.home-gif');
+  const img = box && box.querySelector('img');
+  if (!img) return;
+  img.style.maxHeight = '';
+  const de = document.documentElement;
+  const over = de.scrollHeight - de.clientHeight;
+  if (over <= 0) return;
+  const h = img.getBoundingClientRect().height;
+  if (h <= 0) return;
+  img.style.maxHeight = Math.max(60, Math.floor(h - over)) + 'px';
+};
+window.addEventListener('resize', () => { if (STATE.page === 'home') fitHomeGif(); });
 // Home's lower banner. Replaces the product strip the owner asked to be
 // taken off Home entirely (products live on their own tab now). The artwork
 // is admin-uploadable like every other banner; with none set it falls back
@@ -2188,11 +2300,18 @@ async function renderAccount(){
   // way a square logo is: a 300x220 landscape forced into a 60px circle
   // loses about a quarter of its width off the sides.
   const logoCls = STATE.profileGif ? 'acct-logo has-gif' : 'acct-logo';
+  // The two onerror handlers call brandTextMark() rather than carrying the
+  // fallback markup as a literal. They are inline attributes -- the browser
+  // HTML-decodes them and then compiles the result as JavaScript -- so a name
+  // interpolated straight in would need to survive BOTH passes, and an
+  // apostrophe in it (a perfectly ordinary thing for an owner to type) would
+  // end the JS string early and make the whole handler a syntax error. A
+  // function call has nothing to escape.
   const logo = STATE.profileGif
-    ? `<img src="${esc(STATE.profileGif)}" alt="" onerror="this.closest('.acct-logo').classList.remove('has-gif');this.outerHTML='<span>CHIPZ</span>'">`
+    ? `<img src="${esc(STATE.profileGif)}" alt="" onerror="this.closest('.acct-logo').classList.remove('has-gif');this.outerHTML=brandTextMark()">`
     : STATE.brandLogo
-    ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.outerHTML='<span>CHIPZ</span>'">`
-    : '<span>CHIPZ</span>';
+    ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.outerHTML=brandTextMark()">`
+    : brandTextMark();
   const html = `
 <div style="padding:18px 18px 0;">
   <div class="acct-profile">
@@ -2271,7 +2390,7 @@ function maskedTail(phone){
   return d ? '****' + d.slice(-4) : '****';
 }
 function walletCardHtml(w){
-  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : 'CHIPZ';
+  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : brandName().toUpperCase();
   const num = w && w.phone ? String(w.phone).replace(/\D/g, '') : 'XXXXXXXXXX';
   const holder = w && w.holder ? esc(String(w.holder).toUpperCase()) : 'NO WALLET BOUND';
   return `
@@ -2528,12 +2647,19 @@ function balAvatar(t){
 var BAL_TITLES = {
   deposit: 'Deposit', withdraw: 'Withdraw', promocode: 'Treasure Chest',
   commission: 'Commission', cashback: 'Daily Income', checkin: 'Check-in Bonus',
-  welcome_bonus: 'Welcome Bonus', admin_credit: 'Chipz Credit',
+  welcome_bonus: 'Welcome Bonus',
   team_reward: 'Team Reward', mission_salary: 'Mission Salary',
   mission_deposit_reward: 'Mission Reward', invest: 'Purchase',
   turntable: 'Turntable', spin: 'Turntable', spin_bonus: 'Turntable',
 };
-function balRowTitle(t){ return BAL_TITLES[t.type] || 'Transaction'; }
+// admin_credit is deliberately NOT in the map above: its label carries the
+// app's name, and the map is built once when this file loads -- before the
+// settings that hold the name have arrived. Resolving it here reads the name
+// at the moment the row is drawn, so a rename shows up without a reload.
+function balRowTitle(t){
+  if (t.type === 'admin_credit') return brandName() + ' Credit';
+  return BAL_TITLES[t.type] || 'Transaction';
+}
 // The status pill (deposit/withdraw only) or the plain grey sub-label
 // (everything else) that sits under the date, per the mockup.
 function balRowStatus(t){
@@ -2687,7 +2813,7 @@ function pwFieldHtml(id, placeholder, pin){
 }
 window.openChangeLoginPasswordSheet = function(){
   openSheet('Login Password', `<div class="reveal-in" style="padding-top:22px;">
-    <p class="pw-note">Your login password is used to sign in to your Chipz account.</p>
+    <p class="pw-note">Your login password is used to sign in to your ${esc(brandName())} account.</p>
     <div class="pw-head"><span class="bar"></span><span>Old Login Password</span></div>
     ${pwFieldHtml('lpOld', 'Enter old password')}
     <div class="pw-head"><span class="bar"></span><span>New Login Password</span></div>
@@ -2994,12 +3120,12 @@ function revealWordsHtml(escapedText){
 let _aboutScrollObserver = null;
 window.openAboutSheet = async function(){
   const s = STATE.settings || {};
-  openSheet('About Chipz', `<div id="aboutArticle" class="reveal-in"><p style="color:var(--snow-muted);">Loading…</p></div>`);
+  openSheet('About ' + brandName(), `<div id="aboutArticle" class="reveal-in"><p style="color:var(--snow-muted);">Loading…</p></div>`);
   const r = await api('/public/about-content');
   const wrap = $('aboutArticle');
   if (!wrap) return; // sheet was closed again before this resolved
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
-    : [{ type: 'text', text: s.aboutText || 'Chipz lets you invest in a range of products with daily income and a 3-level referral program.' }];
+    : [{ type: 'text', text: s.aboutText || (brandName() + ' lets you invest in a range of products with daily income and a 3-level referral program.') }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
     ? `<div class="scroll-reveal about-image about-block"><img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;" alt=""></div>`
     : `<div class="scroll-reveal about-block"><p style="white-space:pre-line;line-height:1.7;color:var(--snow-ink);">${revealWordsHtml(esc(b.text))}</p></div>`
@@ -4091,7 +4217,7 @@ window.openDownloadSheet = function(){
     <div class="dl-body">
       <div class="dl-top">
         <div class="dl-mark">${chipzMarkHtml(72)}</div>
-        <h2 class="dl-title">Get the Chipz app</h2>
+        <h2 class="dl-title">Get the ${esc(brandName())} app</h2>
         <p class="dl-sub">Install it on your phone for faster access, and open it straight from your home screen.</p>
       </div>
       <button class="primary-button dl-btn" id="dlInstallBtn" onclick="promptInstallApp()">Download</button>
@@ -4107,7 +4233,7 @@ window.openDownloadSheet = function(){
   }
 };
 window.promptInstallApp = async function(){
-  if (!window._installPrompt) { toast('Already installed, or your browser doesn\'t support installing Chipz.'); return; }
+  if (!window._installPrompt) { toast('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
   window._installPrompt.prompt();
   await window._installPrompt.userChoice.catch(() => {});
   window._installPrompt = null;

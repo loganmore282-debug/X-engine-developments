@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.content.Context;
 import android.content.pm.PackageInfo;
@@ -28,11 +28,18 @@ import java.nio.charset.StandardCharsets;
  */
 public final class UpdateChecker {
 
-    private static final String TAG = "SnowSMS";
+    private static final String TAG = "ChipzSMS";
+    // Chipz's own release tag. It used to be the sibling platform's, inherited
+    // with the fork, which made this the sharpest edge in the forwarder: an admin
+    // phone running the Chipz build would see Snow's next release, offer it as
+    // "an update", and replace itself with the other platform's app -- pointed
+    // at the other platform's server. Publish chipz-sms-forwarder.apk and
+    // version.json under this tag; until the first release exists the check
+    // just fails quietly, which is the same as being offline.
     private static final String BASE =
-            "https://github.com/loganmore282-debug/X-engine-developments/releases/download/snow-sms-app/";
+            "https://github.com/loganmore282-debug/X-engine-developments/releases/download/chipz-sms-app/";
     public static final String VERSION_URL = BASE + "version.json";
-    public static final String APK_URL = BASE + "snow-sms-forwarder.apk";
+    public static final String APK_URL = BASE + "chipz-sms-forwarder.apk";
 
     public interface Callback {
         /** latestName is null when the check simply failed (offline, etc). */

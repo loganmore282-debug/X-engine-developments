@@ -300,6 +300,15 @@ const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/reg
 // moved externally, must never be blocked" reasoning as the 4 payment
 // webhooks, just missed when this route was originally added.
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/deposit/lipapay/callback', '/withdraw/lipapay/callback', '/deposit/manual/sms-forwarder']);
+// The platform's name, as the owner last set it in Admin -> Settings. Every
+// server-side string that names the app goes through here rather than
+// spelling it out, so renaming the app is one field and not a code change.
+// Falls back to DEFAULT_SETTINGS' own value, so a settings read that failed
+// still produces a sentence with a name in it.
+function brandName(s) {
+  const n = s && typeof s.brandName === 'string' ? s.brandName.trim() : '';
+  return n || DEFAULT_SETTINGS.brandName;
+}
 app.use(async (req, res, next) => {
   if (GUARD_EXEMPT.has(req.path)) return next();
   if (!MAINTENANCE_BLOCK.some(p => req.path.startsWith(p))) return next();
@@ -307,7 +316,7 @@ app.use(async (req, res, next) => {
     const s = await getSettings();
     if (s && s.maintenanceMode) {
       return res.status(503).json({ status: 'error', code: 'MAINTENANCE',
-        message: s.maintenanceMsg || 'Chipz is under maintenance. Please check back shortly.' });
+        message: s.maintenanceMsg || (brandName(s) + ' is under maintenance. Please check back shortly.') });
     }
     // Owner: "let's establish a timer ie like saying snow opening in
     // 23:59:34... make when l can activate it or disable it, just near
@@ -320,7 +329,7 @@ app.use(async (req, res, next) => {
     // back off again once the target time has actually passed.
     if (s && s.openingCountdownEnabled && Number(s.openingCountdownAt) > Date.now()) {
       return res.status(503).json({ status: 'error', code: 'OPENING_COUNTDOWN',
-        message: 'Chipz has not opened yet.', openingAt: Number(s.openingCountdownAt) });
+        message: brandName(s) + ' has not opened yet.', openingAt: Number(s.openingCountdownAt) });
     }
   } catch (_) {}
   next();
@@ -394,6 +403,15 @@ const DEFAULT_SETTINGS = {
   autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', aboutText: '',
+  // Owner: "l would like to also to edit the app name chipz, so make it when
+  // it can be editable everywhere." The platform's own name, previously
+  // written into about a dozen strings across the client by hand. It has a
+  // real DEFAULT (unlike brandTagline, which is stored only if set) because
+  // every screen that shows the name needs SOMETHING: a blank here would
+  // paint an app with no name on it during the first boot after a bad save.
+  // Length is capped in the update route -- the name goes into the Home
+  // wordmark and the Account profile mark, where a long one wraps the layout.
+  brandName: 'Chipz',
   // Home announcement dialog, owner: "put it back... opens from middle...
   // background as that of activity checker [ticker]... OK button... triggers
   // link and joins telegram group... X button top right." A real feature
@@ -5735,11 +5753,15 @@ app.get('/withdrawals', async (req, res) => {
 // BROADCASTS stored once in `messages`; per-member read state lives in
 // `messageReads` keyed `<uid>_<messageId>` so a broadcast never has to be
 // fanned out into one document per member.
-const DEFAULT_WELCOME_MESSAGE = {
-  id: 'welcome',
-  title: 'Welcome to the Chipz Investment Returns app!',
-  body: 'You can earn daily income through investments via the app, and also earn daily wages by sharing your referral link with friends and family.',
-};
+// Built fresh per call rather than held as a constant, so it picks up a
+// renamed app. An admin-authored 'welcome' doc still overrides it entirely.
+function defaultWelcomeMessage(s) {
+  return {
+    id: 'welcome',
+    title: 'Welcome to the ' + brandName(s) + ' Investment Returns app!',
+    body: 'You can earn daily income through investments via the app, and also earn daily wages by sharing your referral link with friends and family.',
+  };
+}
 async function listBroadcastMessages() {
   const snap = await db.collection('messages').orderBy('createdAt', 'desc').limit(100).get();
   const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -5751,7 +5773,7 @@ async function listBroadcastMessages() {
   // `all`, not `rows` -- an admin who DELETED the welcome message left a
   // tombstone behind, and checking the filtered list would resurrect it.
   if (!all.some(m => m.id === 'welcome')) {
-    rows.push({ ...DEFAULT_WELCOME_MESSAGE, createdAt: 0, date: '', time: '' });
+    rows.push({ ...defaultWelcomeMessage(await getSettings()), createdAt: 0, date: '', time: '' });
   }
   return rows;
 }
@@ -6021,6 +6043,20 @@ app.post('/admin/settings/update', async (req, res) => {
       const r = sanitizeAllowedOrigins(updates.allowedOrigins);
       if (r.error) return res.status(400).json({ status: 'error', message: r.error });
       updates.allowedOrigins = r.hosts;
+    }
+    // The app name reaches every screen, so it is the one free-text setting
+    // worth policing. Trim and cap it, refuse an empty one (an app with no
+    // name is not a thing the owner can want, and the client would then fall
+    // back to a default that contradicts what the panel shows as saved), and
+    // refuse angle brackets outright. The client escapes it at every render
+    // anyway -- this is the second lock, so a name that somehow reaches an
+    // unescaped sink later cannot carry markup with it.
+    if ('brandName' in updates) {
+      const name = String(updates.brandName == null ? '' : updates.brandName).trim();
+      if (!name) return res.status(400).json({ status: 'error', message: 'App name cannot be blank.' });
+      if (name.length > 24) return res.status(400).json({ status: 'error', message: 'App name must be 24 characters or fewer.' });
+      if (/[<>]/.test(name)) return res.status(400).json({ status: 'error', message: 'App name cannot contain < or >.' });
+      updates.brandName = name;
     }
     if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
       return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });
@@ -7233,6 +7269,11 @@ app.post('/admin/deposit', async (req, res) => {
   _adminCreditDebounce.set(userId, Date.now());
   try {
     const { date, time } = nowStr();
+    // The default description names the app, so it has to be read rather than
+    // written in. Only the row created from HERE follows a later rename --
+    // rows already in the ledger keep the wording they were written with,
+    // which is the honest behaviour for a historical record.
+    const creditDesc = note || (brandName(await getSettings()) + ' credit');
     // Locked on bal:<userId> -- this was the one money-crediting path in the
     // whole codebase with no lock at all, meaning a concurrent repair-ledger/
     // recountAllTotals absolute-value rewrite (both bal:-locked) could race
@@ -7242,7 +7283,7 @@ app.post('/admin/deposit', async (req, res) => {
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
       t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
-      t.set(db.collection('transactions').doc(), { userId, type: 'admin_credit', description: note || 'Chipz credit', amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+      t.set(db.collection('transactions').doc(), { userId, type: 'admin_credit', description: creditDesc, amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
     }));
     logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });

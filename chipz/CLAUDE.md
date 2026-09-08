@@ -867,6 +867,114 @@ of **`test-nav-sheets.py`**, which stubs `navigator.share`, calls the built bund
 `shareReferral()` and reads what it would have sent. That also catches a source fixed but
 never rebuilt.
 
+### The app's name is one admin setting
+
+Owner: *"l would like to also to edit the app name chipz, so make it when it can be
+editable everywhere."* `brandName` is a real field in `DEFAULT_SETTINGS` (default
+`'Chipz'`), edited at **Admin → Settings → App name**, capped at 24 characters, rejected
+if blank or containing `<`/`>`. Nothing spells the name out by hand any more:
+
+- **Client**: `brandName()` reads it, `brandWordmarkHtml()` renders the CHIP+**Z**
+  treatment as a *rule* (all but the last letter, then the last letter in the accent),
+  `brandTextMark()` is the Account badge, `chipzMarkHtml()` is the gradient square.
+  `applyBrandName()` fills `[data-brandmark]` in `index.html`'s static markup (loading
+  screen, auth header, announcement placeholder) and sets `document.title`. It is called
+  at **all three** places `STATE.settings` gets filled — `boot()`, `loadAuthSettings()`,
+  and the cached instant-boot path — because whichever wins the race must be the one
+  that applies it.
+- **Server**: `brandName(s)` backs the maintenance message, the opening-countdown
+  message, the default welcome inbox message, and the description on a new admin credit.
+  Ledger rows already written keep their old wording, which is correct for a record.
+- **Admin panel**: `applyAdminBrandName()` renames the topbar and the tab title; it is
+  called from `openShell()` (not only `renderSettings()`, or an admin who never opens
+  Settings would sit under the old name).
+
+**Two places a rename does NOT reach without a frontend redeploy**, and the admin panel
+says so in plain words: `manifest.json`'s `name` (what Android prints under the installed
+icon) and the `og:`/`twitter:` title (what a pasted link shows). Both are read out of the
+static file by Chrome at install time and by link crawlers — neither runs a line of app
+code. Serving the manifest from the backend is not a fix: `start_url`/`scope` resolve
+relative to the manifest's own origin, so a cross-origin manifest breaks installation
+outright.
+
+Sizing is derived from the name's length in both marks (`px / (0.68 * len)` for the
+gradient square, `95 / len` clamped to 9–19px for the round badge) — at a fixed size a
+longer name simply ran past the shape it sits in. The two `onerror=""` fallbacks on the
+Account profile call `brandTextMark()` rather than interpolating the name into the
+attribute: an inline handler is HTML-decoded *then* compiled as JS, so an apostrophe in
+an owner-typed name would have ended the string early and broken the whole handler.
+
+`test-home-gif-and-name.py` boots the built app four times — renamed, never-set, with and
+without the GIF — and reads the wordmark, its accent letter's computed colour, the tab
+title, the loading-screen mark, the Account badge and the About sheet title.
+
+### Home's idle strip carries the profile GIF
+
+Owner: *"bro this white space is idle we need to put the gif which is in profile also to
+show up here … it should appear there I middle too."* The same `profilegif` slot feeds
+`homeGifHtml()`, rendered after the spin banner. With nothing uploaded it renders **the
+empty string** — no placeholder box, so Home looks exactly as it does today until the
+owner uploads one.
+
+Two things were measured rather than guessed:
+
+- **Horizontal centre.** The treasure chest is `position:fixed` over the bottom-right,
+  so centring in the full width put the mark half underneath it. The strip's right
+  padding is the chest's own column (96px), which centres it in the width that is
+  actually free — and that is what reads as centred on the phone.
+- **Height.** A CSS `max-height: 20vh` cap was wrong by construction: how much room is
+  left is the phone's height minus a fixed stack of content, so on 390×844 it overshot by
+  23px and put a scrollbar on a Home screen that had never had one. `fitHomeGif()` reads
+  `scrollHeight - clientHeight` after the image loads and takes exactly that much off
+  (60px floor). It runs on the image's own `load` (at paint time there is no intrinsic
+  size to measure) and on `resize`. **The test caught this** — the vh version passed
+  every other assertion.
+
+The strip is `pointer-events:none` so it can never swallow a tap meant for the chest.
+
+### Snow residues that were still live (round 2)
+
+The first sweep covered wording a member reads. These were *functional*, and each one
+silently sent something to the wrong platform:
+
+- **`guard-src.js`** — the frame-bust redirected to a hard-coded `https://chn-snow2beer.com/`.
+  A framed Chipz app therefore sent its own members to a different product. Now busts to
+  `window.location.href`, which is also simply correct: the app will get a custom domain
+  one day and a constant would be wrong again that day.
+- **`admin/sw.js`** — initialised **Snow's Firebase project** (`snow-beer-cbf65`), so the
+  admin panel's background push handler was registered against a different project
+  entirely and could never receive a notification. Now matches `FIREBASE_CONFIG` in
+  `admin-src/index.html`; a service worker cannot import from the page, so the values are
+  necessarily duplicated and must be kept in step by hand.
+- **The admin app icon** — `admin-src/index.html`, `admin/manifest.json` and
+  `admin/sw.js` all read the local `/icon-192.png` that ships in the repo, while the user
+  app had been moved onto the server-hosted, admin-uploadable
+  `/public/app-icon-{192,512}.png`. That is the whole of the owner's *"why also the app
+  icon of admin never changed?"* — the upload worked, the admin just wasn't looking at
+  it. All three now point at the server. `test-brand-assets.js` asserts it for every file
+  that names an icon.
+- **`sms-forwarder-app/`** — the sharpest of the lot, and three separate faults:
+  `DEFAULT_URL` posted deposit SMS at Snow's backend
+  (`mylifeismyhappiness.onrender.com`); `UpdateChecker` polled Snow's GitHub release tag,
+  so a Chipz admin phone would have offered Snow's next build **as an update to itself**;
+  and the package id `com.snowplatform.smsforwarder` was byte-identical to Snow's, which
+  Android treats as the same application — the two could never coexist on one phone,
+  installing either silently repointed that phone's SMS at the other platform. Now
+  `com.chipzplatform.smsforwarder`, Chipz's server, tag `chipz-sms-app`. A rename means
+  it installs fresh rather than upgrading, so its settings are entered once more.
+- **There was no workflow building it at all.** `.github/workflows/build-chipz-sms-apk.yml`
+  is new — the fork copied the app but not its pipeline, so the only Chipz forwarder that
+  could ever have existed was a sideloaded Snow APK. It carries a "the fork is fully
+  renamed" step that greps for Snow's package, server and release tag; the strings are
+  deliberately **not** spelled out in nearby comments, because an assertion matching its
+  own explanation has failed here four times already.
+- Snow's wine `#941827` survived in three spots (the forwarder's launcher icon, the
+  guard's console banner, the admin's `theme-color`) — all now Chipz red `#e21b2a`.
+
+What is deliberately left: fork-history comments, `test-cors-origins.js`'s assertion that
+Snow's domain must **not** reach Chipz, and the `--snow-*`/`snow_*` internal names the
+branding test already documents as carve-outs.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

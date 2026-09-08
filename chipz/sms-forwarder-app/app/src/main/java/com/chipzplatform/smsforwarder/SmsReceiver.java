@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -13,11 +13,11 @@ import android.util.Log;
 /**
  * Fires on every incoming SMS (even when the app is closed). Reconstructs the
  * full message, works out WHICH SIM in this phone received it, checks the
- * sender against the allow-list, and forwards it to the Snow server. The
+ * sender against the allow-list, and forwards it to the Chipz server. The
  * server decides whether it is a deposit and which pending order it matches.
  */
 public class SmsReceiver extends BroadcastReceiver {
-    private static final String TAG = "SnowSMS";
+    private static final String TAG = "ChipzSMS";
 
     /**
      * Mobile-money SMS arrive from exactly two sender IDs, both for money in
@@ -145,7 +145,7 @@ public class SmsReceiver extends BroadcastReceiver {
      * numbers are configured in the app and NOT which SIMs currently have a
      * card inserted. Needs no runtime permission. See
      * Prefs.resolveReceivingNumber()'s own comment for why this distinction
-     * is the actual money-safety fix: a dual-SIM phone with only one Snow
+     * is the actual money-safety fix: a dual-SIM phone with only one Chipz
      * number configured must still require the SIM slot to be known, not be
      * treated the same as a phone that only HAS one SIM slot to begin with.
      * Unknown (null manager, or any exception) fails toward "not single-SIM"

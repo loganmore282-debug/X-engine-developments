@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -18,7 +18,7 @@ import android.os.Looper;
  * reliably. It holds no logic itself.
  */
 public class ForwardService extends Service {
-    private static final String CHANNEL = "snow_sms_fwd";
+    private static final String CHANNEL = "chipz_sms_fwd";
     private static final int NOTIF_ID = 1;
     /** How often to look for a newer APK while running. */
     private static final long UPDATE_CHECK_MS = 6 * 60 * 60 * 1000L;
@@ -117,7 +117,7 @@ public class ForwardService extends Service {
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel ch = new NotificationChannel(
-                    CHANNEL, "Snow SMS Forwarder", NotificationManager.IMPORTANCE_LOW);
+                    CHANNEL, "Chipz SMS Forwarder", NotificationManager.IMPORTANCE_LOW);
             ch.setDescription("Keeps deposit SMS forwarding running");
             if (nm != null) nm.createNotificationChannel(ch);
         }
@@ -131,8 +131,8 @@ public class ForwardService extends Service {
                 ? new Notification.Builder(this, CHANNEL)
                 : new Notification.Builder(this);
         return b.setContentTitle(updateBanner == null
-                        ? "Snow SMS active"
-                        : "Snow SMS update available (" + updateBanner + ")")
+                        ? "Chipz SMS active"
+                        : "Chipz SMS update available (" + updateBanner + ")")
                 .setContentText(updateBanner == null
                         ? "Listening for Mobile Money deposit messages"
                         : "Still forwarding. Tap to update.")

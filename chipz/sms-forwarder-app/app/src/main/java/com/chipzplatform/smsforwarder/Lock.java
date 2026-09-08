@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -41,7 +41,7 @@ import javax.crypto.spec.PBEKeySpec;
  */
 public final class Lock {
 
-    private static final String FILE = "snow_lock";
+    private static final String FILE = "chipz_lock";
     private static final String K_SALT = "salt";
     private static final String K_HASH = "hash";
     private static final String K_FAILS = "fails";

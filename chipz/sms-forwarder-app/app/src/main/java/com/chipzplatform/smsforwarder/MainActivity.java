@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.Manifest;
 import android.app.Activity;
@@ -36,20 +36,26 @@ import java.util.List;
  * Single-screen setup UI (built in code, no layout files needed):
  *  - server webhook URL + shared secret (the money sender IDs are fixed in code)
  *  - one receiving-number field PER SIM SLOT, so a dual/triple-SIM phone
- *    covers several Snow payment numbers from one install
+ *    covers several Chipz payment numbers from one install
  *  - Start / Stop forwarding
  *  - Send a test ping to confirm the server is reachable
  */
 public class MainActivity extends Activity {
 
+    // chipz-server, NOT the address this fork arrived with. The forwarder was
+    // copied from the sibling Snow project and kept Snow's live backend as the
+    // prefilled default, so an admin who installed it and tapped Start -- the
+    // obvious thing to do -- sent every Chipz deposit SMS to a different
+    // platform's server. Nothing visible fails when that happens: the phone
+    // reports messages forwarded, and the deposits simply never credit.
     private static final String DEFAULT_URL =
-            "https://mylifeismyhappiness.onrender.com/deposit/manual/sms-forwarder";
+            "https://chipz-server.onrender.com/deposit/manual/sms-forwarder";
     /** Slot fields always shown, even on a phone reporting fewer active SIMs. */
     private static final int MIN_SLOT_ROWS = 2;
     private static final int MAX_SLOT_ROWS = 4;
 
     private static final String APK_MIME = "application/vnd.android.package-archive";
-    private static final String APK_FILENAME = "snow-sms-forwarder.apk";
+    private static final String APK_FILENAME = "chipz-sms-forwarder.apk";
 
     private Prefs prefs;
     private View contentRoot;
@@ -80,7 +86,7 @@ public class MainActivity extends Activity {
         root.setPadding(pad, pad, pad, pad);
         root.setBackgroundColor(Color.parseColor("#111111"));
 
-        root.addView(title("Snow SMS Forwarder"));
+        root.addView(title("Chipz SMS Forwarder"));
         root.addView(label("Server webhook URL"));
         urlField = input(prefs.url().isEmpty() ? DEFAULT_URL : prefs.url(), InputType.TYPE_TEXT_VARIATION_URI);
         root.addView(urlField);
@@ -90,8 +96,8 @@ public class MainActivity extends Activity {
         root.addView(secretField);
 
         root.addView(label("Receiving numbers, one per SIM in this phone"));
-        root.addView(hint("Enter the Snow payment number each SIM actually uses, exactly as saved "
-                + "in the admin panel. Leave a slot blank if that SIM is not a Snow payment number."));
+        root.addView(hint("Enter the Chipz payment number each SIM actually uses, exactly as saved "
+                + "in the admin panel. Leave a slot blank if that SIM is not a Chipz payment number."));
         slotBox = new LinearLayout(this);
         slotBox.setOrientation(LinearLayout.VERTICAL);
         root.addView(slotBox);
@@ -224,7 +230,7 @@ public class MainActivity extends Activity {
         box.setPadding(pad, dp(80), pad, pad);
         box.setBackgroundColor(Color.parseColor("#111111"));
 
-        box.addView(title("Snow SMS"));
+        box.addView(title("Chipz SMS"));
         final TextView msg = new TextView(this);
         msg.setTextColor(Color.parseColor("#9A9A9A"));
         msg.setText("Enter the access password to change settings. Forwarding keeps running either way.");
@@ -381,7 +387,7 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
             new AlertDialog.Builder(this)
                     .setTitle("Allow installing updates")
-                    .setMessage("Android needs permission for Snow SMS to install its own updates. "
+                    .setMessage("Android needs permission for Chipz SMS to install its own updates. "
                             + "Turn on \"Allow from this source\", then tap Update again.")
                     .setPositiveButton("Open settings", new DialogInterface.OnClickListener() {
                         @Override public void onClick(DialogInterface d, int w) {
@@ -408,7 +414,7 @@ public class MainActivity extends Activity {
             if (downloadId != -1 && downloadId != stale) { try { dm.remove(downloadId); } catch (Exception ignored) {} }
 
             DownloadManager.Request req = new DownloadManager.Request(Uri.parse(UpdateChecker.APK_URL));
-            req.setTitle("Snow SMS update");
+            req.setTitle("Chipz SMS update");
             req.setDescription("Downloading the new version");
             req.setMimeType(APK_MIME);
             req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
@@ -653,13 +659,13 @@ public class MainActivity extends Activity {
             String typed = slotFields.get(i).getText().toString().trim();
             TextView st = slotStatuses.get(i);
             if (typed.isEmpty()) {
-                st.setText("Not used for Snow payments.");
+                st.setText("Not used for Chipz payments.");
                 st.setTextColor(Color.parseColor("#6E6E6E"));
                 continue;
             }
             switch (nc.cached(typed)) {
                 case VALID:
-                    st.setText("Verified: this is a Snow payment number.");
+                    st.setText("Verified: this is a Chipz payment number.");
                     st.setTextColor(Color.parseColor("#5BD08A"));
                     break;
                 case DISABLED:
@@ -668,7 +674,7 @@ public class MainActivity extends Activity {
                     st.setTextColor(Color.parseColor("#E8C468"));
                     break;
                 case NOT_FOUND:
-                    st.setText("NOT a Snow payment number. Deposits to it can never match. "
+                    st.setText("NOT a Chipz payment number. Deposits to it can never match. "
                             + "Check the number, or add it in the admin panel.");
                     st.setTextColor(Color.parseColor("#FF6B6B"));
                     break;
@@ -869,7 +875,7 @@ public class MainActivity extends Activity {
                 ? firstConfiguredNumber() : prefs.resolveReceivingNumber(0, true);
         status.setText("Testing...");
         Poster.post(this, url, secret,
-                "TEST: You have received UGX 1 from SNOW TEST. Transaction ID TEST000001.",
+                "TEST: You have received UGX 1 from CHIPZ TEST. Transaction ID TEST000001.",
                 "TEST", receivingNumber,
                 new Poster.Callback() {
                     @Override public void onResult(final String result) {

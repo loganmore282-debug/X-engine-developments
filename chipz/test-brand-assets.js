@@ -335,6 +335,38 @@ ck(/app\.get\('\/admin\/brand-assets'[\s\S]{0,120}verifyAdmin\(req\)/.test(src),
   ck(head.code === 200 && !head.body && head.headers['content-length'],
      'HEAD answers with the length and no body');
 
+  // ── Who actually POINTS at those routes ──
+  // Owner: "why also the app icon of admin never changed?" -- because it
+  // didn't point here. The user app was moved onto the server-hosted asset
+  // and the admin panel was left reading the PNG that ships in the repo, so
+  // an uploaded icon changed one of the two and the owner reasonably read
+  // that as the upload not working. Serving the bytes correctly is only half
+  // the feature; these check the other half, in every file that names an icon.
+  console.log('\n— every surface points at the uploaded icon —');
+  const ICON192 = 'https://chipz-server.onrender.com/public/app-icon-192.png';
+  const ICON512 = 'https://chipz-server.onrender.com/public/app-icon-512.png';
+  const read = (p) => fs.readFileSync(__dirname + '/' + p, 'utf8');
+  for (const [file, want] of [
+    ['user/manifest.json', [ICON192, ICON512]],
+    ['admin/manifest.json', [ICON192, ICON512]],
+  ]) {
+    const m = JSON.parse(read(file));
+    const srcs = (m.icons || []).map(i => i.src);
+    ck(want.every(u => srcs.includes(u)),
+       `${file} installs with the uploaded icon, not a local file (${srcs.join(', ')})`);
+  }
+  for (const file of ['user-src/index.html', 'admin-src/index.html']) {
+    const html = read(file);
+    const links = [...html.matchAll(/<link[^>]*rel="(?:apple-touch-)?icon"[^>]*>/g)].map(m => m[0]);
+    ck(links.length > 0, `${file} declares an icon link at all`);
+    ck(links.every(l => l.includes(ICON192)),
+       `${file}'s icon links all point at the uploaded icon (${links.length} link${links.length === 1 ? '' : 's'})`);
+  }
+  // The admin service worker shows the icon on background push notifications.
+  const asw = read('admin/sw.js');
+  ck(asw.includes(ICON192) && !/icon:\s*'\/icon-192\.png'/.test(asw),
+     "the admin service worker's push notifications use it too");
+
   console.log(bad ? `\n${bad} FAILED` : '\nbrand assets: all cases pass');
   process.exit(bad ? 1 : 0);
 })();

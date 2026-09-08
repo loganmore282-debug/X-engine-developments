@@ -3,11 +3,18 @@ plugins {
 }
 
 android {
-    namespace 'com.snowplatform.smsforwarder'
+    namespace 'com.chipzplatform.smsforwarder'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.snowplatform.smsforwarder"
+        // Chipz's own package id. The fork kept the sibling platform's, which
+        // Android treats as the SAME
+        // APPLICATION: the two builds could never sit on one phone -- installing
+        // either one replaced the other, silently repointing that phone's SMS
+        // at the other platform's server. Distinct ids let a shared admin phone
+        // run both. Changing it means the Chipz build installs fresh rather than
+        // upgrading in place, so its settings are entered once more.
+        applicationId "com.chipzplatform.smsforwarder"
         minSdk 24
         targetSdk 34
         // Bump BOTH on every change you want phones to be offered. The build

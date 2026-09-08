@@ -4,10 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chipz Admin</title>
-<meta name="theme-color" content="#941827">
+<meta name="theme-color" content="#e21b2a">
 <link rel="manifest" href="/manifest.json">
-<link rel="icon" href="/icon-192.png">
-<link rel="apple-touch-icon" href="/icon-192.png">
+<!-- Same server-hosted brand asset the user app installs with, NOT a local
+     /icon-192.png. Uploading an icon in Admin -> Brand rewrote the one the
+     members' app installs with while the admin panel kept showing the file
+     that shipped in the repo, so the icon "never changed" here no matter how
+     many times it was replaced. One source of truth now: whatever
+     /admin/app-icon/set last wrote. -->
+<link rel="icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
 window._adminInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window._adminInstallPrompt = e;
@@ -173,7 +179,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   <div class="login-card">
     <div class="brand">
       <div class="mk"><svg viewBox="0 0 36 28" width="24" height="19" fill="none" aria-hidden="true"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="#FFFFFF"/></svg></div>
-      <b>Chipz Admin</b>
+      <b data-brandadmin>Chipz Admin</b>
     </div>
     <p class="muted">Owner: leave username blank and enter your admin key. Staff: enter the username and password you were given.</p>
     <input id="userInput" type="text" placeholder="Username (leave blank if you're the owner)" autocomplete="off">
@@ -190,7 +196,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
       <div class="topbar-inner">
         <div class="mk"><svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/></svg></div>
-        <b>Chipz Admin</b>
+        <b data-brandadmin>Chipz Admin</b>
         <div class="spacer"></div>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
         <button class="btn ghost sm" id="pushBtn" title="Enable push notifications for new deposits and withdrawal requests on this device/browser. Tapping an alert opens this panel -- it does not approve or send anything by itself.">Notify</button>
@@ -559,6 +565,12 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
   switchTab(lastTab); refreshBadges(); startLive();
   if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
   resyncPushToken();
+  // The app's name, for the topbar and the tab title. Fetched here rather
+  // than left to renderSettings() because that only runs on the Settings tab
+  // -- an admin who lands on Dashboard would otherwise sit under the old name
+  // until they happened to visit Settings. Not awaited and failure is silent:
+  // this is a heading, and nothing else on the screen should wait for it.
+  api('/admin/settings').then(r => { if (r && r.settings) applyAdminBrandName(r.settings.brandName); }).catch(() => {});
 }
 $('liveBtn').addEventListener('click', ()=>{ setLive(!_live); if(_live) liveTick(); });
 $('installBtn').addEventListener('click', async ()=>{
@@ -2274,6 +2286,20 @@ window.addEventListener('beforeunload', (e) => {
   if (_aboutBlocksDirty) { e.preventDefault(); e.returnValue = ''; }
 });
 let _manualNumbers = [];
+// The panel wears the platform's name too, so renaming the app renames this.
+// The <title> and the two "<name> Admin" headings are the whole surface --
+// everything else in here is admin vocabulary, not brand.
+//
+// The login screen paints before any settings call has been made (there is no
+// session yet to make one with), so it keeps the name compiled into the file
+// until the first authenticated render. That is the correct order: an
+// unauthenticated visitor has no business being told anything, the name
+// included.
+function applyAdminBrandName(name){
+  const n = (typeof name === 'string' ? name.trim() : '') || 'Chipz';
+  document.querySelectorAll('[data-brandadmin]').forEach(el => { el.textContent = n + ' Admin'; });
+  try { document.title = n + ' Admin'; } catch (_) {}
+}
 async function renderSettings(){
   const [r, br, hbr, air, abr, pr, mnr, mpir, cir, bar] = await Promise.all([
     api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list'), api('/admin/manual-numbers/list', {}), api('/admin/manual-pay-images'), api('/admin/chipz-images'), api('/admin/brand-assets')
@@ -2308,6 +2334,7 @@ async function renderSettings(){
   const pushTokenCount = pr.status==='success' ? pr.count : null;
   _manualNumbers = mnr.numbers||[];
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
+  applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
     <h2 class="sec">Rates &amp; limits</h2>
@@ -2633,6 +2660,13 @@ async function renderSettings(){
       <p class="muted" style="margin-top:0">Shown under Account → Rules &amp; Regulation. Blank leaves the page empty in the app.</p>
       <textarea id="regText" rows="8" placeholder="Platform rules and regulation…">${esc(v('rulesText',''))}</textarea>
       <button class="btn block" id="saveReg">Save regulation</button>
+    </div>
+
+    <h2 class="sec">App name</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The platform's name. Changing it renames it everywhere inside the app — the Home wordmark, the profile badge, the loading and sign-in screens, About, Get the app, the browser tab, and the wording on admin credits from now on. Members see it the next time they open the app. Two places keep the old name until the frontend is re-uploaded: the name Android shows under the installed icon, and the title on a shared link — both are read out of files the phone downloads once, not from these settings. Up to 24 characters.</p>
+      <label>App name</label><input id="brandNameInput" maxlength="24" value="${esc(v('brandName','Chipz'))}" placeholder="Chipz">
+      <button class="btn block" id="saveBrandName" style="margin-top:6px">Save app name</button>
     </div>
 
     <h2 class="sec">About page</h2>
@@ -3012,6 +3046,16 @@ async function renderSettings(){
   $('saveReg').addEventListener('click', async()=>{
     const d=await api('/admin/settings/update', { settings: { rulesText:$('regText').value } });
     toast(d.status==='success'?'Regulation saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveBrandName').addEventListener('click', async()=>{
+    const name = $('brandNameInput').value.trim();
+    // Checked here as well as on the server so the admin gets the answer
+    // instantly instead of a round trip; the server's own check is the one
+    // that actually protects the field.
+    if (!name) { toast('App name cannot be blank', 'err'); return; }
+    const d=await api('/admin/settings/update', { settings: { brandName:name } });
+    toast(d.status==='success'?'App name saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if (d.status==='success') applyAdminBrandName(name);
   });
   $('saveTagline').addEventListener('click', async()=>{
     const d=await api('/admin/settings/update', { settings: { brandTagline:$('abTag').value.trim() } });

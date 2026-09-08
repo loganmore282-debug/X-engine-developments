@@ -77,7 +77,29 @@ const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 ck(!/shareReferral/.test(stripComments(mod)),
    'shareReferral, which carried the "Join Snow" sentence, no longer exists');
 ck(!/Join Snow/.test(stripComments(mod)), 'and no "Join Snow" anywhere');
-ck(/openSheet\('About Chipz'/.test(mod), "the About sheet is titled 'About Chipz'");
+// The About sheet's title used to be the literal 'About Chipz'. It is now
+// built from the admin-set app name, which is the stronger property: it
+// cannot go stale when the owner renames the platform, and the fallback
+// inside brandName() means it still reads "About Chipz" out of the box. So
+// what is checked here is that it is BUILT from the name, and -- separately
+// -- that nothing in the file spells a platform name out by hand any more.
+ck(/openSheet\('About ' \+ brandName\(\)/.test(mod),
+   'the About sheet title is built from the admin-set app name');
+ck(/function brandName\(\)/.test(mod) && /return n \|\| 'Chipz'/.test(mod),
+   "and brandName() still falls back to 'Chipz' when nothing is set");
+// No hardcoded name left anywhere in the module's actual CODE. Comments are
+// stripped first: this file's own explanations say "Chipz" constantly, and
+// an assertion that matched them would fail for a reason that has nothing to
+// do with the shipped app. The two allowed hits are brandName()'s fallback
+// and the same fallback inside brandTextMark()'s caller chain.
+{
+  const code = stripComments(mod);
+  const hits = (code.match(/'Chipz'|"Chipz"|Chipz /g) || []);
+  ck(hits.length <= 1,
+     `the module hardcodes the app name at most once -- brandName()'s own fallback (${hits.length} hit${hits.length === 1 ? '' : 's'}: ${hits.join(', ') || 'none'})`);
+  ck(!/CHIPZ/.test(code.replace(/chipz-grad|chipzMarkHtml|chipz-images|chipz-image/g, '')),
+     'and no CHIPZ wordmark literal survives -- the mark is rendered from the name');
+}
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 ck(!/snowflake mark/.test(stripComments(admin)),
    'the admin no longer offers to revert to "the snowflake mark"');

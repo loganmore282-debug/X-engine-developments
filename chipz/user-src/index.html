@@ -555,6 +555,16 @@ a{color:inherit;}
 .spin-banner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 .spin-cta{position:relative;margin:0 0 18px;padding:0 30px;height:44px;border:0;border-radius:4px;background:var(--chipz-grad);color:#fff;font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.04em;cursor:pointer;box-shadow:none;}
 .spin-cta:active{opacity:.85;}
+/* The animated brand mark filling Home's leftover strip above the nav.
+   max-height is in vh on purpose -- a GIF arrives at whatever size it was
+   exported at, and one tall upload would otherwise push Home into scrolling.
+   The right padding is wider than the left by the width of the floating
+   chest: the chest is position:fixed over that corner, so centring inside
+   the FULL width would put the mark half under it. This centres it in the
+   space that is actually free, which is what reads as centred on the phone.
+   pointer-events:none so the strip can never eat a tap meant for the chest. */
+.home-gif{display:flex;align-items:center;justify-content:center;padding:2px 96px 0 18px;pointer-events:none;}
+.home-gif img{max-width:100%;max-height:20vh;width:auto;height:auto;display:block;}
 .ref-banner{height:150px;margin-bottom:18px;}
 .home-banner img,.ref-banner img{display:block;width:100%;height:100%;object-fit:cover;}
 .hb-stripes{position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.06) 0 14px,transparent 14px 30px);}
@@ -1446,7 +1456,7 @@ a{color:inherit;}
 <body>
 
 <div id="loadingScreen">
-  <div class="ls-wordmark">CHIP<b>Z</b></div>
+  <div class="ls-wordmark" data-brandmark>CHIP<b>Z</b></div>
   <div class="ls-text" aria-label="Loading"><i style="animation-delay:0ms">L</i><i style="animation-delay:95ms">o</i><i style="animation-delay:190ms">a</i><i style="animation-delay:285ms">d</i><i style="animation-delay:380ms">i</i><i style="animation-delay:475ms">n</i><i style="animation-delay:570ms">g</i><i style="animation-delay:665ms">.</i><i style="animation-delay:760ms">.</i><i style="animation-delay:855ms">.</i><i style="animation-delay:950ms">.</i><i style="animation-delay:1045ms">.</i><i style="animation-delay:1140ms">.</i></div>
 </div>
 
@@ -1466,7 +1476,7 @@ a{color:inherit;}
       <span class="auth-tri t2" aria-hidden="true"></span>
       <div class="mark-row">
         <span class="mark-tri" aria-hidden="true"></span>
-        <span class="auth-wordmark">CHIP<b>Z</b></span>
+        <span class="auth-wordmark" data-brandmark>CHIP<b>Z</b></span>
       </div>
       <div id="authTagline" style="position:relative;z-index:2;text-align:center;font-size:14px;color:rgba(255,255,255,.92);font-weight:600;padding:0 40px;display:none;"></div>
     </div>
@@ -1565,7 +1575,7 @@ a{color:inherit;}
   <div class="announce-wrap">
     <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h1 class="announce-title" id="announceTitle">Welcome</h1>
-    <div class="announce-banner" id="announceBanner"><div class="wm">CHIP<b>Z</b></div></div>
+    <div class="announce-banner" id="announceBanner"><div class="wm" data-brandmark>CHIP<b>Z</b></div></div>
     <div class="announce-scroll"><p id="announceBody"></p></div>
     <div class="announce-footer">
       <button class="primary-button" id="announceTelegramBtn" style="width:100%;height:52px;padding:0;font-size:16px;display:none;align-items:center;justify-content:center;gap:8px;" onclick="openAnnounceTelegram()">

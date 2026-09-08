@@ -1,4 +1,4 @@
-package com.snowplatform.smsforwarder;
+package com.chipzplatform.smsforwarder;
 
 import android.content.Context;
 import android.os.Build;
@@ -12,9 +12,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
-/** Posts a single SMS to Snow's /deposit/manual/sms-forwarder webhook. */
+/** Posts a single SMS to Chipz's /deposit/manual/sms-forwarder webhook. */
 public final class Poster {
-    private static final String TAG = "SnowSMS";
+    private static final String TAG = "ChipzSMS";
 
     /** Runs the network call on a background thread. */
     public static void post(final Context context, final String url, final String secret,
@@ -72,7 +72,7 @@ public final class Poster {
         try {
             PowerManager pm = (PowerManager) context.getApplicationContext().getSystemService(Context.POWER_SERVICE);
             if (pm == null) return null;
-            PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SnowSMS:post");
+            PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ChipzSMS:post");
             wl.setReferenceCounted(false);
             wl.acquire(40000L); // safety timeout -- always releases even if something above goes wrong
             return wl;
@@ -94,7 +94,7 @@ public final class Poster {
             body.put("secret", secret);
             body.put("message", message);
             body.put("sender", sender == null ? "" : sender);
-            // Snow assigns members one of several admin payment numbers and
+            // Chipz assigns members one of several admin payment numbers and
             // matches an incoming SMS to a pending order by
             // (receivingNumber, amount) -- the server has no other way to
             // know which of its own numbers this SIM corresponds to.

@@ -1,27 +1,39 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'chipz-admin-shell-v1';
+const CACHE = 'chipz-admin-shell-v3';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+// The uploaded icon, served by chipz-server. manifest.json and index.html's
+// <link rel="icon"> point here too; the local /icon-*.png above stay only as
+// the offline shell copy. Before this, the admin panel read the PNG that
+// shipped in the repo, so replacing the icon in Admin -> Brand changed the
+// members' app and left the admin's own icon untouched forever.
+const BRAND_ICON = 'https://chipz-server.onrender.com/public/app-icon-192.png';
 
 // Firebase Messaging background handler -- shows a notification for pushes
 // that arrive while the admin panel tab isn't open/focused. Foreground
 // pushes are handled separately by onMessage() in index.html.
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+// Chipz's own Firebase project. This file was left on SNOW's project when
+// the panel was forked -- a real bug, not a cosmetic one: the background
+// push handler registered against a different project entirely, so admin
+// notifications could never arrive here. It must stay in step with
+// FIREBASE_CONFIG in admin-src/index.html; a service worker cannot import
+// from the page, so the values are necessarily duplicated.
 firebase.initializeApp({
-  apiKey: "AIzaSyDhaVbSaQyYRdSiP1LLze-Apb6kNNTVCsc",
-  authDomain: "snow-beer-cbf65.firebaseapp.com",
-  projectId: "snow-beer-cbf65",
-  storageBucket: "snow-beer-cbf65.firebasestorage.app",
-  messagingSenderId: "171510439127",
-  appId: "1:171510439127:web:94f15dd79aa057e3d32492",
+  apiKey: "AIzaSyDUfGBx-8WD9SOufQNC5oNrsyikKobJLwM",
+  authDomain: "chipz-23a4c.firebaseapp.com",
+  projectId: "chipz-23a4c",
+  storageBucket: "chipz-23a4c.firebasestorage.app",
+  messagingSenderId: "649643781611",
+  appId: "1:649643781611:web:31215a9f084cc1918a3dae",
 });
 const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const n = payload.notification || {};
-  self.registration.showNotification(n.title || 'Snow Admin', {
+  self.registration.showNotification(n.title || 'Chipz Admin', {
     body: n.body || '',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: BRAND_ICON,
+    badge: BRAND_ICON,
     data: payload.data || {}
   });
 });

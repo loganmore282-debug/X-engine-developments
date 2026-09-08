@@ -1,16 +1,17 @@
-# Snow SMS Forwarder
+# Chipz SMS Forwarder
 
-A minimal Android app that reads incoming Mobile Money SMS on one of Snow's
-admin payment phones and forwards them to the Snow server
+A minimal Android app that reads incoming Mobile Money SMS on one of Chipz's
+admin payment phones and forwards them to the Chipz server
 (`POST /deposit/manual/sms-forwarder`), so manual-method deposits are matched
 and credited automatically.
 
-This is a fork of the sibling Nexus project's own `sms-forwarder-app/`
-(repo root), adapted for Snow's multi-number manual-deposit design. Install
+This is a fork of the sibling Snow project's own `snow/sms-forwarder-app/`,
+which was itself forked from Nexus's copy at the repo root. Install
 one copy per admin payment phone. **A dual/triple-SIM phone can cover
-several Snow payment numbers from a single install** — one number per SIM
-slot — so you need fewer phones as the number pool grows. Never edit the
-root `sms-forwarder-app/` from here; it's Nexus's own live deployment.
+several Chipz payment numbers from a single install** — one number per SIM
+slot — so you need fewer phones as the number pool grows. Never edit the root `sms-forwarder-app/`
+or `snow/sms-forwarder-app/` from here; those are other platforms' live
+deployments.
 
 ## Which messages get forwarded
 
@@ -32,7 +33,7 @@ that to a SIM slot and sends the number you configured for that slot.
 If it *cannot* work out which SIM received a message and you have two or more
 numbers configured, **it drops the message instead of guessing.** That is
 deliberate. The server matches a payment by (receiving number, amount), and
-Snow's own number-assignment deliberately gives different payment numbers the
+Chipz's own number-assignment deliberately gives different payment numbers the
 same amount at the same time — so reporting the wrong number does not fail
 harmlessly, it can credit a completely different member for someone else's
 money. A dropped SMS is recoverable (the member's paste-SMS fallback and the
@@ -47,7 +48,7 @@ No external dependencies. Everything is stored on the device.
 
 ## Access password (optional)
 
-Set `FORWARDER_PASSWORD` on the `snow-server` Render service and the app asks for it
+Set `FORWARDER_PASSWORD` on the `chipz-server` Render service and the app asks for it
 every time someone opens it, before the settings screen appears. **Forwarding is not
 gated by it** — a locked phone keeps receiving SMS, forwarding them and crediting
 deposits exactly as before; the password only guards the settings screen.
@@ -78,7 +79,7 @@ reinstalling on every phone.
   installing it.
 
 ## How it works
-1. A member is assigned one of Snow's admin payment numbers and sends money to it.
+1. A member is assigned one of Chipz's admin payment numbers and sends money to it.
 2. That number's SIM receives an SMS:
    - **MTN:** `You have received UGX 50,000 from JOHN DOE, 256771234567 on ...`
    - **Airtel:** `RECEIVED. TID 149730678579. UGX 30,000 from 741234567, JOHN. Bal UGX ...`
@@ -109,28 +110,28 @@ already matched and correctly processes anything it never saw.
 ## Build the APK
 
 ### Option A — Android Studio
-1. Clone the repo, open `snow/sms-forwarder-app/` in Android Studio
+1. Clone the repo, open `chipz/sms-forwarder-app/` in Android Studio
 2. **Build → Build Bundle(s) / APK(s) → Build APK(s)**
 3. APK appears at `app/build/outputs/apk/debug/app-debug.apk`
 
 ### Option B — Command line
 ```bash
-cd snow/sms-forwarder-app
+cd chipz/sms-forwarder-app
 ./gradlew assembleDebug
 # APK: app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## Install & configure on each admin phone
 1. Copy `app-debug.apk` to the phone → install it (allow "unknown sources" in settings)
-2. Open **Snow SMS** → grant SMS, phone and notification permissions
+2. Open **Chipz SMS** → grant SMS, phone and notification permissions
 3. Fill in:
-   - **Server webhook URL**: `https://mylifeismyhappiness.onrender.com/deposit/manual/sms-forwarder`
+   - **Server webhook URL**: `https://chipz-server.onrender.com/deposit/manual/sms-forwarder`
    - **Shared secret**: the value of `MANUAL_SMS_SECRET` set on Render
-   - **SIM slot 1 / SIM slot 2 / …**: the Snow payment number each SIM in this phone
+   - **SIM slot 1 / SIM slot 2 / …**: the Chipz payment number each SIM in this phone
      actually uses, exactly as saved in the admin panel's Settings → Manual payments →
      Payment numbers list (e.g. `0770000001`). The app labels each slot with the carrier
      it detects, so slot 1 might read "SIM slot 1 (MTN)" and slot 2 "SIM slot 2 (Airtel)".
-     Leave a slot blank if that SIM is not a Snow payment number.
+     Leave a slot blank if that SIM is not a Chipz payment number.
 4. Tap **Save settings**, then **START forwarding**
 5. Tap **Send test ping** — you should see `Test result: HTTP 200` if the server is reachable
 
@@ -144,8 +145,8 @@ Since v1.8 the app checks this for you instead of leaving it to be discovered la
 no picker, so there is nothing in it to read them out of. It sends the one number entered
 and the server answers only yes or no.
 
-- Under each slot the app says what it was told: *"Verified: this is a Snow payment
-  number"* in green, *"NOT a Snow payment number"* in red, or an amber note if the number
+- Under each slot the app says what it was told: *"Verified: this is a Chipz payment
+  number"* in green, *"NOT a Chipz payment number"* in red, or an amber note if the number
   is saved but switched off in the panel. Formatting is ignored, so `0770000001` and
   `+256770000001` are treated as the same number.
 - If the carrier stored the SIM's own number, a blank slot is prefilled with it. Many
@@ -164,7 +165,7 @@ is refused with `unknown-number` rather than being quietly treated as unmatched,
 `MANUAL_SMS_UNKNOWN_NUMBER`, and listed in **Analytics → Messages from numbers you have not
 saved** so it cannot go unnoticed.
 
-## Required Render environment variables (on the `snow-server` service)
+## Required Render environment variables (on the `chipz-server` service)
 | Variable | Value |
 |----------|-------|
 | `FIREBASE_SERVICE_ACCOUNT` | Full Firebase service account JSON (paste entire file) |
@@ -207,7 +208,7 @@ therefore checks for itself:
   version, offering an "Update now" button. The APK downloads **inside the app** and
   Android's installer opens straight away — no browser round-trip. There's also a
   "Check for updates" button to ask on demand.
-- The first time, Android asks you to allow Snow SMS to install apps ("Allow from this
+- The first time, Android asks you to allow Chipz SMS to install apps ("Allow from this
   source"); the app links you to that exact settings screen. **The update dialog always
   offers "Use browser" as well** — Android's download service behaves differently across
   ROMs, and you should never have to wait for a timeout to find the way that works.
@@ -219,9 +220,9 @@ therefore checks for itself:
   reclaiming memory mid-download no longer orphans it.
 
 If an update ever does get stuck, the direct link works from any browser on the phone:
-`https://github.com/loganmore282-debug/X-engine-developments/releases/download/snow-sms-app/snow-sms-forwarder.apk`
-- **While it's running in the background**, the ongoing "Snow SMS active" notification
-  changes to "Snow SMS update available (1.3)" — these phones sit untouched forwarding
+`https://github.com/loganmore282-debug/X-engine-developments/releases/download/chipz-sms-app/chipz-sms-forwarder.apk`
+- **While it's running in the background**, the ongoing "Chipz SMS active" notification
+  changes to "Chipz SMS update available (1.3)" — these phones sit untouched forwarding
   SMS, so the notification is the one thing an admin actually sees. Tapping it opens the
   app. It keeps forwarding normally either way; an update is never forced.
 
@@ -235,7 +236,7 @@ To publish an update: change the code, bump BOTH `versionCode` and `versionName`
 
 ## Important phone setup
 - Keep each phone **charged** and **online** at all times
-- Go to phone Settings → Battery → exclude **Snow SMS** from battery optimisation
+- Go to phone Settings → Battery → exclude **Chipz SMS** from battery optimisation
 - Do not clear the app from recents — the foreground service keeps it alive
 - `BootReceiver` auto-restarts the service after a phone reboot
 - If the forwarder is ever slow or the phone is offline, a member can still paste
