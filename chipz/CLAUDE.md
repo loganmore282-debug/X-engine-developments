@@ -1347,6 +1347,19 @@ congratulations card that visibly takes money back off the member is worse than 
 that is a few seconds behind — `STATE.account` already holds the truth and Home shows
 it the moment they close the card.
 
+**A rAF timestamp can be earlier than the `performance.now()` you started from.**
+`countBetweenEl` clamped `t` at the top only, and the assertion "it only ever grows"
+failed **once**, in a suite run, then passed on every re-run. That flake was real: a
+rAF callback receives the *frame's start* timestamp, not the moment it executes, so a
+task running inside an already-stamped frame — a promise continuation, which is
+exactly what opens the win card — can schedule a callback that arrives with
+`now < start`. `t` went negative, the ease-out cubic went negative with it, and the
+figure painted one frame **below** where it started: money visibly dipping on a
+congratulations card. `t` is now clamped at both ends. If any other animation here is
+ever written against `performance.now()`, clamp both ends — and treat a
+one-in-many-runs failure of a timing assertion as a defect to find, not a test to
+loosen.
+
 `test-win-and-purchase.py` is the standing check. It only means anything against a
 **slow** backend — on a fast connection the old code looked fine — so it stalls
 `/account` by 3s and `/turntable/spin` by 1.5s and asserts wall-clock time from the

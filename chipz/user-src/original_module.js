@@ -1875,7 +1875,16 @@ function countBetweenEl(el, from, to, fmt, ms){
   el.textContent = fmt(from);
   function tick(now){
     if (el._countToken !== token || !el.isConnected) return;
-    const t = Math.min(1, (now - start) / duration);
+    // Clamped at BOTH ends. `now` is the frame's start timestamp, not the
+    // moment this callback runs, so it can be EARLIER than the performance.now()
+    // captured above: a task that runs inside an already-stamped frame (a
+    // promise continuation -- which is exactly what opens the win card) can
+    // schedule a callback that arrives with now < start. Unclamped, t goes
+    // negative, the cubic below goes negative with it, and the figure paints one
+    // frame BELOW where it started -- money visibly dipping on a congratulations
+    // card. Rare and frame-timing dependent, which is how it showed up as one
+    // flaky "it only ever grows" failure rather than a reproducible one.
+    const t = Math.max(0, Math.min(1, (now - start) / duration));
     // ease-out cubic: quick off the mark, gentle into the real figure, so it
     // settles onto the number rather than stopping dead on it.
     const eased = 1 - Math.pow(1 - t, 3);

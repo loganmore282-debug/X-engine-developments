@@ -164,8 +164,15 @@ async def main():
           window.__balFrames=[];
           const bg=document.getElementById('chestWinBg');
           const el=document.getElementById('chestWinBalance');
+          let seen=false;
           (function watch(){
-            if(bg.classList.contains('show')){
+            const open=bg.classList.contains('show');
+            // Stops for good once this first card closes, so a later win can
+            // never append a second count onto the same list and make the
+            // sequence look like it went backwards at the join.
+            if(seen && !open) return;
+            if(open){
+              seen=true;
               const t=el.textContent;
               const last=window.__balFrames[window.__balFrames.length-1];
               if(t!==last) window.__balFrames.push(t);
@@ -200,7 +207,12 @@ async def main():
            "it starts at the balance held BEFORE the win (%s)" % (nums[0] if nums else None))
         ck(nums and abs(nums[-1] - BAL_AFTER) <= 1,
            "it lands on the balance held after (%s)" % (nums[-1] if nums else None))
-        ck(nums == sorted(nums), "it only ever grows")
+        # Names the offending pair. This assertion caught a genuine, rare
+        # frame-timing defect once (an unclamped negative t painting one frame
+        # below the starting figure), and "it only ever grows: False" gave
+        # nothing to work from.
+        dips = [(i, nums[i - 1], nums[i]) for i in range(1, len(nums)) if nums[i] < nums[i - 1]]
+        ck(not dips, "it only ever grows (dips: %s)" % (dips[:3] if dips else "none"))
 
         await page.screenshot(path=f"{OUT}/chest-win.png")
         await page.evaluate("closeChestWin()")
