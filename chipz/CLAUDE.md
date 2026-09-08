@@ -589,6 +589,49 @@ Two animation corrections, both after the owner rejected an earlier attempt.
   **25px**, up from 18px, and the wave's rise grew with it (9px → 12px), because the same
   travel against larger type reads as a weaker motion.
 
+### Login / Sign Up backdrops (2 images + opacity + blur)
+
+Owner: *"make when l can put background image on those screens of login tab and
+registration tab, make when l can set their opusity and blur … 2 different images so one
+image will appear on login and registration tabs, and 1 will appear on space where orange
+color is shared."* Admin → Settings → **Login & Sign Up screen**.
+
+Two `CHIPZ_IMAGE_SLOTS`: **`authhero`** (the orange band, ~1200 × 700) and **`authcard`**
+(the white form panel, ~900 × 1200). **One pair covers BOTH tabs**, not one pair per tab —
+the two screens share the same hero and the same card, so per-tab images would make the
+background jump as a member switches between Log In and Sign Up. Four settings ride the
+existing `SETTINGS_CRITICAL_RANGES` validation: `authHeroOpacity`/`authCardOpacity`
+(0–100) and `authHeroBlur`/`authCardBlur` (0–40 px).
+
+- **Opacity is stored as a PERCENT, not a 0–1 fraction.** `/admin/settings/update` runs
+  `Math.round()` over every ranged number, which would flatten `0.45` to `0`. It is
+  divided once, client-side, in `applyAuthBackgrounds()`.
+- Each backdrop is a **child element**, not a `background-image` on the section itself.
+  That is what makes opacity useful: the child paints *over* the brand gradient (or the
+  white card), so fading it blends the photo toward the brand colour rather than toward
+  nothing. Fading the section itself would take the wordmark and the form fields with it.
+- **The negative inset is load-bearing.** `filter:blur()` feathers an element's own edges,
+  so a backdrop that exactly filled its box shows a soft transparent rim once blurred.
+  `inset:calc(-2 * var(--auth-bg-blur))` pushes that rim outside the clip — which is why
+  both sections need `overflow:hidden` (added to `.auth-card`).
+- Applied as CSS custom properties on `:root`, not inline styles: the auth screen is
+  static markup in `index.html` that the module never re-renders, so there is nothing to
+  re-apply them to after a repaint.
+- **The trap that actually bit:** `.auth-card > *{position:relative}` and `.auth-bg`
+  have the *same* specificity, and the former comes later in the sheet — so it won the
+  cascade and collapsed the card backdrop to a 0×0 relatively-positioned span. It rendered
+  as nothing at all while **every computed-style assertion still passed**. The fix restores
+  `position:absolute` explicitly on `.auth-card > #authCardBg`, and the test now measures
+  the element's real box.
+
+`test-auth-backgrounds.py` renders the signed-out screen with a **blue** hero image and a
+**green** card image — flatly different colours, so "which image landed where" is answered
+from pixels rather than markup, and a swapped pair cannot pass. It takes the **median** of
+each section's real bounding box (median, not mean: the card is mostly backdrop with dark
+text over it). Card median comes back `(191, 241, 191)` — exactly 25% green over white. It
+also checks the backdrops sit *behind* the content, because a z-index mistake there does
+not look like a styling bug, it looks like the login form has stopped working.
+
 ### Balance Record counts up from zero
 
 Owner: *"when one taps balance records l need a live animation of balancing increase from

@@ -35,7 +35,8 @@ R = {
   "/admin/push/list": {"status": "success", "count": 0},
   "/admin/manual-numbers/list": {"status": "success", "numbers": []},
   "/admin/manual-pay-images": {"status": "success", "selector": None, "hero": None},
-  "/admin/chipz-images": {"status": "success", "referral": None, "logo": None, "spin": None, "profilegif": None},
+  "/admin/chipz-images": {"status": "success", "referral": None, "logo": None, "spin": None,
+     "profilegif": None, "downloadbg": None, "authhero": None, "authcard": None},
   # Nothing uploaded yet: the icon falls back to the built-in one, which is
   # exactly the state where the panel must NOT claim a custom icon is set.
   "/admin/brand-assets": {"status": "success",
@@ -122,6 +123,33 @@ async def main():
         ck('Custom icon' in body2, "an uploaded icon reads as Custom icon")
         ck(await page.locator('#appIconClear').count() == 1, "and gets a Remove button")
         ck(await page.locator('#linkPreviewClear').count() == 1, "so does the preview")
+
+        # ── the Login / Sign Up backdrops ──
+        # Two sections, each with its own opacity and blur -- the owner will
+        # size and tune his artwork from what this screen says, so the fields
+        # have to be here and the guidance has to be on them.
+        print("\n— the Login & Sign Up backdrop section —")
+        body3 = await page.inner_text('#content')
+        ck('Login & Sign Up screen' in body3, "there is a Login & Sign Up section")
+        ck('Top band' in body3 and 'form card' in body3.lower(),
+           "naming both parts: the top band and the form card")
+        ck('1200' in body3 and '900' in body3, "with a size for each (1200 wide, 900 wide)")
+        # The card image sits behind the input boxes; a strong one makes the
+        # form unreadable, which is the mistake worth warning about up front.
+        ck('hard to read' in body3, "and a warning to keep the form-card image faint")
+        for id_ in ('authHeroFile', 'authCardFile', 'authHeroOp', 'authHeroBlur',
+                    'authCardOp', 'authCardBlur', 'saveAuthBg'):
+            ck(await page.locator('#' + id_).count() == 1, "#%s exists" % id_)
+        # Independent fields, not one shared pair.
+        vals = await page.evaluate("""() => ({
+            heroOp: authHeroOp.value, heroBlur: authHeroBlur.value,
+            cardOp: authCardOp.value, cardBlur: authCardBlur.value,
+            heroMax: authHeroOp.max, blurMax: authHeroBlur.max })""")
+        print("   ", vals)
+        ck(vals["heroOp"] == '100' and vals["cardOp"] == '100',
+           "opacity defaults to 100%% so an upload shows as supplied (%s)" % vals)
+        ck(vals["heroMax"] == '100' and vals["blurMax"] == '40',
+           "with the same caps the server enforces (opacity 100, blur 40)")
 
         ck(not errs, "no page errors: %s" % errs[:3])
         await ctx.close(); await b.close()

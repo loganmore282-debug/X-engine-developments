@@ -333,6 +333,11 @@ const DEFAULT_SETTINGS = {
   // Not yet confirmed by the owner — a reasonable Snow-scaled default,
   // admin-editable like every other rate here.
   dailyCheckin: 500,
+  // Login / Sign Up backdrops: fully opaque and unblurred, so an
+  // uploaded image shows exactly as supplied until the owner dials it
+  // back. With no image set these do nothing at all.
+  authHeroOpacity: 100, authHeroBlur: 0,
+  authCardOpacity: 100, authCardBlur: 0,
   // ── Turntable (daily spin wheel) ──
   // Owner's spec: "spin wheel bonus, so everyday one spins just like daily
   // check-in and earns the set amount in admin panel, also spin can also be
@@ -714,7 +719,14 @@ async function getHelpBanner() {
 // 'downloadbg' backs the Download APP screen (owner: "make when one taps
 // download, it opens and middle there is a button download, and in
 // background there is image uploaded from admin panel").
-const CHIPZ_IMAGE_SLOTS = ['referral', 'logo', 'spin', 'profilegif', 'downloadbg'];
+// 'authhero' and 'authcard' back the two halves of the Login / Sign Up
+// screen (owner: "2 different images so one image will appear on login and
+// registration tabs, and 1 will appear on space where orange color is
+// shared"). ONE pair covers BOTH tabs, not one pair per tab: the two
+// screens share the same hero band and the same white card, so per-tab
+// images would make the background jump as a member switches between
+// Log In and Sign Up.
+const CHIPZ_IMAGE_SLOTS = ['referral', 'logo', 'spin', 'profilegif', 'downloadbg', 'authhero', 'authcard'];
 const _chipzImageCache = {};
 async function getChipzImage(slot) {
   if (!CHIPZ_IMAGE_SLOTS.includes(slot)) return null;
@@ -2311,8 +2323,8 @@ app.get('/public/announcement-image', async (_req, res) => {
 // in boot()'s own Promise.all alongside the Home banner so neither pops in.
 app.get('/public/chipz-images', async (_req, res) => {
   try {
-    const [referral, logo, spin, profilegif, downloadbg] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg')]);
-    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg });
+    const [referral, logo, spin, profilegif, downloadbg, authhero, authcard] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg'), getChipzImage('authhero'), getChipzImage('authcard')]);
+    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Both slots in one call (not two round trips) -- fetched unconditionally
@@ -5880,6 +5892,13 @@ const SETTINGS_CRITICAL_RANGES = {
   // a genuinely paused one. 2000 is a generous ceiling, well past anything
   // that would still read as a legible scroll.
   activityTickerSpeed: [10, 2000],
+  // Login / Sign Up backdrops. Opacity is stored as a PERCENT (0-100)
+  // rather than a 0-1 fraction: every other number an admin types in
+  // this panel is a whole number, and Math.round() below would flatten
+  // 0.45 to 0. Blur is in px, capped at 40 -- past that the image is
+  // indistinguishable from a flat colour wash and only costs GPU time.
+  authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
+  authCardOpacity: [0, 100], authCardBlur: [0, 40],
 };
 const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
@@ -5951,8 +5970,8 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/chipz-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [referral, logo, spin, profilegif, downloadbg] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg')]);
-    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg });
+    const [referral, logo, spin, profilegif, downloadbg, authhero, authcard] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg'), getChipzImage('authhero'), getChipzImage('authcard')]);
+    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/chipz-image/set', async (req, res) => {

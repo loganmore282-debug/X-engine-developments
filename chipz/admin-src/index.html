@@ -2292,6 +2292,8 @@ async function renderSettings(){
   const brandLogoImage = cir.logo||'';
   const spinBannerImage = cir.spin||'';
   const downloadBgImage = cir.downloadbg||'';
+  const authHeroImage = cir.authhero||'';
+  const authCardImage = cir.authcard||'';
   const profileGifImage = cir.profilegif||'';
   const manualSelectorImage = mpir.selector||'';
   const manualHeroImage = mpir.hero||'';
@@ -2483,6 +2485,40 @@ async function renderSettings(){
       <h4 style="margin:16px 0 6px;font-size:14px">Spins earned by buying products</h4>
       <p class="muted" style="margin:0 0 8px;font-size:12px">Set per product, not here — open <b>Products</b>, edit a product, and use its "Turntable spins from this product" section to set how many spins it earns and what each can win. That way every product can pay differently.</p>
       <button class="btn block" id="saveTurntable" style="margin-top:6px">Save turntable settings</button>
+    </div>
+
+    <h2 class="sec">Login &amp; Sign Up screen</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The screen a member sees before signing in. It has <b>two parts</b>, and each takes its own picture. Both apply to the Log In tab <b>and</b> the Sign Up tab &mdash; they share this screen, so one image each keeps the background steady when a member switches between them.</p>
+
+      <h4 style="margin:16px 0 6px;font-size:14px">1. Top band (behind the CHIPZ logo)</h4>
+      <p class="muted" style="margin:0 0 8px;font-size:12px">The orange area. Landscape, about <b>1200&nbsp;&times;&nbsp;700</b>. An empty slot shows the brand gradient. The picture sits <i>over</i> the gradient, so lowering opacity blends it back toward the orange rather than toward nothing.</p>
+      <div class="banner-row">
+        ${authHeroImage?`<img class="img-thumb" src="${esc(authHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authHeroImage?'Custom image':'<span class="muted">Brand gradient</span>'}</div>
+        ${authHeroImage?`<button class="btn danger sm" id="authHeroClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload top-band image<input type="file" id="authHeroFile" accept="image/*" hidden></label>
+      <div class="row" style="margin-top:10px">
+        <div><label>Opacity (0&ndash;100%)</label><input id="authHeroOp" type="number" min="0" max="100" value="${esc(v('authHeroOpacity',100))}"></div>
+        <div><label>Blur (0&ndash;40 px)</label><input id="authHeroBlur" type="number" min="0" max="40" value="${esc(v('authHeroBlur',0))}"></div>
+      </div>
+
+      <h4 style="margin:20px 0 6px;font-size:14px">2. The form card (behind the fields)</h4>
+      <p class="muted" style="margin:0 0 8px;font-size:12px">The white panel carrying LOGIN / SIGN UP and the input boxes. Portrait, about <b>900&nbsp;&times;&nbsp;1200</b>. It sits over the white card, so opacity blends it back toward white. <b>Keep this one faint</b> &mdash; try 20&ndash;35% opacity with some blur, or the text and the input boxes become hard to read.</p>
+      <div class="banner-row">
+        ${authCardImage?`<img class="img-thumb" src="${esc(authCardImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authCardImage?'Custom image':'<span class="muted">Plain white</span>'}</div>
+        ${authCardImage?`<button class="btn danger sm" id="authCardClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload form-card image<input type="file" id="authCardFile" accept="image/*" hidden></label>
+      <div class="row" style="margin-top:10px">
+        <div><label>Opacity (0&ndash;100%)</label><input id="authCardOp" type="number" min="0" max="100" value="${esc(v('authCardOpacity',100))}"></div>
+        <div><label>Blur (0&ndash;40 px)</label><input id="authCardBlur" type="number" min="0" max="40" value="${esc(v('authCardBlur',0))}"></div>
+      </div>
+
+      <button class="btn block" id="saveAuthBg" style="margin-top:14px">Save opacity &amp; blur</button>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">Uploading a picture saves it immediately. Opacity and blur need this button.</p>
     </div>
 
     <h2 class="sec">App icon</h2>
@@ -2771,7 +2807,11 @@ async function renderSettings(){
           // The download backdrop fills a whole phone screen, so it keeps more
           // resolution than the banners: 1280 on the long side of a portrait
           // image is only 720 wide, which is visibly soft full-bleed.
-          const maxDim = slot==='logo' ? 512 : slot==='downloadbg' ? 1600 : 1280;
+          // The download backdrop and the two auth backdrops all fill large
+          // areas, so they keep more resolution than the banners.
+          const maxDim = slot==='logo' ? 512
+                       : (slot==='downloadbg' || slot==='authhero' || slot==='authcard') ? 1600
+                       : 1280;
           const image = await fileToDataUrl(f, maxDim, 0.82);
           const d = await api('/admin/chipz-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
@@ -2840,6 +2880,20 @@ async function renderSettings(){
   wireChipzImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved, live for every user', 'Brand logo removed');
   wireChipzImageSlot('spin', 'spinBannerFile', 'spinBannerClear', 'Spin banner saved, live for every user', 'Spin banner removed');
   wireChipzImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download screen background saved, live for every user', 'Download screen background removed');
+  wireChipzImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Top-band image saved, live on Log In and Sign Up', 'Top-band image removed');
+  wireChipzImageSlot('authcard', 'authCardFile', 'authCardClear', 'Form-card image saved, live on Log In and Sign Up', 'Form-card image removed');
+  const saveAuthBg = $('saveAuthBg');
+  if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{
+    const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value,
+                   authCardOpacity:+$('authCardOp').value, authCardBlur:+$('authCardBlur').value };
+    for (const [k,val] of Object.entries(nums)) {
+      const max = k.endsWith('Blur') ? 40 : 100;
+      if (!Number.isFinite(val) || val < 0 || val > max)
+        return toast(`${k.endsWith('Blur')?'Blur':'Opacity'} must be between 0 and ${max}`,'err');
+    }
+    const d = await api('/admin/settings/update', { settings: nums });
+    toast(d.status==='success'?'Login screen opacity & blur saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
   // Deliberately NOT wireChipzImageSlot(): that helper compresses through
   // fileToDataUrl(), which would kill the animation. Same endpoint, raw bytes.
   const profileGifFile = $('profileGifFile');

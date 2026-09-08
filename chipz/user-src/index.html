@@ -899,6 +899,32 @@ a{color:inherit;}
    symbols of padlock, key... l need that same key") -- the only place in
    this app that uses emoji instead of SVG. */
 .auth-hero{position:relative;overflow:hidden;height:280px;background:var(--chipz-grad);background-size:cover;background-position:center;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
+/* ── Admin-set backdrops for the Login / Sign Up screen ──
+   Owner: "make when l can put background image on those screens of login tab
+   and registration tab ... 2 different images so one image will appear on
+   login and registration tabs, and 1 will appear on space where orange color
+   is shared". Two slots: the orange hero band, and the white form card.
+
+   Each is a CHILD element rather than a background-image on the section
+   itself, and that is what makes the opacity control useful: the child paints
+   OVER the brand gradient (or the white card), so opacity blends the photo
+   towards the brand colour instead of towards nothing. A background-image
+   with opacity would need the whole element faded, taking the wordmark and
+   the form fields with it.
+
+   The negative inset is not decoration. filter:blur() feathers an element's
+   own edges, so a backdrop that exactly filled its box would show a soft
+   transparent rim all the way round once blurred. Pulling it out by twice the
+   blur radius puts that rim outside the clip, which is why both sections need
+   overflow:hidden. */
+.auth-bg{position:absolute;inset:calc(-2 * var(--auth-bg-blur, 0px));
+  background-size:cover;background-position:center;background-repeat:no-repeat;
+  opacity:var(--auth-bg-op, 1);filter:blur(var(--auth-bg-blur, 0px));
+  pointer-events:none;z-index:0;}
+#authHeroBg{--auth-bg-blur:var(--auth-hero-blur, 0px);--auth-bg-op:var(--auth-hero-op, 1);
+  background-image:var(--auth-hero-img, none);}
+#authCardBg{--auth-bg-blur:var(--auth-card-blur, 0px);--auth-bg-op:var(--auth-card-op, 1);
+  background-image:var(--auth-card-img, none);border-radius:inherit;}
 /* Angular triangle motifs, straight off Main.dc.html -- Chipz's brand
    language is angular, NOT the soft wave this screen inherited from Snow
    (owner: "l no longer need to see this wavy curvy design"). */
@@ -909,7 +935,15 @@ a{color:inherit;}
 .mark-tri{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-bottom:20px solid #14100d;flex-shrink:0;}
 .auth-wordmark{position:relative;font-size:36px;letter-spacing:.02em;transform:skewX(-7deg);color:#fff;}
 .auth-wordmark b{color:#14100d;font-weight:400;}
-.auth-card{background:var(--snow-surface);margin-top:-28px;border-radius:4px;position:relative;z-index:3;padding:32px 22px 30px;box-shadow:0 22px 44px -26px rgba(40,10,4,.5);}
+.auth-card{background:var(--snow-surface);margin-top:-28px;border-radius:4px;position:relative;z-index:3;padding:32px 22px 30px;box-shadow:0 22px 44px -26px rgba(40,10,4,.5);overflow:hidden;}
+/* Everything in the card sits above its backdrop.
+   The second rule has to restore `position:absolute`, not just drop the
+   z-index: `.auth-card > *` and `.auth-bg` have the SAME specificity, and
+   this one comes later in the sheet, so it was winning and collapsing the
+   backdrop to a 0x0 relatively-positioned span. It rendered as nothing at
+   all, and every computed-style check still passed. */
+.auth-card > *{position:relative;z-index:1;}
+.auth-card > #authCardBg{position:absolute;z-index:0;}
 .auth-card h1{margin:0 0 6px;font-size:26px;text-align:center;letter-spacing:.08em;font-weight:400;}
 .dot-divider{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 26px;}
 .dot-divider .ln{width:34px;height:2px;background:var(--snow-border);}
@@ -1387,6 +1421,7 @@ a{color:inherit;}
 <div id="authScreen" style="display:none;">
   <div class="wrap" style="padding-bottom:0;">
     <div class="auth-hero" id="authHero">
+      <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
       <span class="auth-tri t1" aria-hidden="true"></span>
       <span class="auth-tri t2" aria-hidden="true"></span>
       <div class="mark-row">
@@ -1396,6 +1431,7 @@ a{color:inherit;}
       <div id="authTagline" style="position:relative;z-index:2;text-align:center;font-size:14px;color:rgba(255,255,255,.92);font-weight:600;padding:0 40px;display:none;"></div>
     </div>
     <div class="auth-card">
+      <span class="auth-bg" id="authCardBg" aria-hidden="true"></span>
       <div id="loginPane">
         <h1>LOGIN</h1>
         <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>

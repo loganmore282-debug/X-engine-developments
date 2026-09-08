@@ -503,7 +503,11 @@ async function boot(){
   // than when the screen opens: it is a full-bleed image, and loading it on
   // open would show an empty dark panel for the moment it takes to arrive.
   STATE.downloadBg = (ci.status === 'success' && ci.downloadbg) ? ci.downloadbg : null;
+  // The two Login / Sign Up backdrops.
+  STATE.authHeroImage = (ci.status === 'success' && ci.authhero) ? ci.authhero : null;
+  STATE.authCardImage = (ci.status === 'success' && ci.authcard) ? ci.authcard : null;
   applyAuthTagline();
+  applyAuthBackgrounds();
   applyNumberFont();
 }
 function applyNumberFont(){
@@ -522,6 +526,36 @@ function applyNumberFont(){
 // since before this app had a frontend to read it -- #authTagline is only
 // ever visible on the pre-login auth screen, so this only needs a call from
 // boot() itself (which runs once at module load, independent of auth state).
+// Owner: "make when l can put background image on those screens of login tab
+// and registration tab, make when l can set their opusity and blur."
+//
+// Written as CSS custom properties on :root rather than inline styles on the
+// two elements, because the auth screen is static markup in index.html that
+// this module never re-renders -- so there is nothing to re-apply them to
+// after a repaint, and the values survive whatever the screen does.
+//
+// Opacity is stored as a percent (0-100) so the admin panel takes a whole
+// number like every other field; it is divided here, once.
+function applyAuthBackgrounds(){
+  const s = STATE.settings || {};
+  const root = document.documentElement;
+  function set(prefix, image, opacityPct, blurPx){
+    // url() is built here, so an unset slot yields `none` and the section
+    // falls back to the brand gradient (hero) or plain white (card).
+    // The quotes matter: a data URL is fine unquoted, but a filename with a
+    // bracket or a space would break the declaration silently.
+    root.style.setProperty('--auth-' + prefix + '-img',
+      image ? 'url("' + String(image).replace(/"/g, '\\"') + '")' : 'none');
+    const op = Number(opacityPct);
+    root.style.setProperty('--auth-' + prefix + '-op',
+      String(Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1));
+    const bl = Number(blurPx);
+    root.style.setProperty('--auth-' + prefix + '-blur',
+      (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
+  }
+  set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
+  set('card', STATE.authCardImage, s.authCardOpacity, s.authCardBlur);
+}
 function applyAuthTagline(){
   const el = $('authTagline');
   if (!el) return;
