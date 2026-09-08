@@ -512,6 +512,36 @@ correct 113px radius as 102px and failed a correct implementation; `test-admin-b
 drives the **built** admin panel, because the source is obfuscated into `admin/index.html`
 and grepping the deployed file proves nothing.
 
+### No Snow branding reaches a member
+
+Chipz is a fork of **Snow**, so inherited wording is not hypothetical. Found and fixed
+(owner: *"it could be better if you remove old images of previews of Snow, remove them"*):
+
+- **The referral share text** read `Join Snow and start earning` — the single most
+  widely-seen sentence the app produces, since it is what every member's own WhatsApp
+  invite carries. Every referral anyone had ever sent invited people to a different
+  product.
+- **The About sheet** was titled `About Snow`.
+- Two admin toasts offered to revert the manual-pay marks to *"the snowflake mark"*.
+
+`test-no-snow-branding.js` is the standing guard. It scans the four sources with
+comments stripped (block, line **and HTML** — an unstripped `<!-- ... -->` was the first
+thing it flagged) and **deliberately allows** three inherited internal names: the
+`--snow-*` CSS design tokens (a documented value-only swap; the app reskins by changing
+what they hold), the `snow_*` storage keys, and the `snow-auth` event. It asserts those
+carve-outs still exist, so they get deleted rather than left looking protective if the
+names ever change.
+
+**Where the shipped wording is checked, and why not there:** the obfuscator replaces every
+string literal with a lookup into an encoded string array, so `Join Chipz` is not present
+as text at *any* layer of `user/index.html`. A first attempt grepped the inflated payload
+for it; the assertion that mattered (`no "Join Snow" left`) then passed **vacuously**
+against an empty string. The node test now only proves the payload inflates and that its
+literals *are* encoded — so nobody re-adds a grep there. The real check lives at the end
+of **`test-nav-sheets.py`**, which stubs `navigator.share`, calls the built bundle's own
+`shareReferral()` and reads what it would have sent. That also catches a source fixed but
+never rebuilt.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

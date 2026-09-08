@@ -134,6 +134,33 @@ async def main():
         ck(not await page.evaluate("()=>!!document.querySelector('.sheet-bg.show')"),
            "tapping a tab from inside a sheet closes the sheet")
         ck(await page.evaluate("()=>STATE.page")=="team", "and actually switches to that tab")
+
+        # ── no Snow wording in the BUILT app ──
+        # Chipz is a fork of Snow, and the referral share text still read
+        # "Join Snow and start earning" -- the single most widely-seen
+        # sentence the app produces, since it is what every member's own
+        # WhatsApp invite carries. test-no-snow-branding.js checks the
+        # sources; the obfuscator encodes string literals, so this is the
+        # only place the SHIPPED wording can actually be read. It also
+        # catches a source fixed but never rebuilt.
+        shared = await page.evaluate("""async () => {
+            let captured = null;
+            const real = navigator.share;
+            Object.defineProperty(navigator, 'share',
+              { configurable: true, value: async o => { captured = o; } });
+            shareReferral('https://chipz.example/r/ML3Q4X');
+            await new Promise(r => setTimeout(r, 50));
+            if (real) Object.defineProperty(navigator, 'share', { configurable: true, value: real });
+            return captured;
+        }""")
+        ck(shared and 'Chipz' in shared.get('text', ''),
+           "the referral share invites people to Chipz: %r" % (shared or {}).get('text'))
+        ck(shared and 'Snow' not in shared.get('text', ''),
+           "and never to Snow")
+        await page.evaluate("openAboutSheet()"); await page.wait_for_timeout(500)
+        title = await page.evaluate("()=>{const t=document.querySelector('.sheet-title,.sheet-head h2,#sheetTitle');return t?t.textContent.trim():null;}")
+        ck(title == 'About Chipz', "the About sheet is titled About Chipz (%r)" % title)
+
         ck(not errs, "no page errors: "+str(errs))
         await b.close()
     print(("\n%d FAILED" % len(fails)) if fails else "\nnav + floats: all cases pass")

@@ -2902,7 +2902,7 @@ async function renderSettings(){
   if (mpSelectorImgClear) mpSelectorImgClear.addEventListener('click', async()=>{
     await withTabBusy((async()=>{
       const d = await api('/admin/manual-pay-image/clear', { slot:'selector' });
-      toast(d.status==='success'?'Reverted to the snowflake mark':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?'Reverted to the CHIPZ wordmark':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderSettings();
     })());
   });
@@ -2922,7 +2922,7 @@ async function renderSettings(){
   if (mpHeroImgClear) mpHeroImgClear.addEventListener('click', async()=>{
     await withTabBusy((async()=>{
       const d = await api('/admin/manual-pay-image/clear', { slot:'hero' });
-      toast(d.status==='success'?'Reverted to the snowflake mark':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?'Reverted to the CHIPZ wordmark':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderSettings();
     })());
   });

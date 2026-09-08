@@ -2170,7 +2170,11 @@ window.copyText = function(text){
 };
 window.shareReferral = function(link){
   if (!rapidTapGuardOk('share')) return;
-  const text = `Join Snow and start earning, sign up with my link: ${link}`;
+  // This is the text a member's own referral share carries into WhatsApp, so
+  // it is the single most widely-seen sentence the app produces -- and it
+  // still said "Join Snow", the app Chipz was forked from. Every referral
+  // any member had ever sent invited people to a different product.
+  const text = `Join Chipz and start earning, sign up with my link: ${link}`;
   if (navigator.share) navigator.share({ text }).catch(()=>{});
   else writeClipboard(link);
 };
@@ -3003,7 +3007,7 @@ function revealWordsHtml(escapedText){
 let _aboutScrollObserver = null;
 window.openAboutSheet = async function(){
   const s = STATE.settings || {};
-  openSheet('About Snow', `<div id="aboutArticle" class="reveal-in"><p style="color:var(--snow-muted);">Loading…</p></div>`);
+  openSheet('About Chipz', `<div id="aboutArticle" class="reveal-in"><p style="color:var(--snow-muted);">Loading…</p></div>`);
   const r = await api('/public/about-content');
   const wrap = $('aboutArticle');
   if (!wrap) return; // sheet was closed again before this resolved
