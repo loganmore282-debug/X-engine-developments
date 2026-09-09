@@ -1014,6 +1014,35 @@ function cleanPhone(raw) {
   if (!local9 || !/^7\d{8}$/.test(local9)) return null;
   return '+256' + local9;
 }
+// Which number a deposit should charge, and the loophole this closes.
+//
+// Both deposit routes used to read `cleanPhone(req.body.phone || <account
+// phone>)`. That `||` means an EMPTY field is falsy, so a member who left the
+// number blank did not get refused -- the deposit was quietly created against
+// whatever number the account was registered with, the route answered success,
+// and the app went on to poll a payment prompt nobody had asked for. Owner:
+// "l tried to leave not putting number and clicked confirm deposit but it
+// didn't reject it just continued to go to poll page."
+//
+// The distinction that matters: a field SENT but empty or malformed is a
+// member who has not filled the form in, and must be told so. A field not sent
+// at all is a caller that never had one to send, and the account's own number
+// is a sound answer for it -- so that fallback stays, and only that.
+//
+// Returns { phone } or { error }.
+function depositSenderPhone(body, accountPhone, keys) {
+  for (const k of keys) {
+    if (!Object.prototype.hasOwnProperty.call(body || {}, k)) continue;
+    const v = body[k];
+    if (v === undefined || v === null) continue;
+    const cleaned = cleanPhone(v);
+    return cleaned ? { phone: cleaned }
+                   : { error: 'Enter a valid mobile-money phone number.' };
+  }
+  const fallback = cleanPhone(accountPhone || '');
+  return fallback ? { phone: fallback }
+                  : { error: 'Enter a valid mobile-money phone number.' };
+}
 const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
 const MAX_MONEY_AMOUNT = 999_999_999;
 // The most spins one purchase can ever grant. Used in TWO places that must
@@ -3186,8 +3215,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     // minimum amount, it says deposit is already being processed!!, when
     // you try again once more it says account suspended."
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
-    const phone = cleanPhone(req.body.phone || uSnap.data().phone || '');
-    if (!phone) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
+    const _ph = depositSenderPhone(req.body, uSnap.data().phone, ['phone']);
+    if (_ph.error) return res.status(400).json({ status: 'error', message: _ph.error });
+    const phone = _ph.phone;
 
     // subagent-audit-caught: the debounce check must run BEFORE
     // recordDepositAttempt() too, not just the amount/phone validation
@@ -4028,8 +4058,9 @@ app.post('/deposit/manual/init', async (req, res) => {
     // Same validate-before-touching-abuse-counters ordering as
     // /deposit/marzpay -- see its own comment for why this order matters.
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
-    const senderPhone = cleanPhone(req.body.senderPhone || req.body.phone || uSnap.data().phone || '');
-    if (!senderPhone) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
+    const _sph = depositSenderPhone(req.body, uSnap.data().phone, ['senderPhone', 'phone']);
+    if (_sph.error) return res.status(400).json({ status: 'error', message: _sph.error });
+    const senderPhone = _sph.phone;
 
     const lastDep = _depCreateDebounce.get(userId) || 0;
     if (Date.now() - lastDep < 7000)

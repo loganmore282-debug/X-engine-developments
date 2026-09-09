@@ -1853,6 +1853,43 @@ What is deliberately left: fork-history comments, `test-cors-origins.js`'s asser
 Snow's domain must **not** reach Chipz, and the `--snow-*`/`snow_*` internal names the
 branding test already documents as carve-outs.
 
+### A deposit with no phone number: `||` treated empty as absent
+
+Owner: *"why when one didn't put number, it just continues to poll ... l tried to leave
+not putting number and clicked confirm deposit but it didn't reject it just continued to
+go to poll page. please make sure no loopholes."*
+
+**Two faults stacked, and the second is the one that mattered.**
+
+1. `submitDeposit()` validated the amount and simply never looked at the phone.
+2. Both deposit routes resolved the number as
+   `cleanPhone(req.body.phone || uSnap.data().phone || '')`. **`||` treats an empty
+   string as absent**, so a blank field did not fail the `if (!phone)` check below it —
+   it fell through to the account's own registered number, a real deposit was created,
+   the route answered success, and the app went on to poll a prompt nobody asked for.
+   It also produced the broken **"Payment prompt sent to +256"** with no digits, because
+   the client's display fell back to a bare country code.
+
+`depositSenderPhone(body, accountPhone, keys)` is now the single rule for both routes.
+The distinction it draws: a field **sent but empty or malformed** is a member who has not
+filled the form in and must be told; a field **not sent at all** is a caller that never
+had one, and the account's number is a sound answer for it — so that fallback survives,
+and only that. `senderPhone` is read before `phone` on the manual route, so a caller
+sending both cannot slip a different number past by blanking the one that is read.
+
+The client checks it too now, through the **same `cleanPhone()`** the server uses so the
+two cannot drift — but that is a courtesy: `/deposit/marzpay` is a plain authenticated
+POST and the body is whatever the caller sends.
+
+Audited alongside it, and sound: **`submitWithdraw()`** already refuses a bad amount, a
+non-multiple, a missing bound wallet and a malformed 6-digit Trade Password.
+
+`test-deposit-phone.js` runs the real helper (empty, whitespace, half-typed, wrong
+prefix, `0`, `false`) and asserts the refused input **never becomes the account's own
+number**. `test-pay-poll.py` drives the real form with the field blank and asserts what
+actually went wrong: **no request is sent** and **the poll page does not open** — checking
+only for an alert would pass on a build that still fired the deposit.
+
 ### The recharge poll is a PAGE in the app's colours
 
 Owner: *"l nolonger need those old poll designs ... when one taps deposit, it should open

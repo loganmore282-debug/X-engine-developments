@@ -85,7 +85,45 @@ async def main():
         await page.wait_for_timeout(2600)
         await page.evaluate("closeAnnounce && closeAnnounce()")
 
-        print("— polling —")
+        print("— an empty phone is refused before anything is sent —")
+        # Owner: "l tried to leave not putting number and clicked confirm
+        # deposit but it didn't reject it just continued to go to poll page."
+        # Driven through the REAL form, and asserting the two things that
+        # actually went wrong: a request left the phone, and the poll page
+        # opened. Checking only for an alert would pass on a build that still
+        # fired the deposit.
+        await page.evaluate("""()=>{window.__deposits=[];const f=window.fetch;
+          window.fetch=function(u,o){ if(String(u).includes('/deposit/marzpay'))
+            window.__deposits.push(String(u)); return f.apply(this,arguments);};}""")
+        await page.evaluate("openDepositSheet()")
+        await page.wait_for_timeout(700)
+        filled = await page.evaluate("""()=>{const a=document.getElementById('depAmount'),
+            p=document.getElementById('depPhone');
+          if(!a||!p) return false; a.value='50000'; p.value=''; return true;}""")
+        ck(filled, "the recharge form is open with an amount and NO phone")
+        await page.evaluate("submitDeposit()")
+        await page.wait_for_timeout(900)
+        ck(await page.evaluate("()=>window.__deposits.length") == 0,
+           "no deposit request is sent (%s)" % await page.evaluate("()=>window.__deposits"))
+        ck(not await page.evaluate("()=>document.getElementById('depStatusBg').classList.contains('show')"),
+           "and the poll page does NOT open")
+        ck(await page.evaluate("()=>document.getElementById('notifyBg').classList.contains('show')"),
+           "the member is told, in the alert card")
+        said = await page.evaluate("()=>document.getElementById('notifyMsg').textContent")
+        ck('number' in said.lower(), "and told about the NUMBER specifically (%r)" % said)
+        await page.evaluate("closeNotify && closeNotify()")
+        await page.wait_for_timeout(300)
+        # A half-typed number is no better than none.
+        await page.evaluate("""()=>{document.getElementById('depAmount').value='50000';
+          document.getElementById('depPhone').value='07';}""")
+        await page.evaluate("submitDeposit()")
+        await page.wait_for_timeout(700)
+        ck(await page.evaluate("()=>window.__deposits.length") == 0,
+           "a half-typed number is refused too")
+        await page.evaluate("closeNotify && closeNotify(); closeSheet({fromAction:true})")
+        await page.wait_for_timeout(400)
+
+        print("\n— polling —")
         await page.evaluate("openDepositStatusModal(20000,'0742730382','MTN Mobile Money')")
         await page.wait_for_timeout(600)
         ck(await page.evaluate("()=>document.getElementById('depStatusBg').classList.contains('show')"),

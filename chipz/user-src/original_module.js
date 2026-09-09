@@ -4669,8 +4669,22 @@ function setDepositStatusUnknown(){
 }
 window.submitDeposit = async function(){
   const amount = parseMoneyInput($('depAmount').value);
-  const phone = $('depPhone').value;
+  // Owner: "why when one didn't put number, it just continues to poll ... l
+  // tried to leave not putting number and clicked confirm deposit but it
+  // didn't reject it just continued to go to poll page."
+  //
+  // The amount was validated here and the phone simply was not, so an empty
+  // field went to the server, which fell back to the account's own registered
+  // number, created a real deposit and answered success -- so the app went
+  // happily on to the poll page for a payment prompt the member never asked
+  // for. It also produced the broken "+256" with no digits on that screen,
+  // because the display fell back to a bare country code.
+  //
+  // cleanPhone() is the SAME rule the server applies, so what is accepted
+  // here and what is accepted there cannot drift apart.
+  const phone = cleanPhone($('depPhone').value);
   if (!amount || amount <= 0) return notify('Enter a valid amount');
+  if (!phone) return notify('Enter the mobile money number to charge.');
   $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Sending request…';
   // No network field on this form (Round 145) -- the gateway detects it
   // from the phone number itself; server.js already treats `network` as
