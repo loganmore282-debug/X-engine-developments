@@ -1204,20 +1204,162 @@ function updateNavIcons(){
 // (never a full page rebuild) so it can't disturb the activity ticker, the
 // chest-swing animation, plan countdowns, or whichever team level/tab the
 // member currently has open.
-var _liveRefreshTimer = null;
-function stopLiveRefresh(){ clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; }
-function startLiveRefresh(){
-  stopLiveRefresh();
-  _liveRefreshTimer = setInterval(async () => {
-    if (STATE.page === 'home') {
-      const r = await api('/account');
-      if (r.status === 'success' && STATE.page === 'home') { STATE.account = r.account; patchHomeBalances(); }
-    } else if (STATE.page === 'team') {
-      const r = await api('/team/stats');
-      if (r.status === 'success' && STATE.page === 'team') { STATE.teamStats = r; patchTeamStats(); }
-    }
-  }, 8000);
+// ── THE LIVE LOOP ──
+//
+// Owner: "make sure that the app always listens to every content and updates
+// quickly without reloads ... l want every data to be loaded up quickly every
+// seconds, no reloads."
+//
+// A NOTE ON FIREBASE LISTENERS, because he asked for those by name: they are
+// not available to this data. Firebase here is Auth only -- who you are. Every
+// figure in the app (balances, plans, records, team, messages) lives in MongoDB
+// behind chipz-server, so there is no Firestore document to attach onSnapshot
+// to. The equivalent behaviour without rebuilding the backend is this: a short
+// poll that repaints IN PLACE. Nothing reloads, nothing navigates, and the
+// member cannot tell the difference. (A genuine server push would be SSE from
+// chipz-server off a Mongo change stream -- a real option, and a much bigger
+// change than this.)
+//
+// What it does, and the reasons each part is not optional:
+//  * ONE timer for the whole app, following STATE.page and the open sheet on
+//    every tick rather than being restarted per screen.
+//  * setTimeout chained, not setInterval: a fixed interval cannot back off, and
+//    a stalled request under setInterval stacks up more of the same request.
+//  * PAUSED while the app is hidden. This was the old loop's real fault -- it
+//    kept hitting the backend from a phone in a pocket, all night. It kicks
+//    immediately on return, so coming back to the app shows fresh figures at
+//    once rather than after a wait.
+//  * Repaints only when the data ACTUALLY CHANGED (liveChanged below). A list
+//    rebuilt on every tick would reset scroll position and restart the reveal
+//    animation -- which is precisely the "reload" feeling he does not want.
+//  * Reads only. No money endpoint is ever called from here.
+// _liveGen invalidates work already in flight. A tick that is sitting on an
+// await when the member signs out would otherwise come back, reschedule itself
+// and keep polling a session that no longer exists.
+var _liveTimer = null, _liveBusy = false, _liveDelay = 0, _liveSigs = {}, _liveGen = 0;
+var LIVE_MS = 5000, LIVE_MAX_MS = 60000;
+// Tunable from the backend without shipping an app build. Floored at 2s: below
+// that the phone spends more time on radio wake-ups than on anything a member
+// would notice.
+function livePollMs(){
+  const s = Number((STATE.settings || {}).livePollMs);
+  return Math.max(2000, Number.isFinite(s) && s > 0 ? s : LIVE_MS);
 }
+// True the first time it sees a given payload, and whenever it changes after
+// that. Keyed per feed, so one busy feed cannot suppress another.
+function liveChanged(key, value){
+  const s = JSON.stringify(value);
+  if (_liveSigs[key] === s) return false;
+  _liveSigs[key] = s;
+  return true;
+}
+function stopLiveRefresh(){
+  _liveGen++;
+  clearTimeout(_liveTimer); _liveTimer = null; _liveBusy = false;
+  _liveDelay = 0; _liveSigs = {};
+}
+function scheduleLive(gen, ms){
+  clearTimeout(_liveTimer);
+  _liveTimer = setTimeout(() => liveTick(gen), ms);
+}
+async function liveTick(gen){
+  if (gen !== _liveGen) return;              // stopped, or restarted under us
+  if (document.hidden || _liveBusy) { scheduleLive(gen, livePollMs()); return; }
+  _liveBusy = true;
+  let ok = true;
+  try {
+    ok = await liveRefreshVisible();
+  } catch (_) {
+    ok = false;
+  }
+  _liveBusy = false;
+  if (gen !== _liveGen) return;              // signed out while that was in flight
+  // Steady cadence while the backend is answering; exponential backoff while it
+  // is not, so a sleeping Render instance is not hammered awake by a phone that
+  // has been left open on one screen.
+  _liveDelay = ok ? livePollMs() : Math.min(LIVE_MAX_MS, Math.max(livePollMs(), _liveDelay || 0) * 2);
+  scheduleLive(gen, _liveDelay);
+}
+// Everything the member can currently see, and nothing else. Each branch
+// re-checks what is on screen AFTER its await -- a tick that started on Home
+// must not paint into Team because the member moved while it was in flight.
+async function liveRefreshVisible(){
+  const sheet = _openSheetTitle;
+  let ok = true;
+  // The wallet figure follows the member everywhere, so it is refreshed on
+  // every tick regardless of screen -- it is the number they care about most,
+  // and it is one small read.
+  const acc = await api('/account');
+  if (acc.status === 'success') {
+    STATE.account = acc.account;
+    if (liveChanged('account', acc.account)) {
+      // patchHomeBalances() writes only the specific figures and no-ops on a
+      // page that has none, so it is safe on every screen -- and unlike
+      // renderAccount() it cannot reset the member's scroll position, which
+      // would read as the reload he does not want.
+      patchHomeBalances();
+      const band = $('balBandValue');
+      if (band && sheet === 'Balance Record') {
+        band.textContent = fmtUGX2(Number(acc.account.walletBalance) || 0);
+      }
+    }
+  } else ok = false;
+
+  // An open sheet is what the member is actually looking at, so it wins over
+  // the page behind it.
+  if (sheet === 'Balance Record') {
+    const r = await api('/transactions');
+    if (r.status === 'success' && _openSheetTitle === 'Balance Record') {
+      STATE.transactions = r.transactions;
+      STATE.transactionsTruncated = !!r.truncated;
+      if (liveChanged('tx', r.transactions)) renderBalTab(_balTab);
+    } else if (r.status !== 'success') ok = false;
+    return ok;
+  }
+  if (sheet === 'Messages') {
+    const r = await api('/messages');
+    if (r.status === 'success' && _openSheetTitle === 'Messages') {
+      STATE.messages = r.messages;
+      if (liveChanged('messages', r.messages)) { renderMessagesList(); updateMessageBadge(); }
+    } else if (r.status !== 'success') ok = false;
+    return ok;
+  }
+
+  if (STATE.page === 'products') {
+    const r = await api('/investments');
+    if (r.status === 'success' && STATE.page === 'products' && !_openSheetTitle) {
+      STATE.investments = r.investments;
+      _investmentsLoadFailed = false;
+      // animate:false -- a repaint every few seconds must not replay the
+      // reveal. paintProducts() restarts the plan countdowns itself.
+      if (liveChanged('investments', r.investments)) paintProducts(false);
+    } else if (r.status !== 'success') ok = false;
+  } else if (STATE.page === 'catalog') {
+    const r = await api('/public/products');
+    if (r.status === 'success' && STATE.page === 'catalog' && !_openSheetTitle) {
+      STATE.products = r.products;
+      if (liveChanged('products', r.products)) renderCatalog();
+    } else if (r.status !== 'success') ok = false;
+  } else if (STATE.page === 'team' || STATE.page === 'referral') {
+    const r = await api('/team/stats');
+    if (r.status === 'success' && STATE.page === 'team' && !_openSheetTitle) {
+      STATE.teamStats = r;
+      if (liveChanged('team', r)) patchTeamStats();
+    } else if (r.status !== 'success') ok = false;
+  }
+  return ok;
+}
+function startLiveRefresh(){
+  _liveGen++;
+  _liveDelay = livePollMs();
+  scheduleLive(_liveGen, _liveDelay);
+}
+// Coming back to the app refreshes it at once. Without this the member stares
+// at whatever was on screen when they left until the next tick, which is the
+// single most visible way a polled app feels stale.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && _liveTimer) { _liveDelay = livePollMs(); scheduleLive(_liveGen, 0); }
+});
 window.showPage = async function(name){
   // The bottom bar now stays visible over sheets (Deposit, Withdraw, Wallet
   // and the rest), so a tab can be tapped while one is open. Close it first,
@@ -4515,6 +4657,12 @@ window.promptInstallApp = async function(){
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then((reg) => {
+      // register() normally resolves WITH a registration, but it can resolve
+      // with nothing where service workers are blocked by policy or by the
+      // browser. Unguarded, the first visibilitychange after that threw
+      // "Cannot read properties of undefined (reading 'update')" -- harmless
+      // to the member, but a real uncaught error on every return to the app.
+      if (!reg) return;
       const checkForUpdate = () => reg.update().catch(() => {});
       setInterval(checkForUpdate, 60 * 60 * 1000);
       document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
