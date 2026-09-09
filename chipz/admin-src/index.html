@@ -1121,11 +1121,24 @@ async function renderUsers(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="usersCount">Users (${_users.length})</h2>
       ${isOwner?`<button class="btn sm ghost" id="auditBtn" title="Check every user's wallet balance/deposited/earned/invested against the real records, plus duplicate deposit credits, negative balances, and stuck registrations">Integrity audit</button>
-      <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning/invested totals AND check-in streaks from the real ledger">Recalculate totals</button>`:''}</div>
+      <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning/invested totals AND check-in streaks from the real ledger">Recalculate totals</button>
+      <button class="btn sm ghost" id="shortenIdsBtn" title="Account ids are 5 digits now. This rewrites ids issued while they were 6 (000001 -> 00001). Ids that genuinely need 6 digits are left alone.">Shorten account ids</button>`:''}</div>
     <div class="panel-card"><input id="userSearch" placeholder="Search phone or referral code"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
   $('userSearch').addEventListener('input', drawUsers);
   if (isOwner) {
+    $('shortenIdsBtn').addEventListener('click', async()=>{
+      if(!confirm('Rewrite account ids issued while they were 6 digits down to 5 (000001 becomes 00001)?\n\nOnly ids that are pure padding change. An id that genuinely needs 6 digits (100000 and up) is left alone, and so is any id whose shorter form another account already holds -- those are listed back for you.\n\nA member who has been told their old id will see the new one.'))return;
+      const b=$('shortenIdsBtn'); b.disabled=true; b.textContent='Shortening…';
+      const d=await api('/admin/users/shorten-public-ids', {});
+      b.disabled=false; b.textContent='Shorten account ids';
+      if(d.status!=='success'){ toast(d.message||'Failed','err'); return; }
+      const parts=[];
+      if(d.changed.length) parts.push(`${d.changed.length} id(s) shortened (${d.changed.slice(0,3).map(c=>c.from+'→'+c.to).join(', ')}${d.changed.length>3?'…':''})`);
+      if(d.conflicts.length) parts.push(`${d.conflicts.length} skipped -- the shorter id is already taken: ${d.conflicts.map(c=>c.from+'→'+c.to).join(', ')}`);
+      toast(parts.length?parts.join('. '):'Every account id is already 5 digits', d.conflicts.length?'err':'ok');
+      renderUsers();
+    });
     $('recountBtn').addEventListener('click', async()=>{
       const b=$('recountBtn'); b.disabled=true; b.textContent='Recalculating…';
       const d=await api('/admin/users/recount');

@@ -501,8 +501,33 @@ window.doLogout = async function(){
   if (credManSupported() && navigator.credentials.preventSilentAccess) {
     try { await navigator.credentials.preventSilentAccess(); } catch (_) {}
   }
-  window._autofillLoginTried = false;
+  // THE OTHER auto-login path, and the one that was actually biting. Owner:
+  // "why is it that when l try to log out the app logs in automatically again
+  // because the cached credentials autofills hence triggering auto login yet l
+  // don't want to use that very account."
+  //
+  // preventSilentAccess() above only stops the Credential Management route.
+  // The autofill auto-submit below is a SECOND route: landing back on the
+  // login screen, Chrome refills the saved phone/password, that fires
+  // onAutoFillStart, and maybeAutoSubmit() calls doLogin() -- straight back
+  // into the account the member just left. `_autofillLoginTried = false` was
+  // making it worse, not better: it RE-ARMED the submitter for exactly the
+  // moment Chrome was about to refill.
+  //
+  // A deliberate sign-out disables auto-submit for the rest of the page
+  // session. Nothing re-enables it, on purpose -- after saying "log me out",
+  // no amount of refilling should sign anyone in without a tap. Logging back
+  // into the same account still takes one tap on Login, with the fields
+  // already filled.
+  window._suppressAutofillLogin = true;
+  window._autofillLoginTried = true;
   await window.fbSignOut();
+  // Cleared AFTER the sign-out, so the auth screen is on its way in. Chrome
+  // may refill them again and that is fine -- filled fields are only a
+  // problem when something submits them by itself, which is now blocked.
+  const _lp = $('loginPhone'), _lw = $('loginPassword');
+  if (_lp) _lp.value = '';
+  if (_lw) _lw.value = '';
 };
 
 // ── AUTOFILL AUTO-SUBMIT (Login only) ──
@@ -520,6 +545,9 @@ window.doLogout = async function(){
 (function(){
   let debounce = null;
   function maybeAutoSubmit(){
+    // Set by doLogout(). A member who just signed out must never be signed
+    // back in by Chrome refilling the fields it still has saved.
+    if (window._suppressAutofillLogin) return;
     if (window._autofillLoginTried) return;
     const phone = $('loginPhone'), pass = $('loginPassword'), btn = $('loginBtn');
     if (!phone || !pass || !btn || btn.disabled) return;

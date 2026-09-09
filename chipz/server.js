@@ -1117,8 +1117,16 @@ async function generateUniqueReferralCode(userId) {
     throw new Error('Could not generate a unique referral code');
   });
 }
-// Sequential, server-issued account number ("ID:000001"). Single counter
+// Sequential, server-issued account number ("ID:00001"). Single counter
 // doc, read-increment-write serialized through withLock.
+//
+// FIVE digits, not six. Owner: "let the user id be having 5 characters, so so
+// far now the current account is 000001, so remove first 0 so it will be
+// 00001." padStart is a MINIMUM, so account 100,000 simply becomes six digits
+// rather than wrapping or colliding -- the same way this behaved at six.
+// Accounts issued before this change keep their stored six-digit id; the
+// one-time repair for those is /admin/users/shorten-public-ids below.
+const PUBLIC_ID_DIGITS = 5;
 async function nextSequentialPublicId() {
   return withLock('publicid-counter', async () => {
     const counterRef = db.collection('counters').doc('publicId');
@@ -1126,7 +1134,7 @@ async function nextSequentialPublicId() {
     let n = (snap.exists ? Number(snap.data().value) : 0) || 0;
     for (let i = 0; i < 50; i++) {
       n += 1;
-      const id = String(n).padStart(6, '0');
+      const id = String(n).padStart(PUBLIC_ID_DIGITS, '0');
       const dup = await db.collection('users').where('publicId', '==', id).limit(1).get();
       if (dup.empty) { await counterRef.set({ value: n }, { merge: true }); return id; }
     }
@@ -6691,6 +6699,47 @@ app.post('/admin/products/sync-pricing', async (req, res) => {
 //     those are reported back as conflicts for the owner to resolve by hand
 //     in the product list (compare the two, keep the one with the right
 //     image, delete the other) rather than merged blindly.
+// One-time repair for accounts issued while ids were six digits. Owner: "so
+// far now the current account is 000001, so remove first 0 so it will be
+// 00001." Changing PUBLIC_ID_DIGITS only governs ids handed out from now on;
+// what is already stored has to be rewritten, and only an explicit admin
+// action should rewrite an identifier a member may have already been given.
+//
+// ONLY ids that are pure padding are touched: a six-character id whose value
+// still fits in five (000001 -> 00001). An id that genuinely needs its length
+// (100000 and up) is left exactly as it is -- shortening that would change
+// which account it names.
+//
+// A target that some other account already holds is skipped and reported
+// rather than written: two members sharing an id is far worse than one
+// member keeping a longer one, and this cannot be undone by re-running.
+app.post('/admin/users/shorten-public-ids', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('users').limit(100000).get();
+    const taken = new Set();
+    const rows = [];
+    snap.forEach(d => {
+      const id = String((d.data() || {}).publicId || '');
+      if (id) taken.add(id);
+      rows.push({ ref: d.ref, id });
+    });
+    const changed = [], conflicts = [];
+    for (const r of rows) {
+      if (!/^0\d+$/.test(r.id) || r.id.length <= PUBLIC_ID_DIGITS) continue;
+      const short = String(Number(r.id)).padStart(PUBLIC_ID_DIGITS, '0');
+      if (short.length >= r.id.length) continue;          // nothing to strip
+      if (taken.has(short)) { conflicts.push({ from: r.id, to: short }); continue; }
+      await r.ref.set({ publicId: short }, { merge: true });
+      taken.delete(r.id); taken.add(short);
+      changed.push({ from: r.id, to: short });
+    }
+    res.json({ status: 'success', changed, conflicts });
+  } catch (e) {
+    console.error('shorten-public-ids', e);
+    res.status(500).json({ status: 'error', message: 'Could not shorten account ids' });
+  }
+});
 app.post('/admin/products/fix-legacy-keys', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

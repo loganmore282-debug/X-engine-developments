@@ -1853,6 +1853,59 @@ What is deliberately left: fork-history comments, `test-cors-origins.js`'s asser
 Snow's domain must **not** reach Chipz, and the `--snow-*`/`snow_*` internal names the
 branding test already documents as carve-outs.
 
+### Account ids are five digits
+
+Owner: *"let the user id be having 5 characters, so so far now the current account is
+000001, so remove first 0 so it will be 00001."*
+
+`PUBLIC_ID_DIGITS = 5` in `server.js` drives `nextSequentialPublicId()`'s `padStart`.
+`padStart` is a **minimum**, so account 100,000 becomes six digits rather than wrapping
+round onto an id someone already has.
+
+**Changing the constant only governs ids handed out from now on.** Anything already
+stored has to be rewritten, and a publicId is an identifier a member may already have
+been told — so that is an explicit admin action, not a boot-time migration:
+**Admin → Users → "Shorten account ids"** (`POST /admin/users/shorten-public-ids`).
+
+Two rules it will not break:
+- Only ids that are **pure padding** change. `000001 → 00001`; `100000` stays, because
+  shortening a six-digit *value* would change which account it names.
+- A target another account already holds is **skipped and reported**, never written.
+  Two members sharing an id is far worse than one keeping a longer one, and it cannot
+  be undone by re-running.
+
+`test-public-id.js` lifts both conditions out of `server.js` rather than restating them,
+and runs 200,000 ids through the shortener checking that each still reads as the same
+number and none collide.
+
+### Logging out stayed logged in — there are TWO auto-login routes
+
+Owner: *"why is it that when l try to log out the app logs in automatically again
+because the cached credentials autofills hence triggering auto login yet l don't want
+to use that very account."*
+
+`doLogout()` disarmed only the first of two:
+
+1. **Credential Management silent sign-in** — handled, via `preventSilentAccess()`.
+2. **The autofill auto-submit** — not handled. Back on the login screen, Chrome refills
+   the saved phone/password, that fires the `onAutoFillStart` animation, and the
+   listener calls `doLogin()`: straight back into the account the member just left.
+
+And `doLogout()` ended with `window._autofillLoginTried = false`, which **re-armed** that
+listener for exactly the moment Chrome was about to refill — the logout made the bug
+*more* likely, not less. It now sets `_suppressAutofillLogin`, which `maybeAutoSubmit()`
+checks first, and nothing clears it: after "log me out", no amount of refilling should
+sign anyone in without a tap. Logging back into the same account still takes one tap.
+The login fields are also cleared after the sign-out; Chrome may refill them and that is
+fine, since filled fields only matter when something submits them by itself.
+
+`test-logout.py` dispatches the same `animationstart` Chrome's own fill produces, against
+a Firebase stub whose `signOut`/`signIn` really flip the current user, so an unwanted
+auto-login is observable exactly as on the phone. Reverting the fix reproduces the report
+precisely: one sign-in call, back inside the account. **A test that only checked
+"doLogout calls signOut" would have passed against the broken app** — it did sign out,
+and was then signed back in.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase
