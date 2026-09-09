@@ -1900,13 +1900,35 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   animation:sp .8s linear infinite;}
 .dep-redirect-text{font-size:17px;font-weight:700;color:var(--snow-ink);}
 @media (prefers-reduced-motion:reduce){.dep-redirect-ring{animation-duration:2.4s;}}
+/* A column now, not a centred box: the page has a real header (back chevron
+   + title) pinned at the top, and .pay-body takes the remaining height and
+   centres the card inside THAT. Centring the card in the whole page instead
+   would push it visibly below centre by half the header's height. */
 .pay-page{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
   background:var(--snow-canvas);z-index:310;display:none;
-  align-items:center;justify-content:center;padding:26px;overflow-y:auto;}
+  flex-direction:column;overflow-y:auto;}
 .pay-page.show{display:flex;}
+.pay-body{flex:1;display:flex;align-items:center;justify-content:center;padding:26px;}
 .pay-card{width:100%;max-width:340px;text-align:center;}
 .pay-card h3{font-size:23px;font-weight:800;color:var(--snow-ink);margin:0 0 10px;}
 .pay-card p{font-size:15px;line-height:1.6;color:var(--snow-muted);font-weight:500;margin:0;}
+/* The pending state is a numbered list of what is happening and what the
+   member has to do, so it is LEFT-aligned inside an otherwise centred card --
+   centred list items with numbers hanging off them are hard to scan, and the
+   numbers stop lining up with each other entirely. */
+.pay-steps{margin:0;padding:0 0 0 24px;text-align:left;font-size:15px;
+  line-height:1.6;color:var(--snow-muted);font-weight:500;}
+.pay-steps li{margin:0 0 11px;padding-left:3px;}
+.pay-steps li:last-child{margin-bottom:0;}
+.pay-steps li::marker{color:var(--snow-wine);font-weight:700;}
+/* The USSD fallback. Deliberately NOT a fifth numbered step: the four steps
+   are what happens normally, and this is the way out of the one common
+   failure (the mobile-money prompt never arriving). Quieter and smaller so
+   it reads as a footnote rather than another instruction to follow. */
+.pay-note{margin:16px 0 0;font-size:13.5px;line-height:1.55;
+  color:var(--snow-muted);opacity:.85;text-align:left;}
+.pay-actions{margin-top:22px;display:flex;flex-direction:column;gap:11px;}
+.pay-actions button{width:100%;padding:15px 0;font-size:16px;}
 /* No disc behind it any more -- the mark IS the artwork. Sized here so the
    orbiting chips and the two result marks share one footprint and the page
    does not jump as the poll resolves. */
@@ -2196,12 +2218,31 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   </div>
 </div>
 
+<!-- Owner: "include nav arrow '<', and its title space, on that payment page."
+     Reuses .sheet-head verbatim so this header IS the app's header, not a
+     lookalike -- same gradient, same 30px chevron, same centred title. The
+     gradient gets its own id (chipzBackPay): two <linearGradient> elements
+     sharing an id in one document is a duplicate-id bug, and although both
+     happen to be identical today, a later change to one would silently and
+     confusingly repaint the other.
+     #depStatusBody is a DIV, not a <p>: the pending state renders an <ol>
+     of steps, and an <ol> inside a <p> is invalid and gets reparented by
+     the browser, which drops the list out of the card entirely. -->
 <div class="pay-page" id="depStatusBg">
-  <div class="pay-card">
-    <div class="dep-status-icon" id="depStatusIcon"></div>
-    <h3 id="depStatusTitle">Processing your recharge</h3>
-    <p id="depStatusBody">Waiting for confirmation from your mobile money provider.</p>
-    <button class="primary-button" id="depStatusCloseBtn" style="width:100%;padding:15px 0;font-size:16px;margin-top:22px;display:none;" onclick="closeDepositStatusModal()">Close</button>
+  <div class="sheet-head pay-head">
+    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="chipzBackPay" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ad4e8"/><stop offset="1" stop-color="#2f6fed"/></linearGradient></defs><path d="M15 5l-7 7 7 7" stroke="url(#chipzBackPay)" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <h2 id="depStatusHeadTitle">Recharge</h2>
+  </div>
+  <div class="pay-body">
+    <div class="pay-card">
+      <div class="dep-status-icon" id="depStatusIcon"></div>
+      <h3 id="depStatusTitle">Processing your recharge</h3>
+      <div id="depStatusBody"></div>
+      <div class="pay-actions">
+        <button class="secondary-button" id="depVerifyBtn" style="display:none;" onclick="verifyDepositNow()">Verify</button>
+        <button class="primary-button" id="depStatusCloseBtn" style="display:none;" onclick="closeDepositStatusModal()">Close</button>
+      </div>
+    </div>
   </div>
 </div>
 

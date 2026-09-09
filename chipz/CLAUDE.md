@@ -2125,6 +2125,80 @@ inside the deflated base64 payload.
 - **One environment.** Every change is reviewed in production, on live member data.
 - **No self-serve account deletion.**
 
+### The recharge status page: new copy, a header, working nav, and Verify
+
+Owner: "change this, we need to use new words, even on success and failing, not the
+same words as old ... include nav arrow '<', and its title space ... why the nav icons
+don't work when on payment page ... add a button saying verify, so one can tap it but
+it should not stop autopolling, also they should not call at the same time to strike
+api of payment provider."
+
+**The copy.** The pending state is now the owner's own four numbered steps, verbatim, as
+a real `<ol>` (`.pay-steps`) rather than one paragraph -- the old wording buried "approve
+it on your phone", the single line that actually needed finding, mid-sentence between
+two facts. Left-aligned inside the otherwise centred card, because centred list items put
+the numbers out of line with each other. All five states were reworded: *Payment
+confirmed* / *Payment not completed* / *Still waiting for the provider* / *We are
+checking this payment*. `test-pay-verify.py` sweeps every old phrase across all five
+states in one pass, so none can quietly come back.
+
+Two judgement calls worth keeping:
+- **The USSD fallback stayed.** The four steps replaced the paragraph, but the
+  "dial *165#" note was the owner's own earlier explicit ask (the MoMo push prompt
+  genuinely does fail to arrive), and without it a member is stuck staring at step 2 with
+  nothing to do. It is a `.pay-note` footnote, deliberately NOT a fifth step.
+- **The failure copy says the CHIPZ balance did not change, and nothing about the
+  member's mobile money account** -- this app cannot see that account, so "nothing has
+  been taken" would be a guess about someone else's money. The test asserts that phrase
+  is absent.
+
+**The header** reuses `.sheet-head` verbatim, so it IS the app's header rather than a
+lookalike. Its chevron gradient gets its own id (`chipzBackPay`) -- two `<linearGradient>`
+elements sharing an id is a duplicate-id bug, harmless only until one of them changes.
+`.pay-page` became a flex COLUMN with a `.pay-body` that takes the remaining height, so
+the card centres below the header instead of half a header-height low. `#depStatusBody`
+had to become a `<div>`: an `<ol>` inside a `<p>` is invalid and the browser reparents it,
+dropping the list out of the card entirely.
+
+**The nav bug was the message-detail bug again.** `showPage()`'s teardown carried a
+comment claiming the deposit result was `inset:0` and therefore unreachable -- true when
+it was a dark modal, and stale the moment the round that made it a themed page gave it
+`bottom:var(--nav-h)` so the bar would stay visible. So the tap landed, the page behind
+changed, and the payment page stayed on top: the app looked frozen. `#depStatusBg` is now
+in that teardown, and **deliberately not counted in `spent`** -- it pushes no history
+entry, so retiring one would walk the member off the app's first entry and out of the
+app. Closing it does not stop the poll; the payment is still live at the provider.
+
+**Verify is a single-flight, not a mutex.** `/deposit/marzpay/status` makes the server ask
+the provider, so two at once is two hits for one answer -- and a manual tap is most likely
+to land exactly while the 3s autopoll is mid-request. `depositStatusCheck()` hands a
+caller arriving mid-request the SAME promise instead of refusing it or starting a second:
+the tap is never ignored, the poll is never interrupted, the provider is never asked
+twice. Both callers can therefore resolve on one response, which is why
+`applyDepositStatusResult()` is idempotent (`_depPollDone`). Verify stays available in the
+"still waiting" state -- that is the autopoll spending its 60s budget, not the payment
+ending, so removing the one control that can still resolve it would be backwards.
+
+Two ordering hazards were closed while in here, neither reported: the poll loop now bails
+when `_depActiveDepositId` moves on (deposit A's loop would otherwise write over deposit
+B's page AND set the shared done-flag, stopping B's loop), and the manual path clears
+`_depPendingAmount` so the success copy cannot name a figure from an earlier automatic
+recharge.
+
+**"They should not call at the same time" is a concurrency property, and no amount of
+reading the source proves it.** `test-pay-verify.py` stubs the status endpoint with a real
+1.2s delay, counts requests in flight on arrival and departure, and taps Verify nine times
+straight through the autopoll's ticks: peak concurrency must stay at 1 while requests are
+demonstrably still being made and the poll is still running afterwards. Verified by
+reverting the single-flight -- **peak goes to 2** -- and by reverting the teardown, which
+reproduces the owner's report exactly.
+
+**A route-ordering trap, caught by its own guard.** Playwright gives precedence to the
+route registered LAST, so registering the status stub before the catch-all let the
+catch-all answer it: the counters never moved and "peak <= 1" passed having measured
+nothing at all. The companion "requests really were being made" assertion is what caught
+it. Register specific routes AFTER general ones in these files.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

@@ -1424,10 +1424,29 @@ window.showPage = async function(name){
   // Owner: "when in this message and you tap nav icons, the message screen
   // still persists to go away unless you click on X mark."
   //
-  // Every other overlay in the app (notify, confirm, chest win, announcement,
-  // deposit result, manual pay) is `inset:0` and covers the bar, so a nav tap
-  // cannot reach them and none of them belong here. If a new overlay is ever
-  // given a `bottom:var(--nav-h)` inset, it belongs in this teardown too.
+  // The recharge status page (.pay-page) is the THIRD, and it was missing
+  // here -- owner: "why the nav icons don't work when on payment page, they
+  // should work suitably." The comment this replaces claimed the deposit
+  // result was `inset:0` and therefore unreachable, and that was true when it
+  // was a dark modal; the round that turned it into a themed page gave it
+  // `bottom:var(--nav-h)` specifically SO the bar stays visible and tappable,
+  // and nothing added it to this teardown. So the tap landed, the page behind
+  // changed, and the payment page stayed on top of it -- the app looked
+  // frozen, exactly as the message detail did before it was fixed here.
+  //
+  // Unlike the other two it owns NO history entry (openDepositStatusModal
+  // does not pushState), so it must not be counted in `spent` below --
+  // retiring an entry it never pushed would walk the member off the app's
+  // first entry and drop them out of the app.
+  //
+  // Closing the page does NOT stop the poll, deliberately: a payment is still
+  // in flight at the provider, pollDepositStatus() keeps running and still
+  // refreshes Records when it settles.
+  //
+  // Every remaining overlay (notify, confirm, chest win, announcement, manual
+  // pay) is `inset:0` and covers the bar, so a nav tap cannot reach them and
+  // none of them belong here. If a new overlay is ever given a
+  // `bottom:var(--nav-h)` inset, it belongs in this teardown too.
   //
   // Both overlays own a history entry, and they must be unwound with ONE
   // history call: two history.back()s in a single tick is the exact race this
@@ -1437,8 +1456,12 @@ window.showPage = async function(name){
   // popstate that finds everything already closed and does nothing.
   const detailOpen = !!($('msgDetailBg') && $('msgDetailBg').classList.contains('show'));
   const sheetOpen = !!document.querySelector('.sheet-bg.show');
+  const payOpen = !!($('depStatusBg') && $('depStatusBg').classList.contains('show'));
   if (detailOpen) $('msgDetailBg').classList.remove('show');
+  if (payOpen) { $('depStatusBg').classList.remove('show'); unlockBodyScroll(); }
   if (sheetOpen && typeof closeSheet === 'function') closeSheet({ navigating: true, keepHistory: true });
+  // payOpen is deliberately absent from this count -- it pushes no history
+  // entry, so including it would retire someone else's.
   const spent = (detailOpen ? 1 : 0) + (sheetOpen ? 1 : 0);
   if (spent) history.go(-spent);
   STATE.page = name;
@@ -4495,9 +4518,12 @@ window.submitManualPasteSms = async function(){
 function setDepositStatusReview(){
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = PLAN_SPIN;
-  $('depStatusTitle').textContent = 'Payment under review';
-  $('depStatusBody').textContent = "We're checking this payment and will credit your wallet shortly if it's genuine. Check Records for updates.";
-  $('depStatusCloseBtn').style.display = 'block';
+  $('depStatusTitle').textContent = 'We are checking this payment';
+  $('depStatusBody').innerHTML = '<p>This one needs a quick manual check before it can be credited. '
+    + 'Your balance will be updated as soon as it clears, and the recharge stays visible in Balance Record until then.</p>';
+  // No Verify here: a review is waiting on a person, not on the provider, so
+  // re-asking the provider cannot change the answer.
+  setDepButtons(false, true);
 }
 // Shared by the background poll below AND the reference's own Refresh
 // button (manualPayRefresh) -- one place decides what a
@@ -4506,6 +4532,11 @@ function setDepositStatusReview(){
 // result. Returns true once the deposit has reached a terminal state.
 async function handleManualDepositStatusResult(r){
   if (r.status !== 'success') return false;
+  // The manual flow never shows the pending screen, so _depPendingAmount is
+  // whatever an EARLIER automatic recharge left behind this session. Cleared
+  // here so the success copy falls back to its amount-less wording instead of
+  // confidently naming a figure from a different deposit.
+  _depPendingAmount = 0;
   // A deposit reaching any terminal state (paid, failed, or handed to a
   // human for review) is no longer "pending" -- the resume-on-reload cache
   // must never resurrect the code screen for a deposit that's already
@@ -4626,6 +4657,85 @@ window.closeDepositStatusModal = function(){
   // 'home' or another overlay is open, so this is safe to call unconditionally.
   maybeAnnounceAfterSheet('Recharge');
 };
+// ── ONE STATUS REQUEST AT A TIME ──
+// Owner: "add a button saying verify, so one can tap it but it should not
+// stop autopolling, also they should not call at the same time to strike api
+// of payment provider."
+//
+// /deposit/marzpay/status makes the server ask the payment provider about
+// this transaction, so two of them firing together is two hits on the
+// provider for one answer -- and the manual Verify tap is, by design, most
+// likely to happen exactly while the 3s autopoll is mid-request.
+//
+// This is a single-flight, not a mutex: a caller arriving while a request is
+// already out gets the SAME promise back rather than being refused or made to
+// start a second one. So the member's tap is never ignored (they still get an
+// answer, the one already on its way), the autopoll is never interrupted, and
+// the provider is never asked twice at once. It also means both callers may
+// resolve on the same response, which is why applyDepositStatusResult() below
+// has to be idempotent.
+var _depStatusInflight = null;
+var _depActiveDepositId = null;
+var _depPollDone = false;
+var _depPendingAmount = 0;
+// Long enough that hammering the button cannot turn into a burst of provider
+// calls, short enough that a member watching the screen can re-check when the
+// prompt actually lands on their phone.
+var DEP_VERIFY_COOLDOWN_MS = 2500;
+function depositStatusCheck(depositId){
+  if (_depStatusInflight) return _depStatusInflight;
+  // post() resolves to {status:'error'} rather than rejecting (see api()), so
+  // this promise never rejects and the finally always clears the slot.
+  _depStatusInflight = post('/deposit/marzpay/status', { depositId })
+    .finally(() => { _depStatusInflight = null; });
+  return _depStatusInflight;
+}
+// The single place that decides what a status response MEANS, shared by the
+// autopoll and the Verify button so the two can never disagree about the same
+// payload. Returns true once the deposit has settled.
+async function applyDepositStatusResult(r){
+  if (_depPollDone) return true;
+  if (!r || r.status !== 'success') return false;
+  if (r.state === 'matched') {
+    _depPollDone = true;
+    setDepositStatusSuccess();
+    await refreshTransactionsCache();
+    if (STATE.page === 'home') renderHome();
+    return true;
+  }
+  if (r.state === 'failed') {
+    _depPollDone = true;
+    setDepositStatusFailed(r.message);
+    await refreshTransactionsCache();
+    return true;
+  }
+  return false;
+}
+// Which of the two buttons the current state offers. Verify stays available
+// in the "still processing" state as well as while pending -- that state is
+// the autopoll giving up on its 60s budget, NOT the payment being over, so
+// taking the one control that can still resolve it away at exactly that
+// moment would be backwards.
+function setDepButtons(showVerify, showClose){
+  const v = $('depVerifyBtn'), c = $('depStatusCloseBtn');
+  if (v) { v.style.display = showVerify ? 'block' : 'none'; v.disabled = false; v.textContent = 'Verify'; }
+  if (c) c.style.display = showClose ? 'block' : 'none';
+}
+window.verifyDepositNow = async function(){
+  const btn = $('depVerifyBtn');
+  if (!_depActiveDepositId || _depPollDone || !btn || btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'Checking…';
+  const settled = await applyDepositStatusResult(await depositStatusCheck(_depActiveDepositId));
+  if (settled) return;                       // setDep* already reset the buttons
+  notify('Not confirmed yet. Approve the payment prompt on your phone, then tap Verify again.');
+  // The cooldown runs from the ANSWER, not the tap, so a slow provider does
+  // not let taps queue up behind it.
+  setTimeout(() => {
+    if (_depPollDone) return;
+    const b = $('depVerifyBtn');
+    if (b) { b.disabled = false; b.textContent = 'Verify'; }
+  }, DEP_VERIFY_COOLDOWN_MS);
+};
 function setDepositStatusPending(amount, phone, network){
   $('depStatusIcon').className = 'dep-status-icon';
   // The same orbiting-chips mark the ongoing plans carry, enlarged by CSS
@@ -4651,30 +4761,69 @@ function setDepositStatusPending(amount, phone, network){
   // instead), so `network` is no longer reliably known here -- show both
   // codes rather than guessing.
   const ussd = network === 'Airtel Money' ? '*185#' : (network === 'MTN Mobile Money' ? '*165#' : '*165# (MTN) or *185# (Airtel)');
-  $('depStatusBody').textContent = `Payment prompt sent to ${displayPhone} for ${fmtUGX(amount)}. Approve it on your phone to complete this recharge. If the prompt doesn't come up, dial ${ussd} on that phone to find and approve the pending payment yourself.`;
-  $('depStatusCloseBtn').style.display = 'none';
+  _depPendingAmount = Number(amount) || 0;
+  // Owner's own four steps, verbatim. Numbered because they are a sequence
+  // with one thing for the member to DO in the middle of it -- the previous
+  // single paragraph buried "approve it on your phone" mid-sentence between
+  // two facts, which is the one line that actually needed to be found.
+  //
+  // esc() on both interpolations: the amount is ours, but the phone number is
+  // whatever was typed into the form, and this is innerHTML now.
+  $('depStatusBody').innerHTML =
+    '<ol class="pay-steps">'
+    + '<li>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</li>'
+    + '<li>Check your phone for the payment prompt.</li>'
+    + '<li>Approve the payment to complete your recharge.</li>'
+    + '<li>Your balance will be updated automatically once the payment is confirmed.</li>'
+    + '</ol>'
+    // Kept from the earlier round, and deliberately NOT dropped when the four
+    // steps replaced the old paragraph. Owner, when it was added: "put another
+    // statement, that dial *165# to approve, this is just a fallback bro
+    // because a payment prompt can come or it may fail and one may dial *165#
+    // so he see pending approval." The push prompt genuinely does fail to
+    // arrive sometimes -- a real MoMo gap, not something this app causes --
+    // and without this a member is left staring at step 2 with nothing to do.
+    + '<p class="pay-note">If the prompt does not come up, dial ' + esc(ussd)
+    + ' on that phone to find and approve the pending payment yourself.</p>';
+  setDepButtons(true, false);
 }
 function setDepositStatusSuccess(){
   $('depStatusIcon').className = 'dep-status-icon success';
   // The owner's own artwork, cut out of the images he supplied.
   $('depStatusIcon').innerHTML = '<img src="/pay-success.png" alt="" aria-hidden="true">';
-  $('depStatusTitle').textContent = 'Recharge successful';
-  $('depStatusBody').textContent = 'Your wallet has been credited.';
-  $('depStatusCloseBtn').style.display = 'block';
+  $('depStatusTitle').textContent = 'Payment confirmed';
+  // Names the actual figure when it is known (it always is on the automatic
+  // path, since the pending state set it moments earlier) and falls back to
+  // wording that reads properly without one -- the manual-deposit path lands
+  // here from handleManualDepositStatusResult() without ever showing pending.
+  $('depStatusBody').innerHTML = '<p>' + (_depPendingAmount
+    ? esc(fmtUGX(_depPendingAmount)) + ' has been added to your Chipz balance.'
+    : 'Your recharge has been added to your Chipz balance.')
+    + ' You can see it any time under Balance Record.</p>';
+  setDepButtons(false, true);
 }
 function setDepositStatusFailed(msg){
   $('depStatusIcon').className = 'dep-status-icon failed';
   $('depStatusIcon').innerHTML = '<img src="/pay-failed.png" alt="" aria-hidden="true">';
-  $('depStatusTitle').textContent = 'Recharge failed';
-  $('depStatusBody').textContent = msg || 'Your recharge could not be completed.';
-  $('depStatusCloseBtn').style.display = 'block';
+  $('depStatusTitle').textContent = 'Payment not completed';
+  // Says what is true and checkable -- the Chipz balance did not move -- and
+  // deliberately makes no claim about the member's mobile money account,
+  // which this app cannot see. Promising "nothing was taken" would be a
+  // guess about someone else's money.
+  $('depStatusBody').innerHTML = '<p>' + esc(msg
+    || 'This recharge did not go through, so your Chipz balance has not changed. You can start it again whenever you are ready.') + '</p>';
+  setDepButtons(false, true);
 }
 function setDepositStatusUnknown(){
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = PLAN_SPIN;
-  $('depStatusTitle').textContent = 'Still processing';
-  $('depStatusBody').textContent = 'This is taking longer than usual. Check Records shortly for the final status.';
-  $('depStatusCloseBtn').style.display = 'block';
+  $('depStatusTitle').textContent = 'Still waiting for the provider';
+  $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
+    + 'If it goes through, your balance updates on its own. Tap Verify to check again, '
+    + 'or look under Balance Record later.</p>';
+  // Both buttons: the payment is genuinely unresolved, so Verify must stay,
+  // and the member also needs a way off this screen.
+  setDepButtons(true, true);
 }
 window.submitDeposit = async function(){
   const amount = parseMoneyInput($('depAmount').value);
@@ -4721,13 +4870,28 @@ window.submitDeposit = async function(){
   pollDepositStatus(r.depositId);
 };
 async function pollDepositStatus(depositId){
+  _depActiveDepositId = depositId;
+  _depPollDone = false;
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 3000));
-    const r = await post('/deposit/marzpay/status', { depositId });
-    if (r.status === 'success' && r.state === 'matched') { setDepositStatusSuccess(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
-    if (r.status === 'success' && r.state === 'failed') { setDepositStatusFailed(r.message); await refreshTransactionsCache(); return; }
+    // A Verify tap may have settled it between ticks -- stop rather than
+    // firing another provider call for an answer already in hand.
+    if (_depPollDone) return;
+    // Superseded: the member backed out of this recharge and started another
+    // one, so a newer poll owns the screen now. Without this, THIS loop would
+    // keep running for its full 60s and write deposit A's result over deposit
+    // B's page -- and, worse than the old code, would set the shared
+    // _depPollDone and stop B's loop as well. Same shape as the bug already
+    // documented on the manual-pay poll.
+    if (_depActiveDepositId !== depositId) return;
+    // Goes through the same single-flight the Verify button uses, so a tap
+    // landing mid-tick joins THIS request instead of starting a second one.
+    if (await applyDepositStatusResult(await depositStatusCheck(depositId))) return;
   }
-  setDepositStatusUnknown();
+  // Ending the loop is the autopoll giving up on its own 60s budget, not the
+  // payment being over -- _depPollDone stays false on purpose so Verify keeps
+  // working on this deposit afterwards.
+  if (!_depPollDone) setDepositStatusUnknown();
 }
 
 // Cache-first: STATE.bankAccounts is prefetched at login. Deliberately does
