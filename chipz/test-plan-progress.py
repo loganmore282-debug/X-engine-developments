@@ -39,12 +39,12 @@ on purpose. A 150-day fixture cannot tell a correct cycle from the old
 hardcoded 150.
 """
 import asyncio, datetime, json, os, re, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
 _time_re = re.compile(r' at (?:[01]\d|2[0-3]):[0-5]\d$')
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/plan-progress'
 os.makedirs(OUT, exist_ok=True)
-HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, 'user')
 PORT = 8875
 API = 'https://chipz-server.onrender.com'

@@ -1,7 +1,8 @@
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
-ROOT = '/home/user/X-engine-developments/chipz/user'
+ROOT = os.path.join(HERE, 'user')
 PORT = 8825
 API = 'https://chipz-server.onrender.com'
 
@@ -316,7 +317,7 @@ async def main():
 # with, and the deposit and withdraw screens must both be covered. Grepping the
 # BUILT file would prove nothing -- the obfuscator encodes string literals.
 import re as _re
-_src = open('/home/user/X-engine-developments/chipz/user-src/original_module.js',
+_src = open(os.path.join(HERE, 'user-src/original_module.js'),
             encoding='utf-8').read()
 _m = _re.search(r"var ANNOUNCE_AFTER_SHEETS = \[([^\]]*)\]", _src)
 _listed = _re.findall(r"'([^']+)'", _m.group(1)) if _m else []

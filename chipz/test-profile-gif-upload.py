@@ -1,8 +1,9 @@
 import asyncio, base64, io, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 from PIL import Image
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
-ADMIN = '/home/user/X-engine-developments/chipz/admin'
+ADMIN = os.path.join(HERE, 'admin')
 # The fixture is generated rather than checked in: it has to match the
 # owner's stated spec exactly (300 x 220, 30 frames, ~80 ms each, ~2.4 s,
 # transparent) and a binary in the repo would drift from that silently.
@@ -34,7 +35,7 @@ async def main():
         pg=await b.new_page()
         await pg.goto('about:blank')
         # the real fileToRawDataUrl(), lifted out of the built admin panel's source
-        src=open('/home/user/X-engine-developments/chipz/admin-src/index.html').read()
+        src=open(os.path.join(HERE, 'admin-src/index.html')).read()
         fn=src[src.index('function fileToRawDataUrl'):src.index('let _toastT=null;')]
         await pg.add_script_tag(content=fn)
         await pg.set_content('<input type="file" id="f">')

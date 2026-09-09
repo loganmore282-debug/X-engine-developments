@@ -18,11 +18,12 @@ still demonstrably running and the Verify tap still gets an answer.
 Verified to discriminate by reverting each change; see the round's notes.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/pay-verify'
 os.makedirs(OUT, exist_ok=True)
-ROOT = '/home/user/X-engine-developments/chipz/user'
+ROOT = os.path.join(HERE, 'user')
 PORT = 8796
 API = 'https://chipz-server.onrender.com'
 

@@ -1,7 +1,12 @@
 // Pulls the REAL origin-matching code out of server.js and exercises it, so
 // this tests the shipped logic rather than a paraphrase of it.
 const fs = require('fs');
-const src = fs.readFileSync('/home/user/X-engine-developments/chipz/server.js', 'utf8');
+const path = require('path');
+// __dirname, not an absolute path: this file is run from a GitHub runner
+// as well as from a checkout on someone's machine, and the two are not in
+// the same place. A baked-in path made this test pass only in the one
+// directory it was written in.
+const src = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
 
 const consts = src.slice(src.indexOf('const CORS_ALLOWED_ORIGINS'), src.indexOf('app.use(cors({'));
 const cb = src.slice(src.indexOf('origin: (origin, cb) =>'), src.indexOf('}));', src.indexOf('origin: (origin, cb) =>')));

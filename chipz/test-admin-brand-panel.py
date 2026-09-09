@@ -12,11 +12,12 @@ otherwise come back as bug reports (an installed phone keeps its old icon,
 and WhatsApp keeps a preview it has already fetched).
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/admin-brand'
 os.makedirs(OUT, exist_ok=True)
-ROOT = '/home/user/X-engine-developments/chipz/admin'
+ROOT = os.path.join(HERE, 'admin')
 PORT = 8871
 API = 'https://chipz-server.onrender.com'
 

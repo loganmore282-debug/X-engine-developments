@@ -20,11 +20,11 @@ would drift, and the one that mattered would be whichever this file happened
 to hold.
 """
 import asyncio, json, os, re, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/home-gif-shots'
 os.makedirs(OUT, exist_ok=True)
-HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, 'user')
 PORT = 8853
 API = 'https://chipz-server.onrender.com'

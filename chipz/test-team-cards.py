@@ -25,12 +25,13 @@ the GLYPH's own hue. Only the card EDGE is green (G-R = +16 outside it). So the
 figures get a halo in the brand red and the green stays on the edge.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 from PIL import Image
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/team-measure'
 os.makedirs(OUT, exist_ok=True)
-ROOT = '/home/user/X-engine-developments/chipz/user'
+ROOT = os.path.join(HERE, 'user')
 PORT = 8769
 API = 'https://chipz-server.onrender.com'
 S = 973 / 354.0          # device px per CSS px on his phone

@@ -39,12 +39,12 @@ purple/green theme and Chipz is red/orange, so the OK button and the Join
 Channel button use the brand gradient. Every proportion is his.
 """
 import asyncio, io, json, os, re, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 from PIL import Image, ImageFilter
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/mockup-proportions'
 os.makedirs(OUT, exist_ok=True)
-HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, 'user')
 PORT = 8871
 API = 'https://chipz-server.onrender.com'

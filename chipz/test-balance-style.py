@@ -23,11 +23,12 @@ measures the RENDERED width of real figures instead of trusting the number in
 the stylesheet.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
 OUT  = sys.argv[1] if len(sys.argv) > 1 else '/tmp/balance-style'
 os.makedirs(OUT, exist_ok=True)
-ROOT = '/home/user/X-engine-developments/chipz/user'
+ROOT = os.path.join(HERE, 'user')
 PORT = 8867
 API  = 'https://chipz-server.onrender.com'
 

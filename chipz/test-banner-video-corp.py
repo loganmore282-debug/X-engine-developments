@@ -22,10 +22,10 @@ CORP header again this fails. It also asserts the same-site header genuinely
 blocks playback, so the passing case cannot be vacuous.
 """
 import asyncio, base64, http.server, os, re, socketserver, sys, threading
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 from playwright.async_api import async_playwright
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 VID_PORT, PAGE_PORT = 8871, 8872
 
 fails = []

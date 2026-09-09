@@ -21,12 +21,12 @@ painted, on every main screen, and that the About page in particular has ink
 on it.
 """
 import asyncio, io, json, os, re, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 from PIL import Image
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/visible-text'
 os.makedirs(OUT, exist_ok=True)
-HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, 'user')
 PORT = 8867
 API = 'https://chipz-server.onrender.com'

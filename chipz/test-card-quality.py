@@ -27,12 +27,12 @@ because every pill and disc is a gradient and `background-color` on those is
 matter what the member actually sees.
 """
 import asyncio, io, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 from PIL import Image
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/card-quality'
 os.makedirs(OUT, exist_ok=True)
-HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, 'user')
 PORT = 8861
 API = 'https://chipz-server.onrender.com'

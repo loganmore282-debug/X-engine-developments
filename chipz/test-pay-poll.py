@@ -21,12 +21,13 @@ rendered geometry rather than from class names:
   - success and failure show the owner's own two images.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 from PIL import Image
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/pay-poll'
 os.makedirs(OUT, exist_ok=True)
-ROOT = '/home/user/X-engine-developments/chipz/user'
+ROOT = os.path.join(HERE, 'user')
 PORT = 8773
 API = 'https://chipz-server.onrender.com'
 

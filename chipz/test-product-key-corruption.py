@@ -28,11 +28,12 @@ logic (not a stub), and:
      refuses to guess on a genuine conflict.
 """
 import asyncio, functools, http.server, json, os, socketserver, sys, threading
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/product-key-corruption'
 os.makedirs(OUT, exist_ok=True)
-ADMIN_ROOT = '/home/user/X-engine-developments/chipz/admin'
+ADMIN_ROOT = os.path.join(HERE, 'admin')
 SERVER = 'https://chipz-server.onrender.com'
 PORT = 8891
 

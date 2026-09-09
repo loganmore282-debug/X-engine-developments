@@ -16,9 +16,10 @@ usable snapshot still lands -- with the photos dropped rather than the whole
 snapshot lost.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
-ROOT = '/home/user/X-engine-developments/chipz/user'
+ROOT = os.path.join(HERE, 'user')
 PORT = 8841
 API  = 'https://chipz-server.onrender.com'
 

@@ -20,12 +20,13 @@ Three things here can only be checked by rendering, not by reading CSS:
     form stopped working, because the taps land on the image.
 """
 import asyncio, base64, io, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 from PIL import Image
 
 OUT  = sys.argv[1] if len(sys.argv) > 1 else '/tmp/auth-bg'
 os.makedirs(OUT, exist_ok=True)
-ROOT = '/home/user/X-engine-developments/chipz/user'
+ROOT = os.path.join(HERE, 'user')
 PORT = 8891
 API  = 'https://chipz-server.onrender.com'
 

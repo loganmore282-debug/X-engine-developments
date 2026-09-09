@@ -151,5 +151,32 @@ if (fs.existsSync(dep)) {
   check(/package-ecosystem:\s*github-actions/.test(d), 'and at the workflow actions themselves');
 }
 
+// ── the tests have to run somewhere other than one laptop ──
+// The CI gate's first real run failed for exactly this: test-cors-origins.js
+// opened '/home/user/.../chipz/server.js' by absolute path, which exists in
+// the directory it was written in and nowhere else. It had passed locally
+// forever. 28 files carried the same baked-in prefix.
+console.log('\n— tests are portable —');
+const testFiles = fs.readdirSync(HERE)
+  .filter(f => /^(test-.*|smoke-test)\.(js|py)$/.test(f));
+check(testFiles.length > 40, `found the suite to scan (${testFiles.length} files)`);
+// Comments are stripped first. Without that this check flags ITSELF -- the
+// explanation above quotes an example path, and a plain scan cannot tell an
+// offending line of code from a sentence describing one. That is the same
+// trap test-no-snow-branding.js documents hitting.
+const stripComments = src => src
+  .replace(/\/\*[\s\S]*?\*\//g, '')     // JS block
+  .replace(/^\s*\/\/.*$/gm, '')         // JS line
+  .replace(/"""[\s\S]*?"""/g, '')       // Python docstring
+  .replace(/^\s*#.*$/gm, '');           // Python line + shebang
+const baked = testFiles.filter(f => {
+  const body = stripComments(fs.readFileSync(path.join(HERE, f), 'utf8'));
+  // Any absolute path into a home or checkout directory. Deliberately not a
+  // search for one specific prefix -- the next one will be someone else's.
+  return /['"]\/(home|Users|root)\/[^'"\n]*chipz/.test(body);
+});
+check(baked.length === 0,
+  `no test file hardcodes an absolute checkout path (offenders: ${baked.join(', ') || 'none'})`);
+
 console.log(failed ? `\n${failed} FAILED` : '\nsecurity hardening: all cases pass');
 process.exit(failed ? 1 : 0);

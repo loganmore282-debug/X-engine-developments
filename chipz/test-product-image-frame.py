@@ -26,10 +26,10 @@ Checks:
   5. the app-side card frame is aspect-ratio 16/9, so the two agree
 """
 import base64, http.server, io, os, re, socket, sys, threading, functools
+HERE = os.path.dirname(os.path.abspath(__file__))
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 W, H = 1600, 900
 
 def make_png(w, h):

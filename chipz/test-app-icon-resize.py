@@ -18,12 +18,13 @@ So this lifts the real fileToSquarePng() out of the admin source, runs it in
 Chromium against generated artwork, and decodes what comes back.
 """
 import asyncio, base64, io, os, sys
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 from PIL import Image
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/app-icon-resize'
 os.makedirs(OUT, exist_ok=True)
-ADMIN_SRC = '/home/user/X-engine-developments/chipz/admin-src/index.html'
+ADMIN_SRC = os.path.join(HERE, 'admin-src/index.html')
 
 fails = []
 def ck(ok, l):

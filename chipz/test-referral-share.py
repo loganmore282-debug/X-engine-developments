@@ -21,11 +21,12 @@ out of the gaps and the field, so it landing on his 199.7 means the parts
 above it are right rather than merely summing to the right total.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
+HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/ref-measure'
 os.makedirs(OUT, exist_ok=True)
-ROOT = '/home/user/X-engine-developments/chipz/user'
+ROOT = os.path.join(HERE, 'user')
 PORT = 8763
 API = 'https://chipz-server.onrender.com'
 

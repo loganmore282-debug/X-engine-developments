@@ -2199,6 +2199,43 @@ catch-all answer it: the counters never moved and "peak <= 1" passed having meas
 nothing at all. The companion "requests really were being made" assertion is what caught
 it. Register specific routes AFTER general ones in these files.
 
+### The CI gate's first real run went red, and it was right to
+
+The workflow added with the hardening round failed on all four of its runs. It was
+not the workflow: `npm ci` and `npm audit` passed, and it reported `1 test file(s)
+failed` -- correctly.
+
+`test-cors-origins.js` opened **server.js by absolute path**, hardcoded to the one
+directory it happened to be written in. On a GitHub runner the checkout is somewhere
+else entirely, so it died with ENOENT. **28 test files carried the same baked-in
+prefix**; only that one is in the Node gate, which is why exactly one failed. Every
+one of them had "passed" forever, because they had only ever run from a single
+machine in a single directory. A test that cannot move is a test that is only
+checking where it lives.
+
+All 28 now resolve from `__dirname` / a `HERE` computed off `__file__`, and
+`test-security-hardening.js` grew a guard that fails if ANY test file hardcodes an
+absolute checkout path -- matched on `/home|/Users|/root`, not on one specific
+prefix, since the next one will be someone else's.
+
+**Three mistakes in the fix itself, all of which the suite caught:**
+- The guard flagged **itself**: its own comment quotes an example path, and a plain
+  scan cannot tell an offending line of code from a sentence describing one. It now
+  strips comments and docstrings before scanning -- the same trap
+  `test-no-snow-branding.js` already documents.
+- Inserting `HERE` after the *last* import put it **below its first use** in two
+  files that carry a mid-file `import re as _re`.
+- Inserting it after the first line matching `^(import|from)` put it **inside the
+  module docstring** in three files, where it never executes at all --
+  `test-button-glow.py`'s docstring contains the line *"from right to left."*. The
+  fix is to find the first real import with `ast.parse` rather than a regex, and then
+  assert via the AST that `HERE` is a genuine top-level assignment.
+
+**How to verify this class of change: run the suite from somewhere else.** Copy the
+tracked files (`git ls-files chipz .github`) to a temp directory, drop node_modules
+in, and run the Node suite there. That reproduces what the runner does, and it is the
+only check that would have caught the original bug before it was pushed.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase
