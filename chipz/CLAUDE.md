@@ -1691,6 +1691,41 @@ its height is 898 of 2085 = **43% of the screen** — the previous `58vh` minimu
 short message noticeably taller than his. It still rises from below; it now comes to
 rest 16px up instead of against the screen edge.
 
+### The message sheet, round 3: 20px was not "minimal", and luminance could not see it
+
+Owner: *"see the blur in my mockup it is minimal such that you can even see some texts in
+background."*
+
+|  | luminance | stdev | edge p99 |
+|---|---|---|---|
+| his | 190.9 | **10.9** | **8** |
+| ours at blur 20px | 216.2 | **1.4** | **3** |
+
+**Round 2 measured the wrong thing and this is the lesson.** It tuned the tint until the
+rendered luminance matched his (190 vs 189) and called it done — but luminance is a
+*brightness*, and the fault was that no STRUCTURE survived. At stdev 1.4 the page behind
+was not blurred, it was erased, while brightness sat right where it was aimed. Measure
+what the complaint is about: "can you still read it" is variance and edge energy, not
+mean grey.
+
+`tune-msg-blur.py` sweeps blur × tint over the real popup on the real list (28
+combinations) and reads back all three. **blur 5px / tint .22** reproduces his stdev
+exactly (10.9). Kept from that sweep: at 20px, no tint value gets stdev above 5.9 — the
+blur, not the tint, was the whole problem, so round 2's tint-only tuning could never
+have got there.
+
+**The luminance still reads higher than his (216 vs 191) and that is correct to ignore.**
+His list sits on a green page and ours on a white sheet, so brightness here is a property
+of his *content*, not of his blur. Matching it would mean darkening the wash until the
+text went away again.
+
+`test-mockup-proportions.py` asserts the rendered pixels (stdev ≥ 6.0). The pre-existing
+`"blur" in backdropFilter` check stays, but note it passes for **any** blur including the
+20px that erased the page — it cannot see this class of fault at all. The companion edge
+check is honestly a weak one and says so inline: with that fixture's single message it
+reads 6 at both 5px and 20px, so stdev is the assertion doing the work (8.6 vs 4.0,
+verified by reverting the CSS).
+
 ### The red band above the app was `theme-color`
 
 Owner: *"why app still have red upper title color? it takes space even."*

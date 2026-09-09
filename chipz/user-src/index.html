@@ -1213,10 +1213,31 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
        tint runs to y=1841 of 2085 and the nav below it is untinted and sharp.
        Ours covered the whole screen. `bottom:var(--nav-h)` is the same rule
        .sheet-bg already uses, so this is the app's own convention rather than
-       a number invented here. */
+       a number invented here.
+
+   ROUND 3, and (1) above had overshot: 20px is not "minimal". Owner: "see the
+   blur in my mockup it is minimal such that you can even see some texts in
+   background." Measured over the strip above the card in both screenshots:
+
+                    luminance   stdev   edge p99
+        his            190.9     10.9        8
+        ours (20px)    216.2      1.4        3
+
+   stdev and edge energy are what matter -- they say how much STRUCTURE
+   survives, i.e. whether there is anything left to read. Ours was FLAT: the
+   content was not blurred, it was erased. Luminance cannot see that, and
+   chasing luminance is exactly how round 2 landed on a backdrop that hit the
+   right brightness with nothing legible behind it.
+
+   blur/tint were then swept over the REAL popup on the REAL list
+   (tune-msg-blur.py, 28 combinations) and read back the same three ways.
+   5px/.22 reproduces his stdev exactly (10.9). The luminance still reads
+   higher than his and that is correct to ignore: his list sits on a green
+   page and ours on a white sheet, so brightness here is a property of his
+   CONTENT, not of his blur. */
 .msg-detail-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
-  background:rgba(238,112,34,.26);
-  -webkit-backdrop-filter:blur(20px) saturate(1.2);backdrop-filter:blur(20px) saturate(1.2);
+  background:rgba(238,112,34,.22);
+  -webkit-backdrop-filter:blur(5px) saturate(1.15);backdrop-filter:blur(5px) saturate(1.15);
   display:none;align-items:flex-end;z-index:305;}
 /* No backdrop-filter (older Android WebViews): a light tint alone would leave
    the page behind fully legible and the card floating on nothing, so lean on

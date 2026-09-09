@@ -40,7 +40,7 @@ Channel button use the brand gradient. Every proportion is his.
 """
 import asyncio, io, json, os, re, sys, functools, threading, http.server, socketserver
 from playwright.async_api import async_playwright
-from PIL import Image
+from PIL import Image, ImageFilter
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/mockup-proportions'
 os.makedirs(OUT, exist_ok=True)
@@ -331,6 +331,41 @@ async def main():
         ck(frames[-1] == 0, "and settles at rest (%d)" % frames[-1])
         ck("blur" in det["filter"],
            "the backdrop is blurred, which is what 'blurry' meant (%s)" % det["filter"])
+        # ...and the blur is MINIMAL, measured rather than declared. Owner,
+        # round 3: "see the blur in my mockup it is minimal such that you can
+        # even see some texts in background." The assertion above passes for
+        # any blur at all, including the 20px that erased the page behind --
+        # measured over the strip above the card, his screenshot reads stdev
+        # 10.9 / edge-p99 8 and ours read stdev 1.4 / edge-p99 3, i.e. flat.
+        # So this reads the RENDERED pixels: how much structure survives is
+        # the whole question, and a computed-style check cannot see it.
+        shot = f"{OUT}/msg-backdrop.png"
+        await page.screenshot(path=shot)
+        _im = Image.open(shot).convert('RGB')
+        _W, _H = _im.size
+        # 10%-40% of the height is above the card (it starts around 47%) and
+        # below the status area, so this is backdrop and nothing else.
+        _strip = _im.crop((int(_W*0.06), int(_H*0.10),
+                           int(_W*0.94), int(_H*0.40))).convert('L')
+        _px = list(_strip.getdata())
+        _mean = sum(_px)/len(_px)
+        _std = (sum((p-_mean)**2 for p in _px)/len(_px)) ** 0.5
+        _edges = sorted(_strip.filter(ImageFilter.FIND_EDGES).getdata())
+        _e99 = _edges[int(len(_edges)*0.99)]
+        # Floors, not a window: MORE legible than his is not a fault, and the
+        # failure being guarded against is one-directional (blur cranked up
+        # until nothing is left). 6.0 sits well above the 1.4 that shipped and
+        # comfortably under his 10.9.
+        ck(_std >= 6.0,
+           "the page behind stays readable, not erased (stdev %.1f, his 10.9, the bad build 1.4)" % _std)
+        # Weaker than it looks, and worth saying so: with this fixture's single
+        # message the edge figure reads 6 at BOTH 5px and the old 20px, so it
+        # does not separate them -- stdev above is the assertion that does
+        # (8.6 vs 4.0, verified by reverting the CSS). It is kept because it
+        # does catch the real-world worst case: the owner's screenshot of the
+        # 20px build measured edge p99 3 on a busier page.
+        ck(_e99 >= 5,
+           "and keeps real edges, so there is text to make out (edge p99 %d, his 8)" % _e99)
         # Owner, round 2: "see the message when tapped, it leaves a nav icons
         # but see yours how you did it and you poorly designed it." In his the
         # overlay stops above the bottom bar and the card floats clear of every
