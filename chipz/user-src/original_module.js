@@ -2078,16 +2078,16 @@ function paintProducts(animate){
   let html = `
 <div class="page-head"><h2>My Products</h2></div>
 <div class="mp-band">
-  <div class="mp-band-k">Still to earn</div>
+  <div class="mp-band-k">Remaining to Earn</div>
   <div class="mp-band-v">${fmtUGXCents(stillToEarn)}</div>
-  <div class="mp-band-sub">${perDay > 0 ? `${fmtUGXCents(perDay)} a day across ${counts.running} ongoing plan${counts.running===1?'':'s'}` : 'No plans ongoing right now'}</div>
+  <div class="mp-band-sub">${perDay > 0 ? `${fmtUGXCents(perDay)} a day across ${counts.running} active plan${counts.running===1?'':'s'}` : 'No active plans right now'}</div>
   <div class="mp-band-row">
-    <div><span>Invested</span><b>${fmtUGXCents(totalInvested)}</b></div>
-    <div><span>Earned so far</span><b>${fmtUGXCents(totalEarned)}</b></div>
+    <div><span>Total Invested</span><b>${fmtUGXCents(totalInvested)}</b></div>
+    <div><span>Total Earned</span><b>${fmtUGXCents(totalEarned)}</b></div>
   </div>
 </div>
 <div class="mp-filters">
-  ${['running','matured','all'].map(f => `<button class="mp-f ${_planFilter===f?'on':''}" onclick="switchPlanFilter('${f}')">${f==='running'?'Ongoing':f==='matured'?'Matured':'All'}</button>`).join('')}
+  ${['running','matured','all'].map(f => `<button class="mp-f ${_planFilter===f?'on':''}" onclick="switchPlanFilter('${f}')">${f==='running'?'Active':f==='matured'?'Completed':'All'}</button>`).join('')}
 </div>
 <div class="mp-list">`;
 
@@ -2095,10 +2095,10 @@ function paintProducts(animate){
     html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>Could not load your plans. <button style="background:none;border:none;color:var(--snow-wine);font-weight:600;cursor:pointer;padding:0;font-size:inherit;" onclick="renderProducts()">Tap to retry</button></div>`;
   } else if (!shown.length) {
     const msg = _planFilter === 'matured'
-      ? 'Nothing has matured yet. Plans move here once they finish paying out.'
+      ? 'Nothing has completed yet. Plans move here once they finish paying out.'
       : _planFilter === 'all'
       ? 'No plans yet. Open Products and pick one to get started.'
-      : counts.all ? 'No plans ongoing. Check Matured to see the ones that finished.'
+      : counts.all ? 'No active plans. Check Completed to see the ones that finished.'
                    : 'No plans yet. Open Products and pick one to get started.';
     html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>${msg}</div>`;
   } else {
@@ -2116,13 +2116,13 @@ function paintProducts(animate){
         <div class="mp-name">${esc(inv.tierLabel)}</div>
         <div class="mp-meta">${fmtUGXCents(st.amount)} invested</div>
       </div>
-      <span class="mp-chip ${st.matured?'done':''}">${st.matured?'Matured':'Ongoing'}</span>
+      <span class="mp-chip ${st.matured?'done':''}">${st.matured?'Completed':'Active'}</span>
     </div>
-    <div class="mp-days"><span class="lead">${st.matured ? '' : PLAN_SPIN}<b>Day ${st.made} of ${st.total}</b></span><span>${st.matured ? 'Finished' : st.daysLeft + ' day' + (st.daysLeft===1?'':'s') + ' left'}</span></div>
-    <div class="mp-bought">Bought ${fmtDay(inv.createdAt)}</div>
+    <div class="mp-days"><span class="lead">${st.matured ? '' : PLAN_SPIN}<b>Day ${st.made} of ${st.total}</b></span><span>${st.matured ? 'Finished' : st.daysLeft + ' Day' + (st.daysLeft===1?'':'s') + ' Remaining'}</span></div>
+    <div class="mp-bought">Started ${fmtDay(inv.createdAt)}</div>
     <div class="mp-figs">
       <div><span>Earned</span><b class="up">${fmtUGXCents(st.earned)}</b></div>
-      <div><span>${st.matured ? 'Total paid' : 'Still to come'}</span><b>${fmtUGXCents(st.matured ? st.expected : st.remaining)}</b></div>
+      <div><span>${st.matured ? 'Total paid' : 'Remaining Earnings'}</span><b>${fmtUGXCents(st.matured ? st.expected : st.remaining)}</b></div>
     </div>
     ${st.matured ? '' : `<div class="mp-next" data-countdown data-created="${st.createdMs}" data-payouts-made="${st.made}">${ICONS.clock} <b>${fmtUGXCents(st.daily)}</b> in <span class="countdown-val">--:--:--</span></div>`}
   </div>`;

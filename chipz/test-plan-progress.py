@@ -6,7 +6,7 @@ Owner, later: "remove progress bar on running products."
 
 The bar is gone; the thing it was drawing is not. planStats() still works out
 `payoutsMade` of `payoutsTotal`, and the row now states it in words -- "Day 4 of
-30" with "26 days left" beside it. So this file kept every case and changed what
+30" with "26 Days Remaining" beside it. So this file kept every case and changed what
 it reads: the rendered TEXT instead of the fill's geometry. The arithmetic
 underneath, and every way it can go wrong, is identical.
 
@@ -80,15 +80,15 @@ def inv(iid, label, made, total, days, status="active", paid=0, strings=False):
 
 # label -> (expected "Day X of Y", expected right-hand half)
 CASES = [
-    (inv("a", "New",       0,  CYCLE, 0),                    f"Day 0 of {CYCLE}",  "30 days left"),
-    (inv("b", "Mid",       15, CYCLE, 15, paid=45000),       f"Day 15 of {CYCLE}", "15 days left"),
+    (inv("a", "New",       0,  CYCLE, 0),                    f"Day 0 of {CYCLE}",  "30 Days Remaining"),
+    (inv("b", "Mid",       15, CYCLE, 15, paid=45000),       f"Day 15 of {CYCLE}", "15 Days Remaining"),
     (inv("c", "Matured",   CYCLE, CYCLE, CYCLE, status="matured", paid=90000),
                                                              f"Day {CYCLE} of {CYCLE}", "Finished"),
     (inv("d", "Overpaid",  CYCLE + 1, CYCLE, CYCLE + 1, paid=93000),
                                                              f"Day {CYCLE} of {CYCLE}", "Finished"),
-    (inv("e", "Legacy",    4,  None,  4, paid=12000),        f"Day 4 of {CYCLE}",  "26 days left"),
+    (inv("e", "Legacy",    4,  None,  4, paid=12000),        f"Day 4 of {CYCLE}",  "26 Days Remaining"),
     (inv("f", "Strings",   6,  CYCLE, 6, paid=18000, strings=True),
-                                                             f"Day 6 of {CYCLE}",  "24 days left"),
+                                                             f"Day 6 of {CYCLE}",  "24 Days Remaining"),
 ]
 ROUTES = {
     "/public/settings": {"status": "success", "settings": {
@@ -223,10 +223,10 @@ async def main():
             ck(r["left"] == want_left, "%s and %r beside it" % (name, r["left"]))
 
         # The two states that must differ in more than wording.
-        ck(by_name["Matured"]["chip"] == "Matured" and not by_name["Matured"]["countdown"],
-           "a finished plan says Matured and stops its next-payout countdown")
-        ck(by_name["Mid"]["chip"] == "Ongoing" and by_name["Mid"]["countdown"],
-           "an ongoing plan says Ongoing and keeps counting down")
+        ck(by_name["Matured"]["chip"] == "Completed" and not by_name["Matured"]["countdown"],
+           "a finished plan says Completed and stops its next-payout countdown")
+        ck(by_name["Mid"]["chip"] == "Active" and by_name["Mid"]["countdown"],
+           "a running plan says Active and keeps counting down")
         # Over-paying by a day must not produce "Day 31 of 30".
         ck(by_name["Overpaid"]["days"] == f"Day {CYCLE} of {CYCLE}",
            "an over-paid plan clamps rather than counting past its cycle (%s)"
@@ -248,14 +248,15 @@ async def main():
         # Owner: "instead of running use ongoing, also put this animation on
         # aside of running product, it should be well defined."
         for r in rows:
-            ck(r["chip"] in ("Ongoing", "Matured"),
-               "%s is labelled %r, never 'Running'" % (r["name"].strip(), r["chip"]))
+            ck(r["chip"] in ("Active", "Completed"),
+               "%s is labelled %r -- never the retired Running/Ongoing/Matured"
+               % (r["name"].strip(), r["chip"]))
         print("   ongoing mark: %.1fx%.1fpx, %d chips, core %.1fpx, aria-hidden=%s"
               % (mid["spinW"], mid["spinH"], mid["chips"], mid["coreW"], mid["hidden"]))
         ck(mid["spin"] and by_name["New"]["spin"] and by_name["Legacy"]["spin"],
            "every ongoing plan carries the animation")
         # A finished plan has nothing in motion; an animation there would be
-        # saying the opposite of the "Matured"/"Finished" beside it.
+        # saying the opposite of the "Completed"/"Finished" beside it.
         ck(not by_name["Matured"]["spin"] and not by_name["Overpaid"]["spin"],
            "and a matured one does not")
         ck(mid["chips"] == 3, "all three orbiting chips are there (%d)" % mid["chips"])
@@ -267,9 +268,9 @@ async def main():
         ck(mid["coreW"] > 10,
            "the centre chip has real size, so the shape is not mush (%.1fpx)" % mid["coreW"])
         ck(mid["hidden"] == "true",
-           "it is hidden from screen readers -- the row already says Ongoing")
+           "it is hidden from screen readers -- the row already says Active")
 
-        # ── DATE BOUGHT ──
+        # ── DATE STARTED ──
         # Owner: "make sure that one running investment, it shows Date bought."
         # The fixture's createdAt is `days` ago, so the expected date is
         # computed the same way rather than hardcoded.
@@ -278,8 +279,8 @@ async def main():
             r = by_name.get(src["tierLabel"])
             if not r:
                 continue
-            ck(r["bought"].startswith("Bought "),
-               "%s states when it was bought (%r)" % (src["tierLabel"], r["bought"]))
+            ck(r["bought"].startswith("Started "),
+               "%s states when it was started (%r)" % (src["tierLabel"], r["bought"]))
             # Spelled month, never a numeric date: 12/08 is read two different
             # ways by two different members.
             ck(any(m in r["bought"] for m in
@@ -295,7 +296,7 @@ async def main():
         iso = next(c[0]["createdAt"] for c in CASES if c[0]["tierLabel"] == "Mid")
         d = (datetime.datetime.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")
              - datetime.timedelta(minutes=off))
-        expect = "Bought %d %s %d at %02d:%02d" % (
+        expect = "Started %d %s %d at %02d:%02d" % (
             d.day, ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month-1],
             d.year, d.hour, d.minute)
         ck(mid["bought"] == expect,
