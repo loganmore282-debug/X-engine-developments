@@ -1460,6 +1460,40 @@ requires the colours behind to **track what Home actually paints there** — bec
 flat scrim over a blank page would satisfy "not orange" while showing no dashboard at
 all.
 
+### The announcement fires on the way to HOME, and nowhere else
+
+Owner: *"l said from deposit to home, not when one clicks on deposit and later goes to
+another ... l don't want when l can go in deposit and l click to another nav icon not
+home it should not show announcement dialog, also on withdrawal as well."*
+
+**An ordering bug, two lines apart.** Deposit and Withdraw are OVERLAYS over Home, so
+`STATE.page` is still `'home'` for as long as one is open. `showPage()` closes any open
+sheet **before** it sets `STATE.page = name` — it has to, or the new tab paints
+underneath a sheet still covering it. But that close ran `maybeAnnounceAfterSheet()`,
+whose guard is `if (STATE.page !== 'home') return`, and at that instant the answer was
+still "yes, home" **whichever tab had been tapped**. So the announcement fired on the way
+to Products, Team, Account — everything — and the destination page then painted behind
+the open dialog.
+
+The guard was not wrong; it was simply asked one line too early. `showPage()` now closes
+with `closeSheet({ navigating: true })` and `closeSheet` suppresses the announcement for
+`fromAction || navigating`. **Tapping Home from Deposit still announces** — that path
+goes through the `name === 'home'` branch, which is the one case that genuinely is
+"from deposit back to home" — and so does the back chevron, unchanged.
+
+`navigating` is deliberately a **separate flag from `fromAction`** rather than a reuse of
+it. They suppress the dialog for unrelated reasons (one is "the member is mid-payment",
+the other "the member is leaving"), and folding a tab tap into "fromAction" would read as
+a lie to whoever traces this next.
+
+**Why this needed a runtime test and not an assertion on the flag.** The defect was
+purely in the ORDER two adjacent statements run in — the code, the guard and the list
+were all individually correct. `test-nav-sheets.py` drives real taps on the real bottom
+bar for both screens across three destination tabs, plus the two paths that MUST still
+announce, so a "fix" that just mutes the dialog everywhere cannot pass. Verified by
+reverting the fix and re-running: exactly the six wrong cases fail and the four correct
+ones keep passing.
+
 ### The warning sign is the emoji, and the chest gets its second ring
 
 Owner: *"first check how well defined and realistic and quality ⚠️ that sign is … on

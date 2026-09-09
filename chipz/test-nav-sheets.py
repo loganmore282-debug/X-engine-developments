@@ -135,6 +135,50 @@ async def main():
            "tapping a tab from inside a sheet closes the sheet")
         ck(await page.evaluate("()=>STATE.page")=="team", "and actually switches to that tab")
 
+        # ── the announcement fires on the way to HOME, and nowhere else ──
+        # Owner: "l said from deposit to home, not when one clicks on deposit
+        # and later goes to another ... l don't want when l can go in deposit
+        # and l click to another nav icon not home it should not show
+        # announcement dialog, also on withdrawal as well."
+        #
+        # Deposit and Withdraw are OVERLAYS over Home, so STATE.page is still
+        # 'home' while one is open. showPage() closes the sheet BEFORE it sets
+        # STATE.page, so the announce guard's "am I on Home?" check read the
+        # page the sheet was covering and said yes -- for every tab, not just
+        # Home. The new tab then painted underneath the dialog.
+        #
+        # Driven through real taps on the real bottom bar, because the bug was
+        # in the ORDER two lines run in: calling closeSheet() directly, or
+        # asserting on the flag, would miss it entirely.
+        announced = "()=>document.getElementById('announceBg').classList.contains('show')"
+        for opener, screen in (("openDepositSheet()", "Deposit"),
+                               ("openWithdrawSheet()", "Withdraw")):
+            for tab in ("products", "team", "account"):
+                await page.evaluate("showPage('home')"); await page.wait_for_timeout(400)
+                await page.evaluate("closeAnnounce()")
+                await page.evaluate(opener); await page.wait_for_timeout(400)
+                await page.click(f'.navitem[data-nav="{tab}"]'); await page.wait_for_timeout(700)
+                ck(not await page.evaluate(announced),
+                   f"{screen} -> the {tab} tab: no announcement")
+                ck(await page.evaluate("()=>STATE.page") == tab,
+                   f"{screen} -> the {tab} tab: and it really switched")
+
+            # The half the owner DOES want, checked in the same loop so a fix
+            # that simply muted the dialog everywhere cannot pass this file.
+            await page.evaluate("showPage('home')"); await page.wait_for_timeout(400)
+            await page.evaluate("closeAnnounce()")
+            await page.evaluate(opener); await page.wait_for_timeout(400)
+            await page.click('.navitem[data-nav="home"]'); await page.wait_for_timeout(700)
+            ck(await page.evaluate(announced), f"{screen} -> the Home tab: announcement shows")
+
+            # ...and the back chevron, which is what "clicked back" literally
+            # means and goes through a different path (closeSheet with no args).
+            await page.evaluate("closeAnnounce()")
+            await page.evaluate(opener); await page.wait_for_timeout(400)
+            await page.click('#sheetBg .back'); await page.wait_for_timeout(700)
+            ck(await page.evaluate(announced), f"{screen} -> back chevron: announcement shows")
+        await page.evaluate("closeAnnounce()")
+
         # ── no Snow wording in the BUILT app ──
         # Chipz is a fork of Snow. test-no-snow-branding.js checks the
         # sources; the obfuscator encodes string literals, so a rendered

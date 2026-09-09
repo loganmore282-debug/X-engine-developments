@@ -1381,7 +1381,16 @@ window.showPage = async function(name){
   // and the rest), so a tab can be tapped while one is open. Close it first,
   // otherwise the new tab paints underneath a sheet that is still covering
   // it and the app looks frozen.
-  if (typeof closeSheet === 'function' && document.querySelector('.sheet-bg.show')) closeSheet();
+  //
+  // {navigating:true} because this close is a TAB TAP, not a back-out to Home.
+  // Owner: "l don't want when l can go in deposit and l click to another nav
+  // icon not home it should not show announcement dialog." This ran BEFORE
+  // `STATE.page = name` below, so maybeAnnounceAfterSheet() read STATE.page as
+  // the page the sheet was opened over -- 'home' -- and announced, whichever
+  // tab was actually being tapped. The new page then painted under the dialog.
+  // Tapping HOME from Deposit still announces: the 'home' branch below does it,
+  // which is the one path that genuinely is "from deposit back to home".
+  if (typeof closeSheet === 'function' && document.querySelector('.sheet-bg.show')) closeSheet({ navigating: true });
   STATE.page = name;
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
@@ -3532,6 +3541,12 @@ function openSheet(title, bodyHtml){
 // recharge result the member is actually waiting to read. The back button in
 // index.html calls closeSheet() with no arguments, so a real back-tap is
 // always treated as navigation.
+//
+// opts.navigating marks the OTHER kind of non-back close: showPage() shutting
+// a sheet because a different tab was tapped. Both suppress the announcement,
+// and they are kept as separate flags on purpose -- they suppress it for
+// unrelated reasons, and folding a tab tap into "fromAction" would read as a
+// lie the next time someone traces this.
 window.closeSheet = function(opts){
   const closed = _openSheetTitle;
   $('sheetBg').classList.remove('show');
@@ -3539,7 +3554,7 @@ window.closeSheet = function(opts){
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
   if (history.state && history.state.sheet) history.back();
-  if (!(opts && opts.fromAction)) maybeAnnounceAfterSheet(closed);
+  if (!(opts && (opts.fromAction || opts.navigating))) maybeAnnounceAfterSheet(closed);
 };
 window.addEventListener('popstate', () => {
   // The phone's own Back button, which never goes through closeSheet()/
