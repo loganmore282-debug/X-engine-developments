@@ -118,13 +118,27 @@ services:
       - path: /*
         name: Cross-Origin-Resource-Policy
         value: same-site
-    # No SPA rewrite rule. The app never puts anything in the URL path --
-    # every pushState/replaceState call passes '' (keep the current URL) and
-    # navigation is pure in-memory state -- so a /* -> /index.html rewrite
-    # buys nothing, and a rule that broad sitting in front of sw.js, the
-    # manifest and the nav/action PNGs is a risk with no upside. A service
-    # worker that ever answers with index.html fails in a way that looks
-    # exactly like the stale-cache problems this project already fights.
+    # ONE rewrite, and only one. Referral links are shared as
+    # <origin>/refCode=<code> (owner: "let the link be '/refCode=' not other
+    # more words"), which is a real URL PATH -- so without this rule the host
+    # looks for a file called "refCode=Gy2f", doesn't find it, and every
+    # invite anyone sends 404s.
+    #
+    # It stays scoped to that exact prefix. A broad /* -> /index.html rewrite
+    # buys nothing here (the app never puts anything else in the path: every
+    # pushState/replaceState call passes '' to keep the current URL, and
+    # navigation is pure in-memory state) and a rule that broad sitting in
+    # front of sw.js, the manifest and the nav/action PNGs is a real risk --
+    # a service worker that ever answers with index.html fails in a way that
+    # looks exactly like the stale-cache problems this project already fights.
+    #
+    # IF THE FRONTEND IS UPLOADED TO EDGEONE instead of served from here,
+    # the same single-path rewrite must be configured there too, or invite
+    # links 404 on that host while working fine on this one.
+    routes:
+      - type: rewrite
+        source: /refCode=*
+        destination: /index.html
 
   - type: web
     name: chipz-admin

@@ -718,6 +718,16 @@ function captureReferralFromUrl(){
       const qIdx = location.hash.indexOf('?');
       if (qIdx !== -1) ref = new URLSearchParams(location.hash.slice(qIdx + 1)).get('ref');
     }
+    // The CURRENT shared form (owner: "let the link be '/refCode='"):
+    // <origin>/refCode=<code>, read straight off the path. Checked last only
+    // because the two older forms above are cheaper to test, not because it
+    // is the fallback -- this is what every new invite carries. Both older
+    // forms are kept working on purpose: links already sent to real people
+    // are out of our hands and must not start failing.
+    if (!ref) {
+      const m = /\/refCode=([^/?#]+)/.exec(location.pathname);
+      if (m) { try { ref = decodeURIComponent(m[1]); } catch (_) { ref = m[1]; } }
+    }
     if (!ref) return;
     STATE.refCode = ref;
     // Referral codes are case-sensitive on the server (exact-match lookup,
@@ -2101,7 +2111,13 @@ function paintReferral(){
   const a = STATE.account || {};
   const st = STATE.settings || {};
   const code = a.referralCode || t.referralCode || '';
-  const link = code ? `${location.origin}/#pages/register/?ref=${encodeURIComponent(code)}` : '';
+  // Owner: "let the link be '/refCode=' not other more words." So the shared
+  // link is exactly <origin>/refCode=<code> -- no #pages/register, no query
+  // string. It is a PATH, not a query, which means the host has to answer it
+  // with index.html: render.yaml carries a rewrite scoped to /refCode=* for
+  // chipz-app. If the frontend is uploaded to EdgeOne instead, the same
+  // single-path rewrite has to be configured there or every invite link 404s.
+  const link = code ? `${location.origin}/refCode=${encodeURIComponent(code)}` : '';
   let html = `
 <div class="page-head"><h2>Referral</h2></div>
 <div class="ref-banner">
@@ -4325,9 +4341,9 @@ function openManualPayFlow(amount){
               </div>
               <div class="mp-note">The payment is expected to be successful in 2-10 minutes.<br>Click to refresh the results.</div>
             </div>
-            <div class="mp-sms-fallback mp-hidden" id="manPaySmsFallback">
-              <div class="mp-sms-title">Get results faster!</div>
-              <div class="mp-sms-sub">Fill in the payment SMS or transaction ID</div>
+            <div class="mp-sms-fallback" id="manPaySmsFallback">
+              <div class="mp-sms-title">Send us your payment message</div>
+              <div class="mp-sms-sub">Paste the whole confirmation message your phone received after you sent the money. Our team checks it and credits your balance.</div>
               <textarea id="manDepPastedSms" rows="4" placeholder="You have sent UGX xxx to xxx xxx, 256xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
               <div class="mp-sms-warn">*Filling in the wrong payment SMS/transaction ID will result in payment loss.</div>
               <div class="mp-confirm-wrap">
@@ -4596,12 +4612,17 @@ window.manualPayRefresh = async function(){
   const resolved = await handleManualDepositStatusResult(r);
   if (!resolved) {
     if (btn) btn.disabled = false;
-    notify(r.status === 'success' ? 'Payment not detected yet' : (r.message || 'Could not check right now'), r.status !== 'success');
-    // The forwarder matches automatically in the background -- this
-    // fallback is only offered once a manual check has come back
-    // unresolved, per the owner's own "we are just putting them as
-    // fallback... when one clicks refresh, the page spreads so one puts
-    // sms and submits."
+    notify(r.status === 'success'
+      ? 'Not confirmed yet. Paste the payment message below and submit it, and our team will check it.'
+      : (r.message || 'Could not check right now'), r.status !== 'success');
+    // The paste box is no longer revealed here -- it ships VISIBLE now
+    // (owner: "no use of forwarder sms app, only the sent message ... should
+    // appear to admin panel"). Nothing matches a manual deposit
+    // automatically any more, so hiding the one control that can actually
+    // resolve it behind a refresh that will never resolve it on its own just
+    // cost the member a step. This call is kept because it is harmless when
+    // the class is already absent, and it still does the right thing if the
+    // box is ever collapsed again.
     const fallback = $('manPaySmsFallback');
     if (fallback) fallback.classList.remove('mp-hidden');
   }

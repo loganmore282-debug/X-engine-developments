@@ -2236,6 +2236,68 @@ tracked files (`git ls-files chipz .github`) to a temp directory, drop node_modu
 in, and run the Node suite there. That reproduces what the runner does, and it is the
 only check that would have caught the original bug before it was pushed.
 
+### The invite link is /refCode=, and manual deposits are human-verified
+
+Owner: "let the link be '/refCode=' not other more words also the manual payments, ie
+deposits, this time no use of forwarder sms app, only the sent message from after
+refresh on manual payment page should appear to admin panel in its full details so as
+admin verifies manually or rejects."
+
+**The link is now `<origin>/refCode=<code>`** -- no `#pages/register`, no query string.
+That is a real URL **path**, so the host has to answer it with index.html:
+`render.yaml` carries ONE rewrite, scoped to `/refCode=*`. The file's own long-standing
+"no SPA rewrite" note still holds for everything else and says why -- a blanket `/*`
+rule in front of sw.js, the manifest and the nav PNGs is a real risk. **If the frontend
+is uploaded to EdgeOne, the same single-path rewrite must be configured there or every
+invite 404s on that host while working fine on Render.**
+`captureReferralFromUrl()` reads the code off `location.pathname`, and both older forms
+(`?ref=` and `#...?ref=`) still work on purpose -- links already sent to real people are
+out of our hands and must not start failing.
+
+**Manual deposits no longer credit automatically, by any path.**
+- `settings.manualSmsAutoCredit` defaults to **false**, and the forwarder route checks
+  it *before* `creditDeposit()`. A confident automatic match is still matched and its
+  evidence attached -- it just lands in Needs Review instead of moving money. The route
+  was gated rather than deleted so the matching work survives and it is reversible from
+  a setting; what it can no longer do is pay someone silently.
+- **`/deposit/manual/paste-sms` no longer refuses text it cannot parse.** It used to
+  answer 400 with "that doesn't look like a mobile-money message" and store NOTHING, so
+  a real payment whose SMS wording this parser does not recognise -- a new operator
+  template, a forwarded or edited message -- simply vanished and the member had no way
+  to be paid. The human is the judge now, so the route's job is to deliver what they
+  sent, intact, not to sit in front of the admin deciding what is worth passing on. It
+  stores the raw text plus `pastedSmsParsed:false`. **What did NOT change: it still
+  never calls `creditDeposit()`.** An unparsed message is *less* trusted, not more.
+- The paste box on the manual payment page ships **visible** instead of being revealed
+  only after an unresolved Refresh. With nothing matching automatically any more, a
+  refresh that can never resolve on its own was just a step in front of the one control
+  that can.
+- The admin Deposits tab renders the message **in full** under the row: a pre-wrapped,
+  scrollable `<pre>` (never truncated -- the transaction id sits at the END of an
+  operator SMS, which is exactly what a "…" would cut), plus the amount/id/counterparty
+  cross-checks in green or red, and a loud note when the server could not read it.
+
+**The strongest assertion runs the real route.** `test-manual-review.js` executes the
+actual `paste-sms` handler against a stub database and reads what it wrote -- grepping
+for the absence of a `res.status(400)` would prove nothing about what lands in the
+document. Junk text must come back 200, `status:'review'`, `pastedSms` byte-identical to
+what was typed. Verified by restoring the old refusal: **6 assertions fail.**
+
+**The same self-matching trap bit three times in one session** -- a check whose own
+comment contains the thing it scans for. `test-security-hardening.js`'s portability
+guard flagged itself; then the "route never calls creditDeposit" check matched the
+comment saying it never does; then the forwarder-gate check matched the comment naming
+`manualSmsAutoCredit` and stayed green with the gate deleted. **Strip comments before
+any "does the code do X" scan**, and prove it by deleting the code.
+
+**Two older assertions were deliberately retired, not loosened.**
+`test-referral-share.py` required the URL to wrap to two lines -- true of the mockup only
+because the link used to be long. It now asserts the field's 66px height and its
+*ability* to wrap (clamp 2 + `overflow-wrap:anywhere`, which a custom domain will need
+again) rather than a wrap that no longer happens. `test-round-fixes.py` accepted any
+`ref=Gy2f` substring, which `/refCode=Gy2f` satisfies by accident -- it was tightened to
+the exact form so the old long link cannot come back unnoticed.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

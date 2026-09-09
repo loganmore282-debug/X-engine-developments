@@ -444,8 +444,15 @@ async def main():
            "tapping it does NOT open the phone's share sheet")
         clip = await page.evaluate("()=>navigator.clipboard.readText()")
         print("    clipboard:", repr(clip))
-        ck(clip.startswith('http') and 'ref=Gy2f' in clip,
-           "it copies the member's own referral link (%r)" % clip)
+        # Owner: "let the link be '/refCode=' not other more words." The old
+        # assertion accepted any 'ref=Gy2f' substring, which the new form
+        # happens to satisfy too ("/refCode=Gy2f" contains it) -- so it is
+        # tightened to the exact shape rather than merely updated, or it would
+        # keep passing if the long "#pages/register/?ref=" form came back.
+        ck(clip.startswith('http') and clip.endswith('/refCode=Gy2f'),
+           "it copies the member's own referral link, in the /refCode= form (%r)" % clip)
+        ck('#pages/register' not in clip and '?ref=' not in clip,
+           "with none of the old wording in it (%r)" % clip)
         ck('undefined' not in clip,
            "and the link is real — the old share path sent the word 'undefined'")
         # Owner: "the copy turns to tick." Copy confirms itself ON the control

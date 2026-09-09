@@ -503,6 +503,18 @@ const DEFAULT_SETTINGS = {
   // single depositMethod field) gets sane values for these two the first
   // time it's read after this round ships.
   depositPayAEnabled: true, depositPayBEnabled: false,
+  // Owner: "this time no use of forwarder sms app, only the sent message
+  // from after refresh on manual payment page should appear to admin panel
+  // in its full details so as admin verifies manually or rejects."
+  //
+  // Manual deposits are human-verified now. This defaults to FALSE, so the
+  // SMS-forwarder route can no longer credit a wallet by itself even if the
+  // app is still installed on a phone somewhere and still forwarding -- a
+  // match is queued for review instead. Deleting the route would have been
+  // the cruder way to get here and would throw away the matching work; a
+  // default-off switch turns it back on from the panel if that is ever
+  // wanted again, and cannot silently move money in the meantime.
+  manualSmsAutoCredit: false,
   // Owner: "make when l can configure what speed the activity checker be
   // on home screen." The Home activity ticker's own scroll speed (px/sec)
   // was hand-tuned across several earlier rounds by direct owner request
@@ -4382,6 +4394,32 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
       return res.json({ status: 'mismatch', amount: info.amount });
     }
     await match.ref.update({ matchedSmsId: tid, smsTxId: info.txId || '', smsSender: info.sender || '' }).catch(() => {});
+    // Manual deposits are human-verified (settings.manualSmsAutoCredit,
+    // default false). A confident automatic match is still a match -- it is
+    // recorded above and the evidence is attached below -- it just no longer
+    // moves money on its own. The admin sees it in Needs Review with the
+    // forwarded SMS in full, exactly like a member-pasted one, and approves
+    // or rejects it.
+    const smsSett = await getSettings();
+    if (!smsSett.manualSmsAutoCredit) {
+      await match.ref.update({
+        status: 'review',
+        reviewReason: `Forwarded SMS matched this order automatically (${fmtUGX(info.amount)}${info.txId ? ', id ' + info.txId : ''}) -- automatic crediting is off, so it needs your approval`,
+        pastedSms: info.raw || text,
+        pastedSmsParsed: true,
+        pastedSmsAmount: info.amount,
+        pastedSmsTxId: info.txId || '',
+        pastedSmsCounterparty: info.sender || '',
+        pastedSmsDirection: 'received',
+        pastedSmsAmountMatches: Number(info.amount) === Number(md.amount),
+        pastedSmsNumberMatches: null,
+        pastedSmsSource: 'forwarder',
+        pastedAt: FieldValue.serverTimestamp()
+      }).catch(() => {});
+      await seenRef.update({ matched: true, matchedOrderId: match.id, heldForReview: true }).catch(() => {});
+      trackManual(receivingNumber, 'review', { amount: info.amount });
+      return res.json({ status: 'review', depositId: match.id });
+    }
     await creditDeposit(match);
     await seenRef.update({ matched: true, matchedOrderId: match.id }).catch(() => {});
     trackManual(receivingNumber, 'credited', { amount: info.amount });
@@ -4409,39 +4447,55 @@ app.post('/deposit/manual/paste-sms', async (req, res) => {
     const dep = depSnap.data();
     if (dep.status !== 'pending' && dep.status !== 'review')
       return res.status(400).json({ status: 'error', message: 'This deposit is no longer waiting for payment.' });
-    const text = String(req.body.text || '').slice(0, 2000);
+    const text = String(req.body.text || '').trim().slice(0, 2000);
+    if (!text) return res.status(400).json({ status: 'error', message: 'Paste the payment message you received first.' });
     // The member's own phone gets a SENT message, so that's the normal case.
     // A received message is still accepted in case they somehow relay the
     // admin phone's copy instead.
     const sent = parseSentMoMoSms(text);
     const received = sent ? null : parseMoMoSms(text);
     const info = sent || received;
-    if (!info) return res.status(400).json({ status: 'error', message: "That doesn't look like a mobile-money message. Paste the whole confirmation text you got after sending, exactly as it came." });
 
-    // Cross-checks for whoever reviews this. None of them credit anything --
-    // this endpoint never calls creditDeposit(); it only ever queues the
-    // order for a human, per this codebase's own "never trust user input for
-    // a balance change" rule.
-    const counterparty = sent ? sent.recipient : received.sender;
-    const amountMatches = Number(info.amount) === Number(dep.amount);
+    // UNPARSEABLE TEXT IS NO LONGER REFUSED. This used to answer 400 with
+    // "that doesn't look like a mobile-money message" and store nothing, so
+    // a real payment whose SMS wording this parser does not recognise --
+    // a new operator template, a forwarded/edited message, an Airtel format
+    // we have not seen -- simply vanished, and the member had no way to be
+    // paid. Owner: "the sent message ... should appear to admin panel in its
+    // full details so as admin verifies manually or rejects." The human is
+    // the judge now, so the job here is to DELIVER what they sent, intact,
+    // never to sit in front of them deciding what is worth passing on.
+    //
+    // What has NOT changed, and must not: this endpoint still never calls
+    // creditDeposit(). It only ever queues the order for a person, per this
+    // codebase's own "never trust user input for a balance change" rule. An
+    // unparsed message is strictly LESS trusted, not more.
+    const counterparty = info ? (sent ? sent.recipient : received.sender) : '';
+    const amountMatches = info ? Number(info.amount) === Number(dep.amount) : null;
     const cleanCounterparty = counterparty ? (cleanPhone(counterparty) || counterparty) : '';
     const cleanAssigned = dep.assignedNumber ? (cleanPhone(dep.assignedNumber) || dep.assignedNumber) : '';
     const paidRightNumber = sent && cleanCounterparty && cleanAssigned
       ? cleanCounterparty === cleanAssigned
       : null;   // null = could not be checked
 
-    const notes = [sent ? 'Member pasted their own sent-money SMS' : 'Member pasted a received-money SMS'];
-    if (!amountMatches) notes.push(`amount says ${fmtUGX(info.amount)} but the order is ${fmtUGX(dep.amount)}`);
+    const notes = [info
+      ? (sent ? 'Member pasted their own sent-money SMS' : 'Member pasted a received-money SMS')
+      : 'Member pasted a message this server could not read automatically -- check it by hand'];
+    if (info && !amountMatches) notes.push(`amount says ${fmtUGX(info.amount)} but the order is ${fmtUGX(dep.amount)}`);
     if (paidRightNumber === false) notes.push(`paid ${counterparty} but was assigned ${dep.assignedNumber}`);
 
     await depSnap.ref.update({
       status: 'review',
       reviewReason: notes.join('; '),
-      pastedSms: info.raw,
-      pastedSmsAmount: info.amount,
-      pastedSmsTxId: info.txId || '',
+      // The RAW text always, exactly as it was sent -- `info.raw` when it
+      // parsed, the original otherwise. This is the field the admin panel
+      // renders in full, and it is the whole point of the round.
+      pastedSms: info ? info.raw : text,
+      pastedSmsParsed: !!info,
+      pastedSmsAmount: info ? info.amount : null,
+      pastedSmsTxId: (info && info.txId) || '',
       pastedSmsCounterparty: counterparty || '',
-      pastedSmsDirection: sent ? 'sent' : 'received',
+      pastedSmsDirection: info ? (sent ? 'sent' : 'received') : '',
       pastedSmsAmountMatches: amountMatches,
       pastedSmsNumberMatches: paidRightNumber,
       pastedAt: FieldValue.serverTimestamp()

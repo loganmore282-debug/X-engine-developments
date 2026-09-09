@@ -1645,6 +1645,30 @@ function drawDeps(){
       // it always had (it can only ever have gone through MarzPay).
       : (d.provider==='lipapay'?'LipaPay':d.provider==='marzpay'?'MarzPay':'Automatic');
     const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
+    // Owner: "only the sent message from after refresh on manual payment page
+    // should appear to admin panel in its full details so as admin verifies
+    // manually or rejects." Manual deposits are no longer credited by any
+    // automatic path, so this row IS the evidence -- approving on the
+    // one-line reviewReason alone would be approving blind.
+    //
+    // The message is rendered in a <pre> at its FULL length, deliberately not
+    // truncated: an operator SMS carries the transaction id and the exact
+    // amount near the end, which is precisely what a "…" would cut off. It is
+    // wrapped and scrollable instead so a long one cannot stretch the table.
+    // esc() then white-space:pre-wrap -- the text is a member-supplied string
+    // going into innerHTML, and it must render as the characters they sent,
+    // never as markup.
+    const smsChecks = [];
+    if (d.pastedSmsAmount != null) smsChecks.push(`Message amount: <b>${ugx(d.pastedSmsAmount)}</b> ${d.pastedSmsAmountMatches===true?'<span style="color:var(--ok)">matches the order</span>':d.pastedSmsAmountMatches===false?'<span style="color:var(--danger)">does NOT match the order</span>':''}`);
+    if (d.pastedSmsTxId) smsChecks.push(`Transaction id: <b>${esc(d.pastedSmsTxId)}</b>`);
+    if (d.pastedSmsCounterparty) smsChecks.push(`${d.pastedSmsDirection==='sent'?'Paid to':'Received from'}: <b>${esc(d.pastedSmsCounterparty)}</b> ${d.pastedSmsNumberMatches===true?'<span style="color:var(--ok)">the assigned number</span>':d.pastedSmsNumberMatches===false?'<span style="color:var(--danger)">NOT the assigned number</span>':''}`);
+    if (d.pastedSmsParsed === false) smsChecks.push('<span style="color:var(--warn,#dd6b00)">This server could not read the message automatically — read it yourself before approving.</span>');
+    if (d.pastedSmsSource === 'forwarder') smsChecks.push('<span class="muted">Arrived from the forwarder app, held for approval</span>');
+    const smsBlock = d.pastedSms ? `<tr class="sms-detail"><td colspan="8" style="background:rgba(0,0,0,.03);padding:10px 14px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Payment message from the member${d.pastedAt?` · ${fdate(d.pastedAt)}`:''}</div>
+        <pre style="margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;background:var(--card,#fff);border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:10px">${esc(d.pastedSms)}</pre>
+        ${smsChecks.length?`<div style="font-size:12px;line-height:1.7">${smsChecks.join('<br>')}</div>`:''}
+      </td></tr>` : '';
     // Owner: "let me see even user number he used to send besides account
     // and method" -- the "User" column is the member's own REGISTERED
     // account phone (accountPhone, from the users collection); the number
@@ -1661,7 +1685,7 @@ function drawDeps(){
       <td><b>${ugx(d.amount)}</b></td>
       <td>${esc(d.ref||'Not set')}</td>
       <td>${statusPill(d.status)}${reviewNote}</td>
-      <td>${actions}</td></tr>`;
+      <td>${actions}</td></tr>${smsBlock}`;
   }).join(''):'<tr><td colspan="8" class="empty">No deposits</td></tr>';
   // Owner: "l want them to have... l can tap on a deposit to see user
   // details just like those when a user is tapped in user list" -- same

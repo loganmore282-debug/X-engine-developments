@@ -173,13 +173,28 @@ async def main():
            "the tile carries his clipboard image, not a drawn SVG (%r)" % g['tileHtml'])
         ck(g['btnText'] == 'Copy Invite Link',
            "the button reads 'Copy Invite Link' as the mockup does (%r)" % g['btnText'])
-        # The URL wraps to TWO lines in his mockup -- that is WHY his field is
-        # 66px and ours was 48. Asserting the height alone would pass on a
-        # one-line field with fat padding, which is not what he is holding up.
-        lines = await page.evaluate("""()=>{const s=document.querySelector('.url-row span');
-          const cs=getComputedStyle(s); const lh=parseFloat(cs.lineHeight)||16;
-          return Math.round(s.getBoundingClientRect().height/lh);}""")
-        ck(lines == 2, "the link wraps to 2 lines like the mockup, not 1 with padding (got %d)" % lines)
+        # This used to require the URL to occupy TWO lines, because in his
+        # mockup it did -- but only because the link was long
+        # (".../#pages/register/?ref=CODE"). He then asked for the short form
+        # ("let the link be '/refCode=' not other more words"), so a two-line
+        # wrap is no longer reachable and requiring it would be pinning a
+        # side effect of wording he has since replaced.
+        #
+        # What still matters is the field's own box: it is 66px in his mockup
+        # (ours was 48), and the field must still be ABLE to wrap, because a
+        # custom domain or a longer code can make the link long again. So the
+        # height is asserted directly, and the wrap capability is asserted as
+        # capability -- not as a wrap that happens to occur today.
+        box = await page.evaluate("""()=>{const r=document.querySelector('.url-row');
+          const s=r.querySelector('span'); const cs=getComputedStyle(s);
+          return {h: r.getBoundingClientRect().height,
+                  clamp: cs.webkitLineClamp || cs.getPropertyValue('-webkit-line-clamp'),
+                  wrap: cs.overflowWrap || cs.wordWrap};}""")
+        ck(box['h'] >= 60, "the field keeps its mockup height (%.1fpx, his is 66)" % box['h'])
+        ck(str(box['clamp']).strip() in ('2', '2 '),
+           "and still allows two lines for a longer link (clamp=%r)" % box['clamp'])
+        ck('anywhere' in str(box['wrap']),
+           "breaking mid-URL, since a link is one unbroken word (%r)" % box['wrap'])
         print("\n— what a copy actually shows —")
         # Owner: "on copying, the other button should say copied." Driven, not
         # grepped: the obfuscator encodes every string literal, so "Copied" is
