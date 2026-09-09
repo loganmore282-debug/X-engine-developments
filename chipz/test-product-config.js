@@ -67,7 +67,10 @@ for (const [lo, hi] of [[200, 1000], [5000, 5000], [0, 300]]) {
 // inherited expectedReturn they disagreed outright: the app quoted the old
 // stored total, the server paid price x multiplier. This pins all four to
 // the same function by pulling each one out of the file that ships it.
-eval(slice('function publicProductView', "app.get('/public/products'"));
+// Starts at hhmmToMin, not at publicProductView: the view now reports whether
+// a product is open, so it calls productOpenState, and lifting the view alone
+// leaves that undefined. The schedule helpers sit directly above it.
+eval(slice('function hhmmToMin', "app.get('/public/products'"));
 const userSrc = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 const uslice = (a, b) => userSrc.slice(userSrc.indexOf(a), userSrc.indexOf(b));
 eval(uslice('function planFigures', '// One shared product-card renderer'));

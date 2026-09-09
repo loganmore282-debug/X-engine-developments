@@ -1678,7 +1678,7 @@ function paintHome(){
   <button class="home-action" onclick="openChannelLink()">
     <span class="badge"><img src="/act-channel.png" alt=""></span><span class="lbl">Channel</span>
   </button>
-  <button class="home-action" onclick="openHelpSheet()">
+  <button class="home-action" onclick="openCustomerService()">
     <span class="badge"><img src="/act-service.png" alt=""></span><span class="lbl">Service</span>
   </button>
 </div>
@@ -1830,9 +1830,81 @@ function productCardHtml(p){
         <div class="p-stat"><div class="k">Daily</div><div class="v">${fmtUGXCents(dailyPayout)}</div></div>
         <div class="p-stat warm"><div class="k">Total</div><div class="v">${fmtUGXCents(expected)}</div></div>
       </div>
-      <button class="primary-button p-cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}',this)">${p.comingSoon?'Coming Soon':'Buy Now'}</button>
+      ${productCtaHtml(p)}
     </div>
   </div>`;
+}
+// ── A PRODUCT'S BUY BUTTON, INCLUDING ITS SCHEDULE ──
+//
+// Owner: "make when l can time any product on its opening duration ie it can
+// say coming soon in hh:mm:ss ... or even just putting as it is that coming
+// soon." Three states, decided by the SERVER (publicProductView sends isOpen /
+// openMode / opensAt):
+//   open           -> Buy Now
+//   'soon'         -> "Coming Soon", no clock. The plain checkbox.
+//   'until'/'window' -> "Coming soon in HH:MM:SS", ticking down to opensAt.
+//
+// opensAt is an absolute epoch millisecond from the server, never a duration.
+// A window like "opens 14:00" means 14:00 in EAT; computing that on the phone
+// would be wrong by hours for anyone whose clock is set to another zone, and
+// wrong by however far their clock has drifted.
+//
+// The button stays disabled either way; the countdown is a courtesy. The server
+// re-checks the schedule inside /invest/create, so a card left open on screen
+// as a window closes cannot be used to slip a purchase through.
+function productCtaHtml(p){
+  const open = p.isOpen !== false && !p.comingSoon;
+  if (open) {
+    return `<button class="primary-button p-cta" onclick="openInvestConfirm('${esc(p.key)}',this)">Buy Now</button>`;
+  }
+  const at = Number(p.opensAt) || 0;
+  if (!at || p.openMode === 'soon' || p.comingSoon) {
+    return '<button class="primary-button p-cta" disabled>Coming Soon</button>';
+  }
+  return `<button class="primary-button p-cta" disabled data-opens-at="${at}">`
+    + `Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
+}
+// HH:MM:SS, and days folded into the hours rather than shown separately -- a
+// product opening in two days reads "48:00:00", which is still a countdown. A
+// finished one reads 00:00:00 rather than going negative.
+function fmtCountdown(ms){
+  let s = Math.max(0, Math.floor(Number(ms) / 1000));
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60); s -= m * 60;
+  const pad = n => String(n).padStart(2, '0');
+  return pad(h) + ':' + pad(m) + ':' + pad(s);
+}
+// One timer for every scheduled card on screen. Cleared and restarted by
+// whichever screen paints them, the same shape startPlanCountdowns() uses.
+// When a card's moment arrives it re-fetches the catalog once, so the button
+// becomes Buy Now on its own -- without that the member would sit watching
+// 00:00:00 until they navigated away and back.
+var _openCountdownTimer = null;
+function startProductCountdowns(){
+  if (_openCountdownTimer) { clearInterval(_openCountdownTimer); _openCountdownTimer = null; }
+  const tick = () => {
+    const nodes = document.querySelectorAll('[data-opens-at]');
+    if (!nodes.length) { clearInterval(_openCountdownTimer); _openCountdownTimer = null; return; }
+    let due = false;
+    nodes.forEach(el => {
+      const left = Number(el.getAttribute('data-opens-at')) - Date.now();
+      if (left <= 0) { due = true; el.textContent = 'Opening…'; return; }
+      el.textContent = 'Coming soon in ' + fmtCountdown(left);
+    });
+    if (due) {
+      clearInterval(_openCountdownTimer); _openCountdownTimer = null;
+      refreshCatalogNow();
+    }
+  };
+  tick();
+  _openCountdownTimer = setInterval(tick, 1000);
+}
+async function refreshCatalogNow(){
+  const r = await api('/public/products');
+  if (r.status === 'success' && STATE.page === 'catalog') {
+    STATE.products = r.products;
+    renderCatalog();
+  }
 }
 // Opens whichever community channel the admin configured. Kept separate
 // from Help Centre (the Service button) so the two tiles do different things.
@@ -1930,6 +2002,7 @@ function paintCatalog(){
 </div>
 `;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  startProductCountdowns();
 }
 
 // ── REFERRAL (own tab) ──
@@ -3010,8 +3083,10 @@ function balRowStatus(t){
   const text = cls === 'fail' ? 'Failed' : cls === 'pend' ? 'Pending' : 'Paid';
   return `<span class="rec-pill ${cls}">${text}</span>`;
 }
-window.openBalanceRecordSheet = async function(){
-  _balTab = 'all';
+// `tab` lets a caller land the member on the tab that answers the question
+// they just asked -- a cash-out opens straight onto Withdraw.
+window.openBalanceRecordSheet = async function(tab){
+  _balTab = ['all','deposit','withdraw','turntable'].indexOf(tab) !== -1 ? tab : 'all';
   const hadCache = Array.isArray(STATE.transactions);
   const bal = (STATE.account || {}).walletBalance || 0;
   openSheet('Balance Record', `
@@ -3020,10 +3095,7 @@ window.openBalanceRecordSheet = async function(){
       <div class="val" id="balBandValue">${fmtUGX2(0)}</div>
     </div>
     <div class="rec-tabs" id="balTabs">
-      <button class="tb on" data-cat="all" onclick="switchBalTab('all')">All</button>
-      <button class="tb" data-cat="deposit" onclick="switchBalTab('deposit')">Deposit</button>
-      <button class="tb" data-cat="withdraw" onclick="switchBalTab('withdraw')">Withdraw</button>
-      <button class="tb" data-cat="turntable" onclick="switchBalTab('turntable')">Turntable</button>
+      ${['all','deposit','withdraw','turntable'].map(c => `<button class="tb ${_balTab===c?'on':''}" data-cat="${c}" onclick="switchBalTab('${c}')">${c==='all'?'All':c==='deposit'?'Deposit':c==='withdraw'?'Withdraw':'Turntable'}</button>`).join('')}
     </div>
     <div id="balBody"></div>`);
   // Painted as zero above and counted up here, once the sheet is in the DOM.
@@ -3409,7 +3481,24 @@ function isAnyOverlayOpen(){
 // reason. Withdrawal Accounts is included because it is part of the same
 // flow (Withdraw's own empty state opens it), and the STATE.page check below
 // means it stays silent when it was reached from the Account tab instead.
-var ANNOUNCE_AFTER_SHEETS = ['Recharge', 'Withdraw', 'Withdrawal Accounts'];
+// Owner, later: "l also want the announcement dialog to show when one has
+// clicked back from deposit page to home also when one has clicked back from
+// withdrawal page."
+//
+// It was supposed to already. The bug was one missing string: the deposit flow
+// opens THREE differently-titled sheets -- 'Recharge' for the method chooser
+// and the manual form, and 'Deposit' for the automatic (PayA) form, which is
+// the one most members actually see. Only 'Recharge' was listed, so backing out
+// of the main deposit screen announced nothing. This list is matched by TITLE,
+// so a screen whose title changes silently drops off it -- test-nav-sheets.py
+// now checks every title in this array is one openSheet() is really called
+// with, which is what would have caught it.
+// 'Wallet' -- not 'Withdrawal Accounts'. That screen was renamed when Chipz
+// moved to ONE bound wallet (openWalletSheet), and this entry was left behind
+// pointing at a title nothing opens any more. Dead for however long, and
+// invisible precisely because a title that matches nothing simply never fires.
+// The same new check that caught the missing 'Deposit' caught this too.
+var ANNOUNCE_AFTER_SHEETS = ['Recharge', 'Deposit', 'Withdraw', 'Wallet'];
 function maybeAnnounceAfterSheet(closedTitle){
   if (!closedTitle || ANNOUNCE_AFTER_SHEETS.indexOf(closedTitle) === -1) return;
   if (STATE.page !== 'home') return;      // closed back to Account, not Home
@@ -3482,6 +3571,49 @@ window.openInfoSheet = function(kind){
   };
   const [title, body] = map[kind] || ['Info', ''];
   openSheet(title, `<div class="reveal-in"><p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p></div>`);
+};
+// ── CUSTOMER SERVICE: ONE LINK, NO PAGE ──
+//
+// Owner: "on customer service icon, l don't want one to go to new page, only 1
+// link will be put there for customer service it should support either WhatsApp
+// or telegram."
+//
+// Tapping Service now opens that one chat straight away. The Help Centre sheet
+// it used to open is still in the file and still reachable from the Account
+// menu -- it carries the banner, the support hours and the group links, which
+// are a different thing from "get me a human now".
+//
+// WhatsApp or Telegram, whichever the admin saved. The order below is the
+// order of preference, and every field is one the admin panel already has, so
+// nothing new has to be filled in for this to work:
+//   supportTelegram  -- the dedicated support contact
+//   whatsappContact  -- the dedicated support number
+//   then the group links, as a fallback rather than a dead button.
+//
+// A bare phone number is accepted and turned into a wa.me link: typing
+// 0771234567 into a "WhatsApp" box is the obvious thing to do, and silently
+// producing a broken link for it would be the app's fault, not the owner's.
+function customerServiceUrl(){
+  const s = STATE.settings || {};
+  const raw = String(s.supportTelegram || s.whatsappContact
+    || s.telegramGroup || s.whatsappGroup || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  // @handle -> Telegram.
+  if (raw.charAt(0) === '@') return 'https://t.me/' + raw.slice(1);
+  // Digits (with or without +, spaces or dashes) -> WhatsApp.
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (digits && /^[0-9+][0-9\s+-]*$/.test(raw)) {
+    // A local 07... number needs Uganda's country code, or wa.me rejects it.
+    const intl = digits.charAt(0) === '0' ? '256' + digits.slice(1) : digits;
+    return 'https://wa.me/' + intl;
+  }
+  return 'https://t.me/' + raw.replace(/^\/+/, '');
+}
+window.openCustomerService = function(){
+  const url = customerServiceUrl();
+  if (!url) return notify('Customer service is not set up yet. Please try again later.');
+  window.open(url, '_blank', 'noopener');
 };
 // Help Centre banner + the two support links are lazy-fetched only when
 // this page is actually opened (the banner can be a large embedded image,
@@ -4563,8 +4695,14 @@ window.submitWithdraw = async function(){
   const pct = Number((STATE.settings || {}).withdrawFeePct) || 0;
   const net = Number.isFinite(Number(r.net)) && r.net !== null
     ? Number(r.net) : amount - Math.round(amount * pct / 100);
+  // Owner: "when one requests withdrawal then he is forwarded to records of
+  // withdrawals to see his processing withdrawal."
+  // On OK, not before: the card carries the amount they will actually receive,
+  // and yanking the screen out from under it while they are still reading is
+  // how that number gets missed.
   notify(`Cash-out of ${fmtUGXCents(amount)} is processing. You will receive `
-    + `${fmtUGXCents(net)} after the ${pct}% charge.`);
+    + `${fmtUGXCents(net)} after the ${pct}% charge.`,
+    () => openBalanceRecordSheet('withdraw'));
   closeSheet({ fromAction: true });
   refreshAfterWithdraw();
 };

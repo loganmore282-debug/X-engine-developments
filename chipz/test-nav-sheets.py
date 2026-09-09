@@ -159,4 +159,39 @@ async def main():
         await b.close()
     print(("\n%d FAILED" % len(fails)) if fails else "\nnav + floats: all cases pass")
     sys.exit(1 if fails else 0)
+# ── The announce-after-sheet list is matched by TITLE ──
+# Owner: "l also want the announcement dialog to show when one has clicked back
+# from deposit page to home also when one has clicked back from withdrawal
+# page." It was meant to already, and failed on ONE missing string: the deposit
+# flow opens three differently-titled sheets ('Recharge' for the chooser and the
+# manual form, 'Deposit' for the automatic one most members see) and only
+# 'Recharge' was listed.
+#
+# A title is a string in two places at once, so this checks the source: every
+# entry in ANNOUNCE_AFTER_SHEETS must be a title openSheet() is really called
+# with, and the deposit and withdraw screens must both be covered. Grepping the
+# BUILT file would prove nothing -- the obfuscator encodes string literals.
+import re as _re
+_src = open('/home/user/X-engine-developments/chipz/user-src/original_module.js',
+            encoding='utf-8').read()
+_m = _re.search(r"var ANNOUNCE_AFTER_SHEETS = \[([^\]]*)\]", _src)
+_listed = _re.findall(r"'([^']+)'", _m.group(1)) if _m else []
+_opened = set(_re.findall(r"openSheet\('([^']+)'", _src))
+print("\n— announce-after-sheet —")
+print("   listed:", _listed)
+_f = 0
+for _t in _listed:
+    ok = _t in _opened
+    print(("PASS  " if ok else "FAIL  ") + "%r is a sheet that really exists" % _t)
+    if not ok: _f += 1
+for _need, _label in (('Deposit', 'the automatic deposit form'),
+                      ('Recharge', 'the deposit chooser / manual form'),
+                      ('Withdraw', 'the withdraw screen')):
+    ok = _need in _listed
+    print(("PASS  " if ok else "FAIL  ") + "backing out of %s re-announces (%r listed)" % (_label, _need))
+    if not ok: _f += 1
+if _f:
+    print("\n%d FAILED" % _f)
+    sys.exit(1)
+
 srv=serve(); asyncio.run(main())

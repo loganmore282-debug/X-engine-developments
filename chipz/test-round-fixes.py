@@ -481,6 +481,57 @@ async def main():
         ck(not st["dialog"],
            "with no dialog in the way -- copy is the one action you can see succeed")
 
+        # ── CUSTOMER SERVICE: ONE LINK, NO PAGE ──
+        # Owner: "on customer service icon, l don't want one to go to new page,
+        # only 1 link will be put there for customer service it should support
+        # either WhatsApp or telegram."
+        print("\n— customer service —")
+        # Nothing configured is a real state, and the right answer is nothing
+        # -- the tap then says so rather than opening a broken link.
+        bare = await page.evaluate("customerServiceUrl()")
+        ck(bare == "", "with nothing configured it resolves to nothing (%r)" % bare)
+        # Now configure one, the way the admin would.
+        await page.evaluate(
+            "STATE.settings = Object.assign({}, STATE.settings,"
+            " {supportTelegram:'https://t.me/chipzhelp'})")
+        url = await page.evaluate("customerServiceUrl()")
+        print("   resolved:", url)
+        ck(url == "https://t.me/chipzhelp",
+           "a configured link resolves (%r)" % url)
+        # The forms the owner might reasonably type into an admin box.
+        cases = await page.evaluate("""()=>{
+          const s=STATE.settings, keep=Object.assign({},s);
+          const out={};
+          const one=(v)=>{STATE.settings={supportTelegram:v};return customerServiceUrl();};
+          out['full https']  = one('https://t.me/chipzhelp');
+          out['@handle']     = one('@chipzhelp');
+          out['local 07 no'] = one('0771234567');
+          out['+256 number'] = one('+256 771 234 567');
+          out['bare handle'] = one('chipzhelp');
+          out['empty']       = one('');
+          STATE.settings=keep; return out;}""")
+        for k, v in cases.items():
+            print("   %-12s -> %r" % (k, v))
+        ck(cases['full https'] == 'https://t.me/chipzhelp', 'a pasted link is used as-is')
+        ck(cases['@handle'] == 'https://t.me/chipzhelp', 'an @handle becomes a Telegram link')
+        # A local number is the obvious thing to type into a WhatsApp box, and
+        # wa.me rejects it without a country code -- so it gets one.
+        ck(cases['local 07 no'] == 'https://wa.me/256771234567',
+           'a local 07 number becomes a working WhatsApp link (%r)' % cases['local 07 no'])
+        ck(cases['+256 number'] == 'https://wa.me/256771234567',
+           'and spaces / + in a number do not break it (%r)' % cases['+256 number'])
+        ck(cases['empty'] == '', 'nothing configured resolves to nothing')
+        # Tapping it must not navigate the app anywhere.
+        before_page = await page.evaluate("STATE.page")
+        opened = await page.evaluate("""()=>{let u=null;const o=window.open;
+          window.open=(x)=>{u=x;return null;};
+          try{openCustomerService();}finally{window.open=o;}
+          return {url:u, sheet:_openSheetTitle, page:STATE.page};}""")
+        print("   tap ->", opened)
+        ck(opened["url"] == url, "tapping Service opens that link (%r)" % opened["url"])
+        ck(opened["sheet"] is None, "and opens NO sheet -- no new page (%r)" % opened["sheet"])
+        ck(opened["page"] == before_page, "and leaves the member where they were")
+
         ck(not errs, "no page errors: %s" % errs[:3])
         await ctx.close(); await b.close()
 

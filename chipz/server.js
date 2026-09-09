@@ -2238,10 +2238,67 @@ app.get('/public/settings', async (_req, res) => {
 // the app quote one total and the server credit another.
 // /admin/products deliberately still returns the RAW values, so the editor
 // keeps round-tripping exactly what was typed into it.
+// ── WHEN A PRODUCT IS OPEN ──
+//
+// Owner: "make when l can time any product on its opening duration ie it can
+// say coming soon in hh:mm:ss, make when l can put that this and this product
+// should be coming or opening at this time of day from this minute to this
+// minute, or even just putting as it is that coming soon."
+//
+// Three ways to close a product, in this order of precedence:
+//   1. comingSoon        — closed flat, no clock. The existing checkbox.
+//   2. openAt            — closed UNTIL one specific moment, then open for good.
+//   3. openFrom/openTo   — a DAILY window in EAT ("14:00" to "16:30"). Open
+//                          inside it, closed outside, every day.
+// Nothing set = open.
+//
+// This returns an ABSOLUTE epoch-ms `opensAt`, and the client counts down to
+// that. It deliberately does not send "seconds remaining": the phone's clock
+// and timezone are whatever the member has set them to, and a countdown
+// computed on the phone from a wall-clock window would be wrong by hours for
+// anyone not in EAT. The server owns the schedule; the phone owns only the
+// ticking.
+//
+// A window is allowed to WRAP MIDNIGHT (22:00 to 02:00) -- that is a real
+// thing to want, and treating from>to as invalid would silently reject it.
+function hhmmToMin(v) {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(v || '').trim());
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+function productOpenState(p, nowMs) {
+  const now = Number(nowMs) || Date.now();
+  if (p && p.comingSoon === true) return { open: false, mode: 'soon', opensAt: null };
+  const openAt = Number(p && p.openAt) || 0;
+  if (openAt && now < openAt) return { open: false, mode: 'until', opensAt: openAt };
+  const from = hhmmToMin(p && p.openFrom);
+  const to = hhmmToMin(p && p.openTo);
+  // Both halves are required for a window; one alone is not a schedule.
+  if (from == null || to == null || from === to) return { open: true, mode: null, opensAt: null };
+  const DAY = 86400000, MIN = 60000;
+  // Minutes since EAT midnight, and the instant that midnight happened.
+  const eatNow = now + 3 * 3600000;
+  const eatMidnight = Math.floor(eatNow / DAY) * DAY - 3 * 3600000;
+  const minsIn = Math.floor((eatNow - Math.floor(eatNow / DAY) * DAY) / MIN);
+  const wraps = to < from;
+  const inside = wraps ? (minsIn >= from || minsIn < to) : (minsIn >= from && minsIn < to);
+  if (inside) {
+    // When it shuts again -- today's `to`, or tomorrow's if the window wraps
+    // and we are in the after-midnight half.
+    const closeMin = to;
+    let closesAt = eatMidnight + closeMin * MIN;
+    if (closesAt <= now) closesAt += DAY;
+    return { open: true, mode: 'window', opensAt: null, closesAt };
+  }
+  let opensAt = eatMidnight + from * MIN;
+  if (opensAt <= now) opensAt += DAY;
+  return { open: false, mode: 'window', opensAt };
+}
 function publicProductView(p, sett) {
   const cycle = Number(p.cycle) || Number(sett && sett.cycleDays) || 150;
   const expectedReturn = productExpectedReturn(p, sett);
-  return { ...p, cycle, expectedReturn, dailyPayout: Math.round(expectedReturn / cycle) };
+  const st = productOpenState(p, Date.now());
+  return { ...p, cycle, expectedReturn, dailyPayout: Math.round(expectedReturn / cycle),
+    isOpen: st.open, openMode: st.mode, opensAt: st.opensAt || null, closesAt: st.closesAt || null };
 }
 app.get('/public/products', async (_req, res) => {
   try {
@@ -2972,7 +3029,8 @@ app.post('/invest/create', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const tier = await getProductByKey(req.body.tierKey);
   if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown product' });
-  if (tier.active === false || tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This product is not available right now.' });
+  if (tier.active === false || !productOpenState(tier, Date.now()).open)
+    return res.status(400).json({ status: 'error', message: 'This product is not open right now.' });
   try {
     const sett = await getSettings();
     let invId, liveTier, cycle, expectedReturn, dailyPayout;
@@ -2984,7 +3042,11 @@ app.post('/invest/create', async (req, res) => {
     // an investment that was never actually created.
     await withLock('bal:' + userId, async () => {
       liveTier = await getProductByKey(tier.key);
-      if (!liveTier || liveTier.active === false || liveTier.comingSoon) throw new Error('This product is not available right now.');
+      // Re-checked against the LIVE product inside the lock, and against the
+      // clock at this instant -- a member sitting on the screen as a window
+      // closes must not slip a purchase through on a stale card.
+      if (!liveTier || liveTier.active === false || !productOpenState(liveTier, Date.now()).open)
+        throw new Error('This product is not open right now.');
       cycle = Number(liveTier.cycle) || sett.cycleDays;
       expectedReturn = productExpectedReturn(liveTier, sett);
       dailyPayout = Math.round(expectedReturn / cycle);
@@ -6489,9 +6551,31 @@ function sanitizeProductInput(p, fallbackOrder) {
     spinCount = Math.round(Number(p.spinCount));
     if (!Number.isFinite(spinCount) || spinCount < 0 || spinCount > MAX_SPINS_PER_PURCHASE) return null;
   }
+  // Opening schedule -- see productOpenState() for what each field means and
+  // why the two shapes (a one-off moment, and a daily window) coexist.
+  // Rejected rather than clamped: a malformed time silently becoming 00:00
+  // would open a product the owner meant to keep shut.
+  let openAt = null;
+  if (p?.openAt != null && p.openAt !== '') {
+    openAt = typeof p.openAt === 'number' ? p.openAt : Date.parse(p.openAt);
+    if (!Number.isFinite(openAt) || openAt <= 0) return null;
+  }
+  let openFrom = null, openTo = null;
+  if (p?.openFrom != null && p.openFrom !== '') {
+    if (hhmmToMin(p.openFrom) == null) return null;
+    openFrom = String(p.openFrom).trim();
+  }
+  if (p?.openTo != null && p.openTo !== '') {
+    if (hhmmToMin(p.openTo) == null) return null;
+    openTo = String(p.openTo).trim();
+  }
+  // Half a window is not a schedule -- it would read as "opens at 14:00" and
+  // silently never close, or never open. Both ends, or neither.
+  if ((openFrom == null) !== (openTo == null)) return null;
+  if (openFrom != null && openFrom === openTo) return null;
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
   const order = p?.order != null ? Number(p.order) : fallbackOrder;
-  return { key, name, price, cycle, expectedReturn, multiplier, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  return { key, name, price, cycle, expectedReturn, multiplier, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 app.get('/admin/products', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

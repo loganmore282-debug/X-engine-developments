@@ -19,6 +19,24 @@ PRODUCTS=[{"key":f"product-{i}","name":f"Product-{i}","price":p,"cycle":150,
   "expectedReturn":p*3,"image":"","spinCount":1 if i>1 else 0,"spinMin":200,"spinMax":1000}
   for i,p in enumerate([30000,90000,197000,355000,560000,950000,1000000,
                         1250000,2550000,4500000,6000000,8000000],start=1)]
+# Owner: "make when l can time any product on its opening duration ie it can say
+# coming soon in hh:mm:ss ... or even just putting as it is that coming soon."
+# These carry exactly what /public/products publishes for each of the three
+# closed states. opensAt is an absolute instant, which is the whole point --
+# the phone counts down to it rather than computing a window itself.
+import time as _t
+_SOON_AT = int(_t.time() * 1000) + 3 * 3600 * 1000 + 25 * 60 * 1000   # 3h 25m out
+PRODUCTS += [
+  {"key":"sched-flat","name":"Flat Soon","price":50000,"cycle":150,"expectedReturn":150000,
+   "image":"","spinCount":0,"spinMin":0,"spinMax":0,
+   "comingSoon":True,"isOpen":False,"openMode":"soon","opensAt":None},
+  {"key":"sched-until","name":"Timed Open","price":60000,"cycle":150,"expectedReturn":180000,
+   "image":"","spinCount":0,"spinMin":0,"spinMax":0,
+   "comingSoon":False,"isOpen":False,"openMode":"until","opensAt":_SOON_AT},
+  {"key":"sched-window","name":"Daily Window","price":70000,"cycle":150,"expectedReturn":210000,
+   "image":"","spinCount":0,"spinMin":0,"spinMax":0,
+   "comingSoon":False,"isOpen":False,"openMode":"window","opensAt":_SOON_AT},
+]
 
 def _frame_jpeg(w, h):
     """A 1600x900 photo the admin panel would have produced, with the corners
@@ -179,6 +197,40 @@ async def main():
         print("  animations on page:", anims)
         ck(not [a for a in anims if a in ('revealIn','wordIn')], "no entrance animation left")
         await page.screenshot(path=f"{OUT}/cards-43.png",full_page=False)
+        # ── OPENING SCHEDULE ──
+        # Owner: "make when l can time any product ... it can say coming soon
+        # in hh:mm:ss ... or even just putting as it is that coming soon."
+        import re as _re
+        ctas = await page.evaluate("""()=>[...document.querySelectorAll('.p-card')].map(c=>{
+          const b=c.querySelector('.p-cta');
+          return {name:((c.querySelector('.p-name')||c.querySelector('h3')||{}).textContent||'').trim(),
+                  txt:(b?b.textContent:'').trim(), off:!!(b&&b.disabled),
+                  at:b?b.getAttribute('data-opens-at'):null};})""")
+        by = {c["name"]: c for c in ctas if c["name"]}
+        for n in ("Flat Soon", "Timed Open", "Daily Window"):
+            print("   %-13s %r disabled=%s" % (n, by.get(n, {}).get("txt"), by.get(n, {}).get("off")))
+        ck(by.get("Flat Soon", {}).get("txt") == "Coming Soon",
+           "the plain checkbox still just says Coming Soon, no clock (%r)"
+           % by.get("Flat Soon", {}).get("txt"))
+        ck(by.get("Flat Soon", {}).get("at") in (None, ""),
+           "and carries no countdown target")
+        for n in ("Timed Open", "Daily Window"):
+            t = by.get(n, {}).get("txt", "")
+            ck(bool(_re.match(r"^Coming soon in \d{2}:\d{2}:\d{2}$", t)),
+               "%s counts down in HH:MM:SS (%r)" % (n, t))
+            ck(by.get(n, {}).get("off") is True, "%s cannot be bought while closed" % n)
+        # A scheduled card must be counting DOWN, not printing a frozen figure.
+        first = by.get("Timed Open", {}).get("txt")
+        await page.wait_for_timeout(2200)
+        again = await page.evaluate(
+            "()=>{const b=[...document.querySelectorAll('.p-cta')]"
+            ".find(x=>x.hasAttribute('data-opens-at'));return b?b.textContent.trim():null;}")
+        print("   ticking: %r -> %r" % (first, again))
+        ck(first != again, "and it actually ticks (%r -> %r)" % (first, again))
+        # An open product is untouched by any of this.
+        open_ones = [c for c in ctas if c["txt"] == "Buy Now"]
+        ck(len(open_ones) >= 3 and all(not c["off"] for c in open_ones),
+           "products with no schedule still say Buy Now and stay tappable (%d)" % len(open_ones))
         ck(not errs,"no page errors: "+str(errs))
         await b.close()
     print(("\n%d FAILED" % len(fails)) if fails else "\nproduct cards: all cases pass")

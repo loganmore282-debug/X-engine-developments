@@ -1814,7 +1814,7 @@ async function renderProducts(){
       <div class="prod">
         <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch()}</div>
         <div class="pb">
-          <div class="pt">${esc(p.name||p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Upcoming</span>':''}</div>
+          <div class="pt">${esc(p.name||p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Upcoming</span>':''}${(!p.comingSoon&&p.openFrom&&p.openTo)?`<span class="pill-tag t-warn">${esc(p.openFrom)}–${esc(p.openTo)}</span>`:''}${(!p.comingSoon&&p.openAt&&Number(p.openAt)>Date.now())?'<span class="pill-tag t-warn">Scheduled</span>':''}</div>
           <div class="pp">${ugx(p.price)} · ${p.cycle||0} days</div>
           <div class="pr">Pays ${ugx(resolvedPayout(p))}${(Number(p.multiplier)>0)?` <span class="muted">(&times;${esc(String(p.multiplier))})</span>`:''}</div>
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
@@ -1888,8 +1888,16 @@ function editProduct(p, order){
     <input id="pImage" value="${esc(p.image&&!/^data:/.test(p.image)?p.image:'')}" placeholder="https://…/product.png">
     <div class="switch-row" style="margin-top:10px"><span><b>Active</b> <span class="muted">(shown in the app)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
-    <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable)</span></span>
+    <div class="switch-row"><span><b>Upcoming</b> <span class="muted">(shown, but not buyable — no clock)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
+    <div class="muted" style="margin:14px 0 6px"><b>Opening schedule</b> — leave blank for always open.
+      Upcoming above overrides both. Times are Uganda time.</div>
+    <label>Opens at (one-off) — shows a countdown until then, open for good after</label>
+    <input id="pOpenAt" type="datetime-local" value="${p.openAt?new Date(Number(p.openAt)-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''}">
+    <div class="row2">
+      <div><label>Open daily from</label><input id="pOpenFrom" type="time" value="${esc(p.openFrom||'')}"></div>
+      <div><label>until</label><input id="pOpenTo" type="time" value="${esc(p.openTo||'')}"></div>
+    </div>
     <button class="btn block" id="pSave">Save product</button>`);
   let imgData = p.image||'';
   // Custom upload/URL wins; otherwise fall back to the built-in default photo
@@ -1943,7 +1951,18 @@ function editProduct(p, order){
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
       expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, order:$('pOrder').value,
       spinCount:$('pSpinCount').value, spinMin:$('pSpinMin').value, spinMax:$('pSpinMax').value,
-      image, active:$('pActive').checked, comingSoon:$('pSoon').checked };
+      image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
+      // datetime-local has no zone, so the browser reads it as local time --
+      // which for the owner IS Uganda time. Sent as epoch ms so the server
+      // never has to guess a zone.
+      openAt: $('pOpenAt').value ? new Date($('pOpenAt').value).getTime() : '',
+      openFrom: $('pOpenFrom').value, openTo: $('pOpenTo').value };
+    // Both ends or neither -- half a window would read as "opens at 14:00" and
+    // then never close.
+    if (!!body.openFrom !== !!body.openTo)
+      return toast('A daily window needs BOTH a from and an until time','err');
+    if (body.openFrom && body.openFrom === body.openTo)
+      return toast('A daily window cannot start and end at the same minute','err');
     if(!parseFloat(body.price)) return toast('Enter a price','err');
     const sMin = parseFloat(body.spinMin), sMax = parseFloat(body.spinMax);
     if(Number.isFinite(sMin) && Number.isFinite(sMax) && sMax < sMin)

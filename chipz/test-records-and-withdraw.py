@@ -230,6 +230,25 @@ async def main():
         ck("15%" in msg, "and names the charge (%r)" % msg)
         await page.screenshot(path=f"{OUT}/cashout-card.png")
 
+        # Owner: "when one requests withdrawal then he is forwarded to records
+        # of withdrawals to see his processing withdrawal." On OK, not before --
+        # the card carries the figure they will actually receive, and pulling
+        # the screen away while they read it is how that number gets missed.
+        opened_before = await page.evaluate(
+            "document.querySelector('#balBody')?1:0")
+        ck(not opened_before, "records are not yanked open while the card is still up")
+        await page.click(".notify-ok")
+        await page.wait_for_selector("#balBody .rec", timeout=8000)
+        tab = await page.evaluate(
+            "((document.querySelector('#balTabs .tb.on')||{}).textContent||'').trim()")
+        kinds = await page.evaluate(
+            "[...document.querySelectorAll('#balBody .rec .t1')].map(e=>e.textContent.trim())")
+        print("   after OK: tab=%r rows=%s" % (tab, kinds))
+        ck(tab == "Withdraw",
+           "tapping OK lands on the Withdraw tab of Records (%r)" % tab)
+        ck(kinds and all(k == "Withdraw" for k in kinds),
+           "showing withdrawals only (%s)" % kinds)
+
         ck(not errs, "no page errors: " + str(errs))
         await b.close()
 
