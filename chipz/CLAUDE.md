@@ -1538,6 +1538,54 @@ rewritten.** Worth reading before adding to this file:
   null-dereference stack trace from every later assertion, not as a finding — so there is
   now an explicit, named `did not navigate out of the app entirely` check ahead of them.
 
+### The Referral share card, measured off the mockup
+
+Owner: *"l want the copy SVG icon to be replaced by that image l made myself, just like
+you see on the mock ups, also on copying, the other button should say copied. l want the
+same size of card, box and button and icon exactly that of mock ups rather than guess."*
+
+**Half of it already worked.** "Copied" on the labelled button and the tick on the tile
+shipped a round earlier; driving the built app confirmed both before changing anything.
+He was holding up the mockup as the spec, not reporting those as broken.
+
+**What was actually wrong, measured at 390px against his 1080px screenshots** (1068 of
+which is the phone's content — the last ~12px are the capture's purple edge strip):
+
+| | ours | mockup | |
+|---|---|---|---|
+| icon tile | 28 × 28 | **45.3 × 41.6** | −38% |
+| field height | 48 | **65.7** | −27% |
+| label → field | 10 | **15.0** | −33% |
+| field → button | 14 | **17.5** | −20% |
+| card / field / button width, button height, card padding, tile inset | — | — | **already right, untouched** |
+
+**The field is taller because his URL wraps to TWO lines.** Ours truncated to one with an
+ellipsis. That is the whole 18px, and it is why the height alone is not the assertion —
+a one-line field with fat padding would satisfy it and look nothing like his. The span is
+now a 2-line clamp with `overflow-wrap:anywhere` (a URL is one unbroken word).
+
+**The card height is the independent check.** Nothing sets it; it is the sum of what is
+inside. It landed at **200.0 against his 199.7** — so the parts are right, not merely
+summing to the right total.
+
+`user/copy-clip.png` is his artwork, cut out by flood-filling the white **page** inward
+from the border — the same rule as the spin wheel: a global white→transparent would punch
+holes in the clipboard's own white paper, which is the same colour and only survives
+because it is enclosed. Trimmed to content, 118 × 144, 6KB. Its height is set in CSS
+(`.url-row .copy-ic img`), not in the markup, so the tile and the art stay in step.
+
+**The one judgment call:** his mockup's icon is the system 📋 emoji, whose *ink* measures
+35 × 42 mockup px — about **15 CSS px**, which would turn his detailed illustration into
+mush. The art is set to 24px (57% of the tile height, the ordinary icon-in-tile
+proportion, near the emoji's em box). Everything else in the table is his figure exactly.
+
+**A percentage is the wrong tolerance for small distances.** `test-referral-share.py`
+allows 8% **or 2px, whichever is looser**: the card padding sits 1.5px off his 17.5px,
+which is invisible but 8.6%, while every error this round found is far outside both bars
+(17.3px, 17.7px, 5.0px, 3.5px). A test that flags 1.5px on a JPEG-measured figure is one
+you learn to ignore. Verified by reverting the CSS: 5 assertions fail, including the
+card height.
+
 ### The warning sign is the emoji, and the chest gets its second ring
 
 Owner: *"first check how well defined and realistic and quality ⚠️ that sign is … on

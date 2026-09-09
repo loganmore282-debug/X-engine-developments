@@ -2059,12 +2059,12 @@ function paintReferral(){
     : `<div class="hb-stripes"></div><div class="hb-cap">Invite friends. Earn when they buy their first product.</div>`}
 </div>
 <div class="app-card" style="margin:0 18px;padding:18px;">
-  <div style="font-size:13px;font-weight:800;color:var(--snow-muted);margin-bottom:10px;">Share URL</div>
+  <div style="font-size:13px;font-weight:800;color:var(--snow-muted);margin-bottom:15px;">Share URL</div>
   <div class="url-row">
     <span>${esc(link || 'Your link appears once your code is ready')}</span>
-    <button class="copy-ic" onclick="copyText('${esc(link)}')" aria-label="Copy link">${ICONS.copy}</button>
+    <button class="copy-ic" onclick="copyText('${esc(link)}')" aria-label="Copy link">${COPY_CLIP}</button>
   </div>
-  <button class="primary-button" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="copyText('${esc(link)}')">COPY INVITE LINK</button>
+  <button class="primary-button" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
 </div>
 <div class="app-card" style="margin:16px 18px 0;padding:20px;">
   <h3 style="font-size:17px;font-weight:700;margin:0 0 10px;">Invitation Reward</h3>
@@ -2640,6 +2640,13 @@ function rapidTapGuardOk(key){
 // WhatsApp -- an OK tap between the member and sharing is friction for a result
 // they can already see. Every other message in the app still uses the card;
 // copy is the one action whose outcome is visible where it happened.
+// The owner's own clipboard artwork, replacing the hand-drawn SVG: "l want the
+// copy SVG icon to be replaced by that image l made myself." Cut out of the
+// JPEG he sent by flood-filling the white PAGE inward from the border -- a
+// global white->transparent would have punched holes in the clipboard's own
+// white paper, the same trap the spin-wheel cutout hit. Height is set in CSS
+// (.url-row .copy-ic img), not here, so the tile and the art stay in step.
+var COPY_CLIP = '<img src="/copy-clip.png" alt="" aria-hidden="true">';
 var COPY_TICK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
   + 'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
 function flashCopied(btn){

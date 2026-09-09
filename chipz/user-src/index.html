@@ -759,9 +759,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .page-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 18px 12px;}
 .page-head h2{margin:0;font-size:23px;font-weight:400;letter-spacing:.02em;}
 .page-head span{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
-.url-row{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);padding:0 14px;height:48px;margin-bottom:14px;}
-.url-row span{flex:1;min-width:0;font-size:12px;color:var(--snow-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.url-row .copy-ic{width:28px;height:28px;border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);border:none;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.url-row{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);padding:0 14px;min-height:66px;margin-bottom:18px;}
+.url-row span{flex:1;min-width:0;font-size:12px;line-height:1.45;color:var(--snow-muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;}
+.url-row .copy-ic{width:45px;height:42px;border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);border:none;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
+.url-row .copy-ic img{width:auto;height:24px;display:block;}
 /* Owner: "the copy turns to tick." Green, as in his -- a tick in the brand red
    would read as an error mark. Applies to every copy control (the URL row's
    icon, the manual-payment number/name buttons) and to the labelled button,
