@@ -460,10 +460,14 @@ async def main():
         print("   after tapping the labelled button:", st)
         ck((st["btn"] or '').lower() == 'copied',
            "the labelled button says Copied (%r)" % st["btn"])
-        # Only the control that was TAPPED confirms -- the icon beside it must
-        # not light up for a tap it never received.
-        ck(not st["tick"],
-           "and the icon button it did not touch stays as it was")
+        # REVERSED on the owner's instruction, deliberately -- this used to
+        # assert the icon stayed untouched, i.e. that only the tapped control
+        # confirmed. Owner: "why when l copy link with the other icon and shows
+        # tick, the button which says copy invite link doesn't show copied, yet
+        # l wanted it to say it in all cases whether clicking copy icon or
+        # button." They are two controls for ONE action, so both confirm now.
+        ck(st["tick"],
+           "and the icon beside it confirms too -- one action, both controls")
         # Now the icon button itself, which is the one in his screenshot.
         # Past the 700ms rapid-tap guard first: both controls copy the SAME
         # link, so a tap here 400ms after the one above is exactly what that

@@ -2650,13 +2650,22 @@ var COPY_CLIP = '<img src="/copy-clip.png" alt="" aria-hidden="true">';
 var COPY_TICK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
   + 'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
 function flashCopiedOne(btn){
-  if (!btn || btn._copyRevert) return;
+  if (!btn) return;
   const isIconBtn = btn.classList.contains('copy-ic') || btn.classList.contains('mp-copybtn');
-  const before = btn.innerHTML;
+  // A copy while the flash is STILL RUNNING restarts it rather than being
+  // ignored. It used to return early, which was harmless when each control
+  // flashed alone but is a real fault now they are grouped: tapping the icon
+  // ~1.5s after the button did nothing, and the tick then disappeared 300ms
+  // later on the FIRST tap's timer -- so the second tap read as having failed.
+  // The original content is kept from the first flash in _copyBefore, so a
+  // restart can never capture 'Copied' (or the tick) as the thing to restore
+  // and leave the control permanently stuck on it.
+  if (btn._copyRevert) clearTimeout(btn._copyRevert);
+  else btn._copyBefore = btn.innerHTML;
   btn.innerHTML = isIconBtn ? COPY_TICK : 'Copied';
   btn.classList.add('copied');
   btn._copyRevert = setTimeout(() => {
-    btn.innerHTML = before;
+    btn.innerHTML = btn._copyBefore;
     btn.classList.remove('copied');
     btn._copyRevert = null;
   }, 1800);
