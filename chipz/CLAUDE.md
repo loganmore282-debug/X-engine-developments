@@ -1494,6 +1494,50 @@ announce, so a "fix" that just mutes the dialog everywhere cannot pass. Verified
 reverting the fix and re-running: exactly the six wrong cases fail and the four correct
 ones keep passing.
 
+### The message popup: two overlays stop above the nav bar, only one was handled
+
+Owner: *"even see when in this message and you tap nav icons, the message screen or
+page still persists to go away unless you click on X mark."*
+
+`showPage()` closed `.sheet-bg.show` and nothing else. The message detail is its **own**
+overlay (`#msgDetailBg`), and — measured, not assumed — it is the **only other overlay
+in the app that stops above the bottom bar** (`bottom:var(--nav-h)`, the same inset
+`.sheet-bg` uses). Every other one (notify, confirm, chest win, announcement, deposit
+result, manual pay) is `inset:0` and covers the bar, so a nav tap cannot reach them and
+none of them have this bug. That measurement is the useful part: **the set of overlays a
+nav tap can reach is exactly the set that does not cover the nav.** If a new overlay is
+ever given a `bottom:var(--nav-h)` inset, it belongs in `showPage()`'s teardown.
+
+**A second bug, found by probing rather than reported.** The detail pushed no history
+entry, so the phone **Back** button consumed the Messages *sheet's* entry instead: the
+list was torn down and the popup left floating over nothing (measured `detail=True,
+sheet=False`). Same "it won't go away", different route. It now pushes `{msgDetail:true}`
+like `openSheet()` does, `popstate` closes just the popup and returns — landing back on
+the sheet's own entry with the list still open — and the X routes through `history.back()`
+too, so Back and the X cannot drift apart.
+
+**`history.go(-n)` once, never two `back()`s.** With both overlays owning an entry,
+`showPage()` has two to retire. Two `history.back()` calls in one tick is the exact race
+this file has already been bitten by, so `closeSheet` gained `keepHistory` and `showPage`
+makes a single `go(-spent)`.
+
+**Three assertions here were written, watched to pass against the BROKEN app, and
+rewritten.** Worth reading before adding to this file:
+- *"closes in the same tick"* — a Python-side read straight after `page.click()` passes
+  either way, because `click()` does not resolve until the queued `popstate` has already
+  run. Only clicking and reading **inside one page task** (`page.evaluate` that calls
+  `.click()` and returns the class in the same expression) can tell a synchronous
+  teardown from one that waits for `popstate`.
+- *"Back leaves the list open"* — passes with the `pushState` deleted, because the
+  `popstate` branch closes the popup either way. What actually differs is **whose entry
+  was spent**, so that is what is asserted (`history.state.msgDetail` on top, then
+  `history.state.sheet` after one Back).
+- The real-world consequence of getting that wrong is severe and arrives disguised: with
+  no entry of its own, `go(-spent)` counts one too many and walks off the app's **first**
+  entry, so a nav tap **drops the member out of the app**. In the test that surfaced as a
+  null-dereference stack trace from every later assertion, not as a finding — so there is
+  now an explicit, named `did not navigate out of the app entirely` check ahead of them.
+
 ### The warning sign is the emoji, and the chest gets its second ring
 
 Owner: *"first check how well defined and realistic and quality ⚠️ that sign is … on

@@ -179,6 +179,106 @@ async def main():
             ck(await page.evaluate(announced), f"{screen} -> back chevron: announcement shows")
         await page.evaluate("closeAnnounce()")
 
+        # ── the message detail closes on a nav tap too ──
+        # Owner: "when in this message and you tap nav icons, the message
+        # screen still persists to go away unless you click on X mark."
+        #
+        # It is its OWN overlay, not a sheet, and showPage() only closed
+        # sheets. It is also the only other overlay that stops above the
+        # bottom bar -- which is exactly why the nav could be tapped through
+        # it and nothing happened. The check below pins BOTH halves: that a
+        # nav tap dismisses it, and that the bar really is reachable while it
+        # is open (if a later change made it cover the nav, the tap assertion
+        # would pass vacuously because there would be no tap to make).
+        shown = "()=>document.getElementById('msgDetailBg').classList.contains('show')"
+        for tab in ("team", "account"):
+            await page.evaluate("showPage('home')"); await page.wait_for_timeout(300)
+            await page.evaluate("closeAnnounce()")
+            await page.evaluate("openMessagesSheet()"); await page.wait_for_timeout(500)
+            await page.click('.msg-row'); await page.wait_for_timeout(400)
+            ck(await page.evaluate(shown), f"({tab}) the message detail opened")
+            hit = await page.evaluate("""()=>{const n=document.querySelector('.bottom-nav');
+              const b=n.getBoundingClientRect();
+              const t=document.elementFromPoint(b.x+b.width/2, b.y+b.height/2);
+              return !!(t && t.closest('.bottom-nav'));}""")
+            ck(hit, f"({tab}) the nav bar is really tappable under the popup")
+            # Click and read INSIDE one page task. showPage() retires the
+            # overlay history entries with history.go(-n) and popstate fires
+            # on a later task, so relying on popstate alone to hide the popup
+            # leaves it on screen after the finger lands -- the exact lag that
+            # gets reported as "it didn't close". showPage() hides it up front
+            # instead, and only a same-task read can tell the two apart:
+            # driving this from Python cannot, because page.click() does not
+            # resolve until the queued popstate has already run. (Verified:
+            # with the synchronous removal deleted, a Python-side read
+            # straight after click() still passed.)
+            still = await page.evaluate(f"""()=>{{
+              document.querySelector('.navitem[data-nav="{tab}"]').click();
+              return document.getElementById('msgDetailBg').classList.contains('show');
+            }}""")
+            ck(not still,
+               f"the {tab} tap closes the message detail in the SAME task, not a frame later")
+            await page.wait_for_timeout(700)
+            # The app is still here at all. showPage() retires one history
+            # entry per open overlay, so if the popup ever stops owning one,
+            # that count goes back one level too far and walks off the app's
+            # own first entry -- the member is dropped out of the app by
+            # tapping a tab. Checked first, and by name, because without it
+            # that failure arrives as a null-dereference stack trace from
+            # every assertion below rather than as a finding.
+            alive = await page.evaluate("()=>!!document.getElementById('msgDetailBg')")
+            ck(alive, f"the {tab} tap did not navigate out of the app entirely")
+            if not alive:
+                break
+            ck(not await page.evaluate(shown), f"tapping the {tab} tab closes the message detail")
+            ck(not await page.evaluate("()=>!!document.querySelector('.sheet-bg.show')"),
+               f"...and the Messages list behind it")
+            ck(await page.evaluate("()=>STATE.page") == tab, f"...and lands on {tab}")
+
+        # The X must still work -- it is the only way the owner had, and a fix
+        # that moved the close onto navigation alone would break it.
+        await page.evaluate("showPage('home')"); await page.wait_for_timeout(300)
+        await page.evaluate("closeAnnounce()")
+        await page.evaluate("openMessagesSheet()"); await page.wait_for_timeout(500)
+        await page.click('.msg-row'); await page.wait_for_timeout(400)
+        await page.click('#msgDetail .xbtn'); await page.wait_for_timeout(400)
+        ck(not await page.evaluate(shown), "the X still closes the message detail")
+        ck(await page.evaluate("()=>!!document.querySelector('.sheet-bg.show')"),
+           "and leaves the Messages list open behind it")
+
+        # ── the phone Back button, which was broken the OTHER way ──
+        # Found by probing while fixing the nav tap: the detail carried no
+        # history entry, so Back consumed the Messages SHEET's entry instead
+        # and tore the list down while leaving the popup floating over
+        # nothing (measured: detail=True, sheet=False). Same "it won't go
+        # away", different route. It now owns an entry, so Back retires the
+        # popup and lands back on the list.
+        await page.click('.msg-row'); await page.wait_for_timeout(400)
+        # WHOSE history entry is on top. This is the half that actually needs
+        # the pushState: without it, closing the popup with Back consumes the
+        # SHEET's entry, and although the popup still visibly closes (the
+        # popstate branch handles that), the stack is now one shallower than
+        # the UI -- so the Back that should close the list instead goes past
+        # the app's own first entry and can drop the member out of the app.
+        # Asserting only on what is visible after two Backs misses this
+        # entirely; it passed with the pushState deleted.
+        ck(await page.evaluate("()=>!!(history.state && history.state.msgDetail)"),
+           "the popup owns the top history entry, so Back spends ITS entry not the list's")
+        await page.go_back(); await page.wait_for_timeout(600)
+        ck(await page.evaluate("()=>!!(history.state && history.state.sheet)"),
+           "...and one Back lands back on the list's own entry")
+        ck(not await page.evaluate(shown), "Back closes the message detail")
+        ck(await page.evaluate("()=>!!document.querySelector('.sheet-bg.show')"),
+           "...and leaves the Messages list open behind it, not torn down")
+        # ...and a SECOND Back must still close the list, i.e. the popup ate
+        # its own entry and not the sheet's. This is the half that a fix which
+        # simply returned early in popstate would fail.
+        await page.go_back(); await page.wait_for_timeout(600)
+        ck(not await page.evaluate("()=>!!document.querySelector('.sheet-bg.show')"),
+           "a second Back then closes the Messages list")
+        await page.evaluate("showPage('home')")
+        await page.wait_for_timeout(400); await page.evaluate("closeAnnounce()")
+
         # ── no Snow wording in the BUILT app ──
         # Chipz is a fork of Snow. test-no-snow-branding.js checks the
         # sources; the obfuscator encodes string literals, so a rendered

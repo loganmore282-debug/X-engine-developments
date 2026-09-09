@@ -1390,7 +1390,29 @@ window.showPage = async function(name){
   // tab was actually being tapped. The new page then painted under the dialog.
   // Tapping HOME from Deposit still announces: the 'home' branch below does it,
   // which is the one path that genuinely is "from deposit back to home".
-  if (typeof closeSheet === 'function' && document.querySelector('.sheet-bg.show')) closeSheet({ navigating: true });
+  // The message detail is its OWN overlay, not a sheet, and it is the only
+  // other one that stops above the bottom bar (`bottom:var(--nav-h)`, same as
+  // .sheet-bg) -- so the nav is tappable through it and the tap did nothing.
+  // Owner: "when in this message and you tap nav icons, the message screen
+  // still persists to go away unless you click on X mark."
+  //
+  // Every other overlay in the app (notify, confirm, chest win, announcement,
+  // deposit result, manual pay) is `inset:0` and covers the bar, so a nav tap
+  // cannot reach them and none of them belong here. If a new overlay is ever
+  // given a `bottom:var(--nav-h)` inset, it belongs in this teardown too.
+  //
+  // Both overlays own a history entry, and they must be unwound with ONE
+  // history call: two history.back()s in a single tick is the exact race this
+  // file has already been bitten by (see openManualPayOverlay's note on a
+  // pushState racing a still-pending back). So closeSheet is told to leave
+  // history alone and a single go(-n) retires both entries, firing one
+  // popstate that finds everything already closed and does nothing.
+  const detailOpen = !!($('msgDetailBg') && $('msgDetailBg').classList.contains('show'));
+  const sheetOpen = !!document.querySelector('.sheet-bg.show');
+  if (detailOpen) $('msgDetailBg').classList.remove('show');
+  if (sheetOpen && typeof closeSheet === 'function') closeSheet({ navigating: true, keepHistory: true });
+  const spent = (detailOpen ? 1 : 0) + (sheetOpen ? 1 : 0);
+  if (spent) history.go(-spent);
   STATE.page = name;
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
@@ -3199,14 +3221,31 @@ window.openMessageDetail = async function(index){
     </div>
     <div class="ln"></div>
     <div class="content">${esc(m.body || '')}</div>`;
+  // Its own history entry, mirroring openSheet(). Without one, the phone Back
+  // button consumed the Messages SHEET's entry instead and tore the list down
+  // while leaving this popup floating over nothing -- the same "it won't go
+  // away" the nav tap showed, by a different route. replaceState when it is
+  // somehow already open, for openSheet()'s reason: stacking two entries for
+  // one visible popup breaks the NEXT Back press as well.
+  const detailWasOpen = $('msgDetailBg').classList.contains('show');
   $('msgDetailBg').classList.add('show');
+  if (detailWasOpen) history.replaceState({ msgDetail: true }, '', '');
+  else history.pushState({ msgDetail: true }, '', '');
   if (m.read) return;
   m.read = true;
   renderMessagesList();
   updateMessageBadge();
   await post('/messages/read', { messageId: m.id });
 };
-window.closeMessageDetail = function(){ $('msgDetailBg').classList.remove('show'); };
+// The X goes through history too, so the popup has exactly ONE way to close
+// and Back and the X cannot drift apart. popstate below does the actual
+// hiding; the direct removal is only for a state that is not ours (nothing
+// reaches it today, but a missing entry must still close the popup rather
+// than trap the member behind it).
+window.closeMessageDetail = function(){
+  if (history.state && history.state.msgDetail) { history.back(); return; }
+  $('msgDetailBg').classList.remove('show');
+};
 // Home's envelope button shows a dot while anything is unread. Kept in sync
 // from whatever the last /messages fetch returned -- Home itself re-reads
 // STATE.messages on every paint.
@@ -3553,10 +3592,21 @@ window.closeSheet = function(opts){
   unlockBodyScroll();
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
-  if (history.state && history.state.sheet) history.back();
+  // opts.keepHistory: the caller is retiring several overlay entries itself
+  // with one history.go(-n) -- see showPage(). Only that caller sets it.
+  if (!(opts && opts.keepHistory) && history.state && history.state.sheet) history.back();
   if (!(opts && (opts.fromAction || opts.navigating))) maybeAnnounceAfterSheet(closed);
 };
 window.addEventListener('popstate', () => {
+  // The message detail sits ON TOP of the Messages sheet and carries its own
+  // history entry, so unwinding it closes just the popup and lands back on
+  // the sheet's entry -- the list is still open behind it, which is what
+  // Back should do from a popup opened out of a list. Returning here is what
+  // keeps the teardown below from taking the list with it.
+  if ($('msgDetailBg') && $('msgDetailBg').classList.contains('show')) {
+    $('msgDetailBg').classList.remove('show');
+    return;
+  }
   // The phone's own Back button, which never goes through closeSheet()/
   // closeManualPayOverlay() directly. When either of those ran first, their
   // own history.back() lands here too, but they've already cleared their
