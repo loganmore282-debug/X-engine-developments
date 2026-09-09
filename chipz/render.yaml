@@ -68,9 +68,45 @@ services:
       - path: /*
         name: Referrer-Policy
         value: no-referrer
+      # The three directives this policy started as (frame-ancestors,
+      # object-src, base-uri) stop the page being framed or having its
+      # relative URLs re-pointed. They do nothing about the attack that
+      # actually matters on a money app: script injected into the page
+      # reading a member's balance, session or trade password and POSTing it
+      # to a server the attacker owns. connect-src is what stops that, and it
+      # is the reason this policy exists in full.
+      #
+      # script-src has to carry 'unsafe-inline'. The whole app is one inline
+      # bundle: build-core.js emits it as `s.textContent = code` on a
+      # created <script> element, which the browser treats as inline, and a
+      # hash cannot cover it because the content changes every build.
+      # 'unsafe-eval' is deliberately NOT here -- the bundle is decoded and
+      # injected, never eval()'d or Function()'d, so leaving it out costs
+      # nothing and keeps the strongest half of script-src intact: no script
+      # can be LOADED from a domain not listed here.
+      #
+      # img-src/media-src stay at `https:` on purpose rather than a fixed
+      # list. Product photos, brand assets and the announcement image arrive
+      # as data: URIs, but the home banner video can legitimately be an
+      # admin-entered external URL (sanitizeBannerVideoUrl in server.js), so
+      # pinning an origin here would break a feature the owner controls from
+      # the panel. Images are not an exfiltration path worth that trade.
+      #
+      # *.googleapis.com covers Firebase Auth (identitytoolkit, securetoken)
+      # and the admin panel's FCM registration in one entry -- named
+      # individually they break silently the first time Firebase adds a host.
+      # If the backend ever moves off chipz-server.onrender.com, THIS LINE
+      # must change with API_BASE in user-src/original_module.js or every API
+      # call is blocked by the browser with no server-side signal at all.
       - path: /*
         name: Content-Security-Policy
-        value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      # Nothing in either panel uses a camera, microphone, location or the
+      # Payment Request API. Denying them outright means injected script
+      # cannot turn one on either.
+      - path: /*
+        name: Permissions-Policy
+        value: "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
       # Round 106 -- subagent-audit-caught: chipz-server's helmet config sets
       # HSTS + Cross-Origin-Resource-Policy, but neither static site (the
       # browser-facing origins members and admins actually navigate to) had
@@ -112,9 +148,45 @@ services:
       - path: /*
         name: Referrer-Policy
         value: no-referrer
+      # The three directives this policy started as (frame-ancestors,
+      # object-src, base-uri) stop the page being framed or having its
+      # relative URLs re-pointed. They do nothing about the attack that
+      # actually matters on a money app: script injected into the page
+      # reading a member's balance, session or trade password and POSTing it
+      # to a server the attacker owns. connect-src is what stops that, and it
+      # is the reason this policy exists in full.
+      #
+      # script-src has to carry 'unsafe-inline'. The whole app is one inline
+      # bundle: build-core.js emits it as `s.textContent = code` on a
+      # created <script> element, which the browser treats as inline, and a
+      # hash cannot cover it because the content changes every build.
+      # 'unsafe-eval' is deliberately NOT here -- the bundle is decoded and
+      # injected, never eval()'d or Function()'d, so leaving it out costs
+      # nothing and keeps the strongest half of script-src intact: no script
+      # can be LOADED from a domain not listed here.
+      #
+      # img-src/media-src stay at `https:` on purpose rather than a fixed
+      # list. Product photos, brand assets and the announcement image arrive
+      # as data: URIs, but the home banner video can legitimately be an
+      # admin-entered external URL (sanitizeBannerVideoUrl in server.js), so
+      # pinning an origin here would break a feature the owner controls from
+      # the panel. Images are not an exfiltration path worth that trade.
+      #
+      # *.googleapis.com covers Firebase Auth (identitytoolkit, securetoken)
+      # and the admin panel's FCM registration in one entry -- named
+      # individually they break silently the first time Firebase adds a host.
+      # If the backend ever moves off chipz-server.onrender.com, THIS LINE
+      # must change with API_BASE in user-src/original_module.js or every API
+      # call is blocked by the browser with no server-side signal at all.
       - path: /*
         name: Content-Security-Policy
-        value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      # Nothing in either panel uses a camera, microphone, location or the
+      # Payment Request API. Denying them outright means injected script
+      # cannot turn one on either.
+      - path: /*
+        name: Permissions-Policy
+        value: "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
       - path: /*
         name: Strict-Transport-Security
         value: max-age=63072000; includeSubDomains

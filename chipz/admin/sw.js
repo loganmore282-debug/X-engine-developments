@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'chipz-admin-shell-v6';
+const CACHE = 'chipz-admin-shell-v7';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 // The uploaded icon, served by chipz-server. manifest.json and index.html's
 // <link rel="icon"> point here too; the local /icon-*.png above stay only as

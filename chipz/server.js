@@ -47,7 +47,18 @@ const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 400, keyGenerator: r
 // token — real verification happens later, inside each handler).
 const ipOnlyLimiter = rateLimit({ windowMs: 60 * 1000, max: 900, standardHeaders: false, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests from this network. Slow down.' } });
-app.use((req, res, next) => (req.path === '/health' ? next() : ipOnlyLimiter(req, res, next)));
+// /health is exempted from BOTH limiters above because Render's own platform
+// health checks must never be throttled -- a 429 to the health checker reads
+// as "this service is down" and takes the whole backend out of rotation.
+// But exempt-from-everything was too blunt: /health is unauthenticated, it is
+// the one route whose URL is guessable by design, and it calls pingDb() on
+// every hit, so it was the cheapest way in to make this server hammer Mongo.
+// Its own limiter is set far above any real health-check cadence (Render
+// polls on the order of once every few seconds, and this allows 5/second
+// sustained) while still putting a ceiling on a flood.
+const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: false, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests.' } });
+app.use((req, res, next) => (req.path === '/health' ? healthLimiter(req, res, next) : ipOnlyLimiter(req, res, next)));
 app.use((req, res, next) => (req.path === '/health' ? next() : globalLimiter(req, res, next)));
 
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser,
@@ -205,6 +216,13 @@ app.use((_req, res, next) => {
     'Referrer-Policy': 'no-referrer',
     'Strict-Transport-Security': 'max-age=63072000; includeSubDomains',
     'Cache-Control': 'no-store',
+    // helmet has no permissionsPolicy setting, so this is set by hand, to
+    // match what render.yaml sends from the two static sites. It matters
+    // less here than on the panels (this origin serves JSON, not a page
+    // anyone browses), but a few endpoints DO return HTML/images, and
+    // matching headers across all three origins means there is one posture
+    // to reason about instead of three.
+    'Permissions-Policy': 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()',
   });
   next();
 });

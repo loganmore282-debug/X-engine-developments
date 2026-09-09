@@ -4,6 +4,44 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chipz Admin</title>
+<!-- The SAME policy render.yaml sends as a header, carried in the file itself.
+     It is here because this page does not only ship from Render: the frontend
+     is also deployed to EdgeOne (see CLAUDE.md, and the .edgeone.* entries in
+     CORS_ALLOWED_SUFFIXES), and a host header cannot follow a file to another
+     host. A meta policy travels with index.html, so the app is covered
+     wherever it is uploaded.
+
+     What this actually buys, on a money app: script injected into this page
+     cannot POST a member's balance, session token or Trade Password to a
+     server the attacker controls, and cannot LOAD a script from one. That is
+     connect-src and script-src's host list; everything else here is
+     supporting work.
+
+     'unsafe-inline' in script-src is REQUIRED and must not be "tidied away":
+     build-core.js ships the whole app as one inline <script> (s.textContent =
+     code), which no hash can cover because the content changes every build.
+
+     'unsafe-eval' is deliberately ABSENT, and there is one expected, harmless
+     CSP violation on every load because of it. build-core.js / build-admin.js
+     set `disableConsoleOutput: true`, and javascript-obfuscator implements
+     that with a global-object helper shaped like
+         try { g = Function('return this')(); } catch (e) { g = window; }
+     Function() is eval, so the browser blocks it and reports a violation --
+     then the catch assigns `window`, which is the same object it was reaching
+     for, and the bundle carries on. Verified by test-csp-runtime.py, which
+     walks every tab and sheet under the real policy.
+
+     Do NOT add 'unsafe-eval' to silence that one line. It would let any
+     injected script build code from a string, which is most of what this
+     policy is here to prevent, in exchange for a warning that changes
+     nothing. test-csp-runtime.py allows that exact violation and fails on
+     any other, so a NEW eval -- one without a fallback, that really would
+     break something -- is still caught.
+
+     frame-ancestors is NOT here: a meta policy cannot express it (the browser
+     ignores it), which is exactly why render.yaml keeps sending the header
+     version too. The two are not redundant. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#e21b2a">
 <link rel="manifest" href="/manifest.json">
 <!-- Same server-hosted brand asset the user app installs with, NOT a local
