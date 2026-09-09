@@ -1853,6 +1853,44 @@ What is deliberately left: fork-history comments, `test-cors-origins.js`'s asser
 Snow's domain must **not** reach Chipz, and the `--snow-*`/`snow_*` internal names the
 branding test already documents as carve-outs.
 
+### The recharge poll is a PAGE in the app's colours
+
+Owner: *"l nolonger need those old poll designs ... when one taps deposit, it should open
+a new page for polling, so for polling it should show the other 4 triangles rotating,
+just like those which we placed on running product, so it will be enlarged ... l nolonger
+need those dark things, use app color and theme not dark, also for success use exactly
+that and failed use that ... however still nav icons should exist on the poll payment
+page."*
+
+**Presentation only — the polling state machine is untouched.** All five setters
+(`setDepositStatusPending/Success/Failed/Review/Unknown`) still write into the same
+`#depStatusIcon` / `#depStatusTitle` / `#depStatusBody`; what changed is what those look
+like.
+
+- **Its own classes** (`.pay-page` / `.pay-card`), NOT a restyle of
+  `.chest-modal-bg` / `.chest-modal` — those are shared with the gift-code win modal, and
+  recolouring them here would have silently redesigned the chest too.
+- `background:var(--snow-canvas)` and `bottom:var(--nav-h)`. That inset is the app's own
+  convention for "leave the bottom bar alone" (`.sheet-bg` and `.msg-detail-bg` both use
+  it) and is what keeps the nav icons **visible and tappable** while a payment polls —
+  the old overlay was `inset:0` and swallowed them.
+- The polling mark reuses **`PLAN_SPIN`**, the same orbiting-chips markup the ongoing
+  plan rows carry, enlarged purely by CSS (`.dep-status-icon .pspin{--s:150px}`) — every
+  length in `.pspin` is a fraction of `--s`, so one mark and one set of keyframes serve
+  both sizes.
+- Success and failure are the owner's own artwork, `user/pay-success.png` and
+  `user/pay-failed.png`, cut out by flood-filling the white page inward from the border
+  (never a global white→transparent — both marks enclose white of their own). Checked for
+  stock watermarks before use and found none; he confirmed they are his.
+
+`test-pay-poll.py` reads the things that were actually complained about from **pixels and
+geometry**, not class names: mean luminance of the page (241 — "not dark" is a property
+of what reaches the screen, and a stray inherited rule could darken it while every
+declared value still looked right), the nav hit-tested with `elementFromPoint` rather
+than merely "on screen", the chips mark sampled over real frames so a keyframe name
+cannot pass for motion, and both result images asserted to have actually **loaded**
+(`naturalWidth > 0`) rather than just to be referenced.
+
 ### Account ids are five digits
 
 Owner: *"let the user id be having 5 characters, so so far now the current account is

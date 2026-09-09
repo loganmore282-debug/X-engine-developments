@@ -4494,7 +4494,7 @@ window.submitManualPasteSms = async function(){
 };
 function setDepositStatusReview(){
   $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = '<div class="spin"></div>';
+  $('depStatusIcon').innerHTML = PLAN_SPIN;
   $('depStatusTitle').textContent = 'Payment under review';
   $('depStatusBody').textContent = "We're checking this payment and will credit your wallet shortly if it's genuine. Check Records for updates.";
   $('depStatusCloseBtn').style.display = 'block';
@@ -4619,7 +4619,11 @@ window.closeDepositStatusModal = function(){
 };
 function setDepositStatusPending(amount, phone, network){
   $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = '<div class="spin"></div>';
+  // The same orbiting-chips mark the ongoing plans carry, enlarged by CSS
+  // (.dep-status-icon .pspin sets --s). Owner: "it should show the other 4
+  // triangles rotating, just like those which we placed on running product."
+  // Reusing PLAN_SPIN rather than a copy means one mark, one set of keyframes.
+  $('depStatusIcon').innerHTML = PLAN_SPIN;
   $('depStatusTitle').textContent = 'Processing your recharge';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
@@ -4643,21 +4647,22 @@ function setDepositStatusPending(amount, phone, network){
 }
 function setDepositStatusSuccess(){
   $('depStatusIcon').className = 'dep-status-icon success';
-  $('depStatusIcon').innerHTML = ICONS.check;
+  // The owner's own artwork, cut out of the images he supplied.
+  $('depStatusIcon').innerHTML = '<img src="/pay-success.png" alt="" aria-hidden="true">';
   $('depStatusTitle').textContent = 'Recharge successful';
   $('depStatusBody').textContent = 'Your wallet has been credited.';
   $('depStatusCloseBtn').style.display = 'block';
 }
 function setDepositStatusFailed(msg){
   $('depStatusIcon').className = 'dep-status-icon failed';
-  $('depStatusIcon').innerHTML = ICONS.x;
+  $('depStatusIcon').innerHTML = '<img src="/pay-failed.png" alt="" aria-hidden="true">';
   $('depStatusTitle').textContent = 'Recharge failed';
   $('depStatusBody').textContent = msg || 'Your recharge could not be completed.';
   $('depStatusCloseBtn').style.display = 'block';
 }
 function setDepositStatusUnknown(){
   $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = '<div class="spin"></div>';
+  $('depStatusIcon').innerHTML = PLAN_SPIN;
   $('depStatusTitle').textContent = 'Still processing';
   $('depStatusBody').textContent = 'This is taking longer than usual. Check Records shortly for the final status.';
   $('depStatusCloseBtn').style.display = 'block';

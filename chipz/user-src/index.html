@@ -1825,12 +1825,34 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    3 states toggled via #depStatusIcon's class: pending (spinner, reuses the
    loading screen's own @keyframes sp), success (green check), failed (red
    x) -- SVG only, per the house no-emoji rule. */
-.dep-status-modal{padding-top:28px;}
-.dep-status-icon{width:64px;height:64px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);}
-.dep-status-icon svg{width:32px;height:32px;}
-.dep-status-icon .spin{width:30px;height:30px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;animation:sp .8s linear infinite;}
-.dep-status-icon.success{background:rgba(47,107,71,.18);color:var(--snow-green);}
-.dep-status-icon.failed{background:rgba(148,24,39,.18);color:var(--snow-wine);}
+/* The recharge poll is a PAGE in the app's own colours, not a dark modal.
+   Owner: "l nolonger need those old poll designs ... when one taps deposit,
+   it should open a new page for polling, so for polling it should show the
+   other 4 triangles rotating, just like those which we placed on running
+   product, so it will be enlarged ... l nolonger need those dark things, use
+   app color and theme not dark ... however still nav icons should exist on
+   the poll payment page."
+
+   It keeps its own classes rather than restyling .chest-modal-bg/.chest-modal:
+   those are SHARED with the gift-code win modal, and recolouring them here
+   would silently redesign the chest too.
+
+   `bottom:var(--nav-h)` is the app's own convention for "leave the bottom bar
+   alone" (.sheet-bg and .msg-detail-bg both use it), which is what keeps the
+   nav icons visible and tappable while a payment is being polled. */
+.pay-page{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
+  background:var(--snow-canvas);z-index:310;display:none;
+  align-items:center;justify-content:center;padding:26px;overflow-y:auto;}
+.pay-page.show{display:flex;}
+.pay-card{width:100%;max-width:340px;text-align:center;}
+.pay-card h3{font-size:23px;font-weight:800;color:var(--snow-ink);margin:0 0 10px;}
+.pay-card p{font-size:15px;line-height:1.6;color:var(--snow-muted);font-weight:500;margin:0;}
+/* No disc behind it any more -- the mark IS the artwork. Sized here so the
+   orbiting chips and the two result marks share one footprint and the page
+   does not jump as the poll resolves. */
+.dep-status-icon{width:150px;height:150px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;}
+.dep-status-icon .pspin{--s:150px;}
+.dep-status-icon img{width:116px;height:116px;object-fit:contain;display:block;}
 
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
 .list-empty .empty-icon{display:flex;justify-content:center;margin-bottom:14px;opacity:.85;}
@@ -2097,12 +2119,12 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   </div>
 </div>
 
-<div class="chest-modal-bg" id="depStatusBg">
-  <div class="chest-modal dep-status-modal">
-    <div class="dep-status-icon" id="depStatusIcon"><div class="spin"></div></div>
+<div class="pay-page" id="depStatusBg">
+  <div class="pay-card">
+    <div class="dep-status-icon" id="depStatusIcon"></div>
     <h3 id="depStatusTitle">Processing your recharge</h3>
     <p id="depStatusBody">Waiting for confirmation from your mobile money provider.</p>
-    <button class="primary-button" id="depStatusCloseBtn" style="width:100%;padding:14px 0;font-size:15px;margin-top:6px;display:none;" onclick="closeDepositStatusModal()">Close</button>
+    <button class="primary-button" id="depStatusCloseBtn" style="width:100%;padding:15px 0;font-size:16px;margin-top:22px;display:none;" onclick="closeDepositStatusModal()">Close</button>
   </div>
 </div>
 
