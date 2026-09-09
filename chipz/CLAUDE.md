@@ -1579,6 +1579,19 @@ because it is enclosed. Trimmed to content, 118 × 144, 6KB. Its height is set i
 mush. The art is set to 24px (57% of the tile height, the ordinary icon-in-tile
 proportion, near the emoji's em box). Everything else in the table is his figure exactly.
 
+**Both controls acknowledge, whichever was tapped.** Owner: *"why when l copy link with
+the other icon and shows tick, the button which says copy invite link doesn't show
+copied, yet l wanted it to say it in all cases whether clicking copy icon or button."*
+`flashCopied()` only ever flashed the control that was tapped, which reads as the other
+one not having worked. They are two controls for **one** action, so both now flip.
+
+Grouped by an explicit **`data-copy-group`**, deliberately not by "flash everything in
+the same container": `copyText()` is shared with the manual-pay screen, whose two copy
+buttons sit in one container and copy **different** text (account number, account name) —
+a proximity rule would tick the account name when someone copied the number, telling a
+member they had copied something they hadn't. Only controls copying the same thing share
+a group, and `test-referral-share.py` asserts that exactly two elements carry one.
+
 **A percentage is the wrong tolerance for small distances.** `test-referral-share.py`
 allows 8% **or 2px, whichever is looser**: the card padding sits 1.5px off his 17.5px,
 which is invisible but 8.6%, while every error this round found is far outside both bars

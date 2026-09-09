@@ -211,6 +211,36 @@ async def main():
         st = await page.evaluate("()=>document.querySelector('.copy-ic').innerHTML")
         ck('/copy-clip.png' in st, "and his artwork comes back afterwards (%r)" % st[:50])
 
+        print("\n— BOTH controls acknowledge, whichever was tapped —")
+        # Owner: "why when l copy link with the other icon and shows tick, the
+        # button which says copy invite link doesn't show copied, yet l wanted
+        # it to say it in all cases whether clicking copy icon or button."
+        pair = ("()=>({btn:document.querySelector('.app-card .primary-button').textContent.trim(),"
+                " tick:document.querySelector('.copy-ic').innerHTML.includes('<svg')})")
+        for tapped, sel in (("icon tile", '.copy-ic'), ("labelled button", '.app-card .primary-button')):
+            await page.click(sel)
+            await page.wait_for_timeout(250)
+            st = await page.evaluate(pair)
+            ck(st['btn'] == 'Copied' and st['tick'],
+               "tapping the %s puts BOTH in their copied state (%r)" % (tapped, st))
+            await page.wait_for_timeout(2200)
+            st = await page.evaluate(pair)
+            ck(st['btn'] == 'Copy Invite Link' and not st['tick'],
+               "...and both return afterwards (%r)" % st)
+
+        # The grouping must NOT be "flash whatever is nearby". copyText() is
+        # shared with the manual-pay screen, whose two copy buttons sit in one
+        # container and copy DIFFERENT things (account number, account name) --
+        # ticking both there would tell the member they copied a name they
+        # did not. Proven on the real markup, not by reading the selector.
+        groups = await page.evaluate("""()=>{
+          const out={};
+          document.querySelectorAll('[data-copy-group]').forEach(e=>{
+            const g=e.getAttribute('data-copy-group'); (out[g]=out[g]||[]).push(e.className);});
+          return out;}""")
+        ck(list(groups.keys()) == ['ref'] and len(groups.get('ref', [])) == 2,
+           "exactly the two referral controls share a copy group (%r)" % groups)
+
         await page.screenshot(path=f"{OUT}/referral.png")
         print("\nscreenshot -> %s/referral.png" % OUT)
         ck(not errs, "no page errors: %s" % errs)

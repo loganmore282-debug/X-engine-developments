@@ -2062,9 +2062,9 @@ function paintReferral(){
   <div style="font-size:13px;font-weight:800;color:var(--snow-muted);margin-bottom:15px;">Share URL</div>
   <div class="url-row">
     <span>${esc(link || 'Your link appears once your code is ready')}</span>
-    <button class="copy-ic" onclick="copyText('${esc(link)}')" aria-label="Copy link">${COPY_CLIP}</button>
+    <button class="copy-ic" data-copy-group="ref" onclick="copyText('${esc(link)}')" aria-label="Copy link">${COPY_CLIP}</button>
   </div>
-  <button class="primary-button" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
+  <button class="primary-button" data-copy-group="ref" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
 </div>
 <div class="app-card" style="margin:16px 18px 0;padding:20px;">
   <h3 style="font-size:17px;font-weight:700;margin:0 0 10px;">Invitation Reward</h3>
@@ -2649,7 +2649,7 @@ function rapidTapGuardOk(key){
 var COPY_CLIP = '<img src="/copy-clip.png" alt="" aria-hidden="true">';
 var COPY_TICK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
   + 'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
-function flashCopied(btn){
+function flashCopiedOne(btn){
   if (!btn || btn._copyRevert) return;
   const isIconBtn = btn.classList.contains('copy-ic') || btn.classList.contains('mp-copybtn');
   const before = btn.innerHTML;
@@ -2660,6 +2660,25 @@ function flashCopied(btn){
     btn.classList.remove('copied');
     btn._copyRevert = null;
   }, 1800);
+}
+// Owner: "why when l copy link with the other icon and shows tick, the button
+// which says copy invite link doesn't show copied, yet l wanted it to say it in
+// all cases whether clicking copy icon or button."
+//
+// Two controls, ONE action: the icon and the labelled button on Referral copy
+// the same link, so whichever is tapped, both have to acknowledge it. Only the
+// tapped one used to, which reads as the other one not having worked.
+//
+// Grouped by an explicit `data-copy-group`, NOT by "flash everything nearby":
+// copyText() is shared with the manual-pay screen's own copy buttons (account
+// number, account name), which sit in one container and copy DIFFERENT text --
+// a proximity rule would tick the account name when someone copied the number.
+// Only controls that copy the same thing carry the same group.
+function flashCopied(btn){
+  const group = btn && btn.getAttribute && btn.getAttribute('data-copy-group');
+  if (!group) return flashCopiedOne(btn);
+  const all = document.querySelectorAll('[data-copy-group="' + group + '"]');
+  for (let i = 0; i < all.length; i++) flashCopiedOne(all[i]);
 }
 function writeClipboard(text, btn){
   if (!navigator.clipboard) return notify('Could not copy');
