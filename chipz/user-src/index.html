@@ -1673,17 +1673,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:23px;font-weight:400;letter-spacing:.03em;}
 .sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
 
-#toastHost{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:600;pointer-events:none;padding:20px;}
-/* Owner: "notify... should come smoothly" -- toast() creates a fresh DOM
-   node per call (never reused), so a plain @keyframes animation (not a
-   transition, which needs a prior "from" state already on screen to
-   animate away from) plays automatically the instant it's inserted --
-   same easing/scale-in feel as the popups above. Owner, next round: "abit
-   slow appearing delay abit" -- widened .3s->.5s and added a short .08s
-   delay before it starts, so the appear itself reads more deliberate
-   rather than snapping straight in. */
-@keyframes toastIn{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:scale(1);}}
-.toast{background:rgba(17,17,17,.82);color:#fff;padding:11px 18px;border-radius:var(--r-pill);font-size:13px;max-width:86%;text-align:center;box-shadow:0 12px 28px -14px rgba(0,0,0,.4);animation:toastIn .5s cubic-bezier(.22,1,.36,1) .08s both;}
+/* The dark bottom-pill toast (#toastHost, .toast, @keyframes toastIn) was
+   removed here. Owner: "l nolonger need those dark tiny notifies you already
+   know that we have a pop up card with [the warning sign]." Every message it
+   carried now opens .notify-card instead. */
 
 /* All pop-up dialogs (as opposed to full-page sheets) open centered, share
    the activity ticker's own dark pill color, and use a modest radius --
@@ -2052,7 +2045,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   <div id="manualPayFlow"></div>
 </div>
 
-<div id="toastHost"></div>
 
 <script type="module">
   import { initializeApp, getApps }

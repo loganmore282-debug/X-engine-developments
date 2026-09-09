@@ -447,9 +447,13 @@ async def main():
            "it copies the member's own referral link (%r)" % clip)
         ck('undefined' not in clip,
            "and the link is real — the old share path sent the word 'undefined'")
-        toast = await page.evaluate("()=>{const t=document.querySelector('.toast,#toast');return t?t.textContent.trim():null;}")
-        ck(toast and 'opie' in toast.lower() or (toast or '').lower().startswith('copied'),
-           "and it says so (%r)" % toast)
+        # The dark pill is gone -- every confirmation is the alert card now.
+        said = await page.evaluate(
+            "()=>{const b=document.getElementById('notifyBg');"
+            "return b&&b.classList.contains('show')"
+            "?(document.getElementById('notifyMsg').textContent||'').trim():null;}")
+        ck((said or '').lower().startswith('copied'),
+           "and it says so on the alert card (%r)" % said)
 
         ck(not errs, "no page errors: %s" % errs[:3])
         await ctx.close(); await b.close()

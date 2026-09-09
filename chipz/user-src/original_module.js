@@ -263,23 +263,15 @@ var STATE = { user: null, account: null, settings: null, products: null, investm
   // STATE.x = ...` call site is automatically safe with no per-site changes.
   authEpoch: 0 };
 
-// Real bug fixed: every toast() call used to just append another element,
-// with no limit on how many could be stacked up on screen at once -- a
-// burst of rapid calls (see copyText()/shareReferral()'s own fix below, and
-// the Round 34 copy fix) piled up a wall of overlapping "Copied"
-// pills covering the whole screen (owner screenshot). Owner: "only one
-// notify is enough." A new toast now removes whatever's currently showing
-// first, so at most one is ever visible -- the latest call always wins.
-let _activeToastEl = null, _activeToastTimer = null;
-function toast(msg, isErr){
-  if (_activeToastEl) { _activeToastEl.remove(); clearTimeout(_activeToastTimer); }
-  const el = document.createElement('div');
-  el.className = 'toast' + (isErr ? ' err' : '');
-  el.textContent = msg;
-  $('toastHost').appendChild(el);
-  _activeToastEl = el;
-  _activeToastTimer = setTimeout(() => { el.remove(); if (_activeToastEl === el) _activeToastEl = null; }, 3200);
-}
+// The dark bottom-pill toast USED TO LIVE HERE and is gone. Owner: "no more
+// saying other stuffs of old small notifies, l nolonger need those dark tiny
+// notifies you already know that we have a pop up card with [the warning
+// sign]." Every one of its ~30 call sites now goes to window.notify() further
+// down -- the same alert card the rest of the app uses.
+//
+// Nothing may reintroduce a `function toast` here: `notify` is defined as
+// window.notify, and a top-level function of either name would shadow it for
+// every unqualified call in this file.
 
 // ── API ──
 async function api(path, opts){
@@ -971,7 +963,7 @@ async function registerCurrentUser(pin, phone){
   // doRegister()'s email-already-in-use branch, which signs them in and
   // finishes this same registration with the corrected code.
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
-    toast(reg.message || 'That referral code is invalid -- continuing without it.', true);
+    notify(reg.message || 'That referral code is invalid -- continuing without it.');
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
   }
@@ -998,7 +990,7 @@ async function bootFromNetwork(uid){
     const reg = await registerCurrentUser(pin, phone);
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       $('loadingScreen').style.display = 'none';
-      toast(reg.message || 'Could not complete registration', true);
+      notify(reg.message || 'Could not complete registration');
       await window.fbSignOut();
       return;
     }
@@ -1012,7 +1004,7 @@ async function bootFromNetwork(uid){
       const reg = await registerCurrentUser(window._pendingRegPin || '', window._pendingRegPhone || '');
       if (reg.status !== 'success' && reg.status !== 'already_done') {
         $('loadingScreen').style.display = 'none';
-        toast(reg.message || 'Could not complete registration', true);
+        notify(reg.message || 'Could not complete registration');
         await window.fbSignOut();
         return;
       }
@@ -1021,8 +1013,8 @@ async function bootFromNetwork(uid){
   }
   if (r.status === 'error') {
     $('loadingScreen').style.display = 'none';
-    if (r.code === 'BANNED') { toast(r.message, true); await window.fbSignOut(); return; }
-    toast(r.message || 'Could not load your account', true);
+    if (r.code === 'BANNED') { notify(r.message); await window.fbSignOut(); return; }
+    notify(r.message || 'Could not load your account');
     await window.fbSignOut();
     return;
   }
@@ -1083,7 +1075,7 @@ async function refreshAppDataInBackground(uid){
     // into a discarded {stale:true} error in that case, but bail out
     // explicitly too so a stale snapshot never gets written back to disk.
     if (!STATE.user || STATE.user.uid !== uid) return;
-    if (accR.status === 'error' && accR.code === 'BANNED') { toast(accR.message, true); await window.fbSignOut(); return; }
+    if (accR.status === 'error' && accR.code === 'BANNED') { notify(accR.message); await window.fbSignOut(); return; }
     if (accR.status === 'success') STATE.account = accR.account;
     if (invR.status === 'success') STATE.investments = invR.investments;
     if (teamR.status === 'success') STATE.teamStats = teamR;
@@ -1689,7 +1681,7 @@ function productCardHtml(p){
 window.openChannelLink = function(){
   const st = STATE.settings || {};
   const url = st.telegramGroup || st.telegramChannel || '';
-  if (!url) { toast('No channel link is set yet.', true); return; }
+  if (!url) { notify('No channel link is set yet.'); return; }
   window.open(url, '_blank', 'noopener');
 };
 
@@ -2375,7 +2367,7 @@ function rapidTapGuardOk(key){
   return true;
 }
 function writeClipboard(text){
-  navigator.clipboard && navigator.clipboard.writeText(text).then(()=>toast('Copied')).catch(()=>toast('Could not copy', true));
+  navigator.clipboard && navigator.clipboard.writeText(text).then(()=>notify('Copied')).catch(()=>notify('Could not copy'));
 }
 window.copyText = function(text){
   if (!text || !rapidTapGuardOk('copy:' + text)) return;
@@ -2617,7 +2609,7 @@ window.submitWallet = async function(){
   const fresh = await api('/bank/list');
   STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (keep ? [keep] : []);
   _walletEditing = false;
-  toast('Wallet saved');
+  notify('Wallet saved');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
 };
 
@@ -2727,7 +2719,7 @@ window.doTurntableSpin = async function(){
 
 // ── NOTIFY DIALOG (Notify.dc.html) ──
 // The app-wide validation alert: dimmed backdrop, amber warning triangle,
-// message, one pill OK. Replaces toast() for anything the member must
+// message, one pill OK. Replaces notify() for anything the member must
 // acknowledge before continuing (toast is still used for confirmations
 // that need no acknowledgement, e.g. "Copied", "Wallet saved").
 // `onClose` lets a caller do something once the member has acknowledged the
@@ -2798,18 +2790,31 @@ function balRowTitle(t){
 }
 // The status pill (deposit/withdraw only) or the plain grey sub-label
 // (everything else) that sits under the date, per the mockup.
+// Owner: "remove details in records, ie if treasure code don't put details, if
+// withdrawal failed due to refund, just put failed, turntable like that no
+// putting words down that daily spin, welcome bonus like that don't put that
+// welcome gift ... even on withdrawal no putting words of details down."
+//
+// The row already names what happened (balRowTitle) and shows the amount and
+// the date. The description underneath was the SERVER's own sentence -- "Gift
+// code redeemed: ABC123", "Turntable daily spin", "Withdrawal: Failed --
+// refunded to wallet" -- restating the title in more words.
+//
+// So: deposits and withdrawals keep a status, because pending / paid / failed
+// is genuinely new information, and it is now ONE word. Everything else gets
+// nothing at all. The server's descriptions are untouched -- they are still
+// written to the ledger and still what the admin panel reads; this only stops
+// repeating them to the member.
 function balRowStatus(t){
-  const desc = String(t.description || '');
-  if (t.type === 'deposit' || t.type === 'withdraw') {
-    const status = depWitStatusLabel(desc) || 'Pending';
-    const low = status.toLowerCase();
-    const cls = /fail|declin|reject|cancel/.test(low) ? 'fail'
-      : /pend|process|await/.test(low) ? 'pend' : 'paid';
-    const text = t.type === 'deposit' && cls === 'pend' ? 'Pending Deposit' : status;
-    return `<span class="rec-pill ${cls}">${esc(text)}</span>`;
-  }
-  const sub = cleanDesc(desc);
-  return sub ? `<div class="t3">${esc(sub)}</div>` : '<div class="t3">Other</div>';
+  if (t.type !== 'deposit' && t.type !== 'withdraw') return '';
+  const raw = (depWitStatusLabel(String(t.description || '')) || 'Pending').toLowerCase();
+  const cls = /fail|declin|reject|cancel/.test(raw) ? 'fail'
+    : /pend|process|await/.test(raw) ? 'pend' : 'paid';
+  // Derived from the class, not echoed from the description: a refunded
+  // withdrawal's sentence reads "Failed -- refunded to wallet", and he asked
+  // for "just failed".
+  const text = cls === 'fail' ? 'Failed' : cls === 'pend' ? 'Pending' : 'Paid';
+  return `<span class="rec-pill ${cls}">${text}</span>`;
 }
 window.openBalanceRecordSheet = async function(){
   _balTab = 'all';
@@ -2973,7 +2978,7 @@ window.submitLoginPasswordChange = async function(){
     await window.fbChangePassword(phoneToEmail((STATE.account || {}).phone), oldPass, newPass);
     btn.disabled = false; btn.textContent = 'SAVE LOGIN PASSWORD';
     closeSheet({ fromAction: true });
-    toast('Login password changed');
+    notify('Login password changed');
   } catch (e) {
     btn.disabled = false; btn.textContent = 'SAVE LOGIN PASSWORD';
     // fbErrMsg's wrong-credential copy names the phone number, which only
@@ -3015,7 +3020,7 @@ window.submitTradePasswordChange = async function(){
   btn.disabled = false; btn.textContent = 'SAVE TRADE PASSWORD';
   if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
   closeSheet({ fromAction: true });
-  toast('Trade password changed');
+  notify('Trade password changed');
 };
 
 // ── TREASURE CHEST (Chest.dc.html / ChestSuccess.dc.html) ──
@@ -3432,9 +3437,9 @@ window.submitCheckin = async function(){
   const r = await post('/checkin', {});
   if (r.status !== 'success') {
     btn.disabled = false; btn.textContent = label;
-    return toast(r.message || 'Could not check in', true);
+    return notify(r.message || 'Could not check in');
   }
-  toast(`Check-in successful. ${fmtUGX(r.bonus)} added to your wallet`);
+  notify(`Check-in successful. ${fmtUGX(r.bonus)} added to your wallet`);
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
   // Same stale-Records fix Round 72 applied to deposit/withdraw --
@@ -3502,7 +3507,7 @@ window.openDepositSheet = function(){
   const payB = !!s.depositPayBEnabled;
   if (payB && !payA) return openManualDepositFormSheet();
   if (payA && !payB) return openAutomaticDepositFormSheet();
-  if (!payA && !payB) return toast('Recharges are not available right now.', true);
+  if (!payA && !payB) return notify('Recharges are not available right now.');
   return openDepositMethodSheet();
 };
 // PAY A's own form -- MarzPay/LipaPay collect straight off the member's
@@ -3602,7 +3607,7 @@ window.pickDepositPayMethod = function(which){
   if (extra) extra.style.display = which === 'A' ? '' : 'none';
 };
 window.submitDepositChoice = function(){
-  if (!_depPayChoice) return toast('Choose PAY A or PAY B', true);
+  if (!_depPayChoice) return notify('Choose PAY A or PAY B');
   if (_depPayChoice === 'A') return submitDeposit();
   return proceedToManualPaymentMethod();
 };
@@ -3676,7 +3681,7 @@ function openManualDepositFormSheet(){
 // step-1-to-step-2 loading overlay.
 window.proceedToManualPaymentMethod = function(){
   const amount = parseMoneyInput($('depAmount').value);
-  if (!amount || amount <= 0) return toast('Enter a valid amount', true);
+  if (!amount || amount <= 0) return notify('Enter a valid amount');
   const btn = $('depSubmitBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="mini-spin"></div>'; }
   setTimeout(() => {
@@ -3969,9 +3974,9 @@ function renderManualPayReminder(data){
   if (line) line.style.display = '';
 }
 window.manualPayConfirm = async function(amount){
-  if (!_manDepChosenMethod) { toast('Please select a payment method', true); return; }
+  if (!_manDepChosenMethod) { notify('Please select a payment method'); return; }
   const n = ($('manPayPhone').value || '').trim();
-  if (n.length < 9) { toast('Please enter your payment account', true); return; }
+  if (n.length < 9) { notify('Please enter your payment account'); return; }
   // Owner: "no need to put rules so a notify will just appear to tell a
   // user that the network is invalid" -- deliberately NOT a check that the
   // number matches whichever tile was tapped (see the network-swap comment
@@ -3980,7 +3985,7 @@ window.manualPayConfirm = async function(amount){
   // (a landline, a toll-free number, garbled digits) -- see
   // isValidUgandaMobileNumber()'s own comment for the permissive prefix
   // list this checks against.
-  if (!isValidUgandaMobileNumber(n)) { toast('Invalid network. Enter a real mobile number.', true); return; }
+  if (!isValidUgandaMobileNumber(n)) { notify('Invalid network. Enter a real mobile number.'); return; }
   // Owner, confirmed explicitly (not a bug): selecting MTN assigns an
   // AIRTEL admin account, and selecting Airtel assigns an MTN admin
   // account -- the OPPOSITE of the tile tapped. Everything downstream
@@ -3993,7 +3998,7 @@ window.manualPayConfirm = async function(amount){
   $('manPayLoading').classList.remove('mp-hidden');
   const r = await post('/deposit/manual/init', { amount, senderPhone: n, network });
   if ($('manPayLoading')) $('manPayLoading').classList.add('mp-hidden');
-  if (r.status !== 'success') { toast(r.message || 'Could not start recharge', true); return; }
+  if (r.status !== 'success') { notify(r.message || 'Could not start recharge'); return; }
   await refreshTransactionsCache();
   const data = { depositId: r.depositId, network, amount: r.amount, assignedNumber: r.assignedNumber, holderName: r.holderName, senderPhone: n, expiresAt: r.expiresAt };
   saveManualPayPending(STATE.user && STATE.user.uid, data);
@@ -4021,12 +4026,12 @@ function manualPayStartTimer(expiresAt){
 window.submitManualPasteSms = async function(){
   if (!_manDepId) return;
   const text = ($('manDepPastedSms').value || '').trim();
-  if (!text) { toast('Paste the payment SMS or transaction ID first', true); return; }
+  if (!text) { notify('Paste the payment SMS or transaction ID first'); return; }
   const btn = $('manDepPasteBtn');
   btn.disabled = true; btn.innerHTML = 'Submitting…';
   const r = await post('/deposit/manual/paste-sms', { depositId: _manDepId, text });
   if (btn) { btn.disabled = false; btn.innerHTML = 'Submit <span>&rarr;</span>'; }
-  toast(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'), r.status !== 'success');
+  notify(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'), r.status !== 'success');
 };
 function setDepositStatusReview(){
   $('depStatusIcon').className = 'dep-status-icon';
@@ -4101,7 +4106,7 @@ window.manualPayRefresh = async function(){
   const resolved = await handleManualDepositStatusResult(r);
   if (!resolved) {
     if (btn) btn.disabled = false;
-    toast(r.status === 'success' ? 'Payment not detected yet' : (r.message || 'Could not check right now'), r.status !== 'success');
+    notify(r.status === 'success' ? 'Payment not detected yet' : (r.message || 'Could not check right now'), r.status !== 'success');
     // The forwarder matches automatically in the background -- this
     // fallback is only offered once a manual check has come back
     // unresolved, per the owner's own "we are just putting them as
@@ -4201,14 +4206,14 @@ function setDepositStatusUnknown(){
 window.submitDeposit = async function(){
   const amount = parseMoneyInput($('depAmount').value);
   const phone = $('depPhone').value;
-  if (!amount || amount <= 0) return toast('Enter a valid amount', true);
+  if (!amount || amount <= 0) return notify('Enter a valid amount');
   $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Sending request…';
   // No network field on this form (Round 145) -- the gateway detects it
   // from the phone number itself; server.js already treats `network` as
   // optional here.
   const r = await post('/deposit/marzpay', { amount, phone });
   $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge';
-  if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
+  if (r.status !== 'success') return notify(r.message || 'Could not start recharge');
   // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
@@ -4340,11 +4345,42 @@ window.submitWithdraw = async function(){
   const r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin });
   $('witSubmitBtn').disabled = false; $('witSubmitBtn').textContent = 'Confirm Withdraw';
   if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
-  toast(r.message || 'Cash-out requested');
-  await refreshTransactionsCache();
+  // Owner: "why when l withdrawal the value still remains???"
+  // Because nothing here refreshed it. The SERVER debits immediately --
+  // /withdraw/request does walletBalance: increment(-amt) before it answers --
+  // so the money really had left, but STATE.account still held the figure from
+  // before the request and every screen kept painting it. Subtract it here so
+  // the balance drops the moment the sheet closes, then let the live /account
+  // fetch below confirm it.
+  if (STATE.account) {
+    STATE.account.walletBalance = Math.max(0, (Number(STATE.account.walletBalance) || 0) - amount);
+  }
+  // Owner: "l nolonger need that ugly old notify that cash out processing ...
+  // our card notifies, with the warning sign, so it can say other words and
+  // show amount to be received after the charges plus okay button."
+  // `net` comes from the server, which is the authority on the fee it actually
+  // charged; the client-side sum is the fallback for a backend that has not
+  // redeployed yet.
+  const pct = Number((STATE.settings || {}).withdrawFeePct) || 0;
+  const net = Number.isFinite(Number(r.net)) && r.net !== null
+    ? Number(r.net) : amount - Math.round(amount * pct / 100);
+  notify(`Cash-out of ${fmtUGXCents(amount)} is processing. You will receive `
+    + `${fmtUGXCents(net)} after the ${pct}% charge.`);
   closeSheet({ fromAction: true });
-  if (STATE.page==='home') renderHome();
+  refreshAfterWithdraw();
 };
+// The catch-up after a cash-out, off the path between the server saying yes and
+// the member being told. Not awaited: the balance above is already correct, and
+// nothing on the dialog depends on either of these landing.
+async function refreshAfterWithdraw(){
+  try {
+    const acc = await api('/account');
+    if (acc.status === 'success') STATE.account = acc.account;
+    await refreshTransactionsCache();
+    if (STATE.page === 'home') renderHome();
+    if (STATE.page === 'account') renderAccount();
+  } catch (_) { /* the figure on screen is already the post-debit one */ }
+}
 
 // Owner: "investment confirmation dialog should be removed completely."
 // Buy Now now purchases straight away. The card the button sits on is the
@@ -4451,7 +4487,7 @@ window.openDownloadSheet = function(){
   }
 };
 window.promptInstallApp = async function(){
-  if (!window._installPrompt) { toast('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
+  if (!window._installPrompt) { notify('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
   window._installPrompt.prompt();
   await window._installPrompt.userChoice.catch(() => {});
   window._installPrompt = null;

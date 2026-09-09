@@ -252,7 +252,7 @@ async def main():
         await page.wait_for_selector("#notifyBg.show", timeout=8000)
         landed = await page.evaluate("STATE.page")
         msg = (await page.text_content("#notifyMsg") or "").strip()
-        toasts = await page.evaluate("document.querySelectorAll('#toastHost .toast').length")
+        toasts = await page.evaluate("document.querySelectorAll('.toast').length")
         nav = await page.evaluate(
             "(document.querySelector('.navitem.active [class]')||{}).textContent||''")
         active_tab = await page.evaluate(
@@ -262,7 +262,7 @@ async def main():
         ck(landed == "products", "buying lands on My Products (page=%r)" % landed)
         ck(active_tab == "My Products",
            "and the bottom bar shows it as the open tab (%r)" % active_tab)
-        ck(toasts == 0, "no toast pill is left on screen (%d)" % toasts)
+        ck(toasts == 0, "no dark toast pill exists anywhere any more (%d)" % toasts)
         # The wording he objected to came from the server's own message. It
         # must not be what the dialog now says.
         ck("Bought" not in msg, "the dialog is not the server's 'Bought ...' sentence")
