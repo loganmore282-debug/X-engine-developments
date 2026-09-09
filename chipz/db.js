@@ -421,6 +421,23 @@ class Query {
     const docs = await cursor.toArray();
     return new QuerySnapshot(docs, this._col);
   }
+  // How many documents match -- without pulling any of them back.
+  //
+  // Added because counting by fetching is what produced a real bug: the
+  // turntable reported `earnedSpins: snap.size` from a query capped at
+  // .limit(200), so a member holding more than 200 unused spins was shown 200.
+  // The spins existed and were spendable; only the number was wrong.
+  //
+  // Deliberately NOT named the same as Firestore's own count() aggregate
+  // (which returns a snapshot you then read .data().count from) -- this
+  // returns a plain number, which is what every call site here wants, and
+  // pretending to be an API this layer does not really implement is how a
+  // future reader gets caught out. Honours limit() as an upper bound, so
+  // `.limit(n).count()` still means "at most n".
+  async count() {
+    const opts = this._lim ? { limit: this._lim } : {};
+    return _mdb.collection(this._col).countDocuments(this._filter, opts);
+  }
 }
 
 class CollectionReference extends Query {

@@ -447,13 +447,39 @@ async def main():
            "it copies the member's own referral link (%r)" % clip)
         ck('undefined' not in clip,
            "and the link is real — the old share path sent the word 'undefined'")
-        # The dark pill is gone -- every confirmation is the alert card now.
-        said = await page.evaluate(
-            "()=>{const b=document.getElementById('notifyBg');"
-            "return b&&b.classList.contains('show')"
-            "?(document.getElementById('notifyMsg').textContent||'').trim():null;}")
-        ck((said or '').lower().startswith('copied'),
-           "and it says so on the alert card (%r)" % said)
+        # Owner: "the copy turns to tick." Copy confirms itself ON the control
+        # that was tapped -- no dialog to dismiss between copying a link and
+        # going off to share it. Read from the rendered button, not from CSS.
+        st = await page.evaluate(
+            "()=>{const b=document.querySelector('.url-row .copy-ic');"
+            " const p=[...document.querySelectorAll('.primary-button')]"
+            "   .find(x=>/copied/i.test(x.textContent));"
+            " return {tick:!!(b&&b.querySelector('svg')&&b.classList.contains('copied')),"
+            "  btn:p?p.textContent.trim():null,"
+            "  dialog:document.getElementById('notifyBg').classList.contains('show')};}")
+        print("   after tapping the labelled button:", st)
+        ck((st["btn"] or '').lower() == 'copied',
+           "the labelled button says Copied (%r)" % st["btn"])
+        # Only the control that was TAPPED confirms -- the icon beside it must
+        # not light up for a tap it never received.
+        ck(not st["tick"],
+           "and the icon button it did not touch stays as it was")
+        # Now the icon button itself, which is the one in his screenshot.
+        # Past the 700ms rapid-tap guard first: both controls copy the SAME
+        # link, so a tap here 400ms after the one above is exactly what that
+        # guard exists to swallow -- and swallowing it is correct, not a bug.
+        await page.wait_for_timeout(900)
+        await page.click('.url-row .copy-ic')
+        await page.wait_for_timeout(400)
+        ic = await page.evaluate(
+            "()=>{const b=document.querySelector('.url-row .copy-ic');"
+            " return {tick:!!(b&&b.querySelector('svg')&&b.classList.contains('copied')),"
+            "  path:(b&&b.querySelector('path')||{}).getAttribute"
+            "   ?b.querySelector('path').getAttribute('d'):null};}")
+        print("   after tapping the icon:", ic)
+        ck(ic["tick"], "the copy ICON turns into a tick, as in his screenshot")
+        ck(not st["dialog"],
+           "with no dialog in the way -- copy is the one action you can see succeed")
 
         ck(not errs, "no page errors: %s" % errs[:3])
         await ctx.close(); await b.close()

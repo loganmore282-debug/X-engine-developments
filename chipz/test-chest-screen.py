@@ -109,6 +109,22 @@ async def main():
                   chestAnim: getComputedStyle(img).animationName};}""")
         for k,v in info.items(): print("  %-12s %s" % (k,v))
         ck(info["align"]=="center", "key text is centred like the mockup")
+        # Owner: "avoid stimulating keyboard when one taps chest box." Opening
+        # the screen must NOT focus the key field -- the phone keyboard would
+        # cover the chest, the title and the rules before the member has looked
+        # at any of it. Asserted on document.activeElement, which is what
+        # actually decides whether a phone raises the keyboard.
+        focused = await page.evaluate(
+            "()=>{const a=document.activeElement;"
+            "return a?(a.id||a.tagName.toLowerCase()):null;}")
+        print("   focus on open:", focused)
+        ck(focused != "chestKey",
+           "opening the chest does not focus the key field (focus on %r)" % focused)
+        # And tapping the field yourself still works, or it could not be typed in.
+        await page.click("#chestKey")
+        await page.wait_for_timeout(200)
+        after = await page.evaluate("(document.activeElement||{}).id")
+        ck(after == "chestKey", "but tapping it does focus it (%r)" % after)
         ck(info["rules"]==2 and set(['chest-rule top','chest-rule bottom'])<=set(info["ruleClasses"]), "hairline above and below the block")
         # Owner: "on treasure chest there are 2 linings circulating the chest
         # box, you can even see clearly that one inside is solid and one outside

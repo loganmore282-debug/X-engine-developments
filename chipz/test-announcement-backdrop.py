@@ -59,7 +59,7 @@ ROUTES = {
     "/public/products": {"status": "success", "products": PRODUCTS},
     "/public/activity-feed": {"status": "success", "feed": []},
     "/public/banner": {"status": "success", "image": None},
-    "/public/announcement-image": {"status": "success", "image": None},
+    "/public/announcement-image": {"status": "success", "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0iIzFhMGQwOCIvPjwvc3ZnPg=="},
     "/public/manual-pay-images": {"status": "success", "selector": None, "hero": None},
     "/public/chipz-images": {"status": "success", "referral": None, "logo": None, "spin": None,
                              "profilegif": None, "downloadbg": None, "authhero": None,
@@ -158,9 +158,21 @@ async def main():
         # Where the card actually is, so the strip sampled is genuinely above it.
         box = await page.evaluate("""()=>{const r=document.querySelector(
           '.announce-wrap').getBoundingClientRect();
-          return {top:Math.round(r.top), bottom:Math.round(r.bottom)};}""")
+          return {top:Math.round(r.top), bottom:Math.round(r.bottom),
+                  w:r.width, h:r.height, vw:innerWidth, vh:innerHeight};}""")
         print("   card occupies y=%d..%d of 844" % (box["top"], box["bottom"]))
         ck(box["top"] > 30, "there is real screen above the card (%dpx)" % box["top"])
+        # Owner: "think you can see the exact height and width of the dialog,
+        # see clearly rather than guess." Measured off his screenshot: the card
+        # spans x=45..1034 of 1079 (91.7% of the screen) and y=488..2064 of a
+        # ~2072px viewport (76.1% of its height).
+        wpc = 100 * box["w"] / box["vw"]
+        hpc = 100 * box["h"] / box["vh"]
+        print("   card %.1f%% wide x %.1f%% tall (his: 91.7 x 76.1)" % (wpc, hpc))
+        ck(abs(wpc - 91.7) <= 1.5, "card width matches his (%.1f%% vs 91.7%%)" % wpc)
+        # A CEILING is not a height: 76vh alone let a short announcement render
+        # at 51%, which is what made ours look like a different dialog.
+        ck(abs(hpc - 76.1) <= 1.5, "card height matches his (%.1f%% vs 76.1%%)" % hpc)
 
         y = max(8, box["top"] // 2)
         await page.screenshot(path=f"{OUT}/announce-open.png")

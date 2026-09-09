@@ -2829,14 +2829,19 @@ app.get('/turntable/status', async (req, res) => {
     const now = Date.now();
     const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
     const dailyAvailable = lastKey !== eatDayKey(new Date(now));
-    const earnedSnap = await db.collection('turntableSpins')
-      .where('userId', '==', uid).where('used', '==', false).limit(200).get();
+    // A real count, not the size of a capped fetch. This used to be
+    // .limit(200).get() and report snap.size, so a member holding more than
+    // 200 unused spins was told they had 200 -- the spins existed and were
+    // spendable, but the number on screen was wrong, and totalSpins (which
+    // enables the SPIN button) was wrong with it.
+    const earnedCount = await db.collection('turntableSpins')
+      .where('userId', '==', uid).where('used', '==', false).count();
     res.json({
       status: 'success',
       enabled: !!sett.turntableEnabled,
       dailyAvailable,
-      earnedSpins: earnedSnap.size,
-      totalSpins: (dailyAvailable ? 1 : 0) + earnedSnap.size,
+      earnedSpins: earnedCount,
+      totalSpins: (dailyAvailable ? 1 : 0) + earnedCount,
       nextDailyAt: eatNextMidnight(now),
       dailyMin: Number(sett.turntableDailyMin) || 0,
       dailyMax: Number(sett.turntableDailyMax) || 0,
@@ -2942,13 +2947,13 @@ app.post('/turntable/spin', async (req, res) => {
       }
 
       const earnedLeft = await db.collection('turntableSpins')
-        .where('userId', '==', uid).where('used', '==', false).limit(200).get();
+        .where('userId', '==', uid).where('used', '==', false).count();
       result = { code: 200, body: {
         status: 'success', reward, source,
         walletBalance: (Number(u.walletBalance) || 0) + reward,
-        earnedSpins: earnedLeft.size,
+        earnedSpins: earnedLeft,
         dailyAvailable: false,
-        totalSpins: earnedLeft.size,
+        totalSpins: earnedLeft,
         nextDailyAt: eatNextMidnight(now),
       } };
     });

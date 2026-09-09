@@ -2524,12 +2524,48 @@ function rapidTapGuardOk(key){
   _lastTapAt[key] = now;
   return true;
 }
-function writeClipboard(text){
-  navigator.clipboard && navigator.clipboard.writeText(text).then(()=>notify('Copied')).catch(()=>notify('Could not copy'));
+// Owner: "think you can see closely how the copied link is, so the copy turns
+// to tick."
+// Copying confirms ITSELF, on the control that was tapped: the copy icon
+// becomes a tick and a labelled button's text becomes "Copied", both reverting
+// after a moment. Nothing interrupts.
+//
+// This is the right answer for copy specifically, and it replaces the alert
+// card that copy briefly used. An alert has to be dismissed, and on the
+// Referral screen -- where the whole point is to copy and get straight out to
+// WhatsApp -- an OK tap between the member and sharing is friction for a result
+// they can already see. Every other message in the app still uses the card;
+// copy is the one action whose outcome is visible where it happened.
+var COPY_TICK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+  + 'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
+function flashCopied(btn){
+  if (!btn || btn._copyRevert) return;
+  const isIconBtn = btn.classList.contains('copy-ic') || btn.classList.contains('mp-copybtn');
+  const before = btn.innerHTML;
+  btn.innerHTML = isIconBtn ? COPY_TICK : 'Copied';
+  btn.classList.add('copied');
+  btn._copyRevert = setTimeout(() => {
+    btn.innerHTML = before;
+    btn.classList.remove('copied');
+    btn._copyRevert = null;
+  }, 1800);
 }
+function writeClipboard(text, btn){
+  if (!navigator.clipboard) return notify('Could not copy');
+  navigator.clipboard.writeText(text)
+    .then(() => flashCopied(btn))
+    // A failure has nothing visible to show for itself, so it still needs
+    // saying -- and that is exactly what the alert card is for.
+    .catch(() => notify('Could not copy'));
+}
+// The button is taken from the event rather than passed in by every call site:
+// the markup already routes through onclick, so `this` is the control that was
+// tapped, and no template needs editing to opt in.
 window.copyText = function(text){
   if (!text || !rapidTapGuardOk('copy:' + text)) return;
-  writeClipboard(text);
+  const btn = (typeof event !== 'undefined' && event && event.currentTarget)
+    ? event.currentTarget : null;
+  writeClipboard(text, btn);
 };
 // shareReferral() was here and is gone. Owner: "copying invite link just
 // copys not sharing" -- the button is labelled COPY INVITE LINK and was
@@ -3197,7 +3233,12 @@ window.openChestSheet = function(){
     </div>
     <div class="chest-rule bottom"></div>
   </div>`);
-  setTimeout(() => { const el = $('chestKey'); if (el) el.focus(); }, 60);
+  // Owner: "avoid stimulating keyboard when one taps chest box."
+  // This used to focus the key field on open, which pops the phone keyboard
+  // over the chest the moment the screen appears -- the artwork, the title and
+  // the rules are all hidden behind it before the member has even looked. They
+  // tap the field themselves when they are ready to type.
+
 };
 window.submitChestKey = async function(){
   // Codes are issued uppercase-only, so normalise here as well as in the
