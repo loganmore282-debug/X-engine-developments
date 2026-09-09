@@ -976,7 +976,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .dep-sec .bar{width:4px;height:19px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;}
 .dep-sec span{font-size:17px;font-weight:600;letter-spacing:.02em;}
 .dep-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px;}
-.dep-chip{text-align:center;padding:17px 4px;border-radius:var(--r-ctl);font-weight:700;font-size:17px;border:1.6px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;box-shadow:0 3px 0 var(--snow-border);}
+/* Owner: "every amount card on deposit has some green, see clearly and
+   critically". Measured off his screenshot rather than picked: walking out
+   of a chip's edge gives a 1px border at rgb(203,214,206) -- a light
+   green-grey, not the warm --snow-border we had -- and outside it a green
+   shadow peaking around rgb(227,243,232) against a rgb(247,246,241) page,
+   fading over ~10 device px (about 5 CSS px at this screenshot's scale).
+   The shadow DARKENS red and blue while leaving green almost untouched,
+   which is what makes it read as green rather than as grey. */
+.dep-chip{text-align:center;padding:17px 4px;border-radius:var(--r-ctl);font-weight:700;font-size:17px;border:1.6px solid #cbd9cf;background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;
+  box-shadow:0 3px 0 #dfeade,0 4px 12px rgba(120,190,145,.42);}
 .dep-chip.sel{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:none;}
 /* Kept in step with .wit-amt on purpose -- same control, sibling screen. */
 .dep-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:24px;}
@@ -1840,6 +1849,19 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    `bottom:var(--nav-h)` is the app's own convention for "leave the bottom bar
    alone" (.sheet-bg and .msg-detail-bg both use it), which is what keeps the
    nav icons visible and tappable while a payment is being polled. */
+/* The in-flight loader between Confirm and the poll page. Sits ABOVE the
+   sheet (z-index 320 against .sheet-bg's 200) and, like the poll page, stops
+   at the bottom bar rather than covering it. */
+.dep-redirect{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
+  background:rgba(251,241,232,.86);z-index:320;display:none;
+  align-items:center;justify-content:center;}
+.dep-redirect.show{display:flex;}
+.dep-redirect-inner{text-align:center;}
+.dep-redirect-ring{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;
+  border:5px solid var(--snow-wine-soft);border-top-color:var(--snow-wine);
+  animation:sp .8s linear infinite;}
+.dep-redirect-text{font-size:17px;font-weight:700;color:var(--snow-ink);}
+@media (prefers-reduced-motion:reduce){.dep-redirect-ring{animation-duration:2.4s;}}
 .pay-page{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
   background:var(--snow-canvas);z-index:310;display:none;
   align-items:center;justify-content:center;padding:26px;overflow-y:auto;}
@@ -2050,7 +2072,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 <div class="sheet-bg" id="sheetBg">
   <div class="sheet-head">
-    <button class="back" onclick="closeSheet()" aria-label="Back"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="chipzBack" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ad4e8"/><stop offset="1" stop-color="#2f6fed"/></linearGradient></defs><path d="M15 5l-7 7 7 7" stroke="url(#chipzBack)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="back" onclick="closeSheet()" aria-label="Back"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="chipzBack" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ad4e8"/><stop offset="1" stop-color="#2f6fed"/></linearGradient></defs><path d="M15 5l-7 7 7 7" stroke="url(#chipzBack)" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2 id="sheetTitle"></h2>
   </div>
   <div class="sheet-body" id="sheetBody"></div>
@@ -2116,6 +2138,23 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
     <div class="amt" id="chestWinAmount"></div>
     <div class="bal" id="chestWinBalance"></div>
     <button class="dark-button" style="width:100%;height:52px;padding:0;letter-spacing:.06em;" onclick="closeChestWin()">COLLECT</button>
+  </div>
+</div>
+
+<!-- Owner: "see critically after confirm deposit a loader saying Redirecting
+     to payment." Shown only while /deposit/marzpay is actually in flight, and
+     taken down by the same finally{} that re-enables the button, so it can
+     never be left covering the form after a failure.
+
+     His mockup dims the form to a dark wash; this uses a light scrim in the
+     app's own paper instead, because "l nolonger need those dark things, use
+     app color and theme not dark" was a standing instruction from the round
+     that rebuilt the poll screen, and a dark sheet here would contradict it
+     two screens apart. -->
+<div class="dep-redirect" id="depRedirect" aria-hidden="true">
+  <div class="dep-redirect-inner">
+    <div class="dep-redirect-ring"></div>
+    <div class="dep-redirect-text">Redirecting to payment…</div>
   </div>
 </div>
 

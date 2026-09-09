@@ -1853,6 +1853,46 @@ What is deliberately left: fork-history comments, `test-cors-origins.js`'s asser
 Snow's domain must **not** reach Chipz, and the `--snow-*`/`snow_*` internal names the
 branding test already documents as carve-outs.
 
+### The Deposit screen: green chips, a heavier chevron, and the redirect loader
+
+Owner: *"that arrow with black check it is classic and well defined, also see clearly
+those mockups every amount card on deposit has some green ... also see critically after
+confirm deposit a loader saying Redirecting to payment. Check critically rather than
+guess."*
+
+His screenshot and ours are both **720 px wide**, so device pixels compare directly
+(720/390 = 1.846 per CSS px).
+
+**The chevron was nearly right already** — 23 × 37 in both, same gradient. The only real
+difference was weight: a **14 px** run at mid-height against our 12, so `stroke-width`
+went 4.2 → 4.9. That is the whole of "well defined".
+
+**There is no black on his arrow.** The dark pixels in his close-up are the phone's
+status bar: 3,312 of them, **zero touching the mark**. Checked before adding an outline
+that would have been wrong.
+
+**The green on the amount chips, measured by walking out of a chip's edge:** a 1 px
+border at `rgb(203,214,206)` — a light green-grey, where ours was the warm
+`--snow-border` — and outside it a shadow peaking near `rgb(227,243,232)` against a
+`rgb(247,246,241)` page, fading over ~10 device px. It **darkens red and blue while
+leaving green almost untouched**, which is what makes it read as green rather than grey.
+Ours now renders `(203,217,207)`, G−R **+14** against his +11..+16.
+
+**The loader** is up only while `/deposit/marzpay` is genuinely in flight, and comes down
+in a `finally` — a rejected recharge that left it covering the form would be a worse bug
+than the missing loader was. His mockup dims to a dark wash; this uses a light scrim in
+the app's paper instead, because *"use app color and theme not dark"* was a standing
+instruction from the poll-screen round and a dark sheet two screens apart would
+contradict it.
+
+**Two test traps hit here, both worth knowing:**
+- `page.evaluate("submitDeposit()")` returns the async function's **promise**, which
+  Playwright awaits — so the "mid-flight" check ran *after* the request resolved and read
+  the loader as absent. Fire it as `evaluate("()=>{ submitDeposit(); }")` instead.
+- `r, g, b = _px[...]` **shadowed the browser handle `b`** in that scope. Every assertion
+  still ran and passed; the run then died on `b.close()` at the very end with
+  `'int' object has no attribute 'close'`. Never unpack a pixel into `b` in these files.
+
 ### A deposit with no phone number: `||` treated empty as absent
 
 Owner: *"why when one didn't put number, it just continues to poll ... l tried to leave

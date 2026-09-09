@@ -31,13 +31,19 @@ PORT = 8773
 API = 'https://chipz-server.onrender.com'
 
 ROUTES = {
-  "/public/settings": {"status": "success", "settings": {"brandName": "Chipz", "annEnabled": False}},
+  "/public/settings": {"status": "success", "settings": {"brandName": "Chipz", "annEnabled": False,
+      "minDeposit": 20000, "depositPayAEnabled": True, "depositPayBEnabled": False}},
   "/account": {"status": "success", "account": {"userId": "u1", "phone": "0742730382",
       "publicId": "00001", "referralCode": "TCL80", "walletBalance": 5000, "registrationDone": True}},
   "/investments": {"status": "success", "investments": []},
   "/transactions": {"status": "success", "transactions": []},
   "/messages": {"status": "success", "messages": []},
-  "/public/products": {"status": "success", "products": []},
+  # The amount chips are built from product PRICES, so the catalogue has to
+  # be non-empty or there are no chips to measure.
+  "/public/products": {"status": "success", "products": [
+      {"key": "p1", "name": "Product-1", "price": 30000, "cycle": 150, "expectedReturn": 90000},
+      {"key": "p2", "name": "Product-2", "price": 90000, "cycle": 150, "expectedReturn": 270000},
+      {"key": "p3", "name": "Product-3", "price": 270000, "cycle": 150, "expectedReturn": 810000}]},
   "/public/banner": {"status": "success", "image": None, "video": None},
 }
 FB_APP = "export const initializeApp=()=>({});export const getApps=()=>[];"
@@ -85,7 +91,49 @@ async def main():
         await page.wait_for_timeout(2600)
         await page.evaluate("closeAnnounce && closeAnnounce()")
 
-        print("— an empty phone is refused before anything is sent —")
+        print("— the deposit form, measured against his mockup —")
+        await page.evaluate("openDepositSheet()")
+        await page.wait_for_timeout(800)
+        # His screenshot and ours are both 720 wide, so device pixels compare
+        # directly: 720/390 = 1.846 device px per CSS px.
+        await page.screenshot(path=f"{OUT}/deposit.png")
+        _im = Image.open(f"{OUT}/deposit.png").convert('RGB')
+        _sc = _im.width / 390.0
+        chip = await page.evaluate("""()=>{const c=document.querySelector('.dep-chip:not(.sel)');
+          if(!c) return null; const b=c.getBoundingClientRect();
+          return {x:b.x,y:b.y,w:b.width,h:b.height};}""")
+        ck(bool(chip), "an amount chip is on screen")
+        if chip:
+            _px = _im.load()
+            # Walk OUT of the chip's left edge and find the greenest pixel,
+            # the same way his was measured (G leading R is what makes it
+            # read as green rather than as the warm border we had).
+            cx = int(chip['x'] * _sc); cy = int((chip['y'] + chip['h']/2) * _sc)
+            best = None
+            for dx in range(-14, 3):
+                # Deliberately NOT `r, g, b = ...`: `b` is the browser handle
+                # in this scope, and unpacking a pixel into it replaced the
+                # browser with an int -- every assertion still ran and passed,
+                # then the run died on b.close() at the very end.
+                _pr, _pg, _pb = _px[max(0, cx+dx), cy]
+                d = _pg - _pr
+                if best is None or d > best[0]: best = (d, (_pr, _pg, _pb), dx)
+            ck(best[0] >= 7,
+               "the amount chip carries green at its edge (G-R %+d at %s, his peaks +13..+16)"
+               % (best[0], best[1]))
+            # And it must be green, not merely dark: G must lead BOTH channels.
+            ck(best[1][1] > best[1][0] and best[1][1] >= best[1][2],
+               "and it is green rather than a grey shadow (%s)" % (best[1],))
+
+        # The back chevron: his measures a 14px run at mid-height, ours was 12.
+        chev = await page.evaluate("""()=>{const b=document.querySelector('#sheetBg .back svg path');
+          return b ? getComputedStyle(b).strokeWidth : null;}""")
+        ck(chev is not None and abs(float(chev.replace('px','')) - 4.9) < 0.3,
+           "the back chevron is drawn at his weight, not thinner (%s)" % chev)
+        await page.evaluate("closeSheet({fromAction:true})")
+        await page.wait_for_timeout(400)
+
+        print("\n— an empty phone is refused before anything is sent —")
         # Owner: "l tried to leave not putting number and clicked confirm
         # deposit but it didn't reject it just continued to go to poll page."
         # Driven through the REAL form, and asserting the two things that
@@ -120,6 +168,63 @@ async def main():
         await page.wait_for_timeout(700)
         ck(await page.evaluate("()=>window.__deposits.length") == 0,
            "a half-typed number is refused too")
+        await page.evaluate("closeNotify && closeNotify(); closeSheet({fromAction:true})")
+        await page.wait_for_timeout(400)
+
+        print("\n— the 'Redirecting to payment' loader —")
+        # Owner: "see critically after confirm deposit a loader saying
+        # Redirecting to payment." It only means anything against a SLOW
+        # response: on an instant one it would flash by unobservably, and a
+        # test that checked the flag rather than the screen could pass on a
+        # build that never showed it. So the endpoint is stalled for 2s.
+        async def slow_dep(r):
+            await asyncio.sleep(2.0)
+            await r.fulfill(status=200, content_type="application/json",
+                            body=json.dumps({"status": "success", "depositId": "d1"}))
+        await page.route(f"{API}/deposit/marzpay", slow_dep)
+        await page.evaluate("openDepositSheet()")
+        await page.wait_for_timeout(700)
+        await page.evaluate("""()=>{document.getElementById('depAmount').value='50000';
+          document.getElementById('depPhone').value='0742730382';}""")
+        # NOT `evaluate("submitDeposit()")`: that returns the async function's
+        # promise, which Playwright awaits -- so the call would not come back
+        # until the request had already resolved and the loader was down
+        # again, and the "mid-flight" check would run after the flight. Fire
+        # it and return undefined instead.
+        await page.evaluate("()=>{ submitDeposit(); }")
+        await page.wait_for_timeout(700)          # genuinely mid-flight now
+        st = await page.evaluate("""()=>{const el=document.getElementById('depRedirect');
+          if(!el) return null; const cs=getComputedStyle(el);
+          return {shown:el.classList.contains('show'), display:cs.display,
+                  text:(el.textContent||'').trim(),
+                  ring:!!el.querySelector('.dep-redirect-ring')};}""")
+        ck(bool(st) and st['shown'] and st['display'] != 'none',
+           "the loader is up while the request is in flight (%s)" % st)
+        ck(bool(st) and 'redirecting to payment' in st['text'].lower(),
+           "and says Redirecting to payment (%r)" % (st or {}).get('text'))
+        ck(bool(st) and st['ring'], "with a spinner")
+        await page.screenshot(path=f"{OUT}/redirecting.png")
+        await page.wait_for_timeout(2200)         # let it resolve
+        ck(not await page.evaluate("()=>document.getElementById('depRedirect').classList.contains('show')"),
+           "and it comes down once the request resolves")
+        # And on a REFUSED recharge -- the finally{} is what guarantees this;
+        # a loader left covering the form would be worse than none at all.
+        await page.unroute(f"{API}/deposit/marzpay")
+        async def bad_dep(r):
+            await asyncio.sleep(0.4)
+            await r.fulfill(status=400, content_type="application/json",
+                            body=json.dumps({"status": "error", "message": "Nope"}))
+        await page.route(f"{API}/deposit/marzpay", bad_dep)
+        await page.evaluate("closeDepositStatusModal && closeDepositStatusModal()")
+        await page.evaluate("openDepositSheet()")
+        await page.wait_for_timeout(700)
+        await page.evaluate("""()=>{document.getElementById('depAmount').value='50000';
+          document.getElementById('depPhone').value='0742730382';}""")
+        await page.evaluate("()=>{ submitDeposit(); }")
+        await page.wait_for_timeout(1400)
+        ck(not await page.evaluate("()=>document.getElementById('depRedirect').classList.contains('show')"),
+           "a refused recharge does not leave the loader stuck over the form")
+        await page.unroute(f"{API}/deposit/marzpay")
         await page.evaluate("closeNotify && closeNotify(); closeSheet({fromAction:true})")
         await page.wait_for_timeout(400)
 

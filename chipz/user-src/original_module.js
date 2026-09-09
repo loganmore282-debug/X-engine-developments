@@ -4598,6 +4598,15 @@ function syncDepositQuickAmt(){
 // (a real operation is in flight); the Close button only appears once
 // resolved (or once the poll gives up), matching the app's own established
 // pattern of only offering Close on a settled dialog state.
+// The between-state: Confirm has been tapped, the request is out, and the
+// poll page has nothing to show yet. Kept as its own tiny function so both
+// the raise and the lower are one call and cannot drift apart.
+function showDepRedirect(on){
+  const el = $('depRedirect');
+  if (!el) return;
+  el.classList.toggle('show', !!on);
+  el.setAttribute('aria-hidden', on ? 'false' : 'true');
+}
 window.openDepositStatusModal = function(amount, phone, network){
   setDepositStatusPending(amount, phone, network);
   $('depStatusBg').classList.add('show');
@@ -4686,12 +4695,23 @@ window.submitDeposit = async function(){
   if (!amount || amount <= 0) return notify('Enter a valid amount');
   if (!phone) return notify('Enter the mobile money number to charge.');
   $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Sending request…';
-  // No network field on this form (Round 145) -- the gateway detects it
-  // from the phone number itself; server.js already treats `network` as
-  // optional here.
-  const r = await post('/deposit/marzpay', { amount, phone });
-  $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge';
-  if (r.status !== 'success') return notify(r.message || 'Could not start recharge');
+  // Owner: "after confirm deposit a loader saying Redirecting to payment."
+  // Up while the request is genuinely in flight and down again on EVERY exit
+  // from here -- hence the finally, not a line after the await. A rejected
+  // recharge that left this covering the form would be a worse bug than the
+  // missing loader was.
+  showDepRedirect(true);
+  let r;
+  try {
+    // No network field on this form (Round 145) -- the gateway detects it
+    // from the phone number itself; server.js already treats `network` as
+    // optional here.
+    r = await post('/deposit/marzpay', { amount, phone });
+  } finally {
+    showDepRedirect(false);
+    $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge';
+  }
+  if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start recharge');
   // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
