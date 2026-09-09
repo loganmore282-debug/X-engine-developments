@@ -1579,6 +1579,63 @@ the clock stays readable.
 **An already-installed app keeps the colour it was installed with** until it is
 reinstalled — reopening is not enough for this one.
 
+### Referral / commission audit — what is true, and one thing that was not
+
+Owner: *"make sure you audit referrals and cashback counting and all logics in
+referrals chains."*
+
+**THE RULE, stated once so nothing drifts from it again: referral commission is paid
+ONCE per referred member, on their FIRST product purchase, calculated on the product's
+price.** Not on deposits. Not on their second or later purchases. `creditReferralCommission()`
+returns early unless `isFirstInvestment === true`, and its only real call site is
+`/invest/create` (plus the reconciler retrying the same investments).
+
+**The Referral banner used to say "Invite friends. Earn on every deposit they make."**
+That was false in the way that matters most — about money. A friend could deposit
+UGX 100,000, never buy, and earn their referrer nothing. The copy is now *"Earn when
+they buy their first product"*, and the Rules line states the basis rather than listing
+bare percentages. **The copy was changed, not the payout rule**: L1 at 28% of every
+deposit forever would be ruinous, while 28% once on a first purchase is an ordinary
+acquisition cost — the server was right and the sentence was wrong. If the owner ever
+does want per-deposit commission, that is a server change and an economics decision,
+not a wording one.
+
+**Verified sound, so a later pass need not re-derive it:**
+- **Chain integrity.** Self-referral is refused at registration (`refDoc.id === userId`).
+  Cycles are impossible via registration by construction — `referredBy` is written once,
+  at signup, and the referrer must already exist. The one path that can re-point an
+  upline (`/admin/user/set-referrer`) walks the chain upward and refuses if it reaches
+  the member. The 3-level cap is applied identically in every walk.
+- **Commission is idempotent per (investment, level)**, and each level is CLAIMED
+  (`commissionPaidLevels` arrayUnion) *before* its wallet credit, so a crash mid-loop
+  can only under-pay — visible and fixable — never pay twice.
+- **A banned referrer is a temporary hold, not a forfeiture**: `commissionPending` stays
+  open and `commissionBanBlocked` keeps the 30s reconciler from re-scanning the same
+  stuck rows forever.
+- **Daily cashback has no rounding drift.** `settleInvestmentIfDue()` pays
+  `round(expectedReturn × payoutsMade / payoutsTotal) − paidOut` — a running target, not
+  a fixed daily slice — so it self-corrects every day and the final payout lands exactly
+  on `expectedReturn`. It advances `payoutsMade` before crediting.
+- **Milestone claims** are locked per user per milestone and set the claimed flag in the
+  same write as the credit.
+
+**KNOWN, NOT FIXED — team counts can drift from the member list.** `/team/stats` reads
+the cached `teamL1Count/L2/L3`; `/team/members` queries `referredBy` live. Registration
+and the admin re-point both increment those counters *after* the relationship is
+written, deliberately ("can only under-count, never double-count on a retry"), so a
+crash in that window leaves a permanent "L1: 3" above a list of four names.
+`recomputeTeamCounts(rootId)` repairs it but currently only runs on account deletion.
+**Exposing it as an admin repair button is the fix** — not attempted here, since it was
+not asked for.
+
+**`/team/stats` is the most expensive read in the app** — it walks the downline three
+levels for team deposits, runs a second full query for the active-L1 count, and sums
+every `team_reward` transaction the member has ever had. The live loop had it on the 5s
+beat (and on Referral as well as Team), which multiplied the heaviest endpoint by every
+member sitting on those screens. It now has its own 30s beat (`LIVE_TEAM_MS`); team
+figures move when someone joins or invests, which is minutes, not seconds. The wallet
+balance stays on the 5s tick, because that is the figure that actually needs to be live.
+
 ### Snow residues that were still live (round 2)
 
 The first sweep covered wording a member reads. These were *functional*, and each one

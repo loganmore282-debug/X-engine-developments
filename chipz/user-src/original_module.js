@@ -1238,6 +1238,8 @@ function updateNavIcons(){
 // and keep polling a session that no longer exists.
 var _liveTimer = null, _liveBusy = false, _liveDelay = 0, _liveSigs = {}, _liveGen = 0;
 var LIVE_MS = 5000, LIVE_MAX_MS = 60000;
+// Team stats get their own, slower beat -- see the note at their fetch.
+var LIVE_TEAM_MS = 30000, _liveTeamAt = 0;
 // Tunable from the backend without shipping an app build. Floored at 2s: below
 // that the phone spends more time on radio wake-ups than on anything a member
 // would notice.
@@ -1256,7 +1258,7 @@ function liveChanged(key, value){
 function stopLiveRefresh(){
   _liveGen++;
   clearTimeout(_liveTimer); _liveTimer = null; _liveBusy = false;
-  _liveDelay = 0; _liveSigs = {};
+  _liveDelay = 0; _liveSigs = {}; _liveTeamAt = 0;
 }
 function scheduleLive(gen, ms){
   clearTimeout(_liveTimer);
@@ -1341,11 +1343,25 @@ async function liveRefreshVisible(){
       if (liveChanged('products', r.products)) renderCatalog();
     } else if (r.status !== 'success') ok = false;
   } else if (STATE.page === 'team' || STATE.page === 'referral') {
-    const r = await api('/team/stats');
-    if (r.status === 'success' && STATE.page === 'team' && !_openSheetTitle) {
-      STATE.teamStats = r;
-      if (liveChanged('team', r)) patchTeamStats();
-    } else if (r.status !== 'success') ok = false;
+    // /team/stats is by far the most expensive read in the app: it walks the
+    // whole downline three levels deep for team deposits, runs a second full
+    // query for the active-L1 count, and sums every team_reward transaction
+    // this member has ever had. Putting THAT on the 5s loop (last round did,
+    // and widened it from Team to Referral as well) multiplies the heaviest
+    // endpoint by every member sitting on those two screens.
+    //
+    // Team figures also move on the scale of someone joining or investing --
+    // minutes, not seconds -- so a slower beat loses the member nothing. The
+    // wallet balance above still refreshes every tick, which is the number
+    // that actually needs to be live.
+    if (Date.now() - _liveTeamAt >= LIVE_TEAM_MS) {
+      _liveTeamAt = Date.now();
+      const r = await api('/team/stats');
+      if (r.status === 'success' && STATE.page === 'team' && !_openSheetTitle) {
+        STATE.teamStats = r;
+        if (liveChanged('team', r)) patchTeamStats();
+      } else if (r.status !== 'success') { _liveTeamAt = 0; ok = false; }
+    }
   }
   return ok;
 }
@@ -1936,7 +1952,7 @@ function paintReferral(){
 <div class="ref-banner">
   ${STATE.referralBanner
     ? `<img src="${esc(STATE.referralBanner)}" alt="" onerror="this.style.display='none'">`
-    : `<div class="hb-stripes"></div><div class="hb-cap">Invite friends. Earn on every deposit they make.</div>`}
+    : `<div class="hb-stripes"></div><div class="hb-cap">Invite friends. Earn when they buy their first product.</div>`}
 </div>
 <div class="app-card" style="margin:0 18px;padding:18px;">
   <div style="font-size:13px;font-weight:800;color:var(--snow-muted);margin-bottom:10px;">Share URL</div>
@@ -3421,7 +3437,7 @@ window.openInfoSheet = function(kind){
   if (kind === 'help') return openHelpSheet();
   const s = STATE.settings || {};
   const map = {
-    rules: ['Rules & Terms', s.rulesText || 'Minimum recharge ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + (s.withdrawFeePct||15) + '% fee applies. Referral commission: Level 1 ' + (s.commL1||27) + '%, Level 2 ' + (s.commL2||2) + '%, Level 3 ' + (s.commL3||1) + '%.'],
+    rules: ['Rules & Terms', s.rulesText || 'Minimum recharge ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + (s.withdrawFeePct||15) + '% fee applies. Referral commission is paid once, on the first product each member you invited buys: Level 1 ' + (s.commL1||27) + '%, Level 2 ' + (s.commL2||2) + '%, Level 3 ' + (s.commL3||1) + '%.'],
   };
   const [title, body] = map[kind] || ['Info', ''];
   openSheet(title, `<div class="reveal-in"><p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p></div>`);
