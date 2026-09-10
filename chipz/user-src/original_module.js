@@ -4077,6 +4077,25 @@ window.pickDepositPayMethod = function(which){
 };
 window.submitDepositChoice = function(){
   if (!_depPayChoice) return notify('Choose PAY-A or PAY B');
+  // Amount and phone are checked HERE, once, for BOTH methods -- not inside
+  // each branch. Owner: "when pay b is selected and no putting number, it just
+  // continues to payment page why???"
+  //
+  // It did because only the PAY-A branch validated the phone;
+  // proceedToManualPaymentMethod() checked the amount and nothing else, on the
+  // reasoning that the manual overlay collects its own number on its next
+  // screen. That reasoning does not survive contact with the screen: the
+  // Payment Phone field is right there, visible for every method (his own
+  // instruction, accepting that PAY B types it twice), so leaving it blank and
+  // sailing through is the same loophole he already caught on PAY-A.
+  //
+  // One rule in one place, using the SAME cleanPhone() the server applies, so
+  // the two methods cannot drift apart again. submitDeposit() still repeats
+  // both checks for itself -- that is the guard on the request actually being
+  // sent, and this is the guard on the form.
+  const amount = parseMoneyInput($('depAmount').value);
+  if (!amount || amount <= 0) return notify('Enter a valid amount');
+  if (!cleanPhone($('depPhone').value)) return notify('Enter the mobile money number to charge.');
   if (_depPayChoice === 'A') return submitDeposit();
   return proceedToManualPaymentMethod();
 };

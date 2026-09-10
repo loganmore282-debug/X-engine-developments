@@ -194,6 +194,11 @@ async def main():
         # that timer; this cannot.
         mid = await page.evaluate("""() => {
             document.getElementById('depAmount').value = '20000';
+            // The phone is filled in here too. It was not, and this section
+            // passed anyway until the blank-number guard was added -- which
+            // means it had been exercising a path that skipped validation
+            // entirely. Both fields are what a member actually submits.
+            document.getElementById('depPhone').value = '0742730382';
             submitDepositChoice();
             const el = document.getElementById('depRedirect');
             return { shown: !!el && el.classList.contains('show'),
@@ -212,6 +217,58 @@ async def main():
         ck(not after['loader'], "and the loader comes back down once it does")
         ck(not after['btnDisabled'],
            "the Confirm button is re-enabled, so backing out and retrying works")
+        await ctx.close()
+
+        # ── a blank number is refused on BOTH methods ──
+        # Owner: "when pay b is selected and no putting number, it just
+        # continues to payment page why???" Only the PAY-A branch validated the
+        # phone; the manual branch checked the amount and nothing else. Both
+        # methods are driven here with the field left EMPTY, and the pass
+        # condition is what actually went wrong for him: no request left the
+        # app and no payment screen opened.
+        print("\n— a blank payment phone is refused, whichever method —")
+        for pay_a, pay_b, pick, label in [(True, False, 'A', 'PAY-A'),
+                                          (False, True, 'B', 'PAY B')]:
+            ctx = await b.new_context(viewport={"width": 390, "height": 844},
+                                      service_workers="block")
+            page = await ctx.new_page()
+            calls = []
+            await open_app(page, pay_a, pay_b)
+            page.on("request", lambda r: calls.append(r.url))
+            await page.evaluate("openDepositSheet()")
+            await page.wait_for_timeout(600)
+            await page.evaluate("""() => {
+                document.getElementById('depAmount').value = '20000';
+                document.getElementById('depPhone').value = '';   // left blank
+                submitDepositChoice(); }""")
+            await page.wait_for_timeout(1200)
+            state = await page.evaluate("""() => ({
+                pay: document.getElementById('depStatusBg').classList.contains('show'),
+                manual: document.getElementById('manualPayBg').classList.contains('show'),
+                notify: document.getElementById('notifyBg').classList.contains('show'),
+                msg: (document.getElementById('notifyMsg')||{}).textContent || '' })""")
+            money = [u for u in calls if '/deposit/' in u]
+            ck(not state['pay'] and not state['manual'],
+               f"{label}: no payment screen opens (poll={state['pay']}, manual={state['manual']})")
+            ck(not money, f"{label}: no deposit request is sent ({money[:1]})")
+            ck(state['notify'] and 'number' in state['msg'].lower(),
+               f"{label}: and it says why ({state['msg']!r})")
+            await ctx.close()
+
+        # A valid number still gets through, so the guard is not just a wall.
+        ctx = await b.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
+        page = await ctx.new_page()
+        await open_app(page, False, True)
+        await page.evaluate("openDepositSheet()")
+        await page.wait_for_timeout(600)
+        await page.evaluate("""() => {
+            document.getElementById('depAmount').value = '20000';
+            document.getElementById('depPhone').value = '0742730382';
+            submitDepositChoice(); }""")
+        await page.wait_for_timeout(1200)
+        opened = await page.evaluate(
+            "document.getElementById('manualPayBg').classList.contains('show')")
+        ck(opened, "PAY B still proceeds once the number is filled in")
         await ctx.close()
 
         # ── the instruction card never changes ──

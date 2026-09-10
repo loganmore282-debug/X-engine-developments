@@ -2321,6 +2321,15 @@ and `syncDepositQuickAmt()`'s branch for the row that no longer exists.
 Three details worth keeping:
 - **Preselected when only one method is live**, nothing preselected when both are --
   a radio group with a single option is not a choice.
+- **A blank Payment Phone is refused on BOTH methods**, and the check lives in
+  `submitDepositChoice()` -- one rule, one place, before the branch. Owner: *"when pay b
+  is selected and no putting number, it just continues to payment page why???"* Only the
+  PAY-A branch validated it; `proceedToManualPaymentMethod()` checked the amount and
+  nothing else, on the reasoning that the manual overlay collects its own number on the
+  next screen. That reasoning does not survive contact with the screen: the field is
+  visible for every method, so leaving it blank and sailing through is the same loophole
+  he had already caught on PAY-A. `submitDeposit()` still repeats both checks -- that one
+  guards the request being sent, this one guards the form.
 - **The Payment Phone field is ALWAYS shown**, for every method and every combination.
   A first pass hid it for PAY B, reasoning that the manual overlay collects a number on
   its own next screen; the owner overruled that -- *"l want even if pay a or b, the
