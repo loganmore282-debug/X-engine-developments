@@ -42,7 +42,7 @@
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="theme-color" content="#e21b2a">
+<meta name="theme-color" content="#ef6c00">
 <link rel="manifest" href="/manifest.json">
 <!-- Same server-hosted brand asset the user app installs with, NOT a local
      /icon-192.png. Uploading an icon in Admin -> Brand rewrote the one the
@@ -66,7 +66,14 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
        convention used for --blue* in the user app, so nothing downstream
        (every rule in this file already reads these tokens) needed touching. */
     --bg:#f4f7fb; --card:#ffffff; --ink:#0a1220; --sub:#5b6b84; --line:#d7dfec; --line2:#eef2f8;
-    --gold:#e21b2a; --gold-deep:#9e0f1c; --gold-ink:#ffffff; --ok:#0f9d58; --ok-bg:rgba(15,157,88,.12);
+    /* Owner: "admin panel still has old red color instead of orange."
+       Value-only swap, same as every other reskin here -- the token is
+       still called --gold for the same low-risk reason its comment above
+       gives. NOT the app's own #ff8a1f: --gold-ink is white and white on
+       #ff8a1f measures 2.35:1, under the 3:1 bar, and this token backs
+       filled buttons and pills with white labels on them. #ef6c00 reads
+       as the same orange and carries white at about 3.9:1. */
+    --gold:#ef6c00; --gold-deep:#b34700; --gold-ink:#ffffff; --ok:#0f9d58; --ok-bg:rgba(15,157,88,.12);
     --danger:#d1293e; --danger-bg:rgba(209,41,62,.1); --warn:#b45309; --warn-bg:rgba(180,83,9,.12); --sky:#0ea5b7;
   }
   /* Same orange scrollbar as the user app. Two properties because they cover
@@ -94,7 +101,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .login-card{background:var(--card);border-radius:20px;padding:30px 26px;width:100%;max-width:380px;
     box-shadow:0 10px 40px rgba(0,0,0,.12);text-align:center;}
   .brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px;}
-  .brand .mk{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#4A0C13,var(--gold) 60%,var(--gold-deep));display:flex;align-items:center;justify-content:center;}
+  .brand .mk{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7A3200,var(--gold) 60%,var(--gold-deep));display:flex;align-items:center;justify-content:center;}
   .brand .mk svg{width:24px;height:24px}
   .brand b{font-size:20px}
   .muted{color:var(--sub);font-size:13px}
@@ -117,7 +124,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   /* shell */
   .topbar{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
   .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0}
-  .topbar .mk{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#4A0C13,var(--gold) 60%,var(--gold-deep));display:flex;align-items:center;justify-content:center}
+  .topbar .mk{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7A3200,var(--gold) 60%,var(--gold-deep));display:flex;align-items:center;justify-content:center}
   .topbar .mk svg{width:20px;height:20px}
   .topbar b{font-size:16px}
   .spacer{flex:1}
@@ -228,7 +235,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 <div class="login" id="loginView">
   <div class="login-card">
     <div class="brand">
-      <div class="mk"><svg viewBox="0 0 36 28" width="24" height="19" fill="none" aria-hidden="true"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="#FFFFFF"/></svg></div>
+      <div class="mk" id="brandMarkLogin"><svg viewBox="0 0 36 28" width="24" height="19" fill="none" aria-hidden="true"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="#FFFFFF"/></svg></div>
       <b data-brandadmin>Chipz Admin</b>
     </div>
     <p class="muted">Owner: leave username blank and enter your admin key. Staff: enter the username and password you were given.</p>
@@ -244,7 +251,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   <div class="topbar">
     <div class="wrap">
       <div class="topbar-inner">
-        <div class="mk"><svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div class="mk" id="brandMarkTop"><svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/></svg></div>
         <b data-brandadmin>Chipz Admin</b>
         <div class="spacer"></div>
@@ -622,6 +629,40 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
   // this is a heading, and nothing else on the screen should wait for it.
   api('/admin/settings').then(r => { if (r && r.settings) applyAdminBrandName(r.settings.brandName); }).catch(() => {});
 }
+
+// Owner: "logo on dashboard and authentication screen should match the one
+// uploaded from admin." Both marks were hardcoded SVGs -- the login screen's
+// was still Snow's inherited swoosh, and the topbar's a generic grid glyph --
+// so uploading a Brand logo changed the member app and left the panel showing
+// something else entirely.
+//
+// /public/chipz-images is used rather than the admin API on purpose: the LOGIN
+// screen has to draw this before anyone has signed in, so it cannot depend on
+// a session. Failure is silent and the existing SVG simply stays -- a panel
+// that will not paint its own header because a logo fetch failed would be a
+// much worse trade than a fallback mark.
+async function applyAdminBrandLogo(){
+  let logo = '';
+  try {
+    const r = await fetch(SERVER + '/public/chipz-images');
+    const d = await r.json();
+    logo = (d && d.status === 'success' && d.logo) || '';
+  } catch (_) { return; }
+  if (!logo) return;
+  ['brandMarkLogin', 'brandMarkTop'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    // object-fit:cover inside the round mark, so a square upload fills it
+    // instead of letterboxing. onerror puts the original SVG back rather than
+    // leaving an empty circle if the data URL is ever bad.
+    const prev = el.innerHTML;
+    el.innerHTML = '<img src="' + logo + '" alt="" '
+      + 'style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block">';
+    const img = el.querySelector('img');
+    if (img) img.onerror = () => { el.innerHTML = prev; };
+  });
+}
+applyAdminBrandLogo();
 $('liveBtn').addEventListener('click', ()=>{ setLive(!_live); if(_live) liveTick(); });
 $('installBtn').addEventListener('click', async ()=>{
   if (!window._adminInstallPrompt) return toast('Open the browser menu and choose Install app', 'ok');

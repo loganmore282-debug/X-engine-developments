@@ -2298,6 +2298,79 @@ again) rather than a wrap that no longer happens. `test-round-fixes.py` accepted
 `ref=Gy2f` substring, which `/refCode=Gy2f` satisfies by accident -- it was tightened to
 the exact form so the old long link cannot come back unnoticed.
 
+### One Deposit screen, an orange panel, and the logo where the logo belongs
+
+Owner: "we still have old designs of deposit page, see our current one but see the old
+residue pages, l no longer need them we have that new one, so for option b it will be
+PAY B, so remove all those pages of old stuffs of kpay and others, also admin panel
+still has old red color instead of orange plus logo on dashboard and authentication
+screen should match the one uploaded from admin, that gif which appears on profile icon
+should be logo."
+
+**There were THREE deposit screens, and the SETTINGS chose between them** -- not the
+design, not a route, not anything visible. `openDepositSheet()` branched on which methods
+were enabled: the current Deposit design for PAY A alone, an old Snow-inherited
+"Recharge" whose payment method read **K-pay** for PAY B alone, and a third old
+"Recharge" carrying a PAY A / PAY B list when both were on. So the owner could meet a
+screen he had already replaced simply by switching PAY B on. Now there is **one**
+`openDepositFormSheet(payA, payB)`; only the method rows inside it change, labelled
+`PAY-A` and `PAY B`. Both dead builders are deleted, along with
+`depositQuickAmountsHtml()`, the `.quick-amt*` / `.pm-selected-*` / `.pm-choice-row` CSS
+and `syncDepositQuickAmt()`'s branch for the row that no longer exists.
+
+Three details worth keeping:
+- **Preselected when only one method is live**, nothing preselected when both are --
+  a radio group with a single option is not a choice.
+- **The PAY-A phone field is hidden unless PAY-A is the live choice.** That covers the
+  case that is easy to miss: both enabled with nothing picked yet. Showing the field
+  there implies PAY-A is already selected when it is not. Caught by the test, not by
+  reading.
+- `submitDeposit()`'s failure path restored the button to **"Recharge"** -- a label
+  belonging to one of the deleted screens -- so a member whose recharge failed watched
+  the button silently rename itself. It restores "Confirm Deposit" now.
+
+**The admin panel is orange**, `--gold:#ef6c00` (was `#e21b2a`), a value-only token swap
+like every other reskin here. Deliberately NOT the app's own `#ff8a1f`: `--gold-ink` is
+white, white on `#ff8a1f` measures 2.35:1, and this token backs filled buttons with white
+labels. `#ef6c00` reads as the same orange at about 3.9:1.
+
+**Both admin marks now show the admin-uploaded Brand logo.** They were hardcoded SVGs --
+the login screen's was still *Snow's* inherited swoosh -- so uploading a logo changed the
+member app and left the panel showing something else. `applyAdminBrandLogo()` reads
+`/public/chipz-images`, and it uses the PUBLIC endpoint on purpose: the login screen has
+to draw before anyone has signed in, so it cannot depend on a session. Failure is silent
+and the existing SVG stays; a panel that will not paint its header because a logo fetch
+failed would be a far worse trade.
+
+**The profile icon is the Brand logo, not the GIF.** The GIF used to outrank it there,
+which meant uploading a Brand logo appeared to do nothing on the one card the panel says
+it is for. The GIF is not gone -- it keeps the Home idle strip it was actually asked for.
+
+**Checking only the case that already worked would have proved nothing.**
+`test-deposit-one-screen.py` drives the built app three times, once per PAY combination,
+because PAY-A-alone was the one combination that was already right. Reverting PAY-B-only
+to an old "Recharge" fails 4 assertions; reverting the profile icon to the GIF fails 2;
+reverting the panel to red fails the colour check. The colour is asserted as R>G>B with
+real green in it rather than as a hex string, so a future retune of the same hue does not
+fail it.
+
+**Two test lessons, both about measuring in the wrong place.**
+- `test-profile-gif-render.py`'s rendering-quality checks were **re-targeted to the Home
+  strip rather than deleted** -- aspect, transparency and animation are still worth
+  pinning, just where the GIF now lives. Its "never blown up" check was **not** carried
+  over: that was a property of the 60px circular slot, and asserting it against a
+  deliberately large strip would be asserting against the design. It was replaced with
+  the constraint that actually matters there -- the strip must not push Home into a
+  scroll, which is the bug that position really had.
+- Its animation check compared **one pair of frames 700ms apart** and reported a running
+  GIF as frozen. `locator.screenshot()` made it worse: an element screenshot waits for
+  the element to look stable, so two come back byte-identical on a working animation. Six
+  viewport clips over three seconds, any two differing (measured: 3 distinct of 6).
+
+**The Playwright route-precedence trap bit again** -- a specific route registered BEFORE
+a catch-all never fires, because the last registration wins. Register the catch-all
+first. That is twice in two rounds; it is in this file now for a reason.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase
