@@ -1,0 +1,2406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Chipz</title>
+<!-- The SAME policy render.yaml sends as a header, carried in the file itself.
+     It is here because this page does not only ship from Render: the frontend
+     is also deployed to EdgeOne (see CLAUDE.md, and the .edgeone.* entries in
+     CORS_ALLOWED_SUFFIXES), and a host header cannot follow a file to another
+     host. A meta policy travels with index.html, so the app is covered
+     wherever it is uploaded.
+
+     What this actually buys, on a money app: script injected into this page
+     cannot POST a member's balance, session token or Trade Password to a
+     server the attacker controls, and cannot LOAD a script from one. That is
+     connect-src and script-src's host list; everything else here is
+     supporting work.
+
+     'unsafe-inline' in script-src is REQUIRED and must not be "tidied away":
+     build-core.js ships the whole app as one inline <script> (s.textContent =
+     code), which no hash can cover because the content changes every build.
+
+     'unsafe-eval' is deliberately ABSENT, and there is one expected, harmless
+     CSP violation on every load because of it. build-core.js / build-admin.js
+     set `disableConsoleOutput: true`, and javascript-obfuscator implements
+     that with a global-object helper shaped like
+         try { g = Function('return this')(); } catch (e) { g = window; }
+     Function() is eval, so the browser blocks it and reports a violation --
+     then the catch assigns `window`, which is the same object it was reaching
+     for, and the bundle carries on. Verified by test-csp-runtime.py, which
+     walks every tab and sheet under the real policy.
+
+     Do NOT add 'unsafe-eval' to silence that one line. It would let any
+     injected script build code from a string, which is most of what this
+     policy is here to prevent, in exchange for a warning that changes
+     nothing. test-csp-runtime.py allows that exact violation and fails on
+     any other, so a NEW eval -- one without a fallback, that really would
+     break something -- is still caught.
+
+     frame-ancestors is NOT here: a meta policy cannot express it (the browser
+     ignores it), which is exactly why render.yaml keeps sending the header
+     version too. The two are not redundant. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<!-- Owner: "why app still have red upper title color? it takes space even."
+     That red band above the app is Android painting the status bar with
+     theme-color, and at #e21b2a it reads as a separate red title bar sitting
+     on top of the app rather than as part of it -- which is exactly why it
+     looks like it is taking space. Set to the app's own paper, the status bar
+     becomes the top of the page and the band disappears. Chrome picks dark
+     status icons for a light theme colour, so the clock stays readable.
+     NOTE: manifest.json's theme_color must match, and an ALREADY-INSTALLED
+     app keeps the colour it was installed with until it is reinstalled. -->
+<meta name="theme-color" content="#fbf1e8">
+<link rel="manifest" href="/manifest.json">
+<!-- The app icon and the share card are both admin-uploadable, which is why
+     these point at chipz-server rather than at the files sitting next to
+     this one. Neither consumer can be reached from our JavaScript: Chrome
+     reads the icon out of manifest.json when a member installs the app, and
+     the WhatsApp / Telegram / Facebook crawler reads the og: tags below when
+     someone pastes the link -- crawlers do not run scripts. So both have to
+     be real files at fixed URLs, and the server swaps what sits behind them.
+     It falls back to the bundled icon-192/512.png, so these never 404.
+     THESE URLS ARE PERMANENT. Changing a path here breaks the installed
+     icon and every previously-shared link at the same time. -->
+<link rel="icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
+<meta name="description" content="Chipz — invest, earn daily income, and grow your team.">
+<!-- og:url is deliberately absent. A crawler falls back to the URL it
+     actually fetched, so the card keeps working on any domain the app is
+     served from; a hard-coded one would silently go stale the day a custom
+     domain is added. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Chipz">
+<meta property="og:title" content="Chipz">
+<meta property="og:description" content="Invest, earn daily income, and grow your team.">
+<meta property="og:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Chipz">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Chipz">
+<meta name="twitter:description" content="Invest, earn daily income, and grow your team.">
+<meta name="twitter:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in
+     original_module.js) loaded in one request -- Georgia and "System
+     default" need no webfont, so they aren't listed here. Loading every
+     option up front (not just whichever is currently selected) means
+     switching the admin setting never needs a fresh network request or a
+     page reload to take visible effect. -->
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,800;1,700&family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=DM+Serif+Display&family=Roboto+Mono:wght@500;700&family=JetBrains+Mono:wght@500;700&family=Orbitron:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Chipz design tokens ──────────────────────────────────────────────
+   Value-only swap of the token names this codebase already uses everywhere
+   (the same convention Snow's own history documents for its repeated colour
+   changes) -- every existing rule keeps working, the whole app reskins at
+   once. Chipz's palette is the bold Doritos-style red->orange gradient on a
+   warm cream/paper ground; --snow-green stays a real green because it is
+   used semantically (positive amounts, success pills), not as a brand
+   accent. */
+:root{
+  --snow-canvas:#fbf1e8;
+  --snow-surface:#ffffff;
+  --snow-ink:#1a1310;
+  --snow-muted:#8c7f76;
+  --snow-wine:#e21b2a;
+  --snow-wine-deep:#9e0f1c;
+  --snow-green:#1a7a3e;
+  --snow-border:#efe0d3;
+  --snow-wave-on-wine:#ffd9a8;
+  --snow-green-deep:#146030;
+  --snow-wine-soft:#ffe3d1;
+  --snow-green-soft:#dff2e2;
+  --snow-neutral-soft:#faf4ee;
+  --snow-radius-card:22px;
+  --snow-radius-tile:16px;
+  --snow-radius-control:16px;
+  --snow-radius-sheet:32px;
+  /* Chipz-specific additions (no Snow equivalent) */
+  /* Bottom nav height. Grew from 68px when the icons did -- owner, twice:
+     "the nav icons are small". */
+  --nav-h:68px;
+  --chipz-orange:#ff8a1f;
+  --chipz-grad:linear-gradient(135deg,#e21b2a 0%,#ff8a1f 100%);
+  --chipz-hero:linear-gradient(120deg,#1a0d08 0%,#7c0a1c 45%,#ff8a1f 100%);
+  --chipz-gold:#f4b400;
+  --chipz-neg:#7a1030;
+  --chipz-link:#2f6fed;
+  --chipz-shelf:#9e0f1c;
+  /* ── Surfaces ──
+     Owner, holding a mockup next to the live app: "the mock up has very
+     clean CSS, well ultra definition and quality cards and colour ... clean
+     cards, well defined and high quality."
+
+     What actually separated the two was not colour. Ninety-one rules
+     hardcoded `border-radius:4px` -- square, at the size where a corner
+     reads as an unfinished edge rather than a decision -- and every card
+     leaned on a hard 1px hairline with a shadow so far offset
+     (`-16px`/`-24px` spread) that it never drew a pixel. A hairline with no
+     shadow is a wireframe; a shadow with no hairline is a smudge. Cards need
+     both, and the corner has to be big enough to see.
+
+     These three radii are now the ONLY ones in the file, so a card can never
+     again be 4px in one place and 16px in another:
+       --r-card  panels, list rows, sheets, anything holding content
+       --r-ctl   buttons, inputs, chips, tiles -- tighter, so a control
+                 reads as pressable rather than as a small card
+       --r-pill  status pills, accent bars, progress tracks
+     Two-layer shadow: a 1-2px contact shadow that defines the edge, plus a
+     wide soft one that lifts it off the cream canvas. One layer alone gives
+     you either a hard line or a haze. */
+  --r-card:16px;
+  --r-ctl:12px;
+  --r-pill:999px;
+  --sh-card:0 1px 2px rgba(30,10,5,.05),0 12px 26px -16px rgba(30,10,5,.34);
+  --sh-card-hi:0 2px 4px rgba(30,10,5,.06),0 22px 42px -20px rgba(30,10,5,.42);
+  /* The hairline, dialled back: it is now an edge highlight sitting on top of
+     a real shadow, not the only thing holding the card together. */
+  --line-soft:rgba(239,224,211,.72);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;touch-action:manipulation;}
+*{-webkit-tap-highlight-color:transparent;}
+body{background:var(--snow-canvas);font-weight:400;font-family:'Barlow Condensed','Arial Narrow',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
+.mono{font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,inherit);}
+/* Chipz leads with a serif display face for headings/figures over a
+   condensed sans for body copy, matching every approved mockup. */
+h1,h2,h3,.section-title,.stat-val,.bal-value{}
+button{cursor:pointer;font-family:inherit;}
+input{font-family:inherit;}
+a{color:inherit;}
+/* Owner: "l want the scroll bar to be orange not dull color."
+ *
+ * This needs BOTH properties, and only one of them is the one he can see.
+ *
+ * The file used to say `::-webkit-scrollbar{display:none}`, which is why the
+ * bar he is looking at is grey: Android always draws OVERLAY scrollbars, and
+ * since Chromium 121 overlay scrollbars are painted natively and ignore the
+ * ::-webkit-scrollbar pseudo-elements entirely. The rule was not being
+ * disobeyed -- it simply does not reach that scrollbar, so the phone fell
+ * back to the system thumb. The standard `scrollbar-color` is the one thing
+ * overlay scrollbars do obey.
+ *
+ * ::-webkit-scrollbar is kept for the classic (non-overlay) scrollbars an
+ * older Chromium or a desktop browser still draws, where `scrollbar-color`
+ * alone would leave a default-width grey track around an orange thumb.
+ *
+ * scrollbar-color is an INHERITED property, so setting it on the root covers
+ * every scroller in the app -- the sheets, the announcement body, the message
+ * detail, the manual-pay overlay -- without naming any of them. Naming them
+ * is how the next one added gets missed.
+ *
+ * The track is transparent on purpose: a filled track on a phone is a grey
+ * stripe down the edge of every screen, which is the thing being removed. */
+html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--chipz-orange);border-radius:var(--r-pill);}
+::-webkit-scrollbar-thumb:hover{background:var(--snow-wine);}
+::-webkit-scrollbar-corner{background:transparent;}
+
+.app-card{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);box-shadow:var(--sh-card);}
+/* Owner: "l also need 3d buttons" -- a solid darker shelf under every primary
+   CTA plus a real press-down :active state, applied once here so every button
+   in the app picks it up. */
+.primary-button{background:var(--chipz-grad);color:#fff;border:none;border-radius:var(--r-ctl);font-weight:700;letter-spacing:.02em;
+  box-shadow:none;
+  transform:translateY(0);transition:transform .1s,box-shadow .1s;}
+.primary-button:active:not(:disabled){transform:translateY(4px);box-shadow:none;}
+.primary-button:disabled{opacity:.5;box-shadow:none;}
+.secondary-button{background:var(--snow-surface);color:var(--snow-wine);border:1.6px solid var(--snow-wine);border-radius:var(--r-ctl);font-weight:700;
+  box-shadow:0 4px 0 var(--snow-border);transform:translateY(0);transition:transform .1s,box-shadow .1s;}
+.secondary-button:active:not(:disabled){opacity:.85;}
+/* Dark variant used for Log Out / Edit Wallet, per the Account + Wallet mockups. */
+.dark-button{background:var(--snow-ink);color:#fff;border:none;border-radius:var(--r-ctl);font-weight:700;letter-spacing:.04em;
+  box-shadow:none;transition:opacity .1s;}
+.dark-button:active:not(:disabled){opacity:.85;}
+/* A band of light travels across every filled CTA on a loop, clipped to the
+   button's own rounded box. Owner asked for it "left to right" first, then
+   corrected to "let it move from right to left" -- it now enters at the
+   right edge and exits left.
+
+   Applied to the FILLED buttons only -- the ones that read as a call to
+   action. Deliberately NOT on the bottom-nav items, the Home action icons,
+   the round icon buttons or the close X: those are transparent or 26-38px
+   artwork, and a shine crossing them reads as flicker, not polish.
+
+   The band is a pseudo-element moved with transform alone, which the browser
+   animates on the compositor -- no layout, no repaint, no per-frame work on
+   the main thread. That matters here because these run forever on cheap
+   Android phones. `will-change` is deliberately NOT set: it would pin a
+   layer per button for the life of the page, and a running transform is
+   auto-promoted anyway.
+
+   The sweep runs for the first 55% of the cycle and rests for the remainder,
+   so it reads as a repeating pass rather than a strobe.
+
+   --sweep is the band's colour, so a pale button can override it: white on
+   white would be invisible, so those get a brand-tinted sheen instead. */
+.primary-button,.secondary-button,.dark-button,.spin-cta,.notify-ok,.btn-bind,
+.wallet-panel .btnrow .cancel,#manualPayFlow .mp-confirm-btn{position:relative;overflow:hidden;}
+.primary-button::after,.secondary-button::after,.dark-button::after,.spin-cta::after,
+.notify-ok::after,.btn-bind::after,.wallet-panel .btnrow .cancel::after,
+#manualPayFlow .mp-confirm-btn::after{
+  content:'';position:absolute;top:0;bottom:0;left:0;width:38%;pointer-events:none;
+  background:linear-gradient(90deg,transparent 0%,var(--sweep,rgba(255,255,255,.45)) 50%,transparent 100%);
+  transform:translateX(360%) skewX(-20deg);
+  animation:btnGlowSweep 2.8s ease-in-out infinite;}
+/* Pale buttons: a white band on a near-white face shows nothing, so tint it. */
+.secondary-button,.btn-bind,.wallet-panel .btnrow .cancel{--sweep:rgba(226,27,42,.18);}
+/* A disabled button must not look alive. */
+.primary-button:disabled::after,.secondary-button:disabled::after,.dark-button:disabled::after,
+.spin-cta:disabled::after,.notify-ok:disabled::after,.btn-bind:disabled::after,
+.wallet-panel .btnrow .cancel:disabled::after,#manualPayFlow .mp-confirm-btn:disabled::after{display:none;}
+/* Owner: "let it move from right to left." Starts off the RIGHT edge and
+   travels off the left. */
+@keyframes btnGlowSweep{
+  0%{transform:translateX(360%) skewX(-20deg);}
+  55%,100%{transform:translateX(-140%) skewX(-20deg);}}
+@media (prefers-reduced-motion:reduce){
+  .primary-button::after,.secondary-button::after,.dark-button::after,.spin-cta::after,
+  .notify-ok::after,.btn-bind::after,.wallet-panel .btnrow .cancel::after,
+  #manualPayFlow .mp-confirm-btn::after{animation:none;display:none;}}
+
+/* Team member Active / Pending. Same treatment as the record pills, for the
+   same reason -- one pill vocabulary across the app, so a status looks like a
+   status wherever it appears. Pending stays deliberately quiet: it is the
+   absence of a thing, and shouting it would make every new referral look like
+   a problem. */
+.status-pill{display:inline-block;border-radius:var(--r-pill);font-size:12.5px;font-weight:700;letter-spacing:.03em;padding:5px 13px;}
+.status-pill.active{background:linear-gradient(135deg,#35c46c,#12894a);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.18);box-shadow:0 5px 12px -6px rgba(18,137,74,.7);}
+.status-pill.pending{background:var(--snow-neutral-soft);color:var(--snow-muted);border:1px solid var(--line-soft);font-weight:600;}
+
+/* --nav-h is the ONE place the bar's height is written. Four other rules
+   depend on it (the page's bottom padding, the sheet overlay's bottom
+   inset, the Download panel's height) and they used to repeat 68 as a
+   literal, so growing the bar meant finding all four. */
+.bottom-nav{z-index:210;background:var(--snow-surface);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;height:var(--nav-h);position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:0 2px;}
+.navitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--snow-muted);background:none;border:none;padding:6px 2px;flex:1;min-width:0;position:relative;}
+/* The bottom nav's selector box and its icon animation are TWO separate
+   things, and an earlier build had them the wrong way round. Owner, putting
+   it straight: "l said the icon fades in and out when tapped not static and
+   selector doesn't disappear."
+
+   So:
+     - the BOX is the active-tab marker. It STAYS on whichever tab is
+       selected and does not fade away -- it only eases across as the
+       selection changes (the transition below).
+     - the ICON is what animates on a tap: it fades out and straight back in,
+       so tapping never looks static.
+
+   The box sits BEHIND the icon and label, which is why both are given a
+   z-index: a positioned pseudo-element otherwise paints on top of its own
+   element's text and artwork, and the box would cover the very icon it is
+   meant to sit behind. z-index:-1 is not the answer either -- the bar's own
+   white background would then hide it completely.
+
+   Brand-tinted rather than the reference's lavender, per the standing rule:
+   copy the shape from a reference, never another app's colours. */
+/* Owner: "the nav tab is still small in width can you extend it abit."
+   Widened from a fixed 54px to as wide as the tab allows, capped at 62px.
+   Sized with left/right insets + margin:auto rather than the old
+   left:50% / margin-left:-27px, because that older trick pinned the width to
+   a hard-coded number AND, more importantly, centring via transform would
+   collide with navBoxBounce: the keyframes set transform to a bare scale(),
+   which would throw away any translate the centring depended on. This way
+   `transform` belongs entirely to the animation.
+   The cap matters on a wide phone: 6 tabs across a 430px screen give ~71px
+   each, and a box that grew to fill it would nearly touch its neighbours. */
+.navitem::before{content:'';position:absolute;top:3px;left:3px;right:3px;max-width:56px;margin:0 auto;height:42px;
+  border-radius:14px;background:rgba(226,27,42,.13);opacity:0;transform:scale(.72);pointer-events:none;z-index:0;
+  transition:opacity .2s ease,transform .2s ease;}
+.navitem.active::before{opacity:1;transform:scale(1);}
+.navitem .nav-ic,.navitem .lbl{position:relative;z-index:1;}
+/* Owner: "not only the nav icon bounces in and out but also the selector
+   should do so." So the box presses with the icon -- same curve, so the two
+   read as ONE press rather than two things moving near each other.
+   opacity stays pinned at 1 for the whole animation: the box is the active-tab
+   selector and it must never look like it is going away ("selector doesn't
+   disappear"), so only the scale moves. Slightly gentler than the icon's
+   (.78/1.14 against .74/1.18) because it is a 54x40 slab rather than a 26px
+   glyph, and the same numbers on that area read as a wobble.
+   It is .42s to the icon's .46s deliberately -- hookNavTapBox() ends the tap
+   by watching for navIconBounce, and removing the class kills any animation
+   still running, so the box has to finish FIRST or it gets cut off. */
+.navitem.nav-tap.active::before{animation:navBoxBounce .42s cubic-bezier(.34,1.56,.64,1);}
+@keyframes navBoxBounce{
+  0%{opacity:1;transform:scale(1);}
+  28%{opacity:1;transform:scale(.78);}   /* in  */
+  62%{opacity:1;transform:scale(1.14);}  /* out */
+  82%{opacity:1;transform:scale(.97);}
+  100%{opacity:1;transform:scale(1);}}
+/* The other half of the tap animation lives on the ICON.
+   Owner, third pass: "the nav icons when tapped be live bounce in and out
+   ... it is like tapping something and bounces 1 in and out 1." So it is a
+   BOUNCE now, not the fade it was: the icon presses IN (squashes down),
+   springs back OUT past its own size, then settles. One in, one out.
+   Opacity stays at 1 the whole way -- a fade was what he was rejecting, and
+   an icon that dims mid-bounce reads as a loading state, not a press.
+   The overshoot to 1.18 is what makes it feel physical; without it this is
+   just a scale transition and the "bounce" is gone. */
+.navitem.nav-tap .nav-ic img{animation:navIconBounce .46s cubic-bezier(.34,1.56,.64,1);}
+@keyframes navIconBounce{
+  0%{transform:scale(1);}
+  28%{transform:scale(.74);}   /* in  */
+  62%{transform:scale(1.18);}  /* out */
+  82%{transform:scale(.95);}
+  100%{transform:scale(1);}}
+@media (prefers-reduced-motion:reduce){
+  .navitem::before{transition:none;}
+  .navitem.nav-tap.active::before{animation:none;}
+  .navitem.nav-tap .nav-ic img{animation:none;}}
+.navitem.active{color:var(--snow-wine);}
+.navitem .lbl{font-size:10px;font-weight:600;white-space:nowrap;}
+.navitem.active .lbl{font-weight:700;}
+.navitem svg{width:28px;height:28px;}
+.chest-float.turntable-float{animation:none;right:14px;bottom:212px;width:56px;height:56px;border-radius:50%;background:var(--chipz-grad);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 20px -8px rgba(226,27,42,.6);}
+.chest-float.turntable-float svg{width:26px;height:26px;}
+/* Left over from the old dark ticker pill: white-on-dark. The card is white
+   now, so this rule made every phone number in it invisible. Same element,
+   same id -- the colours just had to follow the card. */
+#activityTickerTrack b{color:var(--snow-ink);font-weight:600;}
+#activityTickerTrack .sep{color:var(--snow-border);}
+/* 31px. The history matters, because this has now been wrong in both
+   directions: the mockup drew these at 23px, which read as specks on a real
+   phone with six tabs sharing the width, so two rounds of "the nav icons are
+   small" pushed them to 38 -- and 38 turned out to be too far the other way
+   ("reduce on sizes of nav icons, they are too big eeh"). 31 is between the
+   two, nearer the smaller end because that is the direction of the last
+   complaint. The bar comes down with it (--nav-h 76 -> 68) rather than
+   leaving a shrunken glyph floating in the old height. */
+.navitem .nav-ic{display:flex;align-items:center;justify-content:center;height:31px;}
+.navitem .nav-ic img{width:31px;height:31px;object-fit:contain;filter:grayscale(1) opacity(.55);transition:filter .15s;}
+.navitem.active .nav-ic img{filter:none;}
+
+
+.wordmark{display:flex;align-items:center;gap:9px;}
+.wordmark .wm-text{font-weight:700;letter-spacing:2px;}
+
+.stat-label{font-size:10px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.35px;}
+.stat-val{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--snow-ink);margin-top:2px;}
+.section-title{font-size:17px;font-weight:700;color:var(--snow-ink);}
+
+.stat-tile{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:12px;box-shadow:var(--sh-card);}
+.icon-tile{border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+/* Product card, per the owner's reference screenshot: the NAME sits on top,
+   centred and large, then the full-width image, then a 2x2 grid of tinted
+   stat tiles, then a full-width Buy Now. The reference is a screenshot of
+   an unrelated app in a purple/blue theme -- layout, labels and proportions
+   are copied, the colours are Chipz's own (CLAUDE.md's design-fidelity
+   rule). */
+/* Owner: "product cards are rounded and large, they should be small and not
+   rounded." The 22px radius and 170px image came from the mockup, but with
+   four money tiles under them each card filled a whole phone screen. Tighter
+   radius, half the image height, and smaller type -- roughly half the height
+   per card, so several are visible at once. */
+/* Owner: no title bar -- the product name sits ON the image. Product photos
+   are stored at exactly 1600x900 px, 16:9 (the admin panel cover-fits every
+   upload onto that frame), so the card frame is aspect-ratio driven rather
+   than a fixed pixel height: the image fills it exactly, with no letterboxing,
+   whatever the phone's width. 1600 px wide still covers a 3x phone at the
+   ~355 px card width, so it stays sharp.
+
+   This was 4:3 until the owner sent his real artwork -- 1721x914, near enough
+   16:9 -- with "reduce on the size of cards their height is very high, just
+   like you see that resolution it should be that". 4:3 was the cause: at a
+   354 px card the image alone was 264 px tall and the whole card 422 px, so
+   barely two fitted on a phone screen. 16:9 takes the image to 199 px and the
+   card to 357 px. Measured, not estimated. */
+.p-card{background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;border:1px solid var(--line-soft);box-shadow:var(--sh-card);}
+/* Owner: "l also want when l tap on the product card it fades in then out,
+   but no action just it is animation but no action should be there on
+   triggering buy."
+   So the CARD acknowledges a tap and does nothing else. Buying stays behind
+   the Buy Now button alone -- tapping a card must never start a purchase,
+   which is why this is a class toggled by a listener rather than any kind of
+   onclick handler on the card itself.
+
+   The first version dipped OPACITY to .62 and left transform alone. Owner:
+   "you failed to understand, cozy when l tap it just cause faint image
+   instead of make product card bounce in or fade in and out minimumly." He is
+   right, and the reason is worth keeping: fading a card does not read as the
+   card responding, it reads as the card briefly failing to draw. A press is a
+   physical event, so the acknowledgement has to be physical -- the card gives
+   under the finger and springs back.
+
+   Same spring curve as the nav icon, a fraction of its amplitude. The nav
+   icon squashes to .74 and overshoots to 1.18, which is right for a 30px
+   glyph and would look like the whole screen lurching on a 360px-wide card.
+   "Minimumly": 2.8% in, under 1% out -- enough to see, not enough to move the
+   layout under the finger. Nothing here changes opacity, so the card never
+   goes faint again. */
+.p-card.card-tap{animation:cardTapBounce .34s cubic-bezier(.34,1.56,.64,1);}
+@keyframes cardTapBounce{
+  0%{transform:scale(1);}
+  34%{transform:scale(.972);}   /* in  */
+  68%{transform:scale(1.008);}  /* out */
+  100%{transform:scale(1);}}
+@media (prefers-reduced-motion:reduce){.p-card.card-tap{animation:none;}}
+.p-card .p-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}
+.p-card .p-img .glyph{width:52px;height:52px;border-radius:var(--r-ctl);background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;}
+/* A scrim, not a solid bar -- the name has to stay readable over whatever
+   photo is uploaded without hiding the top of it. */
+.p-card .p-name{position:absolute;left:0;right:0;bottom:0;padding:24px 13px 10px;color:#fff;font-weight:700;font-size:19px;letter-spacing:.01em;
+  background:linear-gradient(to top,rgba(20,8,4,.72) 0%,rgba(20,8,4,.42) 55%,rgba(20,8,4,0) 100%);text-shadow:0 1px 4px rgba(0,0,0,.5);}
+.p-card .p-body{padding:10px;}
+.p-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:9px;}
+.p-stat{background:var(--snow-green-soft);border-radius:var(--r-ctl);padding:8px 6px;text-align:center;}
+.p-stat.warm{background:var(--snow-wine-soft);}
+.p-stat .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);font-weight:600;}
+.p-stat .v{font-size:16px;font-weight:700;color:var(--snow-ink);margin-top:2px;font-family:var(--number-font,inherit);white-space:nowrap;}
+.p-card .p-cta{width:100%;height:44px;padding:0;font-size:16px;letter-spacing:.04em;border-radius:var(--r-ctl);}
+.product-card__stats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:10px 16px;}
+.product-card__cta{width:100%;min-height:44px;margin-top:16px;border-radius:var(--r-ctl);font-size:14px;}
+
+.plan-card{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:18px;box-shadow:var(--sh-card);}
+
+.segmented-control,.team-level-switcher{display:flex;background:var(--snow-neutral-soft);border-radius:var(--r-ctl);padding:4px;gap:4px;}
+.segmented-control .seg,.team-level-switcher .seg{flex:1;text-align:center;padding:9px 0;border-radius:var(--r-ctl);font-size:13px;font-weight:500;color:var(--snow-muted);background:none;border:none;}
+.segmented-control .seg.active,.team-level-switcher .seg.active{background:#fff;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -8px rgba(17,17,17,.3);}
+
+.settings-list{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:4px 16px;box-shadow:var(--sh-card);}
+.list-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
+.list-row:last-child{border-bottom:none;}
+
+
+
+.team-referral-card{position:relative;overflow:hidden;min-height:210px;padding:22px;border-radius:var(--r-card);color:#fff;background:var(--chipz-hero);box-shadow:0 16px 32px -22px rgba(17,17,17,.35);}
+.team-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.team-deposits-card{grid-column:1 / -1;position:relative;overflow:hidden;border-radius:var(--r-card);padding:20px;color:#fff;background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));box-shadow:0 14px 28px -22px rgba(17,17,17,.3);}
+
+/* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
+.wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
+/* Owner: "on start up loader it will be a word 'Loading...' bouncing in
+   minimum in middle of screen, it will have background set from admin" --
+   the admin-settable background image is applied over the gradient by
+   applyLoadingBackground() when one is configured. */
+#loadingScreen{position:fixed;inset:0;background:linear-gradient(165deg,#0b0b0c 0%,#3a0e12 55%,#7c0a1c 100%);background-size:cover;background-position:center;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;}
+/* The pre-launch gate's wordmark. It used to be styled inline on the
+   element, which stopped working the moment the mark became generated
+   markup -- the generated <b> had no way to inherit an inline rule from the
+   node it replaced. */
+#openingGate .og-mark{font-family:'Playfair Display',Georgia,serif;font-size:36px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;}
+#openingGate .og-mark b{color:var(--chipz-gold);font-weight:400;}
+#loadingScreen .ls-wordmark{font-family:'Playfair Display',Georgia,serif;font-size:34px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;margin-bottom:36px;min-height:42px;}
+#loadingScreen .ls-wordmark b{color:var(--chipz-orange);font-weight:400;}
+/* Owner: "the letters on 'Loading...' and dots are in like wavy moving
+   animations". It was the whole word bobbing as one block, which reads as a
+   bounce, not a wave. Each letter AND each dot is now its own span running
+   the same keyframe on a staggered delay (set inline in the markup below),
+   so the motion travels along the word left to right like a ripple.
+   inline-block is required: transform does nothing to an inline box. */
+/* Second pass, against a reference screenshot: "the loader animation wave
+   should be slow and words spaced like that and 6 dots". So: letters set
+   wide apart, six dots instead of three, and the ripple slowed right down --
+   a 2s cycle with a 95ms step between letters, where it was 1.15s and 55ms.
+   Then, fourth pass: "even loader animation word is small make it abit big"
+   -- 25px, up from 18px.
+   The reference's own cream-and-purple palette is deliberately NOT copied;
+   the standing rule is to take the shape from a reference and keep Chipz's
+   colours. */
+#loadingScreen .ls-text{font-family:'Playfair Display',Georgia,serif;font-size:25px;letter-spacing:.24em;color:#fff;display:flex;}
+#loadingScreen .ls-text i{display:inline-block;font-style:normal;animation:loadWave 2s ease-in-out infinite;}
+/* letter-spacing adds its gap AFTER every character, including the last one,
+   which would hang a quarter-em of empty space off the right and leave the
+   word visibly off-centre. Dropping it on the final dot re-centres it. */
+#loadingScreen .ls-text i:last-child{letter-spacing:0;}
+/* A space collapses to nothing inside a flex row, so any gap in the word has
+   to hold its own width. "Loading......" has none today, but this keeps the
+   effect intact if the wording ever changes. */
+#loadingScreen .ls-text i.sp{width:.32em;}
+/* The rise grew with the type (9px -> 12px): kept at 9 against 25px letters
+   the same wave reads as a smaller, weaker motion than it did at 18px. */
+@keyframes loadWave{
+  0%,60%,100%{transform:translateY(0);}
+  30%{transform:translateY(-12px);}}
+/* ── Download APP screen ──
+   Owner: "make when one taps download, it opens and middle there is a button
+   download, and in background there is image uploaded from admin panel."
+   The admin image fills the panel; the button sits dead centre on top of it.
+   min-height uses the sheet's own visible box (the sheet stops 68px short of
+   the bottom for the nav bar), so "middle" is the middle of what is actually
+   on screen -- 100vh here would push the button below the fold. */
+/* Bleeds to the sheet's own edges: .sheet-body is padded 4px 20px 40px, and
+   .sheet-bg itself stops 68px short of the bottom for the nav bar, under a
+   ~66px .sheet-head. So the panel spans exactly what is visible. */
+.dl-screen{position:relative;min-height:calc(100vh - var(--nav-h) - 66px);display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--chipz-grad);margin:-4px -20px -40px;}
+.dl-screen .dl-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+/* The image is uploaded by the owner and could be anything -- pale, busy,
+   white. The scrim is what guarantees the white title and the button edge
+   stay legible on top of whatever lands here, rather than hoping. */
+.dl-screen .dl-scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,4,.32) 0%,rgba(10,6,4,.62) 100%);}
+/* Owner: "middle there is a button download" -- the BUTTON is what has to sit
+   in the middle, not the block of text that happens to contain it. Centring
+   the whole card puts the heading and blurb above it, which pushes the button
+   about 60px below the real centre. Three rows with equal 1fr top and bottom
+   put the button itself dead centre, with the text hanging off it either way. */
+.dl-screen .dl-body{position:relative;z-index:1;width:100%;max-width:320px;padding:0 22px;text-align:center;color:#fff;
+  display:grid;grid-template-rows:1fr auto 1fr;min-height:calc(100vh - var(--nav-h) - 66px);}
+.dl-screen .dl-top{align-self:end;padding-bottom:26px;}
+.dl-screen .dl-mark{display:flex;justify-content:center;margin-bottom:18px;}
+.dl-screen .dl-title{font-size:24px;font-weight:700;margin:0 0 10px;color:#fff;}
+.dl-screen .dl-sub{font-size:14px;line-height:1.6;margin:0 0 26px;color:rgba(255,255,255,.86);}
+.dl-screen .dl-btn{width:100%;padding:16px 0;font-size:16px;font-weight:700;letter-spacing:.04em;}
+.dl-screen .dl-note{font-size:12.5px;line-height:1.6;margin:16px 0 0;color:rgba(255,255,255,.78);}
+#loadingScreen .spin{width:40px;height:40px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;animation:sp .8s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+/* Owner: "when one taps recharge after having select amount it should
+   bring a spin loader so as to open the screen which is for selecting
+   network and number" -- proceedToManualPaymentMethod() already swapped
+   the button's own label for this markup during its brief transition to
+   the network/number screen, but .mini-spin was never actually given any
+   CSS -- an empty, invisible <div>, so tapping Recharge visibly did
+   nothing for 400ms before the next screen appeared. Real gap, not just
+   too subtle; same white-on-wine spinner style as .primary-button already
+   uses elsewhere, sized to sit cleanly inside a button. */
+.mini-spin{width:18px;height:18px;margin:0 auto;border-radius:50%;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;animation:sp .7s linear infinite;}
+/* Owner: "establish a timer ie like saying snow opening in 23:59:34... so it
+   will be after the start up loader" -- a pre-launch gate shown instead of
+   the login/app once the loading screen would otherwise hand off, admin-
+   toggleable next to Maintenance mode in Settings. Same wine-gradient hero
+   background as the auth screen for visual consistency, not a new palette. */
+#openingGate{position:fixed;inset:0;z-index:501;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:var(--chipz-hero);color:#fff;}
+#openingGate .og-label{font-size:13px;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-top:18px;}
+#openingGate .og-countdown{font-size:40px;font-weight:700;margin-top:10px;font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,inherit);}
+#openingGate .og-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:14px;max-width:320px;line-height:1.5;}
+@keyframes tickerFlow{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+@keyframes chestSwing{0%,100%{transform:rotate(-6deg);}50%{transform:rotate(6deg);}}
+.chest-hang{animation:chestSwing 2.6s ease-in-out infinite;transform-origin:50% -6px;}
+
+/* ── Home / Products / Referral (Chipz mockups) ───────────────────── */
+.home-topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 8px;}
+.icon-btn{width:38px;height:38px;border-radius:50%;background:var(--snow-surface);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px -8px rgba(20,10,5,.3);position:relative;flex-shrink:0;color:var(--snow-ink);}
+.icon-btn .dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--snow-wine);border:2px solid var(--snow-surface);}
+.top-wordmark{font-family:'Playfair Display',Georgia,serif;font-size:20px;letter-spacing:.03em;transform:skewX(-6deg);color:var(--snow-ink);}
+.top-wordmark b{color:var(--snow-wine);font-weight:400;}
+/* Owner: "home video banner should not have frames, it should complete the
+   margin" -- edge to edge, no side gutters and no rounding. */
+.home-banner,.ref-banner{margin:0 0 14px;height:190px;border-radius:0;position:relative;overflow:hidden;background:var(--chipz-hero);}
+/* ── SKELETON LOADERS ──
+   Owner: "use skeleton loaders exactly how the screen contents will appear
+   after load." So these are not generic grey bars -- each one is built from
+   the same measurements as the real thing it stands in for, so nothing jumps
+   when the data lands. Before this, a first-ever visit with nothing cached
+   painted the real screen with empty data: "0 plans", zeroed totals, an empty
+   member list -- indistinguishable from a member who genuinely has none.
+   The shimmer stays. It is what makes a block read as "loading" rather than
+   as a broken empty box, and it is not the content-entrance animation that
+   was removed earlier. */
+/* A tint, not a flat colour: --snow-neutral-soft was so close to the cream
+   page that the blocks were invisible on it. An alpha tint reads at the same
+   strength on the page AND on the white cards the skeletons sit inside. */
+.sk{position:relative;overflow:hidden;background:rgba(60,26,14,.09);border-radius:var(--r-ctl);}
+.sk::after{content:'';position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);
+  animation:skShimmer 1.25s ease-in-out infinite;}
+@keyframes skShimmer{100%{transform:translateX(100%);}}
+.sk-line{height:12px;margin-bottom:8px;}
+.sk-line.sm{height:10px;}
+.sk-line.lg{height:22px;}
+/* Product card: image block at 4:3, then the 2x2 stat grid and the CTA, laid
+   out by the real .p-card rules so the swap is invisible. */
+.sk-pcard{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);overflow:hidden;}
+.sk-pcard .sk-img{aspect-ratio:16/9;border-radius:0;}
+.sk-pcard .sk-body{padding:10px;}
+.sk-pcard .sk-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
+.sk-pcard .sk-stat{height:44px;}
+.sk-pcard .sk-cta{height:38px;}
+/* My Products: the full-bleed band, the filter row, then plan rows. */
+.sk-band{height:150px;border-radius:0;margin-bottom:14px;}
+.sk-filters{display:flex;gap:8px;margin:0 16px 12px;}
+.sk-filters .sk{flex:1;height:34px;}
+.sk-row{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:13px 14px;}
+.sk-row .sk-top{display:flex;align-items:center;gap:11px;margin-bottom:13px;}
+.sk-row .sk-thumb{width:38px;height:38px;flex-shrink:0;}
+.sk-row .sk-bar{height:5px;margin-bottom:6px;}
+.sk-row .sk-figs{display:flex;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--snow-border);}
+.sk-row .sk-figs > div{flex:1;}
+/* Team: two stat cards over the level switcher and member rows. */
+.sk-tcards{display:flex;gap:12px;margin:0 18px 16px;}
+.sk-tcards .sk{flex:1;height:104px;}
+.sk-member{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--snow-border);}
+.sk-member .sk-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;}
+
+/* ── MY PRODUCTS ──
+   Deliberately not Snow's layout. Snow leads with three white count tiles
+   and a flat "Active Plans" list; this leads with the one figure a member
+   actually wants -- what they are still owed -- on a full-bleed band, then
+   filters (Running / Matured / All, which Snow has no equivalent of), then
+   rows that carry a progress bar, days remaining, earned-vs-still-to-come
+   and a live next-payout countdown. */
+.mp-band{margin:0 0 14px;padding:20px 18px 16px;background:var(--chipz-hero);color:#fff;}
+.mp-band-k{font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;font-weight:600;}
+.mp-band-v{font-size:38px;font-weight:700;margin-top:4px;line-height:1.05;}
+.mp-band-sub{font-size:14.5px;opacity:.8;margin-top:6px;}
+.mp-band-row{display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.22);}
+.mp-band-row > div{flex:1;min-width:0;}
+.mp-band-row span{display:block;font-size:13px;opacity:.75;}
+.mp-band-row b{display:block;font-size:17px;font-weight:700;margin-top:2px;white-space:nowrap;}
+.mp-filters{display:flex;gap:8px;margin:0 16px 12px;}
+/* Owner: "remove counter showing number of plans, it is in userpanel so
+   remove it." The `<i>3</i>` badge is gone from the markup, so its two
+   rules go with it rather than styling an element that no longer exists. */
+.mp-f{flex:1;min-width:0;height:42px;border:1px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-muted);border-radius:var(--r-ctl);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;box-shadow:none;}
+.mp-f.on{background:var(--chipz-grad);color:#fff;border-color:transparent;}
+.mp-list{display:flex;flex-direction:column;gap:10px;margin:0 16px;}
+.mp-row{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:16px 15px;box-shadow:var(--sh-card);}
+.mp-row.done{opacity:.85;}
+.mp-top{display:flex;align-items:center;gap:11px;}
+.mp-thumb{width:46px;height:46px;flex-shrink:0;border-radius:var(--r-ctl);background:var(--chipz-hero);display:flex;align-items:center;justify-content:center;overflow:hidden;color:#fff;font-weight:700;font-size:18px;}
+.mp-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.mp-id{flex:1;min-width:0;}
+.mp-name{font-size:17px;font-weight:600;color:var(--snow-ink);}
+.mp-meta{font-size:14px;color:var(--snow-muted);margin-top:1px;}
+.mp-chip{flex-shrink:0;font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:var(--r-pill);background:var(--snow-green-soft);color:var(--snow-green);}
+.mp-chip.done{background:var(--snow-neutral-soft);color:var(--snow-muted);}
+/* Owner: "remove progress bar on running products so on you will see how
+   you'll organize it but remove progress bar."
+   The bar is gone. This line used to be its CAPTION -- two muted greys sitting
+   6px under the track, which without the bar above them read as a leftover
+   label rather than content. So it takes over the bar's own slot (13px, where
+   the eye already expects the next thing after the header) and the day count
+   is promoted to ink at the row's weight: the fact the bar was drawing is now
+   simply stated. The right-hand half stays muted, because "26 days left" is
+   the same arithmetic said a second way and should not compete with it. */
+.mp-days{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;color:var(--snow-muted);margin-top:13px;}
+.mp-days .lead{display:flex;align-items:center;gap:9px;min-width:0;}
+.mp-days b{font-size:15px;font-weight:600;color:var(--snow-ink);}
+/* Owner: "make sure that one running investment, it shows Date bought."
+   Its own quiet line rather than a third column in .mp-figs: those columns
+   would drop from 161px to 104px each, and "UGX 571,300.00" at 16px does not
+   fit in 104. Shown on matured rows too -- when a finished plan was bought is
+   the same fact, and hiding it there would be an odd gap. */
+.mp-bought{font-size:12.5px;color:var(--snow-muted);margin-top:5px;}
+
+/* ── THE ONGOING MARK ──
+   Owner sent this as a 180px standalone loader ("put this animation on aside of
+   running product, it should be well defined") -- three chips orbiting a
+   pulsing centre one.
+
+   Every length is a fraction of --s rather than a fixed px, so the shape is
+   IDENTICAL at any size. Shrinking his 180px original with transform:scale()
+   was the other option and is worse here: it would drop the 2px speckle
+   highlights to a third of a pixel, where they stop being texture and become
+   dirt. Same reason the speckles are dropped outright at this size -- at 32px
+   they are sub-pixel either way, and his gold-to-ember gradient is what
+   actually carries the chip.
+
+   32px is measured, not guessed: rendered at 24/30/36/44 and compared, the
+   three triangles stay separately readable down to about 30 and mush below it.
+
+   It marks ONLY ongoing plans -- a matured one has nothing in motion -- and
+   holds still for a phone that asked for less motion. */
+.pspin{--s:32px;width:var(--s);height:var(--s);position:relative;flex:none;}
+.pspin-orbit{position:absolute;inset:0;animation:pspinOrbit 1.8s linear infinite;}
+.pspin-chip{position:absolute;width:calc(var(--s)*.30);height:calc(var(--s)*.278);
+  clip-path:polygon(50% 0%,100% 100%,0% 100%);
+  background:linear-gradient(145deg,#ffd85f 0%,#f7aa27 32%,#e97918 65%,#b9430e 100%);
+  animation:pspinGlow .9s ease-in-out infinite alternate;}
+.pspin-chip:nth-child(1){top:calc(var(--s)*.011);left:calc(var(--s)*.35);transform:rotate(4deg);}
+.pspin-chip:nth-child(2){right:calc(var(--s)*.022);bottom:calc(var(--s)*.15);transform:rotate(125deg);animation-delay:.2s;}
+.pspin-chip:nth-child(3){left:calc(var(--s)*.022);bottom:calc(var(--s)*.15);transform:rotate(235deg);animation-delay:.4s;}
+.pspin-core{position:absolute;width:calc(var(--s)*.417);height:calc(var(--s)*.383);
+  left:50%;top:50%;
+  clip-path:polygon(50% 0%,100% 100%,0% 100%);
+  background:linear-gradient(145deg,#ffe06b 0%,#f7ae29 34%,#e67917 67%,#b6400d 100%);
+  filter:drop-shadow(0 calc(var(--s)*.044) calc(var(--s)*.033) rgba(96,35,3,.36));
+  animation:pspinPulse 1.15s ease-in-out infinite;}
+.pspin-glow{position:absolute;width:calc(var(--s)*.44);height:calc(var(--s)*.11);left:50%;top:62%;
+  border-radius:50%;background:rgba(255,121,0,.28);
+  filter:blur(calc(var(--s)*.061));animation:pspinShadow 1.15s ease-in-out infinite;}
+@keyframes pspinOrbit{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+@keyframes pspinGlow{
+  from{filter:drop-shadow(0 1px 1px rgba(102,40,6,.22)) brightness(.95);}
+  to{filter:drop-shadow(0 2px 2px rgba(102,40,6,.38)) brightness(1.12);}}
+@keyframes pspinPulse{
+  0%,100%{transform:translate(-50%,-50%) scale(.88) rotate(-5deg);}
+  50%{transform:translate(-50%,-50%) scale(1.08) rotate(5deg);}}
+@keyframes pspinShadow{
+  0%,100%{opacity:.35;transform:translateX(-50%) scale(.75);}
+  50%{opacity:.9;transform:translateX(-50%) scale(1.2);}}
+@media (prefers-reduced-motion:reduce){
+  .pspin-orbit,.pspin-chip,.pspin-core,.pspin-glow{animation:none;}
+  .pspin-core{transform:translate(-50%,-50%);}
+  .pspin-glow{transform:translateX(-50%);}
+}
+.mp-figs{display:flex;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--snow-border);}
+.mp-figs > div{flex:1;min-width:0;}
+.mp-figs span{display:block;font-size:13px;color:var(--snow-muted);}
+.mp-figs b{display:block;font-size:16px;font-weight:700;color:var(--snow-ink);margin-top:2px;white-space:nowrap;}
+.mp-figs b.up{color:var(--snow-green);}
+.mp-next{display:flex;align-items:center;gap:6px;margin-top:11px;font-size:12px;color:var(--snow-muted);}
+.mp-next b{color:var(--snow-ink);font-weight:700;}
+.mp-next .countdown-val{color:var(--snow-ink);font-weight:600;}
+.mp-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* Activity card: a notification line, led by a bell, rather than the old
+   dark pill. Sits on the app surface like every other card now. */
+.act-card{margin:0 16px 14px;display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--sh-card);}
+.act-bell{flex-shrink:0;width:30px;height:30px;display:flex;align-items:center;justify-content:center;}
+.act-bell img{width:100%;height:100%;object-fit:contain;display:block;}
+.act-track-wrap{overflow:hidden;flex:1;min-width:0;}
+.act-track{display:inline-flex;white-space:nowrap;color:var(--snow-muted);font-size:12.5px;font-weight:500;}
+.act-track b{color:var(--snow-ink);font-weight:600;}
+.act-track .sep{color:var(--snow-border);}
+/* Home's lower banner, replacing the product strip. Full-bleed like the top
+   one, with the Go spin call to action sitting on it. */
+.spin-banner{position:relative;margin:0 0 14px;min-height:150px;background:var(--chipz-hero);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;}
+.spin-banner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
+.spin-cta{position:relative;margin:0 0 18px;padding:0 30px;height:44px;border:0;border-radius:var(--r-ctl);background:var(--chipz-grad);color:#fff;font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.04em;cursor:pointer;box-shadow:none;}
+.spin-cta:active{opacity:.85;}
+/* The animated brand mark filling Home's leftover strip above the nav.
+   max-height is in vh on purpose -- a GIF arrives at whatever size it was
+   exported at, and one tall upload would otherwise push Home into scrolling.
+   The right padding is wider than the left by the width of the floating
+   chest: the chest is position:fixed over that corner, so centring inside
+   the FULL width would put the mark half under it. This centres it in the
+   space that is actually free, which is what reads as centred on the phone.
+   pointer-events:none so the strip can never eat a tap meant for the chest. */
+.home-gif{display:flex;align-items:center;justify-content:center;padding:2px 96px 0 18px;pointer-events:none;}
+.home-gif img{max-width:100%;max-height:20vh;width:auto;height:auto;display:block;}
+.ref-banner{height:150px;margin-bottom:18px;}
+.home-banner img,.ref-banner img{display:block;width:100%;height:100%;object-fit:cover;}
+.hb-stripes{position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.06) 0 14px,transparent 14px 30px);}
+.hb-cap{position:absolute;bottom:12px;left:16px;right:16px;color:#fff;font-weight:700;font-size:15px;text-shadow:0 2px 8px rgba(0,0,0,.4);}
+/* Admin video banner (Home.dc.html). Owner: "l dont want it to be tappable
+   or pause or play, l want it to go or run on its own." So the play ring is
+   gone entirely and the video takes NO pointer events -- a tap on the banner
+   passes straight through, it cannot be paused, and there is no long-press
+   menu on it. It starts itself (autoplay+muted+loop+playsinline, with
+   tryAutoplayHomeBanner()'s retries behind it). */
+.home-banner video{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
+.home-banner video::-webkit-media-controls{display:none!important;}
+/* A video URL that 404s or is an unplayable format would otherwise leave a
+   flat empty block; fall back to the same striped hero the no-banner state
+   uses. */
+.home-banner.hb-video-failed video{display:none;}
+.home-banner.hb-video-failed{background:var(--chipz-hero);}
+.home-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:0 18px;margin-bottom:16px;}
+.home-action{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;color:var(--snow-ink);}
+.home-action .badge{width:56px;height:56px;display:flex;align-items:center;justify-content:center;}
+.home-action .badge svg{width:22px;height:22px;}
+.home-action .badge img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 6px 8px rgba(30,10,5,.28));}
+.home-action .lbl{font-size:12px;font-weight:600;}
+.home-tabs{display:flex;gap:10px;padding:0 18px;margin:14px 0;}
+.home-tabs .ht{flex:1;text-align:center;padding:11px 0;border-radius:var(--r-pill);font-weight:700;font-size:14px;letter-spacing:.03em;border:none;font-family:inherit;}
+.home-tabs .ht.active{background:var(--chipz-grad);color:#fff;box-shadow:none;}
+.home-tabs .ht.off{background:var(--snow-surface);color:var(--snow-muted);border:1.5px solid var(--snow-border);}
+/* Owner: "the treasure chest box bouncing minimum in bottom right." */
+.chest-float{position:fixed;right:10px;bottom:112px;width:86px;height:86px;border:none;background:none;padding:0;z-index:40;animation:chestBounce 1.8s ease-in-out infinite;}
+.chest-float img{width:100%;display:block;filter:drop-shadow(0 12px 16px rgba(30,10,5,.35));}
+@keyframes chestBounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
+.page-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 18px 12px;}
+.page-head h2{margin:0;font-size:23px;font-weight:400;letter-spacing:.02em;}
+.page-head span{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
+.url-row{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);padding:0 14px;min-height:66px;margin-bottom:18px;}
+.url-row span{flex:1;min-width:0;font-size:12px;line-height:1.45;color:var(--snow-muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;}
+.url-row .copy-ic{width:45px;height:42px;border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);border:none;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
+.url-row .copy-ic img{width:auto;height:24px;display:block;}
+/* Owner: "the copy turns to tick." Green, as in his -- a tick in the brand red
+   would read as an error mark. Applies to every copy control (the URL row's
+   icon, the manual-payment number/name buttons) and to the labelled button,
+   which swaps its text to "Copied" instead of its icon. */
+.copy-ic.copied,.mp-copybtn.copied{background:var(--snow-green-soft);color:var(--snow-green);}
+.primary-button.copied{pointer-events:none;}
+.lv-line{font-size:13px;font-weight:700;color:var(--snow-ink);margin:4px 0;}
+
+/* ── Team (Team.dc.html) ── */
+.plain-head{font-size:19px;font-weight:400;margin:22px 18px 12px;}
+/* Team cards, measured off the owner's mockup rather than eyeballed. Both his
+   screenshot and ours came off the same phone at 1080x2340, and our card is
+   973 device px for a CSS width of 354, so 1 CSS px = 2.749 device px and his
+   figures convert directly:
+
+                              ours      his
+     card 1 height          157.2    164.8 CSS
+     card 2 height          163.7    177.9
+     "45" / "1%" cap height  25.1     33.8  -> both his figures are ~47px
+     green glow on the edge   none    ~12% alpha, fading over ~16px
+     arcs top-right           none    2 hairlines, r 41.5 and 61.5
+
+   The GREEN is on the card EDGE only. Owner: "see some green behind the
+   percentage, and number, also on card edges" -- but sampling the haze around
+   his figures gives (212,228,244) against a (223,229,245) fill: a shadow in
+   the GLYPH's own hue, not a green one. So the figures get a halo in their own
+   brand colour and the green stays where it was measured, on the edge. */
+.team-gcard{position:relative;overflow:hidden;background:linear-gradient(135deg,#fff0e6,#ffd9b3);border-radius:var(--r-card);padding:21px 20px;border:1px solid #ffe0bf;
+  box-shadow:0 6px 24px rgba(74,170,108,.34),0 2px 8px rgba(74,170,108,.20);}
+/* The two clipped rings in his top-right corner. Centre sits 19.6px INSIDE the
+   corner, so a circle of radius R is offset (19.6 - R) from both edges and the
+   card's own overflow:hidden cuts it into the semi-circle he described. Card 2
+   has none in his mockup, hence :not(.comm). Barely-there strokes on purpose:
+   measured only ~4 luminance units above the fill. */
+.team-gcard:not(.comm)::before,.team-gcard:not(.comm)::after{content:'';position:absolute;border-radius:50%;border:1.5px solid rgba(255,255,255,.55);pointer-events:none;}
+.team-gcard:not(.comm)::before{width:123px;height:123px;top:-41.9px;right:-41.9px;}
+.team-gcard:not(.comm)::after{width:83px;height:83px;top:-21.9px;right:-21.9px;}
+/* Owner: "you failed to put that icon total team icon just as the same team
+   icon on our app, dont use that in mockup" -- the card had no icon at all,
+   and the mockup he was holding up marks it with a bare emoji. This is the
+   app's own team artwork, the same file the bottom nav uses, so the icon for
+   "team" is one thing everywhere instead of an emoji in one place and a
+   picture in another. align-items:center, not baseline: a picture has no
+   baseline to sit on and would hang low against the text. */
+.team-gcard .row1{display:flex;align-items:center;justify-content:center;gap:8px;}
+.team-gcard .row1 .ic{width:24px;height:24px;object-fit:contain;flex-shrink:0;
+  filter:drop-shadow(0 3px 5px rgba(30,10,5,.28));}
+.team-gcard .row1 .lbl{font-size:15px;font-weight:500;color:#7a5a3a;}
+/* Owner: "on team there are some green behind the number, see our mockup on
+   percentage and number of team, some green is there behind numbers, see
+   clearly rather than guess."
+
+   Measured off his mockup rather than eyeballed. Sampling across the glow on
+   his big "45": the halo pixels read (176,220,219) against a (197,230,249)
+   card, so every channel drops but BLUE drops most (-30) and green least
+   (-10) -- the signature of a green cast, not a shadow. Solving that back
+   through normal alpha compositing at a plausible 20-30% puts the glow's own
+   colour between (92,180,99) and (127,197,149): a medium leafy green, not
+   the deep --snow-green and not a mint.
+
+   Ours had a red glow (rgba(226,27,42,.30)) -- the numeral's own colour,
+   which reads as a blur of the digit rather than as anything behind it. The
+   geometry was already right: his halo dies out about 10-25 device px from
+   the stroke, which at his screenshot's 1.846 device px per CSS px is the
+   ~14px reach an 18px blur has. Only the colour changes.
+
+   One token, used by both numbers, so the two can never drift. */
+:root{--team-glow:rgba(45,170,85,.42);}
+.team-gcard .row1 .num{font-size:47px;color:var(--snow-wine);line-height:1.05;
+  text-shadow:0 0 18px var(--team-glow);}
+.team-gcard .ln{height:1px;background:rgba(122,90,58,.25);margin:14px 0;}
+.team-gcard .amt{text-align:center;font-size:22px;font-weight:700;color:var(--snow-ink);}
+.team-gcard .cap{text-align:center;font-size:12px;color:#7a5a3a;font-weight:500;margin-top:2px;}
+.team-gcard.comm{padding:30px 22px;text-align:center;}
+.team-gcard.comm .lvl{font-size:14px;font-weight:500;color:#7a5a3a;margin-bottom:4px;}
+.team-gcard.comm .pct{font-size:47px;color:var(--snow-wine);line-height:1.1;
+  text-shadow:0 0 18px var(--team-glow);}
+.team-gcard.comm .amt2{font-size:20px;color:var(--snow-ink);margin-top:6px;}
+.team-gcard.comm .mem{font-size:12px;color:#7a5a3a;font-weight:500;margin-top:2px;}
+.team-member{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:16px;margin-bottom:12px;box-shadow:var(--sh-card);}
+.team-member .top{display:flex;align-items:center;gap:12px;}
+.team-member .avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;}
+.team-member .name{font-weight:600;font-size:15px;}
+.team-member .phone{font-size:12px;color:var(--snow-muted);font-weight:500;}
+.team-member .amt3{margin-left:auto;font-size:16px;color:var(--snow-wine);}
+.team-member .joined{font-size:11px;color:var(--snow-muted);font-weight:500;margin:10px 0 8px;}
+.team-member .ln2{height:1px;background:var(--snow-border);margin-bottom:8px;}
+.team-member .foot{font-size:11px;color:var(--snow-muted);font-weight:500;}
+
+/* Team.dc.html's level switcher: three separate pills, the active one filled
+   with the brand gradient and its own 3D shelf -- not the soft segmented
+   control inherited from Snow. */
+.lv-switcher{display:flex;gap:10px;margin:16px 18px 14px;}
+.lv-switcher .lv{flex:1;text-align:center;padding:11px 0;border-radius:var(--r-pill);font-weight:700;font-size:14px;border:1.5px solid var(--snow-border);color:var(--snow-muted);background:var(--snow-surface);font-family:inherit;}
+.lv-switcher .lv.on{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:none;}
+
+/* ── Account (Account.dc.html) ──
+   A profile card (logo / ID / phone / wallet balance / Deposit+Withdraw)
+   above a plain white SETTINGS list, then a black Log Out button. This
+   replaces Snow's coloured card matrix entirely. */
+.acct-profile{background:var(--snow-surface);border-radius:var(--r-card);padding:22px;border:1px solid var(--line-soft);box-shadow:var(--sh-card);}
+.acct-profile .p-top{display:flex;align-items:center;gap:14px;}
+.acct-logo{width:68px;height:68px;border-radius:50%;background:var(--chipz-grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;box-shadow:0 10px 20px -12px rgba(226,27,42,.5);}
+.acct-logo img{width:100%;height:100%;object-fit:cover;}
+.acct-logo span{color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:19px;letter-spacing:.06em;}
+/* When an animated logo is set it becomes the profile mark itself, and the
+   circle has to give way: the source is 300x220 landscape, and cropping that
+   to a 60px circle would cut roughly a quarter of its width off the sides.
+   So the slot takes the source's own aspect ratio, contains rather than
+   covers (nothing cropped, nothing stretched), and drops the gradient
+   backing so the file's transparency shows through.
+   Resolution: 66px tall renders at 132-198 device pixels on a 2x/3x phone,
+   comfortably inside the source's 220px height, so it is always downscaled
+   and stays crisp -- it is never blown up past its native size. */
+.acct-logo.has-gif{width:auto;height:66px;aspect-ratio:300/220;border-radius:var(--r-ctl);background:none;box-shadow:none;}
+.acct-logo.has-gif img{width:100%;height:100%;object-fit:contain;image-rendering:auto;}
+.acct-profile .p-id{font-weight:600;font-size:20px;}
+.acct-profile .p-phone{color:var(--snow-muted);font-size:16px;font-weight:500;}
+.acct-divider{height:1px;background:var(--snow-border);margin:18px 0;}
+.acct-profile .bal-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--snow-muted);font-weight:500;text-align:center;}
+/* Owner, against a reference screenshot: "the number of account balance is
+   large and UGX and colored in the colour of site, so ours should be that
+   orange." So the whole figure -- the UGX too, not just the digits -- is the
+   brand orange, big and bold, exactly as the reference treats its own brand
+   colour. It was 34px in the app's default text weight and ink colour, which
+   is what made it read as ordinary body text next to the reference.
+   Size is capped by the longest figure that has to fit on a 390px phone
+   without wrapping (see test-balance-style.py, which measures the real
+   rendered width rather than trusting the number here). */
+.acct-profile .bal-value{font-size:44px;font-weight:700;color:var(--chipz-orange);
+  text-align:center;line-height:1.1;letter-spacing:-.01em;
+  /* Pinned to one line on purpose: a balance broken across two lines reads
+     as two numbers. fitBalanceText() steps the size down only as far as the
+     measured width actually demands, so an ordinary balance keeps all 44px
+     and only a very large one shrinks. */
+  white-space:nowrap;
+  /* fit-content so the box HUGS the digits, which is what makes the gradient
+     below span the figure itself instead of the full-width card. max-width
+     keeps the overflow test (scrollWidth > clientWidth) working: the box is
+     capped at the card's width, so a too-long figure still reports overflow
+     and gets stepped down. */
+  width:fit-content;max-width:100%;margin:2px auto 18px;}
+/* Owner: "but has no gradient just like you see buttons, other side is conc
+   another is half conc" -- the Deposit button runs deep red on one end into
+   orange on the other, and the figure was a single flat orange next to it.
+   Same --chipz-grad, same 135deg, painted through the glyphs.
+   Guarded by @supports because the fallback for an unsupported
+   background-clip is an INVISIBLE balance -- the flat orange above stays as
+   the fallback, and only browsers that can actually clip to text get the
+   gradient. -webkit-text-fill-color is the one WebKit honours. */
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  .acct-profile .bal-value{background:var(--chipz-grad);
+    -webkit-background-clip:text;background-clip:text;
+    color:transparent;-webkit-text-fill-color:transparent;}
+}
+/* Every number below is measured off the owner's own mockup, not chosen.
+   His screenshot and ours are both 1080 device px wide on the same phone, so
+   device pixels compare directly; 1080/390 = 2.769 device px per CSS px.
+
+     icon tile      his 114 dev px -> 41 CSS   (ours was 52, 1.28x too big)
+     row pitch      his 193        -> 70 CSS   (ours was 250)
+     title ink      his  30        -> 15 CSS   (ours was 35 at 17.5px)
+     Deposit btn    his 141 tall   -> 51 CSS   (ours was 58)
+     Log Out        his 146 tall   -> 53 CSS   (ours was 54, already right)
+
+   Owner: "see cards in account are very big plus their icons, please use
+   exactly the size of mock up, even see button size of withdrawal and
+   deposit." Row pitch is tile + 2x padding + the 1px rule: 41 + 28 + 1 = 70,
+   which is his 69.7 to within a pixel. */
+.acct-btnrow{display:flex;gap:10px;}
+.acct-btnrow button{flex:1;height:51px;font-size:16px;padding:0;}
+.sec-head{display:flex;align-items:center;gap:9px;margin:26px 0 12px;}
+.sec-head .bar{width:4px;height:21px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;}
+.sec-head h2{font-size:22px;font-weight:400;margin:0;flex-shrink:0;}
+.sec-head .ln{flex:1;height:1px;background:var(--snow-border);}
+/* The Invitation Reward heading's accent bar. Same shape and gradient as
+   .sec-head .bar so the two read as one device, sized to this smaller 17px
+   heading rather than Account's 22px one. */
+.inv-bar{width:4px;height:17px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;display:block;}
+/* Owner: "see the settings card is having green line." It is the CARD's own
+   border, not the rule beside the heading -- sampled down his left edge it
+   holds rgb(236,243,235) from the top of the card to the bottom, G-R = +7,
+   a green-tinted hairline rather than the neutral one we had. */
+.setting-list{background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;border:1px solid #dceadd;box-shadow:var(--sh-card);}
+.setting-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--snow-border);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left;color:var(--snow-ink);font-family:inherit;}
+.setting-row:last-child{border-bottom:0;}
+.setting-row .sq{width:41px;height:41px;border-radius:var(--r-ctl);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--snow-neutral-soft);}
+.setting-row .sq img{width:30px;height:30px;object-fit:contain;}
+.setting-row .txt{flex:1;min-width:0;}
+.setting-row .t1{font-weight:600;font-size:15px;}
+.setting-row .t2{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
+.setting-row .chev{flex-shrink:0;color:var(--snow-muted);}
+/* Each tile carries its OWN background, sampled top-left to bottom-right off
+   his mockup -- they are gradients, not flat fills. Two stops were his
+   theme's purple and are translated to the brand's orange per the standing
+   rule (shape and placement from the mockup, colour from Chipz); owner:
+   "the first of download app it is purple, so here it should be orange."
+   Everything else is his measured colour unchanged, including the pale green
+   behind Balance Record that he pointed at specifically.
+     download  (100,31,112) -> ( 78, 23, 88)   purple  => deep orange
+     wallet    (255,209,12) -> (232,195, 78)
+     balance   (177,202,172)-> (224,238,225)
+     messages  (254,244,208)-> (250,244,230)
+     loginpw   ( 98,52, 98) -> (233,216,188)   purple  => deep orange
+     tradepw   (192,161,96) -> (246,202, 15)
+   Turntable has no counterpart in his mockup (that row does not exist there),
+   so it takes a warm coral that sits between the gold above it and the green
+   below rather than inventing a seventh hue out of sequence. */
+.setting-row .sq.ic-download{background:linear-gradient(145deg,#b34700,#8a3600);}
+.setting-row .sq.ic-wallet  {background:linear-gradient(145deg,#ffd10c,#e8c34e);}
+.setting-row .sq.ic-turntable{background:linear-gradient(145deg,#f4a06a,#efc0a2);}
+.setting-row .sq.ic-balance {background:linear-gradient(145deg,#b1caac,#e0eee1);}
+.setting-row .sq.ic-messages{background:linear-gradient(145deg,#fef4d0,#faf4e6);}
+.setting-row .sq.ic-loginpw {background:linear-gradient(145deg,#a8480e,#e9d8bc);}
+.setting-row .sq.ic-tradepw {background:linear-gradient(145deg,#c0a160,#f6ca0f);}
+.logout-btn{display:flex;width:100%;height:53px;align-items:center;justify-content:center;gap:8px;margin-top:22px;font-size:16px;letter-spacing:.08em;padding:0;}
+/* The owner's own door artwork, at the size his mockup draws it: his
+   glyph measures 31x47 device px, which is 17 CSS px tall. Width is left
+   auto so the door keeps its own proportions instead of being squashed
+   into a square. */
+.logout-btn img{height:17px;width:auto;display:block;flex-shrink:0;}
+
+/* ── Wallet (Wallet.dc.html) ──
+   ONE bound payout account shown as a bank-card tile, an Edit Wallet
+   toggle that reveals the provider/account/holder form, and a compact
+   "Your Wallet" summary row underneath. */
+.wallet-card{position:relative;border-radius:var(--r-card);padding:22px 22px 20px;color:#fff;overflow:hidden;margin-bottom:18px;box-shadow:0 18px 34px -18px rgba(30,10,5,.55);background:linear-gradient(120deg,#1a0d08 0%,#7c0a1c 42%,#e21b2a 62%,#ff8a1f 100%);}
+.wallet-card .sheen{position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);pointer-events:none;}
+.wallet-card .row1{position:relative;display:flex;align-items:flex-start;justify-content:space-between;}
+/* The card number measured bigger than the mockup's (32 against 24 device
+   px of ink), so what reads as "small" here is TRACKING, not size: his
+   digits are widely spaced and ours were nearly touching. Widened rather
+   than enlarged. The provider label is genuinely bigger in his. */
+.wallet-card .provider{font-size:24px;font-weight:600;letter-spacing:.02em;}
+/* The same two-cards artwork used by the Wallet row on Account -- the owner's
+   own icon, not a drawn approximation of it, so the two places agree. */
+.wallet-card .wc-mark{width:38px;height:38px;object-fit:contain;display:block;flex-shrink:0;filter:drop-shadow(0 4px 6px rgba(0,0,0,.35));}
+.wallet-card .chip{position:relative;width:42px;height:32px;margin:20px 0 22px;border-radius:5px;background:linear-gradient(135deg,#f6dc95,#c9973a);box-shadow:inset 0 0 0 1px rgba(120,80,10,.35);}
+/* The contact pads. Two hairline grids drawn with gradients rather than an
+   image, so the chip reads as a chip at any size. */
+.wallet-card .chip::before{content:'';position:absolute;inset:5px 3px;
+  background:linear-gradient(to right,transparent 0 32%,rgba(120,80,10,.5) 32% 34%,transparent 34% 66%,rgba(120,80,10,.5) 66% 68%,transparent 68%),
+             linear-gradient(to bottom,transparent 0 45%,rgba(120,80,10,.5) 45% 55%,transparent 55%);}
+.wallet-card .chip::after{content:'';position:absolute;left:34%;right:34%;top:5px;bottom:5px;border:1px solid rgba(120,80,10,.5);border-radius:2px;}
+.wallet-card .num{position:relative;font-size:24px;letter-spacing:.16em;margin-bottom:16px;}
+.wallet-card .holder-lbl{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;font-weight:500;}
+.wallet-card .holder-name{position:relative;font-size:15px;font-weight:500;margin-top:3px;}
+.wallet-panel{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:20px;margin-bottom:20px;}
+.wallet-panel .lbl{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 6px;}
+.wallet-panel .field{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:50px;display:flex;align-items:center;padding:0 15px;margin-bottom:16px;gap:8px;}
+.wallet-panel .field input,.wallet-panel .field select{border:0;outline:0;background:transparent;font-size:15px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+/* Wallet provider picker -- a field that drops a plain list under it, as the
+   mockup shows, instead of handing off to Android's own system picker. */
+.prov-pick{position:relative;}
+.prov-pick .prov-input{cursor:pointer;}
+.prov-pick .prov-input input{cursor:pointer;}
+.prov-caret{color:var(--snow-muted);flex-shrink:0;transition:transform .15s;}
+.prov-pick.open .prov-caret{transform:rotate(180deg);}
+.prov-list{display:none;position:absolute;left:0;right:0;top:52px;z-index:5;background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);overflow:hidden;box-shadow:0 14px 28px -14px rgba(30,10,5,.35);}
+.prov-pick.open .prov-list{display:block;}
+.prov-opt{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--snow-border);padding:14px 15px;font-family:inherit;font-size:15px;color:var(--snow-ink);cursor:pointer;}
+.prov-opt:last-child{border-bottom:0;}
+.prov-opt:active{background:var(--snow-neutral-soft);}
+.prov-opt.on{color:var(--snow-wine);font-weight:600;}
+.wallet-panel .btnrow{display:flex;gap:12px;}
+.wallet-panel .btnrow button{flex:1;height:48px;font-size:14px;padding:0;}
+.wallet-panel .btnrow .cancel{border:0;border-radius:var(--r-ctl);background:#f3e2ee;color:#6b2f56;font-weight:600;font-family:inherit;box-shadow:none;}
+.plain-h2{font-size:17px;font-weight:700;margin:0 0 12px;}
+.wallet-summary{display:flex;align-items:center;justify-content:space-between;background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:16px 18px;gap:10px;}
+.wallet-summary .prov{font-weight:600;font-size:14px;flex-shrink:0;}
+.wallet-summary .masked{font-size:14px;color:var(--snow-muted);}
+.wallet-summary .holder{font-size:13px;font-weight:500;text-align:right;line-height:1.3;}
+
+/* ── Deposit (Deposit.dc.html) ──
+   Chipz's own deposit screen, replacing the Recharge form inherited from
+   Snow: red-bar section headers, a 3-column grid of quick-amount chips with
+   the picked one filled, the amount field UNDER the chips, an explicit
+   payment-method row, a dark-prefixed phone field, and the numbered
+   instruction card. */
+.dep-sec{display:flex;align-items:center;gap:9px;margin:0 0 12px;}
+.dep-sec .bar{width:4px;height:19px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;}
+.dep-sec span{font-size:17px;font-weight:600;letter-spacing:.02em;}
+.dep-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px;}
+/* Owner: "every amount card on deposit has some green, see clearly and
+   critically". Measured off his screenshot rather than picked: walking out
+   of a chip's edge gives a 1px border at rgb(203,214,206) -- a light
+   green-grey, not the warm --snow-border we had -- and outside it a green
+   shadow peaking around rgb(227,243,232) against a rgb(247,246,241) page,
+   fading over ~10 device px (about 5 CSS px at this screenshot's scale).
+   The shadow DARKENS red and blue while leaving green almost untouched,
+   which is what makes it read as green rather than as grey. */
+.dep-chip{text-align:center;padding:17px 4px;border-radius:var(--r-ctl);font-weight:700;font-size:17px;border:1.6px solid #cbd9cf;background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;
+  box-shadow:0 3px 0 #dfeade,0 4px 12px rgba(120,190,145,.42);}
+.dep-chip.sel{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:none;}
+/* Kept in step with .wit-amt on purpose -- same control, sibling screen. */
+.dep-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:24px;}
+.dep-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+.pay-row{position:relative;display:flex;align-items:center;justify-content:center;background:var(--snow-surface);border:2px solid var(--snow-border);border-radius:var(--r-ctl);height:56px;padding:0 18px;margin-bottom:14px;width:100%;font-family:inherit;color:var(--snow-ink);}
+.pay-row.on{border-color:var(--snow-ink);}
+.pay-row span{font-weight:600;font-size:15px;letter-spacing:.03em;}
+.pay-row .pay-radio{position:absolute;right:18px;top:50%;transform:translateY(-50%);}
+.pay-radio{width:22px;height:22px;border-radius:50%;border:2px solid var(--snow-ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 0 rgba(26,19,16,.25);}
+.pay-row.on .pay-radio::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--snow-ink);}
+/* height matters here. Every other field on this screen (.dep-amt, .wit-amt,
+   .wit-pw, .pw-field) sets one; this row alone did not, so it collapsed to
+   its text and rendered 19px tall -- a third the height of the box above it,
+   and a genuinely hard tap target on a phone. Owner: "the number text area is
+   very small". 56px, slightly above the others, because it is the one field
+   on this screen that must be typed into. */
+.dep-phone{display:flex;align-items:stretch;height:56px;border-radius:var(--r-ctl);overflow:hidden;border:1.6px solid var(--snow-border);margin-bottom:8px;background:var(--snow-surface);}
+.dep-phone .prefix{background:var(--snow-ink);color:#fff;font-weight:700;display:flex;align-items:center;padding:0 14px;font-size:15px;flex-shrink:0;}
+.dep-phone input{border:0;outline:0;background:transparent;flex:1;padding:0 12px;font-family:inherit;font-size:15px;color:var(--snow-ink);min-width:0;}
+.dep-hint{font-size:12px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
+.dep-instr{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:18px;}
+.dep-instr .ih{display:flex;align-items:center;margin-bottom:10px;}
+.dep-instr .ih span{font-weight:700;font-size:17px;}
+.dep-instr .ln{height:1px;background:var(--snow-border);margin-bottom:10px;}
+.dep-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:13px;font-weight:500;line-height:1.9;}
+
+/* ── Withdraw (Withdraw.dc.html) ── */
+.wit-bal{background:linear-gradient(120deg,#eaf7ee 0%,#fdf0da 55%,#fbe6ea 100%);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:18px 20px;margin-bottom:20px;box-shadow:var(--sh-card);}
+/* Owner: "you see the difference on withdrawal screen with my mockups,
+   things are small even see number, it is small in size, and words."
+   Measured rather than guessed: his mockup and a screenshot of the live
+   screen are both 720px wide, so glyph heights compare directly. Three
+   things came back genuinely undersized, all by the same ~1.45x --
+   the balance figure (38 -> 55 device px of ink), the amount you type
+   (19 -> 28) and the trade-password field (14 -> 21). Everything else on
+   the screen already matched or beat the mockup: the section headings are
+   23 against his 24, and the instruction list is 18-23 against his 16.
+   Those are left alone deliberately -- scaling them too would overshoot
+   the thing he actually pointed at. */
+.wit-bal .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--snow-muted);font-weight:500;}
+.wit-bal .val{font-size:40px;color:var(--snow-ink);margin-top:6px;}
+/* The field grows with its text. Leaving the 52px height while the type
+   goes 16 -> 23px puts the digits hard against the border. */
+.wit-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:22px;gap:10px;}
+.wit-amt span{color:var(--snow-muted);font-weight:700;font-size:21px;}
+.wit-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+.btn-bind{display:block;width:100%;height:52px;border:0;border-radius:var(--r-ctl);background:#f3e2ee;color:#6b2f56;font-weight:700;font-size:15px;margin-bottom:22px;font-family:inherit;}
+.wit-pw{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:12px;}
+.wit-pw input{border:0;outline:0;background:transparent;font-size:22px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+.wit-fee{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
+.wit-instr{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:18px;}
+.wit-instr h3{font-size:17px;font-weight:700;margin:0 0 10px;}
+.wit-instr .ln{height:1px;background:var(--snow-border);margin-bottom:10px;}
+.wit-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:13px;font-weight:500;line-height:1.9;}
+
+/* ── Turntable (spin wheel) ──
+   A Chipz-only feature, so there is no mockup to match -- built in the same
+   language as the rest: brand gradient, Playfair numbers, 3D button. The
+   wheel is 8 alternating segments drawn with conic-gradient so it needs no
+   image asset, and the pointer sits above it. */
+.tt-stage{display:flex;flex-direction:column;align-items:center;padding:28px 0 0;}
+.tt-wheel-wrap{position:relative;width:270px;height:270px;display:flex;align-items:center;justify-content:center;}
+.tt-wheel{width:250px;height:250px;border-radius:50%;position:relative;
+  background:conic-gradient(var(--snow-wine) 0deg 45deg,var(--chipz-orange) 45deg 90deg,var(--snow-wine) 90deg 135deg,var(--chipz-orange) 135deg 180deg,var(--snow-wine) 180deg 225deg,var(--chipz-orange) 225deg 270deg,var(--snow-wine) 270deg 315deg,var(--chipz-orange) 315deg 360deg);
+  box-shadow:0 0 0 8px #1a1310,0 18px 34px -14px rgba(30,10,5,.6);
+  transition:transform 4s cubic-bezier(.17,.67,.16,1);}
+.tt-wheel .hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;border-radius:50%;background:var(--snow-surface);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -4px rgba(0,0,0,.4);}
+.tt-pointer{position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-top:26px solid var(--chipz-gold);filter:drop-shadow(0 3px 4px rgba(0,0,0,.4));z-index:2;}
+.tt-spins{font-size:22px;margin:22px 0 2px;}
+.tt-sub{color:var(--snow-muted);font-size:13px;font-weight:500;text-align:center;margin:0 0 22px;line-height:1.6;}
+.tt-rules{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:18px;margin-top:24px;box-shadow:var(--sh-card);}
+.tt-rules h3{font-size:16px;font-weight:700;margin:0 0 10px;}
+.tt-rules li{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.7;margin-left:16px;}
+
+/* ── Notify dialog (Notify.dc.html) ── */
+.notify-bg{position:fixed;inset:0;background:rgba(20,10,5,.45);display:none;align-items:center;justify-content:center;padding:36px;z-index:400;}
+.notify-bg.show{display:flex;}
+/* Owner, holding his mockup up against this: "see the dialog message should
+   be like that in that height that size."
+   Every number here is measured off his mockup as a FRACTION OF SCREEN WIDTH,
+   which is the only dpr-independent way to compare a phone screenshot with a
+   CSS rule. His alert card is 532/720 = 74% of the screen wide and 384/720
+   tall, i.e. about half as tall as it is wide. Ours was 330px on a 390px
+   screen -- 85% -- and taller with it. At 390px the mockup works out to a
+   288x208 card, which is what these produce.
+   The triangle is 79/720 = 11% of the width (43px), and it sits 38px below
+   the card's top edge; the message is ~15.5px; the OK is a 76x43 PILL, not
+   the rounded rectangle it was. */
+.notify-card{width:100%;max-width:288px;background:var(--snow-surface);border-radius:var(--r-card);box-shadow:0 30px 60px -20px rgba(0,0,0,.4);overflow:hidden;text-align:center;animation:notifyPop .16s ease-out;}
+@keyframes notifyPop{from{transform:scale(.92);opacity:0;}to{transform:scale(1);opacity:1;}}
+/* line-height:1 (not 0) now that this holds a glyph rather than an <svg>: a
+   zero line box clips an emoji's ascender. 43px keeps the ink the same height
+   the SVG occupied, measured against his reference. */
+.notify-icon{padding:32px 0 14px;line-height:1;font-size:43px;
+  font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;}
+.notify-msg{padding:0 24px 20px;font-size:15.5px;font-weight:700;color:var(--snow-ink);line-height:1.45;}
+/* Owner: "your button is long, it doesn't match words." It was stretched to
+   the card width regardless of its label, so a two-letter "OK" sat in a bar
+   the width of the dialog. It now sizes to its own text with comfortable
+   padding, and is centred -- and it is a pill, matching his mockup. */
+.notify-ok{display:block;width:auto;min-width:76px;margin:0 auto 22px;padding:0 26px;height:43px;border:0;border-radius:var(--r-pill);background:var(--chipz-grad);color:#fff;font-weight:700;font-size:15px;letter-spacing:.03em;font-family:inherit;box-shadow:none;transition:opacity .1s;}
+.notify-ok:active{opacity:.85;}
+
+/* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
+/* The mockup frames the whole block with a hairline above the chest and
+   another below the button -- a light rule that fades out at both ends, not
+   a hard border edge to edge. */
+.chest-stage{display:flex;flex-direction:column;align-items:center;padding:30px 0 0;}
+.chest-rule{width:64%;height:1px;flex-shrink:0;background:linear-gradient(to right,transparent,var(--snow-border) 22%,var(--snow-border) 78%,transparent);}
+.chest-rule.top{margin-bottom:22px;}
+.chest-rule.bottom{margin-top:24px;}
+/* Owner: "on treasure chest there are 2 linings circulating the chest box, you
+   can even see clearly that one inside is solid and one outside is dotted ...
+   also some greener background on that chest box."
+   We had ONE dotted ring and an orange wash. All three values below were
+   sampled off his screenshot rather than eyeballed -- scanning the vertical
+   centre line through the circle finds the outer dotted ring at rgb(166,206,180)
+   (a muted mint), the inner solid one 27 image-px inside it at rgb(234,227,209)
+   (a warm tan), and the field between them tinted rgb(198,227,199) against
+   rgb(250,248,240) paper, which is the green wash. At his 1080px capture on a
+   ~393pt screen that is a 191px outer circle, a 172px inner one, and roughly
+   10px between them. */
+.glow-ring{width:230px;height:230px;border-radius:50%;
+  background:radial-gradient(circle,rgba(76,196,140,.34) 0%,rgba(76,196,140,.13) 45%,rgba(76,196,140,0) 70%);
+  display:flex;align-items:center;justify-content:center;position:relative;}
+/* OUTER: dotted, mint. Fine dots, not the 1.5px dashes an earlier round had --
+   those read as a drawn border rather than the faint guide circle it should be. */
+.glow-ring::before{content:'';position:absolute;inset:16px;border-radius:50%;border:1px dotted rgba(126,178,148,.75);}
+/* INNER: solid, warm tan, ~10px further in. */
+.glow-ring::after{content:'';position:absolute;inset:26px;border-radius:50%;border:1px solid rgba(208,180,132,.72);}
+.glow-ring img{width:140px;filter:drop-shadow(0 18px 20px rgba(30,10,5,.35));animation:chestBounce 1.8s ease-in-out infinite;}
+.chest-stage h2{font-size:26px;font-weight:700;text-align:center;margin:26px 0 6px;}
+.chest-stage .sub{color:var(--snow-muted);font-size:14px;font-style:italic;font-weight:500;text-align:center;margin:0 0 26px;}
+/* Owner: "l want you to see the chest box password input card, it has green on
+   it, don't you see the mockup image."
+   It does -- sampling down the field's left edge in his screenshot gives
+   rgb(184,213,195) on the border rows against a rgb(254,253,251) fill. Undoing
+   the JPEG's blend against the paper puts the real border near rgb(156,197,174).
+   It is the same sage the rings and the wash use, which is why the whole block
+   reads as one thing there and read as a plain grey box here. Only this field
+   is greened: it is the one that belongs to the chest. */
+.key-field{width:100%;height:54px;border:1.6px solid rgba(150,196,172,.9);border-radius:var(--r-ctl);background:var(--snow-surface);display:flex;align-items:center;padding:0 18px;margin-bottom:16px;}
+.key-field input{border:0;outline:0;background:transparent;font-size:16px;text-align:center;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+.chest-win-bg{position:fixed;inset:0;background:#2ecc71;display:none;align-items:center;justify-content:center;padding:28px;z-index:320;}
+.chest-win-bg.show{display:flex;animation:winFlash .5s ease-out;}
+@keyframes winFlash{0%{background:#fff;}60%{background:#8ef0b4;}100%{background:#2ecc71;}}
+.chest-win-ghost{position:absolute;top:120px;left:50%;transform:translateX(-50%);width:120px;filter:blur(6px) brightness(1.3);opacity:.55;}
+/* Owner: "when one spins it shows that spin icon background icon l generated
+   my own instead of chest box, so it will show that inside background blur."
+   The wheel is his own artwork and is taller than it is wide (it stands on a
+   base), so it gets its own size and sits a little higher -- at the chest's
+   120px it read as a small smudge rather than the thing he drew. */
+/* Its own opacity and filter, not the chest's. The chest is warm brown, so
+   lifting its brightness on the green flash just made it glow; the wheel is
+   red and white, and the same treatment turned the red to mud and let the
+   green through the white segments until it read as mint. Truer colour, a
+   softer blur, and enough opacity to keep it his artwork rather than a stain
+   on the background. */
+.chest-win-ghost.spin{top:92px;width:172px;filter:blur(5px);opacity:.9;}
+.chest-win-card{position:relative;width:100%;max-width:340px;background:linear-gradient(160deg,#fff,#fbe9ee);border-radius:var(--r-card);border:2px solid #bfe3ff;box-shadow:0 24px 50px -20px rgba(0,0,0,.35);padding:36px 26px 30px;text-align:center;}
+.chest-win-card h1{font-size:26px;font-weight:700;margin:0 0 10px;background:var(--chipz-grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.chest-win-card .sub{font-size:15px;font-style:italic;color:var(--snow-muted);font-weight:500;margin:0 0 14px;}
+.chest-win-card .amt{font-size:38px;font-weight:700;margin:0 0 18px;background:var(--chipz-grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.chest-win-card .bal{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 24px;}
+
+/* ── Balance Record (BalanceRecord.dc.html) ── */
+/* Bleeds to the sheet's own edges: .sheet-body is padded 4px 20px 40px. */
+.bal-band{background:var(--chipz-hero);padding:26px 18px;text-align:center;margin:-4px -20px 0;}
+.bal-band .lbl{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.7);font-weight:600;}
+.bal-band .val{font-size:40px;color:#fff;margin-top:6px;}
+.rec-tabs{display:flex;margin:16px 0;border-bottom:1.5px solid var(--snow-border);}
+.rec-tabs .tb{flex:1;text-align:center;padding:0 0 12px;font-size:16px;font-weight:700;color:var(--snow-muted);position:relative;background:none;border:none;font-family:inherit;}
+.rec-tabs .tb.on{color:var(--snow-ink);}
+.rec-tabs .tb.on::after{content:'';position:absolute;left:20%;right:20%;bottom:-1.5px;height:2.5px;background:var(--snow-wine);border-radius:var(--r-pill);}
+.rec{display:flex;align-items:center;gap:11px;background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:16px 14px;margin-bottom:12px;box-shadow:var(--sh-card);}
+/* The D / W / T discs. Owner: "see icons of D,W, very clean, defined and
+   high quality." They were a flat wash of one colour with the letter in a
+   darker tone of the same -- at 44px that reads as a smudge with something
+   in it. Three things give a small disc definition: a gradient so it has a
+   lit side, a 1px inner highlight along the top edge so it looks raised
+   rather than printed, and a shadow tinted with its OWN colour instead of
+   grey, which is what makes it sit on the card rather than next to it.
+   Green for money coming in, rose for money going out -- the app's own
+   colours, not the mockup's purple. */
+.rec .av{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;letter-spacing:.01em;}
+.rec .av.g{background:linear-gradient(145deg,#eafaee 0%,#b8e6c6 100%);color:#116434;
+  box-shadow:0 6px 14px -6px rgba(20,96,48,.45),inset 0 1px 0 rgba(255,255,255,.9);}
+.rec .av.w{background:linear-gradient(145deg,#ffe7e1 0%,#f0b3b0 100%);color:#7a1030;
+  box-shadow:0 6px 14px -6px rgba(122,16,48,.42),inset 0 1px 0 rgba(255,255,255,.9);}
+.rec .txt{flex:1;min-width:0;}
+.rec .t1{font-weight:600;font-size:16.5px;line-height:1.25;}
+.rec .t2{font-size:12.5px;color:var(--snow-muted);font-weight:500;margin-top:3px;white-space:nowrap;}
+.rec .t3{font-size:13px;font-weight:500;margin-top:5px;color:var(--snow-muted);}
+.rec .right{text-align:right;flex-shrink:0;}
+.rec .amt{font-size:16.5px;font-weight:700;white-space:nowrap;}
+.rec .amt.pos{color:var(--snow-green);}
+.rec .amt.neg{color:var(--chipz-neg);}
+/* Status pills. Owner: "see the colours of paid, deposit pending." They were
+   pale tints with same-hue text -- a green pill on a white card at 12.5px was
+   readable but not LEGIBLE, and Failed and Paid were the same weight of
+   nothing. Solid fill, white text: a status is the one thing on the row worth
+   spotting from arm's length. Each keeps a shadow in its own hue so it reads
+   as a chip laid on the card. */
+.rec-pill{display:inline-block;margin-top:6px;font-size:12.5px;font-weight:700;letter-spacing:.03em;padding:5px 14px;border-radius:var(--r-pill);color:#fff;
+  text-shadow:0 1px 1px rgba(0,0,0,.18);}
+.rec-pill.pend{background:linear-gradient(135deg,#fb8c00,#dd6b00);box-shadow:0 5px 12px -6px rgba(221,107,0,.75);}
+/* The orange is deliberately a stop deeper than the mockup's. White text on
+   a bright #ffa726 measures 2.35:1, which is a label you squint at outdoors;
+   this reads 2.8:1 and still lands as orange next to the green and the red. */
+.rec-pill.paid{background:linear-gradient(135deg,#35c46c,#12894a);box-shadow:0 5px 12px -6px rgba(18,137,74,.7);}
+.rec-pill.fail{background:linear-gradient(135deg,#ef5f52,#c0182a);box-shadow:0 5px 12px -6px rgba(192,24,42,.7);}
+
+/* ── Messages (MessagesList.dc.html / Messages.dc.html) ── */
+/* Owner: "they have design ... the mock up has a very clean css, high
+   quality and definition." His unread row is not a flat white rectangle: it
+   is a soft gradient card carrying a TINTED glow in the accent hue, so an
+   unread message looks lit rather than merely outlined. Ours had the accent
+   only as a 3px bar on the left edge, which is a marker, not a design.
+   The glow is the brand's warm one for the same reason the backdrop is --
+   his green belongs to his theme. */
+.msg-row{display:flex;align-items:flex-start;gap:14px;background:linear-gradient(135deg,#ffffff 0%,#fff6ef 100%);border:1px solid var(--line-soft);border-left:3px solid var(--snow-wine);border-radius:var(--r-card);padding:16px;margin-bottom:12px;width:100%;text-align:left;font-family:inherit;color:var(--snow-ink);box-shadow:0 1px 2px rgba(30,10,5,.05),0 12px 26px -14px rgba(226,27,42,.42);}
+/* A read message loses the lift as well as the bar -- it is done with, and
+   should sit back rather than keep competing with the unread ones. */
+.msg-row.read{background:var(--snow-surface);border-left-color:var(--snow-border);box-shadow:var(--sh-card);}
+/* Same raised disc as the Balance Record avatars -- one avatar treatment
+   across the app, not two that nearly match. */
+.msg-row .av{width:44px;height:44px;border-radius:50%;flex-shrink:0;background:linear-gradient(145deg,#eafaee 0%,#b8e6c6 100%);color:#116434;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;
+  box-shadow:0 6px 14px -6px rgba(20,96,48,.45),inset 0 1px 0 rgba(255,255,255,.9);}
+.msg-row .txt{flex:1;min-width:0;}
+.msg-row .top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.msg-row .t1{font-weight:600;font-size:15px;line-height:1.35;}
+.msg-row .date{font-size:11px;color:var(--snow-muted);font-weight:500;text-align:right;flex-shrink:0;white-space:nowrap;}
+.msg-row .t2{font-size:12px;color:var(--snow-muted);font-weight:500;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* Owner, holding his mockup's before/after beside ours: "you can see blurry
+   green, and message doesn't slide from down."
+   Both halves measured off the two screenshots at matched width.
+
+   THE BACKDROP. His reads rgb(163,218,186) -- luminance 189, a LIGHT tinted
+   wash with the list visibly blurred behind it. Ours read rgb(134,125,118),
+   luminance 126: a flat grey-brown dim, no blur, no hue. The difference is
+   not "a bit darker", it is the opposite operation -- his lifts and tints the
+   page, ours drops a dirty sheet over it.
+   The tint here is the BRAND's warm one, not his green. His mockups are drawn
+   in a purple/green theme; a green wash is the right answer in that app and
+   would be the only green surface in this one. The effect is his, the hue is
+   Chipz's -- say the word and it goes green.
+   backdrop-filter is what does the blurring; the rgba on top does the tint.
+   Both are needed: the blur alone leaves the colour of whatever is behind it,
+   and the tint alone is what we already had.
+
+   ROUND 2, owner: "the mockup shows good blur very well but see yours, not
+   even blur ... see the message when tapped, it leaves a nav icons but see
+   yours how you did it."
+   Two separate faults, both measured off his latest screenshot.
+   (1) The blur WAS applying -- the tint was hiding it. At .42 the wash was
+       opaque enough that the blurred page underneath stopped being legible as
+       content, which is what "not even blur" describes: you cannot see a blur
+       you cannot see through. His backdrop keeps the list's shapes plainly
+       visible behind the glass. Tint down to .26, blur up to 20px, so there is
+       something recognisable behind it.
+   (2) His overlay STOPS ABOVE THE BOTTOM BAR -- sampling his left gutter, the
+       tint runs to y=1841 of 2085 and the nav below it is untinted and sharp.
+       Ours covered the whole screen. `bottom:var(--nav-h)` is the same rule
+       .sheet-bg already uses, so this is the app's own convention rather than
+       a number invented here.
+
+   ROUND 3, and (1) above had overshot: 20px is not "minimal". Owner: "see the
+   blur in my mockup it is minimal such that you can even see some texts in
+   background." Measured over the strip above the card in both screenshots:
+
+                    luminance   stdev   edge p99
+        his            190.9     10.9        8
+        ours (20px)    216.2      1.4        3
+
+   stdev and edge energy are what matter -- they say how much STRUCTURE
+   survives, i.e. whether there is anything left to read. Ours was FLAT: the
+   content was not blurred, it was erased. Luminance cannot see that, and
+   chasing luminance is exactly how round 2 landed on a backdrop that hit the
+   right brightness with nothing legible behind it.
+
+   blur/tint were then swept over the REAL popup on the REAL list
+   (tune-msg-blur.py, 28 combinations) and read back the same three ways.
+   5px/.22 reproduces his stdev exactly (10.9). The luminance still reads
+   higher than his and that is correct to ignore: his list sits on a green
+   page and ours on a white sheet, so brightness here is a property of his
+   CONTENT, not of his blur. */
+.msg-detail-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
+  background:rgba(238,112,34,.22);
+  -webkit-backdrop-filter:blur(5px) saturate(1.15);backdrop-filter:blur(5px) saturate(1.15);
+  display:none;align-items:flex-end;z-index:305;}
+/* No backdrop-filter (older Android WebViews): a light tint alone would leave
+   the page behind fully legible and the card floating on nothing, so lean on
+   opacity instead. Deliberate, not accidental. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .msg-detail-bg{background:rgba(238,112,34,.62);}
+}
+.msg-detail-bg.show{display:flex;}
+/* A FLOATING card, not a sheet welded to the screen edge -- that is what
+   "poorly designed it" is pointing at. Measured off his screenshot: the card
+   spans x=45..1035 of 1080, so a 4.2% side inset (16px at 390), its bottom
+   edge sits 39px above the overlay's own bottom (another ~16px), and every
+   corner is rounded. Its height is 898 of 2085 = 43% of the screen; the old
+   58vh minimum made a short message noticeably taller than his.
+   It still rises from below -- the owner asked for that in an earlier round
+   and this does not undo it; it now travels to a resting place 16px up rather
+   than to the screen edge. */
+.msg-detail{width:calc(100% - 32px);max-width:448px;margin:0 auto 16px;background:var(--snow-surface);border-radius:26px;padding:26px 22px 30px;position:relative;box-shadow:0 18px 44px -14px rgba(20,10,5,.42);animation:sheetUp .42s cubic-bezier(.22,1,.36,1);min-height:43vh;max-height:calc(100% - 32px);overflow-y:auto;}
+/* It really slides now. It was translateY(24px) over .22s -- a nudge you have
+   to be looking for, which is exactly "message doesn't slide from down". From
+   100% of its own height means it starts fully below the fold and travels the
+   whole way up. */
+@keyframes sheetUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+.msg-detail .xbtn{position:absolute;top:18px;right:18px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;color:var(--snow-ink);}
+.msg-detail .head{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px;padding-right:30px;}
+.msg-detail .av{width:44px;height:44px;border-radius:50%;flex-shrink:0;background:linear-gradient(145deg,#eafaee 0%,#b8e6c6 100%);color:#116434;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;
+  box-shadow:0 6px 14px -6px rgba(20,96,48,.45),inset 0 1px 0 rgba(255,255,255,.9);}
+.msg-detail h2{font-size:16px;font-weight:700;margin:0 0 6px;line-height:1.35;}
+.msg-detail .date{font-size:11px;color:var(--snow-muted);font-weight:500;}
+.msg-detail .ln{height:1px;background:var(--snow-border);margin-bottom:16px;}
+.msg-detail .content{font-size:14px;line-height:1.75;color:var(--snow-ink);font-weight:500;white-space:pre-line;}
+
+/* ── Change Login / Trade Password (ChangeLoginPassword.dc.html, ChangePassword.dc.html) ── */
+.pw-note{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.6;margin:0 0 22px;}
+.pw-head{display:flex;align-items:center;gap:9px;margin:0 0 10px;}
+.pw-head .bar{width:4px;height:16px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;}
+.pw-head span{font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--snow-muted);}
+.pw-field{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:52px;display:flex;align-items:center;padding:0 16px;margin-bottom:20px;gap:10px;}
+.pw-field input{border:0;outline:0;background:transparent;font-size:15px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
+.pw-field.pin input{letter-spacing:.2em;}
+.pw-field.pin input::placeholder{letter-spacing:normal;}
+
+/* ── Auth (Login / Sign Up) ──────────────────────────────────────────
+   Matches the approved Main.dc.html / Register.dc.html mockups: a hero
+   band (admin-uploadable background image) with the CHIPZ wordmark, then a
+   white card that overlaps its lower edge carrying the LOGIN / SIGN UP
+   title, a small dash-dot-dash divider, and the fields. Field icons here
+   are deliberately real emoji glyphs (owner: "even see those emoji or
+   symbols of padlock, key... l need that same key") -- the only place in
+   this app that uses emoji instead of SVG. */
+.auth-hero{position:relative;overflow:hidden;height:280px;background:var(--chipz-grad);background-size:cover;background-position:center;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;}
+/* ── Admin-set backdrops for the Login / Sign Up screen ──
+   Owner: "make when l can put background image on those screens of login tab
+   and registration tab ... 2 different images so one image will appear on
+   login and registration tabs, and 1 will appear on space where orange color
+   is shared". Two slots: the orange hero band, and the white form card.
+
+   Each is a CHILD element rather than a background-image on the section
+   itself, and that is what makes the opacity control useful: the child paints
+   OVER the brand gradient (or the white card), so opacity blends the photo
+   towards the brand colour instead of towards nothing. A background-image
+   with opacity would need the whole element faded, taking the wordmark and
+   the form fields with it.
+
+   The negative inset is not decoration. filter:blur() feathers an element's
+   own edges, so a backdrop that exactly filled its box would show a soft
+   transparent rim all the way round once blurred. Pulling it out by twice the
+   blur radius puts that rim outside the clip, which is why both sections need
+   overflow:hidden. */
+.auth-bg{position:absolute;inset:calc(-2 * var(--auth-bg-blur, 0px));
+  background-size:cover;background-position:center;background-repeat:no-repeat;
+  opacity:var(--auth-bg-op, 1);filter:blur(var(--auth-bg-blur, 0px));
+  pointer-events:none;z-index:0;}
+#authHeroBg{--auth-bg-blur:var(--auth-hero-blur, 0px);--auth-bg-op:var(--auth-hero-op, 1);
+  background-image:var(--auth-hero-img, none);}
+/* ── The banner bleeds into the card instead of stopping dead ──
+   Owner: "on login and register pages there should be like whites or color
+   bleeding into the image of banner uploaded from admin panel, just like you
+   see the first image."
+
+   His reference is a photo whose lower half ramps smoothly into the page's
+   own flat colour, so there is no banner EDGE anywhere -- measured down that
+   image, the pixels stop varying entirely about 80 device px before the
+   bottom and the last ~160 px are one continuous ramp. Ours ended on a hard
+   horizontal cut that the card's rounded top corners left visible on both
+   sides.
+
+   A scrim to the card's colour, NOT a mask on the image: masking the image
+   out would just reveal the orange gradient underneath it, which is not
+   "white bleeding in". 55% of the hero, with a mid stop, so the ramp is long
+   and slow at the top and solid well before the bottom rather than a short
+   hard fade near the edge.
+
+   z-index 1 puts it over the photo (z-index 0) and under the wordmark and
+   the tagline (z-index 2), so the brand stays crisp on top of the fade.
+
+   Only when a banner is actually set: with no image the hero is the plain
+   brand gradient, and washing THAT out at the bottom would quietly restyle a
+   screen he has already approved. .has-bg is toggled in applyAuthBackgrounds(). */
+.auth-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:55%;
+  pointer-events:none;z-index:1;opacity:0;transition:opacity .2s ease;
+  background:linear-gradient(to bottom,
+    rgba(255,255,255,0) 0%,
+    rgba(255,255,255,.55) 55%,
+    var(--snow-surface) 88%,
+    var(--snow-surface) 100%);}
+.auth-hero.has-bg::after{opacity:1;}
+#authCardBg{--auth-bg-blur:var(--auth-card-blur, 0px);--auth-bg-op:var(--auth-card-op, 1);
+  background-image:var(--auth-card-img, none);border-radius:inherit;}
+/* Angular triangle motifs, straight off Main.dc.html -- Chipz's brand
+   language is angular, NOT the soft wave this screen inherited from Snow
+   (owner: "l no longer need to see this wavy curvy design"). */
+.auth-tri{position:absolute;}
+.auth-tri.t1{width:0;height:0;border-left:90px solid transparent;border-right:90px solid transparent;border-bottom:150px solid rgba(0,0,0,.16);top:-60px;left:-40px;transform:rotate(18deg);}
+.auth-tri.t2{width:0;height:0;border-left:70px solid transparent;border-right:70px solid transparent;border-bottom:120px solid rgba(255,255,255,.14);bottom:-50px;right:-30px;transform:rotate(-12deg);}
+.mark-row{display:flex;align-items:center;gap:8px;position:relative;z-index:2;}
+.mark-tri{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-bottom:20px solid #14100d;flex-shrink:0;}
+.auth-wordmark{position:relative;font-size:36px;letter-spacing:.02em;transform:skewX(-7deg);color:#fff;}
+.auth-wordmark b{color:#14100d;font-weight:400;}
+.auth-card{background:var(--snow-surface);margin-top:-28px;border-radius:var(--r-card);position:relative;z-index:3;padding:32px 22px 30px;box-shadow:0 22px 44px -26px rgba(40,10,4,.5);overflow:hidden;}
+/* Owner: "there is a white space down the login screen, why is it there?"
+   The hero is a fixed 280px and the card was only as tall as its own fields,
+   so on any screen taller than the two of them together the page canvas
+   showed through underneath as a pale strip -- most obvious on Log In, which
+   has three fewer fields than Sign Up. Making the wrap a column and letting
+   the card take the slack runs it to the bottom of the screen instead.
+   dvh, not vh, where it is supported: 100vh on a phone is the viewport WITH
+   the address bar hidden, so on first paint (bar visible) it overshoots and
+   trades the gap for a scrollbar. dvh tracks what is actually on screen. */
+#authScreen > .wrap{display:flex;flex-direction:column;min-height:100vh;}
+@supports (min-height:100dvh){#authScreen > .wrap{min-height:100dvh;}}
+#authScreen .auth-hero{flex:0 0 auto;}
+#authScreen .auth-card{flex:1 0 auto;}
+/* Everything in the card sits above its backdrop.
+   The second rule has to restore `position:absolute`, not just drop the
+   z-index: `.auth-card > *` and `.auth-bg` have the SAME specificity, and
+   this one comes later in the sheet, so it was winning and collapsing the
+   backdrop to a 0x0 relatively-positioned span. It rendered as nothing at
+   all, and every computed-style check still passed. */
+.auth-card > *{position:relative;z-index:1;}
+.auth-card > #authCardBg{position:absolute;z-index:0;}
+.auth-card h1{margin:0 0 6px;font-size:26px;text-align:center;letter-spacing:.08em;font-weight:400;}
+.dot-divider{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 26px;}
+.dot-divider .ln{width:34px;height:2px;background:var(--snow-border);}
+.dot-divider .dot{width:7px;height:7px;border-radius:50%;background:var(--chipz-orange);}
+.auth-field{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);padding:0 16px;height:54px;margin-bottom:14px;}
+.auth-field input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:var(--snow-ink);text-overflow:ellipsis;}
+.auth-field input::placeholder{color:var(--snow-muted);}
+.auth-field .emoji{font-size:18px;flex-shrink:0;line-height:1;}
+.auth-field .prefix{font-weight:700;color:var(--snow-ink);border-right:1.5px solid var(--snow-border);padding-right:12px;margin-right:2px;}
+.auth-field.referral{background:#fff3e0;border-color:#ffd9a8;}
+.auth-field .eye{background:none;border:none;padding:4px;color:var(--snow-muted);display:flex;align-items:center;flex-shrink:0;}
+.row-check{display:flex;align-items:center;gap:9px;margin:2px 0 22px;}
+.row-check input{width:18px;height:18px;accent-color:var(--snow-wine);}
+.row-check span{font-size:14px;color:var(--snow-muted);font-weight:500;}
+.auth-hint{font-size:12px;color:var(--snow-muted);font-weight:500;margin:-10px 0 16px 4px;}
+.auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--snow-muted);font-weight:500;}
+.auth-switch a{font-weight:600;color:var(--chipz-link);text-decoration:none;}
+.form-field{margin:0 0 14px;}
+.form-field label{display:block;font-size:15px;font-weight:500;color:var(--snow-ink);margin-bottom:8px;}
+.form-field .input-wrap{position:relative;}
+.form-field input{width:100%;padding:17px 44px 17px 16px;border:1px solid var(--snow-border);border-radius:var(--r-ctl);font-size:17px;background:var(--snow-surface);color:var(--snow-ink);}
+.form-field input:focus{outline:none;border-color:var(--snow-wine);}
+.form-field .eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--snow-muted);background:none;border:none;padding:4px;display:flex;align-items:center;justify-content:center;}
+/* Owner: "make (+256) static, so one can type 07xxxxxxxx or 7xxxxxxxx... just
+   the system understand it" -- every phone field is now a static, fixed
+   "+256" chip next to a local-number-only input, instead of one free-text
+   field where the country code had to be typed (and could be typed several
+   different ways). See sanitizePhoneInput()'s own comment for why this is
+   safe for already-registered accounts. */
+.phone-field{display:flex;gap:8px;}
+.phone-prefix{flex-shrink:0;padding:15px 12px;border:1px solid var(--snow-border);border-radius:var(--r-ctl);background:var(--snow-neutral-soft);color:var(--snow-ink);font-size:15px;font-weight:500;display:flex;align-items:center;}
+.phone-field input{flex:1;min-width:0;width:auto;padding:15px 16px;}
+/* Chrome's own "Use saved password?" picker fills #loginPhone/#loginPassword
+   with zero JS-visible events -- there's no input/change to listen for. The
+   browser DOES tag autofilled fields with the :-webkit-autofill pseudo-class
+   though, and toggling a no-op animation on that class is the one reliable,
+   long-standing trick to get a real DOM event (animationstart) out of it. See
+   autoSubmitOnAutofill() in original_module.js. */
+@keyframes onAutoFillStart{ from{} to{} }
+@keyframes onAutoFillCancel{ from{} to{} }
+#loginPhone:-webkit-autofill{ animation-name:onAutoFillStart; animation-duration:.01s; }
+#loginPhone:not(:-webkit-autofill){ animation-name:onAutoFillCancel; animation-duration:.01s; }
+#loginPassword:-webkit-autofill{ animation-name:onAutoFillStart; animation-duration:.01s; }
+#loginPassword:not(:-webkit-autofill){ animation-name:onAutoFillCancel; animation-duration:.01s; }
+.form-hint{font-size:11.5px;color:var(--snow-muted);margin-top:6px;}
+.instr-card{background:var(--snow-wine-soft);border-radius:var(--r-card);padding:18px;margin-top:24px;}
+.instr-card .instr-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.instr-card .instr-head .instr-title{font-size:14.5px;font-weight:700;color:var(--snow-ink);}
+.instr-card ol{margin:0;padding-left:19px;color:var(--snow-muted);font-size:12.5px;line-height:2;}
+.instr-card ol li{margin-bottom:3px;}
+.milestone-card{display:flex;align-items:stretch;background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);overflow:hidden;margin-top:14px;box-shadow:var(--sh-card);}
+.milestone-rail{width:52px;flex-shrink:0;background:linear-gradient(165deg,var(--snow-wine),var(--snow-wine-deep));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:14.5px;}
+.milestone-rail.done{background:linear-gradient(165deg,var(--snow-green),#1F4E33);}
+.milestone-body{flex:1;min-width:0;padding:16px 18px;}
+.milestone-title{font-size:13.5px;font-weight:600;color:var(--snow-ink);line-height:1.45;}
+.milestone-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:14px;text-align:center;}
+.milestone-stats .stat-num{font-size:13.5px;font-weight:700;color:var(--snow-ink);}
+.milestone-stats .stat-lbl{font-size:9.5px;color:var(--snow-muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px;}
+.milestone-track{height:5px;border-radius:var(--r-pill);background:var(--snow-border);margin-top:10px;overflow:hidden;}
+.milestone-fill{height:100%;border-radius:var(--r-pill);background:var(--snow-wine);}
+.milestone-fill.done{background:var(--snow-green);}
+.auth-error{background:var(--snow-wine-soft);color:var(--snow-wine-deep);border-radius:var(--r-ctl);padding:10px 14px;font-size:12.5px;margin-bottom:14px;}
+
+/* ── Manual deposit: payment-method + "COPY & PAY" screens ──
+   Owner supplied this exact reference design and asked for it kept as-is --
+   original colors and layout unchanged, only wired to real backend calls.
+   Round 118 embedded it inside this app's own sheet system (header bar +
+   side padding); the owner then said that read as a "frame" around the
+   reference's own full-page design and asked for it to be "independent"
+   with no header bars -- so this round moves it OUT of the sheet system
+   entirely into its own dedicated full-screen overlay (#manualPayBg,
+   same position:fixed;inset:0 pattern as #openingGate/#loadingScreen),
+   which means the reference's own ORIGINAL min-height:100vh + 190px/220px
+   padding numbers now apply exactly as authored -- no more adaptation
+   needed, since there's a real bare viewport under it again. Every other
+   rule below is still the reference's own exact CSS, just class-prefixed
+   (.foo -> .mp-foo) and scoped so it can't leak into the rest of this app.
+   Two further owner corrections applied this round: the reference's own
+   red accents (#c92727/#c92b2b) are gone -- replaced with the same neutral
+   dark tone the rest of the reference's own body text already uses, not a
+   new color; and the account-number/account-name figures (a real
+   +256XXXXXXXXX number is 13 characters) now scale down with clamp()
+   instead of the reference's own two fixed breakpoints, which were still
+   wide enough to push the copy-button off the right edge on a real phone
+   number at the reference's own 35px mobile size. See
+   openManualDepositFormSheet()'s own comment in original_module.js for why
+   the reference's own "GOPAY" brand logo specifically was swapped for
+   Snow's own mark (a real third-party e-wallet company's logo, not
+   shipped) while the real MTN/Airtel logos were kept exactly as supplied. */
+.mp-overlay{position:fixed;inset:0;z-index:250;display:none;overflow-y:auto;background:#050505;-webkit-overflow-scrolling:touch;}
+.mp-overlay.show{display:block;}
+/* One small, unobtrusive circular back button -- deliberately NOT a full-
+   width title bar ("no header bars"), fixed in the same spot regardless of
+   which of the reference's 2 internal screens is showing. */
+.mp-back-btn{position:fixed;top:16px;left:16px;z-index:5;width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
+#manualPayFlow {
+  --gold:#e58d00;
+  --gold2:#f5c55a;
+  --text:#2d2d2d;
+  --muted:#8f8f8f;
+  --soft:#f6f6f6;
+}
+#manualPayFlow *{box-sizing:border-box}
+#manualPayFlow button,#manualPayFlow input{font:inherit}
+#manualPayFlow button{-webkit-tap-highlight-color:transparent}
+#manualPayFlow .mp-hidden{display:none!important}
+/* Owner: "the network payment page should be balanced in the middle of the
+   page" -- the reference's own version just top-aligned the card with a lot
+   of empty space below it on a real phone screen. Flex-centered instead;
+   min-height (not height) still lets genuinely tall content (a validation
+   message, a long phone number) grow past one viewport rather than clipping. */
+#manualPayFlow .mp-selector-screen{
+  min-height:100vh;
+  padding:32px 16px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  background:
+    linear-gradient(180deg,#050505 0%,#252525 18%,#515151 40%,#515151 100%);
+}
+#manualPayFlow .mp-selector-card{
+  width:min(560px,100%);
+  margin:0 auto;
+  background:#fff;
+  border-radius:var(--r-card);
+  overflow:hidden;
+  box-shadow:0 8px 25px rgba(0,0,0,.08);
+}
+/* Owner: "the tabs are stills very big plus text, make them small tabs
+   copy text icons cards, words are very big" -- every size below in this
+   flow was scaled down (roughly the same proportion throughout, not just
+   the one clipped spot) from the reference design's own desktop-oriented
+   base sizes to genuinely small, phone-appropriate cards/tabs/copy/icons. */
+#manualPayFlow .mp-selector-inner{padding:30px 18px 20px}
+#manualPayFlow .mp-brand-center{display:flex;justify-content:center;margin-bottom:22px}
+#manualPayFlow .mp-brand-center img{width:56px;height:auto;object-fit:contain}
+/* The reference's own brand mark here was a real third-party e-wallet
+   company's logo ("GOPAY") -- swapped for Snow's own snowflake mark
+   (see the top-of-section comment above openManualDepositFormSheet for
+   why), sized to match this round's smaller brand-mark size. */
+#manualPayFlow .mp-brand-center svg{width:44px;height:44px}
+#manualPayFlow .mp-lead{
+  margin:0 0 18px;
+  font-size:13px;
+  line-height:1.35;
+  font-weight:500;
+  color:#4b4b4b;
+}
+#manualPayFlow .mp-amount-line{
+  font-size:13px;
+  font-weight:500;
+  color:#555;
+  margin-bottom:16px;
+}
+#manualPayFlow .mp-amount-line strong{color:#d78200}
+#manualPayFlow .mp-select-label{
+  font-size:12px;
+  color:#656565;
+  font-weight:500;
+  margin-bottom:10px;
+}
+#manualPayFlow .mp-methods{display:flex;gap:10px;justify-content:center;margin-bottom:16px;}
+#manualPayFlow .mp-method{
+  width:96px;height:78px;background:white;border:1px solid #cfcfcf;border-radius:var(--r-card);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  color:#777;font-size:12px;font-weight:600;position:relative;
+  box-shadow:0 5px 12px rgba(0,0,0,.06);cursor:pointer;
+}
+#manualPayFlow .mp-method img{width:29px;height:23px;object-fit:contain}
+#manualPayFlow .mp-method.mp-airtel img{width:36px}
+#manualPayFlow .mp-method.mp-active{border-color:#d7a957;background:#fffaf3;box-shadow:0 6px 14px rgba(220,150,20,.16)}
+#manualPayFlow .mp-method.mp-active:after{
+  content:"✓";position:absolute;right:0;bottom:0;width:20px;height:20px;
+  clip-path:polygon(100% 0,100% 100%,0 100%);background:#d7a957;color:white;
+  display:flex;align-items:flex-end;justify-content:flex-end;padding:0 3px 1px 0;font-size:10px;
+}
+#manualPayFlow .mp-phone-wrap{
+  height:46px;border:1px solid #bdbdbd;border-radius:var(--r-ctl);display:flex;align-items:center;
+  overflow:hidden;background:#fff;margin-bottom:14px;
+}
+#manualPayFlow .mp-prefix{padding:0 10px;color:#d48717;font-size:13px;font-weight:500;white-space:nowrap}
+#manualPayFlow .mp-phone-wrap input{
+  flex:1;min-width:0;border:0;outline:none;font-size:13px;padding:0 12px 0 0;background:transparent;color:#222;
+}
+#manualPayFlow .mp-phone-wrap input::placeholder{color:#c5c5c5}
+#manualPayFlow .mp-warning{
+  margin:0 -18px 16px;padding:10px 18px;background:#fff0f0;color:#cb6565;
+  font-size:11.5px;line-height:1.45;display:flex;gap:8px;align-items:flex-start;
+}
+#manualPayFlow .mp-warning .mp-bang{
+  width:16px;height:16px;border-radius:50%;background:#ffd3d3;color:#d95d5d;display:inline-flex;
+  align-items:center;justify-content:center;font-weight:600;flex:0 0 auto;margin-top:1px;font-size:10px;
+}
+#manualPayFlow .mp-confirm-wrap{display:flex;justify-content:center;padding:0 0 4px}
+#manualPayFlow .mp-confirm-btn{
+  width:min(220px,100%);height:46px;border:none;border-radius:var(--r-ctl);color:white;font-size:14px;font-weight:700;
+  background:linear-gradient(#f8cf71,#e99b1d);box-shadow:inset 0 1px rgba(255,255,255,.5);
+  cursor:pointer;
+}
+#manualPayFlow .mp-confirm-btn span{font-size:18px;font-weight:300;margin-left:5px;vertical-align:-2px}
+#manualPayFlow .mp-pay-screen{min-height:100vh;background:#f6f6f6;padding-bottom:44px}
+#manualPayFlow .mp-hero{
+  height:168px;position:relative;overflow:hidden;color:white;
+  background:
+    radial-gradient(1000px 240px at -10% 20%,rgba(180,160,115,.18),transparent 50%),
+    repeating-linear-gradient(12deg,rgba(255,255,255,.035) 0 2px,transparent 2px 10px),
+    linear-gradient(155deg,#050505,#33342f 55%,#565853);
+}
+#manualPayFlow .mp-hero:before{
+  content:"";position:absolute;inset:24px -120px auto -80px;height:140px;
+  background:
+    linear-gradient(20deg,transparent 0 28%,rgba(191,181,150,.12) 29% 32%,transparent 33% 44%,rgba(180,170,140,.1) 45% 47%,transparent 48%),
+    linear-gradient(-22deg,transparent 0 38%,rgba(255,255,255,.06) 39% 42%,transparent 43%);
+  transform:skewX(-18deg);
+}
+#manualPayFlow .mp-hero-logo{position:absolute;left:44px;top:16px;width:52px;height:auto;object-fit:contain}
+/* Same swap as .mp-brand-center above (GoPay logo -> Snow's own mark),
+   sized to match this round's smaller hero-logo size. */
+#manualPayFlow .mp-hero-logo svg{width:32px;height:32px}
+#manualPayFlow .mp-expiry{position:absolute;right:10px;top:14px;text-align:right;font-size:11px;color:#eee}
+#manualPayFlow .mp-expiry .mp-label{background:rgba(74,74,74,.72);padding:2px 12px 3px 18px;clip-path:polygon(12% 0,100% 0,100% 100%,0 100%)}
+#manualPayFlow .mp-timer{margin-top:6px;font-size:15px;letter-spacing:1px}
+#manualPayFlow .mp-timer span{
+  display:inline-block;min-width:14px;padding:1px 1px;margin:0 1px;border:1px solid #8c8c8c;border-radius:var(--r-pill);
+  background:linear-gradient(#696969,#333);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);
+}
+#manualPayFlow .mp-timeline-card{
+  width:calc(100% - 20px);max-width:560px;margin:-58px auto 0;background:#fff;border-radius:var(--r-card);
+  position:relative;z-index:2;padding:18px 15px;box-shadow:0 18px 28px rgba(0,0,0,.12);
+}
+/* One row per real section (COPY & PAY / Payment completed / Your payment
+   account / Payment reminder) instead of 3 icons absolutely positioned
+   against the WHOLE card's own height -- that only worked while the card's
+   total height was fixed; the new Payment reminder section is admin-authored
+   free text of unpredictable length, so each row now carries its own icon +
+   a connecting line sized to its own row height via flex, not a guessed
+   pixel offset. */
+#manualPayFlow .mp-tl-row{display:flex;gap:11px;}
+#manualPayFlow .mp-tl-rail{display:flex;flex-direction:column;align-items:center;flex:0 0 32px;}
+#manualPayFlow .mp-tl-icon{
+  width:32px;height:32px;border-radius:50%;background:#e9eef4;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;color:#6f89aa;
+}
+#manualPayFlow .mp-tl-line{flex:1;width:0;min-height:14px;border-left:2px dashed #d6d6d6;margin:4px 0;}
+#manualPayFlow .mp-tl-row:last-child .mp-tl-line{display:none}
+#manualPayFlow .mp-tl-body{flex:1;min-width:0;padding-bottom:20px;}
+#manualPayFlow .mp-tl-row:last-child .mp-tl-body{padding-bottom:0;}
+#manualPayFlow .mp-card-title{font-size:16.5px;font-weight:700;margin:0 0 6px}
+#manualPayFlow .mp-sub{font-size:12px;color:#919191;margin-bottom:11px}
+#manualPayFlow .mp-sub b{color:#4b4b4b;font-size:13px}
+#manualPayFlow .mp-detail-box{
+  background:#f6f6f6;border-radius:var(--r-card);padding:14px 13px;margin:0 0 14px;overflow:hidden;
+}
+#manualPayFlow .mp-label{font-size:11px;color:#8e8e8e;font-weight:500;margin-bottom:5px}
+#manualPayFlow .mp-total{font-size:clamp(18px,5.5vw,24px);color:#e58d00;font-weight:700;margin-bottom:12px;}
+#manualPayFlow .mp-total small{font-size:12px;margin-right:6px}
+#manualPayFlow .mp-account-value{font-size:clamp(15px,5vw,20px);color:#e58d00;font-weight:700;line-height:1.15;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;}
+#manualPayFlow .mp-account-value span{min-width:0;overflow-wrap:anywhere;}
+#manualPayFlow .mp-name-value{font-size:clamp(13px,4.5vw,17px);color:#e58d00;font-weight:700;line-height:1.2;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;}
+#manualPayFlow .mp-name-value span{min-width:0;overflow-wrap:anywhere;}
+#manualPayFlow .mp-copybtn{
+  width:24px;height:24px;border:0;background:transparent;position:relative;flex:0 0 24px;cursor:pointer;
+}
+#manualPayFlow .mp-copybtn:before,#manualPayFlow .mp-copybtn:after{
+  content:"";position:absolute;border:2px solid #817b73;border-radius:4px;width:15px;height:15px;
+}
+#manualPayFlow .mp-copybtn:before{left:1px;top:1px}
+#manualPayFlow .mp-copybtn:after{left:6px;top:6px;background:#f6f6f6}
+#manualPayFlow .mp-copybtn i:before,#manualPayFlow .mp-copybtn i:after{
+  content:"";position:absolute;background:#817b73;z-index:2
+}
+#manualPayFlow .mp-copybtn i:before{width:7px;height:2px;left:10px;top:13px}
+#manualPayFlow .mp-copybtn i:after{height:7px;width:2px;left:13px;top:10px}
+#manualPayFlow .mp-paydone{font-size:15px;font-weight:500;margin:2px 0 2px}
+#manualPayFlow .mp-refresh-text{font-size:11.5px;color:#8f8f8f;margin-bottom:10px}
+#manualPayFlow .mp-refresh-text b{color:#4b4b4b;font-size:12.5px}
+#manualPayFlow .mp-paid-box{background:#f6f6f6;border-radius:var(--r-card);padding:12px 14px;margin-bottom:14px}
+#manualPayFlow .mp-paid-row{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #d8d8d8;padding-bottom:8px;gap:8px;}
+#manualPayFlow .mp-paid-label{font-size:11px;font-weight:500}
+#manualPayFlow .mp-paid-value{font-size:14px;color:#a8a8a8;font-weight:700;margin-top:3px}
+#manualPayFlow .mp-refresh-btn{
+  border:0;background:#f09400;color:#fff;border-radius:var(--r-ctl);padding:7px 16px;font-size:12.5px;cursor:pointer;flex-shrink:0;
+}
+#manualPayFlow .mp-refresh-btn:disabled{opacity:.6}
+#manualPayFlow .mp-note{font-size:10.5px;color:#9b9b9b;padding-top:7px}
+#manualPayFlow .mp-your-account{font-size:13px;font-weight:500;margin-top:6px}
+#manualPayFlow .mp-your-number{font-size:13.5px;margin-top:3px;color:#111}
+#manualPayFlow .mp-loading-overlay{
+  position:fixed;inset:0;background:rgba(255,255,255,.0);z-index:20;display:flex;align-items:center;justify-content:center;
+}
+#manualPayFlow .mp-loader-box{
+  width:130px;height:130px;border-radius:var(--r-card);background:rgba(71,71,71,.76);color:white;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:15px;
+}
+#manualPayFlow .mp-spinner{
+  width:34px;height:34px;border:3px solid rgba(255,255,255,.25);border-top-color:white;border-radius:50%;
+  animation:sp 1s linear infinite;margin-bottom:12px;
+}
+/* The reference's own validation toast, back -- owner: "l need to see such
+   notifies, ie when one taps confirm but when no number or operator set, and
+   when invalid number is set." His screenshots show a CENTRED dark box, not
+   the bottom pill an earlier version of this had.
+   
+   That bottom pill was removed for a real reason, recorded below, and this
+   avoids it by construction: it is a FIXED, self-centring element parented to
+   #manualPayFlow, exactly like .mp-loading-overlay, which has always worked.
+   It never becomes a child of a .reveal-in wrapper, so this app's stagger
+   entrance cannot reach it, cannot override its transform, and cannot leave it
+   sitting off-centre with its own opacity:0 still applied.
+   
+   It sits ABOVE the loading overlay (z-index 30 against 20): the two can
+   legitimately overlap -- a failed init lowers the loader and raises the toast
+   in the same tick -- and the message is the part the member needs to read. */
+#manualPayFlow .mp-toast{
+  position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
+  padding:36px;pointer-events:none;
+}
+#manualPayFlow .mp-toast.show{display:flex;}
+#manualPayFlow .mp-toast span{
+  max-width:290px;background:rgba(71,71,71,.88);color:#fff;border-radius:var(--r-card);
+  padding:16px 22px;font-size:15.5px;line-height:1.45;text-align:center;
+}
+@media (prefers-reduced-motion:no-preference){
+  #manualPayFlow .mp-toast.show span{animation:mpToastIn .16s ease-out;}
+}
+@keyframes mpToastIn{from{opacity:0;transform:scale(.94);}to{opacity:1;transform:scale(1);}}
+/* The reference's own local bottom-pill toast was removed (see
+   openManualDepositFormSheet()'s own comment in original_module.js for
+   the real bug it had -- being a direct child of the .reveal-in wrapper
+   meant this app's own stagger-entrance animation permanently overrode its
+   `transform:translateX(-50%)` centering after playing once, and its own
+   `opacity:0` default with it, leaving a small dark box with no text
+   sitting off-center near the bottom of the screen). Validation/status
+   messages on this screen now go through this app's own already-correct,
+   already-centered global toast() instead, per the owner's own "notify
+   doesn't open from middle" -- matching every other message in this app.
+
+   Get-results-faster SMS/transaction-ID fallback -- hidden until the
+   member has tapped Refresh at least once and it's still not confirmed
+   (owner: "the sms forward forwards sms and server matches automatically,
+   we are just putting them as fallback... when one clicks refresh, the
+   page spreads so one puts sms and submits"). */
+#manualPayFlow .mp-sms-fallback{margin:4px 0 14px;}
+#manualPayFlow .mp-sms-title{font-size:13px;font-weight:600;color:#e58d00;margin-bottom:3px;}
+#manualPayFlow .mp-sms-sub{font-size:11.5px;font-weight:500;color:#2d2d2d;margin-bottom:8px;}
+#manualPayFlow .mp-sms-fallback textarea{width:100%;min-height:76px;border:1px solid #bdbdbd;border-radius:var(--r-ctl);padding:10px 12px;font-size:11px;line-height:1.5;color:#222;resize:vertical;font-family:inherit;}
+#manualPayFlow .mp-sms-fallback textarea::placeholder{color:#bbb;}
+#manualPayFlow .mp-sms-warn{font-size:10.5px;color:#cb6565;margin:7px 0 12px;}
+/* Admin-authored, network-specific transfer steps (owner: "let us establish
+   Payment reminder, so as it is also editable in admin panel for mtn and
+   airtel") -- only rendered when the admin has actually filled in a template
+   for the network the member picked; see renderManualPayReminder(). */
+#manualPayFlow .mp-reminder-title{font-size:15px;font-weight:600;color:#4b4b4b;margin-bottom:6px;}
+#manualPayFlow .mp-reminder-box{background:#f6f6f6;border-radius:var(--r-card);padding:12px 14px;font-size:12px;line-height:1.9;color:#555;}
+
+.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;}
+.sheet-bg.show{display:block;}
+/* Every sub-page header in the approved mockups is a soft peach band with a
+   centred serif title and a bare cyan-to-blue gradient chevron on the left --
+   no circular icon button behind it. */
+.sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:linear-gradient(180deg,#ffe3d1,var(--snow-canvas));border-bottom:1px solid var(--snow-border);z-index:1;}
+.sheet-head .back{background:none;border:none;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:23px;font-weight:400;letter-spacing:.03em;}
+.sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
+
+/* The dark bottom-pill toast (#toastHost, .toast, @keyframes toastIn) was
+   removed here. Owner: "l nolonger need those dark tiny notifies you already
+   know that we have a pop up card with [the warning sign]." Every message it
+   carried now opens .notify-card instead. */
+
+/* All pop-up dialogs (as opposed to full-page sheets) open centered, share
+   the activity ticker's own dark pill color, and use a modest radius --
+   not the tall rounded bottom-sheet look. Owner: "smooth appearing... not
+   just appearing suddenly" -- the scale+fade entrance (below, and on
+   .chest-modal, which .announce-modal/.dep-status-modal both extend) was
+   real but only 180ms/linear ease, which read as a snap/pop rather than a
+   settle. Widened to this app's own established "gentle settle" curve
+   (cubic-bezier(.22,1,.36,1), the exact same one .reveal-in/.scroll-reveal
+   already use elsewhere) so every popup eases in consistently. Owner,
+   next round: "abit slow appearing delay abit" -- duration widened again
+   (340ms->520ms) plus a short 100ms delay before the ease-in starts, so
+   the dialog visibly pauses a beat before settling into place rather than
+   beginning to move the instant it's shown. */
+/* Chipz dialog language (Notify.dc.html): white card on a warm dimmed
+   backdrop, dark ink, pill buttons. This card was still Snow's dark glass
+   panel -- the one dialog a member reads immediately before their money
+   moves, in a theme it no longer belongs to. */
+.confirm-bg{position:fixed;inset:0;background:rgba(20,10,5,.45);z-index:300;display:none;align-items:center;justify-content:center;padding:20px;}
+.confirm-bg.show{display:flex;}
+.confirm-sheet{background:var(--snow-surface);color:var(--snow-ink);width:100%;max-width:340px;border-radius:var(--r-card);padding:24px 22px 26px;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);transform:scale(.92);opacity:0;transition:transform .52s cubic-bezier(.22,1,.36,1) .1s,opacity .52s cubic-bezier(.22,1,.36,1) .1s;}
+.confirm-bg.show .confirm-sheet{transform:scale(1);opacity:1;}
+.confirm-sheet h3{margin:0 0 4px;font-size:19px;font-weight:700;color:var(--snow-wine);}
+.confirm-sheet .confirm-sub{color:var(--snow-muted);font-size:13px;margin:0 0 14px;font-weight:500;}
+.confirm-row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13.5px;padding:10px 0;border-bottom:1px solid var(--snow-border);color:var(--snow-muted);font-weight:500;}
+.confirm-row:last-of-type{border-bottom:none;}
+.confirm-row .mono{color:var(--snow-ink);font-weight:700;font-family:var(--number-font,inherit);font-size:15px;}
+.confirm-sheet .secondary-button{background:var(--snow-green-soft);color:var(--snow-ink);border-radius:var(--r-ctl);font-weight:700;}
+
+/* Centered popup (opens from the middle, not a bottom sheet) -- the
+   treasure-chest gift-code entry on Home. */
+.chest-modal-bg{position:fixed;inset:0;background:rgba(17,17,17,.55);z-index:310;display:none;align-items:center;justify-content:center;padding:20px;}
+.chest-modal-bg.show{display:flex;}
+.chest-modal{background:rgba(17,17,17,.82);color:#fff;width:100%;max-width:340px;border-radius:var(--r-card);padding:22px 20px;text-align:center;transform:scale(.92);opacity:0;transition:transform .52s cubic-bezier(.22,1,.36,1) .1s,opacity .52s cubic-bezier(.22,1,.36,1) .1s;}
+.chest-modal-bg.show .chest-modal{transform:scale(1);opacity:1;}
+.chest-modal img{width:96px;height:auto;display:block;margin:0 auto 10px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.28));}
+.chest-modal h3{margin:0 0 6px;font-size:18px;font-weight:700;}
+.chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
+/* Home announcement dialog (Announcement.dc.html) -- a near-fullscreen
+   white sheet inset on a red-to-orange ground, NOT a small centred card. */
+/* Owner: "our dialog is too high."
+   It was `inset:14px` -- a card filling 96% of the viewport height, edge to
+   edge. His mockup's card is 1050/1402 = 75% of the screen tall and centred,
+   with real backdrop showing above and below it. So the backdrop centres
+   instead of being a frame, and the card takes its height from its content up
+   to a 76vh ceiling. max-height, not height: a short announcement should make
+   a short dialog rather than a tall one padded with nothing. */
+/* Owner: "l don't need an announcement dialog to be having yellow background l
+   need it to show dashboard just like my mock ups."
+   The orange-to-red gradient here was Announcement.dc.html's `.screen` rule
+   copied literally -- but that rule is the design CANVAS, the mockup file's
+   stand-in for whatever screen the dialog is sitting on top of. It was never
+   the dialog's own background. Every other .dc.html has the same gradient for
+   the same reason, and this is the only overlay that ever adopted it as paint.
+   The real thing underneath is Home, since maybeShowAnnouncement() only ever
+   fires from showPage('home') -- so a dim scrim, and the dashboard shows
+   through above and below the card exactly as the mockup's framing implies.
+   rgba(20,10,5,.45) is the same scrim .notify-bg uses: one backdrop treatment
+   for every dialog in the app, rather than a second one invented here. */
+.announce-bg{position:fixed;inset:0;background:rgba(20,10,5,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:260;}
+.announce-bg.show{display:flex;}
+/* Owner: "think you can see the exact height and width of the dialog, see
+   clearly rather than guess." Both measured off his screenshot, not estimated:
+   his card spans x=45..1034 of 1079 -- 91.7% of the screen -- and runs
+   y=488..2064 of a ~2072px viewport, 76.1% of its height.
+   WIDTH already matched (16px inset each side of 390 = 91.8%). HEIGHT did not:
+   76vh was only a CEILING, so a short announcement rendered at 51% and looked
+   like a different dialog to his. min-height pins it to his figure, and
+   .announce-scroll (flex:1, overflow-y:auto) absorbs the slack, so a short
+   message sits in a card the same size as a long one -- which is what his is
+   doing. */
+.announce-wrap{position:relative;width:100%;max-width:392px;height:76vh;max-height:76vh;margin:0 auto;background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);display:flex;flex-direction:column;}
+/* Owner: "the X plus circle is different from that in my mockup."
+   Measured off a 3x crop of his: a 77-device-px ring (10.7% of screen width,
+   so 42px here) drawn as a ~1px LIGHT GREY hairline over the card's own
+   white -- not a filled button with a border token -- and an X that spans 41%
+   of the ring's diameter in a thin near-black stroke. Ours was a 38px ring
+   with a 1.8px border and an X spanning only ~20% of it, which is why his
+   reads as an outlined close control and ours read as a small dense glyph. */
+.announce-close{position:absolute;top:16px;right:16px;width:42px;height:42px;border-radius:50%;border:1px solid #b9b2ac;background:transparent;color:#33302e;display:flex;align-items:center;justify-content:center;z-index:2;padding:0;}
+.announce-title{text-align:center;font-size:24px;font-weight:700;margin:26px 0 18px;flex-shrink:0;}
+.announce-banner{margin:0 20px 18px;height:150px;border-radius:var(--r-card);background:var(--chipz-hero);position:relative;overflow:hidden;flex-shrink:0;}
+.announce-banner img{width:100%;height:100%;object-fit:cover;display:block;}
+.announce-banner .wm{position:absolute;bottom:12px;left:16px;color:#fff;font-size:20px;font-weight:500;text-shadow:0 2px 8px rgba(0,0,0,.4);}
+.announce-scroll{padding:0 22px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+.announce-scroll p{font-size:13.5px;color:var(--snow-muted);font-weight:500;line-height:1.65;margin:0 0 14px;white-space:pre-line;}
+.announce-footer{padding:16px 20px 22px;flex-shrink:0;}
+/* Deposit live-status modal (Recharge) -- reuses .chest-modal-bg/.chest-modal
+   for the same dark/centered/thin dialog convention as every other pop-up.
+   3 states toggled via #depStatusIcon's class: pending (spinner, reuses the
+   loading screen's own @keyframes sp), success (green check), failed (red
+   x) -- SVG only, per the house no-emoji rule. */
+/* The recharge poll is a PAGE in the app's own colours, not a dark modal.
+   Owner: "l nolonger need those old poll designs ... when one taps deposit,
+   it should open a new page for polling, so for polling it should show the
+   other 4 triangles rotating, just like those which we placed on running
+   product, so it will be enlarged ... l nolonger need those dark things, use
+   app color and theme not dark ... however still nav icons should exist on
+   the poll payment page."
+
+   It keeps its own classes rather than restyling .chest-modal-bg/.chest-modal:
+   those are SHARED with the gift-code win modal, and recolouring them here
+   would silently redesign the chest too.
+
+   `bottom:var(--nav-h)` is the app's own convention for "leave the bottom bar
+   alone" (.sheet-bg and .msg-detail-bg both use it), which is what keeps the
+   nav icons visible and tappable while a payment is being polled. */
+/* The in-flight loader between Confirm and the poll page. Sits ABOVE the
+   sheet (z-index 320 against .sheet-bg's 200) and, like the poll page, stops
+   at the bottom bar rather than covering it. */
+.dep-redirect{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
+  background:rgba(251,241,232,.86);z-index:320;display:none;
+  align-items:center;justify-content:center;}
+.dep-redirect.show{display:flex;}
+.dep-redirect-inner{text-align:center;}
+.dep-redirect-ring{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;
+  border:5px solid var(--snow-wine-soft);border-top-color:var(--snow-wine);
+  animation:sp .8s linear infinite;}
+.dep-redirect-text{font-size:17px;font-weight:700;color:var(--snow-ink);}
+@media (prefers-reduced-motion:reduce){.dep-redirect-ring{animation-duration:2.4s;}}
+/* A column now, not a centred box: the page has a real header (back chevron
+   + title) pinned at the top, and .pay-body takes the remaining height and
+   centres the card inside THAT. Centring the card in the whole page instead
+   would push it visibly below centre by half the header's height. */
+.pay-page{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
+  background:var(--snow-canvas);z-index:310;display:none;
+  flex-direction:column;overflow-y:auto;}
+.pay-page.show{display:flex;}
+.pay-body{flex:1;display:flex;align-items:center;justify-content:center;padding:26px;}
+.pay-card{width:100%;max-width:340px;text-align:center;}
+.pay-card h3{font-size:23px;font-weight:800;color:var(--snow-ink);margin:0 0 10px;}
+.pay-card p{font-size:15px;line-height:1.6;color:var(--snow-muted);font-weight:500;margin:0;}
+/* The pending state is a numbered list of what is happening and what the
+   member has to do, so it is LEFT-aligned inside an otherwise centred card --
+   centred list items with numbers hanging off them are hard to scan, and the
+   numbers stop lining up with each other entirely. */
+.pay-steps{margin:0;padding:0 0 0 24px;text-align:left;font-size:15px;
+  line-height:1.6;color:var(--snow-muted);font-weight:500;}
+.pay-steps li{margin:0 0 11px;padding-left:3px;}
+.pay-steps li:last-child{margin-bottom:0;}
+.pay-steps li::marker{color:var(--snow-wine);font-weight:700;}
+/* The USSD fallback. Deliberately NOT a fifth numbered step: the four steps
+   are what happens normally, and this is the way out of the one common
+   failure (the mobile-money prompt never arriving). Quieter and smaller so
+   it reads as a footnote rather than another instruction to follow. */
+.pay-note{margin:16px 0 0;font-size:13.5px;line-height:1.55;
+  color:var(--snow-muted);opacity:.85;text-align:left;}
+.pay-actions{margin-top:22px;display:flex;flex-direction:column;gap:11px;}
+.pay-actions button{width:100%;padding:15px 0;font-size:16px;}
+/* No disc behind it any more -- the mark IS the artwork. Sized here so the
+   orbiting chips and the two result marks share one footprint and the page
+   does not jump as the poll resolves. */
+.dep-status-icon{width:150px;height:150px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;}
+.dep-status-icon .pspin{--s:150px;}
+.dep-status-icon img{width:116px;height:116px;object-fit:contain;display:block;}
+
+.list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
+.list-empty .empty-icon{display:flex;justify-content:center;margin-bottom:14px;opacity:.85;}
+.list-empty .empty-icon svg{width:64px;height:64px;}
+.list-end{padding:18px 4px 4px;text-align:center;color:var(--snow-muted);font-size:14px;}
+
+/* Real content fades/lifts into place once it's ready -- no shimmer
+   placeholders. Freshly-inserted DOM (a fresh innerHTML assignment) always
+   plays this from the start, so no manual restart/reflow trick is needed.
+   Direct children stagger in one after another (the "live animation
+   website" look) instead of the whole block popping in as one flat unit;
+   each one starts fully hidden (animation-fill-mode:both) so there's no
+   flash of unanimated content before its delay elapses. */
+/* Owner: "remove live appearing animation everywhere." Both entrance
+   animations are gone -- the stagger that played on every page paint, and
+   the About page's scroll-into-view reveal (including the word-by-word
+   text effect). The .reveal-in / .scroll-reveal / .reveal-word classes are
+   still applied by the JS in a dozen places, so rather than unpick all of
+   that, .scroll-reveal is neutralised here to plain visible content. Its
+   old `opacity:0` default is the thing to be careful about: leaving that
+   behind while removing the transition would hide the About page outright.
+   The .reveal-in rules are deleted rather than set to `animation:none`,
+   because that rule sits later in the file at the same specificity as
+   .chest-float and would go straight back to killing the chest's bounce. */
+.scroll-reveal,.scroll-reveal.about-image,.scroll-reveal.in-view{opacity:1;transform:none;transition:none;}
+.reveal-word{display:inline-block;opacity:1;transform:none;}
+.about-block{margin-bottom:18px;}
+.about-block:last-child{margin-bottom:0;}
+/* The stale `.reveal-word{opacity:0}` that used to sit here is DELETED, not
+   overridden. It was the old animation's starting frame, left behind when the
+   reveal was removed -- and because it came AFTER the replacement rule at the
+   same specificity, it won: every word of the About page rendered at opacity
+   0 and translated 10px down. The page was not blank because the text was
+   missing; the text was all there, invisible.
+   The comment two rules up literally warned about this ("Its old `opacity:0`
+   default is the thing to be careful about: leaving that behind while
+   removing the transition would hide the About page outright") and the
+   duplicate was left in anyway. Adding a third rule to win the cascade would
+   have kept the trap loaded; there is now exactly one .reveal-word rule. */
+
+</style>
+</head>
+<body>
+
+<div id="loadingScreen">
+  <div class="ls-wordmark" data-brandmark></div>
+  <div class="ls-text" aria-label="Loading"><i style="animation-delay:0ms">L</i><i style="animation-delay:95ms">o</i><i style="animation-delay:190ms">a</i><i style="animation-delay:285ms">d</i><i style="animation-delay:380ms">i</i><i style="animation-delay:475ms">n</i><i style="animation-delay:570ms">g</i><i style="animation-delay:665ms">.</i><i style="animation-delay:760ms">.</i><i style="animation-delay:855ms">.</i><i style="animation-delay:950ms">.</i><i style="animation-delay:1045ms">.</i><i style="animation-delay:1140ms">.</i></div>
+</div>
+
+<script>
+/* THE APP'S NAME, PAINTED BEFORE ANYTHING ELSE.
+ *
+ * Owner: "l had made a little bit changes in names but on start up loader it
+ * was still saying chipz."
+ *
+ * He is describing a real gap, not a bug in the rename. The name lives in
+ * Admin -> Settings and reaches the app over the network, but the loading
+ * screen is on screen precisely while that request is in flight -- so the
+ * loader could only ever show whatever was compiled into this file, and what
+ * was compiled in was the old name. Every boot, forever.
+ *
+ * So the name is remembered on the device the first time it is known, and
+ * this runs before the 250KB core inflates: every launch after the very first
+ * paints the real name in the first frame. It sits here rather than in the
+ * head because the loading screen has to exist for it to write into, and the
+ * DOMContentLoaded pass catches the marks further down the document (the
+ * sign-in header, the announcement banner, the pre-launch gate).
+ *
+ * Nothing here falls back to a hard-coded name. Owner: "let's not make chipz
+ * to be default name" -- on a genuinely first-ever launch the mark stays
+ * blank for the moment it takes settings to land, which is why .ls-wordmark
+ * carries a min-height. A blank that fills in is honest; the wrong name is
+ * not.
+ *
+ * The mark is built with createTextNode/createElement rather than innerHTML.
+ * The server already refuses < and > in the name, but this value has been
+ * through localStorage, and building nodes is injection-proof by
+ * construction instead of by remembering to escape.
+ */
+(function(){
+  var KEY = 'chipz_brand_name';
+  var name = '';
+  try { name = (localStorage.getItem(KEY) || '').trim(); } catch (e) {}
+  // The module reads this instead of its own localStorage: one read, one
+  // place that knows the key.
+  window.__brandCached = name;
+  if (!name) return;
+  document.title = name;
+  var up = name.toUpperCase();
+  window.__paintBrandMarks = function(){
+    var els = document.querySelectorAll('[data-brandmark]');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      el.textContent = '';
+      if (up.length > 1) el.appendChild(document.createTextNode(up.slice(0, -1)));
+      var b = document.createElement('b');
+      b.textContent = up.slice(-1);
+      el.appendChild(b);
+    }
+  };
+  window.__paintBrandMarks();
+  document.addEventListener('DOMContentLoaded', window.__paintBrandMarks);
+})();
+</script>
+
+
+<div id="openingGate">
+  <div class="og-mark" data-brandmark></div>
+  <div class="og-label">Opening in</div>
+  <div class="og-countdown" id="openingGateCountdown">--:--:--</div>
+  <div class="og-sub">We're getting ready. Come back once the countdown ends.</div>
+</div>
+
+<!-- ═══════════ AUTH ═══════════ -->
+<div id="authScreen" style="display:none;">
+  <div class="wrap" style="padding-bottom:0;">
+    <div class="auth-hero" id="authHero">
+      <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
+      <span class="auth-tri t1" aria-hidden="true"></span>
+      <span class="auth-tri t2" aria-hidden="true"></span>
+      <div class="mark-row">
+        <span class="mark-tri" aria-hidden="true"></span>
+        <span class="auth-wordmark" data-brandmark></span>
+      </div>
+      <div id="authTagline" style="position:relative;z-index:2;text-align:center;font-size:14px;color:rgba(255,255,255,.92);font-weight:600;padding:0 40px;display:none;"></div>
+    </div>
+    <div class="auth-card">
+      <span class="auth-bg" id="authCardBg" aria-hidden="true"></span>
+      <div id="loginPane">
+        <h1>LOGIN</h1>
+        <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
+        <div id="loginError"></div>
+        <div class="auth-field">
+          <span class="prefix">+256</span>
+          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+        </div>
+        <div class="auth-field">
+          <span class="emoji">&#128274;</span>
+          <input id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
+          <button class="eye" onclick="togglePw('loginPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <label class="row-check"><input type="checkbox" id="rememberMe"><span>Remember me</span></label>
+        <button class="primary-button" id="loginBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doLogin()">Log In</button>
+        <p class="auth-switch"><a href="#" onclick="showAuthTab('register');return false;">Sign Up</a></p>
+      </div>
+
+      <div id="registerPane" style="display:none;">
+        <h1>SIGN UP</h1>
+        <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
+        <div id="regError"></div>
+        <div class="auth-field">
+          <span class="prefix">+256</span>
+          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+        </div>
+        <div class="auth-field">
+          <span class="emoji">&#128274;</span>
+          <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
+          <button class="eye" onclick="togglePw('regPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <div class="auth-field">
+          <span class="emoji">&#128274;</span>
+          <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
+        </div>
+        <div class="auth-field">
+          <span class="emoji">&#128477;</span>
+          <input id="regPin" type="password" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="one-time-code">
+        </div>
+        <div class="auth-field referral">
+          <span class="emoji">&#127873;</span>
+          <input id="regReferral" type="text" placeholder="Referral code" autocomplete="off" maxlength="12">
+        </div>
+        <div class="auth-hint" id="regReferralHint">Referral code is required</div>
+        <button class="primary-button" id="regBtn" style="width:100%;padding:15px 0;font-size:17px;margin-top:6px;" onclick="doRegister()">Sign Up</button>
+        <p class="auth-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ APP ═══════════ -->
+<div id="app" style="display:none;">
+  <div class="wrap" id="pageHost"></div>
+  <!-- 6 tabs (Chipz has a separate Products catalog tab and a Referral tab,
+       unlike Snow's 4) -- icon/label sizes are reduced in .bottom-nav's own
+       CSS so six fit comfortably on a 360px screen. -->
+  <div class="bottom-nav">
+    <button class="navitem" data-nav="home" onclick="showPage('home')"><span class="nav-ic"></span><div class="lbl">Home</div></button>
+    <button class="navitem" data-nav="catalog" onclick="showPage('catalog')"><span class="nav-ic"></span><div class="lbl">Products</div></button>
+    <button class="navitem" data-nav="products" onclick="showPage('products')"><span class="nav-ic"></span><div class="lbl">My Products</div></button>
+    <button class="navitem" data-nav="referral" onclick="showPage('referral')"><span class="nav-ic"></span><div class="lbl">Referral</div></button>
+    <button class="navitem" data-nav="team" onclick="showPage('team')"><span class="nav-ic"></span><div class="lbl">Team</div></button>
+    <button class="navitem" data-nav="account" onclick="showPage('account')"><span class="nav-ic"></span><div class="lbl">Account</div></button>
+  </div>
+</div>
+
+<div class="sheet-bg" id="sheetBg">
+  <div class="sheet-head">
+    <button class="back" onclick="closeSheet()" aria-label="Back"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="chipzBack" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ad4e8"/><stop offset="1" stop-color="#2f6fed"/></linearGradient></defs><path d="M15 5l-7 7 7 7" stroke="url(#chipzBack)" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <h2 id="sheetTitle"></h2>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<div class="confirm-bg" id="confirmBg" onclick="if(event.target===this)closeConfirm()">
+  <div class="confirm-sheet" id="confirmSheet"></div>
+</div>
+
+<!-- Message detail (Messages.dc.html): a bottom sheet that slides up over
+     the inbox list, with an X top-right. -->
+<div class="msg-detail-bg" id="msgDetailBg" onclick="if(event.target===this)closeMessageDetail()">
+  <div class="msg-detail" id="msgDetail"></div>
+</div>
+
+<!-- Announcement (Announcement.dc.html): a near-fullscreen white sheet on a
+     red-to-orange ground, big OUTLINED-CIRCLE X top-right, centred title,
+     admin banner image, body copy, and a Join Channel button. Deliberately
+     not a small centred card -- see chipz/CLAUDE.md. -->
+<div class="announce-bg" id="announceBg">
+  <div class="announce-wrap">
+    <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l14 14M17 3 3 17"/></svg></button>
+    <h1 class="announce-title" id="announceTitle">Welcome</h1>
+    <div class="announce-banner" id="announceBanner"><div class="wm" data-brandmark></div></div>
+    <div class="announce-scroll"><p id="announceBody"></p></div>
+    <div class="announce-footer">
+      <button class="primary-button" id="announceTelegramBtn" style="width:100%;height:52px;padding:0;font-size:16px;display:none;align-items:center;justify-content:center;gap:8px;" onclick="openAnnounceTelegram()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M21.5 3.5L2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5z"></path></svg>
+        Join Channel
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic alert/notify dialog (Notify.dc.html): white rounded card on a
+     dimmed backdrop, amber warning triangle, message, one pill OK button.
+     Used app-wide for validation errors -- see notify() in the core. -->
+<div class="notify-bg" id="notifyBg" onclick="if(event.target===this)closeNotify()">
+  <div class="notify-card">
+    <!-- Owner: "first check how well defined and realistic and quality the
+         warning sign is" -- comparing his reference against ours. His IS the
+         system emoji: Noto Color Emoji's warning sign, with rounded corners, a
+         gold-to-amber gradient and a real drop shadow. Ours was a hand-drawn
+         flat SVG triangle with a hard 1px stroke, which is what looked cheap
+         beside it. This project already uses real emoji glyphs (see the
+         Login/Register fields), so the honest match is the glyph itself --
+         redrawing it in SVG would be an imitation of a picture the phone
+         already has. -->
+    <div class="notify-icon" aria-hidden="true">⚠️</div>
+    <div class="notify-msg" id="notifyMsg"></div>
+    <button class="notify-ok" onclick="closeNotify()">OK</button>
+  </div>
+</div>
+
+<!-- Treasure-chest win state (ChestSuccess.dc.html): a full green flash
+     behind a Congratulations card. Its own layer, not a sheet -- it covers
+     the chest screen it was opened from. -->
+<div class="chest-win-bg" id="chestWinBg">
+  <img class="chest-win-ghost" id="chestWinGhost" src="/treasure-chest.png" alt="">
+  <div class="chest-win-card">
+    <h1>Congratulations!</h1>
+    <div class="sub">You won</div>
+    <div class="amt" id="chestWinAmount"></div>
+    <div class="bal" id="chestWinBalance"></div>
+    <button class="dark-button" style="width:100%;height:52px;padding:0;letter-spacing:.06em;" onclick="closeChestWin()">COLLECT</button>
+  </div>
+</div>
+
+<!-- Owner: "see critically after confirm deposit a loader saying Redirecting
+     to payment." Shown only while /deposit/marzpay is actually in flight, and
+     taken down by the same finally{} that re-enables the button, so it can
+     never be left covering the form after a failure.
+
+     His mockup dims the form to a dark wash; this uses a light scrim in the
+     app's own paper instead, because "l nolonger need those dark things, use
+     app color and theme not dark" was a standing instruction from the round
+     that rebuilt the poll screen, and a dark sheet here would contradict it
+     two screens apart. -->
+<div class="dep-redirect" id="depRedirect" aria-hidden="true">
+  <div class="dep-redirect-inner">
+    <div class="dep-redirect-ring"></div>
+    <div class="dep-redirect-text">Redirecting to payment…</div>
+  </div>
+</div>
+
+<!-- Owner: "include nav arrow '<', and its title space, on that payment page."
+     Reuses .sheet-head verbatim so this header IS the app's header, not a
+     lookalike -- same gradient, same 30px chevron, same centred title. The
+     gradient gets its own id (chipzBackPay): two <linearGradient> elements
+     sharing an id in one document is a duplicate-id bug, and although both
+     happen to be identical today, a later change to one would silently and
+     confusingly repaint the other.
+     #depStatusBody is a DIV, not a <p>: the pending state renders an <ol>
+     of steps, and an <ol> inside a <p> is invalid and gets reparented by
+     the browser, which drops the list out of the card entirely. -->
+<div class="pay-page" id="depStatusBg">
+  <div class="sheet-head pay-head">
+    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="chipzBackPay" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ad4e8"/><stop offset="1" stop-color="#2f6fed"/></linearGradient></defs><path d="M15 5l-7 7 7 7" stroke="url(#chipzBackPay)" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <h2 id="depStatusHeadTitle">Recharge</h2>
+  </div>
+  <div class="pay-body">
+    <div class="pay-card">
+      <div class="dep-status-icon" id="depStatusIcon"></div>
+      <h3 id="depStatusTitle">Processing your recharge</h3>
+      <div id="depStatusBody"></div>
+      <div class="pay-actions">
+        <button class="secondary-button" id="depVerifyBtn" style="display:none;" onclick="verifyDepositNow()">Verify</button>
+        <button class="primary-button" id="depStatusCloseBtn" style="display:none;" onclick="closeDepositStatusModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mp-overlay" id="manualPayBg">
+  <button type="button" class="mp-back-btn" onclick="closeManualPayOverlay()" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+  <div id="manualPayFlow"></div>
+</div>
+
+
+<script type="module">
+  import { initializeApp, getApps }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+           updatePassword, reauthenticateWithCredential, EmailAuthProvider }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDUfGBx-8WD9SOufQNC5oNrsyikKobJLwM",
+    authDomain: "chipz-23a4c.firebaseapp.com",
+    projectId: "chipz-23a4c",
+    storageBucket: "chipz-23a4c.firebasestorage.app",
+    messagingSenderId: "649643781611",
+    appId: "1:649643781611:web:31215a9f084cc1918a3dae",
+    measurementId: "G-SCDFWQJP1K"
+  };
+  const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  window.fbCreateUser = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
+  window.fbSignIn     = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+  window.fbSignOut    = () => signOut(auth);
+  window.fbAuth       = auth;
+  // Change Login Password (Account -> Login Password). Firebase requires a
+  // recent sign-in before updatePassword(), so the old password the member
+  // types is used to reauthenticate first -- that also doubles as the
+  // "is this really you" check, which is why the screen asks for it.
+  window.fbChangePassword = async (email, oldPass, newPass) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('not-signed-in');
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, oldPass));
+    await updatePassword(user, newPass);
+  };
+  onAuthStateChanged(auth, (user) => { window.dispatchEvent(new CustomEvent('snow-auth', { detail: user })); });
+</script>
+
+<script data-nx-core></script>
+</body>
+</html>
