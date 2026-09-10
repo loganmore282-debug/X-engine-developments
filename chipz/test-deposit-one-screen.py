@@ -14,8 +14,8 @@ same current screen every time -- checking only the PAY-A-alone case would have
 passed against the broken build, since that was the one combination that was
 already right.
 
-Also covers the profile icon (the admin logo now, not the GIF) and the admin
-panel's own colour and marks.
+Also covers the profile icon (the uploaded GIF) and the admin panel's own
+colour and marks.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -226,7 +226,7 @@ async def main():
            "and no method-specific line was slipped in")
 
         # ── the profile icon is the logo, not the GIF ──
-        print("\n— the profile icon is the uploaded logo —")
+        print("\n— the profile icon is the uploaded GIF —")
         ctx = await b.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
         page = await ctx.new_page()
         await open_app(page, True, False)
@@ -236,10 +236,10 @@ async def main():
             const el = document.querySelector('.acct-logo');
             const img = el && el.querySelector('img');
             return { html: el ? el.className : null, src: img ? img.getAttribute('src') : null }; }""")
-        ck(prof['src'] == LOGO,
-           "the Account profile mark shows the admin's Brand logo")
-        ck(prof['src'] != GIF, "not the profile GIF")
-        ck('has-gif' not in (prof['html'] or ''), "and no GIF-specific class is left on it")
+        ck(prof['src'] == GIF, "the Account profile mark shows the uploaded GIF")
+        ck(prof['src'] != LOGO,
+           "and outranks the Brand logo, which this fixture also serves")
+        ck('has-gif' in (prof['html'] or ''), "with its own uncropped class on the slot")
         # The GIF keeps the place it was actually asked for.
         home_gif = await page.evaluate("""() => { showPage('home'); return 0; }""")
         await page.wait_for_timeout(700)

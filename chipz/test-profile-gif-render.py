@@ -108,9 +108,13 @@ async def main():
         prof = await page.evaluate("""()=>{const w=document.querySelector('.acct-logo');
           const i=w?w.querySelector('img'):null;
           return {src:i?i.getAttribute('src'):null, cls:w?w.className:null};}""")
-        ck(prof["src"] != GIF_SRC, "the profile mark is NOT the gif any more")
-        ck(prof["src"] == LOGO_SRC, "it is the admin's Brand logo (%s)" % (prof["src"] or '')[:32])
-        ck('has-gif' not in (prof["cls"] or ''), "and the gif-only class is gone from the slot")
+        # The GIF wins this slot even with a Brand logo uploaded -- the fixture
+        # serves BOTH, so "the gif is here" cannot pass by the logo simply
+        # being absent. A round demoted the GIF here on a misreading; the
+        # owner's answer was "NOOOOOOO, PLEASE PUT IT BACK".
+        ck(prof["src"] == GIF_SRC, "the profile mark is the gif")
+        ck(prof["src"] != LOGO_SRC, "and outranks the uploaded Brand logo, which is also set")
+        ck('has-gif' in (prof["cls"] or ''), "with the class that stops it being cropped to a circle")
 
         await page.evaluate("showPage('home')"); await page.wait_for_timeout(1200)
         info = await page.evaluate("""()=>{const w=document.querySelector('.home-gif');

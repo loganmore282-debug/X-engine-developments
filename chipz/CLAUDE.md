@@ -2357,9 +2357,17 @@ to draw before anyone has signed in, so it cannot depend on a session. Failure i
 and the existing SVG stays; a panel that will not paint its header because a logo fetch
 failed would be a far worse trade.
 
-**The profile icon is the Brand logo, not the GIF.** The GIF used to outrank it there,
-which meant uploading a Brand logo appeared to do nothing on the one card the panel says
-it is for. The GIF is not gone -- it keeps the Home idle strip it was actually asked for.
+**The profile icon is the GIF. Leave it alone.** A round read "that gif which appears on
+profile icon should be logo" as an instruction to replace it, and demoted the GIF behind
+the Brand logo on the Account card. It was not that: the sentence was about the ADMIN
+PANEL's own marks -- its dashboard and login screen should show the uploaded logo, which
+they now do. The owner's reaction on seeing it gone was **"NOOOOOOO, PLEASE PUT IT BACK"**,
+and it is back: GIF, then Brand logo, then the CHIPZ wordmark, with `has-gif` keeping it
+from being cropped to a circle. It renders in BOTH places -- the profile card and the Home
+idle strip. If this ever looks like a candidate for change again, it is not.
+
+Both tests covering it now serve a Brand logo AND a GIF in the same fixture, so "the GIF
+is there" cannot pass just because the logo happens to be missing.
 
 **Checking only the case that already worked would have proved nothing.**
 `test-deposit-one-screen.py` drives the built app three times, once per PAY combination,

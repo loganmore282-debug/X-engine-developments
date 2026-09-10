@@ -2802,14 +2802,22 @@ function settingRowHtml(icon, title, sub, onclick){
 }
 async function renderAccount(){
   const a = STATE.account || {};
-  // The profile mark is the admin's BRAND LOGO, then the CHIPZ wordmark.
+  // The profile mark, in priority order: the admin's animated GIF, then a
+  // static brand logo, then the CHIPZ wordmark. The GIF IS the profile logo --
+  // it takes this position rather than sitting beside it.
   //
-  // The GIF used to win this slot. Owner: "that gif which appears on profile
-  // icon should be logo." The GIF is not gone -- it still has the Home idle
-  // strip it was actually asked for (homeGifHtml()) -- it just no longer
-  // outranks the logo here, which meant uploading a Brand logo appeared to do
-  // nothing at all on the one card the panel says it is for.
-  const logoCls = 'acct-logo';
+  // A round briefly demoted the GIF here, reading "that gif which appears on
+  // profile icon should be logo" as an instruction to replace it. It was not:
+  // the owner's answer to seeing it gone was "NOOOOOOO, PLEASE PUT IT BACK".
+  // That sentence was about the ADMIN PANEL's own marks -- its dashboard and
+  // login screen should show the uploaded logo, which they now do -- and not
+  // about this card at all. If this ever looks like a candidate for change
+  // again, it is not.
+  //
+  // It gets its own class because it must NOT be cropped to a circle the way
+  // a square logo is: a 300x220 landscape forced into a 60px circle loses
+  // about a quarter of its width off the sides.
+  const logoCls = STATE.profileGif ? 'acct-logo has-gif' : 'acct-logo';
   // The two onerror handlers call brandTextMark() rather than carrying the
   // fallback markup as a literal. They are inline attributes -- the browser
   // HTML-decodes them and then compiles the result as JavaScript -- so a name
@@ -2817,7 +2825,9 @@ async function renderAccount(){
   // apostrophe in it (a perfectly ordinary thing for an owner to type) would
   // end the JS string early and make the whole handler a syntax error. A
   // function call has nothing to escape.
-  const logo = STATE.brandLogo
+  const logo = STATE.profileGif
+    ? `<img src="${esc(STATE.profileGif)}" alt="" onerror="this.closest('.acct-logo').classList.remove('has-gif');this.outerHTML=brandTextMark()">`
+    : STATE.brandLogo
     ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.outerHTML=brandTextMark()">`
     : brandTextMark();
   const html = `
