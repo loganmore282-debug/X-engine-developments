@@ -2321,13 +2321,28 @@ and `syncDepositQuickAmt()`'s branch for the row that no longer exists.
 Three details worth keeping:
 - **Preselected when only one method is live**, nothing preselected when both are --
   a radio group with a single option is not a choice.
-- **The PAY-A phone field is hidden unless PAY-A is the live choice.** That covers the
-  case that is easy to miss: both enabled with nothing picked yet. Showing the field
-  there implies PAY-A is already selected when it is not. Caught by the test, not by
-  reading.
+- **The Payment Phone field is ALWAYS shown**, for every method and every combination.
+  A first pass hid it for PAY B, reasoning that the manual overlay collects a number on
+  its own next screen; the owner overruled that -- *"l want even if pay a or b, the
+  payment phone should be there ... only that one will be typing the number twice on
+  manual payments, so don't mind with that"*. He is right about the trade: a section
+  that appears and disappears as the radio changes reads as the form breaking, and a
+  duplicate entry is the smaller cost. PAY B ignores the value; its own screen collects
+  the number it actually uses.
+- **The instruction card never changes.** Same four lines on every method -- owner:
+  *"even deposit instructions shouldn't change please it should use that new one, no
+  changing."* A conditional PAY B line was added in the first pass and removed here; the
+  test now compares the rendered list across all three combinations and requires them
+  identical.
 - `submitDeposit()`'s failure path restored the button to **"Recharge"** -- a label
   belonging to one of the deleted screens -- so a member whose recharge failed watched
   the button silently rename itself. It restores "Confirm Deposit" now.
+- **PAY B raises the same "Redirecting to payment…" loader as PAY-A** (`showDepRedirect`).
+  It used to swap the button's label for a small in-button spinner, so the same tap on
+  the same button looked like "going somewhere" on one method and merely "busy" on the
+  other. Lowered once the manual overlay is actually up, and the button re-enabled --
+  this sheet is not destroyed, so an un-restored button stays disabled if the member
+  backs out and returns.
 
 **The admin panel is orange**, `--gold:#ef6c00` (was `#e21b2a`), a value-only token swap
 like every other reskin here. Deliberately NOT the app's own `#ff8a1f`: `--gold-ink` is

@@ -4015,12 +4015,18 @@ function openDepositFormSheet(payA, payB){
   // choice -- asking for a number that is about to be asked for again on the
   // very next screen is the kind of thing that makes a payment form feel
   // broken.
-  // Hidden unless PAY-A is the LIVE choice -- which covers three cases, and
-  // the middle one is easy to miss: PAY B alone (never uses it), both enabled
-  // with nothing picked yet (asking for a number before the method is chosen
-  // implies PAY-A is already selected when it is not), and PAY A alone (shown,
-  // because it is preselected).
-  const phoneHidden = _depPayChoice === 'A' ? '' : ' style="display:none"';
+  // ALWAYS shown, for every method and every combination. Owner: "l want even
+  // if pay a or b, the payment phone should be there ... only that one will be
+  // typing the number twice on manual payments, so don't mind with that, what
+  // l need is that payment phone should be there whether single on A available
+  // or B available."
+  //
+  // A previous round hid it for PAY B on the reasoning that the manual overlay
+  // asks for a number again on its own next screen. That reasoning was mine,
+  // not his, and he has now ruled on it: a section that appears and disappears
+  // as the method changes reads as the form breaking, and the duplicate entry
+  // is the smaller cost. PAY B still ignores this value -- its own screen
+  // collects the number it actually uses.
   openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
     <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
@@ -4029,14 +4035,12 @@ function openDepositFormSheet(payA, payB){
     <div class="dep-sec"><span class="bar"></span><span>Select Payment Method</span></div>
     ${rows}
 
-    <div id="depPayAFields"${phoneHidden}>
-      <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
-      <div class="dep-phone">
-        <span class="prefix">+256</span>
-        <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (7XXXXXXXX)" oninput="sanitizePhoneInput(this)">
-      </div>
-      <div class="dep-hint">Phone number must start with 0 and be 10 digits</div>
+    <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
+    <div class="dep-phone">
+      <span class="prefix">+256</span>
+      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (7XXXXXXXX)" oninput="sanitizePhoneInput(this)">
     </div>
+    <div class="dep-hint">Phone number must start with 0 and be 10 digits</div>
 
     <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDepositChoice()">Confirm Deposit</button>
 
@@ -4045,7 +4049,6 @@ function openDepositFormSheet(payA, payB){
       <div class="ln"></div>
       <ol>
         <li>Recharge time: 7*24 hours.</li>
-        ${payB ? '<li>PAY B: send the exact amount to the number shown on the next screen, then submit the payment message you receive.</li>' : ''}
         <li>If deposit is not received, please contact TG customer service.</li>
         <li>Minimum deposit amount: ${fmtUGX(s.minDeposit)}</li>
         <li>Please do not save old account recharge.</li>
@@ -4058,8 +4061,6 @@ window.pickDepositPayMethod = function(which){
   const a = $('depPayRowA'), b = $('depPayRowB');
   if (a) a.classList.toggle('on', which === 'A');
   if (b) b.classList.toggle('on', which === 'B');
-  const fields = $('depPayAFields');
-  if (fields) fields.style.display = which === 'A' ? '' : 'none';
 };
 window.submitDepositChoice = function(){
   if (!_depPayChoice) return notify('Choose PAY-A or PAY B');
@@ -4129,8 +4130,15 @@ function depositChipsHtml(s){
 window.proceedToManualPaymentMethod = function(){
   const amount = parseMoneyInput($('depAmount').value);
   if (!amount || amount <= 0) return notify('Enter a valid amount');
+  // The SAME "Redirecting to payment…" loader PAY-A uses. Owner: "the loader
+  // to redirecting to payment page on manual payment should be there not the
+  // other old one." This used to swap the button's own label for a small
+  // in-button spinner, which is a different, quieter thing on the same tap of
+  // the same button -- one method looked like it was taking you somewhere and
+  // the other looked like it had merely gone busy.
   const btn = $('depSubmitBtn');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="mini-spin"></div>'; }
+  if (btn) btn.disabled = true;
+  showDepRedirect(true);
   setTimeout(() => {
     // Hide the amount sheet WITHOUT going through closeSheet()'s own
     // history.back() -- that's inherently async (its popstate fires on a
@@ -4149,6 +4157,12 @@ window.proceedToManualPaymentMethod = function(){
     unlockBodyScroll();
     _openSheetTitle = null;
     openManualPayFlow(amount);
+    // Lowered only once the manual overlay is actually up, so there is never a
+    // bare frame between the sheet closing and the overlay painting. The
+    // button is restored too: this sheet is not destroyed, so an un-restored
+    // button would still be disabled if the member backed out and returned.
+    showDepRedirect(false);
+    if (btn) btn.disabled = false;
   }, 400);
 };
 var MTN_LOGO_DATA_URI = 'data:image/png;base64,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';

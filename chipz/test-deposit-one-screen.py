@@ -106,6 +106,7 @@ async def open_app(page, pay_a, pay_b):
 
 
 async def main():
+    instructions = []
     async with async_playwright() as pw:
         b = await pw.chromium.launch(executable_path="/opt/pw-browsers/chromium")
 
@@ -132,7 +133,8 @@ async def main():
                 btn: (document.getElementById('depSubmitBtn')||{}).textContent,
                 body: document.getElementById('sheetBody').innerText,
                 phoneShown: !!document.getElementById('depPhone') &&
-                    (document.getElementById('depPayAFields')||{}).style.display !== 'none' })""")
+                    document.getElementById('depPhone').offsetParent !== null,
+                instr: [...document.querySelectorAll('.dep-instr li')].map(li => li.textContent.trim()) })""")
 
             # The title is the single clearest tell: the two dead screens both
             # opened as "Recharge".
@@ -147,30 +149,81 @@ async def main():
             ck(got['btn'].strip() == 'Confirm Deposit',
                f"the current button label (got {got['btn']!r})")
 
-            # Single method -> preselected; a choice -> nothing preselected.
+            # Owner: "l want even if pay a or b, the payment phone should be
+            # there ... whether single on A available or B available." An
+            # earlier round hid it for PAY B, reasoning that the manual overlay
+            # asks again on its own screen; he overruled that, and the field is
+            # unconditional now. So it is asserted VISIBLE in all three
+            # combinations, and still visible after switching methods -- a
+            # section that comes and goes as the radio changes is what reads as
+            # the form breaking.
+            ck(got['phoneShown'] is True, "the Payment Phone field is on the screen")
+
+            # Owner: "even deposit instructions shouldn't change please it
+            # should use that new one, no changing." Collected per combination
+            # and compared across all three after the loop.
+            instructions.append((name, got['instr']))
+
             if pay_a and pay_b:
                 ck(got['on'] == [], "with both live, neither is preselected")
-                ck(got['phoneShown'] is False,
-                   "and the phone field waits until PAY-A is chosen")
-                # Choosing PAY B must NOT ask for a number here -- its own next
-                # screen collects one.
-                await page.evaluate("pickDepositPayMethod('B')")
-                await page.wait_for_timeout(200)
-                hidden = await page.evaluate(
-                    "document.getElementById('depPayAFields').style.display === 'none'")
-                ck(hidden, "choosing PAY B hides the PAY-A phone field")
-                await page.evaluate("pickDepositPayMethod('A')")
-                await page.wait_for_timeout(200)
-                shown = await page.evaluate(
-                    "document.getElementById('depPayAFields').style.display !== 'none'")
-                ck(shown, "and choosing PAY-A brings it back")
+                for pick in ('B', 'A'):
+                    await page.evaluate(f"pickDepositPayMethod('{pick}')")
+                    await page.wait_for_timeout(200)
+                    still = await page.evaluate(
+                        "document.getElementById('depPhone').offsetParent !== null")
+                    ck(still, f"and it stays visible with PAY {pick} selected")
             else:
                 ck(got['on'] == want, f"the only method is preselected ({got['on']})")
-                ck(got['phoneShown'] is (True if pay_a else False),
-                   "the phone field matches the method")
 
             ck(not errs, f"no page errors ({errs[:1]})")
             await ctx.close()
+
+        # ── PAY B uses the same "Redirecting to payment…" loader as PAY-A ──
+        # Owner: "the loader to redirecting to payment page on manual payment
+        # should be there not the other old one." PAY B used to swap the
+        # button's label for a small in-button spinner instead.
+        print("\n— the manual path shows the redirect loader —")
+        ctx = await b.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
+        page = await ctx.new_page()
+        await open_app(page, False, True)
+        await page.evaluate("openDepositSheet()")
+        await page.wait_for_timeout(600)
+        # Read in the SAME page task as the call. proceedToManualPaymentMethod()
+        # raises the loader synchronously and only then waits 400ms before
+        # opening the overlay, so a Python-side read after the click would race
+        # that timer; this cannot.
+        mid = await page.evaluate("""() => {
+            document.getElementById('depAmount').value = '20000';
+            submitDepositChoice();
+            const el = document.getElementById('depRedirect');
+            return { shown: !!el && el.classList.contains('show'),
+                     text: el ? el.innerText.trim() : '',
+                     btnHtml: document.getElementById('depSubmitBtn').innerHTML }; }""")
+        ck(mid['shown'], "tapping Confirm on PAY B raises the redirect loader")
+        ck('edirect' in mid['text'], f"and it says what it is doing ({mid['text']!r})")
+        ck('mini-spin' not in mid['btnHtml'],
+           "the old in-button spinner is not what is shown any more")
+        await page.wait_for_timeout(900)
+        after = await page.evaluate("""() => ({
+            loader: document.getElementById('depRedirect').classList.contains('show'),
+            overlay: document.getElementById('manualPayBg').classList.contains('show'),
+            btnDisabled: document.getElementById('depSubmitBtn').disabled })""")
+        ck(after['overlay'], "the manual payment overlay opens")
+        ck(not after['loader'], "and the loader comes back down once it does")
+        ck(not after['btnDisabled'],
+           "the Confirm button is re-enabled, so backing out and retrying works")
+        await ctx.close()
+
+        # ── the instruction card never changes ──
+        print("\n— the deposit instructions are the same on every method —")
+        for nm, lst in instructions:
+            print(f"    {nm}: {len(lst)} items")
+        first_name, first = instructions[0]
+        for nm, lst in instructions[1:]:
+            ck(lst == first, f"{nm} matches {first_name} exactly")
+        ck(len(first) == 4, f"the design's own four lines, no extras ({len(first)})")
+        ck(not any('PAY B' in x for x in first),
+           "and no method-specific line was slipped in")
 
         # ── the profile icon is the logo, not the GIF ──
         print("\n— the profile icon is the uploaded logo —")
