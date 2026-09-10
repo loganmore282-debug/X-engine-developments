@@ -2394,6 +2394,72 @@ fail it.
 a catch-all never fires, because the last registration wins. Register the catch-all
 first. That is twice in two rounds; it is in this file now for a reason.
 
+### The Account list, measured off his mockup (and his own door on Log Out)
+
+Owner: "l made that door icon myself, so just like my mock up put it on logout, even see
+cards in account are very big plus their icons, please use exactly the size of mock up,
+even see button size of withdrawal and deposit, see the settings card is having green
+line, see closely on balance record icon it has some green in its background, check every
+background of each icon, the first of download app it is purple, so here it should be
+orange ... see closely rather than guess and implement."
+
+His screenshot and ours are both **1080 device px wide on the same phone**, so device
+pixels compare directly: 1080/390 = **2.769 device px per CSS px**.
+
+| | his mockup | ours was | now |
+|---|---|---|---|
+| icon tile | 114 dev px | 146 (52 CSS) | **41 CSS** |
+| row pitch | 193 | 250 (90 CSS) | **70 CSS** (41 + 2x14 padding + 1px rule) |
+| row title ink | 30 | 35 (17.5px) | **15px** |
+| Deposit / Withdraw | 141 tall | 58 CSS | **51 CSS** |
+| Log Out | 146 tall | 54 CSS | **53 CSS** |
+| his door glyph | 31 x 47 | — | **17px tall**, width auto |
+
+**The "green line" is the CARD's own border**, not the rule beside the heading. Sampled
+down his left edge it holds `rgb(236,243,235)` from the top of the card to the bottom --
+G−R = +7. Ours was the neutral `--line-soft`; it is `#dceadd` now.
+
+**Every icon tile carries its own background, and they are GRADIENTS, not flat fills** --
+sampled top-left to bottom-right off his mockup:
+
+| row | his top-left → bottom-right | ours |
+|---|---|---|
+| Download APP | (100,31,112) → (78,23,88) purple | **orange** `#b34700 → #8a3600` |
+| Wallet | (255,209,12) → (232,195,78) | his, unchanged |
+| Balance Record | (177,202,172) → (224,238,225) | his, unchanged (the green he pointed at) |
+| Messages | (254,244,208) → (250,244,230) | his, unchanged |
+| Login Password | (98,52,98) → (233,216,188) purple | **orange** `#a8480e → #e9d8bc` |
+| Trade Password | (192,161,96) → (246,202,15) | his, unchanged |
+
+Only the two PURPLE stops are translated, per the standing rule and his own instruction.
+**Turntable has no counterpart in his mockup** (that row does not exist there), so it
+takes a warm coral that sits between the gold above and the green below rather than
+inventing a seventh hue out of sequence.
+
+The tile's colour class is derived from the icon key (`.ic-<icon>`), so a row's
+background cannot drift from the artwork sitting on it.
+
+**The door is his own artwork**, cut out by flood-filling the white page inward from the
+border -- the same rule as the spin wheel and the clipboard, never a global
+white→transparent, because the door's own highlights are near-white and only survive
+because they are enclosed. Downscaled to 105x160 (10 KB) for a 17px display, and added to
+the service worker's SHELL precache.
+
+**Two measurement traps, both of which reported a correct build as broken:**
+- A **full-page screenshot places `position:fixed` elements by viewport, not document**,
+  so the last row sampled as flat white on a tile whose gradient was demonstrably applied.
+  Sample from a per-element viewport clip instead.
+- `scroll_into_view_if_needed()` scrolls the **minimum** amount, which leaves the last row
+  under the fixed bottom nav -- the clip then samples the nav's own pale surface. Use
+  `scrollIntoView({block:'center'})`.
+
+**And one trap in the verification itself, worth more than either.** Reverting the card
+border to the neutral token appeared to produce **zero failures** -- because the colour
+parser stripped `"rgb("` and choked on `rgba(239,224,211,0.72)`, so the test **crashed**,
+and a crash prints no FAIL line. Counting FAIL lines therefore read a crash as a pass.
+Parse with a regex, and when checking that an assertion discriminates, **check the exit
+code, not the output**.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

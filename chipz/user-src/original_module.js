@@ -2793,9 +2793,12 @@ window.copyText = function(text){
 // screen only), which is why patchHomeBalances()'s live tick targets
 // #acctWallet.
 function settingRowHtml(icon, title, sub, onclick){
+  // The icon key doubles as the tile's colour class (.ic-<icon>) -- each row's
+  // background is its own measured value off the owner's mockup, so they
+  // cannot drift apart from the artwork they sit behind.
   return `
   <button class="setting-row" onclick="${onclick}">
-    <span class="sq"><img src="/set-${icon}.png" alt=""></span>
+    <span class="sq ic-${icon}"><img src="/set-${icon}.png" alt=""></span>
     <span class="txt"><span class="t1" style="display:block;">${title}</span><span class="t2" style="display:block;">${sub}</span></span>
     <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
   </button>`;
@@ -2854,7 +2857,7 @@ async function renderAccount(){
     ${settingRowHtml('download', 'Download APP', 'Get the mobile app', 'openDownloadSheet()')}
     ${settingRowHtml('wallet', 'Wallet', 'Manage your withdrawal wallet', 'openWalletSheet()')}
     <button class="setting-row" onclick="openTurntableSheet()">
-      <span class="sq"><img src="/turntable.png" alt="" style="width:26px;height:26px;object-fit:contain;"></span>
+      <span class="sq ic-turntable"><img src="/turntable.png" alt="" style="width:22px;height:22px;object-fit:contain;"></span>
       <span class="txt"><span class="t1" style="display:block;">Turntable</span><span class="t2" style="display:block;">Daily spin &amp; bonus wins</span></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
     </button>
@@ -2865,7 +2868,7 @@ async function renderAccount(){
   </div>
 
   <button class="dark-button logout-btn" onclick="doLogout()">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>
+    <img src="/logout-door.png" alt="" aria-hidden="true">
     Log Out
   </button>
   <div style="height:20px;"></div>

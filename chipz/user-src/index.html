@@ -936,22 +936,68 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
     -webkit-background-clip:text;background-clip:text;
     color:transparent;-webkit-text-fill-color:transparent;}
 }
+/* Every number below is measured off the owner's own mockup, not chosen.
+   His screenshot and ours are both 1080 device px wide on the same phone, so
+   device pixels compare directly; 1080/390 = 2.769 device px per CSS px.
+
+     icon tile      his 114 dev px -> 41 CSS   (ours was 52, 1.28x too big)
+     row pitch      his 193        -> 70 CSS   (ours was 250)
+     title ink      his  30        -> 15 CSS   (ours was 35 at 17.5px)
+     Deposit btn    his 141 tall   -> 51 CSS   (ours was 58)
+     Log Out        his 146 tall   -> 53 CSS   (ours was 54, already right)
+
+   Owner: "see cards in account are very big plus their icons, please use
+   exactly the size of mock up, even see button size of withdrawal and
+   deposit." Row pitch is tile + 2x padding + the 1px rule: 41 + 28 + 1 = 70,
+   which is his 69.7 to within a pixel. */
 .acct-btnrow{display:flex;gap:10px;}
-.acct-btnrow button{flex:1;height:58px;font-size:17px;padding:0;}
+.acct-btnrow button{flex:1;height:51px;font-size:16px;padding:0;}
 .sec-head{display:flex;align-items:center;gap:9px;margin:26px 0 12px;}
 .sec-head .bar{width:4px;height:21px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;}
 .sec-head h2{font-size:22px;font-weight:400;margin:0;flex-shrink:0;}
 .sec-head .ln{flex:1;height:1px;background:var(--snow-border);}
-.setting-list{background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;border:1px solid var(--line-soft);box-shadow:var(--sh-card);}
-.setting-row{display:flex;align-items:center;gap:14px;padding:18px 16px;border-bottom:1px solid var(--snow-border);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left;color:var(--snow-ink);font-family:inherit;}
+/* Owner: "see the settings card is having green line." It is the CARD's own
+   border, not the rule beside the heading -- sampled down his left edge it
+   holds rgb(236,243,235) from the top of the card to the bottom, G-R = +7,
+   a green-tinted hairline rather than the neutral one we had. */
+.setting-list{background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;border:1px solid #dceadd;box-shadow:var(--sh-card);}
+.setting-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--snow-border);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left;color:var(--snow-ink);font-family:inherit;}
 .setting-row:last-child{border-bottom:0;}
-.setting-row .sq{width:52px;height:52px;border-radius:var(--r-ctl);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--snow-neutral-soft);}
-.setting-row .sq img{width:38px;height:38px;object-fit:contain;}
+.setting-row .sq{width:41px;height:41px;border-radius:var(--r-ctl);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--snow-neutral-soft);}
+.setting-row .sq img{width:30px;height:30px;object-fit:contain;}
 .setting-row .txt{flex:1;min-width:0;}
-.setting-row .t1{font-weight:600;font-size:17.5px;}
-.setting-row .t2{font-size:14px;color:var(--snow-muted);font-weight:500;}
+.setting-row .t1{font-weight:600;font-size:15px;}
+.setting-row .t2{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
 .setting-row .chev{flex-shrink:0;color:var(--snow-muted);}
-.logout-btn{display:flex;width:100%;height:54px;align-items:center;justify-content:center;gap:8px;margin-top:22px;font-size:16px;letter-spacing:.08em;padding:0;}
+/* Each tile carries its OWN background, sampled top-left to bottom-right off
+   his mockup -- they are gradients, not flat fills. Two stops were his
+   theme's purple and are translated to the brand's orange per the standing
+   rule (shape and placement from the mockup, colour from Chipz); owner:
+   "the first of download app it is purple, so here it should be orange."
+   Everything else is his measured colour unchanged, including the pale green
+   behind Balance Record that he pointed at specifically.
+     download  (100,31,112) -> ( 78, 23, 88)   purple  => deep orange
+     wallet    (255,209,12) -> (232,195, 78)
+     balance   (177,202,172)-> (224,238,225)
+     messages  (254,244,208)-> (250,244,230)
+     loginpw   ( 98,52, 98) -> (233,216,188)   purple  => deep orange
+     tradepw   (192,161,96) -> (246,202, 15)
+   Turntable has no counterpart in his mockup (that row does not exist there),
+   so it takes a warm coral that sits between the gold above it and the green
+   below rather than inventing a seventh hue out of sequence. */
+.setting-row .sq.ic-download{background:linear-gradient(145deg,#b34700,#8a3600);}
+.setting-row .sq.ic-wallet  {background:linear-gradient(145deg,#ffd10c,#e8c34e);}
+.setting-row .sq.ic-turntable{background:linear-gradient(145deg,#f4a06a,#efc0a2);}
+.setting-row .sq.ic-balance {background:linear-gradient(145deg,#b1caac,#e0eee1);}
+.setting-row .sq.ic-messages{background:linear-gradient(145deg,#fef4d0,#faf4e6);}
+.setting-row .sq.ic-loginpw {background:linear-gradient(145deg,#a8480e,#e9d8bc);}
+.setting-row .sq.ic-tradepw {background:linear-gradient(145deg,#c0a160,#f6ca0f);}
+.logout-btn{display:flex;width:100%;height:53px;align-items:center;justify-content:center;gap:8px;margin-top:22px;font-size:16px;letter-spacing:.08em;padding:0;}
+/* The owner's own door artwork, at the size his mockup draws it: his
+   glyph measures 31x47 device px, which is 17 CSS px tall. Width is left
+   auto so the door keeps its own proportions instead of being squashed
+   into a square. */
+.logout-btn img{height:17px;width:auto;display:block;flex-shrink:0;}
 
 /* ── Wallet (Wallet.dc.html) ──
    ONE bound payout account shown as a bank-card tile, an Edit Wallet
