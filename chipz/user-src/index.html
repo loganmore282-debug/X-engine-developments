@@ -956,6 +956,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .sec-head .bar{width:4px;height:21px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;}
 .sec-head h2{font-size:22px;font-weight:400;margin:0;flex-shrink:0;}
 .sec-head .ln{flex:1;height:1px;background:var(--snow-border);}
+/* The Invitation Reward heading's accent bar. Same shape and gradient as
+   .sec-head .bar so the two read as one device, sized to this smaller 17px
+   heading rather than Account's 22px one. */
+.inv-bar{width:4px;height:17px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;display:block;}
 /* Owner: "see the settings card is having green line." It is the CARD's own
    border, not the rule beside the heading -- sampled down his left edge it
    holds rgb(236,243,235) from the top of the card to the bottom, G-R = +7,
@@ -1766,6 +1770,34 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   width:34px;height:34px;border:3px solid rgba(255,255,255,.25);border-top-color:white;border-radius:50%;
   animation:sp 1s linear infinite;margin-bottom:12px;
 }
+/* The reference's own validation toast, back -- owner: "l need to see such
+   notifies, ie when one taps confirm but when no number or operator set, and
+   when invalid number is set." His screenshots show a CENTRED dark box, not
+   the bottom pill an earlier version of this had.
+   
+   That bottom pill was removed for a real reason, recorded below, and this
+   avoids it by construction: it is a FIXED, self-centring element parented to
+   #manualPayFlow, exactly like .mp-loading-overlay, which has always worked.
+   It never becomes a child of a .reveal-in wrapper, so this app's stagger
+   entrance cannot reach it, cannot override its transform, and cannot leave it
+   sitting off-centre with its own opacity:0 still applied.
+   
+   It sits ABOVE the loading overlay (z-index 30 against 20): the two can
+   legitimately overlap -- a failed init lowers the loader and raises the toast
+   in the same tick -- and the message is the part the member needs to read. */
+#manualPayFlow .mp-toast{
+  position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
+  padding:36px;pointer-events:none;
+}
+#manualPayFlow .mp-toast.show{display:flex;}
+#manualPayFlow .mp-toast span{
+  max-width:290px;background:rgba(71,71,71,.88);color:#fff;border-radius:var(--r-card);
+  padding:16px 22px;font-size:15.5px;line-height:1.45;text-align:center;
+}
+@media (prefers-reduced-motion:no-preference){
+  #manualPayFlow .mp-toast.show span{animation:mpToastIn .16s ease-out;}
+}
+@keyframes mpToastIn{from{opacity:0;transform:scale(.94);}to{opacity:1;transform:scale(1);}}
 /* The reference's own local bottom-pill toast was removed (see
    openManualDepositFormSheet()'s own comment in original_module.js for
    the real bug it had -- being a direct child of the .reveal-in wrapper

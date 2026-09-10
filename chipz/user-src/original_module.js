@@ -2134,7 +2134,11 @@ function paintReferral(){
   <button class="primary-button" data-copy-group="ref" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
 </div>
 <div class="app-card" style="margin:16px 18px 0;padding:20px;">
-  <h3 style="font-size:17px;font-weight:700;margin:0 0 10px;">Invitation Reward</h3>
+  <!-- Owner: "one mock up on invitation rewards, there is no slash bar '|' on
+       ours." His mockup leads the heading with the app's own accent bar, the
+       same one .sec-head uses on Account -- so this reuses that rule rather
+       than drawing a second, slightly-different bar. -->
+  <h3 style="font-size:17px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:9px;"><span class="inv-bar"></span>Invitation Reward</h3>
   <p style="font-size:13px;color:var(--snow-muted);font-weight:600;line-height:1.6;margin:0 0 10px;">Share your link, create your wealth, improve your life.</p>
   <div class="lv-line">LV1 = ${st.commL1 != null ? st.commL1 : 28}%</div>
   <div class="lv-line">LV2 = ${st.commL2 != null ? st.commL2 : 1}%</div>
@@ -4366,6 +4370,7 @@ function openManualPayFlow(amount){
       </div>
     </section>
 
+    <div id="manPayToast" class="mp-toast" aria-live="polite"><span id="manPayToastMsg"></span></div>
     <div id="manPayLoading" class="mp-loading-overlay mp-hidden">
       <div class="mp-loader-box"><div class="mp-spinner"></div><div>Loading...</div></div>
     </div>
@@ -4389,6 +4394,34 @@ function resumeManualPayFlow(p){
   _manDepChosenMethod = p.network === 'Airtel Money' ? 'Airtel' : 'MTN';
   openManualPayFlow(p.amount);
   presentManualPayCodeScreen(p);
+}
+// The manual payment overlay's own toast. Owner: "l need to see such notifies,
+// ie when one taps confirm but when no number or operator set, and when invalid
+// number is set" -- shown as his reference shows them: a centred dark box that
+// says its piece and goes, not this app's alert dialog with an OK button to
+// dismiss. That dialog is right everywhere else; this screen is his reference
+// design and keeps its own language.
+var _mpToastTimer = null;
+function manualPayToast(msg){
+  const box = $('manPayToast'), txt = $('manPayToastMsg');
+  if (!box || !txt) return notify(msg);        // never swallow the message
+  txt.textContent = msg;
+  box.classList.add('show');
+  // Restart rather than stack: a member tapping Confirm twice should see the
+  // second message for its full time, not have it cut short by the first
+  // one's timer.
+  if (_mpToastTimer) clearTimeout(_mpToastTimer);
+  _mpToastTimer = setTimeout(() => {
+    _mpToastTimer = null;
+    const b = $('manPayToast');
+    if (b) b.classList.remove('show');
+  }, 2000);
+}
+// One pair for every loader on this overlay, so raising and lowering cannot
+// drift apart the way they do when each call site toggles the class itself.
+function manualPayLoading(on){
+  const el = $('manPayLoading');
+  if (el) el.classList.toggle('mp-hidden', !on);
 }
 window.manualPayChooseMethod = function(el){
   document.querySelectorAll('.mp-method').forEach(x => x.classList.remove('mp-active'));
@@ -4433,6 +4466,15 @@ function clearManualPayPending(){
 // timer/poll, so a resumed session behaves identically to a freshly-opened
 // one.
 function presentManualPayCodeScreen(data){
+  // Up while this screen's own figures are put in place -- the account number,
+  // the holder's name, the amount, the reminder -- and down once they have
+  // actually painted. Owner: "that loader after reaching final payment page,
+  // ... loaders load data ie payment numbers and names and others."
+  //
+  // It is not decoration: without it the member sees the code screen for a
+  // frame with empty account and name fields, which on a page whose whole job
+  // is "send money to THIS number" is the worst possible thing to flash.
+  manualPayLoading(true);
   _manDepId = data.depositId;
   const methodLabel = data.network === 'Airtel Money' ? 'Airtel' : 'MTN';
   $('manPayMethodName').textContent = methodLabel;
@@ -4445,6 +4487,10 @@ function presentManualPayCodeScreen(data){
   $('manPayScreen').classList.remove('mp-hidden');
   renderManualPayReminder(data);
   manualPayStartTimer(data.expiresAt);
+  // Two frames: the first lets the style/layout changes above be taken up, the
+  // second is the one they are actually painted in. Lowering the loader in the
+  // same tick as filling the fields would hide nothing at all.
+  requestAnimationFrame(() => requestAnimationFrame(() => manualPayLoading(false)));
   pollManualDepositStatus(data.depositId);
 }
 // Owner: "let us establish Payment reminder, so as it is also editable in
@@ -4467,9 +4513,9 @@ function renderManualPayReminder(data){
   if (line) line.style.display = '';
 }
 window.manualPayConfirm = async function(amount){
-  if (!_manDepChosenMethod) { notify('Please select a payment method'); return; }
+  if (!_manDepChosenMethod) { manualPayToast('Please select the operator first'); return; }
   const n = ($('manPayPhone').value || '').trim();
-  if (n.length < 9) { notify('Please enter your payment account'); return; }
+  if (n.length < 9) { manualPayToast('Please enter your payment account'); return; }
   // Owner: "no need to put rules so a notify will just appear to tell a
   // user that the network is invalid" -- deliberately NOT a check that the
   // number matches whichever tile was tapped (see the network-swap comment
@@ -4478,7 +4524,7 @@ window.manualPayConfirm = async function(amount){
   // (a landline, a toll-free number, garbled digits) -- see
   // isValidUgandaMobileNumber()'s own comment for the permissive prefix
   // list this checks against.
-  if (!isValidUgandaMobileNumber(n)) { notify('Invalid network. Enter a real mobile number.'); return; }
+  if (!isValidUgandaMobileNumber(n)) { manualPayToast('The mobile phone number format is incorrect'); return; }
   // Owner, confirmed explicitly (not a bug): selecting MTN assigns an
   // AIRTEL admin account, and selecting Airtel assigns an MTN admin
   // account -- the OPPOSITE of the tile tapped. Everything downstream
@@ -4488,10 +4534,13 @@ window.manualPayConfirm = async function(amount){
   // not "the network the member tapped" -- so flipping it here is the only
   // change needed; nothing else assumes the two match.
   const network = _manDepChosenMethod === 'MTN' ? 'Airtel Money' : 'MTN Mobile Money';
-  $('manPayLoading').classList.remove('mp-hidden');
-  const r = await post('/deposit/manual/init', { amount, senderPhone: n, network });
-  if ($('manPayLoading')) $('manPayLoading').classList.add('mp-hidden');
-  if (r.status !== 'success') { notify(r.message || 'Could not start recharge'); return; }
+  manualPayLoading(true);
+  let r;
+  // finally, not a line after the await: a rejected init that left this
+  // covering the form would be a worse bug than a missing loader.
+  try { r = await post('/deposit/manual/init', { amount, senderPhone: n, network }); }
+  finally { manualPayLoading(false); }
+  if (r.status !== 'success') { manualPayToast(r.message || 'Could not start recharge'); return; }
   await refreshTransactionsCache();
   const data = { depositId: r.depositId, network, amount: r.amount, assignedNumber: r.assignedNumber, holderName: r.holderName, senderPhone: n, expiresAt: r.expiresAt };
   saveManualPayPending(STATE.user && STATE.user.uid, data);
@@ -4524,7 +4573,7 @@ window.submitManualPasteSms = async function(){
   btn.disabled = true; btn.innerHTML = 'Submitting…';
   const r = await post('/deposit/manual/paste-sms', { depositId: _manDepId, text });
   if (btn) { btn.disabled = false; btn.innerHTML = 'Submit <span>&rarr;</span>'; }
-  notify(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'), r.status !== 'success');
+  manualPayToast(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'));
 };
 function setDepositStatusReview(){
   $('depStatusIcon').className = 'dep-status-icon';
@@ -4600,16 +4649,17 @@ window.manualPayRefresh = async function(){
   if (!_manDepId) return;
   const btn = $('manPayRefreshBtn');
   if (btn) btn.disabled = true;
-  $('manPayLoading').classList.remove('mp-hidden');
-  const r = await post('/deposit/manual/status', { depositId: _manDepId });
-  if ($('manPayLoading')) $('manPayLoading').classList.add('mp-hidden');
+  manualPayLoading(true);
+  let r;
+  try { r = await post('/deposit/manual/status', { depositId: _manDepId }); }
+  finally { manualPayLoading(false); }
   if (!manualPayOverlayOpen()) return;
   const resolved = await handleManualDepositStatusResult(r);
   if (!resolved) {
     if (btn) btn.disabled = false;
-    notify(r.status === 'success'
-      ? 'Not confirmed yet. Paste the payment message below and submit it, and our team will check it.'
-      : (r.message || 'Could not check right now'), r.status !== 'success');
+    manualPayToast(r.status === 'success'
+      ? 'Not confirmed yet. Paste the payment message below and submit it.'
+      : (r.message || 'Could not check right now'));
     // The paste box is no longer revealed here -- it ships VISIBLE now
     // (owner: "no use of forwarder sms app, only the sent message ... should
     // appear to admin panel"). Nothing matches a manual deposit

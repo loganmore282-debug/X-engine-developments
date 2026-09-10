@@ -2469,6 +2469,70 @@ and a crash prints no FAIL line. Counting FAIL lines therefore read a crash as a
 Parse with a regex, and when checking that an assertion discriminates, **check the exit
 code, not the output**.
 
+### The manual payment page speaks for itself (toasts + loaders)
+
+Owner: "on manual payment page, l need those loaders, ie on redirect loaders after
+finishing, l need to see such notifies, ie when one taps confirm but when no number or
+operator set, and when invalid number is set, also that loader after putting number and
+confirming, and also that loader after reaching final payment page ... loaders load data
+ie payment numbers and names and others, also one mock up on invitation rewards, there is
+no slash bar '|' on ours."
+
+**The validation already existed; the way it spoke was wrong.** All three cases were
+checked, but each called `notify()` — this app's alert dialog, with an OK button to
+dismiss. His reference answers a mistyped field with a **centred dark toast** that says
+its piece and goes. A modal that has to be dismissed to get back to the field you were
+typing in is the wrong instrument for "you left this blank". `manualPayToast(msg)`: 2000
+ms, **restarts rather than stacks** (three fast taps give one toast, not three), and
+falls back to `notify(msg)` if its own elements are missing, so a message is never
+swallowed by a markup change.
+
+His reference's exact wording is kept: *"Please select the operator first"*, *"Please
+enter your payment account"*, *"The mobile phone number format is incorrect."*
+
+**Why `.mp-toast` is `position:fixed` and not a child of the card.** A comment in the
+source records that the reference's own bottom-pill toast had already been removed once
+for a real bug: as a child of `.reveal-in`, the stagger entrance animation permanently
+overrode its `transform:translateX(-50%)` and its `opacity`, so it either sat off-centre
+or never appeared. Scoped to `#manualPayFlow` and fixed with `inset:0`, it centres itself
+the way `.mp-loading-overlay` always has, and the old bug cannot recur. z-index 30, above
+the loader's 20 — a toast raised while the loader is up is exactly the case that must
+still be readable.
+
+**Three loaders, each covering a specific frame the member should never see:**
+- `manualPayConfirm` raises it **synchronously before the await**, and lowers it in a
+  `finally` rather than on the line after — a rejected init that left the overlay covering
+  the form would be a worse bug than a missing loader.
+- The init and status calls both use the same `try/finally` pair.
+- `presentManualPayCodeScreen` raises it and lowers it on a **double
+  `requestAnimationFrame`**, so the code screen never paints a frame with blank account
+  number and holder name. On a page whose whole job is "send money to THIS number", a
+  flash of empty fields is the worst possible thing to show.
+
+**Two assertions that needed care to be true rather than lucky:**
+- The mid-flight loader is read **in the same page task as the call**. Its raise is
+  synchronous and the request resolves on a later tick, so a Python-side read after the
+  click races it and would report a working loader as absent.
+- The code screen's loader is sampled **inside** the double-rAF window by an rAF loop in
+  the page, not after it.
+
+**A wrong test case, not a wrong app.** The first run failed "invalid number" because the
+fixture typed `7373` and expected *"format is incorrect"* — but four digits is caught by
+the length check first and correctly reads as an **unfinished** field, not a wrong one.
+The format message needs a full-length number that is not a mobile: a Kampala landline
+(`0414123456`) or an unused `07x` prefix (`0719968158`, since `UGANDA_MOBILE_PREFIXES`
+omits 71/72). All three cases are now separate assertions.
+
+**The Invitation Reward accent bar** — his mockup has the same `|` the Account sections
+carry, ours had none. A 4x17 `.inv-bar` span reusing `--chipz-grad`, asserted on width,
+height, left-of-heading position and the gradient itself, so a flat-colour regression
+fails too.
+
+`verify-mp-feedback-discriminates.py` proves the point by really breaking the app five
+ways — toasts back to `notify`, each of the two loader raises removed, the bar deleted,
+the bar's gradient flattened — rebuilding each time and judging on the **exit code**, per
+the lesson directly above. All five are caught.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase
