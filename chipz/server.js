@@ -4043,7 +4043,13 @@ async function assignManualNumberAndCreateDeposit(network, amount, depositFields
     const numsSnap = await db.collection('manualPaymentNumbers')
       .where('network', '==', network).where('active', '==', true).get();
     const pool = numsSnap.docs.map(d => ({ id: d.id, number: d.data().number, holderName: d.data().holderName }));
-    if (!pool.length) return null;
+    // 'none' and 'busy' are different problems and need different words. Now
+    // that the tapped operator really is the operator assigned (owner: "mtn
+    // to mtn, airtel to airtel"), an admin who has only ever added Airtel
+    // numbers will have every MTN payer hit this -- and telling them the
+    // numbers are "busy, try a slightly different amount" would send them
+    // round a loop that cannot end. Distinguished here, worded at the caller.
+    if (!pool.length) return { empty: true };
     // Fisher-Yates -- every permutation of the pool is equally likely, so
     // the candidate tried first (and, if it clashes, second, third, ...)
     // is genuinely uniformly random on every call, not just "different
@@ -4115,6 +4121,10 @@ app.post('/deposit/manual/init', async (req, res) => {
       method: 'manual', expiresAt, date, time, createdAt: FieldValue.serverTimestamp(),
     });
     if (!result) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
+    if (result.empty) {
+      console.error(`Manual deposit refused: no active payment numbers configured for ${network}. Add one in Admin -> Deposits -> payment numbers.`);
+      return res.status(503).json({ status: 'error', message: `No ${network} payment number is available right now. Please choose the other network, or contact customer service.` });
+    }
     const { assigned, depRef } = result;
     trackManual(assigned.number, 'assigned', { amount: amt });
     // Same "recorded immediately, not eventually" reasoning as
@@ -4405,7 +4415,10 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
       await match.ref.update({
         status: 'review',
         reviewReason: `Forwarded SMS matched this order automatically (${fmtUGX(info.amount)}${info.txId ? ', id ' + info.txId : ''}) -- automatic crediting is off, so it needs your approval`,
-        pastedSms: info.raw || text,
+        // The forwarded message as it arrived, not the parser's
+        // whitespace-collapsed working copy -- same reasoning as the
+        // member-paste route below.
+        pastedSms: String(text || info.raw).slice(0, 2000),
         pastedSmsParsed: true,
         pastedSmsAmount: info.amount,
         pastedSmsTxId: info.txId || '',
@@ -4487,10 +4500,20 @@ app.post('/deposit/manual/paste-sms', async (req, res) => {
     await depSnap.ref.update({
       status: 'review',
       reviewReason: notes.join('; '),
-      // The RAW text always, exactly as it was sent -- `info.raw` when it
-      // parsed, the original otherwise. This is the field the admin panel
-      // renders in full, and it is the whole point of the round.
-      pastedSms: info ? info.raw : text,
+      // The member's OWN text, byte for byte, parsed or not.
+      //
+      // This used to store `info.raw` whenever the message parsed, and
+      // `info.raw` is the parser's working copy: /\s+/g collapsed to single
+      // spaces so the patterns can match across line breaks. Fine for
+      // matching, wrong to keep -- a mobile-money SMS puts the transaction
+      // id, the balance and the fee on their own lines, and the admin panel
+      // renders this in a <pre style="white-space:pre-wrap"> precisely so a
+      // person can read that shape. Collapsed, every message arrived as one
+      // run-on line and the <pre> had nothing left to preserve.
+      //
+      // Owner: "make sure that messages are sent correctly in full to admin
+      // panel to approve or reject." In full means as they sent it.
+      pastedSms: text,
       pastedSmsParsed: !!info,
       pastedSmsAmount: info ? info.amount : null,
       pastedSmsTxId: (info && info.txId) || '',

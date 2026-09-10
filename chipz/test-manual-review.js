@@ -55,9 +55,14 @@ function fnSource(name) {
 // route's own comment explains that it never calls creditDeposit(), and a
 // plain scan cannot tell that sentence from a call -- the same self-matching
 // trap test-security-hardening.js documents.
+// Line comments FIRST -- see the long note on the same helper in
+// test-no-snow-branding.js. A line comment containing the characters "/*"
+// (a USSD code written as *165#/*185#, say) otherwise opens a block that runs
+// to the next real "*/", blanking every line between and taking the checks
+// built on this helper blind with it.
 const stripComments = s => s
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .replace(/^\s*\/\/.*$/gm, '');
+  .replace(/^\s*\/\/.*$/gm, '')
+  .replace(/\/\*[\s\S]*?\*\//g, '');
 
 // ── the real paste-sms handler, on a stub database ──
 console.log('— the member\'s message reaches review, whatever it says —');
@@ -123,6 +128,33 @@ function run(text, order = ORDER) {
   check(!!a.written && a.written.pastedSmsAmountMatches === true,
     'with the amount cross-checked against the order');
 
+  // 1b. A REAL operator SMS, which arrives on several lines.
+  //
+  // Every case here used to be one line, which is why this went unnoticed for
+  // a round: the route stored `info.raw`, the parser's working copy with
+  // /\s+/g collapsed to single spaces so its patterns can match across breaks.
+  // On one-line input the collapsed copy IS the original and every assertion
+  // passed, while a real message -- transaction id, balance and fee each on
+  // their own line -- reached the admin as one run-on string, with the panel's
+  // <pre style="white-space:pre-wrap"> left with nothing to preserve.
+  //
+  // Owner: "make sure that messages are sent correctly in full to admin panel
+  // to approve or reject."
+  const multi = 'You have sent UGX 20,000 to KYARIMPA MADRINE, 256791399585.\n'
+              + 'Fee: UGX 0\n'
+              + 'New balance: UGX 4,500\n'
+              + 'Financial Transaction ID: 302556677001.';
+  const m = await run(multi);
+  check(m.code === 200 && !!m.written, 'a real multi-line operator SMS is accepted');
+  check(!!m.written && m.written.pastedSms === multi,
+    'and reaches the admin byte for byte, line breaks and all');
+  check(!!m.written && (m.written.pastedSms.match(/\n/g) || []).length === 3,
+    `its 3 line breaks survive (found ${m.written ? (m.written.pastedSms.match(/\n/g) || []).length : 0})`);
+  check(!!m.written && m.written.pastedSmsParsed === true,
+    'while still being parsed -- the parser reads across the breaks as before');
+  check(!!m.written && m.written.pastedSmsAmount === 20000,
+    `and pulls the amount out of it (got ${m.written && m.written.pastedSmsAmount})`);
+
   // 2. THE ROUND'S POINT: something the parser cannot read at all.
   const junk = 'i have sent the 20000 already from my MTN please check and confirm asap';
   const b = await run(junk);
@@ -166,6 +198,18 @@ function run(text, order = ORDER) {
     'a held match is queued for review rather than dropped');
   check(/pastedSms:/.test(fwd.slice(gateAt, creditAt)),
     'with the forwarded message attached, so the admin sees the same evidence');
+  // ...and attached UNCOLLAPSED. `info.raw` is the parser's working copy with
+  // /\s+/g flattened to single spaces, so storing it costs the admin every
+  // line break in the message. The member-paste route is checked by running
+  // it (case 1b above); this branch needs a container full of stubs to reach,
+  // so it is pinned at the source instead -- comments already stripped, and
+  // scoped to the held-for-review branch rather than the whole file.
+  const fwdWrite = fwd.slice(gateAt, creditAt);
+  const fwdPasted = (fwdWrite.match(/pastedSms:\s*([^\n]*)/) || [])[1] || '';
+  check(!/\binfo\.raw\b/.test(fwdPasted.replace(/\|\|[\s\S]*$/, '')),
+    `the forwarded message is stored as it arrived, not the parser's flattened copy  --  ${fwdPasted.trim()}`);
+  check(/slice\(0,\s*2000\)/.test(fwdPasted),
+    'and capped, like the paste route -- this one arrives from an app, not a form');
 
   // ── the admin panel actually shows it ──
   console.log('\n— the admin panel shows the message in full —');

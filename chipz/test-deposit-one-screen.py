@@ -110,9 +110,14 @@ async def main():
     async with async_playwright() as pw:
         b = await pw.chromium.launch(executable_path="/opt/pw-browsers/chromium")
 
+        # The lone live method reads PAY-A whichever one it is. Owner, a round
+        # later than the wording above: "l want when l put pay b let it return
+        # to A in userpanel not just to b, so when l put a single 1, it should
+        # be A." The LABEL is positional now; the path behind it is unchanged,
+        # which is what test-round-bleed-glow-marks.py pins separately.
         for pay_a, pay_b, name, want in [
             (True, False, 'PAY A only', ['PAY-A']),
-            (False, True, 'PAY B only', ['PAY B']),
+            (False, True, 'PAY B only', ['PAY-A']),
             (True, True, 'both', ['PAY-A', 'PAY B']),
         ]:
             print(f"\n— deposit with {name} —")
@@ -227,8 +232,8 @@ async def main():
         # condition is what actually went wrong for him: no request left the
         # app and no payment screen opened.
         print("\n— a blank payment phone is refused, whichever method —")
-        for pay_a, pay_b, pick, label in [(True, False, 'A', 'PAY-A'),
-                                          (False, True, 'B', 'PAY B')]:
+        for pay_a, pay_b, pick, label in [(True, False, 'A', 'the gateway'),
+                                          (False, True, 'B', 'the manual path')]:
             ctx = await b.new_context(viewport={"width": 390, "height": 844},
                                       service_workers="block")
             page = await ctx.new_page()

@@ -41,11 +41,24 @@ const ALLOWED = [
 // the line numbers this reports still match the real file. Deleting them
 // outright shifted every later line and pointed the first run of this test
 // at an innocent CSS rule 400 lines away from the actual hit.
+// LINE comments go first, and the order is the whole point.
+//
+// Running the block pass first let a LINE comment that happens to contain the
+// characters "/*" open a block as far as this function was concerned, and the
+// non-greedy match then ran to the next real "*/" -- blanking hundreds of
+// lines of live code on the way. It really happened: original_module.js had a
+// comment naming the USSD codes "*165#/*185#", and everything from there to
+// the next block comment ~600 lines later was invisible to every check built
+// on this helper. Three hardcoded brand names sat inside that window and this
+// file's own "no hardcoded app name" assertion reported them as absent.
+//
+// Stripping line comments first removes that text before it can be mistaken
+// for a delimiter.
 function stripComments(src) {
   const blank = m => m.replace(/[^\n]/g, ' ');
   return src.replace(/<!--[\s\S]*?-->/g, blank)   // two of the four files are HTML
-            .replace(/\/\*[\s\S]*?\*\//g, blank)
-            .replace(/(^|\s)\/\/[^\n]*/g, '$1');
+            .replace(/(^|\s)\/\/[^\n]*/g, '$1')
+            .replace(/\/\*[\s\S]*?\*\//g, blank);
 }
 
 let bad = 0;

@@ -2533,6 +2533,106 @@ ways — toasts back to `notify`, each of the two loader raises removed, the bar
 the bar's gradient flattened — rebuilding each time and judging on the **exit code**, per
 the lesson directly above. All five are caught.
 
+### The banner bleed, the green behind the numbers, and the last Snow icons
+
+Owner: "on login and register pages there should be like whites or color bleeding into
+the image of banner uploaded from admin panel, just like you see the first image ... also
+on team there are some green behind the number, see our mockup on percentage and number
+of team, some green is there behind numbers, see clearly rather than guess ... also in
+admin panel still has old svgs and icons ie that slanting 8 and that ladder svg on the
+home, please let it be chipz logo ... also l want when l put pay b let it return to A in
+userpanel not just to b, so when l put a single 1, it should be A ... also make sure that
+manual payments are matching very well on orders generated ie mtn to mtn, airtel to
+airtel ... also make sure that messages are sent correctly in full to admin panel."
+
+**The banner fades into the card, and it is a SCRIM, not a mask.** Masking the photo out
+would reveal the orange gradient beneath it, which is not "white bleeding in".
+`.auth-hero::after` ramps to `var(--snow-surface)` over the bottom 55%, at z-index 1 —
+over the photo (0), under the wordmark (2). Measured off his reference: the pixels stop
+varying about 80 device px before the bottom and the last ~160 are one continuous ramp,
+so the stop is at 88%, solid well before the edge, not a short fade near it. **Only when
+a banner is set** (`.has-bg`, toggled in `applyAuthBackgrounds()`) — a fade on the plain
+gradient hero would restyle a screen he already approved. Asserted by SAMPLING the
+rendered hero, not by reading the CSS back: a gradient on a transparent element, or one
+painted under the photo, reads as present and shows as nothing.
+
+**The Team glow is green — his reading, not the earlier one, and the numbers say so.**
+An earlier round measured this and concluded the halo was in the glyph's own hue, with
+green only on the card edge. That sample was taken too far out: (212,228,244) against a
+(223,229,245) fill, a flat −11/−1/−1 that reads as plain darkening. Sampling for the
+MAXIMUM instead: **(176,220,219) against (197,230,249) — −21 red, −10 green, −30 blue.**
+Blue falling three times as fast as green is a hue shift, not a shadow. Solved back
+through normal compositing at 20–30% that puts the glow's own colour between (92,180,99)
+and (127,197,149), a medium leafy green: `--team-glow: rgba(45,170,85,.42)`, one token
+for both figures. The 18px geometry was already right — his halo dies out 10–25 device px
+from the stroke, which at 1.846 device px per CSS px is exactly an 18px blur's reach.
+Both tests assert on CHANNELS, never on a colour name, so a retune of the same hue passes
+and a drift to another hue does not.
+
+**Both app icons were still Snow's snowflake, and that is not cosmetic.** `server.js`
+serves `chipz/user/icon-*.png` as the STOCK app icon for both manifests
+(`bundledBrandAsset` → `/public/app-icon-192.png`), so until he uploads one, anyone
+installing either app got a snowflake on their home screen. `make-app-icon.py` draws the
+app's own mark instead — brand gradient, the auth hero's angular corner motifs, and the
+skewed CHIPZ wordmark with its last letter in ink, the same thing `chipzMarkHtml()` falls
+back to. Regenerate with `python3 make-app-icon.py`. **Size the type by measuring and
+scaling, never by a grow-only search** — the first version's initial guess already
+overshot, so it broke on iteration one and rendered a wordmark wider than the tile.
+
+**The admin's two marks are that icon now.** The login screen's was Snow's inherited
+swoosh (the "slanting 8"); the topbar's a hand-drawn grid (the "ladder"). Both are
+`<img src="/icon-192.png">`: no network, works offline, and `applyAdminBrandLogo()` still
+overrides it when a Brand logo is uploaded — two tiers, same as the member app.
+
+**PAY-A is a POSITION, not an identity.** 'A' and 'B' still name two different payment
+paths and the rest of the file branches on them; what the member reads is just "which one
+in the list". With one method live it is the first one, so switching the manual path on
+alone now shows a single row saying PAY-A. Calling it PAY B asked them to wonder where
+PAY A went.
+
+**MTN orders MTN.** `manualPayConfirm` used to send the OPPOSITE network on purpose. That
+reading is withdrawn, and it broke two things beyond the obvious: the USSD reminder on the
+code screen is chosen by `network`, so an MTN payer was shown Airtel's code; and
+`restoreManualPayPending()` maps a saved order's network straight back onto the tile, so
+reopening a pending order showed an operator nobody had tapped. Both are correct the
+moment the two agree. `assignManualNumberAndCreateDeposit()` now distinguishes **no
+numbers configured** from **all numbers busy** — with the flip gone, an admin holding only
+Airtel numbers sends every MTN payer into a "busy, try a different amount" loop that
+cannot end.
+
+**"In full" means as they sent it.** The paste route stored `info.raw` — the parser's
+working copy, with `/\s+/g` collapsed to single spaces so its patterns match across line
+breaks. Fine for matching, wrong to keep: an operator SMS puts the transaction id, the
+balance and the fee on their own lines, and the admin panel renders it in a
+`<pre style="white-space:pre-wrap">` precisely so a person can read that shape. **Every
+existing test case was one line, which is why it survived a round** — on one-line input
+the collapsed copy IS the original. There is a real multi-line case now.
+
+#### The comment-stripping trap, in a new form — and a real bug it hid
+
+Fixing the network comment made `test-no-snow-branding.js` go red, on something I had not
+touched. The cause: the OLD comment wrote the USSD codes as `*165#/*185#`. That `/*`
+opened a block comment as far as the tests' shared `stripComments` helper was concerned,
+and the non-greedy match ran to the next real `*/` about 600 lines later — **blanking
+every line of live code in between.** Three hardcoded `'Chipz balance'` sentences sat
+inside that window, and this file's own "no hardcoded app name" assertion had been
+reporting them as absent. They now go through `brandName()`, so a rename from admin
+reaches them.
+
+All three copies of `stripComments` (`test-no-snow-branding.js`, `test-manual-review.js`,
+`test-security-hardening.js`) run the **LINE passes before the BLOCK passes** now, which
+removes such text before it can be mistaken for a delimiter.
+
+This is the third distinct shape of the same trap in this project — a check defeated by
+the text of a comment. The rule has widened: **strip comments before any "does the code do
+X" scan, and strip line comments first.**
+
+`verify-round-discriminates.py` really breaks the app eleven ways — the fade off, the fade
+stopping short of white, the glow back to red, the percentage's glow deleted, the lone
+method renamed PAY B, the network flipped back, each of the two admin SVGs restored, both
+message paths re-collapsed, and Snow's snowflake painted back over the app icon —
+rebuilding both panels each time and judging on the **exit code**. All eleven are caught.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

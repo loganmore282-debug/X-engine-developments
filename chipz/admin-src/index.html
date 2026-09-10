@@ -103,6 +103,11 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px;}
   .brand .mk{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7A3200,var(--gold) 60%,var(--gold-deep));display:flex;align-items:center;justify-content:center;}
   .brand .mk svg{width:24px;height:24px}
+  /* The mark is an <img> now (see the comment on #brandMarkLogin). It fills
+     the round badge rather than sitting inside it as a glyph would, so the
+     Chipz tile IS the badge -- same shape an uploaded Brand logo gets from
+     applyAdminBrandLogo(), so the two tiers cannot look different. */
+  .mk img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
   .brand b{font-size:20px}
   .muted{color:var(--sub);font-size:13px}
 
@@ -235,7 +240,15 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 <div class="login" id="loginView">
   <div class="login-card">
     <div class="brand">
-      <div class="mk" id="brandMarkLogin"><svg viewBox="0 0 36 28" width="24" height="19" fill="none" aria-hidden="true"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="#FFFFFF"/></svg></div>
+      <!-- Owner: "in admin panel still has old svgs and icons ie that slanting
+           8 and that ladder svg on the home, please let it be chipz logo."
+           This was Snow's inherited swoosh -- a slanting infinity mark drawn
+           in a hardcoded <path>, which is exactly the "slanting 8". The
+           topbar's was a hand-drawn grid, the "ladder". Both are the app's
+           own icon now: a real file, no network, and the same mark that is on
+           the home screen of anyone who installed either app. An uploaded
+           Brand logo still replaces it -- see applyAdminBrandLogo(). -->
+      <div class="mk" id="brandMarkLogin"><img src="/icon-192.png" alt="" width="40" height="40"></div>
       <b data-brandadmin>Chipz Admin</b>
     </div>
     <p class="muted">Owner: leave username blank and enter your admin key. Staff: enter the username and password you were given.</p>
@@ -251,8 +264,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   <div class="topbar">
     <div class="wrap">
       <div class="topbar-inner">
-        <div class="mk" id="brandMarkTop"><svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/></svg></div>
+        <div class="mk" id="brandMarkTop"><img src="/icon-192.png" alt="" width="34" height="34"></div>
         <b data-brandadmin>Chipz Admin</b>
         <div class="spacer"></div>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
@@ -635,6 +647,11 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
 // was still Snow's inherited swoosh, and the topbar's a generic grid glyph --
 // so uploading a Brand logo changed the member app and left the panel showing
 // something else entirely.
+//
+// Those two SVGs are gone; the markup now ships the Chipz app icon, so the
+// panel is Chipz-branded even with nothing uploaded and even offline. This
+// still overrides it when a Brand logo IS uploaded, which is what he asked
+// for -- it is the second of two tiers now, not the only one.
 //
 // /public/chipz-images is used rather than the admin API on purpose: the LOGIN
 // screen has to draw this before anyone has signed in, so it cannot depend on

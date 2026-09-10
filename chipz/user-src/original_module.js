@@ -687,6 +687,14 @@ function applyAuthBackgrounds(){
   }
   set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
   set('card', STATE.authCardImage, s.authCardOpacity, s.authCardBlur);
+  // The bottom-of-the-banner fade (.auth-hero::after) is switched on only
+  // when there is a banner to fade. Owner: "there should be like whites or
+  // color bleeding into the image of banner uploaded from admin panel." With
+  // no upload the hero is the plain brand gradient, and fading that to white
+  // would restyle a screen he has already signed off on, so the class -- not
+  // the CSS -- is what decides.
+  const hero = $('authHero');
+  if (hero) hero.classList.toggle('has-bg', !!STATE.authHeroImage);
 }
 function applyAuthTagline(){
   const el = $('authTagline');
@@ -4027,7 +4035,19 @@ function openDepositFormSheet(payA, payB){
     `<button class="pay-row${_depPayChoice === which ? ' on' : ''}" type="button"`
     + ` id="depPayRow${which}" onclick="pickDepositPayMethod('${which}')">`
     + `<span>${label}</span><span class="pay-radio"></span></button>`;
-  const rows = (payA ? row('A', 'PAY-A') : '') + (payB ? row('B', 'PAY B') : '');
+  // The LABEL is positional, the identity is not. Owner: "l want when l put
+  // pay b let it return to A in userpanel not just to b, so when l put a
+  // single 1, it should be A."
+  //
+  // 'A' and 'B' are internal names for two different payment paths -- the
+  // gateway and the manual admin-number flow -- and the rest of this file
+  // still branches on them. What the member reads is just "which one in the
+  // list", so with one method live it is the first one, and calling it PAY B
+  // asks them to wonder where PAY A went. Switching the manual path on alone
+  // now shows a single row that says PAY-A; with both on the order and the
+  // wording are unchanged.
+  const live = (payA ? ['A'] : []).concat(payB ? ['B'] : []);
+  const rows = live.map((which, i) => row(which, i === 0 ? 'PAY-A' : 'PAY B')).join('');
   // PAY B never uses this field, so it is hidden unless PAY A is the live
   // choice -- asking for a number that is about to be asked for again on the
   // very next screen is the kind of thing that makes a payment form feel
@@ -4518,22 +4538,26 @@ window.manualPayConfirm = async function(amount){
   if (n.length < 9) { manualPayToast('Please enter your payment account'); return; }
   // Owner: "no need to put rules so a notify will just appear to tell a
   // user that the network is invalid" -- deliberately NOT a check that the
-  // number matches whichever tile was tapped (see the network-swap comment
-  // just below for why those two are no longer even meant to agree). This
-  // only rejects something that isn't a real Uganda mobile number at all
-  // (a landline, a toll-free number, garbled digits) -- see
-  // isValidUgandaMobileNumber()'s own comment for the permissive prefix
-  // list this checks against.
+  // number the member types is on the network they tapped. Someone paying
+  // from an Airtel line into an MTN till is doing something normal, and this
+  // screen is not the place to argue about it. This only rejects something
+  // that isn't a real Uganda mobile number at all (a landline, a toll-free
+  // number, garbled digits) -- see isValidUgandaMobileNumber()'s own comment
+  // for the permissive prefix list it checks against.
   if (!isValidUgandaMobileNumber(n)) { manualPayToast('The mobile phone number format is incorrect'); return; }
-  // Owner, confirmed explicitly (not a bug): selecting MTN assigns an
-  // AIRTEL admin account, and selecting Airtel assigns an MTN admin
-  // account -- the OPPOSITE of the tile tapped. Everything downstream
-  // (the code screen's own account-network label, the *165#/*185# USSD
-  // reminder, the admin-authored payment-reminder template) already reads
-  // `network` as "the network of the account actually being paid into,"
-  // not "the network the member tapped" -- so flipping it here is the only
-  // change needed; nothing else assumes the two match.
-  const network = _manDepChosenMethod === 'MTN' ? 'Airtel Money' : 'MTN Mobile Money';
+  // The tapped operator IS the operator of the account the member is sent to.
+  // Owner: "make sure that manual payments are matching very well on orders
+  // generated ie mtn to mtn, airtel to airtel."
+  //
+  // This line used to send the OPPOSITE network on purpose, so tapping MTN
+  // assigned an Airtel account. That reading is now withdrawn. Two things it
+  // broke, beyond the obvious: the USSD reminder printed on the code screen
+  // is chosen by `network`, so an MTN payer was shown Airtel's *185# code;
+  // and restoreManualPayPending() maps a saved order's network straight back
+  // onto the tile (Airtel Money -> the Airtel tile), so reopening a pending
+  // order showed the member an operator they had never tapped. Both are
+  // correct as-is the moment the two agree, which is what this now does.
+  const network = _manDepChosenMethod === 'MTN' ? 'MTN Mobile Money' : 'Airtel Money';
   manualPayLoading(true);
   let r;
   // finally, not a line after the await: a rejected init that left this
@@ -4860,9 +4884,16 @@ function setDepositStatusSuccess(){
   // path, since the pending state set it moments earlier) and falls back to
   // wording that reads properly without one -- the manual-deposit path lands
   // here from handleManualDepositStatusResult() without ever showing pending.
+  // brandName(), not the literal: the app's name is admin-settable, and these
+  // three sentences were the last hardcoded ones left in the module. They
+  // survived test-no-snow-branding.js's scan for exactly that only because an
+  // OLD comment two hundred lines up wrote the USSD codes as "*165#/*185#" --
+  // that "/*" opened a block comment as far as the test's comment stripper
+  // was concerned, and the strip then swallowed every line down to the next
+  // "*/", these included. Rewording that comment revealed them.
   $('depStatusBody').innerHTML = '<p>' + (_depPendingAmount
-    ? esc(fmtUGX(_depPendingAmount)) + ' has been added to your Chipz balance.'
-    : 'Your recharge has been added to your Chipz balance.')
+    ? esc(fmtUGX(_depPendingAmount)) + ' has been added to your ' + esc(brandName()) + ' balance.'
+    : 'Your recharge has been added to your ' + esc(brandName()) + ' balance.')
     + ' You can see it any time under Balance Record.</p>';
   setDepButtons(false, true);
 }
@@ -4870,12 +4901,12 @@ function setDepositStatusFailed(msg){
   $('depStatusIcon').className = 'dep-status-icon failed';
   $('depStatusIcon').innerHTML = '<img src="/pay-failed.png" alt="" aria-hidden="true">';
   $('depStatusTitle').textContent = 'Payment not completed';
-  // Says what is true and checkable -- the Chipz balance did not move -- and
+  // Says what is true and checkable -- the wallet balance did not move -- and
   // deliberately makes no claim about the member's mobile money account,
   // which this app cannot see. Promising "nothing was taken" would be a
   // guess about someone else's money.
   $('depStatusBody').innerHTML = '<p>' + esc(msg
-    || 'This recharge did not go through, so your Chipz balance has not changed. You can start it again whenever you are ready.') + '</p>';
+    || 'This recharge did not go through, so your ' + brandName() + ' balance has not changed. You can start it again whenever you are ready.') + '</p>';
   setDepButtons(false, true);
 }
 function setDepositStatusUnknown(){

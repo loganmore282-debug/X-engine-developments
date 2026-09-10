@@ -164,11 +164,15 @@ check(testFiles.length > 40, `found the suite to scan (${testFiles.length} files
 // explanation above quotes an example path, and a plain scan cannot tell an
 // offending line of code from a sentence describing one. That is the same
 // trap test-no-snow-branding.js documents hitting.
+// The LINE passes run before the BLOCK ones -- see the long note on the same
+// helper in test-no-snow-branding.js. A line comment holding the characters
+// "/*" otherwise opens a block that runs to the next real "*/", blanking
+// every line in between and blinding whatever this feeds.
 const stripComments = src => src
-  .replace(/\/\*[\s\S]*?\*\//g, '')     // JS block
   .replace(/^\s*\/\/.*$/gm, '')         // JS line
-  .replace(/"""[\s\S]*?"""/g, '')       // Python docstring
-  .replace(/^\s*#.*$/gm, '');           // Python line + shebang
+  .replace(/^\s*#.*$/gm, '')            // Python line + shebang
+  .replace(/\/\*[\s\S]*?\*\//g, '')     // JS block
+  .replace(/"""[\s\S]*?"""/g, '');      // Python docstring
 const baked = testFiles.filter(f => {
   const body = stripComments(fs.readFileSync(path.join(HERE, f), 'utf8'));
   // Any absolute path into a home or checkout directory. Deliberately not a

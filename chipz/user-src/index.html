@@ -849,15 +849,35 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .team-gcard .row1 .ic{width:24px;height:24px;object-fit:contain;flex-shrink:0;
   filter:drop-shadow(0 3px 5px rgba(30,10,5,.28));}
 .team-gcard .row1 .lbl{font-size:15px;font-weight:500;color:#7a5a3a;}
+/* Owner: "on team there are some green behind the number, see our mockup on
+   percentage and number of team, some green is there behind numbers, see
+   clearly rather than guess."
+
+   Measured off his mockup rather than eyeballed. Sampling across the glow on
+   his big "45": the halo pixels read (176,220,219) against a (197,230,249)
+   card, so every channel drops but BLUE drops most (-30) and green least
+   (-10) -- the signature of a green cast, not a shadow. Solving that back
+   through normal alpha compositing at a plausible 20-30% puts the glow's own
+   colour between (92,180,99) and (127,197,149): a medium leafy green, not
+   the deep --snow-green and not a mint.
+
+   Ours had a red glow (rgba(226,27,42,.30)) -- the numeral's own colour,
+   which reads as a blur of the digit rather than as anything behind it. The
+   geometry was already right: his halo dies out about 10-25 device px from
+   the stroke, which at his screenshot's 1.846 device px per CSS px is the
+   ~14px reach an 18px blur has. Only the colour changes.
+
+   One token, used by both numbers, so the two can never drift. */
+:root{--team-glow:rgba(45,170,85,.42);}
 .team-gcard .row1 .num{font-size:47px;color:var(--snow-wine);line-height:1.05;
-  text-shadow:0 0 18px rgba(226,27,42,.30);}
+  text-shadow:0 0 18px var(--team-glow);}
 .team-gcard .ln{height:1px;background:rgba(122,90,58,.25);margin:14px 0;}
 .team-gcard .amt{text-align:center;font-size:22px;font-weight:700;color:var(--snow-ink);}
 .team-gcard .cap{text-align:center;font-size:12px;color:#7a5a3a;font-weight:500;margin-top:2px;}
 .team-gcard.comm{padding:30px 22px;text-align:center;}
 .team-gcard.comm .lvl{font-size:14px;font-weight:500;color:#7a5a3a;margin-bottom:4px;}
 .team-gcard.comm .pct{font-size:47px;color:var(--snow-wine);line-height:1.1;
-  text-shadow:0 0 18px rgba(226,27,42,.30);}
+  text-shadow:0 0 18px var(--team-glow);}
 .team-gcard.comm .amt2{font-size:20px;color:var(--snow-ink);margin-top:6px;}
 .team-gcard.comm .mem{font-size:12px;color:#7a5a3a;font-weight:500;margin-top:2px;}
 .team-member{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:16px;margin-bottom:12px;box-shadow:var(--sh-card);}
@@ -1438,6 +1458,38 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   pointer-events:none;z-index:0;}
 #authHeroBg{--auth-bg-blur:var(--auth-hero-blur, 0px);--auth-bg-op:var(--auth-hero-op, 1);
   background-image:var(--auth-hero-img, none);}
+/* ── The banner bleeds into the card instead of stopping dead ──
+   Owner: "on login and register pages there should be like whites or color
+   bleeding into the image of banner uploaded from admin panel, just like you
+   see the first image."
+
+   His reference is a photo whose lower half ramps smoothly into the page's
+   own flat colour, so there is no banner EDGE anywhere -- measured down that
+   image, the pixels stop varying entirely about 80 device px before the
+   bottom and the last ~160 px are one continuous ramp. Ours ended on a hard
+   horizontal cut that the card's rounded top corners left visible on both
+   sides.
+
+   A scrim to the card's colour, NOT a mask on the image: masking the image
+   out would just reveal the orange gradient underneath it, which is not
+   "white bleeding in". 55% of the hero, with a mid stop, so the ramp is long
+   and slow at the top and solid well before the bottom rather than a short
+   hard fade near the edge.
+
+   z-index 1 puts it over the photo (z-index 0) and under the wordmark and
+   the tagline (z-index 2), so the brand stays crisp on top of the fade.
+
+   Only when a banner is actually set: with no image the hero is the plain
+   brand gradient, and washing THAT out at the bottom would quietly restyle a
+   screen he has already approved. .has-bg is toggled in applyAuthBackgrounds(). */
+.auth-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:55%;
+  pointer-events:none;z-index:1;opacity:0;transition:opacity .2s ease;
+  background:linear-gradient(to bottom,
+    rgba(255,255,255,0) 0%,
+    rgba(255,255,255,.55) 55%,
+    var(--snow-surface) 88%,
+    var(--snow-surface) 100%);}
+.auth-hero.has-bg::after{opacity:1;}
 #authCardBg{--auth-bg-blur:var(--auth-card-blur, 0px);--auth-bg-op:var(--auth-card-op, 1);
   background-image:var(--auth-card-img, none);border-radius:inherit;}
 /* Angular triangle motifs, straight off Main.dc.html -- Chipz's brand

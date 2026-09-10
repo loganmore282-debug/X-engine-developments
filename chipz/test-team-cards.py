@@ -18,11 +18,14 @@ screenshot and converted with that.
     green glow on edge          none   ~12% alpha over ~16px
     arcs top-right              none   2 hairlines, r 41.5 / 61.5
 
-WHERE THE GREEN GOES was settled by measurement, not by picking one reading of
-"green behind the percentage, and number, also on card edges": the haze around
-his figures samples (212,228,244) against a (223,229,245) fill -- a shadow in
-the GLYPH's own hue. Only the card EDGE is green (G-R = +16 outside it). So the
-figures get a halo in the brand red and the green stays on the edge.
+WHERE THE GREEN GOES: the card EDGE is green (G-R = +16 outside it), AND SO IS
+the halo behind the big figures. The paragraph that used to stand here said
+otherwise -- that the haze around his figures was a shadow in the glyph's own
+hue -- on a sample of (212,228,244) against a (223,229,245) fill. That sample
+was taken too far out, in the weakest part of the haze. The owner said so
+plainly a round later ("some green is there behind numbers, see clearly rather
+than guess") and re-measuring for the PEAK proves him right; the figures'
+assertion below carries the numbers.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -135,9 +138,28 @@ async def main():
             ck(abs(px - want) <= 3.5,
                "the big %s is %s against his ~%.0fpx" % (label, got, want))
 
-        # The halo behind the figures, in their OWN colour (see the docstring).
-        ck('rgba(226, 27, 42' in g['numShadow'] and '18px' in g['numShadow'],
-           "the figures carry a brand-red halo, as his carry a blue one (%s)" % g['numShadow'])
+        # The halo behind the figures is GREEN. Owner, overruling the reading
+        # in the docstring above: "on team there are some green behind the
+        # number, see our mockup on percentage and number of team, some green
+        # is there behind numbers, see clearly rather than guess."
+        #
+        # He is right and the earlier measurement was taken in the wrong place.
+        # It sampled the OUTER, weakest part of the haze -- (212,228,244)
+        # against a (223,229,245) fill, a flat -11/-1/-1 that reads as a plain
+        # darkening. Sampling for the MAXIMUM instead finds (176,220,219)
+        # against (197,230,249): -21 red, -10 green, -30 BLUE. Blue falling
+        # twice as fast as green is a hue shift, not a shadow, and solving it
+        # back through normal compositing puts the glow's own colour around
+        # (92,180,99) to (127,197,149) -- a medium leafy green.
+        #
+        # Asserted on the CHANNELS, like the card edge below, so this cannot
+        # pass on a colour name someone typed.
+        import re as _re0
+        _m0 = _re0.search(r'rgba?\((\d+),\s*(\d+),\s*(\d+)', g['numShadow'] or '')
+        _rgb0 = tuple(int(x) for x in _m0.groups()) if _m0 else (0, 0, 0)
+        ck(bool(_m0) and _rgb0[1] > _rgb0[0] + 40 and _rgb0[1] > _rgb0[2] + 40
+           and '18px' in g['numShadow'],
+           "the figures carry a GREEN halo, as his do (%s from %s)" % (str(_rgb0), g['numShadow']))
 
         # The card-edge glow is GREEN -- the one place his actually is. Read
         # from the computed shadow's channels so "some green" is a fact, not
