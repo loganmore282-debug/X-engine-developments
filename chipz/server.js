@@ -2874,11 +2874,38 @@ async function grantTurntableSpins(userId, product, investmentId) {
     // so nothing today calls it twice -- but a bonus that pays out again on
     // a retry is the kind of thing a later caller adds by accident, and one
     // query is cheap next to silently double-granting.
-    if (investmentId) {
+    //
+    // The check and the writes it guards run INSIDE one lock, because on its
+    // own it is a read-then-write: two calls for the same investmentId could
+    // both find nothing and both grant, which is the double-grant the query
+    // exists to stop. Keyed on the investment so two different purchases
+    // still run concurrently. Owner's question -- "what if a product spin and
+    // a daily spin combine together, can't it override??" -- is about the
+    // SPENDING side, which was already safe; this is the granting side, where
+    // the only hole actually was.
+    // AWAITED, not returned: this is called fire-and-forget from
+    // /invest/create with no .catch(), so a returned promise would carry any
+    // rejection straight past the handler below and out as an unhandled
+    // rejection.
+    if (!investmentId) { await writeTurntableSpinDocs(userId, product, null); return; }
+    await withLock('spingrant:' + investmentId, async () => {
       const already = await db.collection('turntableSpins')
         .where('investmentId', '==', investmentId).limit(1).get();
       if (!already.empty) return;
-    }
+      await writeTurntableSpinDocs(userId, product, investmentId);
+    });
+  } catch (e) {
+    // Never let this break a purchase that has already been paid for. The
+    // member keeps their product; the spin is simply not granted, and the
+    // failure is loud in the logs rather than silently swallowed.
+    console.error(`Turntable: failed to grant spins to ${userId} for ${product && product.key}:`, e.message);
+  }
+}
+// The writes themselves. Split out only so the idempotency query above and
+// these can share one lock; it has no try/catch of its own because its single
+// caller already wraps it, and swallowing an error here would let that caller
+// report a grant it did not make.
+async function writeTurntableSpinDocs(userId, product, investmentId) {
     // Per-product config: how many spins this purchase grants, and the band
     // each of those spins pays from. A product with no spinCount grants
     // none, which is how "the cheapest product earns nothing" is expressed --
@@ -2909,12 +2936,6 @@ async function grantTurntableSpins(userId, product, investmentId) {
         used: false, date, time, createdAt: FieldValue.serverTimestamp(),
       });
     }
-  } catch (e) {
-    // Never let this break a purchase that has already been paid for. The
-    // member keeps their product; the spin is simply not granted, and the
-    // failure is loud in the logs rather than silently swallowed.
-    console.error(`Turntable: failed to grant spins to ${userId} for ${product && product.key}:`, e.message);
-  }
 }
 // One shared roll for both spin kinds -- the daily band from settings, or a
 // product spin's own snapshot band.
@@ -3072,9 +3093,33 @@ app.post('/turntable/spin', async (req, res) => {
 
       const earnedLeft = await db.collection('turntableSpins')
         .where('userId', '==', uid).where('used', '==', false).count();
+      // RE-READ the balance rather than adding the reward to the snapshot
+      // taken at the top of this lock.
+      //
+      // `u` was read before the increment, and withLock('bal:' + uid) only
+      // serialises the WRITES -- that read sits outside it. Anything else
+      // crediting this member in between (a referral commission from a
+      // downline purchase, a manual deposit being approved, an investment
+      // maturing on the sweep) lands after the read, so
+      // `u.walletBalance + reward` is short by exactly that amount. The
+      // client trusts this number: it writes it into STATE.account and the
+      // win popup counts up to it, so a member would watch their balance
+      // animate to a figure LOWER than the money they actually have and keep
+      // seeing it until the next /account fetch.
+      //
+      // /checkin, which shares this endpoint's lock discipline, sidesteps the
+      // problem by returning only the bonus and letting the client refetch.
+      // This endpoint promises a balance, so it has to be the real one. On a
+      // failed re-read, omit it -- the client already falls back to
+      // before + reward, and a null is honest where a guess is not.
+      let newBalance = null;
+      try {
+        const after = await ref.get();
+        if (after.exists) newBalance = round2(Number(after.data().walletBalance) || 0);
+      } catch (_) { newBalance = null; }
       result = { code: 200, body: {
         status: 'success', reward, source,
-        walletBalance: (Number(u.walletBalance) || 0) + reward,
+        walletBalance: newBalance,
         earnedSpins: earnedLeft,
         dailyAvailable: false,
         totalSpins: earnedLeft,

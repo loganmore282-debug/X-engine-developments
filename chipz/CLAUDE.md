@@ -2825,6 +2825,99 @@ gap re-crowded. All fourteen are caught. One anchor needed pairing with its foll
 first: **`.team-gcard` carries an identical `box-shadow` string**, so the value alone is
 not unique in the file.
 
+### Can a product spin and the daily spin override each other?
+
+Owner: "what if a product spin and a daily spin combine together, can't it override??"
+
+**No, and five separate things stop it** — now proved by EXECUTION (`test-spin-sources.js`
+runs the real `/turntable/spin` and `grantTurntableSpins` against a stub database),
+not by reading the code:
+
+1. **Different storage.** The daily is a date stamp on the user (`lastTurntableAt`);
+   earned spins are individual `turntableSpins` documents. Neither can consume the other.
+2. **One entitlement per request.** The daily goes first if it is free today, otherwise
+   the oldest earned spin. Never both, never neither.
+3. **Each pays from its own band.** The daily from settings; a product spin from the band
+   **snapshotted onto it at purchase**, so retuning or disabling the product afterwards
+   cannot reprice a spin already earned.
+4. **Claimed before paid, with a conditional write.** `updateIf` on `lastTurntableAt` for
+   the daily, `updateIf({used:false})` on the document for an earned one.
+5. **Handed back if the credit fails.**
+
+So 2 product spins plus today's daily is 3 spins, and nothing is lost.
+
+**The one real defect the question surfaced was the balance in the response.** It was
+`(Number(u.walletBalance) || 0) + reward`, and `u` is read at the top of the lock while
+`withLock('bal:' + uid)` only serialises the WRITES. A referral commission, an approved
+deposit or a maturing investment landing in between made that figure short by exactly
+that amount — and the client trusts it: it writes it into `STATE.account` and the win
+popup counts up to it, so a member watched their balance animate to LESS money than they
+have and kept seeing it until the next `/account` fetch. It is re-read now, and `null`
+rather than a guess if the re-read fails (the client already falls back). `/checkin`,
+which shares this lock discipline, sidesteps this by returning only the bonus.
+
+**The other hole was on the GRANTING side, not the spending side.** The idempotency guard
+in `grantTurntableSpins` was a read-then-write with no lock, so two calls for one
+investmentId could both find nothing and both grant. Check and writes share one
+`withLock('spingrant:' + investmentId)` now, and the call is `await`ed — it is
+fire-and-forget from `/invest/create` with no `.catch()`, so a returned promise would
+have carried a rejection out as an unhandled rejection.
+
+**Still his call, flagged not changed:** `grantTurntableSpins` returns early when
+`turntableEnabled` is false, so buying a product while the wheel is off earns **no spins
+ever**, while the same purchase later earns them. Granting them anyway (inert until the
+wheel is on) is arguably more correct, but it would hand out retroactive payouts the
+moment he enables it — his decision.
+
+#### Three stub-fidelity lessons, and they cost three missed mutations
+
+- **A snapshot is a COPY, taken at read time.** The stub returned the LIVE document
+  object as `data()`, so every read saw writes that happened after it — a second process
+  reading *before* the first one's write still observed that write and correctly bailed
+  out. That made **both** conditional-write mutations look harmless. Freezing `data()`
+  (live `ref`, frozen data — the same split a real snapshot has) is what made
+  `updateIf` testable at all.
+- **`withLock` is in-process, so one lock cannot test what `updateIf` defends.** Two
+  `build()`s over one `state` give two *processes* with separate locks, which is the
+  Render multi-instance case the conditional writes exist for.
+- **A race test must force the interleaving.** Left to the event loop it did not happen.
+  A barrier holds the first N reads until all N have arrived. A race test that depends on
+  lucky scheduling is not a test.
+
+Also: `fnSource()` must match `async function <name>(` first. Matching `function <name>(`
+alone finds the right place in an async function but starts the slice after the keyword,
+so `new Function` throws "await is only valid in async functions" on correct code.
+
+### The wallet card's glow sweep
+
+Owner: "on wallet that wallet card having number, it has a glow sweep animation too."
+
+`.sheen` was a **static** diagonal highlight across the whole card — the look of a sweep
+frozen mid-pass, which is why it read as almost-right. It travels now, reusing this app's
+own sweep convention rather than a second one: the same right-to-left direction he asked
+for on the buttons ("let it move from right to left"), the same band-narrower-than-its-box
+shape, the same run-then-rest cycle, at 5.2s because this is a card at rest rather than a
+control asking to be tapped. Reduced motion returns it to the static highlight — not to
+nothing, since a flat gradient-only card looks unfinished.
+
+**Two measurement traps here, both of which reported working code as broken:**
+- **"Find the brightest column" never moved.** The card's gradient ends in `#ff8a1f`, and
+  that orange is brighter in greyscale than a white band over the card's dark end — so
+  the brightest column was always the right edge, i.e. the base gradient, never the
+  sheen. What identifies a moving highlight is the part that **CHANGED**: frame
+  differencing.
+- **A 2s sample can land entirely inside the rest.** The sweep deliberately rests for 45%
+  of its 5.2s cycle, so the window has to exceed one full cycle. Measured: 10 repainting
+  frame pairs, the change travelling 0.98 of the card's width.
+- And `getBoundingClientRect().width` includes the skew — it read 309px of a 350px card
+  for a band laid out at 193px. Use `offsetWidth` for "is the band narrower than the box".
+
+`verify-spin-and-sheen-discriminate.py` breaks the two together ten ways — the balance
+back to snapshot arithmetic, a daily spin also burning a product spin, a product spin
+repriced from the daily band, each conditional write replaced by a plain one, double
+granting, the sweep static, the band full-width, the sweep run-once, and reduced motion
+losing the highlight. All ten are caught.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

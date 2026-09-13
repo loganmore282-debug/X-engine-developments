@@ -1078,7 +1078,34 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    toggle that reveals the provider/account/holder form, and a compact
    "Your Wallet" summary row underneath. */
 .wallet-card{position:relative;border-radius:var(--r-card);padding:22px 22px 20px;color:#fff;overflow:hidden;margin-bottom:18px;box-shadow:0 18px 34px -18px rgba(30,10,5,.55);background:linear-gradient(120deg,#1a0d08 0%,#7c0a1c 42%,#e21b2a 62%,#ff8a1f 100%);}
-.wallet-card .sheen{position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);pointer-events:none;}
+/* Owner: "on wallet that wallet card having number, it has a glow sweep
+   animation too."
+
+   .sheen was a STATIC diagonal highlight painted across the whole card -- the
+   look of a sweep frozen mid-pass, which is why it reads as almost-right. It
+   travels now, and it deliberately reuses this app's own sweep convention
+   rather than inventing a second one: the same right-to-left direction the
+   owner asked for on the buttons ("let it move from right to left"), the same
+   band-narrower-than-its-box shape, and the same run-then-rest cycle so it
+   reads as a repeating pass rather than a strobe. Slower than the buttons'
+   2.8s because this is a big card at rest, not a control asking to be tapped.
+
+   The band is WIDER than the buttons' 38% and the card is wider still, so it
+   keeps the broad soft gradient the static version had instead of turning
+   into a hard stripe. overflow:hidden is already on .wallet-card. */
+.wallet-card .sheen{position:absolute;top:-20%;bottom:-20%;left:0;width:55%;pointer-events:none;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.26) 50%,transparent 100%);
+  transform:translateX(210%) skewX(-20deg);
+  animation:wcSheenSweep 5.2s ease-in-out infinite;}
+@keyframes wcSheenSweep{
+  0%{transform:translateX(210%) skewX(-20deg);}
+  55%,100%{transform:translateX(-120%) skewX(-20deg);}}
+@media (prefers-reduced-motion:reduce){
+  /* Back to the static highlight rather than nothing: the card is glossy by
+     design, and a flat gradient-only card looks unfinished. */
+  .wallet-card .sheen{animation:none;top:0;bottom:0;width:100%;
+    transform:none;
+    background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);}}
 .wallet-card .row1{position:relative;display:flex;align-items:flex-start;justify-content:space-between;}
 /* The card number measured bigger than the mockup's (32 against 24 device
    px of ink), so what reads as "small" here is TRACKING, not size: his
