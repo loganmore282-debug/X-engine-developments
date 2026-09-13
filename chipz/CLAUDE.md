@@ -2749,6 +2749,82 @@ ignored, the wordmark drawn at the profile size, the centring/clipping dropped, 
 letterboxed, "Joined" doubled again, and `brandTextMark`'s default moved so the Account
 card would shift with it — and all seven are caught.
 
+### The member card against his mockup: absolute dates, the green lining, bigger figures
+
+Owner, holding the mockup up: "l told you removed joined one day ago, l need that exactly
+what you're seeing, all the arrangements, have you seen even those green winnings on
+cards, l need them, also figures are small why?"
+
+("green winnings" is **green linings** — the glow round the card edge. The measurement
+below settles it: there is one in his mockup and there was none in ours.)
+
+**The join line is an absolute stamp now.** `timeAgo()` is gone, replaced by
+`joinedStamp()` → `Joined 07/09/2026 01:21`, day/month/year on a 24-hour clock. Relative
+wording reads better in most places but not in a downline list: it is the one screen where
+a member wants to line a join date up against a commission they were paid, and "2 weeks
+ago" lines up against nothing. Built from the local date **parts**, NOT `toLocaleString()`
+— the format has to be his on every handset, and an en-US phone would print `9/7/2026` and
+silently swap the day and the month on a screen about money. `timeAgo()` had exactly one
+caller, checked before deleting it.
+
+**The green lining was real and ours had none.** Sampled straight out from the left edge
+of his card 1: **G−R reaches +12 and G−B +10** in the two pixels just outside it, decaying
+to the page's own +1 over about 8 device px. Ours carried `var(--sh-card)`, a warm brown
+drop shadow (`rgba(30,10,5,…)`), plus a warm neutral border — no green anywhere. It is the
+same `rgba(74,170,108,…)` glow `.team-gcard` already used, so the two card families on this
+one screen finally match instead of one being warm and one green. Border `#dceadd` to
+match, the same green hairline the settings card uses.
+
+**"Figures are small" was two faults, not one.** Size *and* weight:
+
+| | his | ours was | now |
+|---|---|---|---|
+| `.amt3` ink height | 13.0 CSS | 12 @ 16px | **17px** |
+| `.amt3` ink density | **0.556** | 0.409 @ weight 400 | **700** |
+
+Ink density inside his figure's own bbox is the weight tell: his box is *wider with one
+fewer character in it* (`UGX0.00` vs our `UGX 0.00`), so the extra ink is stroke, not
+glyphs.
+
+**Sizes come from ink heights and this app's own cap-to-font ratios** — measured per
+element on our render, then applied to his, and **only where the two strings share a glyph
+class.** An ink height that includes an ascender or a descender is not comparable to one
+that does not:
+
+| element | his ink | our ink @ our size | → his size | now |
+|---|---|---|---|---|
+| `.name` | 10.8 | 10 @ 15px | 16.2 | **16** |
+| `.phone` | 8.1 | 9 @ 12px | 10.8 | **11** |
+| `.amt3` | 13.0 | 12 @ 16px | 17.3 | **17** |
+| `.foot` | 8.1 | 8 @ 11px | 11.1 | 11 (unchanged) |
+
+**`.joined` is deliberately absent from that table.** His string and ours differed, so ink
+height could not compare them — his has no descender, the old "Joined 1 day ago" had two.
+It is settled by **width** instead, now that both render the same text: his measures
+**123.0 CSS** wide and ours at 11px measures 121.1, inside 2%. **11px was already
+correct** — measuring by the wrong dimension would have "fixed" a value that was right.
+
+**The arrangement, and where the missing 3px was.** Rather than nudge the padding until it
+looked close, every internal offset was measured in both:
+
+| | his | ours was | now |
+|---|---|---|---|
+| card height | 131.6 | 129 | **133** |
+| gap between cards | 15.2 | 12 | **15** |
+| divider (`.ln2`) | 94.8 | 91 | **95** |
+| footer line | 103.0 | 100 | **104** |
+
+One value explained all of it: `.joined`'s bottom margin, 8 → **12**. Everything below it
+then falls where his does, and the card lands at 133 against 131.6 — inside the error of
+measuring a blurred JPEG.
+
+`verify-team-avatar-discriminates.py` now breaks it **fourteen** ways, including the join
+line back to "1 day ago", the date flipped to month/day, the glow back to warm brown, the
+figure back to small, the figure's weight alone removed, the 3px margin reverted and the
+gap re-crowded. All fourteen are caught. One anchor needed pairing with its following line
+first: **`.team-gcard` carries an identical `box-shadow` string**, so the value alone is
+not unique in the file.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

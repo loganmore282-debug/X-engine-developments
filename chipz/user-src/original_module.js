@@ -2604,16 +2604,27 @@ function maskPhone(phone){
   // to be a usable number.
   return s.slice(0, s.length - 7) + '****' + s.slice(-4);
 }
-function timeAgo(ts){
+// The exact date and time a member joined, as his mockup prints it:
+// "07/09/2026 01:21" -- day/month/year and a 24-hour clock.
+//
+// Owner: "l told you removed joined one day ago, l need that exactly what
+// you're seeing." This replaced a timeAgo() that answered "1 day ago" /
+// "2 weeks ago". Relative wording reads more naturally in most places, but
+// not in a downline list: it is the one screen where a member wants to know
+// WHEN somebody joined, to line it up against a commission they were paid,
+// and "2 weeks ago" cannot be lined up against anything.
+//
+// Built from the local date parts rather than toLocaleString(): the format
+// has to be the one in his mockup on every phone, and a locale string is
+// whatever the handset is set to -- an en-US phone would print 9/7/2026 and
+// silently swap the day and the month on a screen about money.
+function joinedStamp(ts){
   if (!ts) return '';
   const ms = typeof ts === 'object' && ts.seconds ? ts.seconds*1000 : new Date(ts).getTime();
-  if (!ms) return '';
-  const days = Math.floor((Date.now()-ms)/86400000);
-  if (days <= 0) return 'Joined today';
-  if (days === 1) return 'Joined 1 day ago';
-  if (days < 14) return `Joined ${days} days ago`;
-  const weeks = Math.floor(days/7);
-  return `Joined ${weeks} week${weeks===1?'':'s'} ago`;
+  if (!ms || isNaN(ms)) return '';
+  const d = new Date(ms);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
@@ -2646,12 +2657,12 @@ function renderTeamMembers(level){
       </div>
       <div class="amt3 mono">${fmtUGXCents(m.invested || 0)}</div>
     </div>
-    <!-- No "Joined" prefix here: timeAgo() already returns one ("Joined 1 day
-         ago", "Joined today"), so the literal made every row read "Joined
-         Joined 1 day ago" -- visible in his screenshot. The fallback says
-         "Joined recently" rather than a bare em dash, which on its own in
-         this slot reads as a row that failed to load. -->
-    <div class="joined">${esc(timeAgo(m.createdAt) || 'Joined recently')}</div>
+    <!-- ONE "Joined", and joinedStamp() no longer carries its own, so the
+         literal belongs here. The doubled "Joined Joined 1 day ago" came from
+         the old timeAgo() returning a prefixed string AND this line adding
+         another. The fallback keeps the word so a member with no recorded
+         timestamp still reads as a sentence rather than a bare dash. -->
+    <div class="joined">Joined ${esc(joinedStamp(m.createdAt) || 'recently')}</div>
     <div class="ln2"></div>
     <div class="foot">Total Purchase</div>
   </div>`).join('') + '</div>';

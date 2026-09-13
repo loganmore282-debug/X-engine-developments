@@ -1,23 +1,39 @@
 #!/usr/bin/env python3
-"""The team member avatar, and the doubled "Joined".
+"""The team member card, measured against his own mockup.
 
-Owner, on a screenshot of one member row: "why the logo is empty?"
+Owner, on a screenshot of one row: "why the logo is empty?" -- because it was.
+Team.dc.html draws these avatars as bare gradient discs and that is what got
+built, a div with a background and nothing inside it. Every member here is
+deliberately anonymous (the name is the literal "User", the phone is masked),
+so there is no per-person picture and an empty disc just reads as an image
+that failed.
 
-Because it was. Team.dc.html draws these avatars as bare gradient discs and
-that is what got built -- a div with a background and nothing inside it. Every
-member is deliberately anonymous on this screen (the name is the literal
-"User", the phone is masked), so there is no per-person picture to show and an
-empty disc just reads as an image that failed.
+Then, holding up the mockup: "l told you removed joined one day ago, l need
+that exactly what you're seeing, all the arrangements, have you seen even
+those green winnings on cards, l need them, also figures are small why?"
 
-The same screenshot also shows "Joined Joined 1 day ago", which he did not
-mention: timeAgo() already returns its own "Joined" prefix and the template
-added another.
+Three separate things, and all three are settled by measurement rather than by
+reading the sentence twice:
 
-Both are read off the rendered page rather than the source -- the mark is
+  * the join line is an absolute "Joined 07/09/2026 01:21", not "1 day ago";
+  * the cards carry a GREEN glow -- sampled straight out from his card's left
+    edge, G-R reaches +12 and G-B +10 just outside it, while ours had a warm
+    brown drop shadow and no green anywhere;
+  * the money figure really was small AND light: his ink height converts to
+    17.3px against our 16, and the ink DENSITY inside his own figure's bbox is
+    0.556 against our 0.409 at weight 400.
+
+Both screenshots are 720 device px wide on the same phone, so 720/390 = 1.846
+device px per CSS px and his figures convert directly. Every size below came
+from an ink measurement and its own cap-to-font ratio, never from a guess --
+except .joined, where the two strings differed so ink height could not compare
+them and WIDTH settled it instead.
+
+Everything is read off the rendered page rather than the source: the mark is
 built by a function whose name the obfuscator removes, and the point is what
 lands in the row.
 """
-import asyncio, json, os, sys, functools, threading, http.server, socketserver
+import asyncio, json, os, re, sys, functools, threading, http.server, socketserver
 HERE = os.path.dirname(os.path.abspath(__file__))
 from playwright.async_api import async_playwright
 
@@ -167,14 +183,65 @@ async def main():
         ck(bool(av) and av['sw'] <= av['w'] - 2,
            f"and it FITS inside the circle ({av and round(av['sw'])}px of {av and round(av['w'])}px)")
 
-        print("\n— the join line says Joined exactly once —")
+        print("\n— the join line is the exact date and time, said once —")
         joined = await page.evaluate(
             "[...document.querySelectorAll('.team-member .joined')].map(e=>e.textContent.trim())")
         for t in joined:
-            ck(t.lower().count('joined') == 1, f"{t!r}")
-        ck(any('1 day ago' in t for t in joined), f"and still says how long ago {joined}")
-        ck(all(t and t != '—' for t in joined),
+            ck(t.lower().count('joined') == 1, f"one 'Joined' only: {t!r}")
+        # Owner: "l told you removed joined one day ago, l need that exactly
+        # what you're seeing" -- his mockup prints "Joined 07/09/2026 01:21".
+        stamp = re.compile(r'^Joined \d{2}/\d{2}/\d{4} \d{2}:\d{2}$')
+        dated = [t for t in joined if stamp.match(t)]
+        ck(len(dated) == 2, f"the two dated rows read day/month/year and a 24-hour clock {dated}")
+        ck(not any(re.search(r'ago|today', t, re.I) for t in joined),
+           f"and nothing says 'ago' or 'today' any more {joined}")
+        # The dates must be the REAL ones, not today's -- a formatter fed the
+        # wrong value still matches the shape above.
+        want = [time.strftime('%d/%m/%Y %H:%M', time.localtime(NOW - DAY)),
+                time.strftime('%d/%m/%Y %H:%M', time.localtime(NOW - 9 * DAY))]
+        ck([t.replace('Joined ', '') for t in dated] == want,
+           f"showing each member's own join moment {dated} vs {want}")
+        ck('Joined recently' in joined,
            f"a member with no timestamp still reads as a sentence {joined}")
+
+        print("\n— the card carries his green lining, not a warm shadow —")
+        card = await page.evaluate("""() => {
+            const c = document.querySelector('.team-member'), cs = getComputedStyle(c);
+            const chans = s => [...s.matchAll(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/g)]
+                                 .map(m => m.slice(1).map(Number));
+            const r = c.getBoundingClientRect();
+            const r2 = document.querySelectorAll('.team-member')[1].getBoundingClientRect();
+            const off = sel => +(c.querySelector(sel).getBoundingClientRect().top - r.top).toFixed(1);
+            return { shadow: chans(cs.boxShadow), border: chans(cs.borderColor || cs.border),
+                     h: +r.height.toFixed(1), gap: +(r2.top - r.bottom).toFixed(1),
+                     ln2: off('.ln2'), foot: off('.foot') }; }""")
+        greens = [c for c in card['shadow'] if c[1] > c[0] + 20 and c[1] > c[2] + 20]
+        ck(len(greens) == len(card['shadow']) and greens,
+           f"every glow layer is green, none warm {card['shadow']}")
+        ck(bool(card['border']) and card['border'][0][1] > card['border'][0][0],
+           f"and the hairline border leans green too {card['border']}")
+
+        # Both screenshots are 720 device px on the same phone: 1.846 per CSS px.
+        print("\n— the arrangement, measured off his mockup —")
+        for label, got, his in (("card height", card['h'], 131.6),
+                                ("gap between cards", card['gap'], 15.2),
+                                ("divider", card['ln2'], 94.8),
+                                ("footer line", card['foot'], 103.0)):
+            ck(abs(got - his) <= 2.0, f"{label} {got} against his {his} ({got - his:+.1f})")
+
+        print("\n— the figures are not small any more —")
+        t = await page.evaluate("""() => {
+            const p = s => { const e = document.querySelector('.team-member ' + s),
+                                   cs = getComputedStyle(e);
+                             return { fs: parseFloat(cs.fontSize), fw: +cs.fontWeight }; };
+            return { amt: p('.amt3'), name: p('.name'), phone: p('.phone'), foot: p('.foot') }; }""")
+        ck(t['amt']['fs'] >= 17, f"the money figure is 17px, up from 16 ({t['amt']['fs']}px)")
+        ck(t['amt']['fw'] >= 700,
+           f"and BOLD -- his ink density is 0.556 against our old 0.409 ({t['amt']['fw']})")
+        ck(t['name']['fs'] == 16, f"the name is 16px ({t['name']['fs']}px)")
+        ck(t['phone']['fs'] == 11, f"the masked phone is 11px ({t['phone']['fs']}px)")
+        ck(t['foot']['fs'] == 11, f"the footer stays 11px ({t['foot']['fs']}px)")
+
         await page.screenshot(path=os.path.join(OUT, 'team-wordmark.png'), full_page=False)
         ck(not errs, f"no page errors ({errs[:1]})")
         await page.close()

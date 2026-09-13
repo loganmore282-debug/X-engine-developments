@@ -35,11 +35,45 @@ MUTATIONS = [
      ".team-member .avatar img{width:100%;height:100%;object-fit:contain;display:block;}"),
 
     ("\"Joined\" is printed twice again", MOD,
-     "<div class=\"joined\">${esc(timeAgo(m.createdAt) || 'Joined recently')}</div>",
-     "<div class=\"joined\">Joined ${esc(timeAgo(m.createdAt) || '—')}</div>"),
+     "<div class=\"joined\">Joined ${esc(joinedStamp(m.createdAt) || 'recently')}</div>",
+     "<div class=\"joined\">Joined ${esc('Joined ' + (joinedStamp(m.createdAt) || 'recently'))}</div>"),
 
     ("brandTextMark's default changes, so the Account card moves too", MOD,
      "  const k = (Number(box) || 68) / 68;", "  const k = (Number(box) || 44) / 68;"),
+
+    # ── this round ──
+    ("the join line goes back to \"1 day ago\"", MOD,
+     "  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;",
+     "  const days = Math.floor((Date.now()-ms)/86400000);\n"
+     "  return days <= 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;"),
+
+    ("the date is month/day, so 07/09 and 09/07 swap silently", MOD,
+     "  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;",
+     "  return `${p(d.getMonth()+1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;"),
+
+    # .team-gcard above carries the IDENTICAL shadow string, so the value on
+    # its own is not a unique anchor -- it is paired with the line that
+    # follows it inside the member-card block.
+    ("the green lining reverts to the warm brown shadow", CSS,
+     "  box-shadow:0 6px 24px rgba(74,170,108,.34),0 2px 8px rgba(74,170,108,.20);}\n"
+     ".team-member .top{",
+     "  box-shadow:var(--sh-card);}\n.team-member .top{"),
+
+    ("the money figure goes back to small and light", CSS,
+     ".team-member .amt3{margin-left:auto;font-size:17px;font-weight:700;color:var(--snow-wine);}",
+     ".team-member .amt3{margin-left:auto;font-size:16px;color:var(--snow-wine);}"),
+
+    ("the figure keeps its size but loses the weight", CSS,
+     "font-size:17px;font-weight:700;color:var(--snow-wine);}",
+     "font-size:17px;color:var(--snow-wine);}"),
+
+    ("the card goes back 3px short of his", CSS,
+     ".team-member .joined{font-size:11px;color:var(--snow-muted);font-weight:500;margin:10px 0 12px;}",
+     ".team-member .joined{font-size:11px;color:var(--snow-muted);font-weight:500;margin:10px 0 8px;}"),
+
+    ("the cards crowd together again", CSS,
+     "border-radius:var(--r-card);padding:16px;margin-bottom:15px;",
+     "border-radius:var(--r-card);padding:16px;margin-bottom:12px;"),
 ]
 
 FILES = [MOD, CSS]

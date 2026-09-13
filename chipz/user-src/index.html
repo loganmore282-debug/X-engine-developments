@@ -880,7 +880,27 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   text-shadow:0 0 18px var(--team-glow);}
 .team-gcard.comm .amt2{font-size:20px;color:var(--snow-ink);margin-top:6px;}
 .team-gcard.comm .mem{font-size:12px;color:#7a5a3a;font-weight:500;margin-top:2px;}
-.team-member{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:16px;margin-bottom:12px;box-shadow:var(--sh-card);}
+/* ── The member card, measured off his mockup ──────────────────────────
+   Owner: "l need that exactly what you're seeing, all the arrangements, have
+   you seen even those green winnings on cards, l need them, also figures are
+   small why?"
+
+   THE GREEN EDGE is real and ours had none. Sampled straight out from the left
+   edge of his card 1: G-R reaches +12 and G-B +10 in the two pixels just
+   outside it, then decays to the page's own +1 over about 8 device px. Ours
+   carried `var(--sh-card)`, a warm brown drop shadow, and a warm neutral
+   border -- no green anywhere. This is the same glow .team-gcard already uses
+   above, rgba(74,170,108,...), so the two card families on this one screen
+   finally match instead of one being warm and one green.
+
+   Both screenshots are 720 device px wide on the same phone, so
+   720/390 = 1.846 device px per CSS px, and his figures convert directly:
+
+     card height   244 dev = 132.2 CSS   (ours was 129)
+     gap           28 dev  =  15.2 CSS   (ours was 12)
+     side margin   32 dev  =  17.3 CSS   (ours 18 -- unchanged) */
+.team-member{background:var(--snow-surface);border:1px solid #dceadd;border-radius:var(--r-card);padding:16px;margin-bottom:15px;
+  box-shadow:0 6px 24px rgba(74,170,108,.34),0 2px 8px rgba(74,170,108,.20);}
 .team-member .top{display:flex;align-items:center;gap:12px;}
 /* The disc holds a mark now (owner: "why the logo is empty?"), so it needs to
    centre one. Mirrors .acct-logo's rules at 44px instead of 68px: cover for an
@@ -890,10 +910,33 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .team-member .avatar img{width:100%;height:100%;object-fit:cover;display:block;}
 .team-member .avatar span{color:#fff;font-family:'Playfair Display',Georgia,serif;letter-spacing:.04em;line-height:1;}
-.team-member .name{font-weight:600;font-size:15px;}
-.team-member .phone{font-size:12px;color:var(--snow-muted);font-weight:500;}
-.team-member .amt3{margin-left:auto;font-size:16px;color:var(--snow-wine);}
-.team-member .joined{font-size:11px;color:var(--snow-muted);font-weight:500;margin:10px 0 8px;}
+/* Text sizes derived from INK HEIGHTS, not guessed. Each of his blocks was
+   measured, then converted with this app's own measured cap-to-font ratio for
+   that same element (same font family, so the ratio transfers) -- and only
+   where the two strings share a glyph class, since an ink height that includes
+   an ascender or descender is not comparable to one that does not.
+
+     element   his ink   our ink @ our size   -> his size   ours now
+     .name       10.8      10 @ 15px             16.2         16
+     .phone       8.1       9 @ 12px             10.8         11
+     .amt3       13.0      12 @ 16px             17.3         17
+     .foot        8.1       8 @ 11px             11.1         11 (unchanged)
+
+   .joined is deliberately absent: his string and ours were different, so ink
+   height could not compare them. It is set by WIDTH instead, now that both
+   render the same "Joined 07/09/2026 01:21" -- his measures 123.0 CSS wide. */
+.team-member .name{font-weight:600;font-size:16px;}
+.team-member .phone{font-size:11px;color:var(--snow-muted);font-weight:500;}
+.team-member .amt3{margin-left:auto;font-size:17px;font-weight:700;color:var(--snow-wine);}
+/* 11px stays: measured by WIDTH, not ink height, now that his string and ours
+   are the same. His "Joined 07/09/2026 01:21" runs 123.0 CSS wide; ours at
+   11px measures 121.1, inside 2%. Ink height could not have settled this --
+   the old text had descenders his has none of.
+
+   The bottom margin is 12, not 8, and it is the whole 3px the card was short:
+   his divider sits 94.8 CSS below the card top and ours sat at 91. With 12 it
+   lands at 95, the footer line at 104, and the card at 132 against his 131.6. */
+.team-member .joined{font-size:11px;color:var(--snow-muted);font-weight:500;margin:10px 0 12px;}
 .team-member .ln2{height:1px;background:var(--snow-border);margin-bottom:8px;}
 .team-member .foot{font-size:11px;color:var(--snow-muted);font-weight:500;}
 
