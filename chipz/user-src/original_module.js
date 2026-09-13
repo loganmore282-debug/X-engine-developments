@@ -212,10 +212,16 @@ function applyBrandName(){
 // Uses brandName(), not brandNameKnown(): this is the fallback shown when the
 // profile image itself failed to load, so an empty badge would be a hole in
 // the card rather than a graceful blank.
-window.brandTextMark = function(){
+// `box` is the diameter of the badge this is going into, and it defaults to
+// 68 -- the Account profile card's circle, the only caller there used to be --
+// so every existing call site is unchanged to the pixel. The team member
+// avatars are 44px, and the sizing constants below were all tuned for 68:
+// dropping the 19px wordmark into a 44px circle overflowed it.
+window.brandTextMark = function(box){
   const name = brandName().toUpperCase();
-  const fs = Math.min(19, Math.max(9, Math.round(95 / Math.max(1, name.length))));
-  return `<span style="font-size:${fs}px;">${esc(name)}</span>`;
+  const k = (Number(box) || 68) / 68;
+  const fs = Math.round(Math.min(19 * k, Math.max(9 * k, 95 * k / Math.max(1, name.length))));
+  return `<span style="font-size:${Math.max(7, fs)}px;">${esc(name)}</span>`;
 };
 // The compact brand mark, used where a small logo is needed and no
 // admin-uploaded image is set (the two manual-deposit screens, the Download
@@ -2613,19 +2619,39 @@ function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
   const box = $('teamMembersBox');
   if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">No members at this level yet.</div>'; return; }
-  // Member card layout per Team.dc.html: gradient avatar, masked phone,
-  // amount on the right, join date and a "Total Purchase" footer line.
+  // Member card layout per Team.dc.html: avatar, masked phone, amount on the
+  // right, join date and a "Total Purchase" footer line.
+  //
+  // Owner: "why the logo is empty?" -- because it was. Team.dc.html draws
+  // these avatars as bare gradient discs and that is what got built: a
+  // <div class="avatar"> with a background and no content at all. Every member
+  // is deliberately anonymous here (the name is the literal "User" and the
+  // phone is masked, so one member cannot harvest another's number), so there
+  // is no per-person image to put in it and an empty disc just reads as a
+  // picture that failed to load.
+  //
+  // Same chain as the Account profile card, so uploading a Brand logo once
+  // lands here too: the uploaded logo, else the wordmark. The alternating
+  // gradient stays as the backdrop behind both.
+  const avatar = STATE.brandLogo
+    ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.outerHTML=brandTextMark(44)">`
+    : brandTextMark(44);
   box.innerHTML = '<div class="reveal-in">' + members.map((m,idx) => `
   <div class="team-member">
     <div class="top">
-      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#f4b400,#e21b2a)' : 'var(--chipz-grad)'};"></div>
+      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#f4b400,#e21b2a)' : 'var(--chipz-grad)'};">${avatar}</div>
       <div style="min-width:0;">
         <div class="name">User</div>
         <div class="phone mono">${esc(maskPhone(m.phone))}</div>
       </div>
       <div class="amt3 mono">${fmtUGXCents(m.invested || 0)}</div>
     </div>
-    <div class="joined">Joined ${esc(timeAgo(m.createdAt) || '—')}</div>
+    <!-- No "Joined" prefix here: timeAgo() already returns one ("Joined 1 day
+         ago", "Joined today"), so the literal made every row read "Joined
+         Joined 1 day ago" -- visible in his screenshot. The fallback says
+         "Joined recently" rather than a bare em dash, which on its own in
+         this slot reads as a row that failed to load. -->
+    <div class="joined">${esc(timeAgo(m.createdAt) || 'Joined recently')}</div>
     <div class="ln2"></div>
     <div class="foot">Total Purchase</div>
   </div>`).join('') + '</div>';

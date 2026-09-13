@@ -2706,6 +2706,49 @@ stored. `make-logo-fixture.py` builds the three fixtures; `verify-logo-cutout-di
 breaks the cutter six ways — back to JPEG, keying globally, no rim recovery, no trim,
 the tickbox off by default, and a toast that always claims success — and all six are caught.
 
+### The team member avatar, and "Joined Joined"
+
+Owner, on a screenshot of one member row: "why the logo is empty?"
+
+**Because it was.** Team.dc.html draws these avatars as bare gradient discs and that is
+exactly what got built — `<div class="avatar" style="background:...">` with no content at
+all. Every member on this screen is deliberately anonymous (the name is the literal
+"User", the phone is masked, so one member cannot harvest another's number), so there is
+no per-person picture to show and an empty disc just reads as an image that failed to
+load. It carries the **same chain as the Account profile card** now — uploaded Brand logo,
+else the wordmark — so uploading a logo once lands in both places. The alternating
+gradient stays as the backdrop behind either.
+
+`brandTextMark()` took an optional `box` argument for this, **defaulting to 68** — the
+profile card's circle, its only previous caller — so every existing call site is unchanged
+to the pixel. Its sizing constants were all tuned for 68, and dropping a 19px wordmark
+into the 44px disc overflowed it. At 44 it comes out 12px, measuring 37px wide inside a
+44px circle.
+
+**"Joined Joined 1 day ago"** — visible in the same screenshot, not mentioned.
+`timeAgo()` returns its own prefix ("Joined today", "Joined 1 day ago") and the template
+prepended another. The fallback is now "Joined recently" rather than a bare em dash, which
+alone in that slot reads as a row that failed.
+
+#### Two test traps, both about asserting on the wrong thing
+
+- **A fixed epoch in a fixture drifts.** The first version pinned `NOW` to a constant and
+  built the member timestamps off it; the browser runs on the real clock, so the "1 day
+  ago" row read as four days old and the assertion failed against correct code. Anchor
+  relative fixtures to `time.time()`.
+- **A DOM check is not a check on what got painted.** The uploaded-logo case asserted
+  `img.naturalWidth > 0`, `object-fit`, and that the image filled the disc — all green —
+  while the disc actually rendered as the bare gradient. The fixture was a hand-written
+  base64 string that **is not a valid PNG at all** (PIL refuses it outright), and Chromium
+  reported a nonzero natural width for it anyway. The fixture is generated and verified
+  now, and the test **screenshots the disc and samples its centre pixel** against the
+  logo's own colour. If an assertion's whole point is "this is what you see", sample it.
+
+`verify-team-avatar-discriminates.py` breaks it seven ways — the disc emptied, the upload
+ignored, the wordmark drawn at the profile size, the centring/clipping dropped, the logo
+letterboxed, "Joined" doubled again, and `brandTextMark`'s default moved so the Account
+card would shift with it — and all seven are caught.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase
