@@ -191,6 +191,16 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .prod .pr{color:var(--ok);font-size:12px;font-weight:700;margin-top:4px}
   .prod .pa{display:flex;gap:6px;margin-top:10px}
   .img-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--line2);flex-shrink:0}
+  /* A transparent logo on a flat tile is indistinguishable from a logo with a
+     matching solid background, so the one slot type where transparency is the
+     whole point gets a checkerboard behind it and CONTAIN rather than cover --
+     cover would crop a wide wordmark and hide exactly the edges he needs to
+     check. Owner: "so as it shows up on transparent sitting with no black
+     background" -- he has to be able to SEE that it worked. */
+  .img-thumb.alpha{object-fit:contain;background-color:#fff;
+    background-image:linear-gradient(45deg,#d8dee6 25%,transparent 25%,transparent 75%,#d8dee6 75%),
+                     linear-gradient(45deg,#d8dee6 25%,transparent 25%,transparent 75%,#d8dee6 75%);
+    background-size:12px 12px;background-position:0 0,6px 6px}
   .img-picker{display:flex;gap:12px;align-items:center;margin:4px 0 8px}
   .img-prev{width:72px;height:72px;border-radius:12px;background:var(--line2);flex-shrink:0;overflow:hidden;
     display:flex;align-items:center;justify-content:center;font-size:11px}
@@ -213,6 +223,10 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;
     padding:11px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.2)}
   .toast.ok{background:var(--ok)} .toast.err{background:var(--danger)}
+  /* Saved, but not the result he asked for -- an upload whose background did
+     not come off is neither a success nor a failure, and reading as either
+     would send him to the member app to find out which. */
+  .toast.warn{background:#b4690e}
   .codebox{background:var(--bg);border-radius:10px;padding:12px;margin-top:12px;font-family:monospace;
     font-size:15px;display:flex;flex-wrap:wrap;gap:8px}
   .mono{font-family:monospace;letter-spacing:.5px}
@@ -536,6 +550,168 @@ function fileToSquarePng(file, size){
         catch(e){ reject(new Error('Could not process the image')); }
       };
       img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+// ── Lifting a logo off its black background ─────────────────────────────
+// Owner: "there are logos l would like to upload ... but they have black
+// background so l wanted the system to refine it such that it remains as it
+// is with no background so as it shows up on transparent sitting with no
+// black background."
+//
+// "Remains as it is" is the hard part, and it rules out the obvious
+// implementation. Keying every dark pixel in the image would also hollow out
+// the dark parts INSIDE the logo -- an outline, a shadow, black lettering --
+// and hand back a logo with holes in it. So this uses the same rule the door
+// icon and the spin wheel were cut out with: FLOOD-FILL INWARD FROM THE
+// BORDER. Only background actually connected to the edge of the picture is
+// removed; anything enclosed by the artwork is untouched no matter how black
+// it is.
+//
+// The second half is the rim. A logo sitting on black has an antialiased edge
+// whose pixels are already a blend of logo colour and black -- cut those at a
+// threshold and the logo keeps a dirty dark fringe, which is the usual tell
+// of a badly cut-out image. Composited over black a pixel is simply
+// c = alpha * C, so inside the flood region both are recoverable: take alpha
+// from the brightness and divide the colour back out. That turns the fringe
+// into a genuine soft edge at the logo's own colour.
+//
+// Returns how many pixels it actually cleared, so the caller can tell the
+// difference between "background removed" and "this image had no dark
+// background to remove" rather than claiming success either way.
+function removeDarkBackdrop(ctx, w, h, hard, soft){
+  hard = hard == null ? 46 : hard;    // at or under this: pure background
+  soft = soft == null ? 132 : soft;   // over this: never touched at all
+  if (soft <= hard) soft = hard + 1;
+  const d = ctx.getImageData(0, 0, w, h), p = d.data;
+  const lumAt = i => (p[i] * 299 + p[i + 1] * 587 + p[i + 2] * 114) / 1000;
+  const region = new Uint8Array(w * h);
+  const stack = [];
+  const consider = (x, y) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const k = y * w + x;
+    if (region[k]) return;
+    const i = k * 4;
+    // Already-transparent pixels belong to the background too, so a PNG that
+    // is part cut out already still floods properly across the gap.
+    if (p[i + 3] !== 0 && lumAt(i) > soft) return;
+    region[k] = 1; stack.push(k);
+  };
+  for (let x = 0; x < w; x++){ consider(x, 0); consider(x, h - 1); }
+  for (let y = 0; y < h; y++){ consider(0, y); consider(w - 1, y); }
+  while (stack.length){
+    const k = stack.pop(), x = k % w, y = (k - x) / w;
+    consider(x - 1, y); consider(x + 1, y); consider(x, y - 1); consider(x, y + 1);
+  }
+  let cleared = 0;
+  for (let k = 0; k < w * h; k++){
+    if (!region[k]) continue;
+    const i = k * 4;
+    if (p[i + 3] === 0) continue;
+    const L = lumAt(i);
+    if (L <= hard){ p[i + 3] = 0; cleared++; continue; }
+    const a = Math.min(1, (L - hard) / (soft - hard));
+    p[i + 3] = Math.round(p[i + 3] * a);
+    p[i]     = Math.min(255, Math.round(p[i] / a));
+    p[i + 1] = Math.min(255, Math.round(p[i + 1] / a));
+    p[i + 2] = Math.min(255, Math.round(p[i + 2] / a));
+    cleared++;
+  }
+  ctx.putImageData(d, 0, 0);
+  return cleared;
+}
+// Once the backdrop is gone the artwork is usually floating in a wide empty
+// margin, and these two slots draw at 56px and 32px -- so a logo that fills
+// half its own file would arrive on screen half the size it should be.
+// Trimming the transparent border makes the mark fill its box. Alpha > 8
+// rather than > 0: the recovered rim above leaves a few nearly-invisible
+// pixels that would otherwise pin the box back to its original size.
+function trimTransparentEdges(canvas){
+  const w = canvas.width, h = canvas.height;
+  const p = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    if (p[(y * w + x) * 4 + 3] > 8){
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) return canvas;                       // nothing left; keep as-is
+  if (x0 === 0 && y0 === 0 && x1 === w - 1 && y1 === h - 1) return canvas;
+  const out = document.createElement('canvas');
+  out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
+  out.getContext('2d').drawImage(canvas, x0, y0, out.width, out.height,
+                                 0, 0, out.width, out.height);
+  return out;
+}
+// A logo for one of the manual-payment screens, as a PNG.
+//
+// PNG and not JPEG, and that alone is half the bug: these two slots went up
+// through fileToDataUrl(), which exports image/jpeg. JPEG HAS NO ALPHA
+// CHANNEL, so the slot could never hold a transparent logo however clean the
+// file he picked -- every upload came back on a solid backdrop. Background
+// removal without this change would have been undone on the way out.
+//
+// Resolves { url, cleared } so the caller can say what actually happened.
+function fileToLogoPng(file, maxDim, stripDark){
+  maxDim = maxDim || 512;
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error('No file'));
+    if (!/^image\//.test(file.type || guessMimeFromName(file.name)))
+      return reject(new Error('Please choose an image file'));
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('Could not read the file'));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That image could not be loaded'));
+      img.onload = () => {
+        const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+        if (!iw || !ih) return reject(new Error('That image could not be loaded'));
+        // Keyed at FULL resolution and downscaled afterwards. Downscaling
+        // first blends the black backdrop into the logo's edge pixels, and a
+        // fringe mixed in by the resampler cannot be told from artwork.
+        let c = document.createElement('canvas');
+        c.width = iw; c.height = ih;
+        let ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        let cleared = 0;
+        if (stripDark){
+          try { cleared = removeDarkBackdrop(ctx, iw, ih); }
+          catch (_) { return reject(new Error('That image could not be processed on this browser')); }
+          c = trimTransparentEdges(c);
+        }
+        const cw = c.width, ch = c.height;
+        const s = Math.min(1, maxDim / Math.max(cw, ch));
+        const out = document.createElement('canvas');
+        out.width = Math.max(1, Math.round(cw * s));
+        out.height = Math.max(1, Math.round(ch * s));
+        const octx = out.getContext('2d');
+        octx.imageSmoothingQuality = 'high';
+        octx.drawImage(c, 0, 0, out.width, out.height);
+        let url;
+        try { url = out.toDataURL('image/png'); }
+        catch (e) { return reject(new Error('Could not process the image')); }
+        // The route caps the stored string; a big photographic PNG can pass
+        // that. Step the size down rather than failing on the server with a
+        // message that would not tell him what to do about it.
+        let dim = maxDim;
+        while (url.length > 2600000 && dim > 96){
+          dim = Math.round(dim * 0.7);
+          const s2 = Math.min(1, dim / Math.max(cw, ch));
+          out.width = Math.max(1, Math.round(cw * s2));
+          out.height = Math.max(1, Math.round(ch * s2));
+          const c2 = out.getContext('2d');
+          c2.imageSmoothingQuality = 'high';
+          c2.clearRect(0, 0, out.width, out.height);
+          c2.drawImage(c, 0, 0, out.width, out.height);
+          url = out.toDataURL('image/png');
+        }
+        if (url.length > 2600000) return reject(new Error('That image is too detailed to store. Try a smaller or simpler logo.'));
+        resolve({ url: url, cleared: cleared });
+      };
+      img.src = fr.result;
     };
     fr.readAsDataURL(file);
   });
@@ -2573,21 +2749,24 @@ async function renderSettings(){
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin:0 0 6px">Manual payment screen images</h2>
-      <p class="muted" style="margin-top:0">Replaces the CHIPZ wordmark on the manual-deposit flow's own 2 screens. An empty slot keeps the wordmark.</p>
+      <p class="muted" style="margin-top:0">Replaces the CHIPZ wordmark on the manual-deposit flow's own 2 screens. An empty slot keeps the wordmark. Saved as PNG, so a logo with no background stays that way.</p>
       <p class="muted" style="margin:0 0 6px"><b>Payment method screen</b> (network/phone selector)</p>
       <div class="banner-row">
-        ${manualSelectorImage?`<img class="img-thumb" src="${esc(manualSelectorImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        ${manualSelectorImage?`<img class="img-thumb alpha" src="${esc(manualSelectorImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualSelectorImage?'Custom image':'<span class="muted">CHIPZ wordmark</span>'}</div>
         ${manualSelectorImage?`<button class="btn danger sm" id="mpSelectorImgClear">Remove</button>`:''}
       </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="mpSelectorImgFile" accept="image/*" hidden></label>
+      <label style="display:flex;align-items:center;gap:8px;width:auto;margin:8px 0 0;font-weight:500"><input type="checkbox" id="mpSelectorStrip" checked style="width:auto;margin:0"><span>Cut the dark background off this logo</span></label>
+      <label class="btn block file-btn" style="margin-top:8px">Upload image<input type="file" id="mpSelectorImgFile" accept="image/*" hidden></label>
       <p class="muted" style="margin:16px 0 6px"><b>Final payment screen</b> (COPY &amp; PAY code screen)</p>
       <div class="banner-row">
-        ${manualHeroImage?`<img class="img-thumb" src="${esc(manualHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        ${manualHeroImage?`<img class="img-thumb alpha" src="${esc(manualHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualHeroImage?'Custom image':'<span class="muted">CHIPZ wordmark</span>'}</div>
         ${manualHeroImage?`<button class="btn danger sm" id="mpHeroImgClear">Remove</button>`:''}
       </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="mpHeroImgFile" accept="image/*" hidden></label>
+      <label style="display:flex;align-items:center;gap:8px;width:auto;margin:8px 0 0;font-weight:500"><input type="checkbox" id="mpHeroStrip" checked style="width:auto;margin:0"><span>Cut the dark background off this logo</span></label>
+      <label class="btn block file-btn" style="margin-top:8px">Upload image<input type="file" id="mpHeroImgFile" accept="image/*" hidden></label>
+      <p class="muted" style="margin:10px 0 0">Both thumbnails sit on a checkerboard, so you can see straight away whether the background really came off. Only background touching the EDGE of the picture is removed &mdash; black inside the artwork, an outline or dark lettering, is left alone. Untick the box to upload a logo exactly as it is.</p>
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin:0 0 6px">Payment reminder</h2>
@@ -3156,16 +3335,31 @@ async function renderSettings(){
       if (d.status==='success') renderSettings();
     })());
   });
+  // Both manual-pay logo slots go up as PNG through fileToLogoPng(), NOT as
+  // JPEG through fileToDataUrl(). JPEG has no alpha channel, so these two
+  // slots could not hold a transparent logo at all, whatever he uploaded.
+  // Owner: "they have black background so l wanted the system to refine it
+  // such that it remains as it is with no background."
+  //
+  // The toast names what actually happened, because "Saved" on an image whose
+  // background did not come off is the one message that would send him
+  // looking at the member app to find out.
+  async function uploadManualPayLogo(slot, file, strip){
+    toast(strip ? 'Cutting the background…' : 'Uploading…', 'ok');
+    const r = await fileToLogoPng(file, 512, strip);
+    const d = await api('/admin/manual-pay-image/set', { slot: slot, image: r.url });
+    if (d.status !== 'success') return toast(d.message || 'Failed', 'err');
+    toast(!strip ? 'Saved as it is, live for every user'
+          : r.cleared ? 'Background removed, live for every user'
+          : 'Saved, but no dark background was found to cut off', r.cleared || !strip ? 'ok' : 'warn');
+    renderSettings();
+  }
   $('mpSelectorImgFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
+    const strip = !!($('mpSelectorStrip') && $('mpSelectorStrip').checked);
     await withTabBusy((async()=>{
-      try {
-        toast('Uploading…','ok');
-        const image = await fileToDataUrl(f,1280,0.82);
-        const d = await api('/admin/manual-pay-image/set', { slot:'selector', image });
-        toast(d.status==='success'?'Saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
-        if (d.status==='success') renderSettings();
-      } catch(err){ toast(err.message||'Could not read image','err'); }
+      try { await uploadManualPayLogo('selector', f, strip); }
+      catch(err){ toast(err.message||'Could not read image','err'); }
     })());
   });
   const mpSelectorImgClear = $('mpSelectorImgClear');
@@ -3178,14 +3372,10 @@ async function renderSettings(){
   });
   $('mpHeroImgFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
+    const strip = !!($('mpHeroStrip') && $('mpHeroStrip').checked);
     await withTabBusy((async()=>{
-      try {
-        toast('Uploading…','ok');
-        const image = await fileToDataUrl(f,1280,0.82);
-        const d = await api('/admin/manual-pay-image/set', { slot:'hero', image });
-        toast(d.status==='success'?'Saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
-        if (d.status==='success') renderSettings();
-      } catch(err){ toast(err.message||'Could not read image','err'); }
+      try { await uploadManualPayLogo('hero', f, strip); }
+      catch(err){ toast(err.message||'Could not read image','err'); }
     })());
   });
   const mpHeroImgClear = $('mpHeroImgClear');

@@ -2633,6 +2633,79 @@ method renamed PAY B, the network flipped back, each of the two admin SVGs resto
 message paths re-collapsed, and Snow's snowflake painted back over the app icon —
 rebuilding both panels each time and judging on the **exit code**. All eleven are caught.
 
+### Lifting an uploaded logo off its black background
+
+Owner: "there are logos l would like to upload to admin panel to replace chipz logo on
+manual payment pages on copy and on network, but they have black background so l wanted
+the system to refine it such that it remains as it is with no background so as it shows
+up on transparent sitting with no black background."
+
+**Half the bug was the file format, and no amount of keying would have fixed it.** Both
+manual-pay slots uploaded through `fileToDataUrl()`, which exports `image/jpeg`. **JPEG
+has no alpha channel**, so those two slots could never hold a transparent logo however
+clean the file he picked — every upload came back on a solid backdrop. They go through
+`fileToLogoPng()` now, and it is PNG on purpose, not incidentally.
+
+**"Remains as it is" rules out the obvious implementation.** Keying every dark pixel also
+hollows out the dark parts INSIDE a logo — an outline, a drop shadow, black lettering —
+and hands back artwork full of holes. `removeDarkBackdrop()` uses the same rule the door
+icon and the spin wheel were cut with: **flood-fill inward from the border**. Only
+background connected to the edge of the picture is removed; anything enclosed by the
+artwork survives regardless of how black it is. The fixture is deliberately a bright shape
+with **black bars inside it**, so a cutter that keys globally fails the test rather than
+passing it and shipping holes.
+
+**The rim is unpremultiplied, not threshold-cut.** A logo on black has an antialiased edge
+whose pixels are already a blend of logo colour and black; cut those at a threshold and
+the logo keeps a dirty dark fringe, which is the usual tell of a bad cut-out. Composited
+over black a pixel is just `c = alpha * C`, so inside the flood region both are
+recoverable — take alpha from the brightness, divide the colour back out. Measured: the
+output has 131 partly-transparent pixels and **none of them is dark**.
+
+**Keyed at full resolution, downscaled after.** Downscaling first blends the black
+backdrop into the logo's edge pixels, and a fringe mixed in by the resampler cannot be
+told from artwork.
+
+Then `trimTransparentEdges()`, because these slots draw at 56px and 32px — a logo left
+floating in its original margin arrives on screen a fraction of the size it should be.
+Alpha > 8, not > 0: the recovered rim leaves a few invisible pixels that would otherwise
+pin the box back to the original dimensions.
+
+**Two supporting changes.** The thumbnails sit on a **checkerboard** (`.img-thumb.alpha`,
+`object-fit:contain` so a wide wordmark is not cropped) — a transparent logo on a flat
+tile is indistinguishable from one with a matching solid background, and he has to be able
+to see that it worked. And the toast **names what happened**: "Background removed",
+"Saved, but no dark background was found to cut off", or "Saved as it is". A plain "Saved"
+on an image whose background did not come off is the one message that sends him to the
+member app to find out why.
+
+`manualPaySelectorBrandHtml()` / `manualPayHeroBrandHtml()` lost their inline
+`height:56px` / `height:32px` and their `border-radius`. The stylesheet already said
+`height:auto` for these images and the inline height was overriding it, letterboxing a
+wide wordmark into a fraction of its own width; and rounding the corners of a transparent
+logo can only clip artwork, since the radius existed to soften an opaque tile that is no
+longer there. `max-height` caps a tall logo so it cannot push the card around.
+
+**Worth knowing before blaming the cutter:** the selector card is `#fff`, but the code
+screen's hero band is `linear-gradient(155deg,#050505,#33342f 55%,#565853)` — near-black
+by design. A dark logo whose background has just been removed is invisible there. That is
+the surface, not the cut.
+
+**A test lesson, and it is about sampling the wrong place again.** The soft-edge assertion
+first walked in from the left edge at mid-height, found no partly-transparent pixels, and
+reported a hard cut. That row crosses the rounded shape at its widest point, where the edge
+is vertical and the trim has already cropped to it, so the first retained pixel is
+legitimately solid. The antialiasing lives on the **corners**, where the edge runs
+diagonally. Scan the whole image, not one row.
+
+**Driven through the UI, not by calling the cutter.** The built panel is obfuscated, so its
+functions have no names left to call (`typeof fileToLogoPng` is `undefined` in the deployed
+file) — but the better reason is that setting the real file input and intercepting the real
+`/admin/manual-pay-image/set` tests the whole path and reads the exact bytes that would be
+stored. `make-logo-fixture.py` builds the three fixtures; `verify-logo-cutout-discriminates.py`
+breaks the cutter six ways — back to JPEG, keying globally, no rim recovery, no trim,
+the tickbox off by default, and a toast that always claims success — and all six are caught.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase

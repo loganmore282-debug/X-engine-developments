@@ -4267,14 +4267,24 @@ window.closeManualPayOverlay = function(opts){
 };
 // Selector/hero brand marks: an admin-uploaded image takes over from the
 // CHIPZ wordmark when set, at the exact same footprint the mark uses.
+// height:auto and NO border-radius, both for the same reason: these slots hold
+// real logos now, uploaded with their background cut off (owner: "so as it
+// shows up on transparent sitting with no black background").
+//
+// A forced square box letterboxed a wide wordmark into a fraction of its own
+// width -- which is why the stylesheet already said `height:auto` for this
+// image, and why the inline `height` that overrode it was wrong. And rounding
+// the corners of a transparent logo can only clip the artwork: the radius was
+// there to soften the edge of an opaque tile, and there is no tile any more.
+// max-height caps a tall logo so it cannot push the card around.
 function manualPaySelectorBrandHtml(){
   return STATE.manualPaySelectorImage
-    ? `<img src="${esc(STATE.manualPaySelectorImage)}" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:12px;">`
+    ? `<img src="${esc(STATE.manualPaySelectorImage)}" alt="" style="width:56px;height:auto;max-height:56px;object-fit:contain;display:block;">`
     : chipzMarkHtml(56);
 }
 function manualPayHeroBrandHtml(){
   return STATE.manualPayHeroImage
-    ? `<img src="${esc(STATE.manualPayHeroImage)}" alt="" style="width:32px;height:32px;object-fit:contain;border-radius:8px;">`
+    ? `<img src="${esc(STATE.manualPayHeroImage)}" alt="" style="width:52px;height:auto;max-height:34px;object-fit:contain;display:block;">`
     : chipzMarkHtml(32);
 }
 function openManualPayFlow(amount){
