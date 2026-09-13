@@ -5056,6 +5056,43 @@ window.openWithdrawSheet = async function(){
   else if (!hadCache) STATE.bankAccounts = [];
   if (!hadCache && _openSheetTitle === 'Withdraw') paintWithdrawSheet(s);
 };
+// ── The cash-out window, client side ────────────────────────────────────
+// Mirrors server.js's withdrawWindowState()/hhmmLabel(). The SERVER decides;
+// this only tells the member what the rule is before they type an amount, and
+// saves them a round trip when it is plainly shut.
+//
+// What was here before was worse than nothing: a hardcoded "Withdrawal time:
+// 06:00:00 - 17:00:00." that no code enforced, so the app quietly promised
+// hours it did not keep. If the window is off, the line now says cash-out is
+// open any time, because that is the truth.
+var _WIT_HHMM = /^(\d{1,2}):(\d{2})$/;
+function witMinutes(v){
+  const m = _WIT_HHMM.exec(String(v == null ? '' : v).trim());
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return (h > 23 || mi > 59) ? null : h * 60 + mi;
+}
+function witClock(v){
+  const t = witMinutes(v);
+  if (t == null) return '';
+  const h24 = Math.floor(t / 60), mi = t % 60, h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(mi).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`;
+}
+function withdrawWindow(s){
+  const from = witMinutes(s && s.withdrawOpenFrom), to = witMinutes(s && s.withdrawOpenTo);
+  if (!(s && s.withdrawWindowEnabled) || from == null || to == null || from === to)
+    return { enabled: false, open: true, from: '', to: '' };
+  const d = new Date(Date.now() + 3 * 3600000);   // EAT, as the server judges it
+  const now = d.getUTCHours() * 60 + d.getUTCMinutes();
+  // The window may WRAP past midnight -- 18:00 to 17:00 is his own example.
+  const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
+  return { enabled: true, open, from: witClock(s.withdrawOpenFrom), to: witClock(s.withdrawOpenTo) };
+}
+function withdrawHoursLine(s){
+  const w = withdrawWindow(s);
+  if (!w.enabled) return 'Cash-out can be requested at any time of day.';
+  return `Cash-out time: ${esc(w.from)} to ${esc(w.to)}.`;
+}
 // Withdraw.dc.html. Replaces the form inherited from Snow: a tinted balance
 // card, a UGX-prefixed amount field, the bound wallet shown as the same
 // bank-card tile the Wallet screen uses (not a <select> of several), the
@@ -5092,8 +5129,8 @@ function paintWithdrawSheet(s){
         <li>Fee: ${fee}%.</li>
         <li>Withdrawal amounts should be between ${Number(s.minWithdraw||0).toLocaleString('en-US')} and ${Number(s.maxWithdraw||1000000).toLocaleString('en-US')}.</li>
         ${Number(s.withdrawMultiple) > 0 ? `<li>Amounts must be a multiple of ${Number(s.withdrawMultiple).toLocaleString('en-US')} &mdash; for example ${[1,2,5,6].map(n=>(n*Number(s.withdrawMultiple)).toLocaleString('en-US')).join(', ')}.</li>` : ''}
-        <li>There is no limit to the number of withdrawals.</li>
-        <li>${s.withdrawHours ? esc(s.withdrawHours) : 'Withdrawal time: 06:00:00 - 17:00:00.'}</li>
+        <li>One cash-out at a time &mdash; once it is paid you can request the next.${Number(s.maxWithdrawalsPerDay) > 0 ? ` Up to ${Number(s.maxWithdrawalsPerDay)} per day.` : ''}</li>
+        <li>${withdrawHoursLine(s)}</li>
       </ol>
     </div>
   </div>`;
@@ -5148,6 +5185,11 @@ window.submitWithdraw = async function(){
     return notify(`Cash-out must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
   }
   if (!acct) return notify('Bind your wallet before withdrawing.');
+  // Same courtesy for the hours: told here so the member is not asked for
+  // their Trade Password only to be refused. The server checks it again.
+  const win = withdrawWindow(STATE.settings || {});
+  if (win.enabled && !win.open)
+    return notify(`Cash-out is open from ${win.from} to ${win.to}. Please come back then.`);
   if (!/^\d{6}$/.test(pin)) return notify('Enter your 6-digit Trade Password.');
   $('witSubmitBtn').disabled = true; $('witSubmitBtn').textContent = 'Submitting…';
   const r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin });

@@ -413,6 +413,19 @@ const DEFAULT_SETTINGS = {
   // for the actual server-side enforcement.
   openingCountdownEnabled: false, openingCountdownAt: 0,
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
+  // The hours cash-out is open. Owner: "one withdrawal time should be
+  // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
+  // withdrawals start from this time to this time, nothing much ie 6pm to
+  // 5pm."
+  //
+  // Stored as "HH:MM" 24-hour strings in EAT, and the window is allowed to
+  // WRAP past midnight -- his own example, 18:00 to 17:00, is a 23-hour
+  // window that does, and a from<=to-only check would have read it as
+  // "closed always".
+  //
+  // Off by default: a fresh install must not lock cash-out behind hours
+  // nobody has set yet.
+  withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   // Off by default — approves every pending withdrawal automatically a few
   // seconds after it's requested, server-driven, idempotent (shares the
   // exact same processWithdrawalCore path a manual admin approval uses).
@@ -1027,6 +1040,49 @@ function eatParts(ts) {
   const d = new Date(ms + 3 * 3600000);
   const pad = n => String(n).padStart(2, '0');
   return { day: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, hour: d.getUTCHours() };
+}
+// ── The cash-out window ──────────────────────────────────────────────────
+// Parsing is hhmmToMin()'s job -- it already existed for the product-schedule
+// helpers and does exactly this, returning null rather than 0 for anything
+// that is not a real time (a bad string coerced to 0 would silently become
+// midnight and move everyone's window). A second near-identical
+// `hhmmToMinutes` was written here first and had to go: beyond being a
+// duplicate for a reader, its NAME is a prefix-superset of the existing one,
+// and test-product-config.js slices server.js by searching for that helper's
+// declaration -- so the new function silently stole the anchor and the slice
+// swallowed 1300 lines, redeclaring finiteMoney.
+//
+// The anchor text is described here rather than quoted, and that is the
+// second half of the same lesson: the first version of this comment spelled
+// it out literally, which made THIS COMMENT the earliest match and broke the
+// slice all over again in a new way. Never write a scanner's anchor verbatim
+// in the file it scans.
+//
+// 13:05 -> "1:05 PM". The member reads this, not a 24-hour clock, and the
+// owner wrote his own example as "6pm to 5pm".
+function hhmmLabel(v) {
+  const t = hhmmToMin(v);
+  if (t == null) return '';
+  const h24 = Math.floor(t / 60), mi = t % 60;
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(mi).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`;
+}
+// Whether cash-out is open right now, plus the labels the client shows.
+//
+// The window MAY WRAP past midnight, and that is not an edge case: the
+// owner's own example is 18:00 to 17:00, which wraps and is open for 23 of
+// the 24 hours. A naive `from <= now && now < to` reads that as never open.
+// Judged in EAT, the same zone every other daily reset in this file uses.
+function withdrawWindowState(sett, ts) {
+  const from = hhmmToMin(sett && sett.withdrawOpenFrom);
+  const to = hhmmToMin(sett && sett.withdrawOpenTo);
+  const enabled = !!(sett && sett.withdrawWindowEnabled) && from != null && to != null && from !== to;
+  const label = { from: hhmmLabel(sett && sett.withdrawOpenFrom), to: hhmmLabel(sett && sett.withdrawOpenTo) };
+  if (!enabled) return { enabled: false, open: true, from: label.from, to: label.to };
+  const d = new Date(tsMillis(ts || Date.now()) + 3 * 3600000);
+  const now = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
+  return { enabled: true, open, from: label.from, to: label.to };
 }
 // Synthetic login email — same convention as space8's phoneToEmail, using
 // the domain already established in Snow's own design (referral links use
@@ -4989,6 +5045,16 @@ app.post('/withdraw/request', async (req, res) => {
     const destValue = cleanPhone(req.body.phone || '');
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
+    // The cash-out window, enforced HERE and not only shown in the app.
+    // Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that when
+    // one tries to withdrawal he sees, that withdrawals start from this time
+    // to this time." The app draws the hours on the screen, but this route is
+    // a plain authenticated POST -- a rule that lives only in the client is
+    // not a rule.
+    const win = withdrawWindowState(sett, Date.now());
+    if (win.enabled && !win.open)
+      return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
+        message: `Cash-out is open from ${win.from} to ${win.to}. Please come back then.` });
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
     // Checked HERE, not only in the app: the client's own check is a
     // courtesy so a member sees the rule before submitting, but /withdraw/
@@ -5029,6 +5095,24 @@ app.post('/withdraw/request', async (req, res) => {
       if (bal < amt) {
         logSecurityEvent(userId, 'withdraw_insufficient_funds', { attempted: amt, balance: bal });
         throw new Error(`Not enough balance, you have ${fmtUGX(bal)}`);
+      }
+      // ONE UNRESOLVED CASH-OUT AT A TIME. Owner: "no requesting another
+      // withdrawal yet another one is on pending, so one should have got his
+      // processing one to be paid then requests another."
+      //
+      // Inside the balance lock and before the debit, so two taps cannot both
+      // find nothing pending. The three statuses are exactly the ones
+      // /admin/withdrawals/list treats as unresolved -- 'processed' and
+      // 'rejected' are finished and must not block anything, or a member's
+      // first ever cash-out would be their last.
+      const openSnap = await db.collection('withdrawals')
+        .where('userId', '==', userId).where('status', 'in', ['pending', 'sending', 'processing'])
+        .limit(1).get();
+      if (!openSnap.empty) {
+        const w = openSnap.docs[0].data();
+        const e = new Error(`You already have a cash-out of ${fmtUGX(w.amount || 0)} waiting. Once it is paid you can request another.`);
+        e.code = 'WITHDRAW_PENDING';
+        throw e;
       }
       const maxPerDay = Number(sett.maxWithdrawalsPerDay) || 0;
       if (maxPerDay > 0) {
@@ -6275,7 +6359,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -6327,6 +6411,30 @@ app.post('/admin/settings/update', async (req, res) => {
       if (name.length > 24) return res.status(400).json({ status: 'error', message: 'App name must be 24 characters or fewer.' });
       if (/[<>]/.test(name)) return res.status(400).json({ status: 'error', message: 'App name cannot contain < or >.' });
       updates.brandName = name;
+    }
+    // The two cash-out times. Refused rather than coerced: a silently
+    // repaired time is a window the owner did not choose, on a screen whose
+    // whole job is telling members exactly when they can cash out.
+    for (const key of ['withdrawOpenFrom', 'withdrawOpenTo']) {
+      if (!(key in updates)) continue;
+      // Padded BEFORE parsing, not after: hhmmToMin() requires a two-digit
+      // hour, and a hand-typed "9:00" is a perfectly clear time to refuse on
+      // a technicality.
+      let raw = String(updates[key] == null ? '' : updates[key]).trim();
+      if (/^\d:\d{2}$/.test(raw)) raw = '0' + raw;
+      if (hhmmToMin(raw) == null)
+        return res.status(400).json({ status: 'error', message: `${key} must be a 24-hour time like 18:00` });
+      updates[key] = raw;
+    }
+    // Equal times are refused too. from === to is not "open all day" and not
+    // "closed all day" -- it is ambiguous, and withdrawWindowState() treats
+    // it as unset, so saving it would show the member hours that are not
+    // being enforced.
+    {
+      const f = 'withdrawOpenFrom' in updates ? updates.withdrawOpenFrom : null;
+      const t = 'withdrawOpenTo' in updates ? updates.withdrawOpenTo : null;
+      if (f != null && t != null && f === t)
+        return res.status(400).json({ status: 'error', message: 'Cash-out opening and closing times cannot be the same.' });
     }
     if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
       return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });

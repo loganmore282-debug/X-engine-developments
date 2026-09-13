@@ -2699,6 +2699,17 @@ async function renderSettings(){
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
+      <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
+           when one tries to withdrawal he sees, that withdrawals start from
+           this time to this time, nothing much ie 6pm to 5pm." -->
+      <div class="switch-row" style="margin-top:8px"><span><b>Only allow cash-out between set hours</b> <span class="muted">(members see the hours on the Withdraw screen)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sWitWindow" ${s.withdrawWindowEnabled===true?'checked':''} style="width:auto"></label></div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Cash-out opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
+        <div><label>Cash-out closes at</label><input id="sWitTo" type="time" value="${esc(v('withdrawOpenTo','17:00'))}"></div>
+      </div>
+      <p class="muted" style="margin:6px 0 0">East Africa Time. The window may run past midnight &mdash; set <b>18:00</b> to <b>17:00</b> and cash-out is open all day except between 5pm and 6pm. Members always see exactly these hours, and the server refuses a request outside them, not just the app.</p>
+      <p class="muted" style="margin:6px 0 0"><b>One cash-out at a time, always.</b> A member with a request still Pending, Sending or Processing cannot start another until it is paid or rejected. That is not a setting.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a referral code to sign up</b> <span class="muted">(every new member must be invited by an existing one)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqReferral" ${s.requireReferralCode!==false?'checked':''} style="width:auto"></label></div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Leave this ON. The very first account is let through automatically no matter what — with nobody registered yet there is no code in existence to type — and the rule starts applying the moment that first member exists. Only switch it OFF if you ever need to sign someone up with no upline, and switch it back on afterwards.</p>
@@ -3060,6 +3071,8 @@ async function renderSettings(){
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
+      withdrawWindowEnabled:$('sWitWindow').checked,
+      withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
       // Sent as raw text; the server splits, validates and de-duplicates it,
       // and rejects the whole save naming the bad line rather than silently
       // dropping it.

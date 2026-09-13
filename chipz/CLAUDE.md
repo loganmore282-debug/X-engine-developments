@@ -2918,6 +2918,104 @@ repriced from the daily band, each conditional write replaced by a plain one, do
 granting, the sweep static, the band full-width, the sweep run-once, and reduced motion
 losing the highlight. All ten are caught.
 
+### One cash-out at a time, and settable cash-out hours
+
+Owner: "no requesting another withdrawal yet another one is on pending, so one should have
+got his processing one to be paid then requests another, also one withdrawal time should
+be SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that withdrawals
+start from this time to this time, nothing much ie 6pm to 5pm."
+
+**One unresolved cash-out at a time, and it is not a setting.** Checked inside
+`withLock('bal:' + userId)` and **before the debit**, so two taps cannot both find nothing
+pending. The blocking statuses are exactly the three `/admin/withdrawals/list` treats as
+unresolved — `pending`, `sending`, `processing`. `processed` and `rejected` are finished
+and must not block, or a member's first cash-out would be their last. Another member's
+pending request is irrelevant; both are asserted.
+
+**The window is `withdrawWindowEnabled` + `withdrawOpenFrom`/`withdrawOpenTo`**, stored as
+`"HH:MM"` in EAT, off by default. **It may wrap past midnight and that is not an edge
+case — his own example does it.** 18:00 to 17:00 is open for 23 of the 24 hours, and the
+obvious `from <= now && now < to` reads it as never open:
+
+```js
+const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
+```
+
+A bad time string returns **null, not 0** — coerced to 0 it would silently become midnight
+and move everyone's window. `from === to` is treated as unset rather than as
+open-or-closed-all-day, and the save endpoint **refuses** both a malformed time and two
+identical ones instead of repairing them: a silently repaired window is hours the owner
+did not choose on a screen whose whole job is stating them.
+
+**The app was already lying about this.** The instruction card carried a hardcoded
+`Withdrawal time: 06:00:00 - 17:00:00.` that nothing enforced, and
+`There is no limit to the number of withdrawals.` Both are gone: the hours come from the
+real setting via `withdrawHoursLine()` (and say "any time of day" when the window is off,
+because that is the truth), and the one-at-a-time rule is stated plainly.
+
+### The manual payment flow is Snow's again, rule for rule
+
+Owner: "you changed the design and font of manual payment land page, check back on snow
+scripts, it should be same texts and design, you even rounded the network selection design
+and submit sms stuffs were changed, use exact as it was on snow, only logics change."
+
+**The markup was never the problem** — Snow's and Chipz's manual-pay HTML are identical,
+same classes and same strings, which is how the fault got narrowed. The stylesheet had
+diverged, and **every single divergence was one of two mechanical substitutions made when
+Chipz was forked:**
+
+- **Literal radii replaced with Chipz tokens.** `.mp-method` went from `11px` to
+  `var(--r-card)` — **22px, double** — which is exactly "you even rounded the network
+  selection design". Same for the phone field, the SMS textarea ("submit sms stuffs"), the
+  detail/paid/reminder boxes, the loader, the timeline card, the Refresh and Confirm
+  buttons, the copy glyph and the timer digits.
+- **Font weights lightened one or two steps** — 800→700, 700→500 — on fifteen rules.
+
+`restore-snow-manualpay-css.py` put all 31 back, written as a one-shot repair with a
+uniqueness assertion per anchor so a silent no-op is impossible — **it refused outright on
+its first run** (five anchors spanned line breaks) rather than applying half.
+
+**Kept, deliberately, because he asked for them and neither touches Snow's text, shape or
+weight:** the centred `.mp-toast` notices, and the app-wide Confirm-button glow sweep. The
+button's radius went back to Snow's 26px pill regardless, because that is shape.
+
+**`test-manualpay-matches-snow.js` diffs against Snow's own file** rather than a list of
+numbers someone typed — a hardcoded expectation is a second copy of the design that drifts
+on its own. It also asserts no Chipz radius token survives anywhere in the flow, and
+`SKIP`s cleanly if `snow/` is not in the checkout.
+
+`verify-withdraw-and-snowcss-discriminate.py` breaks the three tests sixteen ways —
+the pending block removed, narrowed to one status, or checked-but-not-thrown; the window
+unenforced, un-wrapped, coerced-from-garbage, or labelled on a 24-hour clock; the fake
+hours line restored; the admin inputs downgraded; a bad time quietly repaired; both named
+radii re-rounded; two weights re-lightened; a rule dropped; and one of Snow's strings
+reworded. All sixteen are caught.
+
+#### The name-prefix trap, and the self-matching comment AGAIN
+
+This round's window work first added `hhmmToMinutes()` — and `hhmmToMin()` already existed
+a thousand lines further down, doing **exactly the same thing** for the product-schedule
+helpers. Two faults in one:
+
+1. It was a duplicate of live code. Deleted; the window uses `hhmmToMin()`. Its regex
+   demands a two-digit hour, so the settings route **pads before parsing** — a hand-typed
+   `9:00` is a clear time to refuse on a technicality.
+2. **Its name is a prefix-superset of the existing one**, and `test-product-config.js`
+   slices server.js by searching for that helper's declaration. The new function sat
+   earlier in the file, silently stole the anchor, and the slice swallowed ~1300 lines —
+   `test-product-config.js` and `test-product-schedule.js` both died on a redeclared
+   `finiteMoney`. **A new helper whose name merely starts with an existing one's can break
+   a text-slicing test.**
+
+Then the comment explaining all that **quoted the anchor literally**, which made the
+comment itself the earliest match and broke the same slice again in a new way. The anchor
+is now described rather than quoted. That is the **fourth** distinct shape of this trap in
+this project, and the rule has widened once more: **never write a scanner's anchor
+verbatim in the file it scans.**
+
+Both product tests were confirmed green at HEAD before the fix, so the breakage was
+correctly attributed to this round rather than assumed pre-existing.
+
 ## Secrets — NEVER commit
 
 Same rule as every sibling project in this repo: real secrets (Mongo URI, Firebase
