@@ -66,6 +66,25 @@ const api = new Function('normalizeAllowedHost', `
   const setRegions = list => { _regionsSnapshot = list; };
   const setCurrent = r => { _current = r; };
   ${fnSource(src, 'normalizeRegion')}
+  let _baseDomain = 'chipz-platform.com';
+  let _blockRootDomain = true;
+  let _parkedHosts = [];
+  let _strictRegionHosts = false;
+  let _regionHosts = [];
+  let _corsExtraHosts = [];
+  let _mainAllowedHosts = [];
+  const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.edgeone.dev', '.onrender.com', '.pages.dev'];
+  const setHostPolicy = o => { if (o.baseDomain !== undefined) _baseDomain = o.baseDomain;
+    if (o.blockRootDomain !== undefined) _blockRootDomain = o.blockRootDomain;
+    if (o.parkedHosts !== undefined) _parkedHosts = o.parkedHosts;
+    if (o.strictRegionHosts !== undefined) _strictRegionHosts = o.strictRegionHosts;
+    rebuildRegionHosts(); };
+  ${fnSource(src, 'refreshCorsSnapshot')}
+  ${fnSource(src, 'hostOnly')}
+  ${fnSource(src, 'regionHostnames')}
+  ${fnSource(src, 'rebuildRegionHosts')}
+  ${fnSource(src, 'isInfraHost')}
+  ${fnSource(src, 'hostIsParked')}
   ${fnSource(src, 'regionForHost')}
   ${fnSource(src, 'settingsDocId')}
   ${fnSource(src, 'applyRegionToProduct')}
@@ -80,7 +99,9 @@ const api = new Function('normalizeAllowedHost', `
   const PRODUCT_REGION_FIELDS = ${JSON.stringify(JSON.parse('[' + (/const PRODUCT_REGION_FIELDS = \[([^\]]*)\]/.exec(bare)[1]).replace(/'/g, '"') + ']'))};
   return { DEFAULT_REGION, normalizeRegion, regionForHost, settingsDocId, applyRegionToProduct,
            localDigits, cleanPhone, phoneToEmail, phoneFormatHint, badPhoneMessage,
-           looksLikeRegionMobile, fmtMoney, setRegions, setCurrent, PRODUCT_REGION_FIELDS };
+           looksLikeRegionMobile, fmtMoney, setRegions, setCurrent, PRODUCT_REGION_FIELDS,
+           hostIsParked, regionHostnames, isInfraHost, setHostPolicy,
+           corsHosts: () => _corsExtraHosts.slice() };
 `)(new Function('raw', fnSource(src, 'normalizeAllowedHost').replace(/^function [^{]*/, '') + '')
    // normalizeAllowedHost is a plain function; wrap it so the new Function
    // above can take it as an argument instead of re-declaring it.
@@ -245,7 +266,10 @@ console.log('\n— the money-safety rules, in the code that ships —');
 {
   const mw = bare.slice(bare.indexOf('app.use(async (req, res, next) => {\n  let region = defaultRegion();'));
   const block = mw.slice(0, mw.indexOf('_regionCtx.run({ region }, next);'));
-  ck(/regionForHost\(req\.headers\.origin/.test(block), 'a visitor gets the region that owns the hostname');
+  ck(/region = regionForHost\(host\)/.test(block) && /const host = requestHost\(req\)/.test(block),
+    'a visitor gets the region that owns the hostname');
+  ck(/req\.headers\.origin \|\| req\.headers\.host/.test(stripComments(fnSource(src, 'requestHost'))),
+    'read from Origin, because the app is served from a different origin than this API');
   ck(/userRegionKey\(uid\)/.test(block) && /region = regionByKey\(key\)/.test(block),
     'and a signed-in caller overrides it with their own accountʼs region');
   ck(block.indexOf('regionForHost') < block.indexOf('userRegionKey'),
@@ -289,8 +313,10 @@ ck(/String\(d\.data\(\)\.regionKey \|\| DEFAULT_REGION_KEY\) === regionKey/.test
   // passed with the code that actually fills the list deleted, and every new
   // subdomain would then be CORS-refused by a perfectly healthy server.
   const g = stripComments(fnSource(src, 'getRegions'));
-  ck(/_regionHosts\.push\(h\)/.test(g) && /refreshCorsSnapshot\(\)/.test(g),
-    'a country\'s own web address is folded into the CORS allowlist as the regions load');
+  ck(/rebuildRegionHosts\(\)/.test(g), 'loading the regions rebuilds the host list');
+  const rb = stripComments(fnSource(src, 'rebuildRegionHosts'));
+  ck(/regionHostnames\(r\)/.test(rb) && /_regionHosts\.push\(h\)/.test(rb) && /refreshCorsSnapshot\(\)/.test(rb),
+    'and every country address -- short names included -- lands in the CORS allowlist');
 }
 {
   // Deleting a country takes its rates and its product prices with it. Left
@@ -314,6 +340,130 @@ ck(/String\(d\.data\(\)\.regionKey \|\| DEFAULT_REGION_KEY\) === regionKey/.test
       `${fn}() runs in the memberʼs own region`);
 }
 
+console.log('\n— short addresses per country (g26e, shy) —');
+{
+  const ug = api.normalizeRegion({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
+    localLength: 9, prefixes: ['7'], labels: 'g26e, x7k2' }, 'ug');
+  const ke2 = api.normalizeRegion({ key: 'ke', name: 'Kenya', currency: 'KES', dialCode: '254',
+    localLength: 9, prefixes: ['7'], labels: ['shy'] }, 'ke');
+  ck(JSON.stringify(ug.labels) === '["g26e","x7k2"]', 'a country holds several short names');
+  api.setRegions([ug, ke2]);
+  api.setHostPolicy({ baseDomain: 'chipz-platform.com', blockRootDomain: true, parkedHosts: [], strictRegionHosts: false });
+  ck(api.regionHostnames(ug).includes('g26e.chipz-platform.com'),
+    'a short name resolves against the base domain: ' + api.regionHostnames(ug).join(', '));
+  ck(api.regionForHost('g26e.chipz-platform.com').key === 'ug', 'g26e is Uganda');
+  ck(api.regionForHost('shy.chipz-platform.com').key === 'ke', 'shy is Kenya');
+  ck(api.corsHosts().includes('shy.chipz-platform.com'),
+    'and every short address is allowed to reach the backend without being typed into the allowlist');
+  // A parked address must be able to READ its own refusal. CORS-refuse it
+  // and the browser drops the 403 before any code sees it, so the app shows
+  // its generic "Network error" instead of the notice -- exactly the
+  // confusion HOST_PARKED exists to remove.
+  ck(api.corsHosts().includes('chipz-platform.com'),
+    'and the root domain is allowed through CORS so it can read its own refusal');
+  // normalizeRegion() stays PERMISSIVE on purpose: it also runs over
+  // whatever is already stored, and refusing there would take a country
+  // offline. Whitespace and commas both separate, so "sp ace" is two
+  // addresses, which is what that field says it does.
+  const messy = api.normalizeRegion({ key: 'zz', dialCode: '1', labels: 'G26E, WWW, -bad, ok-2, sp ace' }, 'zz');
+  ck(JSON.stringify(messy.labels) === '["g26e","ok-2","sp","ace"]',
+    'stored labels are lowercased, and www / a leading dash are dropped: ' + JSON.stringify(messy.labels));
+  // The SAVE route is where a typed one is refused rather than repaired --
+  // an admin shown "hello" after typing "he!lo" has been given an address
+  // they did not choose.
+  const save = bare.slice(bare.indexOf("app.post('/admin/regions/save'"));
+  const saveBody = save.slice(0, save.indexOf("app.post('/admin/regions/add-label'"));
+  ck(/is not a usable address/.test(saveBody) && /\^\[a-z0-9\]\(\[a-z0-9-\]\*\[a-z0-9\]\)\?\$/.test(saveBody),
+    'a typed address with a bad character is refused, not silently repaired');
+  ck(/cannot be a country address/.test(saveBody), 'and "www" is refused by name');
+}
+
+console.log('\n— the root domain does not serve the app —');
+{
+  const ug = api.normalizeRegion({ key: 'ug', dialCode: '256', labels: ['g26e'] }, 'ug');
+  api.setRegions([ug]);
+  api.setHostPolicy({ baseDomain: 'chipz-platform.com', blockRootDomain: true, parkedHosts: [], strictRegionHosts: false });
+  ck(api.hostIsParked('chipz-platform.com') === true, 'the bare domain is refused');
+  ck(api.hostIsParked('www.chipz-platform.com') === true, 'and so is its www. form');
+  ck(api.hostIsParked('https://chipz-platform.com/refCode=ABC') === true, 'however it is written');
+  ck(api.hostIsParked('g26e.chipz-platform.com') === false, 'a country’s own short address still works');
+  // The owner administers and tests from these. strictRegionHosts would
+  // otherwise lock him out of the panel the setting is turned off in.
+  for (const h of ['chipz-app.onrender.com', 'chipz-admin.onrender.com', 'x.edgeone.app', 'localhost', '127.0.0.1'])
+    ck(api.hostIsParked(h) === false, `the platform’s own host ${h} is never refused`);
+  // A gateway webhook and Render's health check arrive with no Origin at
+  // all. Money that has already left a payer's account must never be lost
+  // to a domain rule.
+  ck(api.hostIsParked('') === false, 'a request with no address at all is never refused');
+  {
+    // Checked again with STRICT mode on, because that is the only setting
+    // under which an empty host would otherwise be parked -- with strict
+    // off every later rule says "not parked" anyway, so this case cannot
+    // tell the early return from its absence. Verified by mutation:
+    // deleting `if (!h) return false;` goes undetected without this.
+    api.setHostPolicy({ strictRegionHosts: true });
+    ck(api.hostIsParked('') === false, 'including in strict mode, so a gateway webhook can never be lost to a domain rule');
+    api.setHostPolicy({ strictRegionHosts: false });
+  }
+  api.setHostPolicy({ blockRootDomain: false });
+  ck(api.hostIsParked('chipz-platform.com') === false, 'and the block can be switched off');
+  api.setHostPolicy({ blockRootDomain: true, parkedHosts: ['old.chipz-platform.com'] });
+  ck(api.hostIsParked('old.chipz-platform.com') === true, 'a retired address is refused too');
+  api.setHostPolicy({ parkedHosts: [] });
+  ck(api.hostIsParked('zzz.chipz-platform.com') === false, 'an unclaimed name works while strict mode is off');
+  api.setHostPolicy({ strictRegionHosts: true });
+  ck(api.hostIsParked('zzz.chipz-platform.com') === true, 'and is refused once it is on');
+  ck(api.hostIsParked('g26e.chipz-platform.com') === false, 'while a claimed one still works in strict mode');
+  ck(api.hostIsParked('chipz-app.onrender.com') === false, 'and the Render address still works in strict mode');
+  api.setHostPolicy({ strictRegionHosts: false });
+}
+
+console.log('\n— and the refusal is a readable answer, not a dropped request —');
+{
+  const mw = bare.slice(bare.indexOf("if (GUARD_EXEMPT.has(req.path)) return next();\n  const store = _regionCtx.getStore();"));
+  const block = mw.slice(0, mw.indexOf('});'));
+  ck(/HOST_PARKED/.test(block) && /status\(403\)/.test(block),
+    'a parked address gets 403 HOST_PARKED, so the app can tell it apart from the server being down');
+  ck(/GUARD_EXEMPT\.has\(req\.path\)/.test(block),
+    'and the payment webhooks are exempt, so a domain rule can never lose a payment');
+  ck(/data\.code === 'HOST_PARKED'/.test(bareClient) && /showHostParked/.test(bareClient),
+    'the app handles it in api(), so it does not matter which call happens to be first');
+  const parked = stripComments(fnSource(client, 'showHostParked'));
+  ck(/loadingScreen/.test(parked) && /_hostParkedShown/.test(parked),
+    'the notice takes the loading screen down with it, and shows once');
+}
+
+console.log('\n— an address can be generated on demand —');
+{
+  const gen = bare.slice(bare.indexOf("app.post('/admin/regions/add-label'"));
+  const body = gen.slice(0, gen.indexOf("app.post('/admin/regions/delete'"));
+  ck(/randFromAlphabet\(LABEL_ALPHABET/.test(body), 'the label is minted with the CSPRNG, not Math.random');
+  ck(/for \(const r of regions\) for \(const l of \(r\.labels \|\| \[\]\)\) taken\.add\(l\)/.test(body),
+    'and checked unique across EVERY country, not just this one');
+  ck(/\(region\.labels \|\| \[\]\)\.concat\(\[label\]\)/.test(body),
+    'it is ADDED, so an address already shared with members keeps working');
+  const alpha = /const LABEL_ALPHABET = '([^']*)'/.exec(bare)[1];
+  for (const ch of ['l', 'o', '0', '1'])
+    ck(!alpha.includes(ch), `the alphabet leaves out "${ch}", which gets misread off a screen`);
+}
+
+console.log('\n— the host rules are backend-wide and validated —');
+{
+  const g = /const GLOBAL_ONLY_SETTINGS = \[([^\]]*)\]/.exec(bare)[1];
+  for (const k of ['baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'])
+    ck(g.includes(k), `${k} cannot be set per country`);
+  const upd = bare.slice(bare.indexOf("app.post('/admin/settings/update'"));
+  const body = upd.slice(0, upd.indexOf('logAdminAction'));
+  ck(/if \('baseDomain' in updates\)/.test(body) && /normalizeAllowedHost\(updates\.baseDomain\)/.test(body),
+    'a mistyped base domain is refused, not stored');
+  ck(/sanitizeAllowedOrigins\(updates\.parkedHosts\)/.test(body), 'and the retired list runs through the same validator');
+  ck(/refreshHostPolicy\(await getSettings\(DEFAULT_REGION_KEY\)\)/.test(body),
+    'the rules apply immediately on save rather than up to a minute later');
+  const b = /const SETTINGS_BOOLEAN_FIELDS = \[([^\]]*)\]/.exec(bare)[1];
+  ck(b.includes('blockRootDomain') && b.includes('strictRegionHosts'),
+    'and both switches are coerced to real booleans server-side');
+}
+
 console.log('\n— the admin panel, which edits one country at a time —');
 {
   const admin = stripComments(fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8'));
@@ -335,6 +485,14 @@ console.log('\n— the admin panel, which edits one country at a time —');
     'an amount in an admin list is labelled in the currency of the row’s own country');
   ck(/ADMIN_REGIONS\.length < 2/.test(admin),
     'and the country picker is hidden while there is only one country');
+  ck(/data-gen-region/.test(admin) && /'\/admin\/regions\/add-label'/.test(admin),
+    'the panel can ask the server for a new short address');
+  ck(/id="rgLabels"/.test(admin) && /labels: \$\('rgLabels'\)\.value/.test(admin),
+    'short addresses are editable per country');
+  ck(/id="sBaseDomain"/.test(admin) && /id="sBlockRoot"/.test(admin) && /id="sStrictHosts"/.test(admin) && /id="sParkedHosts"/.test(admin),
+    'and the four host rules have their own card in Settings');
+  ck(/baseDomain:\$\('sBaseDomain'\)\.value/.test(admin) && /blockRootDomain:\$\('sBlockRoot'\)\.checked/.test(admin),
+    'which really sends them');
 }
 
 console.log('\n— the app is told its region, and never tells the server —');

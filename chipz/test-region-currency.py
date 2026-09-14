@@ -177,10 +177,16 @@ async def main():
         page = await ctx.new_page()
         page.on("pageerror", lambda e: errs.append(str(e)))
 
-        current = {"region": KE_REGION, "account": None}
+        current = {"region": KE_REGION, "account": None, "parked": False}
 
         async def api(r):
             path = "/" + r.request.url.split("://", 1)[-1].split("/", 1)[-1].split("?")[0]
+            if current["parked"]:
+                await r.fulfill(status=403, content_type="application/json", body=json.dumps({
+                    "status": "error", "code": "HOST_PARKED",
+                    "message": "This address does not serve the app. Please open the link for your own country.",
+                }))
+                return
             table = routes(current["region"], current["account"])
             body = next((v for k, v in table.items() if path.endswith(k)), {"status": "success"})
             await r.fulfill(status=200, content_type="application/json", body=json.dumps(body))
@@ -247,6 +253,51 @@ async def main():
         ck("KES" in cross["wallet"], "and the balance is shown in the member's own currency: " + cross["wallet"])
         ck(cross["prices"] == ["KES"], "with no Ugandan figure anywhere on screen: %s" % (cross["prices"],))
         ck(cross["depPrefix"] == "+254", "and their own dialling code on the number field: " + cross["depPrefix"])
+
+        print('\n— the root domain does not serve the app —')
+        # Owner: "l didn't want root domain to work." The server answers
+        # every request from a parked address with 403 HOST_PARKED; what has
+        # to be verified here is the VISIBLE half -- that the app stops and
+        # says so instead of hanging on the loader or painting a broken
+        # screen. Asserted on the rendered box, not on a flag.
+        current["parked"] = True
+        await page.evaluate("()=>{try{localStorage.clear()}catch(e){}}")
+        # Sampled at the INSTANT the notice appears, not seconds later: the
+        # boot path takes the loading screen down on its own once it gives
+        # up, so a late sample cannot tell "the notice hid it" from "boot
+        # hid it eventually" -- and the fault being guarded against is the
+        # notice arriving UNDER a spinner that is still up. Verified by
+        # mutation: at 3s, removing the hide goes undetected.
+        await page.add_init_script(
+            "window.__parkedAt=null;"
+            "new MutationObserver(()=>{const b=document.getElementById('hostParked');"
+            "if(b&&!window.__parkedAt){const ls=document.getElementById('loadingScreen');"
+            "window.__parkedAt={loader: !!ls && getComputedStyle(ls).display!=='none'};}})"
+            ".observe(document,{childList:true,subtree:true});")
+        await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
+        await page.wait_for_selector("#hostParked", timeout=15000)
+        at_show = await page.evaluate("()=>window.__parkedAt")
+        print("  at the moment it appeared:", at_show)
+        await page.wait_for_timeout(1200)
+        parked = await page.evaluate(
+            "()=>{const b=document.getElementById('hostParked');"
+            "const ls=document.getElementById('loadingScreen');"
+            "const app=document.getElementById('app');"
+            "const auth=document.getElementById('authScreen');"
+            "const vis=e=>!!e&&getComputedStyle(e).display!=='none';"
+            "return {shown:vis(b), text:b?b.innerText.trim():'',"
+            " loader:vis(ls), app:vis(app), auth:vis(auth),"
+            " boxes:document.querySelectorAll('#hostParked').length};}")
+        for k, v in parked.items():
+            print("  %-12s %s" % (k, v))
+        ck(parked["shown"], "the notice is on screen")
+        ck("country" in parked["text"].lower(), "and it says to open your own country's link: " + parked["text"].replace("\n", " / "))
+        ck(at_show is not None and at_show.get("loader") is False,
+           "the loading screen was already down the moment the notice appeared, not left spinning over it")
+        ck(not parked["loader"], "and it stays down")
+        ck(not parked["app"] and not parked["auth"], "and neither the app nor the sign-in screen is left showing")
+        ck(parked["boxes"] == 1, "shown once, however many requests were refused")
+        await page.screenshot(path=f"{OUT}/parked.png", full_page=True)
 
         ck(not errs, "no page errors: " + str(errs))
         await b.close()

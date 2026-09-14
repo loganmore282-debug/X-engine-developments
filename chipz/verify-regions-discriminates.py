@@ -48,7 +48,7 @@ MUTATIONS = [
      """    /* region taken from the hostname only */"""),
 
     ('the hostname wins over the account', SERVER,
-     """    region = regionForHost(req.headers.origin || req.headers.host);
+     """    region = regionForHost(host);
     // A signed-in caller overrides the hostname with their own account's
     // region -- see the money-safety rule at the top of this section.
     if ((req.headers.authorization || '').startsWith('Bearer ')) {
@@ -61,7 +61,7 @@ MUTATIONS = [
       const key = uid ? await userRegionKey(uid) : null;
       if (key) region = regionByKey(key);
     }
-    region = regionForHost(req.headers.origin || req.headers.host);"""),
+    region = regionForHost(host);"""),
 
     ('a new account is not stamped with its region', SERVER,
      "    regionKey: String(regionKey || currentRegionKey() || DEFAULT_REGION_KEY),\n",
@@ -87,11 +87,11 @@ MUTATIONS = [
       if (offending.length)"""),
 
     ('maintenance mode becomes a per-country setting', SERVER,
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
      "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName'];"),
 
     ("the minimum cash-out stops being a country's own", SERVER,
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
      "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'minWithdraw'];"),
 
     ('every country shares one settings document', SERVER,
@@ -147,8 +147,8 @@ MUTATIONS = [
      "  return s;"),
 
     ('a country switched off still answers for its own address', SERVER,
-     "  for (const r of _regionsSnapshot) if (r.active && r.hosts.includes(h)) return r;",
-     "  for (const r of _regionsSnapshot) if (r.hosts.includes(h)) return r;"),
+     "  for (const r of _regionsSnapshot) if (r.active && regionHostnames(r).includes(h)) return r;",
+     "  for (const r of _regionsSnapshot) if (regionHostnames(r).includes(h)) return r;"),
 
     ('the founding country can be switched off', SERVER,
      "    active: isDefault ? true : (raw && raw.active) !== false,",
@@ -202,6 +202,118 @@ MUTATIONS = [
      "  try { localStorage.setItem('chipzRegion', JSON.stringify(REGION)); } catch(_){}",
      "  /* not remembered */"),
 
+    ('a parked address is CORS-refused, so it cannot read its own refusal', SERVER,
+     "  const all = _mainAllowedHosts.concat(_regionHosts, _parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : []);",
+     "  const all = _mainAllowedHosts.concat(_regionHosts);"),
+
+    ('the root domain serves the app after all', SERVER,
+     "  if (_blockRootDomain && _baseDomain && (h === _baseDomain || h === 'www.' + _baseDomain)) return true;",
+     '  void _blockRootDomain;'),
+
+    ('www is left serving the app', SERVER,
+     "  if (_blockRootDomain && _baseDomain && (h === _baseDomain || h === 'www.' + _baseDomain)) return true;",
+     '  if (_blockRootDomain && _baseDomain && h === _baseDomain) return true;'),
+
+    ("the platform's own Render address gets parked, locking the owner out", SERVER,
+     '  if (isInfraHost(h)) return false;',
+     '  void isInfraHost;'),
+
+    ('a webhook with no Origin gets refused, losing a payment', SERVER,
+     '  if (!h) return false;\n  if (isInfraHost(h)) return false;',
+     '  if (isInfraHost(h)) return false;'),
+
+    ('strict mode stops refusing unclaimed addresses', SERVER,
+     '  if (_strictRegionHosts && !_regionHosts.includes(h)) return true;',
+     '  void _strictRegionHosts;'),
+
+    ('a retired address keeps working', SERVER,
+     '  if (_parkedHosts.includes(h)) return true;',
+     '  void _parkedHosts;'),
+
+    ('a parked address is refused by CORS instead, so the app cannot say why', SERVER,
+     "    status: 'error', code: 'HOST_PARKED',",
+     "    status: 'error', code: 'FORBIDDEN',"),
+
+    ('the payment webhooks lose their exemption from the domain rule', SERVER,
+     'app.use((req, res, next) => {\n  if (GUARD_EXEMPT.has(req.path)) return next();\n  const store = _regionCtx.getStore();',
+     'app.use((req, res, next) => {\n  const store = _regionCtx.getStore();'),
+
+    ('the app ignores the parked answer and shows a broken screen instead', CLIENT,
+     "  if (data && data.code === 'HOST_PARKED') { showHostParked(data.message); return data; }",
+     '  /* parked answer ignored */'),
+
+    ('the parked notice sits behind a spinner that never stops', CLIENT,
+     "    const ls = $('loadingScreen'); if (ls) ls.style.display = 'none';",
+     '    /* loading screen left up */'),
+
+    ('a short address stops resolving against the base domain', SERVER,
+     "  for (const l of (r.labels || [])) if (_baseDomain) hosts.push(l + '.' + _baseDomain);",
+     '  void _baseDomain;'),
+
+    ('short addresses are dropped from the region model', SERVER,
+     '    labels: labels.filter((l, i) => labels.indexOf(l) === i),',
+     '    labels: [],'),
+
+    ('www becomes a usable country address', SERVER,
+     "    .filter(l => l && l.length <= 40 && l !== 'www' && !l.startsWith('-') && !l.endsWith('-'));",
+     '    .filter(Boolean);'),
+
+    ('a country address is no longer allowed to reach the backend', SERVER,
+     '  for (const r of _regionsSnapshot) for (const h of regionHostnames(r)) _regionHosts.push(h);',
+     '  /* region hosts not collected */'),
+
+    ('a generated address can collide with another country', SERVER,
+     '    for (const r of regions) for (const l of (r.labels || [])) taken.add(l);',
+     '    for (const l of (region.labels || [])) taken.add(l);'),
+
+    ('a generated address replaces the ones already shared with members', SERVER,
+     '    const next = normalizeRegion(Object.assign({}, region, { labels: (region.labels || []).concat([label]) }), key);',
+     '    const next = normalizeRegion(Object.assign({}, region, { labels: [label] }), key);'),
+
+    ('generated addresses use characters that get misread off a screen', SERVER,
+     "const LABEL_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';",
+     "const LABEL_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';"),
+
+    ('a generated address is predictable', SERVER,
+     '      const cand = randFromAlphabet(LABEL_ALPHABET, len).toLowerCase();',
+     "      const cand = Array.from({length: len}, () => LABEL_ALPHABET[Math.floor(Math.random() * LABEL_ALPHABET.length)]).join('');"),
+
+    ('a mistyped base domain is stored instead of refused', SERVER,
+     "    if ('baseDomain' in updates) {\n      const r = normalizeAllowedHost(updates.baseDomain);",
+     '    if (false) {\n      const r = normalizeAllowedHost(updates.baseDomain);'),
+
+    ('the retired list skips its validator', SERVER,
+     '      const r = sanitizeAllowedOrigins(updates.parkedHosts);',
+     '      const r = { hosts: updates.parkedHosts };'),
+
+    ('the host rules take up to a minute to apply', SERVER,
+     '      try { refreshHostPolicy(await getSettings(DEFAULT_REGION_KEY)); } catch (_) {}',
+     '      /* not applied until the cache expires */'),
+
+    ('the host rules become per-country settings', SERVER,
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];"),
+
+    ('the two host switches stop being coerced to booleans', SERVER,
+     "'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts'];",
+     "'requireReferralCode', 'withdrawWindowEnabled'];"),
+
+    ('a typed address with a bad character is silently repaired', SERVER,
+     '        return res.status(400).json({ status: \'error\', message: `"${t}" is not a usable address. Use lowercase letters, digits and dashes only, not starting or ending with a dash.` });',
+     '        void t;'),
+
+    ('the panel loses its short-address field', ADMIN,
+     "      labels: $('rgLabels').value.split(/[\\s,\\n]+/).filter(Boolean),",
+     '      labels: (cur.labels || []),'),
+
+    ('the panel cannot generate an address', ADMIN,
+     "  const d = await api('/admin/regions/add-label', { key });",
+     "  const d = { status: 'error', message: 'disabled' };"),
+
+    ('the host rules lose their card in Settings', ADMIN,
+     "      baseDomain:$('sBaseDomain').value.trim(), blockRootDomain:$('sBlockRoot').checked,\n      strictRegionHosts:$('sStrictHosts').checked, parkedHosts:$('sParkedHosts').value,",
+     '      /* host rules not sent */'),
+
     ("a deleted country's rates are left behind to haunt the next one", SERVER,
      "    try { await db.collection('settings').doc(settingsDocId(key)).delete(); } catch (_) {}",
      "    /* settings document left behind */"),
@@ -219,7 +331,7 @@ MUTATIONS = [
      "        void ADMIN_GLOBAL_ONLY;"),
 
     ('the panel and the server disagree about which settings are backend-wide', ADMIN,
-     "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];",
+     "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
      "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'brandName'];"),
 
     ('the picked country is no longer stamped on admin reads', ADMIN,
@@ -236,7 +348,7 @@ MUTATIONS = [
 
     ("a country's own web address is not allowed to reach the backend", SERVER,
      """  _regionHosts = [];
-  for (const r of _regionsSnapshot) for (const h of r.hosts) _regionHosts.push(h);
+  for (const r of _regionsSnapshot) for (const h of regionHostnames(r)) _regionHosts.push(h);
   refreshCorsSnapshot();""",
      """  /* region hosts not folded into the CORS allowlist */"""),
 ]

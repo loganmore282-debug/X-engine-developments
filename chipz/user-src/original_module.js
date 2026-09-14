@@ -364,8 +364,39 @@ async function api(path, opts){
   }
   let data;
   try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response from server' }; }
+  // Owner: "l didn't want root domain to work." The server answers every
+  // request from a parked address -- the bare domain, its www. form, or
+  // anything the admin has retired -- with this code. Handled HERE, in the
+  // one place every request passes through, so it cannot matter which call
+  // happens to be first: whatever the app was doing, it stops and says so.
+  if (data && data.code === 'HOST_PARKED') { showHostParked(data.message); return data; }
   if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', message: 'Session changed', stale: true };
   return data;
+}
+// A plain, final screen. Not notify(): a dialog with an OK button implies
+// there is something behind it to go back to, and on this address there is
+// nothing -- no amount of tapping will make the app work here. The loading
+// screen is taken down with it, or this would sit behind a spinner that
+// never stops.
+var _hostParkedShown = false;
+function showHostParked(msg){
+  if (_hostParkedShown) return;
+  _hostParkedShown = true;
+  try {
+    const ls = $('loadingScreen'); if (ls) ls.style.display = 'none';
+    const app = $('app'); if (app) app.style.display = 'none';
+    const auth = $('authScreen'); if (auth) auth.style.display = 'none';
+  } catch(_){}
+  const host = (typeof location !== 'undefined' && location.hostname) || '';
+  const box = document.createElement('div');
+  box.id = 'hostParked';
+  box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--snow-canvas,#fbf1e8);');
+  box.innerHTML = `<div style="max-width:340px;text-align:center;">
+    <div style="font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:700;margin-bottom:12px;">${esc(brandName())}</div>
+    <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'This address does not serve the app.')}</div>
+    ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">You opened <b>${esc(host)}</b>.</div>` : ''}
+  </div>`;
+  document.body.appendChild(box);
 }
 function post(path, body){ return api(path, { method: 'POST', body: JSON.stringify(body || {}) }); }
 

@@ -788,7 +788,7 @@ const REGION_SCOPED_WRITES = ['/admin/settings/update', '/admin/products/save', 
 // the payload here instead -- the picker's own caption says these apply to
 // every country and are edited on the founding one. The server still refuses
 // them, which is what stops a direct POST.
-const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];
+const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];
 function regionByKeyAdmin(key){ return ADMIN_REGIONS.find(r => r.key === (key || ADMIN_REGION)) || ADMIN_REGIONS[0]; }
 function curOf(key){ const r = regionByKeyAdmin(key); return (r && r.currency) || 'UGX'; }
 function adminCur(){ return curOf(ADMIN_REGION); }
@@ -2474,10 +2474,12 @@ async function renderPromoCodes(){
 // and number shape its members type, and the clock its cash-out hours and
 // product windows are judged against. Its RATES and its PRODUCT PRICES are
 // edited on the Settings and Products tabs, with this country picked there.
+var ADMIN_BASE_DOMAIN = 'chipz-platform.com';
 async function loadAdminRegions(){
   const r = await api('/admin/regions');
   if (r && r.status === 'success' && Array.isArray(r.regions) && r.regions.length) {
     ADMIN_REGIONS = r.regions;
+    if (r.baseDomain) ADMIN_BASE_DOMAIN = r.baseDomain;
     // A country that has since been deleted must not stay selected, or
     // every save would be refused with "there is no region".
     if (!ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';
@@ -2515,9 +2517,12 @@ async function renderRegions(){
       <td>+${esc(r.dialCode)}</td>
       <td>${esc(String(r.localLength))} digits${(r.prefixes || []).length ? '<div class="muted">starts ' + esc((r.prefixes || []).join(', ')) + '</div>' : ''}</td>
       <td>${esc(offsetLabel(r.utcOffsetMin))}</td>
-      <td>${(r.hosts || []).length ? (r.hosts || []).map(h => esc(h)).join('<br>') : '<span class="muted">none yet</span>'}</td>
+      <td>${(r.resolvedHosts || r.hosts || []).length
+        ? (r.resolvedHosts || r.hosts).map(h => `<code>${esc(h)}</code>`).join('<br>')
+        : '<span class="muted">none yet</span>'}</td>
       <td>${r.active === false ? '<span class="pill-tag t-bad">Off</span>' : '<span class="pill-tag t-ok">On</span>'}</td>
       <td style="white-space:nowrap">
+        <button class="btn sm ghost" data-gen-region="${esc(r.key)}" title="Mint a new short address for this country, e.g. g26e.${esc(ADMIN_BASE_DOMAIN)}">+ Address</button>
         <button class="btn sm ghost" data-edit-region="${esc(r.key)}">Edit</button>
         ${r.isDefault ? '' : `<button class="btn sm ghost" data-del-region="${esc(r.key)}">Delete</button>`}
       </td>
@@ -2538,6 +2543,8 @@ async function renderRegions(){
   $('newRegion').addEventListener('click', () => regionForm(null));
   document.querySelectorAll('[data-edit-region]').forEach(b =>
     b.addEventListener('click', () => regionForm(regionByKeyAdmin(b.dataset.editRegion))));
+  document.querySelectorAll('[data-gen-region]').forEach(b =>
+    b.addEventListener('click', () => generateRegionLabel(b.dataset.genRegion, b)));
   document.querySelectorAll('[data-del-region]').forEach(b =>
     b.addEventListener('click', () => deleteRegion(b.dataset.delRegion)));
 }
@@ -2569,9 +2576,12 @@ function regionForm(r){
     <input id="rgOff" type="number" min="-720" max="840" value="${esc(String(cur.utcOffsetMin == null ? 180 : cur.utcOffsetMin))}">
     <div class="switch-row" style="margin-top:10px"><span><b>Open for business</b> <span class="muted">(off hides it from its own web address)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="rgActive" ${cur.active === false ? '' : 'checked'} style="width:auto"${cur.isDefault ? ' disabled' : ''}></label></div>
-    <label>Web addresses, one per line</label>
-    <textarea id="rgHosts" rows="3" placeholder="sfhd.chipz-platform.com">${esc((cur.hosts || []).join('\n'))}</textarea>
-    <p class="muted" style="margin:6px 0 0">The subdomain(s) this country is served from. A member opening one of these sees this country's currency and prices. These addresses are also allowed to reach the backend automatically, so there is nothing to add to the domain allowlist.</p>
+    <label>Short addresses <span class="muted" style="font-weight:400">— just the bit in front of ${esc(ADMIN_BASE_DOMAIN)}</span></label>
+    <input id="rgLabels" value="${esc((cur.labels || []).join(', '))}" placeholder="g26e, shy">
+    <p class="muted" style="margin:6px 0 10px">Each one becomes <code>&lt;name&gt;.${esc(ADMIN_BASE_DOMAIN)}</code>. Separate several with commas. Use <b>+ Address</b> on the list to have one generated for you.</p>
+    <label>Full web addresses, one per line <span class="muted" style="font-weight:400">— only for a domain that is not ${esc(ADMIN_BASE_DOMAIN)}</span></label>
+    <textarea id="rgHosts" rows="2" placeholder="chipz-ke.example.com">${esc((cur.hosts || []).join('\n'))}</textarea>
+    <p class="muted" style="margin:6px 0 0">A member opening any of these sees this country's currency and prices. They are allowed to reach the backend automatically, so there is nothing to add to the domain allowlist. <b>DNS still has to point them at the app</b> — a wildcard record for <code>*.${esc(ADMIN_BASE_DOMAIN)}</code> makes every short address work the moment it is saved.</p>
     ${cur.isDefault ? '<p class="muted" style="margin:8px 0 0">This is the founding country. Its id cannot change and it cannot be switched off -- it is where any unrecognised address, and any account with no country of its own, lands.</p>' : ''}
     <div class="row" style="margin-top:14px;justify-content:flex-end;gap:8px">
       <button class="btn ghost" onclick="closeModal()">Cancel</button>
@@ -2587,6 +2597,7 @@ function regionForm(r){
       localLength: Number($('rgLen').value),
       prefixes: $('rgPfx').value.split(/[\s,]+/).filter(Boolean),
       utcOffsetMin: Number($('rgOff').value),
+      labels: $('rgLabels').value.split(/[\s,\n]+/).filter(Boolean),
       hosts: $('rgHosts').value.split(/[\s,\n]+/).filter(Boolean),
       active: $('rgActive').checked,
     } });
@@ -2596,6 +2607,18 @@ function regionForm(r){
     await loadAdminRegions();
     switchTab('regions');
   });
+}
+// The server mints the label, not the panel: it has to be unique across
+// every country, and only the server can see them all at once.
+async function generateRegionLabel(key, btn){
+  const was = btn.textContent;
+  btn.disabled = true; btn.textContent = '…';
+  const d = await api('/admin/regions/add-label', { key });
+  btn.disabled = false; btn.textContent = was;
+  if (d.status !== 'success') return toast(d.message || 'Could not generate an address', 'err');
+  toast('New address: ' + (d.host || d.label), 'ok');
+  await loadAdminRegions();
+  switchTab('regions');
 }
 async function deleteRegion(key){
   const r = regionByKeyAdmin(key);
@@ -2927,6 +2950,17 @@ async function renderSettings(){
       <label style="margin-top:14px">Allowed website domains</label>
       <textarea id="sAllowedOrigins" rows="4" placeholder="chipz-platform.com&#10;www.chipz-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only websites listed here may talk to the backend. Add your own custom domain when you buy one &mdash; <b>one per line</b>, and add the <b>www.</b> version too if you use it. If a site is not allowed, its pages show "Network error" even though the server is perfectly fine, so this is the first place to look when that happens.<br><br>You do <b>not</b> need to add the Render or EdgeOne addresses: <b>onrender.com</b>, <b>edgeone.app</b>, <b>edgeone.site</b> and <b>edgeone.dev</b> are permanently built in and cannot be removed from here. That is on purpose &mdash; it means a mistake in this box can never lock you out of this admin panel. Exact domains only, no <b>*</b> wildcards.</p>
+      <h2 class="sec" style="margin:14px 0 4px">Where the app may be opened from</h2>
+      <label>Base domain</label>
+      <input id="sBaseDomain" value="${esc(v('baseDomain','chipz-platform.com'))}" placeholder="chipz-platform.com">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Every country's short address is built from this &mdash; <code>g26e</code> becomes <code>g26e.&lt;base domain&gt;</code>. Set the short names per country on the <b>Countries</b> tab.</p>
+      <div class="switch-row" style="margin-top:12px"><span><b>The root domain does not serve the app</b> <span class="muted">(the bare domain and its www. form show a short notice instead)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sBlockRoot" ${v('blockRootDomain',true)!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row"><span><b>Only a country's own addresses work</b> <span class="muted">(anything else on the base domain shows the notice &mdash; turn this on once you have a wildcard DNS record)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sStrictHosts" ${v('strictRegionHosts',false)?'checked':''} style="width:auto"></label></div>
+      <label style="margin-top:12px">Retired addresses, one per line</label>
+      <textarea id="sParkedHosts" rows="2" placeholder="old.chipz-platform.com">${esc((s.parkedHosts||[]).join('\n'))}</textarea>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Addresses that must never serve the app, on top of the root domain. Your Render and EdgeOne addresses are permanently exempt, so a mistake here cannot lock you out of this panel.</p>
       <h2 class="sec" style="margin:14px 0 4px">Appearance</h2>
       <label>Number/digit font (every money figure in the app)</label>
       <select id="sNumberFont">${NUMBER_FONT_OPTIONS.map(f=>`<option value="${esc(f)}" ${v('numberFont','Bodoni Moda')===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
@@ -3282,6 +3316,8 @@ async function renderSettings(){
       // and rejects the whole save naming the bad line rather than silently
       // dropping it.
       allowedOrigins:$('sAllowedOrigins').value, maintenanceMode:$('sMaint').checked,
+      baseDomain:$('sBaseDomain').value.trim(), blockRootDomain:$('sBlockRoot').checked,
+      strictRegionHosts:$('sStrictHosts').checked, parkedHosts:$('sParkedHosts').value,
       maintenanceMsg:$('sMaintMsg').value.trim(), numberFont:$('sNumberFont').value,
       openingCountdownEnabled:$('sOpenCd').checked,
       openingCountdownAt:$('sOpenCdAt').value ? new Date($('sOpenCdAt').value).getTime() : 0,

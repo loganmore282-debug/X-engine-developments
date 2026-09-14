@@ -3454,3 +3454,112 @@ still matched). **Check inside the function, not across the file.**
    `ADMIN_GLOBAL_ONLY`, which `test-regions.js` asserts is **exactly** the server's
    `GLOBAL_ONLY_SETTINGS`, so nothing is stripped that should save and nothing is sent
    that will be refused. The server refusal stays as the backstop for a direct POST.
+
+## Round 153 — Short per-country subdomains, and the root domain is closed
+
+Owner: *"bro l wanted like subdomains of different countries, ie g26e for Uganda, shy
+for another, or make when server auto generates subdomains every session of the specific
+country, like l didn't want root domain to work, l used hostinger and onrender for
+connecting."*
+
+Three asks. Two are built; the third is not possible as phrased and the honest version
+is built instead.
+
+### 1. Short addresses, typed as LABELS not hostnames
+A country now holds `labels: ['g26e','x7k2']`, and the hostname is built from them and
+one backend-wide `baseDomain` (default `chipz-platform.com`). Four characters typed per
+address instead of a whole hostname spelled out, and the domain lives in one place
+rather than repeated on every country. `hosts` is still there for an address on a
+DIFFERENT domain.
+
+`regionHostnames(region)` is the single resolver — every hostname a country answers for,
+short and full — and `regionForHost()`, the CORS allowlist (`rebuildRegionHosts()`) and
+the admin panel's display all go through it, so they cannot disagree.
+
+`/admin/regions` returns `resolvedHosts` per country, so the panel prints
+`g26e.chipz-platform.com` rather than leaving the admin to join label and domain in
+their head.
+
+**normalizeRegion() stays permissive; the SAVE route refuses.** That split matters:
+normalizeRegion also runs over whatever is already stored, and refusing there would take
+a live country offline — but an admin who types `he!lo` and is shown `hello` in the list
+has been given an address they did not choose. So `/admin/regions/save` rejects a typed
+label that would not survive normalisation unchanged, by name, and rejects `www`
+explicitly. Whitespace and commas both separate, so `sp ace` is deliberately **two**
+addresses — that field says it takes several.
+
+### 2. "The root domain must not work"
+`blockRootDomain` (default **on**) refuses the bare domain and its `www.` form;
+`parkedHosts` adds any retired address; `strictRegionHosts` (default **off**) narrows it
+further to "only a hostname some country actually claims". All four are
+`GLOBAL_ONLY_SETTINGS` — backend-wide, never per-country — and live in Admin → Settings
+→ **Where the app may be opened from**.
+
+- **The refusal is a 403 with `code: 'HOST_PARKED'`, deliberately NOT a CORS refusal.**
+  A refused origin means the browser drops the reply before any code sees it, so the app
+  could not tell "this address is parked" from "the server is down" and would show the
+  wrong screen. Answering with a code is what lets it say the right thing.
+- **The app handles it in `api()`** — the one place every request passes through — so it
+  cannot matter which call happens to be first. `showHostParked()` takes the loading
+  screen, the app and the sign-in screen down and shows a plain final notice. Not
+  `notify()`: a dialog with an OK button implies there is something behind it to go back
+  to, and on this address there is nothing.
+- **An EMPTY host is never parked**, and `GUARD_EXEMPT` is honoured. Gateway webhooks,
+  the SMS forwarder and Render's health check arrive with no Origin at all, and money
+  that has already left a payer's account must never be lost to a domain rule.
+- **The platform's own hosts are never parked** — `*.onrender.com`, the EdgeOne and
+  Pages previews, localhost and bare IPs (`isInfraHost`). Without that,
+  `strictRegionHosts` would lock the owner out of the very panel the setting is turned
+  off in.
+
+**The real fix is at the host: do not attach the root domain to the `chipz-app` static
+site at all.** This is the backstop for it being attached anyway, and for a direct API
+call made from it.
+
+### 3. "Auto-generate subdomains every session" — what is actually possible
+**A subdomain cannot be minted per session.** A browser can only reach a hostname that
+DNS already answers for and that the host already holds a certificate for, and neither
+happens in the second between tapping a link and the page loading. There is no
+implementation of this that works; it is a property of DNS and TLS, not of this code.
+
+What is real, and what `POST /admin/regions/add-label` does, is mint a fresh unguessable
+label **on demand** — Admin → Countries → **+ Address**. With a wildcard
+`*.chipz-platform.com` record at Hostinger pointed at the Render app, and a wildcard
+custom domain on that Render service, a generated label works the moment it is saved,
+and generating is then effectively unlimited. **Without a wildcard, each label still
+needs its own DNS record and certificate**, so generate a few and add them at the host
+in one sitting rather than expecting one per visit.
+
+Details that matter:
+- the label is minted with `randFromAlphabet` (the CSPRNG), not `Math.random`;
+- the alphabet omits **l, o, 0, 1** — these get read off a screen and typed;
+- uniqueness is checked across **every** country, not just the one being added to: two
+  countries sharing a label would make the currency depend on document order;
+- labels are **added, never replaced** — an address already shared with members has to
+  keep working. Remove one by editing the country.
+
+### Tests
+`test-regions.js` gained five sections: short addresses resolving against the base
+domain and reaching the CORS allowlist, the root-domain block in every configuration
+(including strict mode, the infra exemptions and the empty-host case), the 403-not-CORS
+shape and the app's handling of it, the generator's properties, and the validation of
+all four settings. `test-region-currency.py` gained a fourth browser scenario: every
+request answered 403 HOST_PARKED, and the notice must be on screen with the loader down
+and neither the app nor the sign-in screen showing.
+
+`verify-regions-discriminates.py` is now **70 mutations**, all caught.
+
+**Three of this round's own assertions did not discriminate at first, and each is a
+reusable lesson:**
+1. **The empty-host case passed with `if (!h) return false;` deleted** — with strict mode
+   OFF every later rule says "not parked" anyway, so the early return was unobservable.
+   It is now checked with strict mode **on**, which is the only state where it does work.
+2. **"the loading screen is down" passed with the hide deleted**, because the boot path
+   takes the loader down on its own once it gives up — a sample three seconds later
+   cannot tell "the notice hid it" from "boot hid it eventually". It is now sampled by a
+   MutationObserver **at the instant the notice appears**. (Observe `document`, not
+   `document.documentElement`: an `add_init_script` runs before the root element exists.)
+3. **A re-anchoring edit turned one mutation into a no-op** — a bulk replace of the old
+   `GLOBAL_ONLY_SETTINGS` literal hit both the `old` and the `new` field of the same
+   entry, so it substituted a string for itself and "passed". When re-anchoring a
+   mutation harness, check that `old != new` for every entry.

@@ -366,8 +366,86 @@ let _regionsCacheTs = 0;
 let _regionHosts = [];
 let _mainAllowedHosts = [];
 function refreshCorsSnapshot() {
-  const all = _mainAllowedHosts.concat(_regionHosts);
+  // Parked hostnames are allowed through CORS **on purpose**. They are
+  // refused by hostIsParked() a moment later with a 403 the app can read
+  // and act on -- and it can only read it if the browser does not drop the
+  // response first. A CORS-refused parked address would show the app's
+  // generic "Network error" instead of the notice, which is precisely the
+  // confusion HOST_PARKED exists to avoid. The root domain is in the
+  // built-in allowlist already for the same reason; this covers a custom
+  // one the owner retires later.
+  const all = _mainAllowedHosts.concat(_regionHosts, _parkedHosts, _baseDomain ? [_baseDomain, 'www.' + _baseDomain] : []);
   _corsExtraHosts = all.filter((h, i) => h && all.indexOf(h) === i);
+}
+// ── WHERE THE APP MAY BE OPENED FROM ──
+// A synchronous snapshot of the four host settings, for the same reason
+// _corsExtraHosts is one: this is decided on every request, including
+// preflights, and must never await a database read. Refreshed by
+// getSettings() whenever its own cache refreshes, and immediately on save.
+let _baseDomain = 'chipz-platform.com';
+let _blockRootDomain = true;
+let _parkedHosts = [];
+let _strictRegionHosts = false;
+function refreshHostPolicy(sett) {
+  const bd = normalizeAllowedHost(sett && sett.baseDomain);
+  if (bd.host) _baseDomain = bd.host;
+  _blockRootDomain = (sett && sett.blockRootDomain) !== false;
+  _parkedHosts = (sanitizeAllowedOrigins(sett && sett.parkedHosts).hosts) || [];
+  _strictRegionHosts = !!(sett && sett.strictRegionHosts);
+  rebuildRegionHosts();
+}
+// One hostname, lowercased with the scheme, path and port taken off -- the
+// shape every host comparison in this file is made in.
+function hostOnly(raw) {
+  return String(raw || '').trim().toLowerCase()
+    .replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+}
+// Every hostname a country answers for: the full ones it lists, plus each
+// short LABEL joined to the base domain.
+function regionHostnames(region) {
+  const r = region || {};
+  const hosts = (r.hosts || []).slice();
+  for (const l of (r.labels || [])) if (_baseDomain) hosts.push(l + '.' + _baseDomain);
+  return hosts.filter((h, i) => h && hosts.indexOf(h) === i);
+}
+function rebuildRegionHosts() {
+  _regionHosts = [];
+  for (const r of _regionsSnapshot) for (const h of regionHostnames(r)) _regionHosts.push(h);
+  refreshCorsSnapshot();
+}
+// The platform's OWN service and preview hosts. Never parked, whatever the
+// settings say: these are the addresses the owner administers and tests
+// from, and strictRegionHosts would otherwise lock him out of the panel the
+// setting is turned off in.
+function isInfraHost(h) {
+  if (!h) return false;
+  if (h === 'localhost' || h === '127.0.0.1' || /^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return true;
+  return CORS_ALLOWED_SUFFIXES.some(sfx => h.endsWith(sfx));
+}
+// Owner: "l didn't want root domain to work." Members arrive on their own
+// country's subdomain; the bare domain and its www. form serve nobody, so a
+// request from one is refused outright rather than handed the app.
+//
+// An EMPTY host is never parked. A gateway webhook, the SMS forwarder and
+// Render's own health check arrive with no Origin at all, and money that has
+// already left a payer's account must never be blocked by a domain rule.
+function hostIsParked(rawHost) {
+  const h = hostOnly(rawHost);
+  if (!h) return false;
+  if (isInfraHost(h)) return false;
+  if (_parkedHosts.includes(h)) return true;
+  if (_blockRootDomain && _baseDomain && (h === _baseDomain || h === 'www.' + _baseDomain)) return true;
+  // Only a hostname some country actually claims serves the app. Worth
+  // having once a wildcard DNS record exists, or every made-up label under
+  // the base domain would quietly serve the founding country.
+  if (_strictRegionHosts && !_regionHosts.includes(h)) return true;
+  return false;
+}
+// The hostname the app was loaded from. Origin, because the app is served
+// from a different origin than this API; Host is the fallback for a
+// same-origin or server-to-server call.
+function requestHost(req) {
+  return hostOnly((req && req.headers && (req.headers.origin || req.headers.host)) || '');
 }
 // One region record, with every field forced into the shape the rest of the
 // server relies on. Applied to admin input at save time AND to whatever is
@@ -385,6 +463,14 @@ function normalizeRegion(raw, key) {
   const off = Number(raw && raw.utcOffsetMin);
   const hosts = (Array.isArray(raw && raw.hosts) ? raw.hosts : String((raw && raw.hosts) || '').split(/[\s,\n]+/))
     .map(h => { const r = normalizeAllowedHost(h); return r.host || null; }).filter(Boolean);
+  // Owner: "l wanted like subdomains of different countries, ie g26e for
+  // Uganda, shy for another." A LABEL is just the bit in front of the base
+  // domain -- 'g26e' becomes g26e.chipz-platform.com. Four characters typed
+  // instead of a whole hostname spelled out, and the base domain then lives
+  // in one setting rather than repeated on every country.
+  const labels = (Array.isArray(raw && raw.labels) ? raw.labels : String((raw && raw.labels) || '').split(/[\s,\n]+/))
+    .map(l => String(l == null ? '' : l).trim().toLowerCase().replace(/[^a-z0-9-]/g, ''))
+    .filter(l => l && l.length <= 40 && l !== 'www' && !l.startsWith('-') && !l.endsWith('-'));
   return {
     key: k, name: String((raw && raw.name) || base.name || k).trim().slice(0, 48),
     currency: String((raw && raw.currency) || base.currency || 'UGX').trim().slice(0, 8).toUpperCase(),
@@ -392,6 +478,7 @@ function normalizeRegion(raw, key) {
     prefixes: prefixes.length ? prefixes : (base.prefixes || []).slice(),
     utcOffsetMin: Number.isFinite(off) ? Math.round(off) : (base.utcOffsetMin != null ? base.utcOffsetMin : 180),
     hosts: hosts.filter((h, i) => hosts.indexOf(h) === i),
+    labels: labels.filter((l, i) => labels.indexOf(l) === i),
     // The founding region can never be switched off -- see DEFAULT_REGION.
     active: isDefault ? true : (raw && raw.active) !== false,
     isDefault,
@@ -411,9 +498,7 @@ async function getRegions() {
     _regionsSnapshot = _regionsSnapshot.length ? _regionsSnapshot : [DEFAULT_REGION];
   }
   _regionsCacheTs = Date.now();
-  _regionHosts = [];
-  for (const r of _regionsSnapshot) for (const h of r.hosts) _regionHosts.push(h);
-  refreshCorsSnapshot();
+  rebuildRegionHosts();
   return _regionsSnapshot;
 }
 function defaultRegion() { return _regionsSnapshot[0] || DEFAULT_REGION; }
@@ -436,9 +521,9 @@ function regionByKey(key) {
 // the Render domain, localhost and the admin panel, none of which belong to
 // a country, and all of which must keep working.
 function regionForHost(host) {
-  const h = String(host || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+  const h = hostOnly(host);
   if (!h) return defaultRegion();
-  for (const r of _regionsSnapshot) if (r.active && r.hosts.includes(h)) return r;
+  for (const r of _regionsSnapshot) if (r.active && regionHostnames(r).includes(h)) return r;
   return defaultRegion();
 }
 // Run fn with an explicit region in force. Used by the admin panel (editing
@@ -477,12 +562,16 @@ async function withUserRegion(userId, fn) {
 }
 app.use(async (req, res, next) => {
   let region = defaultRegion();
+  let parked = false;
   try {
+    // The founding region's settings carry the four backend-wide host
+    // controls (base domain, root-domain block, parked list, strict mode).
+    // Read first, and cheap -- it is the same 60s cache every other route
+    // reads -- so the host decision below is never made against defaults.
+    await getSettings(DEFAULT_REGION_KEY);
     await getRegions();
-    // The app is served from a different origin than this API, so the
-    // hostname that identifies the region is the one in Origin. Host is the
-    // fallback for a same-origin or server-to-server call.
-    region = regionForHost(req.headers.origin || req.headers.host);
+    const host = requestHost(req);
+    region = regionForHost(host);
     // A signed-in caller overrides the hostname with their own account's
     // region -- see the money-safety rule at the top of this section.
     if ((req.headers.authorization || '').startsWith('Bearer ')) {
@@ -490,8 +579,38 @@ app.use(async (req, res, next) => {
       const key = uid ? await userRegionKey(uid) : null;
       if (key) region = regionByKey(key);
     }
+    parked = hostIsParked(host);
   } catch (_) {}
-  _regionCtx.run({ region }, next);
+  _regionCtx.run({ region, parked }, next);
+});
+// ── THE ROOT DOMAIN DOES NOT SERVE THE APP ──
+// Owner: "l didn't want root domain to work."
+//
+// The real fix is not attaching the root domain to the static site at all,
+// and that is what should be done at the host. This covers it being
+// attached anyway, and it covers a direct API call made from it: the app
+// gets a definite answer it can act on rather than a silent CORS failure,
+// which looks identical to the server being down.
+//
+// CORS is deliberately NOT used to do this. A refused origin means the
+// browser drops the reply before any code sees it, so the app could not
+// tell "this address is parked" from "the network is broken" and would show
+// the wrong screen. Answering 403 with a code is what lets it say the right
+// thing.
+//
+// GUARD_EXEMPT is honoured for the same reason the maintenance gate honours
+// it: those are gateway webhooks, the SMS forwarder and the health check,
+// reporting money that has already moved. None of them arrives with a
+// browser Origin anyway, but a domain rule must never be the thing that
+// loses a payment.
+app.use((req, res, next) => {
+  if (GUARD_EXEMPT.has(req.path)) return next();
+  const store = _regionCtx.getStore();
+  if (!store || !store.parked) return next();
+  return res.status(403).json({
+    status: 'error', code: 'HOST_PARKED',
+    message: 'This address does not serve the app. Please open the link for your own country.',
+  });
 });
 
 // ── MAINTENANCE GATE ──
@@ -594,6 +713,33 @@ const DEFAULT_SETTINGS = {
   // panel (Settings -> Allowed website domains). ADDED to the built-in
   // allowlist, never replacing it -- see _corsExtraHosts.
   allowedOrigins: [],
+  // ── WHERE THE APP IS ALLOWED TO BE OPENED FROM ──
+  // Owner: "l wanted like subdomains of different countries, ie g26e for
+  // Uganda, shy for another... l didn't want root domain to work."
+  //
+  // The domain every country's short address hangs off. A country lists
+  // LABELS ('g26e', 'shy') and the server builds the hostname from them and
+  // this, so adding an address is four characters typed, not a full domain
+  // spelled out in two places.
+  baseDomain: 'chipz-platform.com',
+  // The bare domain and its www. form serve nobody: every member arrives on
+  // their own country's subdomain. With this on, a request from the root
+  // domain is refused with HOST_PARKED and the app shows a short notice
+  // instead of booting. Belt to the braces of simply not attaching the root
+  // domain to the site at all, which is the real fix -- this is what covers
+  // it being attached anyway, and direct API calls made from it.
+  blockRootDomain: true,
+  // Extra hostnames that must never serve the app, beyond the root domain --
+  // an old address being retired, a domain parked for later.
+  parkedHosts: [],
+  // With this on, ONLY a hostname some country actually claims serves the
+  // app; anything else on the base domain is treated as parked. Worth
+  // turning on once a wildcard DNS record exists, or every made-up label
+  // would quietly serve the founding country. Off by default so no existing
+  // address can stop working the moment this ships. The platform's own
+  // service hosts (*.onrender.com and the preview hosts) are always exempt,
+  // or this would lock the owner out of the URL he administers from.
+  strictRegionHosts: false,
   maintenanceMode: false, maintenanceMsg: '',
   // Owner: "let's establish a timer ie like saying snow opening in
   // 23:59:34... just near maintenance mode." A pre-launch gate, separate
@@ -763,7 +909,7 @@ const DEFAULT_PRODUCTS = [
 // payment providers, the cash-out window, the turntable bands -- is
 // per-region, which is what the owner asked for ("all settings as these of
 // ugx").
-const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];
+const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];
 // Which settings document belongs to which region. The founding region
 // keeps 'main' -- the document every deployment already has, so nothing
 // migrates -- and every other region gets its own, holding only what it has
@@ -823,7 +969,10 @@ async function getSettings(regionKey) {
     // backend-wide list, and the region hosts refreshCorsSnapshot() folds in
     // alongside it come from getRegions().
     _mainAllowedHosts = (sanitizeAllowedOrigins(stored.allowedOrigins).hosts) || [];
-    refreshCorsSnapshot();
+    // The four host controls come from 'main' for the same reason: they
+    // govern the whole backend, not one country (see GLOBAL_ONLY_SETTINGS).
+    // This calls refreshCorsSnapshot() itself, via rebuildRegionHosts().
+    refreshHostPolicy(Object.assign({}, DEFAULT_SETTINGS, stored));
     _settingsCacheTs = Date.now();
     return merged;
   } catch (_) {
@@ -6845,7 +6994,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -6907,6 +7056,23 @@ app.post('/admin/settings/update', async (req, res) => {
       const r = sanitizeAllowedOrigins(updates.allowedOrigins);
       if (r.error) return res.status(400).json({ status: 'error', message: r.error });
       updates.allowedOrigins = r.hosts;
+    }
+    // Hostnames the app must never be served from, same validator as the
+    // allowlist -- one bad line is named rather than silently dropped.
+    if ('parkedHosts' in updates) {
+      const r = sanitizeAllowedOrigins(updates.parkedHosts);
+      if (r.error) return res.status(400).json({ status: 'error', message: r.error });
+      updates.parkedHosts = r.hosts;
+    }
+    // The domain every country's short address hangs off. Refused rather
+    // than coerced: a mistyped base domain silently stops every country's
+    // subdomain resolving at once, which is the whole platform, and the
+    // symptom (HOST_PARKED everywhere) points nowhere near the cause.
+    if ('baseDomain' in updates) {
+      const r = normalizeAllowedHost(updates.baseDomain);
+      if (r.error) return res.status(400).json({ status: 'error', message: r.error });
+      if (r.skip) return res.status(400).json({ status: 'error', message: 'The base domain cannot be blank -- it is what every country\'s short address is built from.' });
+      updates.baseDomain = r.host;
     }
     // The app name reaches every screen, so it is the one free-text setting
     // worth policing. Trim and cap it, refuse an empty one (an app with no
@@ -6982,6 +7148,13 @@ app.post('/admin/settings/update', async (req, res) => {
     // being told "wait a minute" while staring at a broken page is how a
     // working fix gets mistaken for a broken one.
     if ('allowedOrigins' in updates) { _mainAllowedHosts = updates.allowedOrigins; refreshCorsSnapshot(); }
+    // Apply the host rules NOW rather than up to 60s later: the owner saves
+    // these precisely because an address is behaving wrongly, and being
+    // told to wait a minute while staring at it is how a working fix gets
+    // mistaken for a broken one. Same reasoning as allowedOrigins above.
+    if (['baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'].some(k => k in updates)) {
+      try { refreshHostPolicy(await getSettings(DEFAULT_REGION_KEY)); } catch (_) {}
+    }
     logAdminAction(req, 'settings_updated', { region: targetRegion.key, fields: Object.keys(updates), cleared: clearFields });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save settings' }); }
@@ -6995,7 +7168,16 @@ app.get('/admin/regions', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     _regionsCacheTs = 0;
-    res.json({ status: 'success', regions: await getRegions(), defaultKey: DEFAULT_REGION_KEY });
+    const regions = await getRegions();
+    res.json({
+      status: 'success', defaultKey: DEFAULT_REGION_KEY,
+      // Each country's RESOLVED addresses alongside its raw fields, so the
+      // panel prints g26e.chipz-platform.com rather than leaving the admin
+      // to join the label to the base domain in their head.
+      regions: regions.map(r => Object.assign({}, r, { resolvedHosts: regionHostnames(r) })),
+      baseDomain: _baseDomain, blockRootDomain: _blockRootDomain,
+      parkedHosts: _parkedHosts.slice(), strictRegionHosts: _strictRegionHosts,
+    });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load regions' }); }
 });
 const REGION_KEY_RE = /^[a-z0-9][a-z0-9-]{0,23}$/;
@@ -7031,10 +7213,31 @@ app.post('/admin/regions/save', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `Dialling code ${r.dialCode} is already used by ${dialClash.name} (${dialClash.key}). Each region needs its own.` });
     // A hostname can only belong to one region, or regionForHost() would
     // pick whichever happened to sort first and the currency shown would
-    // depend on document order.
-    for (const h of r.hosts) {
-      const owner = existing.find(o => o.key !== key && o.hosts.includes(h));
+    // depend on document order. Checked against the RESOLVED hostnames, so
+    // a short label and somebody else's full hostname cannot collide either.
+    const mine = regionHostnames(r);
+    for (const h of mine) {
+      const owner = existing.find(o => o.key !== key && regionHostnames(o).includes(h));
       if (owner) return res.status(400).json({ status: 'error', message: `${h} already belongs to ${owner.name} (${owner.key}).` });
+    }
+    if (r.labels.length > 24)
+      return res.status(400).json({ status: 'error', message: 'A country can hold at most 24 short addresses.' });
+    // A short address that does not survive normalisation unchanged is
+    // REFUSED here rather than quietly repaired. normalizeRegion() has to
+    // stay permissive -- it also runs over whatever is already stored, and
+    // refusing there would take a country offline -- but an admin typing
+    // "he!lo" and being shown "hello" in the list afterwards has been given
+    // an address they did not choose, which is the same class of mistake
+    // the cash-out times are refused for.
+    const typed = (Array.isArray(raw.labels) ? raw.labels : String(raw.labels || '').split(/[\s,\n]+/))
+      .map(l => String(l == null ? '' : l).trim()).filter(Boolean);
+    for (const t of typed) {
+      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(t.toLowerCase()))
+        return res.status(400).json({ status: 'error', message: `"${t}" is not a usable address. Use lowercase letters, digits and dashes only, not starting or ending with a dash.` });
+      if (t.toLowerCase() === 'www')
+        return res.status(400).json({ status: 'error', message: '"www" cannot be a country address -- it is the root domain, which does not serve the app.' });
+      if (t.length > 40)
+        return res.status(400).json({ status: 'error', message: `"${t}" is too long for an address (40 characters maximum).` });
     }
     await db.collection('regions').doc(key).set(r, { merge: false });
     _regionsCacheTs = 0;
@@ -7043,6 +7246,51 @@ app.post('/admin/regions/save', async (req, res) => {
     logAdminAction(req, 'region_saved', { key, currency: r.currency, hosts: r.hosts.length });
     res.json({ status: 'success', region: r });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this region' }); }
+});
+// Owner: "or make when server auto generates subdomains every session of
+// the specific country."
+//
+// A subdomain cannot be minted per SESSION -- a browser can only reach a
+// hostname that DNS already answers for and that the host already holds a
+// certificate for, and neither happens in the second between tapping a link
+// and the page loading. What is real, and what this does, is mint a fresh
+// unguessable label on demand: with a wildcard record (*.<base domain>)
+// pointed at the app and a wildcard custom domain on the host, the label
+// works the moment it is saved. Without one, each label still needs its own
+// DNS record and certificate, so generate a few and add them at the host in
+// one sitting rather than expecting one per visit.
+//
+// Labels are ADDED, never replaced -- an address already shared with members
+// has to keep working. Remove an old one by editing the country.
+const LABEL_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789'; // no l/o/0/1: these get read off a screen and typed
+app.post('/admin/regions/add-label', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const key = String(req.body.key || '').trim().toLowerCase();
+  const len = Math.min(12, Math.max(3, Math.round(Number(req.body.length)) || 4));
+  try {
+    _regionsCacheTs = 0;
+    const regions = await getRegions();
+    const region = regions.find(x => x.key === key);
+    if (!region) return res.status(400).json({ status: 'error', message: `There is no country "${key}".` });
+    if ((region.labels || []).length >= 24)
+      return res.status(400).json({ status: 'error', message: 'This country already holds 24 short addresses. Remove one first.' });
+    // Unique across EVERY country, not just this one -- two countries
+    // sharing a label would make the currency depend on document order.
+    const taken = new Set();
+    for (const r of regions) for (const l of (r.labels || [])) taken.add(l);
+    let label = null;
+    for (let tries = 0; tries < 60 && !label; tries++) {
+      const cand = randFromAlphabet(LABEL_ALPHABET, len).toLowerCase();
+      if (!taken.has(cand)) label = cand;
+    }
+    if (!label) return res.status(500).json({ status: 'error', message: 'Could not find an unused address. Try a longer one.' });
+    const next = normalizeRegion(Object.assign({}, region, { labels: (region.labels || []).concat([label]) }), key);
+    await db.collection('regions').doc(key).set(next, { merge: false });
+    _regionsCacheTs = 0;
+    await getRegions();
+    logAdminAction(req, 'region_label_added', { key, label });
+    res.json({ status: 'success', label, host: _baseDomain ? label + '.' + _baseDomain : label, region: next });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not generate an address' }); }
 });
 app.post('/admin/regions/delete', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
