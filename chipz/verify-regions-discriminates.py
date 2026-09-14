@@ -33,9 +33,16 @@ def write(p, s):
 
 
 def run_test():
-    r = subprocess.run([  'node', 'test-regions.js' ], cwd=ROOT,
-                       capture_output=True, text=True)
-    return r.returncode, (r.stdout + r.stderr)
+    # Two harnesses, because the mutations below span both: the region/link
+    # work is pinned by test-regions.js and the check-in money path by
+    # test-checkin-idempotency.js. A mutation is detected if EITHER fails.
+    out = ''
+    worst = 0
+    for f in ('test-regions.js', 'test-checkin-idempotency.js'):
+        r = subprocess.run(['node', f], cwd=ROOT, capture_output=True, text=True)
+        out += r.stdout + r.stderr
+        worst = worst or r.returncode
+    return worst, out
 
 
 # (label, file, old, new) -- `old` must appear exactly once.
@@ -732,6 +739,56 @@ MUTATIONS = [
     ('the panel hides the incomplete-totals warning', ADMIN,
      "  const truncWarn = s.truncated ? `<div style=",
      "  const truncWarn = false ? `<div style="),
+
+    # ── the daily check-in: one day, one credit ──
+    # Audit finding, CONFIRMED: eligibility was rebuilt from the LEDGER while
+    # the claim was written to the USER DOCUMENT, so a ledger write that
+    # failed after the money landed let the retry credit the same day again.
+    ('the check-in gate reads only the ledger, not the durable claim', SERVER,
+     "      if (claimDay === todayKey || lastKey === todayKey) {",
+     "      if (lastKey === todayKey) {"),
+
+    ('the check-in claim is not written with the money', SERVER,
+     """      const applied = await withLock('bal:' + uid, () => ref.updateIf(
+        { lastCheckinClaimDay: { $ne: todayKey } },
+        {
+          walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus),
+          lastCheckinAt: now, checkinStreak: streak, lastCheckinClaimDay: todayKey,
+        }
+      ));""",
+     """      const applied = await withLock('bal:' + uid, () => ref.update({
+        walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus),
+        lastCheckinAt: now, checkinStreak: streak,
+      }).then(() => true));"""),
+
+    ('a concurrent check-in is no longer refused by the conditional write', SERVER,
+     "      if (!applied) {\n        result = { code: 400, body: { status: 'error', message: 'Already checked in today. Come back after midnight.', nextCheckinAt: eatNextMidnight(now) } };\n        return;\n      }",
+     "      if (!applied) { /* proceed anyway */ }"),
+
+    ('the check-in ledger row gets a random id, so it cannot be repaired', SERVER,
+     """        await db.collection('transactions').doc(`checkin:${uid}:${todayKey}`).createIfAbsent({
+          userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
+          amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });""",
+     """        await db.collection('transactions').add({
+          userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
+          amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });"""),
+
+    ('a failed check-in ledger write rolls the claim back, re-opening the double credit', SERVER,
+     """      } catch (ledgerErr) {
+        console.error(`MONEY-SAFETY: check-in bonus ${bonus} credited to ${uid} for ${todayKey} but its transaction row failed; the claim stands to prevent a double credit.`, ledgerErr.message);
+      }""",
+     """      } catch (ledgerErr) {
+        await ref.update({ lastCheckinClaimDay: null }).catch(() => {});
+        throw ledgerErr;
+      }"""),
+
+    ('the missing check-in ledger row is never repaired, so the streak breaks', SERVER,
+     """          await db.collection('transactions').doc(`checkin:${uid}:${todayKey}`).createIfAbsent({
+            userId: uid, type: 'checkin', description: `Daily check-in, day ${u.checkinStreak || 1}`,""",
+     """          await db.collection('transactions').doc(`skip:${uid}:${todayKey}`).createIfAbsent({
+            userId: uid, type: 'noop', description: `Daily check-in, day ${u.checkinStreak || 1}`,"""),
 ]
 
 

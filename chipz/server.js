@@ -3403,7 +3403,11 @@ function defaultProfileDoc(phone, regionKey) {
   return {
     regionKey: String(regionKey || currentRegionKey() || DEFAULT_REGION_KEY),
     phone: phone || '', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
-    checkinStreak: 0, lastCheckinAt: null,
+    // lastCheckinClaimDay is the durable "this EAT day is already claimed"
+    // marker, written atomically with the check-in credit. Kept separate from
+    // lastCheckinAt because reconcilers recompute that one from the ledger --
+    // see the /checkin handler's own comment.
+    checkinStreak: 0, lastCheckinAt: null, lastCheckinClaimDay: null,
     teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, teamCommission: 0,
     referredBy: null, referralCode: null, registrationDone: false, status: 'active',
     createdAt: FieldValue.serverTimestamp()
@@ -3680,8 +3684,47 @@ app.post('/checkin', async (req, res) => {
       // window (see computeCheckinStreak's own header comment for why).
       const todayKey = eatDayKey(new Date(now));
       const lastKey = real.lastCheckinAt ? eatDayKey(new Date(real.lastCheckinAt)) : null;
-      if (lastKey === todayKey) {
+      // ── THE DURABLE CLAIM IS A FIELD OF ITS OWN ──
+      // Audit finding, CONFIRMED: this gate used to be `lastKey === todayKey`
+      // alone -- and `lastKey` comes from computeCheckinStreak(), which reads
+      // the TRANSACTIONS LEDGER, while the claim was written to the USER
+      // DOCUMENT. Two different facts. So if the wallet credit landed and the
+      // ledger row then failed, the endpoint returned 500, the retry
+      // reconstructed eligibility from a ledger with no row for today, and
+      // the SAME day's check-in credited the wallet again. Repeatable once
+      // per failed ledger write. withLock does not help: the retry is a new
+      // request, arriving after that lock has already been released.
+      //
+      // `lastCheckinClaimDay` is now the claim, written in the same atomic
+      // user-document update as the money. It is deliberately NOT
+      // `lastCheckinAt`: that field is recomputed from the ledger by
+      // /admin/user/reconcile-checkin and by recountAllTotals's freshness
+      // pass, so a reconciler could roll the claim back to a ledger that is
+      // missing today's row and re-open the same hole. Nothing else in this
+      // file writes lastCheckinClaimDay.
+      //
+      // The LEDGER is still what the streak NUMBER is derived from -- that is
+      // its original job (see computeCheckinStreak's header) and is unchanged.
+      // Only the "may I claim today" question moved.
+      const claimDay = u.lastCheckinClaimDay || null;
+      // Both are checked, not just the new field: members who claimed before
+      // this field existed have no claimDay, and their ledger row for today
+      // is the only evidence of it. Without the second half of this test,
+      // deploying the fix would hand everyone who had already checked in that
+      // day one extra check-in.
+      if (claimDay === todayKey || lastKey === todayKey) {
         logSecurityEvent(uid, 'checkin_already_claimed', null);
+        // Repair a ledger row that went missing when its write failed after
+        // the credit. Deterministic id, so this cannot duplicate a row that
+        // is already there -- and it restores the streak, which would
+        // otherwise reset tomorrow because the ledger has a hole in it.
+        try {
+          await db.collection('transactions').doc(`checkin:${uid}:${todayKey}`).createIfAbsent({
+            userId: uid, type: 'checkin', description: `Daily check-in, day ${u.checkinStreak || 1}`,
+            amount: Number(sett.dailyCheckin) || 0, status: 'success',
+            date: nowStr().date, time: nowStr().time, createdAt: FieldValue.serverTimestamp(),
+          });
+        } catch (_) {}
         result = { code: 400, body: { status: 'error', message: 'Already checked in today. Come back after midnight.', nextCheckinAt: eatNextMidnight(now) } };
         return;
       }
@@ -3689,12 +3732,37 @@ app.post('/checkin', async (req, res) => {
       const streak = (lastKey === yesterdayKey) ? real.streak + 1 : 1;
       const bonus = Number(sett.dailyCheckin) || 0;
       // Nested under bal:<uid> -- see settleInvestmentIfDue's own comment.
-      await withLock('bal:' + uid, () => ref.update({ walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckinAt: now, checkinStreak: streak }));
+      //
+      // CONDITIONAL, not a blind update: the claim and the money move in one
+      // atomic document write, and only if this day has not already been
+      // claimed. The read above can be stale (a concurrent request, a retry);
+      // this cannot. If it does not apply, somebody else already claimed
+      // today and nothing has been credited.
+      const applied = await withLock('bal:' + uid, () => ref.updateIf(
+        { lastCheckinClaimDay: { $ne: todayKey } },
+        {
+          walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus),
+          lastCheckinAt: now, checkinStreak: streak, lastCheckinClaimDay: todayKey,
+        }
+      ));
+      if (!applied) {
+        result = { code: 400, body: { status: 'error', message: 'Already checked in today. Come back after midnight.', nextCheckinAt: eatNextMidnight(now) } };
+        return;
+      }
       const { date, time } = nowStr();
-      await db.collection('transactions').add({
-        userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
-        amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-      });
+      // Independently idempotent, and deliberately NOT allowed to undo the
+      // claim. The spendable balance is already correct; re-opening the claim
+      // because a bookkeeping row failed is the exact double-credit path this
+      // whole change exists to close. Surface it loudly instead -- and the
+      // deterministic id means the next attempt today repairs it.
+      try {
+        await db.collection('transactions').doc(`checkin:${uid}:${todayKey}`).createIfAbsent({
+          userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
+          amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });
+      } catch (ledgerErr) {
+        console.error(`MONEY-SAFETY: check-in bonus ${bonus} credited to ${uid} for ${todayKey} but its transaction row failed; the claim stands to prevent a double credit.`, ledgerErr.message);
+      }
       result = { code: 200, body: { status: 'success', bonus, streak, nextCheckinAt: eatNextMidnight(now) } };
     });
     res.status(result.code).json(result.body);

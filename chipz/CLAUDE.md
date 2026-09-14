@@ -4163,3 +4163,86 @@ Kept the tail match exact (`endswith('/?ref=Gy2f')`) rather than loosening it to
 quietly start passing again if the path form ever came back.
 
 **Full suite now green**, including `test-round-fixes.py` and `test-referral-share.py`.
+
+## Round 160 — The check-in double-credit: eligibility read one fact, the claim wrote another
+
+A second Codex audit reported **one** CONFIRMED critical finding and, to its credit,
+**did not commit it** — "I did not push an inadequately tested money-code change."
+`codex/audit-2` is still at `defd4f5`. The finding was real; it is fixed here.
+
+### The bug
+`/checkin`'s gate was `if (lastKey === todayKey)`, where `lastKey` comes from
+`computeCheckinStreak()` — which reads the **transactions ledger**. The claim was written
+to the **user document** (`lastCheckinAt`). **Two different facts.** So:
+
+1. member taps Check in; the wallet credit lands;
+2. the `transactions.add()` for it throws (a write error, a disconnect mid-request);
+3. the endpoint answers 500 and the app offers the button again;
+4. the retry rebuilds eligibility from a ledger that has **no row for today**, sees the
+   day as free, and credits the bonus **again**.
+
+Repeatable once per failed ledger write. **`withLock` cannot help**: the retry is a new
+request, arriving long after that lock was released. On two Render instances there is no
+shared lock at all.
+
+### The fix — three parts, and each is load-bearing
+1. **`lastCheckinClaimDay` is the claim**, written in the *same atomic document update* as
+   the money. Deliberately **not** `lastCheckinAt`: that field is recomputed from the
+   ledger by `/admin/user/reconcile-checkin` and by `recountAllTotals`'s freshness pass, so
+   a reconciler could roll the claim back onto a ledger with a hole in it and re-open the
+   identical hole. Nothing else in `server.js` writes `lastCheckinClaimDay`.
+2. **The write is conditional** — `ref.updateIf({ lastCheckinClaimDay: { $ne: todayKey } }, …)`
+   — so a stale read cannot pay twice, and a request whose write does not apply is
+   **refused (400), not told it won**. The pre-check stays, but it is a courtesy; the
+   conditional write is the guarantee. Same discipline as the turntable's daily spin.
+3. **The ledger row has a deterministic id** (`checkin:<uid>:<dayKey>`) written with
+   `createIfAbsent`, and its failure **must not undo the claim** — re-opening a claim
+   because a bookkeeping row failed *is* the double-credit path. It logs
+   `MONEY-SAFETY:` loudly instead, and the *next* attempt that day **repairs the missing
+   row** (same deterministic id), which also saves the streak — the ledger is still what
+   the streak number is derived from, so a hole there would silently reset it tomorrow.
+
+**Both halves of the gate are checked** (`claimDay === todayKey || lastKey === todayKey`).
+Members who checked in before this field existed have no `claimDay`, and their ledger row
+is the only evidence of it — without the second half, **deploying the fix would hand
+everyone who had already checked in that day one extra check-in.**
+
+### Two test-harness lessons, and one is the reason the fix is trustworthy
+**A pre-check hides the conditional write from your test.** The mutation
+*"a concurrent check-in is no longer refused by the conditional write"* went **MISSED** at
+first: the test never reached a *losing* `updateIf`, because the read-then-check refused
+first. Both the stub and the case had to change —
+
+- **a snapshot must be a frozen COPY** (`const frozen = {...u}`; live `ref`, frozen data),
+  or the second reader observes the first one's write and correctly bails out, making every
+  conditional-write mutation look harmless — the same lesson `test-spin-sources.js`
+  already records, hit again in a new place;
+- **a barrier must force the interleaving** — two `build(state)` calls give two *processes*
+  with separate in-process locks (the Render case the conditional write exists for), held
+  at the read until both have arrived. Result: wallet 500 not 1000, one ledger row, one
+  200 and one **400**.
+
+`test-checkin-idempotency.js` lifts the real handler and `computeCheckinStreak()` into a
+sandbox over a stub db whose ledger can be made to fail on demand: one credit; a second
+attempt pays nothing; **the reported defect** (ledger fails after the credit → the retry
+credits nothing and the row is repaired); five retries still pay once; the two-process
+race; and a legacy member with a ledger row but no claim field is refused.
+
+`verify-regions-discriminates.py` now runs **both** harnesses per mutation (worst exit code
+wins) and carries 6 check-in mutations — gate back to ledger-only, claim not written with
+the money, `if (!applied)` removed, a random ledger id, the claim rolled back on a ledger
+failure, the repair row renamed. **163 mutations, all caught.**
+
+### Reviewing an audit that did not commit
+The right order, and it is cheaper than reviewing a push: read the finding, **confirm it
+against the code yourself** (this one was exactly as described), fix it, then prove the fix
+discriminates by re-breaking it one way at a time. An audit that hands over a finding and
+stops is more useful than one that pushes a repair to an auto-deploying branch.
+
+### Fresh container: the Python suite needs two installs
+Every `test-*.py` failed identically on the first run of this session — `ModuleNotFoundError:
+playwright`, then `PIL`. The container is rebuilt per session and neither is preinstalled:
+`pip install playwright pillow`. Chromium itself **is** there (`/opt/pw-browsers`,
+`PLAYWRIGHT_BROWSERS_PATH` already set) — never run `playwright install`. **46 harnesses
+failing at once is an environment problem, not a regression**; run one directly and read
+its traceback before believing the batch.
