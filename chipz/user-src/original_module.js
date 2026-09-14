@@ -2393,12 +2393,29 @@ function paintReferral(){
   // with index.html: render.yaml carries a rewrite scoped to /refCode=* for
   // chipz-app. If the frontend is uploaded to EdgeOne instead, the same
   // single-path rewrite has to be configured there or every invite link 404s.
-  // shareOrigin(), not location.origin: the host is a random one of this
-  // member's own country's short addresses, re-picked every time this screen
-  // is opened, so invites are spread across all of them instead of every
-  // link naming whichever address he happens to be browsing on. Falls back
-  // to this origin, so the link is never broken.
-  const link = code ? `${shareOrigin()}/refCode=${encodeURIComponent(code)}` : '';
+  // ── WHY THIS IS "/?ref=" AND NOT "/refCode=" ──
+  // Owner, on a live subdomain: "https://gigs.myapp.com/refCode=RC9J2N ...
+  // it returns not found, why why".
+  //
+  // Because "/refCode=RC9J2N" is a real URL PATH. The host goes looking for
+  // a file with that name, does not find one, and answers 404. Making it
+  // work needs a rewrite rule (path -> index.html) configured on the host,
+  // and that rule is the single most fragile thing in the whole invite
+  // chain: it lives in render.yaml, which only applies if the service was
+  // created from that blueprint, it has to be re-added by hand on any other
+  // host, and when it is missing NOTHING looks wrong until an invite is
+  // tapped -- the app itself loads fine, because "/" serves index.html by
+  // default.
+  //
+  // "/?ref=CODE" is a query string on "/", so it needs no rule anywhere and
+  // cannot 404 on any host, ever. It is barely longer, and the 404 also
+  // killed the LINK PREVIEW: a crawler that gets a 404 page never reads the
+  // og: tags, so shared invites showed no title and no picture either.
+  //
+  // Every older shape still parses -- see captureReferralFromUrl(), which
+  // reads ?ref=, #...?ref= and /refCode= -- so invites already sent to real
+  // people keep working.
+  const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';
   let html = `
 <div class="page-head"><h2>Referral</h2></div>
 <div class="ref-banner">

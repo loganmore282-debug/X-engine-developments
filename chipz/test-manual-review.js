@@ -231,12 +231,27 @@ function run(text, order = ORDER) {
     'with both Approve and Reject available on a review row');
 
   // ── the referral link ──
-  console.log('\n— the invite link is /refCode= and nothing else —');
+  // This used to require "/refCode=<code>" and REFUSE "?ref=". That was
+  // pinning the bug: "/refCode=CODE" is a URL path, so the host answers 404
+  // unless a rewrite rule is configured on it, and when that rule is missing
+  // nothing looks wrong until an invite is tapped -- "/" serves index.html
+  // regardless. Reported live: "https://gigs.myapp.com/refCode=RC9J2N ... it
+  // returns not found", and the 404 killed the link PREVIEW with it, because
+  // a crawler that gets a 404 never reads the og: tags.
+  //
+  // "/?ref=CODE" is a query string on "/", so it needs no rule on any host
+  // and cannot 404. The app still PARSES all three shapes (see
+  // test-regions.js, which runs the parser over each) so invites already
+  // sent to real people keep working -- what changed is only what new links
+  // are built as.
+  console.log('\n— the invite link cannot 404 on any host —');
   const linkLine = (mod.match(/const link = code \?[^\n]*/) || [''])[0];
-  check(/\/refCode=\$\{encodeURIComponent\(code\)\}/.test(linkLine),
-    `the link is <origin>/refCode=<code>  --  ${linkLine.trim()}`);
-  check(!/#pages\/register/.test(linkLine) && !/\?ref=/.test(linkLine),
-    'with none of the older wording left in it');
+  check(/\/\?ref=\$\{encodeURIComponent\(code\)\}/.test(linkLine),
+    `the link is <origin>/?ref=<code>  --  ${linkLine.trim()}`);
+  check(!/refCode=/.test(linkLine),
+    'not a path shape that needs a host rewrite rule to resolve');
+  check(/shareOrigin\(\)/.test(linkLine),
+    'and built on the rotated address, not whichever one he is browsing on');
   check(/\/refCode=\(\[\^\/\?#\]\+\)/.test(mod),
     'and the app reads that code back off the path');
   // Links already sent to real people must keep working.

@@ -675,8 +675,8 @@ MUTATIONS = [
      "host: pool[Math.floor(Math.random() * pool.length)]"),
 
     ('the invite link goes back to the address he is browsing on', CLIENT,
-     "  const link = code ? `${shareOrigin()}/refCode=${encodeURIComponent(code)}` : '';",
-     "  const link = code ? `${location.origin}/refCode=${encodeURIComponent(code)}` : '';"),
+     "  const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';",
+     "  const link = code ? `${location.origin}/?ref=${encodeURIComponent(code)}` : '';"),
 
     ('the rotated address is never fetched', CLIENT,
      "  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);",
@@ -689,6 +689,19 @@ MUTATIONS = [
     ('an empty pick blanks the invite link instead of falling back', CLIENT,
      "  return h ? (location.protocol + '//' + h) : location.origin;",
      "  return location.protocol + '//' + h;"),
+
+    # ── the invite link shape, and the link preview ──
+    ('the invite link goes back to a path that 404s unless a rewrite exists', CLIENT,
+     "  const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';",
+     "  const link = code ? `${shareOrigin()}/refCode=${encodeURIComponent(code)}` : '';"),
+
+    ('the app stops reading the older /refCode= links already sent to people', CLIENT,
+     "      const m = /\\/refCode=([^/?#]+)/.exec(location.pathname);",
+     "      const m = null;"),
+
+    ('the app stops reading the ?ref= links it now hands out', CLIENT,
+     "    let ref = search.get('ref');",
+     "    let ref = null;"),
 ]
 
 

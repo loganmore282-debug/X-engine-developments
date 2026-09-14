@@ -153,9 +153,45 @@ console.log('    og:image =', ogImage);
 ck(!!ogImage, 'the built page carries an og:image');
 ck(/^https:\/\//.test(ogImage || ''),
    'it is an absolute URL — a crawler cannot resolve a relative one');
+// ── og:image IS A STATIC FILE, DELIBERATELY NOT A BACKEND ROUTE ──
+// This used to assert the opposite: that og:image resolved to a registered
+// server route. That was the bug. Pointed at the backend it had two ways to
+// show no picture at all, and did: serveBrandAsset() answers 404 when
+// nothing has been uploaded in the admin panel, and even once uploaded that
+// host sleeps -- a crawler allows a link preview a few seconds and a cold
+// start takes far longer. Reported as "all those route domains aren't
+// fetching link preview image".
 const ogPath = (ogImage || '').replace(/^https?:\/\/[^/]+/, '');
-ck(routes[ogPath] === 'link-preview', `og:image → ${ogPath} is the link-preview route`);
+ck(!routes[ogPath],
+   'og:image is NOT a backend route -- that endpoint 404s until something is uploaded, and sleeps');
+ck(/^https:\/\/chipz-app\.onrender\.com\//.test(ogImage || ''),
+   'it names the STATIC site, whose host never changes and never sleeps');
 const lp = BRAND_ASSET_SLOTS['link-preview'];
+// The file has to actually be there. Static hosting cannot 404 a file that
+// exists -- and cannot serve one that does not.
+const ogFile = __dirname + '/user' + ogPath;
+ck(fs.existsSync(ogFile), `and it is a real file shipped with the site: user${ogPath}`);
+// Its REAL pixel size, read out of the JPEG header, must match what the tags
+// promise -- a crawler that is told 1200x630 and handed something else
+// renders a broken or cropped card.
+function jpegSize(buf) {
+  let i = 2;
+  while (i < buf.length) {
+    if (buf[i] !== 0xFF) { i++; continue; }
+    const m = buf[i + 1];
+    if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
+    const len = buf.readUInt16BE(i + 2);
+    if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC)
+      return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+    i += 2 + len;
+  }
+  return null;
+}
+if (fs.existsSync(ogFile)) {
+  const real = jpegSize(fs.readFileSync(ogFile));
+  ck(!!real && real.w === lp.w && real.h === lp.h,
+     `the shipped file really is ${lp.w}×${lp.h} (found ${real ? real.w + '×' + real.h : 'unreadable'})`);
+}
 ck(meta('og:image:width') === String(lp.w) && meta('og:image:height') === String(lp.h),
    `the declared ${meta('og:image:width')}×${meta('og:image:height')} matches the enforced ${lp.w}×${lp.h}`);
 ck(meta('twitter:image') === ogImage, 'twitter:image points at the same file');

@@ -3980,3 +3980,66 @@ harness on the same port **before** looking for a bug in the app.
 Ports currently in use across the suite: 8000, 8640, 8763, 8769, 8771, 8773, 8796,
 8798–8799, 8801, 8803–8805, 8812–8814, 8825, 8831, 8833, 8835, 8841, 8843, 8847, 8851,
 8853, 8857, 8859, 8861, 8867, 8869, 8871, 8873, 8875, 8877, 8879, 8881, 8883, 8891.
+
+## Round 158 — The invite link 404, and the missing link preview
+
+> "https://gigs.myapp.com/refCode=RC9J2N ... it returns not found, why why"
+> "and all all those route domains aren't fetching link preview image"
+
+**These were the same bug plus one more, and both are now impossible rather than
+configured.**
+
+### Why `/refCode=` 404'd
+`gigs.myapp.com` works because `/` serves `index.html` by default. `/refCode=RC9J2N` is a
+real URL **path**, so the host looks for a file with that name and answers 404. Making it
+work needs a **rewrite rule** on the host — and that rule is the most fragile thing in the
+whole invite chain: it lives in `render.yaml`, which only applies if the service was
+created from that blueprint, it must be re-added by hand on any other host, and while it
+is missing **nothing looks wrong** until an invite is tapped.
+
+**And the 404 killed the link preview too**: a crawler that gets a 404 page never reads
+the `og:` tags, so shared invites had no title and no picture either.
+
+New links are `<origin>/?ref=CODE` — a query string on `/`, so **no rule is needed on any
+host and it cannot 404**. `captureReferralFromUrl()` still parses all three shapes
+(`?ref=`, `#…?ref=`, `/refCode=`), so **invites already sent to real people keep working**.
+The `render.yaml` rewrite stays for exactly that reason.
+
+### Why the preview image was missing even where the page loaded
+`og:image` pointed at `https://chipz-server.onrender.com/public/link-preview.jpg` — the
+**backend** — and that had two independent ways to show nothing:
+1. `serveBrandAsset()` answers **404 when nothing has been uploaded** in the admin panel.
+   No picture, on every host, with nothing anywhere saying so.
+2. Even once uploaded, the backend **sleeps**. A crawler allows a link preview a few
+   seconds; a cold start takes far longer, so the picture would come and go depending on
+   whether the backend happened to be awake.
+
+`og:image` now names **`https://chipz-app.onrender.com/link-preview.jpg`** — a real
+1200×630 file shipped with the static site. Static hosting does not sleep and cannot 404 a
+file that exists. The URL is absolute and names the static site's own stable host on
+purpose: an `og:image` must resolve for a crawler with no page context, and the members'
+domain changes per country while that host never does.
+
+**To change the picture, replace `chipz/user/link-preview.jpg` (1200×630).** The admin
+panel's link-preview upload still serves at `/public/link-preview.jpg` for anything else.
+
+### Tests
+`test-regions.js` now **runs `captureReferralFromUrl()` over all three link shapes** plus a
+plain visit. `test-brand-assets.js` asserts `og:image` is **not** a backend route, names the
+static host, that the file **exists**, and that its **real** pixel size (read out of the
+JPEG header) matches the declared 1200×630. `verify-regions-discriminates.py` is **151
+mutations**, all caught.
+
+**Two harnesses had assertions that pinned the bug**, and both were rewritten rather than
+deleted:
+- `test-brand-assets.js` required `og:image` to resolve to a registered **server route** —
+  which is precisely the thing that 404s and sleeps.
+- `test-manual-review.js` required the link to be `/refCode=` and **refused** `?ref=`.
+
+*A test that pins the current shape of a thing will defend a bug as loyally as it defends a
+feature. When the shape was the defect, the assertion has to be rewritten with the reason
+recorded, not quietly dropped.*
+
+And one of my own new assertions did not discriminate: "the `?ref=` shape is read" matched
+`URLSearchParams(location.search)` and passed with `let ref = null;` a line later. Running
+the parser over real URLs replaced it.

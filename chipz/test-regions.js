@@ -1199,10 +1199,47 @@ async function askShare(opts) {
 {
   // The app half: the link the member copies, and WHEN it is re-picked.
   const paint = stripComments(fnSource(client, 'paintReferral'));
-  ck(/\$\{shareOrigin\(\)\}\/refCode=/.test(paint),
+  ck(/\$\{shareOrigin\(\)\}\/\?ref=/.test(paint),
     'the invite link is built from the rotated address');
-  ck(!/location\.origin\}\/refCode=/.test(paint),
+  ck(!/location\.origin\}\/\?ref=/.test(paint),
     'and not from whichever address he happens to be browsing on');
+  // ── THE SHAPE OF THE LINK ITSELF ──
+  // "/refCode=CODE" is a URL PATH, so the host looks for a file with that
+  // name and answers 404 unless a rewrite rule is configured on it -- which
+  // lives in render.yaml, only applies if the service came from that
+  // blueprint, and has to be re-added by hand on any other host. When it is
+  // missing nothing looks wrong until an invite is tapped, because "/"
+  // serves index.html regardless. Reported live:
+  // "https://gigs.myapp.com/refCode=RC9J2N ... it returns not found".
+  //
+  // "/?ref=CODE" is a query string on "/", so it needs no rule anywhere and
+  // cannot 404 on any host.
+  ck(!/refCode=/.test(paint),
+    'and the link is a query string, not a path that needs a rewrite rule on every host');
+  // Every shape must still PARSE, or invites already sent to real people
+  // stop working. RUN, across all three -- a static "does it mention
+  // location.search" check passes with the value thrown away a line later.
+  function capture(href) {
+    const u = new URL(href);
+    const field = { value: '' };
+    const state = {};
+    new Function('deps', `
+      const STATE = deps.state;
+      const location = deps.location;
+      const $ = () => deps.field;
+      const showAuthTab = () => {};
+      ${fnSource(client, 'captureReferralFromUrl')}
+      captureReferralFromUrl();
+    `)({ state, field, location: { search: u.search, hash: u.hash, pathname: u.pathname } });
+    return state.refCode || null;
+  }
+  ck(capture('https://gigs.myapp.com/?ref=RC9J2N') === 'RC9J2N',
+    'the ?ref= shape the app now hands out is read');
+  ck(capture('https://gigs.myapp.com/#pages/register/?ref=RC9J2N') === 'RC9J2N',
+    'the older #...?ref= shape still is');
+  ck(capture('https://gigs.myapp.com/refCode=RC9J2N') === 'RC9J2N',
+    'and so is /refCode=, so invites already out there keep working');
+  ck(capture('https://gigs.myapp.com/') === null, 'and a plain visit captures nothing');
   // RUN, not matched. stripComments() treats the '//' inside the string
   // literal as the start of a line comment and eats the rest of the line,
   // so a static check of this particular function is testing rubble.
