@@ -1,0 +1,88 @@
+name: Chipz rebuild after audit fixes
+
+on:
+  push:
+    branches:
+      - claude/chipz-platform-build
+    paths:
+      - .github/workflows/chipz-rebuild-after-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/chipz-platform-build
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Normalize Round 158 project-log formatting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('chipz/CLAUDE.md')
+          s = p.read_text(encoding='utf-8')
+          marker = r'\n\n## Round 158 — 2026-09-14 — money/region audit repairs'
+          if marker in s:
+              head, tail = s.split(marker, 1)
+              tail = ('## Round 158 — 2026-09-14 — money/region audit repairs' + tail).replace(r'\n', '\n')
+              s = head.rstrip() + '\n\n' + tail.lstrip()
+              p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Install pinned dependencies
+        working-directory: chipz
+        run: npm ci
+
+      - name: Rebuild deployed user and admin bundles
+        working-directory: chipz
+        run: |
+          node build-core.js
+          node build-admin.js
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check chipz/server.js
+          node --check chipz/user-src/original_module.js
+
+      - name: Audit dependencies
+        working-directory: chipz
+        run: npm audit --audit-level=high
+
+      - name: Run complete Node test suite
+        working-directory: chipz
+        run: |
+          set -euo pipefail
+          fails=0
+          for f in test-*.js; do
+            echo "=== $f"
+            node "$f" || fails=$((fails + 1))
+          done
+          if [ "$fails" -ne 0 ]; then
+            echo "$fails test file(s) failed"
+            exit 1
+          fi
+          echo "all Node test files passed"
+
+      - name: Remove one-shot workflow
+        run: rm .github/workflows/chipz-rebuild-after-audit.yml
+
+      - name: Commit rebuilt deploy artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add chipz/CLAUDE.md chipz/user chipz/admin .github/workflows/chipz-rebuild-after-audit.yml
+          if git diff --cached --quiet; then
+            echo "nothing changed"
+            exit 0
+          fi
+          git commit -m "build(chipz): rebuild audited fixes"
+          git push origin HEAD:claude/chipz-platform-build
