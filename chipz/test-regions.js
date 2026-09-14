@@ -378,6 +378,30 @@ console.log('\n— one country at a time, on every admin screen —');
     ck(/scopeRowsToRegion\(|\.filter\(u => !want \|\| u\.regionKey === want\)|want \? all\.filter\(r => r\.regionKey === want\) : all|!want \|\| rowRegionKey/.test(body),
       `  and ${kind} really drops the other countries' rows`);
   }
+  // ── A TOTAL IS EITHER COMPLETE OR VISIBLY FLAGGED ──
+  // The audit removed the row caps from this endpoint because a silent cap
+  // turns a total into "first N rows". Right about that -- but unbounded is
+  // the wrong other end: M0 is a shared tier, this pulls four whole
+  // collections into memory, and the dashboard re-polls every 30 seconds, so
+  // "no limit" trades a wrong number for the owner's only admin view timing
+  // out. A high ceiling plus an honest flag is the bargain the rest of this
+  // file already strikes.
+  const statsAt = bare.indexOf("app.get('/admin/stats'");
+  const statsBody = bare.slice(statsAt, bare.indexOf('\napp.', statsAt + 10));
+  ck(/const STATS_SCAN_LIMIT = \d+;/.test(statsBody),
+    'the dashboard scan has a ceiling, so it cannot pull an unbounded collection into memory');
+  ck((statsBody.match(/\.limit\(STATS_SCAN_LIMIT\)/g) || []).length === 6,
+    'every one of its six reads is capped, not just the first four');
+  ck(/const truncated = \[usersSnap, depSnap, witSnap, invSnap, pendDepSnap, pendWitSnap\]/.test(statsBody) &&
+     /snap\.docs\.length >= STATS_SCAN_LIMIT/.test(statsBody),
+    'and it says so when the ceiling is reached, judged on the raw reads before the country filter');
+  ck(/regionKey: want \|\| 'all', truncated,/.test(statsBody),
+    'with the flag on the reply');
+  {
+    const admin2 = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+    ck(/s\.truncated \?/.test(admin2) && /These totals are incomplete/.test(admin2),
+      'and the panel shows it, because a capped total that looks authoritative is the same fault one layer up');
+  }
   // The totals have to be filtered BEFORE they are added up, or the numbers
   // on screen would describe every country while the rows beneath them
   // describe one.

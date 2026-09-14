@@ -9205,14 +9205,28 @@ app.post('/admin/withdraw/reject', async (req, res) => {
 app.get('/admin/stats', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
+    // These feed exact financial TOTALS, not a rendered page, so a silent cap
+    // turns a total into "first N rows" once the platform grows -- the audit
+    // finding that removed the caps entirely was right about that.
+    //
+    // But unbounded is the wrong other end. Atlas M0 is a shared tier with
+    // little RAM, this endpoint pulls FOUR whole collections into Node
+    // memory, and the dashboard re-polls it every 30 seconds
+    // (LIVE_TABS/liveTick in the panel) -- so "no limit" trades a wrong
+    // number for the owner's only admin view timing out, on the one screen
+    // he looks at to find out whether anything is wrong.
+    //
+    // So: a ceiling high enough not to be reached in normal operation, and
+    // an explicit `truncated` flag when it IS reached. The number on screen
+    // is then either complete or visibly flagged, never quietly wrong --
+    // which is the same bargain /admin/transactions/list and
+    // /admin/referrals/list already strike in this file.
+    const STATS_SCAN_LIMIT = 200000;
     const [usersSnap, depSnap, witSnap, invSnap] = await Promise.all([
-      // These feed exact financial TOTALS, not a rendered page. A hard limit
-      // silently turns a total into "first N rows" once the platform grows,
-      // so these deliberately read the complete matching sets.
-      db.collection('users').get(),
-      db.collection('pendingDeposits').where('status', '==', 'matched').get(),
-      db.collection('withdrawals').where('status', '==', 'processed').get(),
-      db.collection('investments').get(),
+      db.collection('users').limit(STATS_SCAN_LIMIT).get(),
+      db.collection('pendingDeposits').where('status', '==', 'matched').limit(STATS_SCAN_LIMIT).get(),
+      db.collection('withdrawals').where('status', '==', 'processed').limit(STATS_SCAN_LIMIT).get(),
+      db.collection('investments').limit(STATS_SCAN_LIMIT).get(),
     ]);
     // One country at a time. Every figure on this screen is money in a
     // currency, so mixing countries into a single total produces a number
@@ -9263,16 +9277,21 @@ app.get('/admin/stats', async (req, res) => {
       if (inv.status === 'active') activeInvestments++;
     });
     const [pendDepSnap, pendWitSnap] = await Promise.all([
-      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).get(),
-      db.collection('withdrawals').where('status', '==', 'pending').get(),
+      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(STATS_SCAN_LIMIT).get(),
+      db.collection('withdrawals').where('status', '==', 'pending').limit(STATS_SCAN_LIMIT).get(),
     ]);
     const pendingDepCount = pendDepSnap.docs.filter(d => mine({ ...d.data() })).length;
     const pendingWitCount = pendWitSnap.docs.filter(d => mine({ ...d.data() })).length;
     // In a one-country view the scalar fields stay backward-compatible. In
     // All countries they are null on purpose: UGX + KES is not money. The
     // grouped rows are the only meaningful financial totals in that mode.
+    // Judged on the RAW reads, before the country filter: the ceiling was hit
+    // or it was not, and calling one country's share of a capped scan
+    // "complete" would be the very lie the cap is being flagged for.
+    const truncated = [usersSnap, depSnap, witSnap, invSnap, pendDepSnap, pendWitSnap]
+      .some(snap => snap.docs.length >= STATS_SCAN_LIMIT);
     res.json({
-      status: 'success', regionKey: want || 'all',
+      status: 'success', regionKey: want || 'all', truncated,
       moneyByRegion: Array.from(moneyByRegion.values()).sort((a, b) => a.regionKey.localeCompare(b.regionKey)),
       stats: {
         totalUsers, activeUsers, bannedUsers,

@@ -1201,7 +1201,15 @@ async function renderDashboard(){
       <div class="table-scroll"><table><thead><tr><th>Country</th><th>Wallets</th><th>Deposited</th><th>Withdrawn</th><th>Invested</th></tr></thead><tbody>
       ${moneyRows.length?moneyRows.map(r=>`<tr><td><b>${esc(r.name||r.regionKey)}</b><br><span class="muted">${esc(r.currency||'')}</span></td><td>${ugx(r.walletTotal,r.regionKey)}</td><td>${ugx(r.depositAmount,r.regionKey)}</td><td>${ugx(r.withdrawAmount,r.regionKey)}</td><td>${ugx(r.investedAmount,r.regionKey)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No money activity yet</td></tr>'}
       </tbody></table></div></div>` : '';
+  // A capped scan must SAY it was capped. Without this the figures look
+  // authoritative while describing only part of the platform -- which is the
+  // same "silently truncated statistics" fault the audit raised, just moved
+  // from the query to the screen.
+  const truncWarn = s.truncated ? `<div style="background:#fff4e5;border:1px solid #f0b357;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+      <b>These totals are incomplete.</b> There is now more history than this screen reads in one go, so the figures below cover only part of it. Tell your developer -- the totals need to be computed in the database rather than added up here.
+    </div>` : '';
   $('content').innerHTML = `
+    ${truncWarn}
     <h2 class="sec">Overview</h2>
     <div class="cards">
       <div class="stat"><div class="n">${stats.totalUsers||0}</div><div class="l">Total users</div></div>

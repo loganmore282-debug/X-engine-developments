@@ -482,9 +482,18 @@ MUTATIONS = [
      "    usesBareLocal: regionUsesBareLocal(reg),\n",
      ""),
 
-    ('sign-in stops trying the other address shape', CLIENT,
-     "  const list = [loginAddressFor(phone, bare), loginAddressFor(phone, !bare)];",
-     "  const list = [loginAddressFor(phone, bare)];"),
+    ('the founding country loses its migration fallback, locking members out', CLIENT,
+     "  if (bare) list.push(loginAddressFor(phone, false));\n",
+     ""),
+
+    # THE BUG CODEX FOUND IN MY CODE. A non-founding country trying the bare
+    # local address reaches into the FOUNDING country's namespace: the same
+    # local digits can resolve to another country's Firebase user whenever the
+    # password happens to match. My own assertion had an `|| ugAddr ===
+    # cands[1]` escape hatch that exempted exactly this.
+    ('a dial-code country reaches into the founding bare-local namespace', CLIENT,
+     "  if (bare) list.push(loginAddressFor(phone, false));",
+     "  list.push(loginAddressFor(phone, !bare));"),
 
     ('sign-in reports success after every address failed', CLIENT,
      "    if (lastErr) throw lastErr;\n",
@@ -546,8 +555,8 @@ MUTATIONS = [
   return String((row && row.regionKey) || '').trim().toLowerCase() || DEFAULT_REGION_KEY;"""),
 
     ('the dashboard stops being per-country', SERVER,
-     "    const want = adminRegionFilter(req);\n    const userRegions = new Map();\n    usersSnap.forEach(d => userRegions.set(d.id, String(d.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY));\n    const mine = row => !want || rowRegionKey(row, userRegions) === want;\n    let totalUsers = 0, activeUsers = 0, bannedUsers = 0, walletTotal = 0;",
-     "    const want = null;\n    const mine = () => true;\n    let totalUsers = 0, activeUsers = 0, bannedUsers = 0, walletTotal = 0;"),
+     "    const mine = row => !want || rowRegionKey(row, userRegions) === want;\n    const moneyByRegion = new Map();",
+     "    const mine = () => true;\n    const moneyByRegion = new Map();"),
 
     ('the members list stops being per-country', SERVER,
      "    }).filter(u => !want || u.regionKey === want);",
@@ -702,6 +711,27 @@ MUTATIONS = [
     ('the app stops reading the ?ref= links it now hands out', CLIENT,
      "    let ref = search.get('ref');",
      "    let ref = null;"),
+
+    # ── the dashboard totals: complete, or visibly flagged ──
+    ('the dashboard pulls unbounded collections into memory again', SERVER,
+     "      db.collection('users').limit(STATS_SCAN_LIMIT).get(),",
+     "      db.collection('users').get(),"),
+
+    ('the pending counts lose their ceiling', SERVER,
+     "      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(STATS_SCAN_LIMIT).get(),",
+     "      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).get(),"),
+
+    ('a capped dashboard total claims to be complete', SERVER,
+     "      .some(snap => snap.docs.length >= STATS_SCAN_LIMIT);",
+     "      .some(() => false);"),
+
+    ('the reply stops carrying the truncation flag', SERVER,
+     "      status: 'success', regionKey: want || 'all', truncated,",
+     "      status: 'success', regionKey: want || 'all',"),
+
+    ('the panel hides the incomplete-totals warning', ADMIN,
+     "  const truncWarn = s.truncated ? `<div style=",
+     "  const truncWarn = false ? `<div style="),
 ]
 
 

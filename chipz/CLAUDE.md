@@ -4053,3 +4053,91 @@ the parser over real URLs replaced it.
 - Admin Dashboard: exact stats queries are no longer hard-capped; All countries money is returned/displayed per region/currency rather than summed across currencies.
 - Admin transaction tables: row amounts now format with each transaction's `regionKey`.
 
+
+## Round 159 — Reviewing Codex's audit push, and the bug it found in my code
+
+Codex pushed seven audited repairs straight to `claude/chipz-platform-build`, which
+**auto-deploys**, so this was reviewed after the fact rather than before. Reviewed commit
+range `193aba7..1b81c96` — 192 insertions, 60 deletions across 9 files. Contained, not a
+rewrite.
+
+### Checked first: nothing of this session's was reverted
+`corsHostAllowed` subdomain matching, `regionUsesBareLocal`, the currency-based referral
+rule, `usesBareLocal` publication, `adminRegionFilter`, `/public/share-host`, the `?ref=`
+link, `paintRegionChrome`, the sticky parked-notice stylesheet and the static
+`link-preview.jpg` are all intact. **No `runTransaction` was introduced** — the M0
+in-process-lock design is untouched, which was the thing most likely to be "improved" into
+a double-credit. The committed bundles were genuinely rebuilt from the edited sources
+(~50 chars of obfuscator rename variance out of ~300k).
+
+### A REAL BUG IN MY OWN CODE, found by Codex
+`loginAddressCandidates()` (Round 155) returned, for a **non-founding** country:
+
+```
+254712345678@…   ← correct
+712345678@…      ← the BARE form, which is the FOUNDING country's namespace
+```
+
+So a Kenyan member signing in could resolve to a **Ugandan** member's Firebase account
+whenever the same local digits and password happened to coincide — and a malicious one
+could grind passwords against the founding namespace from their own login screen. I had
+written the comment *"never another country's -- so it cannot become a way to sign in to a
+Kenyan account on the Ugandan site"* directly above code that did exactly that.
+
+**Worse, my own test exempted it.** I wrote:
+
+```js
+ck(!cands.includes(ugAddr) || ugAddr === cands[1], 'and never an address built from …')
+```
+
+The `|| ugAddr === cands[1]` is an escape hatch for precisely the collision the assertion
+was supposed to catch. I noticed the overlap and wrote it off instead of failing on it.
+**An assertion with an `||` that excuses the observed value is not a test; it is a
+comment.** Codex's replacement is unconditional, and the fix is that only the
+founding/bare namespace may try a dial-prefixed migration shape. Now pinned with its own
+mutation so it cannot come back.
+
+### Codex's other six, all verified real
+- **Turntable double-credit.** The history write sat inside the same `try` as the wallet
+  increment, so a failed transaction row re-armed the spin (`used: false`) **after** the
+  money had landed — spin again, credited again. Now the catch covers only the wallet
+  update; a history failure logs loudly and keeps the entitlement consumed.
+- **Turntable partial grant.** `if (!already.empty) return;` treated one surviving row as
+  "all spins granted", so a loop that died after 2 of 5 lost the other 3 forever. Now
+  counts rows and fills the tail, with deterministic ids + `createIfAbsent`.
+- **Referral commission ordering.** The level was marked paid *before* the wallet moved.
+  Now: wallet increment carrying a durable idempotency token (`creditedCommissionKeys` +
+  `updateIf $ne`) first, idempotent history second, marker last.
+- **`db.js createIfAbsent`** — `$setOnInsert` + upsert, returning whether it inserted. A
+  correct primitive, and notably *not* a transaction.
+- **Mixed-currency dashboard totals.** My Round 155 work added `regionKey` to rows and a
+  caption warning, but still *summed across currencies* in All-countries view. Codex hides
+  the money cards there and shows a per-country breakdown, and labels each transaction row
+  with `ugx(amount, t.regionKey)`. Better than my caption.
+
+### The one thing I changed back
+Codex removed the row caps on `/admin/stats` entirely, reasoning that a silent cap turns a
+total into "first N rows". **Right about the lie, wrong about the remedy.** Atlas M0 is a
+shared tier, that endpoint pulls **four whole collections** into Node memory, and the
+dashboard **re-polls it every 30 seconds** (`LIVE_TABS`/`liveTick`) — so unbounded trades a
+wrong number for the owner's only admin view timing out, on the one screen he uses to find
+out whether anything is wrong.
+
+Restored a high ceiling (`STATS_SCAN_LIMIT = 200000`) on all six reads, added a
+`truncated` flag judged on the **raw** reads before the country filter, and the panel now
+shows "These totals are incomplete" when it is hit. The figure is then either complete or
+visibly flagged — the same bargain `/admin/transactions/list` and `/admin/referrals/list`
+already strike in this file.
+
+### Verification Codex did not do
+It ran the `test-*.js` files. It did **not** run the Playwright/Python harnesses or
+`verify-regions-discriminates.py`. Both were run here. Two mutation anchors had drifted
+onto lines Codex rewrote (and one new anchor collided with `/admin/analytics`, which now
+shares a line with `/admin/stats`) — re-anchored, and the suite is **157 mutations, all
+caught**.
+
+**Process note worth keeping:** an agent pushing to an auto-deploying branch means review
+happens after production, not before. The review that matters is (1) are the previous
+round's fixes still present, (2) were the money-safety invariants preserved rather than
+"improved", (3) do the built bundles match the edited sources, and (4) run the harnesses
+the other agent did not.
