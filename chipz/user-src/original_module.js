@@ -387,6 +387,19 @@ function showHostParked(msg){
     const app = $('app'); if (app) app.style.display = 'none';
     const auth = $('authScreen'); if (auth) auth.style.display = 'none';
   } catch(_){}
+  // ...and then make it STICK. Hiding the three screens once is not enough:
+  // a Firebase session restore landing a moment later runs enterApp(), which
+  // shows #app again, and the member is then looking at a half-painted app
+  // on an address where every single request is refused. Caught by
+  // test-region-currency.py's parked scenario the moment this notice started
+  // appearing earlier than it used to. A stylesheet rule with !important
+  // beats the inline style any later code can set, which an inline style set
+  // from here does not.
+  try {
+    const st = document.createElement('style');
+    st.textContent = '#loadingScreen,#app,#authScreen{display:none !important}';
+    document.head.appendChild(st);
+  } catch(_){}
   const host = (typeof location !== 'undefined' && location.hostname) || '';
   const box = document.createElement('div');
   box.id = 'hostParked';
@@ -5544,7 +5557,89 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ── MOVING THIS SESSION ONTO A DIFFERENT ADDRESS ──
+// Owner: "if one joined the site or visited the site with a subdomain like
+// gfdt so in his session, server changes the subdomain of his session to
+// another like b5dh, so in that very country."
+//
+// The server decides (GET /public/entry); this just carries it out. What
+// makes it safe is the loop guard, and the guard cannot live in
+// sessionStorage alone: storage is scoped PER ORIGIN, so the marker written
+// here would not exist on the address we are about to land on -- it would
+// ask again, be handed a third address, and hop forever. So the marker
+// travels IN THE URL (?_e=1) and is copied into this origin's
+// sessionStorage on arrival, then stripped back out of the address bar so
+// nobody sees it or shares it.
+//
+// The whole current location travels too -- path, query and #hash -- so an
+// invite link (/refCode=ABC, ?ref=ABC, #pages/register/?ref=ABC) still
+// carries its code to the address the member ends up on.
+var ENTRY_MOVE_PARAM = '_e';
+var ENTRY_MOVE_KEY = 'chipzEntryMoved';
+// True once this browsing session has already been moved -- from the marker
+// in the URL on the hop we just made, or from sessionStorage on every later
+// page load within the same tab. Reading it also CONSUMES the URL marker.
+function entryAlreadyMoved(){
+  let moved = false;
+  try { moved = !!sessionStorage.getItem(ENTRY_MOVE_KEY); } catch (_) {}
+  let url;
+  try { url = new URL(location.href); } catch (_) { return moved; }
+  if (url.searchParams.get(ENTRY_MOVE_PARAM)) {
+    moved = true;
+    try { sessionStorage.setItem(ENTRY_MOVE_KEY, '1'); } catch (_) {}
+    url.searchParams.delete(ENTRY_MOVE_PARAM);
+    // Tidy the address bar. Not just cosmetic: this URL is what a member
+    // copies and shares, and a marker in it would tell the next person's
+    // browser it had already been moved when it had not.
+    try {
+      const q = url.searchParams.toString();
+      history.replaceState(null, '', url.pathname + (q ? '?' + q : '') + url.hash);
+    } catch (_) {}
+  }
+  return moved;
+}
+async function maybeRotateEntry(){
+  if (entryAlreadyMoved()) return false;
+  let r;
+  try { r = await api('/public/entry?from=' + encodeURIComponent(location.hostname)); } catch (_) { return false; }
+  if (!r || r.status !== 'success' || !r.rotate || !r.host) return false;
+  if (r.host === location.hostname) return false;
+  // The server's own 'visitors' check asks Firebase whether this request
+  // carried a signed-in token -- and on the very first request of a page
+  // load it usually has not restored the session yet, so a returning member
+  // can look exactly like a stranger. This is the check that actually holds:
+  // a saved snapshot in localStorage means somebody has signed in on THIS
+  // address, and moving him would cost him his saved password, his offline
+  // app shell and his installed icon. Only 'always' does that.
+  if (r.mode !== 'always') {
+    let hasAccountHere = false;
+    try { hasAccountHere = !!localStorage.getItem(CACHED_STATE_KEY); } catch (_) {}
+    if (hasAccountHere) return false;
+  }
+  try { sessionStorage.setItem(ENTRY_MOVE_KEY, '1'); } catch (_) {}
+  let target;
+  try {
+    const url = new URL(location.href);
+    url.hostname = r.host;
+    url.searchParams.set(ENTRY_MOVE_PARAM, '1');
+    target = url.toString();
+  } catch (_) {
+    target = location.protocol + '//' + r.host + '/?' + ENTRY_MOVE_PARAM + '=1';
+  }
+  // replace(), not assign(): the address he arrived on must not sit in the
+  // back stack, or the phone's Back button walks him straight back onto it
+  // and (with the marker gone from that entry) round again.
+  try { location.replace(target); } catch (_) { location.href = target; }
+  return true;
+}
+
 // ── START ──
 captureReferralFromUrl();
+// Asked alongside boot() rather than before it: one extra round trip in
+// front of the loading screen would slow down every single arrival to buy a
+// decision that, most of the time, is "stay where you are". If the answer is
+// "move", the page navigates and whatever boot() had started is discarded
+// with it.
+var _entryPromise = maybeRotateEntry();
 var _bootPromise = boot();
 

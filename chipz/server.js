@@ -408,6 +408,11 @@ function regionHostnames(region) {
   for (const l of (r.labels || [])) if (_baseDomain) hosts.push(l + '.' + _baseDomain);
   return hosts.filter((h, i) => h && hosts.indexOf(h) === i);
 }
+// The three ways an arrival can be moved onto a different address in his own
+// country -- see the rotateEntry comment in DEFAULT_SETTINGS for what each
+// one costs. Kept beside regionHostnames because the pool it draws from is
+// exactly what that function returns.
+const ROTATE_ENTRY_MODES = ['off', 'visitors', 'always'];
 function rebuildRegionHosts() {
   _regionHosts = [];
   for (const r of _regionsSnapshot) for (const h of regionHostnames(r)) _regionHosts.push(h);
@@ -740,6 +745,35 @@ const DEFAULT_SETTINGS = {
   // service hosts (*.onrender.com and the preview hosts) are always exempt,
   // or this would lock the owner out of the URL he administers from.
   strictRegionHosts: false,
+  // ── MOVING A VISITOR ONTO A DIFFERENT ADDRESS ──
+  // Owner: "if one joined the site or visited the site with a subdomain like
+  // gfdt so in his session, server changes the subdomain of his session to
+  // another like b5dh, so in that very country."
+  //
+  // On arrival the app asks the server for an address, and the server hands
+  // back a DIFFERENT short address belonging to the SAME country, which the
+  // browser then moves to. The path, the ?ref= code and the #hash all come
+  // along, so a shared invite link still works. Only addresses that country
+  // actually claims are handed out -- a made-up label resolves to the
+  // founding country (wrong currency) and is not in the CORS allowlist, so
+  // it would break rather than rotate.
+  //
+  //   'off'      -- nobody is moved (default).
+  //   'visitors' -- only people with no account signed in are moved. THE ONE
+  //                 TO USE. A browser files the saved password, the instant-
+  //                 boot cache, the offline app shell and an installed home-
+  //                 screen icon under ONE hostname; move a signed-in member
+  //                 and he loses his autofill, re-downloads the whole app on
+  //                 mobile data, and his installed icon still points at the
+  //                 address he left. Someone with no account yet has none of
+  //                 that to lose.
+  //   'always'   -- everyone is moved, signed-in members included. Costs
+  //                 exactly what is listed above, every session.
+  //
+  // Per country on purpose: the pool of addresses is per country, and "in
+  // that very country" is the whole point -- a Kenyan visitor is only ever
+  // moved to another Kenyan address.
+  rotateEntry: 'off',
   maintenanceMode: false, maintenanceMsg: '',
   // Owner: "let's establish a timer ie like saying snow opening in
   // 23:59:34... just near maintenance mode." A pre-launch gate, separate
@@ -2892,6 +2926,62 @@ app.get('/public/settings', async (_req, res) => {
     // the wrong subdomain genuinely cannot find it.
     }, region: publicRegionView(), regionCount: (await getRegions()).filter(r => r.active).length });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// ── WHICH ADDRESS THIS ARRIVAL SHOULD BE ON ──
+// Owner: "if one joined the site or visited the site with a subdomain like
+// gfdt so in his session, server changes the subdomain of his session to
+// another like b5dh, so in that very country."
+//
+// The app asks this on arrival and, if told to, moves the browser to the
+// hostname it gets back. Everything about the answer is decided here rather
+// than in the app, so the mode can be changed from the panel without
+// shipping a new build.
+//
+// Rules the answer obeys:
+//  - SAME COUNTRY, ALWAYS. The pool is this region's own short addresses and
+//    nothing else. Which region that is has already been decided by the
+//    region middleware, which prefers a signed-in member's OWN region over
+//    the hostname -- so a Kenyan member who somehow opens a Ugandan address
+//    is offered a Kenyan one, never the other way round.
+//  - CLAIMED ADDRESSES ONLY. A made-up label resolves to the founding region
+//    (wrong currency) and is not in the CORS allowlist, so handing one out
+//    would break the app rather than move it.
+//  - NEVER BACK TO WHERE HE IS. The current host is excluded, so a pool of
+//    one address answers "stay".
+//  - NOT FROM A SERVICE HOST. Opened from *.onrender.com or localhost -- the
+//    owner testing -- nobody is moved; being bounced onto a live country
+//    address mid-test is not a thing he asked for.
+//  - 'visitors' DOES NOT MOVE A SIGNED-IN MEMBER. A browser files the saved
+//    password, the instant-boot cache, the offline shell and an installed
+//    home-screen icon under one hostname. See DEFAULT_SETTINGS.rotateEntry.
+app.get('/public/entry', async (req, res) => {
+  try {
+    const region = currentRegion();
+    const sett = await getSettings(region.key);
+    const mode = ROTATE_ENTRY_MODES.includes(sett.rotateEntry) ? sett.rotateEntry : 'off';
+    const stay = { status: 'success', rotate: false, mode, host: '' };
+    if (mode === 'off') return res.json(stay);
+    const host = requestHost(req);
+    if (isInfraHost(host)) return res.json(stay);
+    // Signed in? Only 'always' moves him. Read from the cached decode the
+    // region middleware already did, so this costs no extra Firebase round
+    // trip.
+    if (mode !== 'always' && (req.headers.authorization || '').startsWith('Bearer ')) {
+      const uid = await verifyAuth(req);
+      if (uid) return res.json(stay);
+    }
+    const from = hostOnly(req.query.from || '') || host;
+    const pool = (region.labels || [])
+      .map(l => (_baseDomain ? l + '.' + _baseDomain : ''))
+      .filter(h => h && h !== from);
+    if (!pool.length) return res.json(stay);
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    res.json({ status: 'success', rotate: true, mode, host: pick });
+  } catch (e) {
+    // A failure here must never stop the app loading: the member stays on
+    // the address he already has, which works.
+    res.json({ status: 'success', rotate: false, mode: 'off', host: '' });
+  }
 });
 // Members must never be shown a payout the purchase won't actually honour,
 // so this endpoint publishes RESOLVED figures instead of the raw stored
@@ -7074,6 +7164,17 @@ app.post('/admin/settings/update', async (req, res) => {
       if (r.skip) return res.status(400).json({ status: 'error', message: 'The base domain cannot be blank -- it is what every country\'s short address is built from.' });
       updates.baseDomain = r.host;
     }
+    // Which arrivals get moved onto a different address in their country.
+    // Refused rather than coerced: a typo silently landing on 'off' would
+    // read in the panel as saved while nobody is ever moved, and a typo
+    // silently landing on 'always' would log every member out of his saved
+    // password. Only the three known modes are accepted.
+    if ('rotateEntry' in updates) {
+      const mode = String(updates.rotateEntry == null ? '' : updates.rotateEntry).trim().toLowerCase();
+      if (!ROTATE_ENTRY_MODES.includes(mode))
+        return res.status(400).json({ status: 'error', message: 'Moving arrivals to another address must be off, visitors, or always.' });
+      updates.rotateEntry = mode;
+    }
     // The app name reaches every screen, so it is the one free-text setting
     // worth policing. Trim and cap it, refuse an empty one (an app with no
     // name is not a thing the owner can want, and the client would then fall
@@ -7272,24 +7373,36 @@ app.post('/admin/regions/add-label', async (req, res) => {
     const regions = await getRegions();
     const region = regions.find(x => x.key === key);
     if (!region) return res.status(400).json({ status: 'error', message: `There is no country "${key}".` });
-    if ((region.labels || []).length >= 24)
+    const held = (region.labels || []).length;
+    if (held >= 24)
       return res.status(400).json({ status: 'error', message: 'This country already holds 24 short addresses. Remove one first.' });
+    // Several at once, because moving arrivals between addresses needs a POOL
+    // and adding them one at a time is a lot of tapping. Capped at whatever
+    // room is left under the 24 this country may hold.
+    const want = Math.min(24 - held, Math.max(1, Math.round(Number(req.body.count)) || 1));
     // Unique across EVERY country, not just this one -- two countries
     // sharing a label would make the currency depend on document order.
     const taken = new Set();
     for (const r of regions) for (const l of (r.labels || [])) taken.add(l);
-    let label = null;
-    for (let tries = 0; tries < 60 && !label; tries++) {
-      const cand = randFromAlphabet(LABEL_ALPHABET, len).toLowerCase();
-      if (!taken.has(cand)) label = cand;
+    const made = [];
+    for (let i = 0; i < want; i++) {
+      let label = null;
+      for (let tries = 0; tries < 60 && !label; tries++) {
+        const cand = randFromAlphabet(LABEL_ALPHABET, len).toLowerCase();
+        if (!taken.has(cand)) label = cand;
+      }
+      if (!label) break;
+      taken.add(label);
+      made.push(label);
     }
-    if (!label) return res.status(500).json({ status: 'error', message: 'Could not find an unused address. Try a longer one.' });
-    const next = normalizeRegion(Object.assign({}, region, { labels: (region.labels || []).concat([label]) }), key);
+    if (!made.length) return res.status(500).json({ status: 'error', message: 'Could not find an unused address. Try a longer one.' });
+    const next = normalizeRegion(Object.assign({}, region, { labels: (region.labels || []).concat(made) }), key);
     await db.collection('regions').doc(key).set(next, { merge: false });
     _regionsCacheTs = 0;
     await getRegions();
-    logAdminAction(req, 'region_label_added', { key, label });
-    res.json({ status: 'success', label, host: _baseDomain ? label + '.' + _baseDomain : label, region: next });
+    logAdminAction(req, 'region_label_added', { key, labels: made.join(', ') });
+    const hostOf = l => (_baseDomain ? l + '.' + _baseDomain : l);
+    res.json({ status: 'success', label: made[0], labels: made, host: hostOf(made[0]), hosts: made.map(hostOf), region: next });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not generate an address' }); }
 });
 app.post('/admin/regions/delete', async (req, res) => {

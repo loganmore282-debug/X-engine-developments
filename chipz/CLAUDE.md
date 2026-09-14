@@ -3563,3 +3563,122 @@ reusable lesson:**
    `GLOBAL_ONLY_SETTINGS` literal hit both the `old` and the `new` field of the same
    entry, so it substituted a string for itself and "passed". When re-anchoring a
    mutation harness, check that `old != new` for every entry.
+
+## Round 154 — Each arrival moved onto a different address in his own country
+
+> "so l wanted that if one joined the site or visited the site with a subdomain like
+> gfdt so in his session, server changes the subdomain of his session to another like
+> b5dh, so in that very country"
+
+Now possible because the wildcard is live (Round 153's DNS walkthrough): a generated
+label works the moment it is saved, so there is a real pool of addresses to move
+between.
+
+### How it works
+`GET /public/entry` is asked once on arrival and answers `{rotate, mode, host}`. The
+app (`maybeRotateEntry()`, called at start-up alongside `boot()`) moves the browser to
+that host. Every rule lives on the server so the mode can be changed from the panel
+without shipping a build:
+
+- **Same country, always.** The pool is `region.labels` joined to the base domain and
+  nothing else. Which region that is was already decided by the region middleware,
+  which prefers a **signed-in member's own region** over the hostname — so a Kenyan
+  member who opens a Ugandan address is offered a Kenyan one, never the reverse.
+- **Claimed addresses only.** A made-up label resolves to the founding region (wrong
+  currency) and is not in the CORS allowlist, so handing one out would break the app
+  rather than move it.
+- **Never back to where he is.** `?from=` (or the Origin header) is excluded, so a pool
+  of one answers "stay".
+- **Not from a service host.** `*.onrender.com`, `*.edgeone.app`, `localhost` — that is
+  the owner testing, and being bounced onto a live country address mid-test is not a
+  thing he asked for.
+- **A failure answers "stay".** A broken settings read must never stop the app loading.
+
+### The three modes — `rotateEntry`, PER COUNTRY
+`'off'` (default) / `'visitors'` / `'always'`. Deliberately **not** in
+`GLOBAL_ONLY_SETTINGS`: the pool is per country and "in that very country" is the point.
+Refused rather than coerced at `/admin/settings/update` (`ROTATE_ENTRY_MODES`) — a typo
+landing on `'off'` would read as saved while nobody moves; a typo landing on `'always'`
+would log every member out of his saved password.
+
+**`'visitors'` is the one to use, and the cost is the reason.** A browser scopes the
+saved password, the `localStorage` instant-boot cache, the service worker's offline
+shell and an **installed home-screen icon** to ONE hostname. Move a signed-in member and
+he loses autofill, re-downloads the whole app shell on his own data, and his installed
+icon still points at the address he left. Someone with no account yet has none of that
+to lose.
+
+### The loop guard cannot live in sessionStorage alone
+Storage is **per origin**, so a marker written before the hop does not exist on the
+address we land on — it would ask again, be handed a third address, and hop forever. So
+the marker travels **in the URL** (`?_e=1`), is copied into the destination's own
+`sessionStorage` on arrival, and is then stripped out of the address bar with
+`history.replaceState` (a member must not be able to share a link that says "already
+moved"). The hop uses `location.replace()`, not `assign()`, so the phone's Back button
+cannot walk him onto the old address. `url.hostname` is the **only** thing changed, so
+the path, the `?ref=` code and the `#hash` all travel — every invite-link shape keeps
+working.
+
+The app also makes its **own** "is anyone signed in here" check
+(`localStorage.getItem(CACHED_STATE_KEY)`) before obeying `'visitors'`: on the first
+request of a page load Firebase has usually not restored the session yet, so the
+server's token check sees a returning member as a stranger.
+
+### Also
+`/admin/regions/add-label` takes a `count` (capped at the room left under 24) and the
+panel gained a **+ 5** button — a pool needs several addresses and one tap each is a lot
+of tapping. Each minted label is added to `taken` inside the loop, so a batch cannot
+contain the same address twice.
+
+### Tests
+`test-regions.js` gained a section that **runs the real `/public/entry` handler** lifted
+out of `server.js` (200 iterations, because which address it picks is deliberately
+random — a single call could pass by luck) and **runs the real `maybeRotateEntry()`**
+lifted out of `original_module.js` against a stub `location`, asserting the exact URL
+the browser is sent to. `verify-regions-discriminates.py` is now **98 mutations**, all
+caught. `test-region-currency.py` gained a fifth browser scenario that performs a
+**real hop between two real origins** — `127.0.0.1` and `localhost` are the same
+server on the same port but different origins, which is exactly the trap this feature
+has to survive — and asserts the landing URL, the surviving `?ref=` code, the stripped
+marker, the recorded `sessionStorage` flag, and that a browser already holding an
+account there is left alone.
+
+### A real bug this round surfaced, unreported
+**The parked notice could be covered by the app a moment later.** `showHostParked()`
+hid `#loadingScreen`, `#app` and `#authScreen` with inline styles — once. A Firebase
+session restore landing a moment after that runs `enterApp()`, which shows `#app`
+again, leaving the member looking at a half-painted app on an address where every
+single request is refused. It had been invisible because the notice used to appear
+later; `maybeRotateEntry()` is now the first request of the page, the notice arrives
+earlier, and `test-region-currency.py`'s parked scenario went red on
+`app: True`. Fixed by appending a `<style>` with
+`#loadingScreen,#app,#authScreen{display:none !important}` — a stylesheet rule with
+`!important` beats the inline style any later code sets; an inline style set from
+`showHostParked` does not.
+
+**Two of this round's own assertions did not discriminate at first:**
+1. **"all of them come back, not just the first" passed with the reply stripped back to
+   one address** — a file-wide `/labels: made/` matched the `logAdminAction(..., { key,
+   labels: made.join(', ') })` line right above it. Now matched on the reply line only.
+   (Watch the regex too: `[^)]*` stopped at the `)` inside `hostOf(made[0])`.)
+2. **"the path, ref code and hash travel with him" passed with a line that blanked the
+   path inserted right in front of `url.hostname = r.host`** — a static "does it assign
+   the hostname" check cannot see what happens either side of it. Replaced by running
+   the function and comparing the URL string.
+3. **A pre-existing mutation went obsolete** — "the parked notice sits behind a spinner"
+   stopped being caught, because the new `!important` rule *names* `#loadingScreen`, so
+   the loose `/loadingScreen/` match still passed with the inline hide deleted. Both
+   mechanisms are wanted (the inline hide is in place in the same tick, the stylesheet
+   keeps it there), so the assertion now matches the inline hide **specifically** and
+   each id in the rule is checked on its own, with a mutation per id.
+
+**Playwright notes for a page that navigates itself:** `page.goto(..., wait_until="load")`
+**times out** on a page that hops away during start-up — use `wait_until="commit"`. And
+clear the origin's storage on a load where the answer is still "stay": set it to "move"
+first and the page navigates mid-`page.evaluate`, which throws "Execution context was
+destroyed".
+
+### Owner still has to
+Give each country **several** short addresses (Countries → **+ 5**) before turning this
+on, then set **Settings → Move arrivals to another address** to **Visitors only** for
+that country. With no wildcard on a domain, every label still needs its own DNS record.

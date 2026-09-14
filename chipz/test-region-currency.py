@@ -177,7 +177,8 @@ async def main():
         page = await ctx.new_page()
         page.on("pageerror", lambda e: errs.append(str(e)))
 
-        current = {"region": KE_REGION, "account": None, "parked": False}
+        current = {"region": KE_REGION, "account": None, "parked": False,
+                   "entry": {"status": "success", "rotate": False, "mode": "off", "host": ""}}
 
         async def api(r):
             path = "/" + r.request.url.split("://", 1)[-1].split("/", 1)[-1].split("?")[0]
@@ -186,6 +187,13 @@ async def main():
                     "status": "error", "code": "HOST_PARKED",
                     "message": "This address does not serve the app. Please open the link for your own country.",
                 }))
+                return
+            # Which address this arrival should be on. Answered from
+            # `current` rather than the table so a scenario can change it
+            # between page loads.
+            if path.endswith("/public/entry"):
+                await r.fulfill(status=200, content_type="application/json",
+                                body=json.dumps(current["entry"]))
                 return
             table = routes(current["region"], current["account"])
             body = next((v for k, v in table.items() if path.endswith(k)), {"status": "success"})
@@ -253,6 +261,75 @@ async def main():
         ck("KES" in cross["wallet"], "and the balance is shown in the member's own currency: " + cross["wallet"])
         ck(cross["prices"] == ["KES"], "with no Ugandan figure anywhere on screen: %s" % (cross["prices"],))
         ck(cross["depPrefix"] == "+254", "and their own dialling code on the number field: " + cross["depPrefix"])
+
+        print('\n— an arrival is moved onto a different address in his own country —')
+        # Owner: "if one joined the site or visited the site with a subdomain
+        # like gfdt so in his session, server changes the subdomain of his
+        # session to another like b5dh, so in that very country."
+        #
+        # A REAL hop, in a real browser, between two real origins. 127.0.0.1
+        # and localhost are the same server on the same port but DIFFERENT
+        # ORIGINS, which is exactly the trap this feature has to survive:
+        # sessionStorage does not cross an origin, so a marker written before
+        # the hop is gone on arrival. If the guard were storage-only the page
+        # would hop again, and again.
+        #
+        # Mode "always" for the hop itself: this harness's Firebase stub is
+        # ALWAYS signed in, and "visitors" (correctly) leaves a signed-in
+        # member exactly where he is -- which is the second half of this
+        # scenario, below.
+        current["region"] = UG_REGION; current["account"] = None
+        # Clear this origin's storage FIRST, with the answer still "stay" --
+        # set it to "move" before this load and the page hops away mid-
+        # evaluate and the clear never happens.
+        current["entry"] = {"status": "success", "rotate": False, "mode": "off", "host": ""}
+        await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
+        await page.evaluate("()=>{try{localStorage.clear();sessionStorage.clear()}catch(e){}}")
+        current["entry"] = {"status": "success", "rotate": True, "mode": "always", "host": "localhost"}
+        hops = []
+        page.on("framenavigated", lambda f: hops.append(f.url) if f == page.main_frame else None)
+        # "commit", not "load": the hop fires from start-up code, so the
+        # original page is navigated away from before it ever finishes
+        # loading and a wait_until="load" goto times out instead of passing.
+        await page.goto(f"http://127.0.0.1:{PORT}/index.html?ref=ABC123", wait_until="commit")
+        try:
+            await page.wait_for_url(f"http://localhost:{PORT}/**", timeout=20000)
+        except Exception as e:
+            print("  never reached the other address:", type(e).__name__)
+        # Long enough for a second hop to have happened if the guard failed.
+        await page.wait_for_timeout(6000)
+        moved_to = page.url
+        print("  landed on:", moved_to)
+        print("  navigations:", hops)
+        ck(moved_to.startswith(f"http://localhost:{PORT}/"),
+           "the visitor really was moved to the other address: " + moved_to)
+        ck("ref=ABC123" in moved_to,
+           "and his invite code came with him: " + moved_to)
+        ck("_e=" not in moved_to,
+           "with the “already moved” marker stripped back out of the address bar: " + moved_to)
+        later = [u for u in hops if u.startswith(f"http://localhost:{PORT}/")]
+        ck(len(later) <= 2,
+           "and he was moved ONCE, not round a loop (landings on the new address: %d)" % len(later))
+        moved_flag = await page.evaluate("()=>{try{return sessionStorage.getItem('chipzEntryMoved')}catch(e){return 'unreadable'}}")
+        ck(moved_flag == "1", "the marker is recorded on the address he landed on: %s" % moved_flag)
+
+        # A member with an account on this address is left alone: his saved
+        # password, his cached app shell and his installed icon all live on
+        # this one hostname. Same answer as above except for the mode, and
+        # the server still says rotate -- so if the app obeyed it blindly he
+        # would be moved.
+        current["entry"] = {"status": "success", "rotate": True, "mode": "visitors", "host": "127.0.0.1"}
+        await page.evaluate("()=>{try{sessionStorage.clear();localStorage.setItem('snow_state_cache', JSON.stringify({uid:'u1'}))}catch(e){}}")
+        held_on = page.url.split("?")[0]
+        await page.goto(held_on, wait_until="load")
+        await page.wait_for_timeout(6000)
+        ck(page.url.startswith(f"http://localhost:{PORT}/"),
+           "a browser already holding an account here is not moved: " + page.url)
+
+        # Back to where the next scenario expects to start.
+        current["entry"] = {"status": "success", "rotate": False, "mode": "off", "host": ""}
+        await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
+        await page.evaluate("()=>{try{localStorage.clear();sessionStorage.clear()}catch(e){}}")
 
         print('\n— the root domain does not serve the app —')
         # Owner: "l didn't want root domain to work." The server answers

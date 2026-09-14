@@ -2523,6 +2523,7 @@ async function renderRegions(){
       <td>${r.active === false ? '<span class="pill-tag t-bad">Off</span>' : '<span class="pill-tag t-ok">On</span>'}</td>
       <td style="white-space:nowrap">
         <button class="btn sm ghost" data-gen-region="${esc(r.key)}" title="Mint a new short address for this country, e.g. g26e.${esc(ADMIN_BASE_DOMAIN)}">+ Address</button>
+        <button class="btn sm ghost" data-gen-region="${esc(r.key)}" data-gen-count="5" title="Mint five at once -- what moving arrivals between addresses needs">+ 5</button>
         <button class="btn sm ghost" data-edit-region="${esc(r.key)}">Edit</button>
         ${r.isDefault ? '' : `<button class="btn sm ghost" data-del-region="${esc(r.key)}">Delete</button>`}
       </td>
@@ -2535,7 +2536,8 @@ async function renderRegions(){
     <div class="card">
       <p class="muted" style="margin:0 0 10px">Each country has its own subdomain, currency, dialling code and number shape.
       Its rates and its product prices are edited on the <b>Settings</b> and <b>Products</b> tabs with that country picked at the top.
-      A member belongs to the country they signed up on, for good: they always see that country's currency and prices, even if they open another country's address.</p>
+      A member belongs to the country they signed up on, for good: they always see that country's currency and prices, even if they open another country's address.<br><br>
+      <b>+ 5</b> mints five short addresses at once. That is what <b>Settings &rarr; Move arrivals to another address</b> needs: it sends each new visitor on to a different one of this country's addresses, and with only one address there is nowhere to send them.</p>
       <div class="table-scroll"><table><thead><tr>
         <th>Country</th><th>Currency</th><th>Code</th><th>Number</th><th>Clock</th><th>Web address</th><th>Status</th><th></th>
       </tr></thead><tbody>${rows}</tbody></table></div>
@@ -2544,7 +2546,7 @@ async function renderRegions(){
   document.querySelectorAll('[data-edit-region]').forEach(b =>
     b.addEventListener('click', () => regionForm(regionByKeyAdmin(b.dataset.editRegion))));
   document.querySelectorAll('[data-gen-region]').forEach(b =>
-    b.addEventListener('click', () => generateRegionLabel(b.dataset.genRegion, b)));
+    b.addEventListener('click', () => generateRegionLabel(b.dataset.genRegion, b, Number(b.dataset.genCount) || 1)));
   document.querySelectorAll('[data-del-region]').forEach(b =>
     b.addEventListener('click', () => deleteRegion(b.dataset.delRegion)));
 }
@@ -2610,13 +2612,14 @@ function regionForm(r){
 }
 // The server mints the label, not the panel: it has to be unique across
 // every country, and only the server can see them all at once.
-async function generateRegionLabel(key, btn){
+async function generateRegionLabel(key, btn, count){
   const was = btn.textContent;
   btn.disabled = true; btn.textContent = '…';
-  const d = await api('/admin/regions/add-label', { key });
+  const d = await api('/admin/regions/add-label', { key, count: Math.max(1, Number(count) || 1) });
   btn.disabled = false; btn.textContent = was;
   if (d.status !== 'success') return toast(d.message || 'Could not generate an address', 'err');
-  toast('New address: ' + (d.host || d.label), 'ok');
+  const made = (d.hosts && d.hosts.length) ? d.hosts : [d.host || d.label];
+  toast(made.length > 1 ? made.length + ' new addresses: ' + made.join(', ') : 'New address: ' + made[0], 'ok');
   await loadAdminRegions();
   switchTab('regions');
 }
@@ -2961,6 +2964,13 @@ async function renderSettings(){
       <label style="margin-top:12px">Retired addresses, one per line</label>
       <textarea id="sParkedHosts" rows="2" placeholder="old.chipz-platform.com">${esc((s.parkedHosts||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Addresses that must never serve the app, on top of the root domain. Your Render and EdgeOne addresses are permanently exempt, so a mistake here cannot lock you out of this panel.</p>
+      <label style="margin-top:14px">Move arrivals to another address &mdash; <b>${esc(regionByKeyAdmin().name)}</b> only</label>
+      <select id="sRotateEntry">
+        <option value="off" ${v('rotateEntry','off')==='off'?'selected':''}>Off &mdash; everyone stays on the address they opened</option>
+        <option value="visitors" ${v('rotateEntry','off')==='visitors'?'selected':''}>Visitors only &mdash; recommended</option>
+        <option value="always" ${v('rotateEntry','off')==='always'?'selected':''}>Everyone, signed-in members included</option>
+      </select>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">When someone opens <code>gfdt.&lt;base domain&gt;</code>, the server sends them on to a different short address of <b>the same country</b> &mdash; <code>b5dh.&lt;base domain&gt;</code> &mdash; for the rest of that visit. Their invite code and the page they were opening travel with them. Give this country <b>several</b> short addresses on the <b>Countries</b> tab first: with only one there is nowhere to send anybody, and only addresses listed there are ever used.<br><br><b>Why "visitors only" is the one to pick.</b> A phone files the saved password, the offline copy of the app and the installed home-screen icon under <b>one</b> address. Move a signed-in member and he loses his saved password, re-downloads the whole app on his own data, and the icon on his home screen still points at the address he left. Someone who has not signed up yet has none of that to lose. This setting is per country &mdash; switch country at the top of this tab to set it for another one.</p>
       <h2 class="sec" style="margin:14px 0 4px">Appearance</h2>
       <label>Number/digit font (every money figure in the app)</label>
       <select id="sNumberFont">${NUMBER_FONT_OPTIONS.map(f=>`<option value="${esc(f)}" ${v('numberFont','Bodoni Moda')===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
@@ -3318,6 +3328,10 @@ async function renderSettings(){
       allowedOrigins:$('sAllowedOrigins').value, maintenanceMode:$('sMaint').checked,
       baseDomain:$('sBaseDomain').value.trim(), blockRootDomain:$('sBlockRoot').checked,
       strictRegionHosts:$('sStrictHosts').checked, parkedHosts:$('sParkedHosts').value,
+      // Per country, unlike the four host controls just above -- it rides
+      // this same payload and gets stamped with the selected country by
+      // api(), because the pool of addresses it draws from is per country.
+      rotateEntry:$('sRotateEntry').value,
       maintenanceMsg:$('sMaintMsg').value.trim(), numberFont:$('sNumberFont').value,
       openingCountdownEnabled:$('sOpenCd').checked,
       openingCountdownAt:$('sOpenCdAt').value ? new Date($('sOpenCdAt').value).getTime() : 0,

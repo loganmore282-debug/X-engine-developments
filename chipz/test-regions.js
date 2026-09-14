@@ -429,8 +429,23 @@ console.log('\n— and the refusal is a readable answer, not a dropped request �
   ck(/data\.code === 'HOST_PARKED'/.test(bareClient) && /showHostParked/.test(bareClient),
     'the app handles it in api(), so it does not matter which call happens to be first');
   const parked = stripComments(fnSource(client, 'showHostParked'));
-  ck(/loadingScreen/.test(parked) && /_hostParkedShown/.test(parked),
+  // Matched on the inline hide SPECIFICALLY, not on the word
+  // 'loadingScreen' anywhere in the function: the !important stylesheet
+  // added below names it too, so a loose match passes with the inline hide
+  // deleted. Both are wanted -- the inline hide is what is in place in the
+  // same tick the notice is appended, the stylesheet is what keeps it there.
+  ck(/\$\('loadingScreen'\); if \(ls\) ls\.style\.display = 'none'/.test(parked) && /_hostParkedShown/.test(parked),
     'the notice takes the loading screen down with it, and shows once');
+  // And it has to STAY down. A Firebase session restore landing a moment
+  // later runs enterApp(), which shows #app again -- leaving the member
+  // looking at a half-painted app on an address where every request is
+  // refused. A stylesheet rule with !important beats the inline style that
+  // later code sets; an inline style set from here does not.
+  const sticky = /st\.textContent = '([^']*)'/.exec(parked);
+  ck(!!sticky && /display:none !important/.test(sticky[1]) && /appendChild/.test(parked) && /createElement\('style'\)/.test(parked),
+    'and nothing that runs afterwards can put the app back on screen over it');
+  for (const id of ['#loadingScreen', '#app', '#authScreen'])
+    ck(!!sticky && sticky[1].includes(id), `  including ${id}`);
 }
 
 console.log('\n— an address can be generated on demand —');
@@ -440,7 +455,7 @@ console.log('\n— an address can be generated on demand —');
   ck(/randFromAlphabet\(LABEL_ALPHABET/.test(body), 'the label is minted with the CSPRNG, not Math.random');
   ck(/for \(const r of regions\) for \(const l of \(r\.labels \|\| \[\]\)\) taken\.add\(l\)/.test(body),
     'and checked unique across EVERY country, not just this one');
-  ck(/\(region\.labels \|\| \[\]\)\.concat\(\[label\]\)/.test(body),
+  ck(/\(region\.labels \|\| \[\]\)\.concat\(made\)/.test(body),
     'it is ADDED, so an address already shared with members keeps working');
   const alpha = /const LABEL_ALPHABET = '([^']*)'/.exec(bare)[1];
   for (const ch of ['l', 'o', '0', '1'])
@@ -495,6 +510,266 @@ console.log('\n— the admin panel, which edits one country at a time —');
     'which really sends them');
 }
 
+
+async function rotationChecks(){
+console.log('\n— moving an arrival onto a different address in his own country —');
+// Owner: "if one joined the site or visited the site with a subdomain like
+// gfdt so in his session, server changes the subdomain of his session to
+// another like b5dh, so in that very country."
+//
+// The REAL /public/entry handler is lifted out and run here, not described:
+// which address it hands out is the whole feature, and every rule it has to
+// obey (same country, claimed addresses only, never back to where he is) is
+// a rule that only shows up when the thing actually runs.
+function handlerSource(text, path) {
+  const at = text.indexOf(`app.get('${path}'`);
+  if (at === -1) throw new Error(`no such route: ${path}`);
+  const fnAt = text.indexOf('=> {', at);
+  const open = text.indexOf('{', fnAt);
+  let depth = 0;
+  for (let k = open; k < text.length; k++) {
+    if (text[k] === '{') depth++;
+    else if (text[k] === '}') { depth--; if (depth === 0) return text.slice(text.lastIndexOf('async', fnAt), k + 1); }
+  }
+  throw new Error('unbalanced braces');
+}
+function entryHandler(opts) {
+  return new Function('deps', `
+    const { getSettings, requestHost, isInfraHost, hostOnly, verifyAuth, ROTATE_ENTRY_MODES, currentRegion } = deps;
+    let _baseDomain = deps.baseDomain;
+    return ${handlerSource(bare, '/public/entry')};
+  `)(Object.assign({
+    isInfraHost: h => ['localhost', '127.0.0.1'].includes(h) || /\.onrender\.com$/.test(h) || /\.edgeone\.app$/.test(h),
+    hostOnly: raw => String(raw || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, ''),
+    requestHost: req => String((req.headers && (req.headers.origin || req.headers.host)) || '').toLowerCase(),
+    ROTATE_ENTRY_MODES: ['off', 'visitors', 'always'],
+    baseDomain: 'example.test',
+  }, opts));
+}
+// One call: returns whatever the handler passed to res.json().
+async function askEntry(opts, req) {
+  let out = null;
+  const res = { json: o => { out = o; return res; }, status: () => res };
+  await entryHandler(opts)(Object.assign({ headers: {}, query: {} }, req), res);
+  return out;
+}
+{
+  const ugPool = api.normalizeRegion({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
+    localLength: 9, prefixes: ['7'], labels: ['gfdt', 'b5dh', 'q7rk'] }, 'ug');
+  const kePool = api.normalizeRegion({ key: 'ke', name: 'Kenya', currency: 'KES', dialCode: '254',
+    localLength: 9, prefixes: ['7'], labels: ['shy', 'm4te'] }, 'ke');
+  const base = (region, mode) => ({
+    currentRegion: () => region,
+    getSettings: async () => ({ rotateEntry: mode }),
+    verifyAuth: async () => null,
+  });
+  const from = { headers: { origin: 'gfdt.example.test' } };
+
+  const off = await askEntry(base(ugPool, 'off'), from);
+  ck(off && off.status === 'success' && off.rotate === false, 'off: nobody is moved');
+
+  // Run it enough times to see the whole pool, because which one it picks is
+  // deliberately random -- a single call could pass by luck.
+  const seen = new Set();
+  let everRotated = 0, everWrong = 0;
+  for (let i = 0; i < 200; i++) {
+    const r = await askEntry(base(ugPool, 'visitors'), from);
+    if (r.rotate) { everRotated++; seen.add(r.host); }
+    if (r.host === 'gfdt.example.test') everWrong++;
+  }
+  ck(everRotated === 200, 'visitors: a visitor is moved');
+  ck(everWrong === 0, 'and never back onto the address he is already on');
+  ck(seen.size === 2 && seen.has('b5dh.example.test') && seen.has('q7rk.example.test'),
+    'the pool is this country’s other short addresses, and all of them get used');
+
+  // "so in that very country" -- the one rule the whole feature hangs on.
+  const keSeen = new Set();
+  for (let i = 0; i < 60; i++) {
+    const r = await askEntry(base(kePool, 'visitors'), { headers: { origin: 'shy.example.test' } });
+    if (r.rotate) keSeen.add(r.host);
+  }
+  ck(keSeen.size === 1 && keSeen.has('m4te.example.test'),
+    'a Kenyan arrival is only ever moved to another Kenyan address');
+
+  // The region middleware hands a signed-in member his OWN region even on
+  // another country's hostname -- so a Kenyan member who opens a Ugandan
+  // address must be offered Kenya's, never Uganda's.
+  const cross = await askEntry(base(kePool, 'always'), from);
+  ck(cross.rotate && cross.host === 'shy.example.test' || cross.host === 'm4te.example.test',
+    'a member on another country’s address is offered his own country’s, not that one’s');
+  ck(!['gfdt.example.test', 'b5dh.example.test', 'q7rk.example.test'].includes(cross.host),
+    'and never one of the other country’s');
+
+  // Signed in.
+  const signedIn = { headers: { origin: 'gfdt.example.test', authorization: 'Bearer tok' } };
+  const asMember = m => Object.assign(base(ugPool, m), { verifyAuth: async () => 'uid-1' });
+  ck((await askEntry(asMember('visitors'), signedIn)).rotate === false,
+    'visitors: a signed-in member is left where he is (his saved password, offline app and installed icon all live on that one address)');
+  ck((await askEntry(asMember('always'), signedIn)).rotate === true,
+    'always: he is moved anyway, which is what that mode means');
+  // A Bearer header that Firebase rejects is not a signed-in member.
+  ck((await askEntry(base(ugPool, 'visitors'), signedIn)).rotate === true,
+    'a token the server cannot verify does not count as signed in');
+
+  // The owner's own testing addresses.
+  for (const h of ['chipz-app.onrender.com', 'localhost', 'chipz.edgeone.app']) {
+    ck((await askEntry(base(ugPool, 'always'), { headers: { origin: h } })).rotate === false,
+      `nobody is moved off ${h} -- that is the owner testing`);
+  }
+
+  // Nowhere to send anybody.
+  const lone = api.normalizeRegion({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
+    localLength: 9, prefixes: ['7'], labels: ['gfdt'] }, 'ug');
+  ck((await askEntry(base(lone, 'always'), from)).rotate === false,
+    'a country with one short address moves nobody, rather than sending him round to himself');
+  const none = api.normalizeRegion({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
+    localLength: 9, prefixes: ['7'], labels: [] }, 'ug');
+  ck((await askEntry(base(none, 'always'), from)).rotate === false, 'and a country with none moves nobody');
+
+  // ?from= wins over the header, which is how the app names the address it
+  // is actually on when the request carries no Origin.
+  const byQuery = new Set();
+  for (let i = 0; i < 80; i++) {
+    const r = await askEntry(base(ugPool, 'always'), { headers: {}, query: { from: 'b5dh.example.test' } });
+    if (r.rotate) byQuery.add(r.host);
+  }
+  ck(!byQuery.has('b5dh.example.test') && byQuery.size === 2,
+    'the app can name the address it is on, and is never sent back to it');
+
+  // A broken settings read must not stop the app loading.
+  const brokeRes = await askEntry({ currentRegion: () => ugPool,
+    getSettings: async () => { throw new Error('db down'); }, verifyAuth: async () => null }, from);
+  ck(brokeRes && brokeRes.status === 'success' && brokeRes.rotate === false,
+    'a failure answers “stay where you are” -- the address he has works');
+
+  // Only addresses the country claims. A label with no base domain to hang
+  // off would produce a bare hostname that resolves nowhere.
+  const noBase = await askEntry(Object.assign(base(ugPool, 'always'), { baseDomain: '' }), from);
+  ck(noBase.rotate === false, 'with no base domain set, nobody is moved anywhere');
+}
+{
+  // Only the three known modes, refused rather than coerced.
+  const m = /const ROTATE_ENTRY_MODES = \[([^\]]*)\]/.exec(bare);
+  ck(!!m, 'the modes are named in one place');
+  ck(m && m[1].split(',').map(x => x.trim().replace(/'/g, '')).sort().join('|') === 'always|off|visitors',
+    'and there are exactly three of them');
+  // Two structural guarantees the stubs above cannot see, because the stub
+  // getSettings answers whatever key it is handed.
+  const entryBody = handlerSource(bare, '/public/entry');
+  ck(/getSettings\(region\.key\)/.test(entryBody),
+    'the mode is read from this country’s own settings, not the founding country’s');
+  ck(/const pool = \(region\.labels \|\| \[\]\)/.test(entryBody),
+    'and the pool is built from this country’s own address list and nothing else');
+  const upd = bare.slice(bare.indexOf("app.post('/admin/settings/update'"));
+  const body = upd.slice(0, upd.indexOf("app.post('", 10));
+  ck(/'rotateEntry' in updates/.test(body) && /ROTATE_ENTRY_MODES\.includes\(mode\)/.test(body),
+    'a typed mode is checked against them at save time');
+  ck(/return res\.status\(400\)[\s\S]{0,200}off, visitors, or always/.test(body),
+    'and a bad one is refused, not quietly turned into “off”');
+  // Per COUNTRY, not backend-wide: the pool of addresses is per country, and
+  // "in that very country" is the point.
+  const g = /const GLOBAL_ONLY_SETTINGS = \[([^\]]*)\]/.exec(bare)[1];
+  ck(!/rotateEntry/.test(g), 'and it is a per-country setting, so each country can have its own answer');
+  ck(/rotateEntry:/.test(bare.slice(bare.indexOf('const DEFAULT_SETTINGS'), bare.indexOf('const DEFAULT_SETTINGS') + 9000)),
+    'with a default, so a country that has never been asked is “off”');
+}
+{
+  // Several addresses at once: the pool needs more than one, and one tap per
+  // address is a lot of tapping.
+  const add = bare.slice(bare.indexOf("app.post('/admin/regions/add-label'"));
+  const body = add.slice(0, add.indexOf("app.post('", 10));
+  ck(/Number\(req\.body\.count\)/.test(body), 'the panel can ask for several short addresses in one go');
+  ck(/Math\.min\(24 - held/.test(body), 'capped at the room left under the 24 a country may hold');
+  ck(/taken\.add\(label\)/.test(body),
+    'and each one minted is counted as taken, so a batch cannot contain the same address twice');
+  // Checked on the REPLY line specifically. A file-wide /labels: made/ passed
+  // with the reply stripped back to one address, because the admin-log line
+  // right above it says `labels: made.join(', ')`.
+  const reply = /res\.json\(\{ status: 'success', label: made\[0\].*$/m.exec(body);
+  ck(!!reply && /labels: made,/.test(reply[0]) && /hosts: made\.map\(hostOf\)/.test(reply[0]),
+    'all of them come back, not just the first');
+}
+{
+  // The client half. The loop guard is the whole safety of this feature and
+  // it CANNOT live in sessionStorage alone -- storage is per origin, so the
+  // marker written before the hop does not exist on the address we land on.
+  ck(/ENTRY_MOVE_PARAM = '_e'/.test(bareClient), 'the “already moved” marker travels in the URL');
+  const moved = stripComments(fnSource(client, 'entryAlreadyMoved'));
+  ck(/searchParams\.get\(ENTRY_MOVE_PARAM\)/.test(moved) && /sessionStorage\.setItem\(ENTRY_MOVE_KEY/.test(moved),
+    'and is copied into this address’s own storage on arrival');
+  ck(/searchParams\.delete\(ENTRY_MOVE_PARAM\)/.test(moved) && /history\.replaceState/.test(moved),
+    'then stripped back out of the address bar, so a member cannot share a link that says “already moved”');
+  const rot = stripComments(fnSource(client, 'maybeRotateEntry'));
+  ck(/if \(entryAlreadyMoved\(\)\) return false/.test(rot), 'a session is only ever moved once');
+  ck(/'\/public\/entry\?from=' \+ encodeURIComponent\(location\.hostname\)/.test(rot),
+    'the app tells the server which address it is on');
+  ck(/r\.host === location\.hostname/.test(rot), 'and refuses a hop to where it already is');
+  ck(/r\.mode !== 'always'/.test(rot) && /localStorage\.getItem\(CACHED_STATE_KEY\)/.test(rot),
+    'the app makes its own “is anyone signed in here” check, because Firebase has usually not restored the session by the first request');
+  // The hop itself, RUN rather than described: which URL the browser is
+  // actually sent to is the whole of it. A static "does it assign
+  // url.hostname" check passed with a line that blanked the path added right
+  // in front of it -- and the invite code lives in the path.
+  function runRotate(deps) {
+    const moves = [];
+    const loc = {
+      protocol: 'https:', hostname: 'gfdt.example.test',
+      href: deps.href || 'https://gfdt.example.test/refCode=ABC#pages/register/?ref=ABC',
+      replace: t => moves.push(['replace', t]),
+      assign: t => moves.push(['assign', t]),
+    };
+    const store = {};
+    const fn = new Function('deps', `
+      const api = deps.api, location = deps.location;
+      const sessionStorage = deps.sessionStorage, localStorage = deps.localStorage;
+      const CACHED_STATE_KEY = 'snow_state_cache';
+      const ENTRY_MOVE_PARAM = '_e', ENTRY_MOVE_KEY = 'chipzEntryMoved';
+      const entryAlreadyMoved = deps.entryAlreadyMoved;
+      ${fnSource(client, 'maybeRotateEntry')}
+      return maybeRotateEntry;
+    `)({
+      api: async () => deps.answer,
+      location: loc,
+      entryAlreadyMoved: () => !!deps.alreadyMoved,
+      sessionStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } },
+      localStorage: { getItem: () => (deps.signedInHere ? '{"uid":"u1"}' : null) },
+    });
+    return fn().then(r => ({ moved: r, moves }));
+  }
+  const hop = await runRotate({ answer: { status: 'success', rotate: true, mode: 'visitors', host: 'b5dh.example.test' } });
+  ck(hop.moved === true && hop.moves.length === 1, 'a visitor really is sent somewhere');
+  ck(hop.moves[0][0] === 'replace',
+    'with replace(), not assign(), so the phone’s Back button cannot walk him back onto the old address');
+  ck(hop.moves[0][1] === 'https://b5dh.example.test/refCode=ABC?_e=1#pages/register/?ref=ABC',
+    'only the hostname changes -- the path, the ?ref= code and the #hash all travel with him');
+  const held = await runRotate({ signedInHere: true, answer: { status: 'success', rotate: true, mode: 'visitors', host: 'b5dh.example.test' } });
+  ck(held.moved === false && held.moves.length === 0,
+    'and a browser that already holds a signed-in account on this address is left alone');
+  const forced = await runRotate({ signedInHere: true, answer: { status: 'success', rotate: true, mode: 'always', host: 'b5dh.example.test' } });
+  ck(forced.moved === true, 'unless the mode is “always”');
+  const stay = await runRotate({ answer: { status: 'success', rotate: false, mode: 'visitors', host: '' } });
+  ck(stay.moved === false && stay.moves.length === 0, '“stay” moves nobody');
+  const again = await runRotate({ alreadyMoved: true, answer: { status: 'success', rotate: true, mode: 'always', host: 'b5dh.example.test' } });
+  ck(again.moved === false && again.moves.length === 0, 'and a session already moved once is never moved again');
+  ck(/var _entryPromise = maybeRotateEntry\(\);/.test(bareClient),
+    'it runs at start-up');
+  ck(bareClient.indexOf('maybeRotateEntry();') < bareClient.indexOf('boot();'),
+    'alongside boot(), not in front of it -- an extra round trip before the loading screen would slow every arrival down to buy an answer that is usually “stay”');
+}
+{
+  const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+  ck(/id="sRotateEntry"/.test(admin) && /rotateEntry:\$\('sRotateEntry'\)\.value/.test(admin),
+    'the mode is set from the panel and really sent');
+  ck(/value="off"/.test(admin) && /value="visitors"/.test(admin) && /value="always"/.test(admin),
+    'all three modes are offered');
+  ck(/Visitors only &mdash; recommended/.test(admin),
+    'and the recommended one says so');
+  ck(/saved password/.test(admin) && /home-screen icon/.test(admin),
+    'with what moving a signed-in member actually costs him spelled out');
+  ck(/data-gen-count="5"/.test(admin), 'and five addresses can be minted in one tap');
+}
+}
+
 console.log('\n— the app is told its region, and never tells the server —');
 {
   // Checked PER ROUTE. One shared "does the file mention publicRegionView"
@@ -525,5 +800,9 @@ ck(!/'UGX ' \+|"UGX " \+|>UGX</.test(bareClient), 'no screen still prints a hard
 ck(!/\.slice\(3\)/.test(stripComments(fnSource(client, 'fmtUGXCents'))),
   'and the cents formatter no longer assumes the label is exactly three characters');
 
-console.log(failed ? `\n${failed} FAILED` : '\nregions: all cases pass');
-process.exit(failed ? 1 : 0);
+// The rotation checks run the real async route handler, so they finish
+// after everything above; the verdict waits for them.
+rotationChecks().then(() => {
+  console.log(failed ? `\n${failed} FAILED` : '\nregions: all cases pass');
+  process.exit(failed ? 1 : 0);
+}).catch(e => { console.log('FAIL  rotation checks threw: ' + (e && e.message)); process.exit(1); });

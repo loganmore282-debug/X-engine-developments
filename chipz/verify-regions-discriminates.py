@@ -267,8 +267,8 @@ MUTATIONS = [
      '    for (const l of (region.labels || [])) taken.add(l);'),
 
     ('a generated address replaces the ones already shared with members', SERVER,
-     '    const next = normalizeRegion(Object.assign({}, region, { labels: (region.labels || []).concat([label]) }), key);',
-     '    const next = normalizeRegion(Object.assign({}, region, { labels: [label] }), key);'),
+     '    const next = normalizeRegion(Object.assign({}, region, { labels: (region.labels || []).concat(made) }), key);',
+     '    const next = normalizeRegion(Object.assign({}, region, { labels: made }), key);'),
 
     ('generated addresses use characters that get misread off a screen', SERVER,
      "const LABEL_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';",
@@ -307,7 +307,7 @@ MUTATIONS = [
      '      labels: (cur.labels || []),'),
 
     ('the panel cannot generate an address', ADMIN,
-     "  const d = await api('/admin/regions/add-label', { key });",
+     "  const d = await api('/admin/regions/add-label', { key, count: Math.max(1, Number(count) || 1) });",
      "  const d = { status: 'error', message: 'disabled' };"),
 
     ('the host rules lose their card in Settings', ADMIN,
@@ -351,6 +351,123 @@ MUTATIONS = [
   for (const r of _regionsSnapshot) for (const h of regionHostnames(r)) _regionHosts.push(h);
   refreshCorsSnapshot();""",
      """  /* region hosts not folded into the CORS allowlist */"""),
+
+    # ── moving an arrival onto a different address in his own country ──
+    ('a visitor is sent back to the address he is already on', SERVER,
+     "      .filter(h => h && h !== from);",
+     "      .filter(h => h);"),
+
+    ('the address the app says it is on is ignored', SERVER,
+     "    const from = hostOnly(req.query.from || '') || host;",
+     "    const from = host;"),
+
+    ('the owner testing on a service host gets bounced onto a live address', SERVER,
+     "    if (isInfraHost(host)) return res.json(stay);\n",
+     ""),
+
+    ('a signed-in member is moved in visitors mode', SERVER,
+     "    if (mode !== 'always' && (req.headers.authorization || '').startsWith('Bearer ')) {",
+     "    if (false && (req.headers.authorization || '').startsWith('Bearer ')) {"),
+
+    ('the signed-in test is inverted', SERVER,
+     "      if (uid) return res.json(stay);",
+     "      if (!uid) return res.json(stay);"),
+
+    ('a country with no other address hands out nothing at all', SERVER,
+     "    if (!pool.length) return res.json(stay);\n",
+     ""),
+
+    ('the mode is read from the founding country instead of this one', SERVER,
+     "    const sett = await getSettings(region.key);",
+     "    const sett = await getSettings(DEFAULT_REGION_KEY);"),
+
+    ('the pool is not built from this country own address list', SERVER,
+     "    const pool = (region.labels || [])",
+     "    const pool = (region.hosts || [])"),
+
+    ('a failed settings read stops the app loading', SERVER,
+     "    res.json({ status: 'success', rotate: false, mode: 'off', host: '' });\n  }",
+     "    res.status(500).json({ status: 'error', message: 'entry failed' });\n  }"),
+
+    ('a mistyped mode is quietly turned into off instead of refused', SERVER,
+     """      if (!ROTATE_ENTRY_MODES.includes(mode))
+        return res.status(400).json({ status: 'error', message: 'Moving arrivals to another address must be off, visitors, or always.' });
+      updates.rotateEntry = mode;""",
+     """      updates.rotateEntry = ROTATE_ENTRY_MODES.includes(mode) ? mode : 'off';"""),
+
+    ('the mode becomes backend-wide, so every country shares one answer', SERVER,
+     "'parkedHosts', 'strictRegionHosts'];",
+     "'parkedHosts', 'strictRegionHosts', 'rotateEntry'];"),
+
+    ('the mode has no default, so a country never asked is undefined', SERVER,
+     "  rotateEntry: 'off',\n",
+     ""),
+
+    ('several addresses at once is uncapped', SERVER,
+     "    const want = Math.min(24 - held, Math.max(1, Math.round(Number(req.body.count)) || 1));",
+     "    const want = Math.max(1, Math.round(Number(req.body.count)) || 1);"),
+
+    ('a batch can mint the same address twice', SERVER,
+     "      taken.add(label);\n",
+     ""),
+
+    ('only the first of a batch comes back', SERVER,
+     "    res.json({ status: 'success', label: made[0], labels: made, host: hostOf(made[0]), hosts: made.map(hostOf), region: next });",
+     "    res.json({ status: 'success', label: made[0], host: hostOf(made[0]), region: next });"),
+
+    ('the loop guard is gone, so every landing hops again', CLIENT,
+     "  if (entryAlreadyMoved()) return false;\n",
+     ""),
+
+    ('the marker is left in the address bar for a member to share', CLIENT,
+     "    url.searchParams.delete(ENTRY_MOVE_PARAM);",
+     "    /* marker left in the URL */"),
+
+    ('the marker in the URL is never read, so only per-origin storage guards the loop', CLIENT,
+     "  if (url.searchParams.get(ENTRY_MOVE_PARAM)) {",
+     "  if (false) {"),
+
+    ('the old address stays in the back stack', CLIENT,
+     "  try { location.replace(target); } catch (_) { location.href = target; }",
+     "  try { location.assign(target); } catch (_) { location.href = target; }"),
+
+    ('the app own signed-in check is gone, so a returning member is moved', CLIENT,
+     """  if (r.mode !== 'always') {
+    let hasAccountHere = false;
+    try { hasAccountHere = !!localStorage.getItem(CACHED_STATE_KEY); } catch (_) {}
+    if (hasAccountHere) return false;
+  }""",
+     """  /* trusting the server own signed-in check */"""),
+
+    ('the path, ref code and hash are dropped on the hop', CLIENT,
+     "    url.hostname = r.host;",
+     "    url.pathname = '/'; url.hash = ''; url.hostname = r.host;"),
+
+    ('the hop is put in front of the loading screen', CLIENT,
+     "var _entryPromise = maybeRotateEntry();\nvar _bootPromise = boot();",
+     "var _bootPromise = boot();\nvar _entryPromise = maybeRotateEntry();"),
+
+    ('the panel never sends the mode it shows as saved', ADMIN,
+     "      rotateEntry:$('sRotateEntry').value,\n",
+     ""),
+
+    ('the panel offers no way to mint a pool in one tap', ADMIN,
+     '        <button class="btn sm ghost" data-gen-region="${esc(r.key)}" data-gen-count="5" title="Mint five at once -- what moving arrivals between addresses needs">+ 5</button>\n',
+     ""),
+
+    ('the parked notice can be covered by the app a moment later', CLIENT,
+     """    const st = document.createElement('style');
+    st.textContent = '#loadingScreen,#app,#authScreen{display:none !important}';
+    document.head.appendChild(st);""",
+     """    /* the one-off inline hide above is all there is */"""),
+
+    ('the sticky rule stops covering the spinner', CLIENT,
+     "    st.textContent = '#loadingScreen,#app,#authScreen{display:none !important}';",
+     "    st.textContent = '#app,#authScreen{display:none !important}';"),
+
+    ('the sticky rule stops covering the sign-in screen', CLIENT,
+     "st.textContent = '#loadingScreen,#app,#authScreen{display:none !important}';",
+     "st.textContent = '#loadingScreen,#app{display:none !important}';"),
 ]
 
 
