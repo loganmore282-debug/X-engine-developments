@@ -1,0 +1,160 @@
+package com.chipzplatform.smsforwarder;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+
+/**
+ * A lightweight foreground service whose only job is to keep the app alive and
+ * exempt from aggressive battery-killing, so the SMS receiver keeps working
+ * reliably. It holds no logic itself.
+ */
+public class ForwardService extends Service {
+    private static final String CHANNEL = "chipz_sms_fwd";
+    private static final int NOTIF_ID = 1;
+    /** How often to look for a newer APK while running. */
+    private static final long UPDATE_CHECK_MS = 6 * 60 * 60 * 1000L;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private String updateBanner = null;   // non-null once a newer version exists
+    private Runnable updateTick;
+    private Runnable heartbeatTick;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        startForeground(NOTIF_ID, buildNotification());
+        startUpdateChecks();
+        startHeartbeats();
+        // Runs once per genuine service (re)start -- a fresh "Start
+        // forwarding" tap, or BootReceiver restarting it after a reboot --
+        // not on every onStartCommand() while already running. Owner: "l
+        // want it to catch out even previous messages for matching" -- any
+        // SMS that arrived while forwarding was off (or before this phone
+        // was ever activated) never got a live broadcast delivered to
+        // SmsReceiver, and nothing replays that later on its own. This
+        // sweeps the phone's own inbox for anything since the last scan
+        // (the whole inbox, the very first time) and forwards it through the
+        // same webhook, so a "forgot to turn it on" gap self-heals the
+        // moment forwarding starts again, with no admin action needed.
+        InboxScanner.scanAndForwardAsync(this, false, null);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        startForeground(NOTIF_ID, buildNotification());
+        return START_STICKY;   // restart if the system kills us
+    }
+
+    @Override
+    public void onDestroy() {
+        if (updateTick != null) handler.removeCallbacks(updateTick);
+        if (heartbeatTick != null) handler.removeCallbacks(heartbeatTick);
+        super.onDestroy();
+    }
+
+    /**
+     * Tells the server this phone is still alive, every 15 minutes.
+     *
+     * Silence is otherwise ambiguous: a number with no SMS coming in looks
+     * identical whether it is simply idle or the phone is dead, out of
+     * credit, or has had the app killed. The admin panel marks a number
+     * healthy only while these keep arriving, so a phone that quietly stops
+     * working becomes visible instead of being mistaken for a slow day.
+     */
+    private void startHeartbeats() {
+        heartbeatTick = new Runnable() {
+            @Override public void run() {
+                Heartbeat.sendAsync(ForwardService.this);
+                handler.postDelayed(this, Heartbeat.INTERVAL_MS);
+            }
+        };
+        handler.post(heartbeatTick);
+    }
+
+    /**
+     * These phones sit untouched in a drawer forwarding SMS, so nobody would
+     * ever see an update prompt inside the app. The ongoing notification this
+     * service already shows is the one thing an admin does see, so it doubles
+     * as the update banner.
+     */
+    private void startUpdateChecks() {
+        updateTick = new Runnable() {
+            @Override public void run() {
+                UpdateChecker.checkAsync(ForwardService.this, new UpdateChecker.Callback() {
+                    @Override public void onResult(boolean available, int latestCode, final String latestName) {
+                        final String banner = available ? latestName : null;
+                        handler.post(new Runnable() {
+                            @Override public void run() {
+                                boolean changed = (banner == null) != (updateBanner == null)
+                                        || (banner != null && !banner.equals(updateBanner));
+                                updateBanner = banner;
+                                if (changed) refreshNotification();
+                            }
+                        });
+                    }
+                });
+                handler.postDelayed(this, UPDATE_CHECK_MS);
+            }
+        };
+        handler.post(updateTick);
+    }
+
+    private void refreshNotification() {
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) nm.notify(NOTIF_ID, buildNotification());
+    }
+
+    private Notification buildNotification() {
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel ch = new NotificationChannel(
+                    CHANNEL, "Chipz SMS Forwarder", NotificationManager.IMPORTANCE_LOW);
+            ch.setDescription("Keeps deposit SMS forwarding running");
+            if (nm != null) nm.createNotificationChannel(ch);
+        }
+        // Tapping the notification opens the app, where the update prompt and
+        // the Download button live.
+        PendingIntent tap = PendingIntent.getActivity(this, 0,
+                new Intent(this, MainActivity.class),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Notification.Builder b = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                ? new Notification.Builder(this, CHANNEL)
+                : new Notification.Builder(this);
+        return b.setContentTitle(updateBanner == null
+                        ? "Chipz SMS active"
+                        : "Chipz SMS update available (" + updateBanner + ")")
+                .setContentText(updateBanner == null
+                        ? "Listening for Mobile Money deposit messages"
+                        : "Still forwarding. Tap to update.")
+                .setSmallIcon(R.drawable.ic_launcher)
+                .setContentIntent(tap)
+                .setOngoing(true)
+                .build();
+    }
+
+    public static void start(Context ctx) {
+        Intent i = new Intent(ctx, ForwardService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ctx.startForegroundService(i);
+        } else {
+            ctx.startService(i);
+        }
+    }
+
+    public static void stop(Context ctx) {
+        ctx.stopService(new Intent(ctx, ForwardService.class));
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) { return null; }
+}

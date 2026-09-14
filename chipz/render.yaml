@@ -1,0 +1,211 @@
+services:
+  - type: web
+    name: chipz-server
+    runtime: node
+    rootDir: chipz
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: ADMIN_KEY
+        sync: false
+      - key: MARZPAY_KEY
+        sync: false
+      # Round 141 -- MarzSms, a SEPARATE MarzPay product (its own
+      # dashboard/API keys at sms.wearemarz.com) used only to text-alert
+      # admins on a new withdrawal request. Optional: server.js skips the
+      # SMS entirely (no error) if this is left unset.
+      - key: MARZSMS_KEY
+        sync: false
+      - key: QUOTAGUARDSTATIC_URL
+        sync: false
+      - key: LIPAPAY_MCHID
+        sync: false
+      - key: LIPAPAY_PRIVATE_KEY
+        sync: false
+      - key: LIPAPAY_SANDBOX
+        sync: false
+      # Round 106 -- subagent-audit-caught: server.js reads both of these
+      # (manual-deposit SMS-forwarder auth + the forwarder app's optional
+      # settings-screen lock) but neither was documented here, so recreating
+      # this service from render.yaml alone silently disabled automated
+      # manual-deposit crediting with no signal anything was missing.
+      - key: MANUAL_SMS_SECRET
+        sync: false
+      - key: FORWARDER_PASSWORD
+        sync: false
+
+  - type: web
+    name: chipz-app
+    runtime: static
+    rootDir: chipz/user
+    buildCommand: "echo no build needed"
+    staticPublishPath: .
+    autoDeploy: true
+    # index.html is the whole app -- no-cache means "revalidate every time",
+    # not "never store", so an unchanged build still answers 304 while a new
+    # one is picked up immediately, instead of phones sitting on stale builds.
+    headers:
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      - path: /manifest.json
+        name: Cache-Control
+        value: no-cache
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      # The three directives this policy started as (frame-ancestors,
+      # object-src, base-uri) stop the page being framed or having its
+      # relative URLs re-pointed. They do nothing about the attack that
+      # actually matters on a money app: script injected into the page
+      # reading a member's balance, session or trade password and POSTing it
+      # to a server the attacker owns. connect-src is what stops that, and it
+      # is the reason this policy exists in full.
+      #
+      # script-src has to carry 'unsafe-inline'. The whole app is one inline
+      # bundle: build-core.js emits it as `s.textContent = code` on a
+      # created <script> element, which the browser treats as inline, and a
+      # hash cannot cover it because the content changes every build.
+      # 'unsafe-eval' is deliberately NOT here -- the bundle is decoded and
+      # injected, never eval()'d or Function()'d, so leaving it out costs
+      # nothing and keeps the strongest half of script-src intact: no script
+      # can be LOADED from a domain not listed here.
+      #
+      # img-src/media-src stay at `https:` on purpose rather than a fixed
+      # list. Product photos, brand assets and the announcement image arrive
+      # as data: URIs, but the home banner video can legitimately be an
+      # admin-entered external URL (sanitizeBannerVideoUrl in server.js), so
+      # pinning an origin here would break a feature the owner controls from
+      # the panel. Images are not an exfiltration path worth that trade.
+      #
+      # *.googleapis.com covers Firebase Auth (identitytoolkit, securetoken)
+      # and the admin panel's FCM registration in one entry -- named
+      # individually they break silently the first time Firebase adds a host.
+      # If the backend ever moves off chipz-server.onrender.com, THIS LINE
+      # must change with API_BASE in user-src/original_module.js or every API
+      # call is blocked by the browser with no server-side signal at all.
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      # Nothing in either panel uses a camera, microphone, location or the
+      # Payment Request API. Denying them outright means injected script
+      # cannot turn one on either.
+      - path: /*
+        name: Permissions-Policy
+        value: "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+      # Round 106 -- subagent-audit-caught: chipz-server's helmet config sets
+      # HSTS + Cross-Origin-Resource-Policy, but neither static site (the
+      # browser-facing origins members and admins actually navigate to) had
+      # them documented here -- a real oversight, not a deliberate
+      # difference, since 5 of the 6 header categories were already present.
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=63072000; includeSubDomains
+      - path: /*
+        name: Cross-Origin-Resource-Policy
+        value: same-site
+    # ONE rewrite, and only one. Referral links are shared as
+    # <origin>/refCode=<code> (owner: "let the link be '/refCode=' not other
+    # more words"), which is a real URL PATH -- so without this rule the host
+    # looks for a file called "refCode=Gy2f", doesn't find it, and every
+    # invite anyone sends 404s.
+    #
+    # It stays scoped to that exact prefix. A broad /* -> /index.html rewrite
+    # buys nothing here (the app never puts anything else in the path: every
+    # pushState/replaceState call passes '' to keep the current URL, and
+    # navigation is pure in-memory state) and a rule that broad sitting in
+    # front of sw.js, the manifest and the nav/action PNGs is a real risk --
+    # a service worker that ever answers with index.html fails in a way that
+    # looks exactly like the stale-cache problems this project already fights.
+    #
+    # IF THE FRONTEND IS UPLOADED TO EDGEONE instead of served from here,
+    # the same single-path rewrite must be configured there too, or invite
+    # links 404 on that host while working fine on this one.
+    routes:
+      - type: rewrite
+        source: /refCode=*
+        destination: /index.html
+
+  - type: web
+    name: chipz-admin
+    runtime: static
+    rootDir: chipz/admin
+    buildCommand: "echo no build needed"
+    staticPublishPath: .
+    autoDeploy: true
+    # Same headers as the app, and they matter MORE here -- this panel moves
+    # money, so it must never be embeddable in someone else's page.
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      # The three directives this policy started as (frame-ancestors,
+      # object-src, base-uri) stop the page being framed or having its
+      # relative URLs re-pointed. They do nothing about the attack that
+      # actually matters on a money app: script injected into the page
+      # reading a member's balance, session or trade password and POSTing it
+      # to a server the attacker owns. connect-src is what stops that, and it
+      # is the reason this policy exists in full.
+      #
+      # script-src has to carry 'unsafe-inline'. The whole app is one inline
+      # bundle: build-core.js emits it as `s.textContent = code` on a
+      # created <script> element, which the browser treats as inline, and a
+      # hash cannot cover it because the content changes every build.
+      # 'unsafe-eval' is deliberately NOT here -- the bundle is decoded and
+      # injected, never eval()'d or Function()'d, so leaving it out costs
+      # nothing and keeps the strongest half of script-src intact: no script
+      # can be LOADED from a domain not listed here.
+      #
+      # img-src/media-src stay at `https:` on purpose rather than a fixed
+      # list. Product photos, brand assets and the announcement image arrive
+      # as data: URIs, but the home banner video can legitimately be an
+      # admin-entered external URL (sanitizeBannerVideoUrl in server.js), so
+      # pinning an origin here would break a feature the owner controls from
+      # the panel. Images are not an exfiltration path worth that trade.
+      #
+      # *.googleapis.com covers Firebase Auth (identitytoolkit, securetoken)
+      # and the admin panel's FCM registration in one entry -- named
+      # individually they break silently the first time Firebase adds a host.
+      # If the backend ever moves off chipz-server.onrender.com, THIS LINE
+      # must change with API_BASE in user-src/original_module.js or every API
+      # call is blocked by the browser with no server-side signal at all.
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      # Nothing in either panel uses a camera, microphone, location or the
+      # Payment Request API. Denying them outright means injected script
+      # cannot turn one on either.
+      - path: /*
+        name: Permissions-Policy
+        value: "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=63072000; includeSubDomains
+      - path: /*
+        name: Cross-Origin-Resource-Policy
+        value: same-site
+    # No SPA rewrite here either, for the same reason: admin/index.html is
+    # the entire panel and nothing routes by path.

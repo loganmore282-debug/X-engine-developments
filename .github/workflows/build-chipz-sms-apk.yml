@@ -1,0 +1,154 @@
+name: Build Chipz SMS Forwarder APK
+
+# Chipz's forwarder had no workflow at all -- the fork copied the app but not
+# the pipeline that turns it into an installable APK, so the only Chipz build
+# that ever existed was whatever an admin sideloaded from Snow's release. This
+# publishes Chipz's own, under its own tag, matching the URL compiled into
+# UpdateChecker.java.
+
+on:
+  push:
+    branches: [ "claude/chipz-platform-build" ]
+    paths:
+      - "chipz/sms-forwarder-app/**"
+      - ".github/workflows/build-chipz-sms-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      # Gradle does catch malformed XML, but only 25s in and only as a Java
+      # stack trace out of the manifest merger. This fails in two seconds
+      # naming the file and line. (A literal "--" inside an XML comment is
+      # illegal and broke a build exactly this way.)
+      - name: Validate XML
+        working-directory: chipz/sms-forwarder-app
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.dom.minidom as m
+          bad = 0
+          for f in glob.glob('app/src/main/**/*.xml', recursive=True):
+              try:
+                  m.parse(f); print('ok   ', f)
+              except Exception as e:
+                  print('BROKEN', f, '->', e); bad += 1
+          sys.exit(1 if bad else 0)
+          PY
+
+      # A brace count cannot see a method that is called but no longer
+      # defined -- an edit that deletes one leaves the file balanced. This
+      # says which name is missing, in about a second.
+      - name: Check Java symbols
+        working-directory: chipz/sms-forwarder-app
+        run: python3 check-java-symbols.py
+
+      # The package rename that split this app off Snow's is exactly the kind
+      # of change that half-lands: one file left on the old package still
+      # compiles nothing, and one stale URL sends a phone's deposits to the
+      # other platform. Both are cheap to assert, so assert them.
+      - name: Check the fork is fully renamed
+        working-directory: chipz/sms-forwarder-app
+        run: |
+          if grep -rniI 'snowplatform\|mylifeismyhappiness\|snow-sms-app\|snow-sms-forwarder' app/ build.gradle settings.gradle; then
+            echo "Snow residue above -- the Chipz forwarder must not carry Snow's package, server or release tag."
+            exit 1
+          fi
+          grep -q 'chipz-server.onrender.com/deposit/manual/sms-forwarder' \
+            app/src/main/java/com/chipzplatform/smsforwarder/MainActivity.java
+          grep -q 'releases/download/chipz-sms-app/' \
+            app/src/main/java/com/chipzplatform/smsforwarder/UpdateChecker.java
+          echo "fork is clean"
+
+      - name: Build debug APK
+        working-directory: chipz/sms-forwarder-app
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      # Distinct filename so this never gets confused with the Snow or Nexus
+      # forwarder's own APK in their separate releases.
+      - name: Rename APK
+        working-directory: chipz/sms-forwarder-app
+        run: cp app/build/outputs/apk/debug/app-debug.apk chipz-sms-forwarder.apk
+
+      # The installed app polls this to find out a newer APK exists. Values
+      # come straight from build.gradle so they can never drift from what was
+      # actually built.
+      - name: Generate version.json
+        working-directory: chipz/sms-forwarder-app
+        run: |
+          VC=$(grep -oP 'versionCode\s+\K[0-9]+' app/build.gradle | head -1)
+          VN=$(grep -oP 'versionName\s+"\K[^"]+' app/build.gradle | head -1)
+          if [ -z "$VC" ] || [ -z "$VN" ]; then
+            echo "Could not parse versionCode/versionName from app/build.gradle"; exit 1
+          fi
+          printf '{"versionCode":%s,"versionName":"%s"}\n' "$VC" "$VN" > version.json
+          cat version.json
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chipz-sms-forwarder
+          path: chipz/sms-forwarder-app/chipz-sms-forwarder.apk
+          if-no-files-found: error
+
+      - name: Publish APK to a Release (direct download link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: chipz-sms-app
+          name: Chipz SMS Forwarder
+          body: |
+            Chipz's manual-deposit SMS forwarder. Install one copy per admin payment
+            phone. A dual/triple-SIM phone can cover several payment numbers from a
+            single install: one number per SIM slot.
+
+            Download `chipz-sms-forwarder.apk` below, allow "unknown sources" in phone
+            settings, then install and open **Chipz SMS**, grant the SMS and phone
+            permissions, and fill in:
+            - Server webhook URL (pre-filled with Chipz's own endpoint)
+            - Shared secret: the MANUAL_SMS_SECRET set on the chipz-server Render service
+            - SIM slot 1 / SIM slot 2 / ...: the payment number each SIM in this phone
+              actually uses, exactly as saved in the admin panel under
+              Settings -> Manual payments -> Payment numbers. Each slot is labelled with
+              the carrier the phone detects. Leave a slot blank if that SIM is not a
+              Chipz payment number.
+
+            Then tap Save settings, START forwarding, and Send test ping (expect HTTP 200).
+
+            This app has its own package id, separate from the Snow forwarder's, so an
+            admin phone can run both at once. That also means it installs fresh rather
+            than upgrading an existing Snow install -- enter its settings once more.
+
+            If `FORWARDER_PASSWORD` is set on the chipz-server Render service, the app
+            asks for it every time it is opened, before the settings screen appears.
+            Forwarding is never gated by it: a locked phone keeps forwarding SMS and
+            crediting deposits. Leave that variable unset to switch the lock off.
+
+            Put a number in the wrong slot and messages get attributed to the wrong
+            payment number, so double-check the carrier label on each slot. If the app
+            cannot tell which SIM received a message and more than one number is
+            configured, it deliberately drops that message rather than risk crediting
+            the wrong member.
+          files: |
+            chipz/sms-forwarder-app/chipz-sms-forwarder.apk
+            chipz/sms-forwarder-app/version.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

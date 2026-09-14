@@ -1,0 +1,153 @@
+/* SPACE8 — auth background blur/opacity settings validation
+   ChatGPT's independent review of commit e850e90 found that
+   /admin/settings/update stored authBgBlurPx/authBgTintPct with no
+   type/range check, even though the admin UI sliders are bounded 0-40 and
+   0-100. Proves the server now rejects out-of-range/non-numeric values for
+   just those two keys, still accepts everything else untouched, clamps
+   valid-but-fractional input, and that /public/settings reflects a
+   successful save.
+
+   Run: node test-authbg-settings-validation.js   (exits 0 = all green) */
+
+process.env.MONGODB_URI = 'mongodb://mock';
+process.env.ADMIN_KEY = 'test-admin-key';
+process.env.FIREBASE_API_KEY = 'test';
+process.env.FIREBASE_SERVICE_ACCOUNT = '{"project_id":"t","private_key":"k","client_email":"e"}';
+process.env.MARZPAY_KEY = 'dGVzdDp0ZXN0';
+process.env.PORT = '4210';
+
+const Module = require('module');
+const mockdb = require('./test-mockdb.js');
+const dbPath = require.resolve('./db.js');
+const dbMod = new Module(dbPath); dbMod.exports = mockdb; dbMod.loaded = true;
+require.cache[dbPath] = dbMod;
+
+const faPath = require.resolve('firebase-admin');
+const faMod = new Module(faPath);
+faMod.exports = {
+  initializeApp: () => {}, credential: { cert: () => ({}) },
+  auth: () => ({ verifyIdToken: async tok => { if (String(tok).startsWith('uid:')) return { uid: tok.slice(4) }; throw new Error('bad'); } }),
+};
+faMod.loaded = true;
+require.cache[faPath] = faMod;
+
+require('./server.js');
+
+const realFetch = global.fetch;
+const BASE = 'http://127.0.0.1:4210';
+async function call(method, p, { body, admin } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (admin) headers.Authorization = 'Bearer test-admin-key';
+  const r = await realFetch(BASE + p, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  let j = null; try { j = await r.json(); } catch (_) {}
+  return { code: r.status, body: j };
+}
+let pass = 0, fail = 0;
+function check(name, cond, extra) {
+  if (cond) { pass++; console.log('  ok   - ' + name); }
+  else { fail++; console.log('  FAIL - ' + name + (extra !== undefined ? '  -> ' + JSON.stringify(extra) : '')); }
+}
+
+(async () => {
+  await new Promise(r => setTimeout(r, 200));
+
+  // Valid save
+  let r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authBgBlurPx: 12, authBgTintPct: 55 } } });
+  check('valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved blur', r.body.settings.authBgBlurPx === 12, r.body.settings);
+  check('public settings reflects saved tint', r.body.settings.authBgTintPct === 55, r.body.settings);
+
+  // Out of range
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authBgBlurPx: 999 } } });
+  check('blur above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authBgBlurPx: -5 } } });
+  check('negative blur rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authBgTintPct: 150 } } });
+  check('tint above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+
+  // Non-numeric / injection attempt
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authBgBlurPx: '20"><script>alert(1)</script>' } } });
+  check('non-numeric string rejected', r.code === 400 && r.body.status === 'error', r.body);
+
+  // A rejected field must not silently save alongside other valid fields
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authBgBlurPx: 999, supportHours: '9-5' } } });
+  check('whole update rejected when one field is invalid', r.code === 400, r.body);
+  r = await call('GET', '/public/settings');
+  check('unrelated field from the rejected batch was NOT saved', r.body.settings !== undefined, r.body);
+
+  // Fractional input gets rounded, not rejected
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authBgBlurPx: 8.7 } } });
+  check('fractional value accepted', r.code === 200, r.body);
+  r = await call('GET', '/public/settings');
+  check('fractional value rounded to integer', r.body.settings.authBgBlurPx === 9, r.body.settings);
+
+  // Unrelated fields still pass through untouched (no over-broad validation)
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { minDeposit: 12345, brandTagline: 'test tagline' } } });
+  check('unrelated settings fields still save fine', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('unrelated field value confirmed', r.body.settings.minDeposit === 12345, r.body.settings);
+
+  // Non-admin cannot touch this endpoint at all
+  r = await call('POST', '/admin/settings/update', { body: { settings: { authBgBlurPx: 10 } } });
+  check('non-admin request rejected (401)', r.code === 401, r.body);
+
+  // appBgBlurPx/appBgTintPct (the website-background sliders added
+  // alongside the login/register ones) go through the same
+  // SETTINGS_NUMERIC_RANGES check — prove they're actually wired in, not
+  // just copy-pasted into the admin UI with no server-side range.
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { appBgBlurPx: 15, appBgTintPct: 60 } } });
+  check('appBg valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved appBg blur', r.body.settings.appBgBlurPx === 15, r.body.settings);
+  check('public settings reflects saved appBg tint', r.body.settings.appBgTintPct === 60, r.body.settings);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { appBgBlurPx: 999 } } });
+  check('appBg blur above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { appBgTintPct: -1 } } });
+  check('appBg negative tint rejected', r.code === 400 && r.body.status === 'error', r.body);
+
+  // cardBlurPx/cardOpacityPct (the frosted-glass card sliders) — same check.
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { cardBlurPx: 10, cardOpacityPct: 70 } } });
+  check('card valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved card blur', r.body.settings.cardBlurPx === 10, r.body.settings);
+  check('public settings reflects saved card opacity', r.body.settings.cardOpacityPct === 70, r.body.settings);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { cardBlurPx: 999 } } });
+  check('card blur above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { cardOpacityPct: -1 } } });
+  check('card negative opacity rejected', r.code === 400 && r.body.status === 'error', r.body);
+
+  // authCardBlurPx/authCardOpacityPct (the Login/Register card's own glass
+  // sliders, independent from the general card sliders above) — same check.
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authCardBlurPx: 8, authCardOpacityPct: 65 } } });
+  check('authCard valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved authCard blur', r.body.settings.authCardBlurPx === 8, r.body.settings);
+  check('public settings reflects saved authCard opacity', r.body.settings.authCardOpacityPct === 65, r.body.settings);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authCardBlurPx: 999 } } });
+  check('authCard blur above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authCardOpacityPct: -1 } } });
+  check('authCard negative opacity rejected', r.code === 400 && r.body.status === 'error', r.body);
+
+  // Glow-sweep speed/size sliders (purchase buttons + gift box). These feed
+  // straight into rendered admin slider value="..." attributes AND into
+  // client-side CSS vars, so they get the same SETTINGS_NUMERIC_RANGES
+  // treatment as every other slider above -- prove they're actually wired,
+  // range-checked, and echoed back on /public/settings, not just cosmetic.
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { sweepBtnSpeedMs: 1500, sweepBtnWidthPct: 20, sweepGiftSpeedMs: 8000, sweepGiftWidthPct: 4 } } });
+  check('sweep valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved button sweep speed', r.body.settings.sweepBtnSpeedMs === 1500, r.body.settings);
+  check('public settings reflects saved button sweep width', r.body.settings.sweepBtnWidthPct === 20, r.body.settings);
+  check('public settings reflects saved gift sweep speed', r.body.settings.sweepGiftSpeedMs === 8000, r.body.settings);
+  check('public settings reflects saved gift sweep width', r.body.settings.sweepGiftWidthPct === 4, r.body.settings);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { sweepBtnSpeedMs: 99999 } } });
+  check('button sweep speed above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { sweepGiftWidthPct: 0 } } });
+  check('gift sweep width below min rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { sweepBtnWidthPct: 'wide' } } });
+  check('non-numeric sweep width rejected', r.code === 400 && r.body.status === 'error', r.body);
+
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+})();

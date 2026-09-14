@@ -1,0 +1,32 @@
+# Nothing was watching the dependency tree of a server that moves real money.
+# Weekly rather than daily, and grouped, because the failure mode to avoid
+# here is a stream of individual pull requests nobody reads -- Chipz deploys
+# on push, so an unreviewed dependency bump is an unreviewed production
+# change.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /chipz
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for routine patch/minor movement across the whole tree; major
+      # bumps still arrive separately, since those are the ones that actually
+      # need reading (express 4 -> 5, firebase-admin, the mongodb driver).
+      routine:
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+
+  # The workflow above pins actions/checkout and actions/setup-node by major
+  # version; this keeps those moving too, so the gate does not quietly rot on
+  # a deprecated runner image.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies

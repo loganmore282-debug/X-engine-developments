@@ -1,0 +1,68 @@
+# Chipz ships to Render with autoDeploy: true on all three services, so a
+# push to the default branch IS the deploy -- there was no point at which
+# anything checked the code first. This is that point.
+#
+# It runs the Node half of the suite only. Those 17 tests need no browser, no
+# MongoDB and no secrets: they read server.js / db.js / the built bundles and
+# assert on real behaviour (money-route guards, CORS origin matching, referral
+# and gift-code generation, deposit phone validation, product config). The
+# Playwright tests are deliberately left out -- they need a browser and a
+# built page, and a slow, flaky gate that people learn to ignore is worse
+# than an honest fast one. Run those locally before pushing, as now.
+name: Chipz tests
+
+on:
+  push:
+    paths:
+      - 'chipz/**'
+      - '.github/workflows/chipz-tests.yml'
+  pull_request:
+    paths:
+      - 'chipz/**'
+      - '.github/workflows/chipz-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  node-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chipz
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # npm ci, not npm install: it installs exactly what package-lock.json
+      # pins, so the gate tests the dependency tree that will actually deploy
+      # rather than whatever the registry happens to resolve to today.
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails the job on a known-vulnerable dependency at high severity or
+      # above. Kept at 'high' rather than 'moderate' on purpose: a gate that
+      # goes red for a moderate advisory in a build-only dependency trains
+      # everyone to merge past it, which costs more than it catches.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      # Every test-*.js exits non-zero when any of its own checks fail, so a
+      # plain loop is a real gate. `set -e` is not enough on its own here --
+      # a failure inside a for-loop body would otherwise be discarded.
+      - name: Run Node test suite
+        run: |
+          set -euo pipefail
+          fails=0
+          for f in test-*.js; do
+            echo "=== $f"
+            node "$f" || fails=$((fails + 1))
+          done
+          if [ "$fails" -ne 0 ]; then
+            echo "$fails test file(s) failed"
+            exit 1
+          fi
+          echo "all Node test files passed"
