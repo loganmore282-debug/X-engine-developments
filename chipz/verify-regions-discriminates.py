@@ -41,7 +41,8 @@ def run_test():
     # test-brand-assets.js. A mutation is detected if ANY of them fails.
     out = ''
     worst = 0
-    for f in ('test-regions.js', 'test-checkin-idempotency.js', 'test-brand-assets.js'):
+    for f in ('test-regions.js', 'test-checkin-idempotency.js', 'test-brand-assets.js',
+              'test-languages.js'):
         r = subprocess.run(['node', f], cwd=ROOT, capture_output=True, text=True)
         out += r.stdout + r.stderr
         worst = worst or r.returncode
@@ -528,8 +529,11 @@ MUTATIONS = [
      "    /* chips left as they were rendered */"),
 
     ('the region arrives without repainting the screen', CLIENT,
-     "  paintRegionChrome();\n}\n// The bits of the SIGN-IN screen that name a country.",
-     "}\n// The bits of the SIGN-IN screen that name a country."),
+     # Re-anchored in Round 163: applyRegion now ends with two calls, not
+     # one, so the old anchor (paintRegionChrome immediately before the
+     # closing brace) no longer exists.
+     "  paintRegionChrome();\n  applyRegionLanguages();\n}",
+     "  applyRegionLanguages();\n}"),
 
     ('the country count is set after the repaint, so the line stays hidden', CLIENT,
      "  if (s.status === 'success') { STATE.regionCount = s.regionCount; applyRegion(s.region); }",
@@ -650,8 +654,9 @@ MUTATIONS = [
      ""),
 
     ('the app drops the published login-address shape on the floor', CLIENT,
-     "  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault','usesBareLocal']) {",
-     "  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault']) {"),
+     # Re-anchored in Round 163: the whitelist gained languages/defaultLang.
+     "'utcOffsetMin','isDefault','usesBareLocal','languages','defaultLang']",
+     "'utcOffsetMin','isDefault','languages','defaultLang']"),
 
     # ── every subdomain refused by the backend, so nothing loaded at all ──
     ('a generated subdomain is refused by the backend again', SERVER,
@@ -957,6 +962,59 @@ MUTATIONS = [
     ('settings are cached for a minute, so maintenance mode takes a minute to bite', SERVER,
      "    }, region: publicRegionView(), regionCount: (await getRegions()).filter(r => r.active).length });",
      "    }, region: publicRegionView(), regionCount: (await getRegions()).filter(r => r.active).length }, IMAGE_CACHE);"),
+
+    # ── Round 163: languages ──────────────────────────────────────────────
+    ('a country can be given a language the app cannot render', SERVER,
+     ".map(c => String(c == null ? '' : c).trim().toLowerCase()).filter(c => LANGUAGE_CODES.includes(c));",
+     ".map(c => String(c == null ? '' : c).trim().toLowerCase()).filter(Boolean);"),
+    ('a country with nothing ticked ends up offering no language at all', SERVER,
+     "  if (!languages.length) languages.push('en');",
+     "  /* no fallback */"),
+    ('the default language is not forced into the allowed list', SERVER,
+     "  if (!languages.includes(defaultLang)) defaultLang = languages[0];",
+     "  if (!defaultLang) defaultLang = languages[0];"),
+    ('the app is never told which languages its country allows', SERVER,
+     "    languages: (reg.languages && reg.languages.length ? reg.languages : ['en']).slice(),\n    defaultLang: reg.defaultLang || 'en',",
+     "    defaultLang: reg.defaultLang || 'en',"),
+    ('the save route quietly drops an unknown language instead of refusing it', SERVER,
+     "  const badLang = typedLangs.find(c => !LANGUAGE_CODES.includes(c));",
+     "  const badLang = null;"),
+    ('applyRegion drops the language list, the same whitelist slip that once broke the login address', CLIENT,
+     "'usesBareLocal','languages','defaultLang']",
+     "'usesBareLocal']"),
+    ('the translator rewrites any string that CONTAINS a translated word', CLIENT,
+     "  const hit = t(key);\n  const want = hit === key ? src : String(src).replace(key, hit);",
+     "  let want = src;\n  for (const k of Object.keys(DICT[LANG] || {})) want = String(want).split(k).join(DICT[LANG][k]);\n  const hit = want;"),
+    ('the translator reads what is on screen instead of the stored English, so a second switch never lands', CLIENT,
+     "  let src;\n  if (_i18nText.has(node)) src = _i18nText.get(node);\n  else { src = node.nodeValue; _i18nText.set(node, src); }",
+     "  let src = node.nodeValue;"),
+    ('text inside [data-no-i18n] is translated after all', CLIENT,
+     "        if (p.closest('[data-no-i18n]')) return NodeFilter.FILTER_REJECT;",
+     "        /* no opt-out */"),
+    ('a <script> body is put through the translator', CLIENT,
+     "        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA') return NodeFilter.FILTER_REJECT;",
+     "        /* everything is fair game */"),
+    ('the language button is shown even where the country offers only one', CLIENT,
+     "    const many = LANG_ALLOWED.length > 1;\n    for (const id of ['langBtn', 'langRow']) {",
+     "    const many = true;\n    for (const id of ['langBtn', 'langRow']) {"),
+    ('a stored language the country has withdrawn is honoured anyway', CLIENT,
+     "  if (stored && allowed.includes(stored) && LANG_CODES.includes(stored)) return stored;",
+     "  if (stored && LANG_CODES.includes(stored)) return stored;"),
+    ('the picker offers a code the app has no dictionary for', CLIENT,
+     "    .map(c => String(c || '').toLowerCase()).filter(c => LANG_CODES.includes(c));",
+     "    .map(c => String(c || '').toLowerCase());"),
+    ('the chosen language is never written down, so it is lost on the next launch', CLIENT,
+     "    try { localStorage.setItem(LANG_STORE_KEY, c); } catch(_){}",
+     "    /* not remembered */"),
+    ('the language picker moves above the bottom bar, where a nav tap can strand it', SHELL,
+     ".lang-sheet-bg{position:fixed;inset:0;",
+     ".lang-sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);"),
+    ('the button is no longer pinned to the top right of the hero', SHELL,
+     ".lang-btn{position:absolute;top:14px;right:14px;",
+     ".lang-btn{position:static;"),
+    ('the panel stops sending the ticked languages', ADMIN,
+     "      languages: Array.from(document.querySelectorAll('.rg-lang')).filter(c => c.checked).map(c => c.value),",
+     "      "),
 ]
 
 

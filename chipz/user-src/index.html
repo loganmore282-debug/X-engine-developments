@@ -1105,6 +1105,14 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .setting-row .sq.ic-messages{background:linear-gradient(145deg,#fef4d0,#faf4e6);}
 .setting-row .sq.ic-loginpw {background:linear-gradient(145deg,#a8480e,#e9d8bc);}
 .setting-row .sq.ic-tradepw {background:linear-gradient(145deg,#c0a160,#f6ca0f);}
+/* Language has no counterpart in the owner's mockup (that row does not exist
+   there), so like Turntable it takes a tone that sits inside the sequence
+   already measured off it rather than introducing a hue of its own -- a
+   deeper burnt orange, one step darker than Download APP's so the two do not
+   read as the same tile. Its glyph is stroked white, hence the light end
+   stays dark enough to keep it legible. */
+.setting-row .sq.ic-language{background:linear-gradient(145deg,#8f4a12,#c4763a);
+  display:flex;align-items:center;justify-content:center;}
 .logout-btn{display:flex;width:100%;height:53px;align-items:center;justify-content:center;gap:8px;margin-top:22px;font-size:16px;letter-spacing:.08em;padding:0;}
 /* The owner's own door artwork, at the size his mockup draws it: his
    glyph measures 31x47 device px, which is 17 CSS px tall. Width is left
@@ -1638,6 +1646,40 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    this one comes later in the sheet, so it was winning and collapsing the
    backdrop to a 0x0 relatively-positioned span. It rendered as nothing at
    all, and every computed-style check still passed. */
+/* ── THE LANGUAGE BUTTON AND ITS PICKER ──
+   The button sits over the auth hero's top-right corner, above the backdrop
+   image (z-index 0) and the wordmark row's own layer. It is a glass pill
+   rather than a filled one: the hero behind it is either the brand gradient
+   or an owner-uploaded photo, and a solid chip on top of either reads as a
+   sticker. */
+.lang-btn{position:absolute;top:14px;right:14px;z-index:4;display:inline-flex;align-items:center;gap:6px;
+  padding:7px 11px;border:1px solid rgba(255,255,255,.42);border-radius:var(--r-pill);
+  background:rgba(20,10,5,.26);color:#fff;font:inherit;font-size:13px;font-weight:600;
+  letter-spacing:.01em;cursor:pointer;-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
+.lang-btn:active{transform:translateY(1px);}
+.lang-sheet-bg{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center;
+  background:rgba(20,10,5,.45);opacity:0;pointer-events:none;transition:opacity .2s ease;}
+.lang-sheet-bg.show{opacity:1;pointer-events:auto;}
+.lang-sheet{width:100%;max-width:520px;background:var(--snow-surface);
+  border-radius:var(--r-card) var(--r-card) 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));
+  transform:translateY(100%);transition:transform .26s cubic-bezier(.22,1,.36,1);max-height:82vh;overflow:auto;}
+.lang-sheet-bg.show .lang-sheet{transform:translateY(0);}
+.lang-head{display:flex;align-items:center;justify-content:space-between;margin:0 2px 12px;}
+.lang-head b{font-size:19px;letter-spacing:.02em;}
+.lang-x{width:34px;height:34px;border-radius:var(--r-pill);border:1px solid var(--line-soft);
+  background:transparent;color:var(--snow-ink);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.lang-list{display:flex;flex-direction:column;gap:8px;}
+.lang-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  padding:13px 14px;border:1px solid var(--line-soft);border-radius:var(--r-ctl);
+  background:var(--snow-card);color:var(--snow-ink);font:inherit;text-align:left;cursor:pointer;}
+.lang-opt.on{border-color:var(--chipz-orange);box-shadow:0 0 0 1px var(--chipz-orange) inset;color:var(--chipz-red);}
+.lang-names{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.lang-names .n1{font-size:16.5px;font-weight:700;}
+.lang-names .n2{font-size:12.5px;color:var(--snow-muted);}
+.lang-opt.on .lang-names .n2{color:var(--chipz-red);opacity:.75;}
+@media (prefers-reduced-motion:reduce){
+  .lang-sheet{transition:none;}
+}
 .auth-card > *{position:relative;z-index:1;}
 .auth-card > #authCardBg{position:absolute;z-index:0;}
 .auth-card h1{margin:0 0 6px;font-size:26px;text-align:center;letter-spacing:.08em;font-weight:400;}
@@ -2165,6 +2207,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .dep-status-icon .pspin{--s:150px;}
 .dep-status-icon img{width:116px;height:116px;object-fit:contain;display:block;}
 
+/* The orbiting-chips mark while a list is being fetched. Owner, on the Team
+   downline: "add the other loader of 'Loading...' while Loading users on team
+   of specific level ... l wanted the other which has 4 triangle chips
+   rotating, it is already there" -- so this is PLAN_SPIN, the same markup and
+   the same keyframes the ongoing-plan rows and the payment page use, resized
+   purely by --s. One mark, one set of keyframes, three sizes.
+   No word under it: he asked for the chips INSTEAD of the word ("it will be 4
+   triangles not Loading..."). */
+.list-loading{padding:34px 4px;display:flex;justify-content:center;align-items:center;}
+.list-loading .pspin{--s:56px;}
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
 .list-empty .empty-icon{display:flex;justify-content:center;margin-bottom:14px;opacity:.85;}
 .list-empty .empty-icon svg{width:64px;height:64px;}
@@ -2284,6 +2336,17 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
       <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
       <span class="auth-tri t1" aria-hidden="true"></span>
       <span class="auth-tri t2" aria-hidden="true"></span>
+      <!-- Owner: "on login page of every subdomain of any country, at top
+           right there is a button of language". Hidden by paintLangButton()
+           whenever the country allows only one language, so a single-language
+           country gains no furniture. data-no-i18n because the label is
+           already written in its own language and must never be put back
+           through the translation table. -->
+      <button type="button" class="lang-btn" id="langBtn" data-no-i18n style="display:none;" onclick="openLangPicker()" aria-label="Change language">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
+        <span id="langBtnLabel">English</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
       <div class="mark-row">
         <span class="mark-tri" aria-hidden="true"></span>
         <span class="auth-wordmark" data-brandmark></span>

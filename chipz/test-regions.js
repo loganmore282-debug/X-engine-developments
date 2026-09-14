@@ -58,6 +58,7 @@ const api = new Function('normalizeAllowedHost', `
     key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
     localLength: 9, prefixes: ['7'], utcOffsetMin: 180, hosts: [], active: true, isDefault: true,
   });
+  ${(src.match(/const LANGUAGE_CODES = \[[^\]]*\];/) || [''])[0]}
   let _regionsSnapshot = [DEFAULT_REGION];
   let _current = DEFAULT_REGION;
   const currentRegion = () => _current;

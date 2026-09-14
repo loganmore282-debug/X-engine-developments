@@ -4526,3 +4526,158 @@ suite caught by reporting it undetected.
 ### Ports
 `test-boot-speed.py` binds **8893** (static) and **8895** (stub API). Neither was in use;
 the running list is in Round 157's note.
+
+## Round 163 — Languages, per country; and the downline loader
+
+> "l wanted to remove that of www, also please add the other loader of
+> 'Loading... ' while Loading users on team of specific level, l am not saying the
+> other designed loader, l wanted the other which has 4 triangle chips rotating,
+> think you know it, it is already there, and it will be 4 triangles not
+> 'Loading...', another thing add when can select languages of a country, so on
+> login page of every subdomain of any country, at top right there is a button of
+> language, it can change that very word depending on selected language, so you put
+> all language code base of Luganda, so app or site can read luganda, English,
+> swahili, French you'll add more 2 you think needs to be added. so make when l can
+> select allowed languages of any specific country."
+
+### 1. The downline loader
+Tapping a level with nothing cached left the box showing the PREVIOUS level's
+members until the fetch landed — so Level 2 looked like Level 1's list re-labelled,
+which is worse than looking slow. It now paints `PLAN_SPIN` — the same orbiting-chips
+markup the ongoing-plan rows and the payment page use, every length a fraction of
+`--s`, so one mark and one set of keyframes now serve **32px, 56px and 150px**.
+
+Painted **before** the await and **only** for a level with nothing cached: a level
+already in `STATE.teamMembers` renders instantly, and a mark that appears for one
+frame reads as a glitch. `test-languages.py` asserts both directions — it appears on
+a cold level and does **not** appear on a warm one.
+
+No word beside it: he asked for the chips *instead of* "Loading...".
+
+### 2. Languages — six, per country
+| | |
+|---|---|
+| Admin → **Countries** → *Languages this country offers* | tickboxes, one per language |
+| Admin → **Countries** → *Opens in* | which one a device with no choice stored starts in |
+| member, signed out | a button at the **top right of the sign-in hero** |
+| member, signed in | **Account → Language** (he would otherwise never see that screen again) |
+
+**English, Luganda, Swahili, French** are his four. The two added:
+- **Kinyarwanda** — Rwanda, and close enough to Kirundi that Burundi reads it. Two
+  countries for one dictionary.
+- **Runyankole** — western Uganda. Luganda is central Uganda's language, not a
+  national one, so "Uganda is covered" is only true with a second one.
+
+**Deliberately NOT added: Amharic and Arabic.** Neither has a font in this build, and
+Arabic needs a right-to-left pass over every screen — either would arrive as boxes or
+a broken layout rather than as a language. That is a project of its own.
+
+#### Keyed on the ENGLISH SENTENCE, not on codes like `login.button`
+- a string with no entry falls back to **its own English**, automatically. A member
+  can never be shown a missing-key placeholder.
+- adding a string to a screen costs nothing; it reads English until somebody adds a row.
+- and it is what makes the DOM sweep possible.
+
+#### The sweep, and why it exists
+This app draws nearly every screen by assigning a template literal to `innerHTML`.
+Wrapping each visible string in `t()` would mean editing several hundred sites and
+would **still** miss whatever the next round adds. So `translateTree()` walks the
+rendered DOM, and a `MutationObserver` on `document.body` translates each newly
+rendered subtree as it lands. `childList` only, on purpose: the function's own writes
+are `characterData` and attribute changes, so observing those would feed it its own
+output forever. When the language is English it is a single early return per batch.
+
+**The original English is kept per node** (`_i18nText` / `_i18nAttr`, WeakMaps). That
+is what makes Luganda → French work: the second pass resolves from the stored English,
+never from the Luganda on screen — and switching back **to** English restores the page
+word for word, because `t()` then returns each stored original.
+
+**Only a whole trimmed text node that matches a row is replaced, never a substring.**
+`Home Cell Battery` and `Tap Withdraw to cash out` both survive untouched even though
+each contains a translated word; amounts, names and product titles cannot be rewritten
+by accident. `[data-no-i18n]`, `<script>`, `<style>` and `<textarea>` are skipped.
+`placeholder`, `aria-label` and `title` are translated too, so a screen reader agrees
+with the screen.
+
+#### An empty cell means "not translated", and it is used on purpose
+A wrong word on a money screen is worse than an English one: a member who reads
+"Withdraw" in English still withdraws. Where the right word was not certain the cell
+is **left empty** rather than filled with a guess. Swahili and French are complete;
+the three Bantu columns cover what a member meets on every screen and **should be read
+over by a native speaker before launch** — every correction is one cell in `LANG_ROWS`,
+nothing else moves. `test-languages.js` fails any cell that merely repeats the English
+(French for "Messages" *is* "Messages" — that cell is blank, because a filled cell is
+a claim somebody chose it).
+
+#### Rules worth keeping
+- **The button is hidden where the country allows one language.** One option is not a
+  choice; a single-language country gains no furniture. Same rule the admin panel's
+  country switch follows, and `paintLangButton()` applies it to the button and the
+  Account row together so the two cannot disagree.
+- **A stored language the country has since withdrawn falls back to the country's
+  default.** The picker lists only allowed languages, so a member left in a withdrawn
+  one would have nothing on screen able to switch them back.
+- **A default outside the allowed list is pulled back into it**, at save time and in
+  `normalizeRegion`, for the same reason.
+- **A country with nothing ticked offers English alone** — exactly what every region
+  stored before this reads as, so nothing needs migrating.
+- **`applyRegion`'s whitelist gained `languages` and `defaultLang`.** Round 155's
+  `usesBareLocal` slip is the precedent: a field left out of that list is silently
+  dropped, and these two decide what the button offers and what a first launch opens in.
+- **The picker is `inset:0`**, covering the bottom bar. This file's own rule: the
+  overlays a nav tap can reach are exactly the ones that do NOT cover the nav, and each
+  of those has needed teardown code in `showPage()`. Covering it means no teardown entry
+  and no history entry.
+- **Server messages are English.** Nothing on the server translates — but because the
+  sweep matches whole nodes, any server sentence that is in the table is translated
+  where it is displayed. The common ones are in it.
+- Prices, amounts, currency labels and dialling codes are never translated.
+
+### 3. `www` — what actually closes it
+The root `A` record is gone (he confirmed NXDOMAIN). `www` still resolves, because the
+`*` wildcard matches it. Two ways to close it, and he was told both: `blockRootDomain`
+(already on) refuses it **once Base domain holds his real domain**, and a **more
+specific DNS record at `www`** — a TXT is enough — removes it from the wildcard's reach
+entirely, since a wildcard only applies to a name that has no records of its own.
+
+### Tests
+`test-languages.js` runs the real `normalizeRegion`, `publicRegionView`, `t()`,
+`translateTree()`, `resolveLang()` and `applyRegionLanguages()` — the translator against
+a stub DOM real enough to drive a TreeWalker (node types, `parentElement`, `closest`,
+`querySelectorAll`, attributes). It also asserts **the three code lists agree**
+(`LANGUAGE_CODES` in server.js, `LANGS` in the app, `ADMIN_LANGS` in the panel): a code
+in two of the three is an option that does nothing when tapped, and nothing at runtime
+would say so.
+
+`test-languages.py` (port **8897**) drives the BUILT, obfuscated app: the button's box
+measured against the hero's (14px in from the right, 14px down), the picker's two
+options, and the screen **actually rewritten** — `LOGIN`→`INGIA`, the placeholder, the
+Remember me label — because the obfuscator encodes every string literal and grepping
+the deployed file proves nothing. Then a reload (still Swahili), a one-language country
+(no button), a withdrawn language (falls back), the Account row, and the downline mark
+sampled over real frames.
+
+`verify-regions-discriminates.py` now runs **four** harnesses per mutation and carries
+16 language mutations.
+
+**One existing assertion was rewritten, not bumped.** `test-account-sizes.py` pinned
+his mockup's **seven** Account rows and read 8. Counting **visible** rows keeps the
+seven pinned *and* proves the Language row is really hidden in a one-language country —
+bumping the number to eight would have thrown both away.
+
+### Ports
+`test-languages.py` binds **8897**. 8893/8895 are test-boot-speed.py's; the running
+list is in Round 157's note.
+
+#### Two process lessons from this round, both self-inflicted
+- **Never build, and never run anything else that reads the sources, while
+  `verify-regions-discriminates.py` is running.** It mutates `server.js`,
+  `user-src/`, `admin-src/` and `user/index.html` in place and restores each after
+  its own run. A `node build-core.js` fired alongside it compiled a MUTATED source
+  into the deployed bundle, and the suite's results were meaningless for that window.
+- **Do not `pkill` it either.** SIGTERM skips the `finally` that restores the files,
+  so it leaves whichever mutation was in flight applied to the tree — here
+  `labels: []`, which is a live bug that would have shipped. The tell was
+  `test-regions.js` going red on five label assertions while every other harness
+  passed; the whole Node suite is the cheap way to confirm the tree is clean
+  afterwards, because exactly one mutation is ever applied at a time.

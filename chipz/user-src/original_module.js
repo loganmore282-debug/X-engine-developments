@@ -57,12 +57,17 @@ function applyRegion(r){
   // address, so dropping it sends every member of a country that carries
   // its dialling code to the wrong Firebase account. Caught by
   // test-region-currency.py, which read the address off the running app.
-  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault','usesBareLocal']) {
+  // languages / defaultLang are in this list for the same reason
+  // usesBareLocal is: a field left out is silently dropped, and these two
+  // decide which languages the button offers and which one a first-ever
+  // launch opens in.
+  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault','usesBareLocal','languages','defaultLang']) {
     if (r[k] !== undefined && r[k] !== null && r[k] !== '') out[k] = r[k];
   }
   REGION = Object.assign({}, REGION, out);
   try { localStorage.setItem('chipzRegion', JSON.stringify(REGION)); } catch(_){}
   paintRegionChrome();
+  applyRegionLanguages();
 }
 // The bits of the SIGN-IN screen that name a country. Repainted from here,
 // because the region arrives from the network AFTER that screen is already
@@ -103,6 +108,337 @@ function paintRegionChrome(){
     if (raw) { const r = JSON.parse(raw); if (r && r.currency) REGION = Object.assign({}, REGION, r); }
   } catch(_){}
 })();
+
+// ══════════════════════════════════════════════════════════════════════════
+// LANGUAGES
+// ══════════════════════════════════════════════════════════════════════════
+// Owner: "add when can select languages of a country, so on login page of
+// every subdomain of any country, at top right there is a button of language,
+// it can change that very word depending on selected language ... Luganda,
+// English, swahili, French ... make when l can select allowed languages of
+// any specific country."
+//
+// WHICH SIX, AND WHY THESE TWO EXTRA. He named four. The other two are picked
+// for the markets this platform can actually reach next, not for coverage
+// counts:
+//   - Kinyarwanda (rw) -- Rwanda, and close enough to Kirundi that Burundi
+//     reads it. Two countries for one dictionary.
+//   - Runyankole (nyn) -- western Uganda. Luganda is central Uganda's
+//     language, not a national one; a Mbarara member reads it as a foreign
+//     language, so "Uganda is covered" is only true with a second one.
+// Deliberately NOT added: Amharic and Arabic. Both need a font this build does
+// not ship (and Arabic needs a right-to-left layout pass across every screen),
+// so either would arrive as boxes or a broken layout rather than as a
+// language. Say the word and they become a project of their own.
+//
+// HOW IT WORKS, and why it is keyed on the ENGLISH SENTENCE rather than on
+// codes like `login.button`:
+//   - a string with no entry falls back to its own English, automatically.
+//     There is no such thing as a missing-key placeholder reaching a member.
+//   - adding a string to a screen costs nothing; it simply reads English
+//     until somebody puts a row in the table below.
+//   - and it makes the DOM sweep below possible, which is what gives this
+//     real coverage without rewriting several hundred template literals.
+var LANGS = [
+  { code: 'en',  name: 'English',     native: 'English' },
+  { code: 'lg',  name: 'Luganda',     native: 'Luganda' },
+  { code: 'sw',  name: 'Swahili',     native: 'Kiswahili' },
+  { code: 'fr',  name: 'French',      native: 'Français' },
+  { code: 'rw',  name: 'Kinyarwanda', native: 'Ikinyarwanda' },
+  { code: 'nyn', name: 'Runyankole',  native: 'Runyankore' },
+];
+var LANG_CODES = LANGS.map(l => l.code);
+var LANG = 'en';
+// What this country allows, from the region. Until the region lands it is
+// English alone -- one option is not a choice, so the button stays hidden
+// rather than flashing a list that is about to change.
+var LANG_ALLOWED = ['en'];
+var LANG_STORE_KEY = 'chipz_lang';
+// ── THE TABLE ──
+// One row per English string: [english, lg, sw, fr, rw, nyn].
+//
+// AN EMPTY CELL MEANS "NOT TRANSLATED YET" AND FALLS BACK TO ENGLISH, AND
+// THAT IS USED ON PURPOSE. A wrong word on a money screen is worse than an
+// English one -- a member who reads "Withdraw" in English still withdraws,
+// while a member who reads a mistranslation may do something else entirely.
+// So where the right word was not certain the cell is left empty rather than
+// filled with a guess. Swahili and French are complete; the three Bantu
+// columns cover the words a member meets on every screen and should be read
+// over by a native speaker before launch -- every correction is one cell in
+// this table, nothing else moves.
+var LANG_ROWS = [
+  // key                            lg                  sw                     fr                          rw                    nyn
+  ['Home',                          'Awaka',            'Nyumbani',            'Accueil',                  'Ahabanza',           'Omuka'],
+  ['Products',                      'Ebyamaguzi',       'Bidhaa',              'Produits',                 'Ibicuruzwa',         'Ebyamaguzi'],
+  ['My Products',                   'Ebyange',          'Bidhaa Zangu',        'Mes Produits',             'Ibyanjye',           'Ebyangye'],
+  ['Referral',                      'Okuyita',          'Mwaliko',             'Parrainage',               'Gutumira',           'Okweta'],
+  ['Team',                          'Ekibiina',         'Timu',                'Équipe',              'Itsinda',            'Ekibiina'],
+  ['Account',                       'Akawunti',         'Akaunti',             'Compte',                   'Konti',              'Akaunti'],
+  ['Deposit',                       'Teeka Ssente',     'Weka Pesa',           'Dépôt',          'Kubitsa',            'Ta Sente'],
+  ['Withdraw',                      'Ggyamu Ssente',    'Toa Pesa',            'Retrait',                  'Kubikuza',           'Ihamu Sente'],
+  ['LOGIN',                         'YINGIRA',          'INGIA',               'CONNEXION',                'INJIRA',             'TAAHA'],
+  ['SIGN UP',                       'WEEWANDIISE',      'JISAJILI',            "S'INSCRIRE",               'IYANDIKISHE',        'YEEWANDIISE'],
+  ['Log In',                        'Yingira',          'Ingia',               'Connexion',                'Injira',             'Taaha'],
+  ['Sign Up',                       'Weewandiise',      'Jisajili',            "S'inscrire",               'Iyandikishe',        'Yeewandiise'],
+  ['Log Out',                       'Fuluma',           'Toka',                'Déconnexion',         'Sohoka',             'Shohoka'],
+  ['Enter phone number',            'Wandiika ennamba ya ssimu', 'Weka namba ya simu', 'Entrez le numéro de téléphone', 'Andika nimero ya telefone', 'Handiika enamba ya esimu'],
+  ['Enter password',                'Wandiika ekisumuluzo', 'Weka nenosiri',   'Entrez le mot de passe',   'Andika ijambobanga', 'Handiika ekisumuruzo'],
+  ['Remember me',                   'Onjjukire',        'Nikumbuke',           'Se souvenir de moi',       'Unyibuke',           'Onyijuke'],
+  ['Referral code',                 '',                 'Msimbo wa mwaliko',   'Code de parrainage',       '',                   ''],
+  ['Logging in…',              '',                 'Inaingia…',      'Connexion en cours…', '',                   ''],
+  ['Creating your account…',   '',                 'Inatengeneza akaunti yako…', 'Création de votre compte…', '', ''],
+  ['Wallet',                        'Ensawo',           'Pochi',               'Portefeuille',             'Umufuka',            'Ensaho'],
+  // French for "Messages" is "Messages". The cell is left EMPTY rather than
+  // holding the same word: a filled cell is a claim that somebody chose it,
+  // and DICT drops a cell equal to its English anyway, so the two behave
+  // identically and only one of them is honest about it.
+  ['Messages',                      'Obubaka',          'Ujumbe',              '',                         'Ubutumwa',           'Obutumwa'],
+  ['Balance Record',                '',                 'Rekodi ya Salio',     'Historique du solde',      '',                   ''],
+  ['Login Password',                '',                 'Nenosiri la Kuingia', 'Mot de passe de connexion', '',                  ''],
+  ['Trade Password',                '',                 'Nenosiri la Malipo',  'Mot de passe de transaction', '',                ''],
+  ['Download APP',                  '',                 'Pakua APP',           "Télécharger l'application", '',        ''],
+  ['Turntable',                     '',                 'Gurudumu',            'La Roue',                  '',                   ''],
+  ['Language',                      'Olulimi',          'Lugha',               'Langue',                   'Ururimi',            'Orurimi'],
+  ['SETTINGS',                      '',                 'MIPANGILIO',          'PARAMÈTRES',          '',                   ''],
+  ['Cancel',                        'Sazaamu',          'Ghairi',              'Annuler',                  'Hagarika',           'Sazamu'],
+  ['Confirm',                       'Kakasa',           'Thibitisha',          'Confirmer',                'Emeza',              'Hamya'],
+  ['Submit',                        '',                 'Wasilisha',           'Envoyer',                  'Ohereza',            ''],
+  ['Save',                          'Tereka',           'Hifadhi',             'Enregistrer',              'Bika',               'Bika'],
+  ['Copy',                          'Koppa',            'Nakili',              'Copier',                   'Koporora',           'Koppa'],
+  ['Copied',                        'Kikoppeddwa',      'Imenakiliwa',         'Copié',               'Byakoporowe',        'Kikoppirwe'],
+  ['Amount',                        'Omuwendo',         'Kiasi',               'Montant',                  'Ingano',             'Omuhendo'],
+  ['Balance',                       'Ebisigaddewo',     'Salio',               'Solde',                    'Amafaranga asigaye', 'Esigaireho'],
+  ['Buy Now',                       'Gula Kati',        'Nunua Sasa',          'Acheter',                  'Gura Ubu',           'Gura Hati'],
+  ['Total Team',                    '',                 'Timu Yote',           'Équipe totale',       '',                   ''],
+  ['Commission Rate',               '',                 'Kiwango cha Kamisheni', 'Taux de commission',     '',                   ''],
+  ['Level 1',                       'Omutendera 1',     'Ngazi 1',             'Niveau 1',                 'Urwego 1',           'Omurengo 1'],
+  ['Level 2',                       'Omutendera 2',     'Ngazi 2',             'Niveau 2',                 'Urwego 2',           'Omurengo 2'],
+  ['Level 3',                       'Omutendera 3',     'Ngazi 3',             'Niveau 3',                 'Urwego 3',           'Omurengo 3'],
+  ['Purchase',                      '',                 'Manunuzi',            'Achat',                    '',                   ''],
+  ['Total Purchase',                '',                 'Jumla ya Manunuzi',   'Achat total',              '',                   ''],
+  ['No members at this level yet.', '',                 'Bado hakuna wanachama katika ngazi hii.', "Aucun membre à ce niveau pour l'instant.", '', ''],
+  ['Ongoing',                       '',                 'Inaendelea',          'En cours',                 '',                   ''],
+  ['Matured',                       '',                 'Imekamilika',         'Arrivé à terme', '',                   ''],
+  ['All',                           'Byonna',           'Zote',                'Tout',                     'Byose',              'Byona'],
+  ['Select Amount',                 '',                 'Chagua Kiasi',        'Choisissez le montant',    '',                   ''],
+  ['Payment Phone',                 '',                 'Simu ya Malipo',      'Téléphone de paiement', '',             ''],
+  ['Confirm Deposit',               '',                 'Thibitisha Malipo',   'Confirmer le dépôt', '',               ''],
+  ['Network error. Try again.',     '',                 'Hitilafu ya mtandao. Jaribu tena.', 'Erreur de réseau. Réessayez.', '', ''],
+];
+// code -> { english: translated }. Built once; an empty cell is simply not
+// stored, so a lookup miss and "deliberately English" are the same thing.
+var DICT = (function(){
+  const out = {};
+  for (let i = 1; i < LANG_CODES.length; i++) out[LANG_CODES[i]] = {};
+  for (const row of LANG_ROWS) {
+    const en = row[0];
+    for (let i = 1; i < LANG_CODES.length; i++) {
+      const v = row[i];
+      if (typeof v === 'string' && v && v !== en) out[LANG_CODES[i]][en] = v;
+    }
+  }
+  return out;
+})();
+function langMeta(code){ return LANGS.find(l => l.code === code) || LANGS[0]; }
+// The one translator. Everything else in this block is plumbing around it.
+function t(s){
+  if (LANG === 'en' || typeof s !== 'string' || !s) return s;
+  const d = DICT[LANG];
+  if (!d) return s;
+  const hit = d[s];
+  return (typeof hit === 'string' && hit) ? hit : s;
+}
+// ── TRANSLATING WHAT IS ALREADY ON SCREEN ──
+// This app draws nearly every screen by assigning a template literal to
+// innerHTML, so wrapping each visible string in t() would mean editing
+// several hundred sites and would still miss whichever one the next round
+// adds. Instead the ORIGINAL English is kept per node and the translation is
+// applied to the rendered DOM.
+//
+// Keeping the original is what makes switching Luganda -> French work: a
+// second pass reads the stored English, never the Luganda already on screen,
+// so nothing is translated twice and switching back to English restores
+// exactly what was rendered.
+//
+// Only a WHOLE trimmed text node that matches a table row is replaced -- never
+// a substring. A member's own data (a name, an amount, a product title)
+// therefore cannot be rewritten by accident unless it is character-for-
+// character one of the rows above, and anything inside [data-no-i18n] is
+// skipped outright.
+var _i18nText = new WeakMap();
+var _i18nAttr = new WeakMap();
+var I18N_ATTRS = ['placeholder', 'aria-label', 'title'];
+function i18nTextNode(node){
+  let src;
+  if (_i18nText.has(node)) src = _i18nText.get(node);
+  else { src = node.nodeValue; _i18nText.set(node, src); }
+  const key = String(src == null ? '' : src).trim();
+  if (!key || key.length > 160) return;
+  const hit = t(key);
+  const want = hit === key ? src : String(src).replace(key, hit);
+  if (node.nodeValue !== want) node.nodeValue = want;
+}
+function i18nElementAttrs(el){
+  let store = _i18nAttr.get(el);
+  for (const a of I18N_ATTRS) {
+    let src;
+    if (store && a in store) src = store[a];
+    else {
+      if (!el.hasAttribute(a)) continue;
+      src = el.getAttribute(a);
+      if (!store) { store = {}; _i18nAttr.set(el, store); }
+      store[a] = src;
+    }
+    const key = String(src == null ? '' : src).trim();
+    if (!key) continue;
+    const hit = t(key);
+    if (el.getAttribute(a) !== hit) el.setAttribute(a, hit);
+  }
+}
+function translateTree(root){
+  if (!root) return;
+  try {
+    if (root.nodeType === 3) { i18nTextNode(root); return; }
+    if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(n){
+        const p = n.parentElement;
+        if (!p) return NodeFilter.FILTER_REJECT;
+        const tag = p.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA') return NodeFilter.FILTER_REJECT;
+        if (p.closest('[data-no-i18n]')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const jobs = [];
+    let n;
+    while ((n = walker.nextNode())) jobs.push(n);
+    for (const node of jobs) i18nTextNode(node);
+    if (root.nodeType === 1 && root.matches && root.matches('[placeholder],[aria-label],[title]')) i18nElementAttrs(root);
+    const els = root.querySelectorAll ? root.querySelectorAll('[placeholder],[aria-label],[title]') : [];
+    for (const el of els) { if (!el.closest('[data-no-i18n]')) i18nElementAttrs(el); }
+  } catch(_){}
+}
+// Newly rendered HTML is translated as it lands. childList only, on purpose:
+// this function's own writes are characterData and attribute changes, so
+// observing those instead would feed it its own output forever.
+var _i18nObserving = false;
+function startI18nObserver(){
+  if (_i18nObserving || typeof MutationObserver === 'undefined' || !document.body) return;
+  _i18nObserving = true;
+  try {
+    new MutationObserver(muts => {
+      if (LANG === 'en') return; // the overwhelmingly common case, one branch
+      for (const m of muts) for (const node of m.addedNodes) translateTree(node);
+    }).observe(document.body, { childList: true, subtree: true });
+  } catch(_){ _i18nObserving = false; }
+}
+// A full pass over the document. Run when the language changes -- including
+// changing back TO English, where t() returns each stored original and this
+// restores the page word for word.
+function applyLanguage(){
+  try {
+    translateTree(document.body);
+    const btn = $('langBtnLabel');
+    if (btn) btn.textContent = langMeta(LANG).native;
+    document.documentElement.setAttribute('lang', LANG);
+    paintLangButton();
+  } catch(_){}
+}
+function setLang(code, opts){
+  const c = String(code || '').trim().toLowerCase();
+  if (!LANG_CODES.includes(c)) return;
+  if (c !== LANG) {
+    LANG = c;
+    try { localStorage.setItem(LANG_STORE_KEY, c); } catch(_){}
+  }
+  applyLanguage();
+  if (!opts || !opts.silent) closeLangPicker();
+}
+// Which language this device should open in: the one chosen here before, if
+// the country still allows it, else the country's own default, else English.
+//
+// The allowed-list check is not decoration. A country's languages can be
+// changed from the panel, and a member left holding a language it no longer
+// offers would be reading a UI his own country has withdrawn -- with no way
+// to get back to one it does offer, because the button would not list the
+// language he is currently in.
+function resolveLang(){
+  let stored = '';
+  try { stored = String(localStorage.getItem(LANG_STORE_KEY) || '').toLowerCase(); } catch(_){}
+  const allowed = LANG_ALLOWED.length ? LANG_ALLOWED : ['en'];
+  if (stored && allowed.includes(stored) && LANG_CODES.includes(stored)) return stored;
+  const def = String(REGION && REGION.defaultLang || '').toLowerCase();
+  if (def && allowed.includes(def) && LANG_CODES.includes(def)) return def;
+  return allowed[0] || 'en';
+}
+function applyRegionLanguages(){
+  const list = (REGION && Array.isArray(REGION.languages) ? REGION.languages : [])
+    .map(c => String(c || '').toLowerCase()).filter(c => LANG_CODES.includes(c));
+  LANG_ALLOWED = list.length ? list.filter((c, i) => list.indexOf(c) === i) : ['en'];
+  const want = resolveLang();
+  if (want !== LANG) setLang(want, { silent: true });
+  else { paintLangButton(); applyLanguage(); }
+}
+// ── THE BUTTON, AND THE PICKER ──
+// Hidden while the country allows exactly one language: one option is not a
+// choice, and a single-language country should gain no furniture. Same rule
+// the admin panel's country switch follows.
+function paintLangButton(){
+  try {
+    const many = LANG_ALLOWED.length > 1;
+    for (const id of ['langBtn', 'langRow']) {
+      const el = $(id);
+      if (el) el.style.display = many ? '' : 'none';
+    }
+    const lbl = $('langBtnLabel');
+    if (lbl) lbl.textContent = langMeta(LANG).native;
+    const row = $('langRowValue');
+    if (row) row.textContent = langMeta(LANG).native;
+  } catch(_){}
+}
+// inset:0 on purpose, NOT bottom:var(--nav-h). This file's own rule: the set
+// of overlays a nav tap can reach is exactly the set that does not cover the
+// nav bar, and every one of those has needed teardown code in showPage() to
+// stop it being left floating over a screen it no longer belongs to. Covering
+// the bar means a nav tap cannot land behind it at all, so this needs no
+// entry in that teardown and no history entry of its own.
+function langPickerHtml(){
+  return LANG_ALLOWED.map(code => {
+    const m = langMeta(code);
+    const on = code === LANG;
+    return `<button class="lang-opt${on ? ' on' : ''}" onclick="setLang('${esc(code)}')">
+      <span class="lang-names"><span class="n1">${esc(m.native)}</span><span class="n2">${esc(m.name)}</span></span>
+      ${on ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' : ''}
+    </button>`;
+  }).join('');
+}
+function openLangPicker(){
+  let bg = $('langSheetBg');
+  if (!bg) {
+    bg = document.createElement('div');
+    bg.id = 'langSheetBg';
+    bg.className = 'lang-sheet-bg';
+    bg.setAttribute('data-no-i18n', '');
+    bg.onclick = e => { if (e.target === bg) closeLangPicker(); };
+    document.body.appendChild(bg);
+  }
+  // data-no-i18n on the whole sheet: every name in it is already written in
+  // its own language and must never be put through the table.
+  bg.innerHTML = `<div class="lang-sheet">
+    <div class="lang-head"><b>${esc(t('Language'))}</b>
+      <button class="lang-x" onclick="closeLangPicker()" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="lang-list">${langPickerHtml()}</div>
+  </div>`;
+  requestAnimationFrame(() => bg.classList.add('show'));
+}
+function closeLangPicker(){
+  const bg = $('langSheetBg');
+  if (bg) bg.classList.remove('show');
+}
 function fmtUGX(n){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
@@ -2997,11 +3333,28 @@ window.switchTeamLevel = async function(level){
   setTxt('teamCommPct', (rates['l' + level] != null ? rates['l' + level] : 0) + '%');
   setTxt('teamCommMembers', ((team['l' + level]) || 0) + ' Members');
   if (!STATE.teamMembers[level]) {
+    // The downline for a level that has not been fetched yet takes a real
+    // round trip, and until this the box simply stayed as whatever the
+    // PREVIOUS level had rendered -- so tapping Level 2 looked like Level 1's
+    // members had been re-listed under a different heading, which is worse
+    // than looking slow. Owner: "add the other loader ... while Loading users
+    // on team of specific level ... it will be 4 triangles not Loading...".
+    //
+    // Painted BEFORE the await, and only for a level with nothing cached: a
+    // level already in STATE.teamMembers renders instantly and a spinner that
+    // flashes for one frame reads as a glitch.
+    const box = $('teamMembersBox');
+    if (box) box.innerHTML = teamLoadingHtml();
     const r = await api('/team/members?level=' + level);
     STATE.teamMembers[level] = r.status === 'success' ? r.members : [];
   }
   if (_activeTeamLevel === level) renderTeamMembers(level);
 };
+// The orbiting-chips mark, centred, while a list is in flight. PLAN_SPIN is
+// the same markup the ongoing-plan rows and the payment page use -- every
+// length inside it is a fraction of --s, so one mark serves 32px, 56px and
+// 150px with no second copy and no second set of keyframes.
+function teamLoadingHtml(){ return '<div class="list-loading">' + PLAN_SPIN + '</div>'; }
 function maskPhone(phone){
   const s = String(phone||'').replace(/\D/g,'');
   if (s.length < 7) return phone || '';
@@ -3320,6 +3673,20 @@ async function renderAccount(){
     ${settingRowHtml('messages', 'Messages', 'Notifications &amp; mail', 'openMessagesSheet()')}
     ${settingRowHtml('loginpw', 'Login Password', 'Change login password', 'openChangeLoginPasswordSheet()')}
     ${settingRowHtml('tradepw', 'Trade Password', 'Change trade / withdrawal password', 'openChangeTradePasswordSheet()')}
+    <!-- The language button on the sign-in screen is the one the owner asked
+         for, but a member who is already signed in never sees that screen
+         again -- so the same picker is reachable here. Hidden by
+         paintLangButton() when the country allows only one language, exactly
+         like the button. The current language is printed in ITS OWN language
+         (Kiswahili, not Swahili), which is how every language list a person
+         actually uses is written, so [data-no-i18n] keeps the table off it. -->
+    <button class="setting-row" id="langRow" style="display:none;" onclick="openLangPicker()">
+      <span class="sq ic-language">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
+      </span>
+      <span class="txt"><span class="t1" style="display:block;">Language</span><span class="t2" style="display:block;" id="langRowValue" data-no-i18n>English</span></span>
+      <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
+    </button>
   </div>
 
   <button class="dark-button logout-btn" onclick="doLogout()">
@@ -3331,6 +3698,9 @@ async function renderAccount(){
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   // The figure is in the DOM now, so it can be measured and sized to fit.
   fitBalanceText($('acctWallet'));
+  // The Language row ships hidden and is shown only where the country offers
+  // a choice; this also fills in which language is currently in use.
+  paintLangButton();
 }
 // "+256 742 730 382" -- the shape the mockups show, from whatever the
 // server stored (0742730382 / 256742730382 / +256742730382 all normalise).
@@ -5898,6 +6268,13 @@ captureReferralFromUrl();
 // so paint them from it before the first network reply lands rather than
 // showing Uganda's code to a Kenyan for a beat.
 paintRegionChrome();
+// Same reasoning for the language: the country's allowed list came back with
+// the region and was cached with it, so a returning device opens straight
+// into the language it was left in instead of showing English until
+// /public/settings lands. The observer is started first so anything the boot
+// path renders is translated as it appears, not after a visible flash.
+startI18nObserver();
+applyRegionLanguages();
 var _entryPromise = maybeRotateEntry();
 var _bootPromise = boot();
 

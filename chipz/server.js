@@ -389,9 +389,16 @@ const _regionCtx = new AsyncLocalStorage();
 // can never stop being the default -- there is always somewhere for an
 // unknown hostname and an unstamped account to land.
 const DEFAULT_REGION_KEY = 'ug';
+// The languages the app ships a dictionary column for. This list and LANGS in
+// user-src/original_module.js MUST hold the same codes -- the server decides
+// which a country may offer and the app decides what each one reads like, so
+// a code here with no column there is an option that does nothing when
+// tapped. test-languages.js compares the two files.
+const LANGUAGE_CODES = ['en', 'lg', 'sw', 'fr', 'rw', 'nyn'];
 const DEFAULT_REGION = Object.freeze({
   key: DEFAULT_REGION_KEY, name: 'Uganda', currency: 'UGX', dialCode: '256',
   localLength: 9, prefixes: ['7'], utcOffsetMin: 180, hosts: [], active: true, isDefault: true,
+  languages: ['en'], defaultLang: 'en',
 });
 // Regions as a plain synchronous array, refreshed on the same 60s cadence as
 // settings and products. Synchronous because currentRegion() is called from
@@ -521,7 +528,24 @@ function normalizeRegion(raw, key) {
   const labels = (Array.isArray(raw && raw.labels) ? raw.labels : String((raw && raw.labels) || '').split(/[\s,\n]+/))
     .map(l => String(l == null ? '' : l).trim().toLowerCase().replace(/[^a-z0-9-]/g, ''))
     .filter(l => l && l.length <= 40 && l !== 'www' && !l.startsWith('-') && !l.endsWith('-'));
+  // Owner: "make when l can select allowed languages of any specific
+  // country." Unknown codes are dropped rather than kept, because the app can
+  // only render a language it ships a column for -- storing 'de' would put an
+  // option in the picker that does nothing when tapped.
+  const langsIn = (Array.isArray(raw && raw.languages) ? raw.languages : String((raw && raw.languages) || '').split(/[\s,\n]+/))
+    .map(c => String(c == null ? '' : c).trim().toLowerCase()).filter(c => LANGUAGE_CODES.includes(c));
+  const languages = langsIn.filter((c, i) => langsIn.indexOf(c) === i);
+  // A country with nothing picked offers English alone -- the same thing it
+  // did before this feature existed, so every stored region reads correctly
+  // without a migration.
+  if (!languages.length) languages.push('en');
+  // Which one a first-ever launch opens in. Forced into the allowed list: a
+  // default nobody is allowed to use would leave new arrivals in a language
+  // the picker cannot switch away from, since it lists only allowed ones.
+  let defaultLang = String((raw && raw.defaultLang) || '').trim().toLowerCase();
+  if (!languages.includes(defaultLang)) defaultLang = languages[0];
   return {
+    languages, defaultLang,
     key: k, name: String((raw && raw.name) || base.name || k).trim().slice(0, 48),
     currency: String((raw && raw.currency) || base.currency || 'UGX').trim().slice(0, 8).toUpperCase(),
     dialCode, localLength,
@@ -3002,6 +3026,12 @@ function publicRegionView(r) {
     key: reg.key, name: reg.name, currency: reg.currency, dialCode: reg.dialCode,
     localLength: reg.localLength, prefixes: (reg.prefixes || []).slice(),
     utcOffsetMin: reg.utcOffsetMin, isDefault: !!reg.isDefault,
+    // Which languages this country's sign-in screen may offer, and which one
+    // a device with no choice stored opens in. Published rather than compiled
+    // into the app so a country's list can change from the panel without a
+    // frontend redeploy.
+    languages: (reg.languages && reg.languages.length ? reg.languages : ['en']).slice(),
+    defaultLang: reg.defaultLang || 'en',
     // Which login-address shape this region's accounts use. Sent rather than
     // worked out in the app: it depends on the FOUNDING region's dialling
     // code, which the app has no way of knowing, and the two must agree
@@ -7740,6 +7770,17 @@ app.post('/admin/regions/save', async (req, res) => {
     return res.status(400).json({ status: 'error', message: 'A number prefix cannot be as long as the whole local number.' });
   if (!(r.utcOffsetMin >= -720 && r.utcOffsetMin <= 840))
     return res.status(400).json({ status: 'error', message: 'The clock offset must be between -720 and +840 minutes.' });
+  // Same split as the short addresses directly below: normalizeRegion stays
+  // permissive because it also runs over what is already stored, and the SAVE
+  // route refuses by name. An admin who ticks a language and is shown a list
+  // without it has been given a country he did not configure.
+  const typedLangs = (Array.isArray(raw.languages) ? raw.languages : String(raw.languages || '').split(/[\s,\n]+/))
+    .map(c => String(c == null ? '' : c).trim().toLowerCase()).filter(Boolean);
+  const badLang = typedLangs.find(c => !LANGUAGE_CODES.includes(c));
+  if (badLang)
+    return res.status(400).json({ status: 'error', message: `"${badLang}" is not a language this app can display. Choose from: ${LANGUAGE_CODES.join(', ')}.` });
+  if (raw.defaultLang && !r.languages.includes(String(raw.defaultLang).trim().toLowerCase()))
+    return res.status(400).json({ status: 'error', message: 'The default language has to be one of the languages this country allows.' });
   try {
     _regionsCacheTs = 0;
     const existing = await getRegions();

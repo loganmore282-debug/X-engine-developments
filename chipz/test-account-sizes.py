@@ -126,6 +126,13 @@ async def main():
               doorSrc: img ? img.getAttribute('src') : null,
               border: getComputedStyle(list).borderTopColor,
               rowCount: rows.length,
+              // VISIBLE rows, not rows in the DOM. Account gained a Language
+              // row, and it is hidden wherever the country offers only one
+              // language -- which this fixture's region does. Counting the
+              // visible ones keeps his seven-row mockup pinned AND proves the
+              // new row really is hidden rather than merely declared so;
+              // bumping the count to eight would have thrown both away.
+              visibleRows: rows.filter(r => getComputedStyle(r).display !== 'none').length,
               classes: rows.map(r => r.querySelector('.sq').className) }; }""")
 
         print("— sizes, against his mockup —")
@@ -161,7 +168,9 @@ async def main():
            f"the card border is green-tinted, not neutral ({tuple(bc)})")
 
         print("\n— every icon tile has its own background —")
-        ck(g['rowCount'] == 7, f"seven rows ({g['rowCount']})")
+        ck(g['visibleRows'] == 7,
+           f"his seven rows, and the Language row correctly hidden in a one-language country "
+           f"({g['visibleRows']} visible of {g['rowCount']})")
         for c in g['classes']:
             ck('ic-' in c, f"tile carries its colour class ({c})")
 

@@ -234,6 +234,15 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
     border-radius:8px;padding:5px 6px 5px 10px}
   .code-chip .btn{padding:5px 10px;font-size:12px;border-radius:6px}
   .switch-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
+  /* Which languages a country offers. A wrapping grid rather than a
+     multi-select: a <select multiple> on a phone hides the choices behind a
+     scroll and needs ctrl-click on a desktop to pick more than one, and this
+     is a list of six that has to be readable at a glance. */
+  .lang-picks{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 0}
+  .lang-pick{display:flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid var(--line);
+    border-radius:10px;cursor:pointer;font-size:13px;background:var(--card)}
+  .lang-pick input{width:auto;margin:0}
+  .lang-pick:has(input:checked){border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
   .seg{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .seg button{padding:6px 14px;border-radius:20px;border:1px solid var(--line);background:var(--card);
     cursor:pointer;font-size:13px;color:var(--sub);font-weight:600}
@@ -804,6 +813,20 @@ function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('
 var ADMIN_REGION = 'ug';
 try { const _r = localStorage.getItem('chipz_admin_region'); if (_r) ADMIN_REGION = _r; } catch (_) {}
 var ADMIN_REGIONS = [{ key:'ug', name:'Uganda', currency:'UGX', dialCode:'256', localLength:9, prefixes:['7'], utcOffsetMin:180, hosts:[], active:true, isDefault:true }];
+// The languages the member app ships a dictionary column for. Must hold the
+// same codes as LANGUAGE_CODES in server.js and LANGS in
+// user-src/original_module.js -- the panel decides what a country may offer,
+// the server stores it and the app renders it, so a code missing from any of
+// the three is an option that does nothing. test-languages.js compares all
+// three files.
+const ADMIN_LANGS = [
+  { code:'en',  name:'English',     native:'English' },
+  { code:'lg',  name:'Luganda',     native:'Luganda' },
+  { code:'sw',  name:'Swahili',     native:'Kiswahili' },
+  { code:'fr',  name:'French',      native:'Français' },
+  { code:'rw',  name:'Kinyarwanda', native:'Ikinyarwanda' },
+  { code:'nyn', name:'Runyankole',  native:'Runyankore' },
+];
 const REGION_SCOPED_READS = ['/admin/settings', '/admin/products'];
 const REGION_SCOPED_WRITES = ['/admin/settings/update', '/admin/products/save', '/admin/manual-numbers/save'];
 // ── THE COUNTRY TOGGLE, ON EVERY SCREEN ──
@@ -2785,7 +2808,7 @@ function offsetLabel(min){
 }
 function regionForm(r){
   const isNew = !r;
-  const cur = r || { key:'', name:'', currency:'', dialCode:'', localLength:9, prefixes:[], utcOffsetMin:180, hosts:[], active:true };
+  const cur = r || { key:'', name:'', currency:'', dialCode:'', localLength:9, prefixes:[], utcOffsetMin:180, hosts:[], active:true, languages:['en'], defaultLang:'en' };
   openModal(`
     <h3>${isNew ? 'New country' : 'Edit ' + esc(cur.name)}</h3>
     <div class="row2">
@@ -2804,6 +2827,13 @@ function regionForm(r){
     <input id="rgOff" type="number" min="-720" max="840" value="${esc(String(cur.utcOffsetMin == null ? 180 : cur.utcOffsetMin))}">
     <div class="switch-row" style="margin-top:10px"><span><b>Open for business</b> <span class="muted">(off hides it from its own web address)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="rgActive" ${cur.active === false ? '' : 'checked'} style="width:auto"${cur.isDefault ? ' disabled' : ''}></label></div>
+    <label style="margin-top:12px">Languages this country offers</label>
+    <div class="lang-picks" id="rgLangs">${ADMIN_LANGS.map(l => `
+      <label class="lang-pick"><input type="checkbox" class="rg-lang" value="${esc(l.code)}"${(cur.languages || ['en']).includes(l.code) ? ' checked' : ''}>
+        <span>${esc(l.native)} <span class="muted">${esc(l.name)}</span></span></label>`).join('')}</div>
+    <label style="margin-top:8px">Opens in</label>
+    <select id="rgDefLang">${ADMIN_LANGS.map(l => `<option value="${esc(l.code)}"${(cur.defaultLang || 'en') === l.code ? ' selected' : ''}>${esc(l.native)}</option>`).join('')}</select>
+    <p class="muted" style="margin:6px 0 10px">Members here get a <b>language button at the top right of the sign-in screen</b>, and a Language row in Account. It is <b>hidden entirely when only one language is ticked</b> — one option is not a choice. "Opens in" is what a phone that has never picked one starts in; it must be one of the ticked languages.<br><br>Anything not yet translated shows in <b>English</b> rather than in a placeholder, so ticking a language is always safe. Prices, amounts and currency labels are never translated.</p>
     <label>Short addresses <span class="muted" style="font-weight:400">— just the bit in front of ${esc(ADMIN_BASE_DOMAIN)}</span></label>
     <input id="rgLabels" value="${esc((cur.labels || []).join(', '))}" placeholder="g26e, shy">
     <p class="muted" style="margin:6px 0 10px">Each one becomes <code>&lt;name&gt;.${esc(ADMIN_BASE_DOMAIN)}</code>. Separate several with commas. Use <b>+ Address</b> on the list to have one generated for you.</p>
@@ -2828,6 +2858,8 @@ function regionForm(r){
       labels: $('rgLabels').value.split(/[\s,\n]+/).filter(Boolean),
       hosts: $('rgHosts').value.split(/[\s,\n]+/).filter(Boolean),
       active: $('rgActive').checked,
+      languages: Array.from(document.querySelectorAll('.rg-lang')).filter(c => c.checked).map(c => c.value),
+      defaultLang: $('rgDefLang').value,
     } });
     btn.disabled = false; btn.textContent = 'Save country';
     if (d.status !== 'success') return toast(d.message || 'Could not save this country', 'err');
