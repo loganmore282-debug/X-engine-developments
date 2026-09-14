@@ -4246,3 +4246,153 @@ playwright`, then `PIL`. The container is rebuilt per session and neither is pre
 `PLAYWRIGHT_BROWSERS_PATH` already set) — never run `playwright install`. **46 harnesses
 failing at once is an environment problem, not a regression**; run one directly and read
 its traceback before believing the batch.
+
+## Round 161 — The root domain, the uploaded share card, and ONE country switch
+
+> "l would like to delete the root domain records such that it brings this, so as l just
+> remain with sub domains, also l wanted the uploaded link preview to be shown not the
+> hardcoded, please check out that very well. also in the admin panel, l wanted to have a
+> single switch such that it changes all contents ie l can toggle to switch to another
+> country so as l see all contents ie dashboard, deposits, withdrawals, transactions,
+> settings etc, note settings like dialog will be different too, so all country changes
+> everything but images are same only edittable variables like prices, words like that,
+> withdrawal time etc"
+
+### 1. Deleting the root domain's DNS records — nothing in the code needs changing
+Walked the whole chain before answering, and the platform already survives it:
+
+- **The wildcard is what serves the subdomains.** `*.<domain>` is a separate record from
+  the root's; deleting the root's `A`/`CNAME`/`ALIAS` leaves every short address working
+  and gives the bare domain exactly the `DNS_PROBE_FINISHED_NXDOMAIN` screen he sent.
+- **`www` still resolves through the wildcard** — `*.<domain>` matches `www.<domain>`, so
+  deleting the root record does NOT close `www`. What closes it is `blockRootDomain`
+  (default **on**), whose rule covers `h === baseDomain || h === 'www.' + baseDomain`.
+  **That only works once Base domain holds his real domain**, which is the one setting he
+  still has to fill in.
+- **CORS is unaffected.** `corsHostAllowed()` matches the Origin *string*, not DNS, and
+  `_baseDomain` is in that list precisely so every label under it is allowed.
+- **Nothing in the app or the server ever fetches the root.** `API_BASE` is absolute,
+  `og:image` is absolute, the manifest's `start_url`/`scope` are relative, and
+  `guard-src.js` busts frames to `window.location.href`.
+- **He should also remove the root as a custom domain from the Render static site**, or
+  Render keeps trying to verify and renew a certificate for a hostname with no DNS.
+- **`strictRegionHosts` must stay OFF** unless he adds his admin host to Allowed website
+  domains: that check is `_mainAllowedHosts.includes(h)`, an EXACT match, so
+  `admin.<domain>` is not covered by the base domain being allowed.
+
+### 2. The uploaded link preview is what shares now, and the reasoning that changed
+`og:image` pointed at a **static file in the build**, so Admin → Settings → Link preview
+changed nothing a crawler ever saw — only a redeploy could change the share card. It
+names the backend route again: `https://chipz-server.onrender.com/public/link-preview.jpg`.
+
+**Both reasons Round 158 moved it off that route are gone, and that is why this is not a
+flip-flop:**
+1. *"It 404s until something is uploaded."* It cannot any more —
+   `BRAND_ASSET_SLOTS['link-preview'].file` is `'link-preview.jpg'`, so the route falls
+   back to the card bundled in the build, exactly as the app icon has always fallen back
+   to `icon-512.png`. Upload set → the upload; nothing uploaded, or Mongo unreachable →
+   this build's own card. **Never a 404.**
+2. *"The backend sleeps and a crawler waits seconds."* `chipz-server` is a **paid**
+   instance and does not sleep. That was a free-tier assumption, already untrue for this
+   deploy when it was written.
+
+The old "an unset share card must show NO picture, never a wrong one" rule was right when
+nothing shipped in the build. A branded 1200 × 630 card **is** the right picture, so the
+fallback is now the correct answer rather than a compromise.
+
+Two delays the panel now states in its own copy, because both come back as bug reports:
+the route's **five-minute** `max-age` (a fresh fetch can show the previous card for that
+long) and **WhatsApp/Facebook remembering** a preview for a link already shared.
+
+### 3. One switch, in the topbar, that changes everything
+The pieces existed (`ADMIN_REGION`, stamped centrally in `api()`) but the control was a
+**card injected into each tab after it painted** — so it looked like a different control
+on every screen, its options *changed* between tabs ("All countries" was dropped on
+Settings), it was absent from Gift Codes and Messages, and it forgot the country on every
+reload.
+
+- **It is one `<select>` in the topbar**, beside Live/Refresh, on every screen. Outside
+  `#content`, so no tab render can wipe it — which is why `switchTab()` no longer waits
+  for the tab to paint before drawing it.
+- **The option list never changes.** A switch whose choices move as you navigate is not
+  one switch. Settings and Products still mean one country at a time; they say so in a
+  **note under the tabs** instead of by removing an option, and that note is also where
+  an All-countries list warns that its totals mix currencies, and where a screen no
+  country owns (Countries, Admins, Activity Log) says "This screen is the same for every
+  country."
+- **Remembered on the device** (`localStorage['chipz_admin_region']`). An admin working
+  through one country's deposits, then its withdrawals, then its settings should not
+  re-pick it every reload — and a panel that silently snapped back to the founding country
+  is how figures get read under the wrong heading. A country that has since been deleted
+  clears the stored value too, or every reload resurrects it.
+- `adminOneRegion()` mirrors `api()`'s own `'all' → 'ug'` fallback, so what a one-country
+  screen SHOWS and what it ASKS FOR cannot disagree. The manual payment numbers were
+  filtered on the raw `ADMIN_REGION`, so with All countries picked they silently listed
+  **nothing** while a save would have targeted Uganda.
+
+### The two tabs that were not per-country yet — and one is money
+- **Gift codes.** The reward is a bare number; what it is WORTH is the claimer's currency,
+  so a code cut for 5,000 UGX claimed by a Kenyan pays 5,000 KES — about twenty times as
+  much. Same class of bug as a cross-country referral commission, and by a similar
+  multiple. A code now carries `regionKey`, `/redeem` refuses one from another country
+  **before any credit**, the list is per country, and each row shows its country with the
+  reward labelled in **that code's** currency rather than the panel's.
+- **Messages.** Words that name a currency, an amount or an operator are wrong in another
+  country. `messages` carry `regionKey`; `/messages` serves the **member's own** country.
+- **Both default permissive for legacy rows:** a missing `regionKey` (every row written
+  before this) means *every country*. Hiding somebody's live announcements, or killing
+  gift codes already handed out, would be a far worse surprise than one row shown too
+  widely — and a code that stops working reads as theft. Writing for one country is an
+  explicit act with that country picked; "All countries" is still offered and stores `all`.
+- **The announcement dialog was already per-country** (`annEnabled`/`annTitle`/`annBody`
+  are ordinary settings, not `GLOBAL_ONLY_SETTINGS`), so "settings like dialog will be
+  different too" needed nothing — it just needed the switch to reach the Settings tab.
+- **Images stay shared**, as he asked: the banners, logos, app icon, link preview and
+  product photos are all global slots. Only `PRODUCT_REGION_FIELDS` (price, payout,
+  cycle, spin band, availability) and the per-country settings document vary.
+
+**A footgun I wrote and then closed:** with All countries picked the panel shows messages
+from several countries at once, so an edit made from that view would have **re-stamped**
+the message it was editing — fixing a typo in a Kenyan message would broadcast it to the
+whole platform. `'all'` now means "every country" for a NEW message and "leave it as it
+is" for an edit.
+
+### Tests
+`test-regions.js` runs the real `giftCodeInRegion`/`giftCodeRegion` and the real
+`listBroadcastMessages` over a stub database (Kenyan/Ugandan/all-countries/legacy rows,
+a per-country welcome, a tombstone, and the settings region the built-in row is built
+from), asserts the `/redeem` refusal comes **before** `FieldValue.increment`, and **runs
+`paintRegionSwitch()`** over a stub DOM — options, per-tab note, hidden with one country —
+then **fires its change handler** and checks what it actually did.
+`verify-regions-discriminates.py` now runs **three** harnesses per mutation
+(`test-brand-assets.js` joined it) and is **187 mutations, all caught**.
+
+**Five lessons, and three cost a missed mutation each:**
+1. **A fourth harness was pinning the old shape.** `test-brand-assets.js` *required*
+   `og:image` NOT to be a backend route and the link-preview slot to have NO fallback —
+   both written deliberately, both now wrong. Rewritten with the history in the comment,
+   because this assertion has now been written **both ways** and the next person needs to
+   know each flip removed the reason the previous shape existed. (This project's running
+   count of harnesses that defended a bug: five.)
+2. **Mutate what the test READS.** The og: mutations had to target `user/index.html`, the
+   built artifact `test-brand-assets.js` opens — mutating `user-src` went undetected
+   because nothing rebuilds between mutations. Added an assertion that the built page and
+   the source **agree**, so a source fixed but never rebuilt is caught on its own.
+3. **A text match found the wrong copy.** "the picked country is never written down" and
+   "switching country no longer repaints the open tab" both survived, because the panel
+   has *other* `localStorage.setItem('chipz_admin_region', …)` calls and *other*
+   `switchTab(_tab)` calls. Fixed by capturing the change handler and **firing** it, then
+   asserting on the recorded `setItem`/`switchTab` calls.
+4. **My stub's methods closed over the factory, not the node** — `addEventListener` wrote
+   `_onChange` onto the function object, and a correctly wired switch measured as unwired.
+5. **Four old mutations were deleted rather than re-anchored**, each with its reason: they
+   described the per-tab picker's own guard, its injection point and its live-refresh
+   repaint, none of which exist now. The live-refresh one in particular *cannot* fail for
+   an honest reason any more — the switch is not in `#content` — and this file already
+   records that such a mutation should be deleted, not propped up.
+
+### Owner still has to
+Delete the root `A`/`CNAME` record (and remove the root custom domain from the Render
+static site), keep the `*` wildcard, and **set Settings → Base domain to his real
+domain** — without it `www` is not closed and short addresses match no country. Then
+upload a Link preview if he wants his own card instead of the built-in one.

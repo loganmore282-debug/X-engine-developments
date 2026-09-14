@@ -281,6 +281,18 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <div class="mk" id="brandMarkTop"><img src="/icon-192.png" alt="" width="34" height="34"></div>
         <b data-brandadmin>Chipz Admin</b>
         <div class="spacer"></div>
+        <!-- ── THE ONE COUNTRY SWITCH ──
+             Owner: "l wanted to have a single switch such that it changes all
+             contents ie l can toggle to switch to another country so as l see
+             all contents ie dashboard, deposits, withdrawals, transactions,
+             settings etc."
+
+             It lives in the TOPBAR, not inside each tab, because that is what
+             makes it one switch: it is in the same place on every screen, it
+             does not move as tabs change, and switching does not depend on
+             which tab happens to be open. It is hidden entirely while there
+             is only one country. -->
+        <select id="regionSwitch" class="hidden" title="Which country this panel is showing" style="max-width:190px"></select>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
         <button class="btn ghost sm" id="pushBtn" title="Enable push notifications for new deposits and withdrawal requests on this device/browser. Tapping an alert opens this panel -- it does not approve or send anything by itself.">Notify</button>
         <button class="btn ghost sm hidden" id="installBtn">Install</button>
@@ -303,6 +315,11 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
+      <!-- What the switch means on THIS tab: mixed currencies on an
+           All-countries list, one country only on Settings and Products, or
+           nothing at all on a screen no country owns. Painted by
+           paintRegionSwitch(), and empty (and hidden) with one country. -->
+      <div class="muted hidden" id="regionNote" style="font-size:12px;padding:0 0 8px"></div>
     </div>
   </div>
   <div class="wrap content" id="content"></div>
@@ -777,7 +794,15 @@ function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('
 //              /admin/manual-numbers/save  ->  region:'<key>' in the body
 // Uganda ('ug') is the default and sends nothing extra, so with one region
 // configured every request is byte-for-byte what it always was.
+// Remembered on the device. The switch is meant to be set once and then
+// forgotten about -- an admin working through a country's deposits, then its
+// withdrawals, then its settings should not have to re-pick it on every
+// reload, and a panel that silently snapped back to the founding country
+// between reloads is how figures get read under the wrong heading.
+// localStorage, not sessionStorage: the tab memory beside it is per-tab on
+// purpose (where you were), this is per-device (what you are working on).
 var ADMIN_REGION = 'ug';
+try { const _r = localStorage.getItem('chipz_admin_region'); if (_r) ADMIN_REGION = _r; } catch (_) {}
 var ADMIN_REGIONS = [{ key:'ug', name:'Uganda', currency:'UGX', dialCode:'256', localLength:9, prefixes:['7'], utcOffsetMin:180, hosts:[], active:true, isDefault:true }];
 const REGION_SCOPED_READS = ['/admin/settings', '/admin/products'];
 const REGION_SCOPED_WRITES = ['/admin/settings/update', '/admin/products/save', '/admin/manual-numbers/save'];
@@ -792,11 +817,18 @@ const REGION_SCOPED_WRITES = ['/admin/settings/update', '/admin/products/save', 
 // founding country, so leaving it off was the same thing. For a list, "no
 // region" means EVERY country -- so not stamping it while Uganda is picked
 // would show a mixed list under a label saying Uganda.
-const REGION_FILTERED_READS = ['/admin/users', '/admin/stats', '/admin/referrals/list'];
-const REGION_FILTERED_WRITES = ['/admin/deposits/list', '/admin/withdrawals/list', '/admin/transactions/list', '/admin/analytics'];
-// Every screen the toggle actually changes, so the picker is shown there and
-// nowhere it would be decoration.
-const REGION_AWARE_TABS = ['dashboard', 'analytics', 'users', 'deposits', 'withdrawals', 'transactions', 'referrals', 'settings', 'products'];
+// Gift codes and messages joined this list in the round that made the switch
+// global: a gift code is money in a currency, and an inbox message is words
+// that name one -- so both are per-country on the server now, and the panel
+// has to ask for the same country it is labelled with.
+const REGION_FILTERED_READS = ['/admin/users', '/admin/stats', '/admin/referrals/list', '/admin/promocodes/list', '/admin/messages/list'];
+const REGION_FILTERED_WRITES = ['/admin/deposits/list', '/admin/withdrawals/list', '/admin/transactions/list', '/admin/analytics',
+  // WRITES that create per-country content. Stamped with the picked country
+  // so what is generated belongs where the panel says it does.
+  '/admin/promocodes/generate', '/admin/messages/save'];
+// Every screen the switch actually changes. The switch itself is always on
+// screen; this is what its note says about the tab in front of it.
+const REGION_AWARE_TABS = ['dashboard', 'analytics', 'users', 'deposits', 'withdrawals', 'transactions', 'referrals', 'settings', 'products', 'promocodes', 'messages'];
 // Screens that can only ever mean ONE country. Picking "All countries" and
 // opening one of these would otherwise silently edit the founding country's
 // figures under an "All countries" label.
@@ -1058,30 +1090,63 @@ function switchTab(name){
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
      referrals:renderReferrals, settings:renderSettings, regions:renderRegions, admins:renderAdmins, auditlog:renderAuditLog }[name]);
-  // The country toggle is added AFTER the tab paints, centrally, rather than
-  // by editing every render function -- and only on the tabs it actually
-  // changes (REGION_AWARE_TABS). Settings and Products paint their own
-  // picker with a longer caption, so paintRegionPicker leaves those alone.
-  Promise.resolve(fn()).then(() => { if (_tab === name) paintRegionPicker(name); }).catch(() => {});
+  // The switch lives in the topbar, OUTSIDE #content, so a tab render can
+  // never take it with it -- which is why this no longer waits for the tab
+  // to paint. Only the note under the tabs depends on which tab is open, and
+  // that is repainted here before anything is fetched.
+  paintRegionSwitch();
+  Promise.resolve(fn()).catch(() => {});
 }
-// Puts the country toggle at the top of a tab that does not paint one
-// itself. Idempotent: a tab that already has one (Settings, Products) is
-// left as it is, so its own caption survives.
-function paintRegionPicker(name){
+// The one country switch: fills it, shows or hides it, and writes the note
+// that says what it means on the tab currently open. Safe to call as often
+// as you like -- it rebuilds the options from ADMIN_REGIONS every time and
+// re-selects ADMIN_REGION, so it cannot drift out of step with either.
+function paintRegionSwitch(){
   try {
-    if (!REGION_AWARE_TABS.includes(name)) return;
-    if ($('regionPick')) { wireRegionPicker(); return; }
-    const html = regionPickerHtml('');
-    if (!html) return;
-    const holder = document.createElement('div');
-    holder.innerHTML = html;
-    const card = holder.firstElementChild;
-    const c = $('content');
-    if (!card || !c) return;
-    c.insertBefore(card, c.firstChild);
-    wireRegionPicker();
+    const sel = $('regionSwitch'), note = $('regionNote');
+    if (!sel) return;
+    // One country is not a choice. Hidden rather than disabled: a platform
+    // running in Uganda alone should not have a country selector on screen
+    // at all.
+    const many = ADMIN_REGIONS.length > 1;
+    sel.classList.toggle('hidden', !many);
+    if (note) { note.classList.add('hidden'); note.textContent = ''; }
+    if (!many) return;
+    const single = REGION_SINGLE_TABS.includes(_tab);
+    const aware = REGION_AWARE_TABS.includes(_tab);
+    // "All countries" is offered everywhere the switch is, INCLUDING on
+    // Settings and Products. Removing the option on those tabs (which is
+    // what the old per-tab picker did) meant the list of choices changed as
+    // you moved around, and a switch whose options move is not one switch.
+    // What those tabs do instead is say, in the note, that they are showing
+    // one country -- which is also what the server does with the request.
+    sel.innerHTML = `<option value="all" ${ADMIN_REGION === 'all' ? 'selected' : ''}>All countries</option>` +
+      ADMIN_REGIONS.map(r =>
+        `<option value="${esc(r.key)}" ${r.key === ADMIN_REGION ? 'selected' : ''}>${esc(r.name)} (${esc(r.currency)})${r.active === false ? ' - off' : ''}</option>`).join('');
+    if (note) {
+      let msg = '';
+      if (!aware) msg = 'This screen is the same for every country.';
+      else if (single && ADMIN_REGION === 'all') msg = 'Showing ' + regionByKeyAdmin('ug').name + ' - this screen is edited one country at a time.';
+      else if (ADMIN_REGION === 'all') msg = 'Every country together - each amount is in its own currency, so totals mix currencies. Pick one country for figures that add up.';
+      if (msg) { note.textContent = msg; note.classList.remove('hidden'); }
+    }
+    if (!sel._wired) {
+      sel._wired = true;
+      sel.addEventListener('change', () => {
+        ADMIN_REGION = sel.value;
+        try { localStorage.setItem('chipz_admin_region', ADMIN_REGION); } catch (_) {}
+        // Repaint whatever is open against the new country. Every tab reads
+        // its data through api(), which stamps the country on, so one
+        // re-render is the whole of "changes all contents".
+        switchTab(_tab);
+      });
+    }
   } catch (_) {}
 }
+// The country a one-country screen (Settings, Products, payment numbers)
+// actually means. Mirrors api()'s own fallback, so what the panel shows and
+// what the server is asked for can never disagree.
+function adminOneRegion(){ return (!ADMIN_REGION || ADMIN_REGION === 'all') ? 'ug' : ADMIN_REGION; }
 async function refreshBadges(){
   const s = await api('/admin/badges');
   if(s.status==='success' && s.pendingWithdrawals>0){ $('wBadge').textContent=s.pendingWithdrawals; $('wBadge').classList.remove('hidden'); }
@@ -1167,11 +1232,11 @@ function liveTick(){
   const scrollY = window.scrollY;
   Promise.resolve((RENDERERS[tab]||(()=>{}))()).then(()=>{
     if(staleTab(tab)) return; // admin switched tabs while this was loading -- don't touch whatever's shown now
-    // A full render on tick rebuilds the panel shell, which takes the
-    // country toggle with it. The quiet* refreshes patch in place and leave
-    // it alone; paintRegionPicker is idempotent, so calling it either way
-    // is correct and cheap.
-    paintRegionPicker(tab);
+    // The switch itself is in the topbar and a tab render cannot touch it,
+    // but the note under the tabs is repainted anyway: cheap, and it keeps
+    // the wording right if a country was added or renamed since the tab
+    // opened (loadAdminRegions refreshes the list under us).
+    paintRegionSwitch();
     window.scrollTo(0, scrollY);
   }).catch(()=>{});
 }
@@ -2242,7 +2307,7 @@ async function renderProducts(){
   if(staleTab('products')) return;
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
   $('content').innerHTML = `
-    ${regionPickerHtml('Prices, payouts, spins and the opening schedule are saved for the country picked here. Names, photos and order are shared by every country.')}
+    ${ADMIN_REGIONS.length > 1 ? `<p class="muted" style="margin:0 0 12px;font-size:12px">Prices, payouts, spins and the opening schedule are saved for <b>${esc(regionByKeyAdmin(adminOneRegion()).name)}</b> &mdash; the country in the switch at the top. Names, photos and order are shared by every country.</p>` : ''}
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products (${list.length})${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
       <button class="btn sm ghost" id="syncProdPricing" title="Updates price/cycle/expectedReturn on any saved product back to the current code defaults -- leaves images, active/coming-soon, and order untouched">Sync pricing to defaults</button>
       <button class="btn sm ghost" id="fixLegacyKeys" title="A now-fixed bug could turn saving product-1 into a SEPARATE product1 -- this finds and merges any it made">Fix duplicate keys</button>
@@ -2258,7 +2323,6 @@ async function renderProducts(){
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
         </div>
       </div>`).join(''):'<div class="empty">No products yet. The app catalogue reverts to defaults until you add one.</div>'}</div>`;
-  wireRegionPicker();
   $('newProd').addEventListener('click',()=>editProduct(null,list.length));
   $('syncProdPricing').addEventListener('click',async()=>{
     if(!confirm('Update price/total-payout/cycle on every saved product to match the current built-in pricing table? Images, active/coming-soon, and order are left untouched. A product that was never individually saved is already correct and is skipped.'))return;
@@ -2428,6 +2492,9 @@ async function renderMessages(){
     <h2 class="sec">Messages</h2>
     <div class="panel-card">
       <div class="muted" style="font-size:12px;margin-bottom:8px">Broadcast to every member's in-app Messages inbox. Leave the ID blank to post a new message; fill it to edit an existing one.</div>
+      ${ADMIN_REGIONS.length>1?`<div class="muted" style="font-size:12px;margin-bottom:8px">${ADMIN_REGION==='all'
+        ? 'This message will go to <b>every country</b>. Pick one country in the switch above to write for that country only &mdash; useful when the wording names an amount, a currency or a payment operator.'
+        : `This message will go to <b>${esc(regionByKeyAdmin().name)}</b> members only.`}</div>`:''}
       <div class="row">
         <div style="flex:2"><label>Title</label><input id="mTitle" type="text" maxlength="200" placeholder="Welcome to Chipz"></div>
         <div><label>ID (blank = new)</label><input id="mId" type="text" placeholder="new"></div>
@@ -2439,7 +2506,9 @@ async function renderMessages(){
     ${list.length ? list.map(m=>`
       <div class="panel-card" style="margin-bottom:10px">
         <div style="font-weight:700">${esc(m.title||'')}</div>
-        <div class="muted" style="font-size:11.5px;margin:2px 0 6px">${esc(m.id)} &middot; ${esc(m.date||'')} ${esc(m.time||'')}</div>
+        <div class="muted" style="font-size:11.5px;margin:2px 0 6px">${esc(m.id)} &middot; ${esc(m.date||'')} ${esc(m.time||'')}${ADMIN_REGIONS.length>1
+          ? ' &middot; ' + (!m.regionKey || m.regionKey==='all' ? 'every country' : esc(regionByKeyAdmin(m.regionKey).name))
+          : ''}</div>
         <div style="font-size:13px;white-space:pre-line">${esc(m.body||'')}</div>
         <div style="margin-top:10px;display:flex;gap:8px">
           <button class="btn sm" data-medit="${esc(m.id)}">Edit</button>
@@ -2486,23 +2555,32 @@ async function renderPromoCodes(){
         <div><label>Expires after (seconds, optional)</label><input id="cDuration" type="number" min="1" step="1" placeholder="e.g. 30 for a flash code"></div>
       </div>
       <div class="muted" style="margin:4px 0 10px">Each claim rolls its own random reward between min and max (down to the cent) -- one person might get 123.39, another 234.89. Set min and max the same for a fixed reward instead. Leave expiry blank for a code that never expires.</div>
+      ${ADMIN_REGIONS.length>1?`<div class="muted" style="margin:0 0 10px;font-size:12px">${ADMIN_REGION==='all'
+        ? 'These codes will be claimable in <b>every country</b>, each paying the amount above in the claimer\'s own currency.'
+        : `These codes are for <b>${esc(regionByKeyAdmin().name)}</b> and pay in ${esc(adminCur())}. Members of other countries cannot claim them. Pick <b>All countries</b> above to cut a code anybody can claim.`}</div>`:''}
       <button class="btn block" id="genBtn">Generate codes</button>
       <div id="genOut"></div>
     </div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward range</th><th>Used</th><th>Total claimed</th><th>Status</th><th>Expires</th><th>Created</th><th></th></tr></thead>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward range</th>${ADMIN_REGIONS.length>1?'<th>Country</th>':''}<th>Used</th><th>Total claimed</th><th>Status</th><th>Expires</th><th>Created</th><th></th></tr></thead>
     <tbody>${list.length?list.map(c=>{
       const expiredNow = c.expiresAt && tsMs(c.expiresAt) < Date.now();
       const statusLabel = expiredNow ? 'Expired' : (c.active!==false?'Active':'Off');
       const statusClass = expiredNow ? 't-bad' : (c.active!==false?'t-ok':'t-mut');
-      const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward) : `${ugx(c.minReward)} – ${ugx(c.maxReward)}`;
-      const claimedCol = c.uses ? `<b>${ugx(c.totalClaimed)}</b>` : '<span class="muted">Not claimed yet</span>';
-      return `<tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${rewardCol}</td><td>${c.uses||0} / ${c.maxUses||'∞'}</td>
+      // Labelled in the CODE's own currency. With All countries picked the
+      // rows come from several, and adminCur() would print one country's
+      // label over another country's money. A code marked 'all' really is
+      // claimable anywhere, so it is shown in the panel's current currency
+      // and the Country column says which codes those are.
+      const cCur = c.regionKey && c.regionKey !== 'all' ? c.regionKey : undefined;
+      const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward, cCur) : `${ugx(c.minReward, cCur)} – ${ugx(c.maxReward, cCur)}`;
+      const claimedCol = c.uses ? `<b>${ugx(c.totalClaimed, cCur)}</b>` : '<span class="muted">Not claimed yet</span>';
+      return `<tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc(regionByKeyAdmin(c.regionKey).name)}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
       <td>${claimedCol}</td>
       <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
       <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>
       <td>${fdate(c.createdAt)}</td>
       <td>${(c.active!==false&&!expiredNow)?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`;
-    }).join(''):'<tr><td colspan="8" class="empty">No codes yet</td></tr>'}
+    }).join(''):`<tr><td colspan="${ADMIN_REGIONS.length>1?9:8}" class="empty">No codes yet</td></tr>`}
     </tbody></table></div>`;
   $('genBtn').addEventListener('click', async()=>{
     const minReward=parseFloat($('cMinReward').value||0), maxReward=parseFloat($('cMaxReward').value||0);
@@ -2560,43 +2638,18 @@ async function loadAdminRegions(){
     // 'all' is a real selection on the list and total screens, not a
     // country id, so it must survive this check -- without the exception it
     // snapped straight back to Uganda the moment any tab reloaded regions.
-    if (ADMIN_REGION !== 'all' && !ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';
+    if (ADMIN_REGION !== 'all' && !ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) {
+      ADMIN_REGION = 'ug';
+      // Forget it on the device too, or every reload resurrects the dead
+      // country and resets to Uganda again a moment later.
+      try { localStorage.setItem('chipz_admin_region', ADMIN_REGION); } catch (_) {}
+    }
   }
+  // The switch is built from this list, so repaint it here rather than
+  // leaving it to the next tab change -- adding or renaming a country on the
+  // Countries tab should show up in the switch immediately.
+  paintRegionSwitch();
   return ADMIN_REGIONS;
-}
-// The picker that sits at the top of Settings and Products. Hidden entirely
-// while there is only one country -- a platform running in Uganda alone
-// should not have to look at a country selector on every screen.
-function regionPickerHtml(label){
-  if (ADMIN_REGIONS.length < 2) return '';
-  // "All countries" is offered on the lists and totals, but not on Settings
-  // or Products -- those belong to exactly one country.
-  const single = REGION_SINGLE_TABS.includes(_tab);
-  const all = single ? '' :
-    `<option value="all" ${ADMIN_REGION === 'all' ? 'selected' : ''}>All countries</option>`;
-  const opts = all + ADMIN_REGIONS.map(r =>
-    `<option value="${esc(r.key)}" ${r.key === ADMIN_REGION ? 'selected' : ''}>${esc(r.name)} (${esc(r.currency)})${r.active === false ? ' - off' : ''}</option>`).join('');
-  // With "All countries" picked, the figures on screen are in more than one
-  // currency at once, so say so rather than letting them read as one.
-  const mixed = !single && ADMIN_REGION === 'all'
-    ? 'Showing every country together &mdash; amounts are in each row\'s own currency, so totals mix currencies. Pick one country for figures that add up.'
-    : '';
-  const note = single && ADMIN_REGION === 'all'
-    ? `Showing <b>${esc(regionByKeyAdmin('ug').name)}</b> &mdash; this screen belongs to one country at a time.`
-    : '';
-  return `<div class="card" style="margin-bottom:12px">
-    <div class="row" style="align-items:center;gap:10px">
-      <b style="flex:0 0 auto">Country</b>
-      <select id="regionPick" style="flex:0 0 auto;max-width:260px">${opts}</select>
-      <span class="muted" style="flex:1">${note || mixed || esc(label || '')}</span>
-    </div>
-  </div>`;
-}
-// Called by renderSettings()/renderProducts() right after they paint.
-function wireRegionPicker(){
-  const sel = $('regionPick');
-  if (!sel) return;
-  sel.addEventListener('change', () => { ADMIN_REGION = sel.value; switchTab(_tab); });
 }
 async function renderRegions(){
   await loadAdminRegions();
@@ -2802,7 +2855,10 @@ async function deleteRegion(key){
   const d = await api('/admin/regions/delete', { key });
   if (d.status !== 'success') return toast(d.message || 'Could not delete this country', 'err');
   toast('Country deleted', 'ok');
-  if (ADMIN_REGION === key) ADMIN_REGION = 'ug';
+  if (ADMIN_REGION === key) {
+    ADMIN_REGION = 'ug';
+    try { localStorage.setItem('chipz_admin_region', ADMIN_REGION); } catch (_) {}
+  }
   await loadAdminRegions();
   switchTab('regions');
 }
@@ -3074,12 +3130,12 @@ async function renderSettings(){
   // Only the picked country's collection numbers -- a Ugandan MTN line is
   // not somewhere a Kenyan member can send money, and the server assigns
   // them per country too (see assignManualNumberAndCreateDeposit).
-  _manualNumbers = (mnr.numbers||[]).filter(n => String(n.regionKey || 'ug') === ADMIN_REGION);
+  _manualNumbers = (mnr.numbers||[]).filter(n => String(n.regionKey || 'ug') === adminOneRegion());
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
   applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
-    ${regionPickerHtml('Rates, limits, bonuses, payment methods and the cash-out window are saved for the country picked here. The app name, the domain allowlist, maintenance mode and the opening countdown apply to every country and are only editable on ' + esc(ADMIN_REGIONS[0].name) + '.')}
+    ${ADMIN_REGIONS.length > 1 ? `<p class="muted" style="margin:0 0 12px;font-size:12px">Rates, limits, bonuses, payment methods, the announcement dialog and the cash-out window are saved for <b>${esc(regionByKeyAdmin(adminOneRegion()).name)}</b> &mdash; the country in the switch at the top. The app name, the domain allowlist, maintenance mode, the opening countdown and every uploaded image apply to every country, and the first four are only editable on ${esc(ADMIN_REGIONS[0].name)}.</p>` : ''}
     <h2 class="sec">Rates &amp; limits${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
     <div class="panel-card">
       <div class="row">
@@ -3345,11 +3401,13 @@ async function renderSettings(){
         Put the logo and any words in the middle &mdash; WhatsApp crops the sides on some phones.</p>
       <div class="banner-row">
         ${linkPreviewImage?`<img class="img-thumb" style="border-radius:6px" src="${esc(linkPreviewImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:6px"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${linkPreviewCustom?'Custom preview':'<span class="muted">Nothing set — links share with no picture</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${linkPreviewCustom?'Your uploaded preview &mdash; this is what gets shared':'<span class="muted">Nothing uploaded — links share the built-in card</span>'}</div>
         ${linkPreviewCustom?`<button class="btn danger sm" id="linkPreviewClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload preview<input type="file" id="linkPreviewFile" accept="image/*" hidden></label>
-      <p class="muted" style="margin:10px 0 0;font-size:12px"><b>WhatsApp and Facebook remember the old picture.</b> Once a link has been shared, they keep the preview they first fetched for a while, so a link you have already sent may keep showing the previous image. Sharing the link with anything after it &mdash; for example <code>?x=2</code> on the end &mdash; forces them to fetch it again.</p>
+      <p class="muted" style="margin:10px 0 0;font-size:12px">What you upload here <b>is</b> the picture shared links show, on every address. Remove it and they go back to the card built into the app.
+        Two delays to expect, neither a fault: a fresh share can keep showing the previous picture for up to <b>five minutes</b>, and
+        <b>WhatsApp and Facebook remember the old picture</b> for a link that has already been shared &mdash; they keep the preview they first fetched. Sharing the link with anything after it &mdash; for example <code>?x=2</code> on the end &mdash; forces them to fetch it again.</p>
     </div>
 
     <h2 class="sec">Referral banner</h2>
@@ -3484,7 +3542,6 @@ async function renderSettings(){
     _manualNumbers.push({ id:'', network:'MTN Mobile Money', number:'', holderName:'', active:true, order:(_manualNumbers.length?Math.max(...(_manualNumbers.map(n=>n.order||0)))+1:1), _new:true });
     renderManualNumbersEditor();
   });
-  wireRegionPicker();
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, withdrawMultiple:+$('sWitMult').value, welcomeBonus:+$('sWelcome').value,
@@ -3954,7 +4011,7 @@ function renderManualNumbersEditor(){
     // Only the picked country's collection numbers -- a Ugandan MTN line is
   // not somewhere a Kenyan member can send money, and the server assigns
   // them per country too (see assignManualNumberAndCreateDeposit).
-  _manualNumbers = (mnr.numbers||[]).filter(n => String(n.regionKey || 'ug') === ADMIN_REGION);
+  _manualNumbers = (mnr.numbers||[]).filter(n => String(n.regionKey || 'ug') === adminOneRegion());
     renderManualNumbersEditor();
   }));
   box.querySelectorAll('[data-mn-del]').forEach(btn=>btn.addEventListener('click', async()=>{

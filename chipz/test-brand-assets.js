@@ -153,24 +153,34 @@ console.log('    og:image =', ogImage);
 ck(!!ogImage, 'the built page carries an og:image');
 ck(/^https:\/\//.test(ogImage || ''),
    'it is an absolute URL — a crawler cannot resolve a relative one');
-// ── og:image IS A STATIC FILE, DELIBERATELY NOT A BACKEND ROUTE ──
-// This used to assert the opposite: that og:image resolved to a registered
-// server route. That was the bug. Pointed at the backend it had two ways to
-// show no picture at all, and did: serveBrandAsset() answers 404 when
-// nothing has been uploaded in the admin panel, and even once uploaded that
-// host sleeps -- a crawler allows a link preview a few seconds and a cold
-// start takes far longer. Reported as "all those route domains aren't
-// fetching link preview image".
+// ── og:image IS THE BACKEND ROUTE, SO THE UPLOAD IS WHAT SHOWS ──
+// This assertion has now been written BOTH ways, and the history is the
+// point. It first required a backend route; that was changed to require a
+// static file after the backend route showed no picture; it requires the
+// backend route again now. Neither rewrite was a whim -- each time the
+// REASON the old shape failed was removed:
+//
+//   * "it 404s until something is uploaded" -- it cannot any more. The
+//     link-preview slot has a bundled fallback (asserted below), the same
+//     way the app icon always has.
+//   * "that host sleeps" -- chipz-server is a paid instance and does not.
+//     That was a free-tier assumption, already untrue for this deploy.
+//
+// What is left is the thing the owner actually asked for: "l wanted the
+// uploaded link preview to be shown not the hardcoded". Only a route can
+// serve an upload; a file in the build can only ever be the hardcoded one.
 const ogPath = (ogImage || '').replace(/^https?:\/\/[^/]+/, '');
-ck(!routes[ogPath],
-   'og:image is NOT a backend route -- that endpoint 404s until something is uploaded, and sleeps');
-ck(/^https:\/\/chipz-app\.onrender\.com\//.test(ogImage || ''),
-   'it names the STATIC site, whose host never changes and never sleeps');
+ck(!!routes[ogPath],
+   'og:image resolves to a real backend route, so an admin upload is what crawlers fetch');
+ck(/^https:\/\/chipz-server\.onrender\.com\//.test(ogImage || ''),
+   'it names the backend, on the same host the manifest icons are served from');
 const lp = BRAND_ASSET_SLOTS['link-preview'];
-// The file has to actually be there. Static hosting cannot 404 a file that
-// exists -- and cannot serve one that does not.
-const ogFile = __dirname + '/user' + ogPath;
-ck(fs.existsSync(ogFile), `and it is a real file shipped with the site: user${ogPath}`);
+// The FALLBACK file has to actually be on disk beside server.js, or the
+// route is back to answering 404 with nothing uploaded -- which is the whole
+// reason this tag was moved off the backend once before.
+const ogFile = __dirname + '/user/' + lp.file;
+ck(!!lp.file, 'the slot declares a bundled fallback file');
+ck(fs.existsSync(ogFile), `and it is really shipped: user/${lp.file}`);
 // Its REAL pixel size, read out of the JPEG header, must match what the tags
 // promise -- a crawler that is told 1200x630 and handed something else
 // renders a broken or cropped card.
@@ -195,6 +205,16 @@ if (fs.existsSync(ogFile)) {
 ck(meta('og:image:width') === String(lp.w) && meta('og:image:height') === String(lp.h),
    `the declared ${meta('og:image:width')}×${meta('og:image:height')} matches the enforced ${lp.w}×${lp.h}`);
 ck(meta('twitter:image') === ogImage, 'twitter:image points at the same file');
+// A source fixed but never rebuilt is a real failure mode in this project --
+// everything above reads the BUILT page, so without this an edited og: tag
+// that was never put through build-core.js would pass here and ship the old
+// picture.
+{
+  const srcPage = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
+  const srcOg = /<meta property="og:image" content="([^"]*)"/.exec(srcPage);
+  ck(!!srcOg && srcOg[1] === ogImage,
+     'and the built page matches user-src/index.html, so the build is not stale');
+}
 ck(meta('twitter:card') === 'summary_large_image',
    'and asks for the large card, not a thumbnail');
 // A hard-coded og:url would go stale the day a custom domain is added, and a
@@ -225,8 +245,16 @@ for (const slot of ['app-icon-512', 'app-icon-192']) {
   ck(!!f && fs.existsSync(__dirname + '/user/' + f),
      `${slot} falls back to user/${f}, which exists on disk`);
 }
-ck(BRAND_ASSET_SLOTS['link-preview'].file === null,
-   'the link preview has no fallback — an unset share card must have NO picture, not a wrong one');
+// This once asserted `file === null`, on the reasoning that an unset share
+// card must show NO picture rather than a wrong one. That reasoning stopped
+// holding when a branded 1200x630 card started shipping in the build: it is
+// not a wrong picture, it is this platform's own. And a fallback is what
+// lets og:image point at the route that serves the UPLOAD.
+{
+  const f = BRAND_ASSET_SLOTS['link-preview'].file;
+  ck(!!f && fs.existsSync(__dirname + '/user/' + f),
+     `the link preview falls back to user/${f}, which exists on disk`);
+}
 
 console.log('\n— the panel sends what the server reads —');
 ck(/api\('\/admin\/app-icon\/set', \{ png512, png192 \}\)/.test(admin),
@@ -343,9 +371,17 @@ ck(/app\.get\('\/admin\/brand-assets'[\s\S]{0,120}verifyAdmin\(req\)/.test(src),
   const s = imageSize(r.body);
   ck(s && s.w === 512 && s.h === 512, 'and it really is 512×512');
 
-  // The link preview has no fallback: an unset share card must show nothing.
+  // With nothing uploaded the share card is the bundled one, NOT a 404 --
+  // a crawler that gets a 404 renders a card with no picture at all, which
+  // is what "those route domains aren't fetching link preview image" was.
   const p = await call(prev);
-  ck(p.code === 404, 'an unset link preview 404s rather than serving a wrong picture');
+  ck(p.code === 200 && Buffer.isBuffer(p.body) && p.body.length > 100,
+     'an unset link preview serves the bundled card (' + (p.body ? p.body.length : 0) + ' bytes)');
+  ck(p.headers['content-type'] === 'image/jpeg', 'as image/jpeg');
+  ck(p.headers['cross-origin-resource-policy'] === 'cross-origin',
+     'with CORP cross-origin, like the icon');
+  const ps = imageSize(p.body);
+  ck(ps && ps.w === 1200 && ps.h === 630, 'and it really is 1200×630');
 
   // Now "upload" one and confirm the served bytes change.
   const uploaded = fakePng(512, 512);

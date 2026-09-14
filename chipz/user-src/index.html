@@ -66,28 +66,44 @@
 <link rel="icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
 <link rel="apple-touch-icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
 <meta name="description" content="Chipz — invest, earn daily income, and grow your team.">
-<!-- ── WHY og:image IS A STATIC FILE, NOT THE BACKEND ENDPOINT ──
-     Owner: "all all those route domains aren't fetching link preview image".
-     Two reasons, both real, and the old value carried both. It pointed at
-     the BACKEND's /public/link-preview.jpg, and:
+<!-- ── og:image IS THE BACKEND ROUTE, SO THE UPLOADED CARD IS WHAT SHOWS ──
+     Owner: "l wanted the uploaded link preview to be shown not the
+     hardcoded, please check out that very well."
 
-     1. serveBrandAsset() answers 404 when nothing has been uploaded in the
-        admin panel -- so no picture in the preview, on every host, with
-        nothing anywhere saying so.
-     2. Even once uploaded, that host sleeps. A crawler gives a link preview
-        a few seconds; a cold start takes far longer, so the picture would
-        come and go depending on whether the backend happened to be awake.
+     It pointed at a static file shipped with this build, which meant the
+     admin panel's Link preview upload changed nothing a crawler ever saw --
+     only a redeploy could change the share card. It names the BACKEND's
+     /public/link-preview.jpg again, which serves the upload when there is
+     one. A static host cannot do that: it has no database and runs no code.
 
-     link-preview.jpg is now a real file shipped with the static site. Static
-     hosting does not sleep and cannot 404 a file that exists, so the preview
-     works on every subdomain, first try, every time. The URL is absolute and
-     names the static site's own stable host on purpose: an og:image must
-     resolve for a crawler with no page context, and the members' domain
-     changes per country while this one never does.
+     The two reasons that route was abandoned are both dealt with, and it is
+     worth knowing why, because they were real at the time:
 
-     To change the picture, replace chipz/user/link-preview.jpg (1200x630).
-     The admin panel's link-preview upload still serves at
-     /public/link-preview.jpg for anything else that wants it.
+     1. "It 404s when nothing has been uploaded." It no longer can --
+        BRAND_ASSET_SLOTS['link-preview'] now falls back to the bundled
+        user/link-preview.jpg read off disk, exactly as the app icon has
+        always fallen back to icon-512.png. Upload set -> the upload; no
+        upload, or the database unreachable -> this build's own card.
+     2. "The backend sleeps, and a crawler only waits a few seconds."
+        chipz-server is a PAID Render instance and does not sleep. That
+        reasoning was carried over from a free-tier assumption and was
+        already wrong for this deploy.
+
+     Same host as the manifest's icons on purpose: these two consumers are
+     the same shape (no script, no data: URI, a fixed permanent URL), and the
+     icon has been served this way from the backend all along.
+
+     THE URL IS PERMANENT. It is absolute and names the backend's own stable
+     host because an og:image must resolve for a crawler with no page
+     context, and the members' domain changes per country while this one
+     never does.
+
+     Two things an upload does NOT reach, stated in the panel's own copy
+     because they otherwise come back as bug reports: a link somebody has
+     ALREADY shared keeps the preview WhatsApp/Facebook cached for it
+     (appending anything, e.g. ?x=2, forces a refetch), and the route's own
+     five-minute cache means a fresh fetch can show the old card for up to
+     that long.
 -->
 <!-- og:url is deliberately absent. A crawler falls back to the URL it
      actually fetched, so the card keeps working on any domain the app is
@@ -97,7 +113,7 @@
 <meta property="og:site_name" content="Chipz">
 <meta property="og:title" content="Chipz">
 <meta property="og:description" content="Invest, earn daily income, and grow your team.">
-<meta property="og:image" content="https://chipz-app.onrender.com/link-preview.jpg">
+<meta property="og:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -105,7 +121,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Chipz">
 <meta name="twitter:description" content="Invest, earn daily income, and grow your team.">
-<meta name="twitter:image" content="https://chipz-app.onrender.com/link-preview.jpg">
+<meta name="twitter:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in

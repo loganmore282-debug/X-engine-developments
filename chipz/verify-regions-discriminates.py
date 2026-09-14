@@ -19,6 +19,8 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SERVER = os.path.join(ROOT, 'server.js')
 CLIENT = os.path.join(ROOT, 'user-src', 'original_module.js')
 ADMIN = os.path.join(ROOT, 'admin-src', 'index.html')
+# The built artifact, because test-brand-assets.js asserts on what SHIPS.
+USERBUILT = os.path.join(ROOT, 'user', 'index.html')
 SHELL = os.path.join(ROOT, 'user-src', 'index.html')
 
 
@@ -33,12 +35,13 @@ def write(p, s):
 
 
 def run_test():
-    # Two harnesses, because the mutations below span both: the region/link
-    # work is pinned by test-regions.js and the check-in money path by
-    # test-checkin-idempotency.js. A mutation is detected if EITHER fails.
+    # Three harnesses, because the mutations below span all of them: the
+    # region/country work is pinned by test-regions.js, the check-in money
+    # path by test-checkin-idempotency.js, and the share card by
+    # test-brand-assets.js. A mutation is detected if ANY of them fails.
     out = ''
     worst = 0
-    for f in ('test-regions.js', 'test-checkin-idempotency.js'):
+    for f in ('test-regions.js', 'test-checkin-idempotency.js', 'test-brand-assets.js'):
         r = subprocess.run(['node', f], cwd=ROOT, capture_output=True, text=True)
         out += r.stdout + r.stderr
         worst = worst or r.returncode
@@ -353,9 +356,11 @@ MUTATIONS = [
      "function ugx(n, regionKey){",
      "function ugx(n, ignoredRegionKey){ const regionKey = undefined;"),
 
-    ('the country picker is shown even with one country', ADMIN,
-     "  if (ADMIN_REGIONS.length < 2) return '';",
-     "  if (false) return '';"),
+    # OBSOLETE, deleted not re-anchored: this was the per-tab picker's own
+    # "hide me with one country" guard. The one topbar switch has its own,
+    # and its own mutation ("the switch is shown even with only one
+    # country") -- which is now PROVED BY RUNNING the switch rather than by
+    # matching this line.
 
     ("a country's own web address is not allowed to reach the backend", SERVER,
      """  _regionHosts = [];
@@ -600,25 +605,29 @@ MUTATIONS = [
      "  else if (REGION_FILTERED_WRITES.includes(path)) body = Object.assign({ region: ADMIN_REGION || 'all' }, body || {});",
      "  else if (false) body = Object.assign({ region: ADMIN_REGION || 'all' }, body || {});"),
 
-    ('the toggle is never added to the tabs that need it', ADMIN,
-     "  Promise.resolve(fn()).then(() => { if (_tab === name) paintRegionPicker(name); }).catch(() => {});",
-     "  Promise.resolve(fn()).catch(() => {});"),
+    # OBSOLETE: the switch is no longer injected into a tab after it paints
+    # -- it lives in the topbar, outside #content, so a render cannot remove
+    # it. "the country switch is gone from the panel" replaces this.
 
-    ('a live refresh wipes the toggle off the tab', ADMIN,
-     "    paintRegionPicker(tab);\n",
-     ""),
+    # OBSOLETE for the same reason: a live refresh rebuilds #content, and
+    # the switch is not in it. Nothing observable breaks by removing the
+    # repaint on tick, so no honest assertion can fail on it -- and this file
+    # already records that a mutation which cannot fail for the right reason
+    # should be deleted, not propped up.
 
     ('All countries snaps back to Uganda on every region reload', ADMIN,
-     "    if (ADMIN_REGION !== 'all' && !ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';",
-     "    if (!ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';"),
+     "    if (ADMIN_REGION !== 'all' && !ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) {",
+     "    if (!ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) {"),
 
     ('Settings is edited under an All-countries label', ADMIN,
      "    const one = (!ADMIN_REGION || ADMIN_REGION === 'all') ? 'ug' : ADMIN_REGION;",
      "    const one = ADMIN_REGION;"),
 
-    ('an All-countries view stops saying its figures mix currencies', ADMIN,
-     "    ? 'Showing every country together &mdash; amounts are in each row\\'s own currency, so totals mix currencies. Pick one country for figures that add up.'",
-     "    ? ''"),
+    # DELETED as obsolete, not re-anchored: this described the per-tab
+    # picker's own caption, and that picker no longer exists -- the one
+    # topbar switch carries the warning now, and its own mutation ("an
+    # All-countries view stops warning that its totals mix currencies")
+    # replaces this one exactly.
 
     ('the address checker stops naming the wrong-base-domain cause', SERVER,
      "        reasons.push(`It is not under the base domain, which is set to \"${_baseDomain}\". Short addresses are built as <short name>.${_baseDomain}, so an address on any other domain can never match one.`);",
@@ -789,6 +798,91 @@ MUTATIONS = [
             userId: uid, type: 'checkin', description: `Daily check-in, day ${u.checkinStreak || 1}`,""",
      """          await db.collection('transactions').doc(`skip:${uid}:${todayKey}`).createIfAbsent({
             userId: uid, type: 'noop', description: `Daily check-in, day ${u.checkinStreak || 1}`,"""),
+    # ── Round 161: the link preview, and one country switch everywhere ──
+    ('the link preview goes back to 404ing until something is uploaded', SERVER,
+     "'link-preview': { mime: 'image/jpeg', w: 1200, h: 630, max: 900 * 1024, file: 'link-preview.jpg' }",
+     "'link-preview': { mime: 'image/jpeg', w: 1200, h: 630, max: 900 * 1024, file: null }"),
+    ('the share card is a static file again, so an upload changes nothing', USERBUILT,
+     '<meta property="og:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">',
+     '<meta property="og:image" content="https://chipz-app.onrender.com/link-preview.jpg">'),
+    ('twitter keeps pointing at the old static file', USERBUILT,
+     '<meta name="twitter:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">',
+     '<meta name="twitter:image" content="https://chipz-app.onrender.com/link-preview.jpg">'),
+    ('a gift code stops being stamped with a country', SERVER,
+     "    const regionKey = adminRegionFilter(req) || 'all';\n    const doc = {",
+     "    const regionKey = 'all';\n    const doc = {"),
+    ('a gift code from another country can be claimed', SERVER,
+     'if (!giftCodeInRegion(cd, currentRegionKey())) {',
+     'if (false) {'),
+    ('a legacy code with no country stops working anywhere', SERVER,
+     "  return String((c && c.regionKey) || '').trim().toLowerCase() || 'all';",
+     "  return String((c && c.regionKey) || '').trim().toLowerCase() || 'nowhere';"),
+    ('the gift code list stops being per country', SERVER,
+     'codes: snap.docs.filter(d => giftCodeInRegion(d.data(), want)).map(d => {',
+     'codes: snap.docs.map(d => {'),
+    ('a code row no longer says which country it is for', SERVER,
+     'maxUses: c.maxUses || null, uses, totalClaimed, regionKey: giftCodeRegion(c),',
+     'maxUses: c.maxUses || null, uses, totalClaimed,'),
+    ("a reward figure is labelled in the panel's currency, not the code's", ADMIN,
+     'const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward, cCur) : `${ugx(c.minReward, cCur)} – ${ugx(c.maxReward, cCur)}`;',
+     'const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward) : `${ugx(c.minReward)} – ${ugx(c.maxReward)}`;'),
+    ("a member is served every country's inbox messages", SERVER,
+     'const rows = await listBroadcastMessages(currentRegionKey());',
+     'const rows = await listBroadcastMessages();'),
+    ('inbox messages stop being filtered by country at all', SERVER,
+     "  const rows = all.filter(m => !m.deleted && messageInRegion(m, want));",
+     "  const rows = all.filter(m => !m.deleted);"),
+    ('a country-specific message is treated as belonging to nobody', SERVER,
+     "  return !own || own === 'all' || own === want;",
+     "  return own === 'all';"),
+    ('a welcome written for one country deletes the built-in row everywhere else', SERVER,
+     "  if (!all.some(m => m.id === 'welcome' && messageInRegion(m, want))) {",
+     "  if (!all.some(m => m.id === 'welcome')) {"),
+    ("the admin previews the welcome in the panel host's wording, not the picked country's", SERVER,
+     'rows.push({ ...defaultWelcomeMessage(await getSettings(settingsRegion)), createdAt: 0',
+     'rows.push({ ...defaultWelcomeMessage(await getSettings()), createdAt: 0'),
+    ('a saved message is not stamped with its country', SERVER,
+     '      title, body, regionKey, date: stamp.date,',
+     '      title, body, date: stamp.date,'),
+    ('the admin messages list stops being per country', SERVER,
+     "    const messages = await listBroadcastMessages(want, want || undefined);",
+     "    const messages = await listBroadcastMessages();"),
+    ('the country switch is gone from the panel', ADMIN,
+     'function paintRegionSwitch(){',
+     'function paintRegionSwitch(){ if (1) return;'),
+    ('the switch is shown even with only one country', ADMIN,
+     '    const many = ADMIN_REGIONS.length > 1;',
+     '    const many = true;'),
+    ('the switch loses its options on a one-country screen', ADMIN,
+     "    const single = REGION_SINGLE_TABS.includes(_tab);\n    const aware = REGION_AWARE_TABS.includes(_tab);",
+     "    const single = REGION_SINGLE_TABS.includes(_tab);\n    const aware = REGION_AWARE_TABS.includes(_tab);\n    if (single) { sel.innerHTML = ''; return; }"),
+    ('an All-countries view stops warning that its totals mix currencies', ADMIN,
+     "      else if (ADMIN_REGION === 'all') msg = 'Every country together - each amount is in its own currency, so totals mix currencies. Pick one country for figures that add up.';",
+     "      else if (ADMIN_REGION === 'all') msg = '';"),
+    ('a one-country screen stops saying which country it is editing', ADMIN,
+     "      else if (single && ADMIN_REGION === 'all') msg = 'Showing ' + regionByKeyAdmin('ug').name + ' - this screen is edited one country at a time.';",
+     "      else if (single && ADMIN_REGION === 'all') msg = '';"),
+    ('a screen no country owns pretends the switch changes it', ADMIN,
+     "      if (!aware) msg = 'This screen is the same for every country.';",
+     "      if (!aware) msg = '';"),
+    ('the picked country is forgotten on reload', ADMIN,
+     "try { const _r = localStorage.getItem('chipz_admin_region'); if (_r) ADMIN_REGION = _r; } catch (_) {}",
+     ''),
+    ('the picked country is never written down', ADMIN,
+     "        try { localStorage.setItem('chipz_admin_region', ADMIN_REGION); } catch (_) {}\n        // Repaint whatever is open against the new country. Every tab reads",
+     "        // Repaint whatever is open against the new country. Every tab reads"),
+    ('switching country no longer repaints the open tab', ADMIN,
+     "        switchTab(_tab);\n      });",
+     "      });"),
+    ('gift codes and messages are read without a country', ADMIN,
+     "'/admin/referrals/list', '/admin/promocodes/list', '/admin/messages/list']",
+     "'/admin/referrals/list']"),
+    ('new gift codes and messages are written without a country', ADMIN,
+     "  '/admin/promocodes/generate', '/admin/messages/save'];",
+     "  ];"),
+    ('the panel resolves a one-country screen differently from the server', ADMIN,
+     "function adminOneRegion(){ return (!ADMIN_REGION || ADMIN_REGION === 'all') ? 'ug' : ADMIN_REGION; }",
+     "function adminOneRegion(){ return ADMIN_REGION; }"),
 ]
 
 
@@ -800,7 +894,8 @@ def main():
         return 1
     print('baseline: test-regions.js passes on the untouched tree\n')
 
-    originals = {SERVER: read(SERVER), CLIENT: read(CLIENT), ADMIN: read(ADMIN), SHELL: read(SHELL)}
+    originals = {SERVER: read(SERVER), CLIENT: read(CLIENT), ADMIN: read(ADMIN), SHELL: read(SHELL),
+                 USERBUILT: read(USERBUILT)}
     missed, applied = [], 0
     try:
         for label, path, old, new in MUTATIONS:

@@ -1319,7 +1319,18 @@ async function getChipzImage(slot) {
 const BRAND_ASSET_SLOTS = {
   'app-icon-512': { mime: 'image/png',  w: 512,  h: 512, max: 600 * 1024, file: 'icon-512.png' },
   'app-icon-192': { mime: 'image/png',  w: 192,  h: 192, max: 300 * 1024, file: 'icon-192.png' },
-  'link-preview': { mime: 'image/jpeg', w: 1200, h: 630, max: 900 * 1024, file: null }
+  // The link preview has a bundled fallback for the same reason the icon
+  // does, and it did NOT always. It used to be `file: null` on the
+  // reasoning that "an unset share card must show no picture, never a wrong
+  // one" -- sound while nothing shipped in the build, and wrong the moment
+  // `user/link-preview.jpg` did: that file is this platform's own branded
+  // card, so it is the RIGHT picture, and 404ing instead meant every shared
+  // link had no image until somebody remembered to upload one.
+  //
+  // Owner: "l wanted the uploaded link preview to be shown not the
+  // hardcoded." With a fallback here the og: tag can point at this route
+  // and get the UPLOAD when there is one, which a static file can never do.
+  'link-preview': { mime: 'image/jpeg', w: 1200, h: 630, max: 900 * 1024, file: 'link-preview.jpg' }
 };
 const _brandAssetCache = {}, _bundledAssetCache = {};
 // The icon that ships inside the static build, read off disk. chipz-server's
@@ -6825,6 +6836,20 @@ app.post('/account/transaction-pin/change', async (req, res) => {
 // ═══════════════════════════════════════════
 // GIFT CODES
 // ═══════════════════════════════════════════
+// ── WHICH COUNTRY A GIFT CODE BELONGS TO ──
+// Stamped at generate time (see /admin/promocodes/generate for why money
+// makes this necessary). 'all' means every country; so does a MISSING field,
+// which is every code cut before this existed -- those were genuinely
+// claimable by anybody and must stay that way, because they are already in
+// members' hands and a code that stops working reads as theft.
+function giftCodeRegion(c) {
+  return String((c && c.regionKey) || '').trim().toLowerCase() || 'all';
+}
+function giftCodeInRegion(c, want) {
+  if (!want || want === 'all') return true;
+  const own = giftCodeRegion(c);
+  return own === 'all' || own === want;
+}
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -6870,6 +6895,16 @@ app.post('/redeem', async (req, res) => {
       const code = cd.code;
       if (cd.active === false) { result = { code: 400, body: { status: 'error', message: 'This code is no longer active' } }; return; }
       if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now()) { result = { code: 400, body: { status: 'error', message: 'This code has expired' } }; return; }
+      // A code cut for another country would pay its face value in THIS
+      // member's currency -- the same arithmetic that makes a cross-country
+      // referral commission wrong, and by a similar multiple. Refused with
+      // its own wording, like the two above: this is a real code in a state
+      // that is wrong for this account, not a typo to go hunting for.
+      if (!giftCodeInRegion(cd, currentRegionKey())) {
+        logSecurityEvent(userId, 'giftcode_wrong_region', { code: cd.code, codeRegion: giftCodeRegion(cd) });
+        result = { code: 400, body: { status: 'error', message: 'This code was issued for a different country' } };
+        return;
+      }
       const usedBy = cd.usedBy || [];
       const alreadyClaimed = usedBy.indexOf(userId) !== -1;
       if (alreadyClaimed) {
@@ -7053,18 +7088,41 @@ function defaultWelcomeMessage(s) {
     body: 'You can earn daily income through investments via the app, and also earn daily wages by sharing your referral link with friends and family.',
   };
 }
-async function listBroadcastMessages() {
+// ── A MESSAGE BELONGS TO ONE COUNTRY, OR TO ALL OF THEM ──
+// Owner: "all country changes everything but images are same only edittable
+// variables like prices, words like that." An inbox message IS words -- and
+// words that name a currency, an amount or a payment operator are wrong in
+// another country, so a broadcast must be able to be per-country.
+//
+// An EMPTY regionKey, or the explicit 'all', means every country. That is
+// deliberately the permissive direction: every message written before this
+// existed has no regionKey, and quietly hiding somebody's live announcements
+// from most of the platform would be a worse surprise than showing one
+// message too widely. Writing one for a single country is an explicit choice
+// made with that country picked in the panel.
+function messageInRegion(m, want) {
+  if (!want || want === 'all') return true;
+  const own = String((m && m.regionKey) || '').trim().toLowerCase();
+  return !own || own === 'all' || own === want;
+}
+async function listBroadcastMessages(want, settingsRegion) {
   const snap = await db.collection('messages').orderBy('createdAt', 'desc').limit(100).get();
   const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  const rows = all.filter(m => !m.deleted);
+  const rows = all.filter(m => !m.deleted && messageInRegion(m, want));
   // A brand-new deployment has no admin-authored messages yet; the welcome
   // note the mockups show is served as a virtual row so the inbox is never
   // blank on day one. The moment an admin writes a real 'welcome' doc it
   // takes over (same id), so this can't ever duplicate it. Tested against
   // `all`, not `rows` -- an admin who DELETED the welcome message left a
   // tombstone behind, and checking the filtered list would resurrect it.
-  if (!all.some(m => m.id === 'welcome')) {
-    rows.push({ ...defaultWelcomeMessage(await getSettings()), createdAt: 0, date: '', time: '' });
+  //
+  // It IS filtered by region though, and that is not the same test: a real
+  // 'welcome' doc written for ONE country is not visible in the others, so
+  // those still need the built-in row. A tombstone carries no regionKey, so
+  // deleting the welcome still hides it everywhere -- which is exactly what
+  // the admin who deleted it asked for.
+  if (!all.some(m => m.id === 'welcome' && messageInRegion(m, want))) {
+    rows.push({ ...defaultWelcomeMessage(await getSettings(settingsRegion)), createdAt: 0, date: '', time: '' });
   }
   return rows;
 }
@@ -7072,7 +7130,10 @@ app.get('/messages', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const rows = await listBroadcastMessages();
+    // The MEMBER's own country, never the hostname's -- the region middleware
+    // has already resolved that for a signed-in caller, and currentRegionKey()
+    // is what every other per-country read in this file uses.
+    const rows = await listBroadcastMessages(currentRegionKey());
     const reads = await db.collection('messageReads').where('userId', '==', uid).limit(200).get();
     const readIds = new Set(reads.docs.map(d => d.data().messageId));
     res.json({ status: 'success', messages: rows.map(m => ({
@@ -8370,7 +8431,15 @@ app.post('/admin/products/fix-legacy-keys', async (req, res) => {
 // ═══════════════════════════════════════════
 app.get('/admin/messages/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', messages: await listBroadcastMessages() }); }
+  try {
+    const want = adminRegionFilter(req);
+    // The built-in welcome row is PREVIEWED in the picked country's own
+    // wording, not the panel hostname's: it reads settings, and settings are
+    // per-country. Without the second argument an admin looking at Kenya
+    // would be shown the Ugandan copy of a message Kenyan members never get.
+    const messages = await listBroadcastMessages(want, want || undefined);
+    res.json({ status: 'success', messages, regionKey: want || 'all' });
+  }
   catch (e) { res.status(500).json({ status: 'error', message: 'Could not load messages' }); }
 });
 app.post('/admin/messages/save', async (req, res) => {
@@ -8380,14 +8449,33 @@ app.post('/admin/messages/save', async (req, res) => {
   if (!title) return res.status(400).json({ status: 'error', message: 'A title is required' });
   if (!body) return res.status(400).json({ status: 'error', message: 'A message body is required' });
   // An explicit id edits that message in place; no id writes a new one.
-  const id = String(req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120)
-    || 'msg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const explicitId = String(req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
+  const id = explicitId || 'msg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   try {
     const stamp = nowStr();
+    // Written with the country that was picked when Save was tapped.
+    // Explicitly -- an absent field means "every country" for legacy rows,
+    // so leaving it off would make a country-specific message impossible to
+    // tell from one written before this existed.
+    //
+    // With ALL COUNTRIES picked the panel is showing messages from several
+    // countries at once, and an edit made from that view must NOT re-stamp
+    // the one being edited: fixing a typo in a Kenyan message would
+    // otherwise silently broadcast it to the whole platform. So 'all' means
+    // "every country" for a NEW message and "leave it as it is" for an edit.
+    const want = adminRegionFilter(req);
+    let regionKey = want;
+    if (!regionKey) {
+      let prev = null;
+      if (explicitId) {
+        try { prev = await db.collection('messages').doc(id).get(); } catch (_) { prev = null; }
+      }
+      regionKey = (prev && prev.exists && String(prev.data().regionKey || '').trim().toLowerCase()) || 'all';
+    }
     await db.collection('messages').doc(id).set({
-      title, body, date: stamp.date, time: stamp.time, createdAt: Date.now(), deleted: false,
+      title, body, regionKey, date: stamp.date, time: stamp.time, createdAt: Date.now(), deleted: false,
     }, { merge: true });
-    logAdminAction(req, 'message_saved', { id, title });
+    logAdminAction(req, 'message_saved', { id, title, regionKey });
     res.json({ status: 'success', id });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this message' }); }
 });
@@ -8431,21 +8519,38 @@ app.post('/admin/promocodes/generate', async (req, res) => {
   if (durationSeconds !== null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0)) return res.status(400).json({ status: 'error', message: 'Duration must be a positive number of seconds' });
   try {
     const code = await generateUniqueGiftCode();
+    // ── A GIFT CODE IS MONEY, SO IT BELONGS TO ONE COUNTRY ──
+    // The reward is a bare number; what it is WORTH is decided by the
+    // currency of whoever claims it. A code cut for 5,000 UGX claimed by a
+    // Kenyan pays 5,000 KES, about twenty times as much. So a code is
+    // stamped with the country that was picked when it was generated, and
+    // /redeem refuses it elsewhere.
+    //
+    // Generating with "All countries" picked deliberately still works and
+    // stores 'all' -- a code meant for everybody is a real thing to want,
+    // and the panel says which one it just made.
+    const regionKey = adminRegionFilter(req) || 'all';
     const doc = {
       code, codeLower: code.toLowerCase(), minReward, maxReward, maxUses: maxUses || null, usedBy: [], active: true,
+      regionKey,
       createdBy: req.adminUser?.username || 'owner', createdAt: FieldValue.serverTimestamp(),
     };
     if (durationSeconds) doc.expiresAt = new Date(Date.now() + durationSeconds * 1000);
     await db.collection('promoCodes').add(doc);
-    logAdminAction(req, 'giftcode_generated', { code, minReward, maxReward, maxUses, durationSeconds });
-    res.json({ status: 'success', code, minReward, maxReward });
+    logAdminAction(req, 'giftcode_generated', { code, minReward, maxReward, maxUses, durationSeconds, regionKey });
+    res.json({ status: 'success', code, minReward, maxReward, regionKey });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/promocodes/list', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
+    const want = adminRegionFilter(req);
     const snap = await db.collection('promoCodes').orderBy('createdAt', 'desc').limit(300).get();
-    res.json({ status: 'success', codes: snap.docs.map(d => {
+    // Same rule as messages: no regionKey, or 'all', shows in every country's
+    // view. A legacy code carries no field and really is claimable anywhere
+    // (see /redeem), so hiding it from the country being looked at would be
+    // a list that disagrees with what the code does.
+    res.json({ status: 'success', regionKey: want || 'all', codes: snap.docs.filter(d => giftCodeInRegion(d.data(), want)).map(d => {
       const c = d.data();
       // A code generated before this round only ever has the old, single
       // `reward` field -- read as a degenerate range (min===max) so the
@@ -8462,7 +8567,7 @@ app.get('/admin/promocodes/list', async (req, res) => {
         ? round2(Object.values(c.claimedRewards).reduce((s, r) => s + (Number(r) || 0), 0))
         : round2((Number(c.reward) || 0) * uses);
       return { id: d.id, code: c.code, minReward: c.minReward ?? c.reward, maxReward: c.maxReward ?? c.reward,
-        maxUses: c.maxUses || null, uses, totalClaimed,
+        maxUses: c.maxUses || null, uses, totalClaimed, regionKey: giftCodeRegion(c),
         active: c.active !== false, expiresAt: c.expiresAt || null, createdAt: c.createdAt || null };
     }) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }

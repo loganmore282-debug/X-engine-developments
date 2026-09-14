@@ -442,20 +442,121 @@ console.log('\n— one country at a time, on every admin screen —');
     'and stamps it on every time, not only when the country is not Uganda');
   ck(/REGION_FILTERED_WRITES\.includes\(path\)\) body = Object\.assign\(\{ region: ADMIN_REGION \|\| 'all' \}/.test(admin),
     'on the POST-shaped ones too');
-  ck(/function paintRegionPicker\(name\)/.test(admin) && /REGION_AWARE_TABS\.includes\(name\)/.test(admin),
-    'the toggle is put on every screen it changes');
-  ck(/Promise\.resolve\(fn\(\)\)\.then\(\(\) => \{ if \(_tab === name\) paintRegionPicker\(name\); \}\)/.test(admin),
-    'after the tab paints, so it is not wiped by the render');
-  ck(/paintRegionPicker\(tab\);/.test(admin),
-    'and put back after a live refresh rebuilds the tab');
   ck(/ADMIN_REGION !== 'all' && !ADMIN_REGIONS\.some/.test(admin),
     '"All countries" survives a region reload instead of snapping back to Uganda');
   ck(/REGION_SINGLE_TABS = \['settings', 'products'\]/.test(admin),
     'Settings and Products stay one country at a time');
   ck(/const one = \(!ADMIN_REGION \|\| ADMIN_REGION === 'all'\) \? 'ug' : ADMIN_REGION;/.test(admin),
     'so picking "All countries" and opening them shows the founding country rather than editing it under the wrong label');
-  ck(/amounts are in each row/.test(admin),
-    'and an "All countries" view says its figures are in more than one currency');
+  ck(/function adminOneRegion\(\)\{ return \(!ADMIN_REGION \|\| ADMIN_REGION === 'all'\) \? 'ug' : ADMIN_REGION; \}/.test(admin),
+    'and the panel resolves that same country itself, so what it shows matches what it asks for');
+  // Both tabs that got their OWN per-country data this round have to ask for
+  // the country they are labelled with, or the label is a lie.
+  for (const route of ['/admin/promocodes/list', '/admin/messages/list'])
+    ck(readsM[1].includes(`'${route}'`), `${route} is read per country`);
+  for (const route of ['/admin/promocodes/generate', '/admin/messages/save'])
+    ck(writesM[1].includes(`'${route}'`), `${route} is written with the picked country`);
+
+  // ── THE SWITCH ITSELF, RUN RATHER THAN GREPPED ──
+  // The old assertions here matched the text of paintRegionPicker() and its
+  // two call sites. They passed on a picker that painted an empty <select>,
+  // and they went red the moment the same feature moved to the topbar --
+  // which is the wrong way round for a test: it defended an implementation,
+  // not a behaviour. This runs the real function over a stub DOM instead.
+  function switchFor(regions, region, tab) {
+    const hidden = {};
+    // Each method has to close over the NODE, not over the factory -- the
+    // first version of this stub wrote _onChange onto the factory function
+    // itself and reported a perfectly wired switch as unwired.
+    const el = (id) => {
+      const node = { id, innerHTML: '', textContent: '', value: region };
+      node.classList = {
+        toggle: (c, on) => { if (c === 'hidden') hidden[id] = !!on; },
+        add: (c) => { if (c === 'hidden') hidden[id] = true; },
+        remove: (c) => { if (c === 'hidden') hidden[id] = false; },
+      };
+      node.addEventListener = (ev, fn) => { if (ev === 'change') node._onChange = fn; };
+      return node;
+    };
+    const nodes = { regionSwitch: el('regionSwitch'), regionNote: el('regionNote') };
+    // What the handler DID, rather than what its source says -- the two
+    // mutations that removed the remembering and the repaint both survived a
+    // text match, because other copies of those calls exist elsewhere in the
+    // panel.
+    const saved = [], repainted = [];
+    new Function('$', 'esc', 'ADMIN_REGIONS', 'ADMIN_REGION', '_tab',
+      'REGION_SINGLE_TABS', 'REGION_AWARE_TABS', 'regionByKeyAdmin', 'localStorage', 'switchTab', `
+      ${fnSource(admin, 'paintRegionSwitch')}
+      paintRegionSwitch();
+    `)(
+      (id) => nodes[id] || null,
+      x => String(x == null ? '' : x),
+      regions, region, tab,
+      ['settings', 'products'],
+      ['dashboard', 'analytics', 'users', 'deposits', 'withdrawals', 'transactions', 'referrals', 'settings', 'products', 'promocodes', 'messages'],
+      (k) => regions.find(r => r.key === (k || region)) || regions[0],
+      { setItem(k, v) { saved.push([k, v]); }, getItem() { return null; } },
+      (t) => repainted.push(t)
+    );
+    // Somebody picking a different country in the switch.
+    const pick = (key) => {
+      const sel = nodes.regionSwitch;
+      sel.value = key;
+      if (sel._onChange) sel._onChange();
+      return { saved, repainted };
+    };
+    return { html: nodes.regionSwitch.innerHTML, note: nodes.regionNote.textContent,
+             switchHidden: !!hidden.regionSwitch, noteHidden: !!hidden.regionNote,
+             wired: !!nodes.regionSwitch._onChange, pick };
+  }
+  const two = [{ key: 'ug', name: 'Uganda', currency: 'UGX' }, { key: 'ke', name: 'Kenya', currency: 'KES' }];
+  const one = [{ key: 'ug', name: 'Uganda', currency: 'UGX' }];
+
+  const onKenya = switchFor(two, 'ke', 'deposits');
+  ck(!onKenya.switchHidden, 'the country switch is on screen once there is more than one country');
+  ck(/value="ug"/.test(onKenya.html) && /value="ke"/.test(onKenya.html) && /value="all"/.test(onKenya.html),
+    'and offers every country plus All countries');
+  ck(/value="ke"[^>]*selected/.test(onKenya.html), 'with the picked country selected');
+
+  // The SAME option list on a one-country screen. A switch whose choices
+  // change as you move between tabs is not one switch, which is what the
+  // per-tab picker did (it dropped "All countries" on Settings).
+  const onSettings = switchFor(two, 'ke', 'settings');
+  ck(/value="all"/.test(onSettings.html),
+    'the options do not change from tab to tab -- All countries is still offered on Settings');
+
+  ck(switchFor(one, 'ug', 'deposits').switchHidden,
+    'and the switch is hidden entirely while there is only one country');
+  ck(switchFor(one, 'ug', 'deposits').noteHidden,
+    'along with its note');
+
+  const allLists = switchFor(two, 'all', 'transactions');
+  ck(!allLists.noteHidden && /mix currencies/.test(allLists.note),
+    'an "All countries" list says its figures are in more than one currency');
+  const allSettings = switchFor(two, 'all', 'settings');
+  ck(/Uganda/.test(allSettings.note) && /one country at a time/.test(allSettings.note),
+    'and an "All countries" Settings screen says which country it is actually editing');
+  ck(switchFor(two, 'ke', 'admins').note === 'This screen is the same for every country.',
+    'a screen no country owns says so rather than implying the switch changed it');
+  ck(switchFor(two, 'ke', 'deposits').noteHidden,
+    'and an ordinary one-country list needs no note at all');
+
+  // Picking a country: remembered on the device, and the open tab repainted
+  // against it. Both are RUN -- the panel has other localStorage writes and
+  // other switchTab calls, so a text match here passed with the ones inside
+  // this handler deleted.
+  const picked = switchFor(two, 'ug', 'deposits');
+  ck(picked.wired, 'the switch listens for a change at all');
+  const after = picked.pick('ke');
+  ck(after.saved.some(([k, v]) => k === 'chipz_admin_region' && v === 'ke'),
+    'picking a country writes it down, so a reload does not silently snap back to another country\'s figures');
+  ck(after.repainted.length === 1 && after.repainted[0] === 'deposits',
+    'and repaints the tab that is open, which is the whole of "it changes all contents"');
+  ck(/localStorage\.getItem\('chipz_admin_region'\)/.test(admin),
+    'and it is read back on the next load');
+  ck(/paintRegionSwitch\(\);\n  Promise\.resolve\(fn\(\)\)/.test(admin),
+    'the note is repainted on every tab change');
+  ck(/switchTab\(_tab\);/.test(admin), 'and changing the country repaints whatever tab is open');
 }
 {
   // "those subdomain are not working well why" -- answerable in one tap
@@ -507,6 +608,136 @@ console.log('\n— one country at a time, on every admin screen —');
     ck(warnFor(h, 'chipz-platform.com', withLabel) === '', `  nor when the panel itself is on ${h}`);
   ck(/No base domain is set/.test(warnFor('panel.example.com', '', withLabel)),
     'and an unset base domain is called out on its own terms');
+}
+
+// ── GIFT CODES AND INBOX MESSAGES BELONG TO A COUNTRY ──
+// Owner: "all country changes everything but images are same only edittable
+// variables like prices, words like that." A gift code is a bare number that
+// pays in the claimer's currency, and an inbox message is words that name
+// one, so both had to become per-country when the switch went global.
+console.log('\n— a gift code is money, so it belongs to one country —');
+{
+  const run = (names, body) => new Function(...names, body);
+  const giftFns = run([], `
+    ${fnSource(src, 'giftCodeRegion')}
+    ${fnSource(src, 'giftCodeInRegion')}
+    return { giftCodeRegion, giftCodeInRegion };
+  `)();
+  const { giftCodeRegion, giftCodeInRegion } = giftFns;
+  ck(giftCodeRegion({ regionKey: 'KE' }) === 'ke', 'a code names its country, however it was cased');
+  ck(giftCodeRegion({}) === 'all' && giftCodeRegion({ regionKey: '' }) === 'all',
+    'and a code cut before this existed counts as every country');
+  ck(giftCodeInRegion({ regionKey: 'ke' }, 'ke'), 'a Kenyan code is claimable in Kenya');
+  ck(!giftCodeInRegion({ regionKey: 'ke' }, 'ug'),
+    'and NOT in Uganda -- 5,000 KES and 5,000 UGX are not the same money');
+  ck(!giftCodeInRegion({ regionKey: 'ug' }, 'ke'), 'nor the other way round');
+  ck(giftCodeInRegion({ regionKey: 'all' }, 'ke') && giftCodeInRegion({}, 'ke'),
+    'an all-countries code, and a legacy one, stay claimable anywhere');
+  ck(giftCodeInRegion({ regionKey: 'ke' }, null) && giftCodeInRegion({ regionKey: 'ke' }, 'all'),
+    'and the admin\'s All-countries view lists every country\'s codes');
+
+  // The refusal has to come BEFORE the money moves, and it has to be a
+  // refusal -- not a silent pass to a different branch.
+  const rd = bare.slice(bare.indexOf("app.post('/redeem'"));
+  const rdBody = rd.slice(0, rd.indexOf('\napp.', 10));
+  const before = (text, a, b) => {
+    const i = text.indexOf(a), j = text.indexOf(b);
+    return i !== -1 && j !== -1 && i < j;
+  };
+  ck(/giftCodeInRegion\(cd, currentRegionKey\(\)\)/.test(rdBody),
+    'redeeming checks the code against the MEMBER\'s own country, not the hostname\'s');
+  ck(before(rdBody, 'giftCodeInRegion', 'FieldValue.increment'),
+    'and it is checked before a single shilling is credited');
+  ck(/different country/.test(rdBody),
+    'with its own wording, like the expired and inactive refusals');
+
+  // Generated with the picked country stamped on, and the panel says which.
+  const gen = bare.slice(bare.indexOf("app.post('/admin/promocodes/generate'"));
+  const genBody = gen.slice(0, gen.indexOf('\napp.', 10));
+  ck(/const regionKey = adminRegionFilter\(req\) \|\| 'all';/.test(genBody) && /\bregionKey,/.test(genBody),
+    'a new code is stamped with the country that was picked when it was generated');
+  const lst = bare.slice(bare.indexOf("app.get('/admin/promocodes/list'"));
+  const lstBody = lst.slice(0, lst.indexOf('\napp.', 10));
+  ck(/giftCodeInRegion\(d\.data\(\), want\)/.test(lstBody), 'and the list is per country');
+  ck(/regionKey: giftCodeRegion\(c\)/.test(lstBody),
+    'each row saying which, so a reward figure is never labelled in the wrong currency');
+  const panel = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+  ck(/ugx\(c\.minReward, cCur\)/.test(panel) && /const cCur = c\.regionKey/.test(panel),
+    'which is what the panel labels it with');
+}
+
+// Runs at the end with the other async checks -- see the verdict chain at
+// the bottom of this file (this is a CommonJS module, so no top-level await).
+async function messageRegionChecks(){
+  console.log('\n— an inbox message can be for one country or for all of them —');
+  const listSrc = `
+    ${fnSource(src, 'messageInRegion')}
+    ${fnSource(src, 'listBroadcastMessages')}
+    return listBroadcastMessages;
+  `;
+  const mk = (docs) => {
+    const calls = [];
+    const db = { collection: () => ({ orderBy: () => ({ limit: () => ({ get: async () => ({
+      docs: docs.map(d => ({ id: d.id, data: () => d })),
+    }) }) }) }) };
+    const list = new Function('db', 'defaultWelcomeMessage', 'getSettings', `
+      ${listSrc}
+    `)(db,
+      (s) => ({ id: 'welcome', title: 'Welcome to ' + s.brandName, body: 'hello' }),
+      async (r) => { calls.push(r); return { brandName: r === 'ke' ? 'ChipzKE' : 'Chipz' }; });
+    return { list, calls };
+  };
+  const docs = [
+    { id: 'm1', title: 'For Kenya', body: 'x', regionKey: 'ke' },
+    { id: 'm2', title: 'For Uganda', body: 'x', regionKey: 'ug' },
+    { id: 'm3', title: 'For everybody', body: 'x', regionKey: 'all' },
+    { id: 'm4', title: 'Legacy, no country', body: 'x' },
+  ];
+  const ids = async (want) => (await mk(docs).list(want)).map(m => m.id).sort().join(',');
+  ck(await ids('ke') === 'm1,m3,m4,welcome',
+    'a Kenyan member sees Kenya\'s messages, the all-countries ones and the legacy ones');
+  ck(await ids('ug') === 'm2,m3,m4,welcome', 'and a Ugandan sees Uganda\'s, not Kenya\'s');
+  ck(await ids(null) === 'm1,m2,m3,m4,welcome',
+    'while the admin\'s All-countries view sees every one of them');
+
+  // The built-in welcome row is per country too: a real 'welcome' doc
+  // written for ONE country must not silently delete the built-in row from
+  // the others, and a DELETED one (tombstone, no regionKey) must stay gone
+  // everywhere.
+  const kenyaWelcome = [{ id: 'welcome', title: 'Karibu', body: 'x', regionKey: 'ke' }];
+  ck((await mk(kenyaWelcome).list('ke')).filter(m => m.id === 'welcome').length === 1 &&
+     (await mk(kenyaWelcome).list('ke'))[0].title === 'Karibu',
+    'a welcome written for Kenya is what Kenya gets');
+  const ugRows = await mk(kenyaWelcome).list('ug');
+  ck(ugRows.length === 1 && /Welcome to/.test(ugRows[0].title),
+    'and Uganda still gets the built-in one rather than nothing');
+  const tomb = [{ id: 'welcome', deleted: true }];
+  ck((await mk(tomb).list('ke')).length === 0 && (await mk(tomb).list('ug')).length === 0,
+    'a deleted welcome stays deleted in every country');
+
+  // The built-in row reads SETTINGS, and settings are per country -- so the
+  // admin previewing Kenya must be shown Kenya's wording, not the panel
+  // hostname's.
+  const probe = mk(docs);
+  await probe.list('ke', 'ke');
+  ck(probe.calls.includes('ke'), 'the built-in welcome is built from the asked-for country\'s settings');
+
+  const ms = bare.slice(bare.indexOf("app.post('/admin/messages/save'"));
+  const msBody = ms.slice(0, ms.indexOf('\napp.', 10));
+  ck(/const want = adminRegionFilter\(req\);/.test(msBody) && /regionKey,/.test(msBody),
+    'a saved message carries the country it was written for');
+  // The footgun: with All countries picked the panel is showing messages
+  // from several countries at once, so an edit made from that view must not
+  // re-stamp the one being edited.
+  ck(/if \(explicitId\)/.test(msBody) && /prev\.data\(\)\.regionKey/.test(msBody),
+    'and editing one from the All-countries view leaves its country alone instead of broadcasting it everywhere');
+  const ml = bare.slice(bare.indexOf("app.get('/admin/messages/list'"));
+  const mlBody = ml.slice(0, ml.indexOf('\napp.', 10));
+  ck(/adminRegionFilter\(req\)/.test(mlBody) && /listBroadcastMessages\(want, want \|\| undefined\)/.test(mlBody),
+    'the admin list shows the picked country\'s messages, in that country\'s own wording');
+  const mg = bare.slice(bare.indexOf("app.get('/messages'"));
+  ck(/listBroadcastMessages\(currentRegionKey\(\)\)/.test(mg.slice(0, mg.indexOf('\napp.', 10))),
+    'and a member is served their own country\'s inbox');
 }
 
 console.log('\n— the format hint, and picking a payer out of an SMS —');
@@ -872,8 +1103,13 @@ console.log('\n— the admin panel, which edits one country at a time —');
     'a backend-wide field is dropped from a country’s save rather than failing it');
   ck(/function ugx\(n, regionKey\)/.test(admin) && /curOf\(regionKey\)/.test(admin),
     'an amount in an admin list is labelled in the currency of the row’s own country');
-  ck(/ADMIN_REGIONS\.length < 2/.test(admin),
-    'and the country picker is hidden while there is only one country');
+  // The "hidden with one country" behaviour is proved by RUNNING the switch
+  // further up (switchFor(one, ...).switchHidden). This kept matching the old
+  // picker's `ADMIN_REGIONS.length < 2` guard, which no longer exists -- so
+  // it is the tab labels that are checked here instead, which is the thing
+  // this block is about.
+  ck(/ADMIN_REGIONS\.length > 1/.test(admin),
+    'and single-country installs are spared every country label in the panel');
   ck(/data-gen-region/.test(admin) && /'\/admin\/regions\/add-label'/.test(admin),
     'the panel can ask the server for a new short address');
   ck(/id="rgLabels"/.test(admin) && /labels: \$\('rgLabels'\)\.value/.test(admin),
@@ -1347,7 +1583,7 @@ ck(!/\.slice\(3\)/.test(stripComments(fnSource(client, 'fmtUGXCents'))),
 
 // The rotation checks run the real async route handler, so they finish
 // after everything above; the verdict waits for them.
-rotationChecks().then(() => {
+rotationChecks().then(messageRegionChecks).then(() => {
   console.log(failed ? `\n${failed} FAILED` : '\nregions: all cases pass');
   process.exit(failed ? 1 : 0);
 }).catch(e => { console.log('FAIL  rotation checks threw: ' + (e && e.message)); process.exit(1); });
