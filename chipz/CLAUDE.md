@@ -3888,3 +3888,78 @@ flake generator: wait long, and record the outcome as a value the assertions can
 `print` the failure of a wait you are relying on — assert it, or a later, unrelated error
 becomes the only symptom. And where one step failing makes the next step meaningless,
 **guard the next step** rather than letting it produce a second, more confusing failure.
+
+## Round 157 — The INVITE LINK rotates, not the browsing session
+
+> "if one clicks a link ie of Uganda, so the subdomain can be gdfs ... when he uses gdfs
+> in the team links, the urls will rotate to any of that specific country ie t3gs,
+> randomly every sessions ... so user can tap on team everything and sees a different
+> subdomain which is not bad, so only rotation such that every subdomain is used and
+> randomly, and not login session changes rotation of a link but also clicking back
+> there to that section of copying referral code, a server looks for another subdomain
+> of that very country randomly, and secure and perfect secured"
+
+**This is the better half of Round 154's idea, and it is what he wanted all along.** What
+rotates is the link he SHARES, not the address he is browsing on. The goal is spreading
+invite traffic across every one of a country's addresses instead of burning one.
+
+`GET /public/share-host` returns a random claimed short address of the member's own
+country. The app asks on **every open of the Referral screen** — "clicking back there to
+that section" picks again — so over time every address gets used. The referral **code** is
+untouched; only the hostname varies, so every invite link stays valid whichever address it
+names.
+
+### Why this costs nothing, unlike session rotation
+Rotating the browsing session (`rotateEntry`, Round 154) takes away the member's saved
+password, his offline copy of the app and his installed home-screen icon, because a
+browser files all three under **one** hostname. Rotating only the link he copies has none
+of those costs — he stays where he is. **`rotateEntry` should stay `off`**; this replaces
+the reason it existed.
+
+### Security
+- **The server picks.** No hostname is accepted from the request, so a member cannot aim
+  his own invite link anywhere he likes.
+- **His own country only.** The region is already the member's own (the region middleware
+  prefers the account over the hostname), so an invite can never carry another country's
+  address — where the code would be refused at sign-up as a different currency, and the
+  invitee would be shown the wrong prices on the way there.
+- **Claimed addresses only**, drawn from the country's own label list. A made-up label
+  resolves to the founding country and is not allowed to reach the backend, so an invite
+  built on one would simply be dead.
+- Picked with `crypto.randomInt`, not `Math.random`.
+- A failure answers `host: ''`, and the app falls back to the current origin — the member
+  never ends up with a blank or broken invite link.
+
+**One honest limitation to note:** a member can call this repeatedly and enumerate all of
+his country's addresses. That is inherent to the feature — the addresses have to appear in
+shared links to work at all — so they are public, not secret. If the addresses are ever
+meant to resist enumeration, this feature is the wrong shape for that, and the owner
+should be told rather than sold a false guarantee.
+
+`render.yaml`'s `/refCode=*` rewrite is scoped to the **service**, not a host, so it
+applies to every custom domain on `chipz-app` including the wildcard. Invite links resolve
+on any subdomain.
+
+### Tests
+`test-regions.js` runs the real `/public/share-host` handler 300 times and requires **all**
+of a country's addresses to appear and **none** from another country; covers the empty-pool,
+no-base-domain and thrown-error paths; and **runs the real `renderReferral()` and
+`shareOrigin()`** against stubs.
+
+**Three assertions had to be rewritten to discriminate, all the same lesson in different
+clothes:**
+1. `shareOrigin()` could not be checked statically at all — `stripComments()` treats the
+   `'//'` inside `location.protocol + '//' + h` as the start of a line comment and eats
+   the rest of the line, so the "source" being matched was rubble. Run it instead.
+2. "the screen repaints even when the stats call fails" passed with an early `return`
+   bolted in above the repaint — the repaint was still *in the text*. Run it and count the
+   paints.
+3. Two older `/public/entry` mutations **drifted because the new handler duplicated their
+   anchors** (`const pool = (region.labels || [])`, `if (!pool.length) return res.json(stay);`).
+   Re-anchored on the entry handler's own `from`-excluding filter. *Adding a similar
+   endpoint silently breaks every mutation anchored on shared-looking lines — re-run the
+   discrimination suite after any such addition, not just after changing behaviour.*
+
+One mutation was **deleted rather than propped up**: removing the empty-pool guard makes
+`crypto.randomInt(0)` throw, the catch answers the identical `stay` reply, and the
+observable behaviour is unchanged — so no honest assertion can fail on it.

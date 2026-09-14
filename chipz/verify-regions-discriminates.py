@@ -378,16 +378,16 @@ MUTATIONS = [
      "      if (!uid) return res.json(stay);"),
 
     ('a country with no other address hands out nothing at all', SERVER,
-     "    if (!pool.length) return res.json(stay);\n",
-     ""),
+     "      .filter(h => h && h !== from);\n    if (!pool.length) return res.json(stay);\n",
+     "      .filter(h => h && h !== from);\n"),
 
     ('the mode is read from the founding country instead of this one', SERVER,
      "    const sett = await getSettings(region.key);",
      "    const sett = await getSettings(DEFAULT_REGION_KEY);"),
 
     ('the pool is not built from this country own address list', SERVER,
-     "    const pool = (region.labels || [])",
-     "    const pool = (region.hosts || [])"),
+     "    const pool = (region.labels || [])\n      .map(l => (_baseDomain ? l + '.' + _baseDomain : ''))\n      .filter(h => h && h !== from);",
+     "    const pool = (region.hosts || [])\n      .filter(h => h && h !== from);"),
 
     ('a failed settings read stops the app loading', SERVER,
      "    res.json({ status: 'success', rotate: false, mode: 'off', host: '' });\n  }",
@@ -656,6 +656,39 @@ MUTATIONS = [
     ('the country and currency are put back in front of members', CLIENT,
      "      el.textContent = '';\n      el.style.display = 'none';",
      "      el.textContent = regionName() + ' · ' + cur();\n      el.style.display = '';"),
+
+    # ── the invite link carries a random address of the member's own country ──
+    ('the invite link stops rotating and names one address forever', SERVER,
+     "    res.json({ status: 'success', host: pool[crypto.randomInt(pool.length)], count: pool.length });",
+     "    res.json({ status: 'success', host: pool[0], count: pool.length });"),
+
+    ('the invite link can carry another country address', SERVER,
+     "    const pool = (region.labels || [])\n      .map(l => (_baseDomain ? l + '.' + _baseDomain : ''))\n      .filter(Boolean);\n    if (!pool.length) return res.json(stay);",
+     "    const pool = ['other-country.example.test'];\n    if (!pool.length) return res.json(stay);"),
+
+    ('a failed share-host read costs the member his invite link', SERVER,
+     "  } catch (e) { res.json(stay); }\n});\n// Members must never be shown a payout",
+     "  } catch (e) { res.status(500).json({ status: 'error' }); }\n});\n// Members must never be shown a payout"),
+
+    ('the share address is picked with Math.random instead of the CSPRNG', SERVER,
+     "host: pool[crypto.randomInt(pool.length)]",
+     "host: pool[Math.floor(Math.random() * pool.length)]"),
+
+    ('the invite link goes back to the address he is browsing on', CLIENT,
+     "  const link = code ? `${shareOrigin()}/refCode=${encodeURIComponent(code)}` : '';",
+     "  const link = code ? `${location.origin}/refCode=${encodeURIComponent(code)}` : '';"),
+
+    ('the rotated address is never fetched', CLIENT,
+     "  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);",
+     "  const [r] = await Promise.all([ api('/team/stats') ]);"),
+
+    ('the screen does not repaint when the stats call fails, so the new address is never shown', CLIENT,
+     "  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);\n  if (r.status === 'success') STATE.teamStats = r;",
+     "  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);\n  if (r.status !== 'success') return;\n  STATE.teamStats = r;"),
+
+    ('an empty pick blanks the invite link instead of falling back', CLIENT,
+     "  return h ? (location.protocol + '//' + h) : location.origin;",
+     "  return location.protocol + '//' + h;"),
 ]
 
 

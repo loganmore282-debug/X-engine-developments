@@ -3040,6 +3040,51 @@ app.get('/public/entry', async (req, res) => {
     res.json({ status: 'success', rotate: false, mode: 'off', host: '' });
   }
 });
+// ── WHICH ADDRESS THIS MEMBER'S INVITE LINK SHOULD CARRY ──
+// Owner: "when he uses gdfs in the team links, the urls will rotate to any
+// of that specific country ie t3gs, randomly ... not login session changes
+// rotation of a link but also clicking back there to that section of copying
+// referral code, a server looks for another subdomain of that very country
+// randomly."
+//
+// So the thing that rotates is the LINK HE SHARES, not the address he is
+// browsing on. The app asks this every time the Referral screen is opened,
+// so going back to it picks again -- over time every one of that country's
+// addresses gets used, which spreads invite traffic across all of them
+// instead of burning one.
+//
+// This is the better half of the idea, and it costs nothing: rotating the
+// browsing session (see rotateEntry) takes away the member's saved password,
+// his offline copy of the app and his installed icon, because a browser
+// files all three under one hostname. Rotating only the link he copies has
+// none of those costs -- he stays where he is.
+//
+// Security:
+//  - The SERVER picks. No hostname is ever accepted from the request, so a
+//    member cannot have his invite link point anywhere he chooses.
+//  - HIS OWN COUNTRY ONLY. The region here is already the member's own (the
+//    region middleware prefers the account over the hostname), so an invite
+//    can never carry another country's address -- where the code would be
+//    refused at sign-up as belonging to a different currency, and the
+//    invitee would be shown the wrong prices on the way there.
+//  - CLAIMED ADDRESSES ONLY, drawn from the country's own label list. A
+//    made-up label resolves to the founding country and is not allowed to
+//    reach the backend, so an invite built on one would simply be dead.
+//  - The referral CODE is untouched; only the hostname varies. Every invite
+//    link stays valid whichever of the country's addresses it names.
+app.get('/public/share-host', async (req, res) => {
+  // A failure here must never cost a member his invite link: an empty host
+  // means "use the address you are already on", which always works.
+  const stay = { status: 'success', host: '', count: 0 };
+  try {
+    const region = currentRegion();
+    const pool = (region.labels || [])
+      .map(l => (_baseDomain ? l + '.' + _baseDomain : ''))
+      .filter(Boolean);
+    if (!pool.length) return res.json(stay);
+    res.json({ status: 'success', host: pool[crypto.randomInt(pool.length)], count: pool.length });
+  } catch (e) { res.json(stay); }
+});
 // Members must never be shown a payout the purchase won't actually honour,
 // so this endpoint publishes RESOLVED figures instead of the raw stored
 // fields. It resolves them with exactly the rules /invest/create uses:

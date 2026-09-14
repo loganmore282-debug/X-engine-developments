@@ -2352,10 +2352,35 @@ function paintCatalog(){
 // Owner: "introduce a new nav icon just between my products and team, it is
 // called referral, so here there will be that banner and referral link and
 // instruction, so remove them from team and they come here to this tab."
+// The address the member's INVITE LINK should carry -- a random one of his
+// own country's short addresses, picked by the server. Asked for on every
+// open of this screen, which is the point: owner "not login session changes
+// rotation of a link but also clicking back there to that section of copying
+// referral code, a server looks for another subdomain of that very country
+// randomly." Going back to Referral picks again, so over time every one of
+// the country's addresses gets used.
+//
+// The last pick is kept in STATE so a repeat open paints the rotated link
+// immediately instead of flashing the address the member is browsing on.
+// And a failure is silent by design: the link falls back to this origin,
+// which is always a working invite.
+async function refreshShareHost(){
+  const r = await api('/public/share-host');
+  if (r && r.status === 'success' && r.host) STATE.shareHost = r.host;
+}
+function shareOrigin(){
+  const h = STATE.shareHost;
+  return h ? (location.protocol + '//' + h) : location.origin;
+}
 async function renderReferral(){
   paintReferral();
-  const r = await api('/team/stats');
-  if (r.status === 'success') { STATE.teamStats = r; if (STATE.page === 'referral') paintReferral(); }
+  // Both at once -- the rotated address must not add a second round trip in
+  // front of a screen the member opened to copy one line of text.
+  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);
+  if (r.status === 'success') STATE.teamStats = r;
+  // Repainted whether or not the stats call succeeded: the ADDRESS may have
+  // changed even when nothing else did, and that is the whole feature.
+  if (STATE.page === 'referral') paintReferral();
 }
 function paintReferral(){
   const t = STATE.teamStats || {};
@@ -2368,7 +2393,12 @@ function paintReferral(){
   // with index.html: render.yaml carries a rewrite scoped to /refCode=* for
   // chipz-app. If the frontend is uploaded to EdgeOne instead, the same
   // single-path rewrite has to be configured there or every invite link 404s.
-  const link = code ? `${location.origin}/refCode=${encodeURIComponent(code)}` : '';
+  // shareOrigin(), not location.origin: the host is a random one of this
+  // member's own country's short addresses, re-picked every time this screen
+  // is opened, so invites are spread across all of them instead of every
+  // link naming whichever address he happens to be browsing on. Falls back
+  // to this origin, so the link is never broken.
+  const link = code ? `${shareOrigin()}/refCode=${encodeURIComponent(code)}` : '';
   let html = `
 <div class="page-head"><h2>Referral</h2></div>
 <div class="ref-banner">

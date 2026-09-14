@@ -1122,6 +1122,140 @@ async function askEntry(opts, req) {
     'with what moving a signed-in member actually costs him spelled out');
   ck(/data-gen-count="5"/.test(admin), 'and five addresses can be minted in one tap');
 }
+
+console.log('\n— the invite link carries a random address of the member’s own country —');
+// Owner: "when he uses gdfs in the team links, the urls will rotate to any
+// of that specific country ie t3gs, randomly ... not login session changes
+// rotation of a link but also clicking back there to that section of copying
+// referral code, a server looks for another subdomain of that very country
+// randomly."
+//
+// The REAL handler, run -- which address it hands out is the whole feature.
+function shareHandler(opts) {
+  return new Function('deps', `
+    const currentRegion = deps.currentRegion, crypto = deps.crypto;
+    let _baseDomain = deps.baseDomain;
+    return ${handlerSource(bare, '/public/share-host')};
+  `)(Object.assign({ crypto: require('crypto'), baseDomain: 'example.test' }, opts));
+}
+async function askShare(opts) {
+  let out = null;
+  const res = { json: o => { out = o; return res; }, status: () => res };
+  await shareHandler(opts)({ headers: {}, query: {} }, res);
+  return out;
+}
+{
+  const ug = api.normalizeRegion({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
+    localLength: 9, prefixes: ['7'], labels: ['gdfs', 't3gs', 'q7rk'] }, 'ug');
+  const ke = api.normalizeRegion({ key: 'ke', name: 'Kenya', currency: 'KES', dialCode: '254',
+    localLength: 9, prefixes: ['7'], labels: ['shy', 'm4te'] }, 'ke');
+  const ugHosts = ['gdfs.example.test', 't3gs.example.test', 'q7rk.example.test'];
+
+  // Over many opens EVERY one of the country's addresses gets used -- the
+  // stated goal ("every subdomain is used and randomly"). Run enough times
+  // that a uniform pick over three cannot miss one by luck.
+  const seen = new Set();
+  let offCountry = 0;
+  for (let i = 0; i < 300; i++) {
+    const r = await askShare({ currentRegion: () => ug });
+    if (!ugHosts.includes(r.host)) offCountry++;
+    seen.add(r.host);
+  }
+  ck(offCountry === 0, 'every pick is one of this country’s own addresses');
+  ck(seen.size === 3, 'and all of them get used, not just one: ' + [...seen].sort().join(', '));
+
+  // "in that very country" -- a Kenyan member's invite can never carry a
+  // Ugandan address. Sending one would be worse than cosmetic: the code is
+  // refused at sign-up as belonging to another currency.
+  const keSeen = new Set();
+  for (let i = 0; i < 120; i++) keSeen.add((await askShare({ currentRegion: () => ke })).host);
+  ck([...keSeen].every(h => ['shy.example.test', 'm4te.example.test'].includes(h)),
+    'a Kenyan member’s invite only ever carries a Kenyan address: ' + [...keSeen].sort().join(', '));
+
+  // Nothing to rotate to, and a broken read: both answer "use the address
+  // you are already on", which is always a working invite.
+  const none = api.normalizeRegion({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
+    localLength: 9, prefixes: ['7'], labels: [] }, 'ug');
+  const empty = await askShare({ currentRegion: () => none });
+  ck(empty.status === 'success' && empty.host === '' && empty.count === 0,
+    'a country with no short addresses hands back nothing rather than failing');
+  const noBase = await askShare({ currentRegion: () => ug, baseDomain: '' });
+  ck(noBase.host === '', 'and so does a platform with no base domain set');
+  const broke = await askShare({ currentRegion: () => { throw new Error('down'); } });
+  ck(broke && broke.status === 'success' && broke.host === '',
+    'a failure never costs the member his invite link');
+
+  // The host is never taken from the request -- a member must not be able to
+  // point his own invite link wherever he likes.
+  const at = bare.indexOf("app.get('/public/share-host'");
+  const body = bare.slice(at, bare.indexOf('\napp.', at + 10));
+  ck(!/req\.(body|query)\.host/.test(body),
+    'the server picks; no hostname is accepted from the request');
+  ck(/const region = currentRegion\(\);/.test(body) && /\(region\.labels \|\| \[\]\)/.test(body),
+    'drawn from the member’s own region’s claimed address list and nothing else');
+  ck(/crypto\.randomInt\(pool\.length\)/.test(body),
+    'and picked with the CSPRNG, not Math.random');
+}
+{
+  // The app half: the link the member copies, and WHEN it is re-picked.
+  const paint = stripComments(fnSource(client, 'paintReferral'));
+  ck(/\$\{shareOrigin\(\)\}\/refCode=/.test(paint),
+    'the invite link is built from the rotated address');
+  ck(!/location\.origin\}\/refCode=/.test(paint),
+    'and not from whichever address he happens to be browsing on');
+  // RUN, not matched. stripComments() treats the '//' inside the string
+  // literal as the start of a line comment and eats the rest of the line,
+  // so a static check of this particular function is testing rubble.
+  function runShareOrigin(host, origin) {
+    return new Function('deps', `
+      const STATE = { shareHost: deps.host };
+      const location = { protocol: 'https:', origin: deps.origin };
+      ${fnSource(client, 'shareOrigin')}
+      return shareOrigin();
+    `)({ host, origin });
+  }
+  ck(runShareOrigin('t3gs.example.test', 'https://gdfs.example.test') === 'https://t3gs.example.test',
+    'the link is built on the address the server picked, not the one he is on');
+  ck(runShareOrigin('', 'https://gdfs.example.test') === 'https://gdfs.example.test',
+    'and falls back to this origin when there is no pick, so the link is never broken');
+  const rr = stripComments(fnSource(client, 'renderReferral'));
+  ck(/refreshShareHost\(\)/.test(rr),
+    'and it is re-picked when the Referral screen is opened');
+  ck(/Promise\.all\(\[ api\('\/team\/stats'\), refreshShareHost\(\) \]\)/.test(rr),
+    'alongside the stats, not as a second round trip in front of the screen');
+  // Re-picked per OPEN, not once per session: boot() must not be the only
+  // place it happens, or going back to the screen would keep one address.
+  ck(!/refreshShareHost/.test(stripComments(fnSource(client, 'boot'))),
+    'per open rather than once at start-up -- going back to the screen picks again');
+  // RUN. A static "is the repaint still in the text" check passes just as
+  // happily when an early `return` is bolted in above it, which is exactly
+  // the failure that matters: the address rotated and the member never sees
+  // it because an unrelated call failed.
+  function runRenderReferral(statsStatus) {
+    const calls = { paint: 0, share: 0 };
+    const fn = new Function('deps', `
+      const STATE = { page: 'referral' };
+      const paintReferral = () => { deps.calls.paint++; };
+      const api = async p => (p === '/team/stats'
+        ? { status: deps.statsStatus }
+        : { status: 'success', host: 't3gs.example.test' });
+      const refreshShareHost = async () => { deps.calls.share++; };
+      ${fnSource(client, 'renderReferral')}
+      return renderReferral;
+    `)({ calls, statsStatus });
+    return fn().then(() => calls);
+  }
+  const okRun = await runRenderReferral('success');
+  ck(okRun.paint === 2 && okRun.share === 1,
+    'the screen paints, fetches the address, and repaints with it');
+  const badRun = await runRenderReferral('error');
+  ck(badRun.paint === 2,
+    'and it repaints even when the stats call fails, because the ADDRESS may still have changed');
+  ck(badRun.share === 1, 'the address is still fetched on a failed stats call');
+  const rsh = stripComments(fnSource(client, 'refreshShareHost'));
+  ck(/STATE\.shareHost = r\.host/.test(rsh) && !/STATE\.settings/.test(rsh),
+    'the pick is kept on STATE itself, never written into STATE.settings');
+}
 }
 
 console.log('\n— the app is told its region, and never tells the server —');
