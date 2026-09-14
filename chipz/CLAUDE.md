@@ -4141,3 +4141,25 @@ happens after production, not before. The review that matters is (1) are the pre
 round's fixes still present, (2) were the money-safety invariants preserved rather than
 "improved", (3) do the built bundles match the edited sources, and (4) run the harnesses
 the other agent did not.
+
+### Round 159 follow-up — the THIRD harness pinning the old link form
+
+The full Python suite came back with one red: `test-round-fixes.py` demanded the clipboard
+end in `/refCode=Gy2f` and explicitly **refused** `?ref=`. The value it captured
+(`http://127.0.0.1:8873/?ref=Gy2f`) was correct; the assertion was not.
+
+That makes **three** harnesses that pinned the same defect — `test-brand-assets.js`,
+`test-manual-review.js`, and now this one — and I found them one suite-run at a time
+instead of all at once.
+
+**The lesson is procedural, not technical: when changing a user-visible format, grep every
+harness for the old value before running anything.** One `grep -ln "refCode=" test-*` would
+have found all three in a second. For the record the remaining matches are legitimate:
+`test-referral-share.py` (asserts the old forms still PARSE), `test-regions.js` (runs the
+parser over all three shapes) and `verify-regions-discriminates.py` (mutates them).
+
+Kept the tail match exact (`endswith('/?ref=Gy2f')`) rather than loosening it to a
+`ref=Gy2f` substring — `/refCode=Gy2f` contains that substring, so a loose assertion would
+quietly start passing again if the path form ever came back.
+
+**Full suite now green**, including `test-round-fixes.py` and `test-referral-share.py`.

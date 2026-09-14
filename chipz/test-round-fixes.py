@@ -444,15 +444,22 @@ async def main():
            "tapping it does NOT open the phone's share sheet")
         clip = await page.evaluate("()=>navigator.clipboard.readText()")
         print("    clipboard:", repr(clip))
-        # Owner: "let the link be '/refCode=' not other more words." The old
-        # assertion accepted any 'ref=Gy2f' substring, which the new form
-        # happens to satisfy too ("/refCode=Gy2f" contains it) -- so it is
-        # tightened to the exact shape rather than merely updated, or it would
-        # keep passing if the long "#pages/register/?ref=" form came back.
-        ck(clip.startswith('http') and clip.endswith('/refCode=Gy2f'),
-           "it copies the member's own referral link, in the /refCode= form (%r)" % clip)
-        ck('#pages/register' not in clip and '?ref=' not in clip,
-           "with none of the old wording in it (%r)" % clip)
+        # The link is "/?ref=CODE", NOT "/refCode=CODE". This assertion used to
+        # demand the path form and REFUSE "?ref=" -- pinning the bug. A path
+        # only resolves if a rewrite rule is configured on the host, and when
+        # that rule is missing nothing looks wrong until an invite is tapped,
+        # because "/" serves index.html regardless. Reported live:
+        # "https://gigs.myapp.com/refCode=RC9J2N ... it returns not found",
+        # and the 404 killed the link preview with it, since a crawler that
+        # gets a 404 never reads the og: tags.
+        #
+        # Still matched on the EXACT tail rather than a loose "ref=Gy2f"
+        # substring, which "/refCode=Gy2f" would also satisfy -- so this
+        # cannot quietly start passing again if the path form comes back.
+        ck(clip.startswith('http') and clip.endswith('/?ref=Gy2f'),
+           "it copies the member's own referral link, as a query that cannot 404 (%r)" % clip)
+        ck('#pages/register' not in clip and 'refCode=' not in clip,
+           "with none of the shapes that need a host rewrite rule (%r)" % clip)
         ck('undefined' not in clip,
            "and the link is real — the old share path sent the word 'undefined'")
         # Owner: "the copy turns to tick." Copy confirms itself ON the control
