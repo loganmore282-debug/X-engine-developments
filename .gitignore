@@ -4,3 +4,7 @@ node_modules/
 # delivery artifacts
 x-engine-update.zip
 *.zip
+
+# Python bytecode from the test harnesses
+__pycache__/
+*.pyc
