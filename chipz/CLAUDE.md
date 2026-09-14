@@ -4396,3 +4396,133 @@ Delete the root `A`/`CNAME` record (and remove the root custom domain from the R
 static site), keep the `*` wildcard, and **set Settings → Base domain to his real
 domain** — without it `www` is not closed and short addresses match no country. Then
 upload a Link preview if he wants his own card instead of the built-in one.
+
+## Round 162 — Faster loading, and an invite address that changes instantly
+
+> "l also need faster loading and faster changing of the subdomain rations,
+> before we tackle on the removing root domain certificates"
+
+**Everything below was measured before it was changed.** `test-boot-speed.py` is new and
+exists for that: it drives the real built app and a real local HTTP server, because the
+three questions here cannot all be seen with the same tool.
+
+| | before | after |
+|---|---|---|
+| JSON the loading screen waits for | **1,281 KB** | **151 KB** |
+| time to the first screen (artwork stalled 3s) | blocked | **141 ms** |
+| round trips per read | **2** (OPTIONS + GET) | **1** |
+| a second open's artwork | **900 KB again** | **0 KB** (304) |
+| changing the invite address | 1 request, link repainted | **0 requests, instant** |
+
+### 1. A CORS preflight was doubling every request
+`api()` sent `Content-Type: application/json` on **every** call. That header is not
+CORS-safelisted, so it turns even a plain GET into a **preflighted** request: an `OPTIONS`
+round trip before every single read, per URL. Eight reads on the boot path is eight wasted
+round trips, on the connection where latency costs the most.
+
+It was never needed on a GET — there is no body to describe, and Express's JSON parser only
+runs when a body is present. It is now sent **only when there is a body**. Writes still
+declare theirs, and their preflight is cached for a day (`cors({ maxAge: 86400 })`) instead
+of Chromium's five-second default.
+
+**This is invisible to `page.route` and to Playwright's request events** — the browser
+issues preflights below that layer — which is why the harness runs a real cross-origin
+server and counts methods server-side. Measured: `['OPTIONS','GET']` with the header,
+`['GET']` without, same answer.
+
+### 2. Every launch re-downloaded a megabyte of artwork
+Not one of the public reads carried a cache header, and **every admin-uploaded image
+travels as a base64 data: URL inside JSON**. `/public/chipz-images` alone carries seven
+slots — measured at **900 KB** with realistic artwork — and it was re-sent in full on every
+single app open.
+
+`publicJson()` now adds a **weak ETag hashed from the body it was about to send** (correct
+by construction — no version counter to forget) and answers `304` with no body when the
+browser already has it. Policies differ on purpose:
+- **artwork** (`chipz-images`, `banner`, `announcement-image`, `manual-pay-images`) —
+  `max-age=60`. Opening the app twice in a row costs nothing; an upload still shows up on
+  the owner's own phone within a minute.
+- **settings and products** — revalidated every time, no `max-age`. Maintenance mode, the
+  opening countdown and a rate change have to bite on the *next* launch, not a minute
+  later. The ETag still removes the bytes.
+
+`Vary: Origin` is set, because these replies are per **region** (resolved from the
+hostname) — without it a shared cache could hand one country's prices to another.
+
+### 3. The loading screen now waits for four replies, not seven
+Of the seven images in that bundle, exactly **two** can appear on the first screen (Home's
+spin banner and the profile GIF). The rest belong to screens nobody has opened yet.
+
+The three heavy replies are **still fired at the same instant** — delaying the fetch would
+only move the wait later — but the app no longer *blocks* on them (`_artPromise`). They
+land underneath, and `applyBootArtwork()` repaints Home when they do.
+
+**The one thing that must NOT open before its picture arrives is the announcement dialog**,
+because it paints once and never repaints — so that path waits on `_artPromise` (capped at
+4s, and it still opens if the wait fails: an announcement with no picture beats no
+announcement).
+
+`BANNER_PRELOAD_MS` also came down **10s → 4s**. That wait is the owner's own ask and is
+paid once per upload (the year-long immutable cache serves every later open from the
+phone), but ten seconds of loading screen is a member deciding the app is broken.
+
+### 4. The invite address changes with no round trip
+`/public/share-host` used to answer with **one** address, so every open of the Referral
+screen cost a request before the link could be painted — and it was painted **twice**, so
+the address visibly changed under him a beat after the screen opened.
+
+It now returns the country's **whole pool, shuffled** (Fisher-Yates on `crypto.randomInt`,
+never `Math.random`). The app caches it and advances **locally** on each open: instant, and
+it walks the pool in order so **every** address gets used, which is the point — random
+picking leaves some unused and repeats others. The pool is re-read after ten minutes so an
+address the owner adds reaches a member who leaves the app open, and it is prefetched at
+boot so even the *first* open is instant.
+
+**None of Round 157's security properties move**: the server still decides which addresses
+exist and in what order, no hostname is accepted from the request, and it is the member's
+own country only. `host` stays in the reply so a phone running the previous build keeps
+working.
+
+### The harness, and two false starts worth recording
+`test-boot-speed.py` measures each question where it can actually be seen — and getting
+that split right took two failures:
+
+1. **Pointing the real app at a local server by rewriting its `fetch` does not work.** The
+   page's own CSP blocked the stub origin (fixable), and then every response write died
+   with a broken pipe while the app reported no error and sat on its loading screen. The
+   obfuscated bundle is not what the preflight and caching questions are about, so those
+   are measured on a **minimal page** that reproduces `api()`'s request shape, and the
+   shape itself is asserted against the source in `test-regions.js`.
+2. **A stub that speaks HTTP/1.0 cannot test HTTP caching.** `BaseHTTPRequestHandler`
+   defaults to 1.0, and Chromium will not revalidate a 1.0 response at all — so a perfectly
+   good ETag measured as "no 304". One line (`protocol_version = 'HTTP/1.1'`) and the same
+   fixture showed `If-None-Match` and a zero-byte second fetch.
+
+**And the first version of the boot assertion measured the wrong thing entirely.** It
+counted every request made before `#app` appeared and failed on the big ones — but firing
+them early is deliberate and good. What matters is whether the loader *blocks*, and the
+only way to see that is to **stall those replies by three seconds and watch whether the app
+still opens** (it opens in 141 ms). The byte count had the same flaw: it counted payloads at
+**request** time, including ones that arrived long after the app was up. Counting on
+**arrival** is what turned a meaningless 1,281 KB into the real 151 KB.
+
+### Tests
+`test-regions.js` gained the fast, mutation-suite-friendly half: it **runs** the real pool
+walk (four opens, one request, four distinct addresses, wrapping, the single-host fallback,
+the forced re-read), **runs** `api()` and reads the headers it really sends, **runs**
+`publicJson()` for the 200/304/ETag-changes-with-content behaviour, and asserts **per route**
+which cache policy is used. That last one is not decoration: the mutation that dropped the
+artwork route back to a bare `res.json()` went **undetected** until it was added — proving
+a helper behaves correctly says nothing about whether the heavy replies go through it.
+
+`verify-regions-discriminates.py` is **207 mutations, all caught**. Four older anchors had
+drifted onto lines this round rewrote, and two of my own were not unique (`crypto.randomInt(i + 1)`
+appears in the entry handler too; `if-none-match` in three routes) — the same lesson this
+file already records, hit again: **check the anchor count, not just the result.** One was
+deleted as obsolete (there is no single "pick" any more) and one of mine was a **no-op**
+(`IMAGE_CACHE && {…}` is just `{…}` — a truthy string and-ed with an object), which the
+suite caught by reporting it undetected.
+
+### Ports
+`test-boot-speed.py` binds **8893** (static) and **8895** (stub API). Neither was in use;
+the running list is in Round 157's note.

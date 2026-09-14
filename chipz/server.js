@@ -231,7 +231,21 @@ app.use(cors({
       if (h === 'localhost' || h === '127.0.0.1') return cb(null, true);
     } catch (_) {}
     cb(null, false);
-  }
+  },
+  // ── WHY maxAge IS SET ──
+  // A preflight is a whole extra round trip, and Chromium caches one for
+  // only FIVE SECONDS by default -- so every POST paid for two requests,
+  // over and over, on a phone where the round trip is the expensive part.
+  // A day is safe here because the answer barely changes: the allowed
+  // methods and headers are fixed, and the origin decision is per-URL-and-
+  // origin, so a newly allowed domain is unaffected (it has no cached
+  // preflight to go stale).
+  //
+  // This does NOT fix the reads: a GET carrying Content-Type: application/
+  // json is preflighted at all, which is a thing the app should not be doing
+  // -- see api() in user-src/original_module.js, where that header is now
+  // sent only with a body.
+  maxAge: 86400
 }));
 
 app.use((_req, res, next) => {
@@ -2996,7 +3010,7 @@ function publicRegionView(r) {
     usesBareLocal: regionUsesBareLocal(reg),
   };
 }
-app.get('/public/settings', async (_req, res) => {
+app.get('/public/settings', async (req, res) => {
   try {
     const s = await getSettings();
     // allowedOrigins is operator configuration, not app content -- there is
@@ -3008,7 +3022,10 @@ app.get('/public/settings', async (_req, res) => {
     // figures below. The Sign Up screen shows the field as required or
     // optional from this one flag, so it can never disagree with what
     // /register will actually accept.
-    res.json({ status: 'success', settings: {
+    // Revalidated every time (no max-age): maintenance mode, the opening
+    // countdown and every rate have to take effect on the next launch, not a
+    // minute later. The ETag still removes the bytes when nothing changed.
+    publicJson(req, res, { status: 'success', settings: {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
       payoutManual: payoutIsManual(s),
@@ -3119,7 +3136,34 @@ app.get('/public/share-host', async (req, res) => {
       .map(l => (_baseDomain ? l + '.' + _baseDomain : ''))
       .filter(Boolean);
     if (!pool.length) return res.json(stay);
-    res.json({ status: 'success', host: pool[crypto.randomInt(pool.length)], count: pool.length });
+    // ── THE WHOLE POOL, SHUFFLED, IN ONE ANSWER ──
+    // Owner: "l also need ... faster changing of the subdomain rations."
+    //
+    // This used to return ONE address, so every open of the Referral screen
+    // cost a round trip before the invite link could be painted -- and it
+    // was painted twice, once with the address he is browsing on and again
+    // when the answer landed, so the link visibly changed under him.
+    //
+    // Handing over the shuffled pool lets the app advance to the next
+    // address locally on each open: instant, and still every address in turn
+    // rather than one burnt. The SERVER still decides what is in the pool
+    // and in what order, so none of Round 157's rules are weakened -- no
+    // hostname is accepted from the request, it is this member's own country
+    // only, and only addresses that country actually claims are in it.
+    //
+    // Shuffled with the CSPRNG (Fisher-Yates), not Math.random: this is the
+    // same "a member sees a long run of these outputs" argument the spin
+    // reward records, and a predictable order would make one address the
+    // first pick for everybody.
+    const shuffled = pool.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = crypto.randomInt(i + 1);
+      const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t;
+    }
+    // `host` stays in the reply for a phone still running the previous
+    // build: it reads that field and ignores `hosts`, so an old app keeps
+    // working exactly as it did rather than losing its invite link.
+    res.json({ status: 'success', host: shuffled[0], hosts: shuffled, count: shuffled.length });
   } catch (e) { res.json(stay); }
 });
 // Members must never be shown a payout the purchase won't actually honour,
@@ -3198,14 +3242,58 @@ function publicProductView(p, sett) {
   return { ...p, cycle, expectedReturn, dailyPayout: Math.round(expectedReturn / cycle),
     isOpen: st.open, openMode: st.mode, opensAt: st.opensAt || null, closesAt: st.closesAt || null };
 }
-app.get('/public/products', async (_req, res) => {
+// ── WHY THESE READS CARRY AN ETag ──
+// Owner: "l also need faster loading."
+//
+// MEASURED, not assumed (test-boot-speed.py): the loading screen waits for
+// about 1.3 MB of JSON on a first open, and 900 KB of that is
+// /public/chipz-images alone -- every admin-uploaded image travels as a
+// base64 data: URL inside JSON, and none of these replies carried a single
+// cache header, so every launch re-downloaded the lot.
+//
+// An ETag turns the repeat into a 304 with no body. `no-cache` means "always
+// ask, but a 304 is enough": the bytes go away while an upload is still
+// visible on the very next open, which matters for settings and prices.
+// The image bundles take a short max-age on top, because artwork changes
+// once a month and a round trip per launch for something unchanged is the
+// thing being removed.
+//
+// The ETag is a hash of the body we were about to send, so it is correct by
+// construction -- no version counter to forget to bump when a slot changes.
+// Weak (`W/`), because the body is JSON built per request: two equal payloads
+// may differ in key order across restarts, and a weak tag is the honest claim
+// ("semantically the same"), not a byte-for-byte one.
+//
+// The browser only revalidates an HTTP/1.1 response, which is fine here and
+// was a real trap in the harness -- see test-boot-speed.py's own note.
+function publicJson(req, res, body, cacheControl) {
+  let raw;
+  try { raw = JSON.stringify(body); } catch (_) { return res.json(body); }
+  const etag = 'W/"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '"';
+  res.set('Cache-Control', cacheControl || 'no-cache');
+  res.set('ETag', etag);
+  // Vary on Origin: the CORS headers differ per origin and these replies are
+  // per REGION, which is resolved from the hostname -- without this a shared
+  // cache could hand one country's prices to another.
+  res.vary('Origin');
+  if (req.headers['if-none-match'] === etag) return res.status(304).end();
+  res.set('Content-Type', 'application/json; charset=utf-8');
+  return res.send(raw);
+}
+// 60s for the artwork bundles. Long enough that opening the app twice in a
+// row costs nothing, short enough that an admin who uploads a banner sees it
+// on his own phone within a minute rather than wondering if it saved.
+const IMAGE_CACHE = 'public, max-age=60';
+app.get('/public/products', async (req, res) => {
   try {
     const [products, sett] = await Promise.all([getProducts(), getSettings()]);
-    res.json({ status: 'success', products: products.map(p => publicProductView(p, sett)) });
+    // Prices: revalidated every time, so a change is never served stale --
+    // but unchanged prices cost a 304 instead of every product photo again.
+    publicJson(req, res, { status: 'success', products: products.map(p => publicProductView(p, sett)) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.get('/public/banner', async (_req, res) => {
-  try { res.json({ status: 'success', ...(await getHomeBanner()) }); }
+app.get('/public/banner', async (req, res) => {
+  try { publicJson(req, res, { status: 'success', ...(await getHomeBanner()) }, IMAGE_CACHE); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // The uploaded banner video's bytes. Deliberately NOT part of /public/banner:
@@ -3305,26 +3393,29 @@ app.get('/public/help-banner', async (_req, res) => {
 // Home banner) -- not lazy-loaded like the Help Centre banner, since that
 // would reintroduce the "waits before appearing" complaint this dialog's
 // own timing was already fixed for in an earlier round.
-app.get('/public/announcement-image', async (_req, res) => {
-  try { res.json({ status: 'success', image: await getAnnouncementImage() }); }
+app.get('/public/announcement-image', async (req, res) => {
+  try { publicJson(req, res, { status: 'success', image: await getAnnouncementImage() }, IMAGE_CACHE); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // The Referral banner and the Account brand logo, in one call -- fetched
 // in boot()'s own Promise.all alongside the Home banner so neither pops in.
-app.get('/public/chipz-images', async (_req, res) => {
+app.get('/public/chipz-images', async (req, res) => {
   try {
     const [referral, logo, spin, profilegif, downloadbg, authhero, authcard] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg'), getChipzImage('authhero'), getChipzImage('authcard')]);
-    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard });
+    // The heaviest reply in the app -- seven base64 slots. Measured at
+    // 900 KB with the owner's own artwork, and it used to be re-sent on
+    // every single launch.
+    publicJson(req, res, { status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Both slots in one call (not two round trips) -- fetched unconditionally
 // inside boot()'s own Promise.all, same "cheap when unset" tradeoff every
 // other banner-style image already accepts, so a member who reaches the
 // manual-deposit flow moments after boot never sees a pop-in.
-app.get('/public/manual-pay-images', async (_req, res) => {
+app.get('/public/manual-pay-images', async (req, res) => {
   try {
     const [selector, hero] = await Promise.all([getManualPayImage('selector'), getManualPayImage('hero')]);
-    res.json({ status: 'success', selector, hero });
+    publicJson(req, res, { status: 'success', selector, hero }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part

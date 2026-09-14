@@ -1411,20 +1411,36 @@ async function askShare(opts) {
   // stated goal ("every subdomain is used and randomly"). Run enough times
   // that a uniform pick over three cannot miss one by luck.
   const seen = new Set();
-  let offCountry = 0;
+  let offCountry = 0, firstVaried = new Set();
   for (let i = 0; i < 300; i++) {
     const r = await askShare({ currentRegion: () => ug });
+    // The reply is the whole POOL now, shuffled, so the app can advance to
+    // the next address without another round trip (Round 162). `host` is
+    // still the first of them, for a phone running the previous build.
+    for (const h of (r.hosts || [])) { if (!ugHosts.includes(h)) offCountry++; seen.add(h); }
     if (!ugHosts.includes(r.host)) offCountry++;
-    seen.add(r.host);
+    firstVaried.add(r.host);
   }
-  ck(offCountry === 0, 'every pick is one of this country’s own addresses');
-  ck(seen.size === 3, 'and all of them get used, not just one: ' + [...seen].sort().join(', '));
+  ck(offCountry === 0, 'every address handed out is one of this country’s own');
+  ck(seen.size === 3, 'and the pool carries all of them, not just one: ' + [...seen].sort().join(', '));
+  ck(firstVaried.size === 3,
+    'the order is shuffled per request, so one address is not everybody’s first: ' + firstVaried.size);
+  {
+    const r = await askShare({ currentRegion: () => ug });
+    ck(Array.isArray(r.hosts) && r.hosts.length === 3 && r.host === r.hosts[0],
+      'one reply carries the whole pool, and `host` stays as its first entry for an older app build');
+    ck(new Set(r.hosts).size === r.hosts.length, 'with no address repeated inside it');
+  }
 
   // "in that very country" -- a Kenyan member's invite can never carry a
   // Ugandan address. Sending one would be worse than cosmetic: the code is
   // refused at sign-up as belonging to another currency.
   const keSeen = new Set();
-  for (let i = 0; i < 120; i++) keSeen.add((await askShare({ currentRegion: () => ke })).host);
+  for (let i = 0; i < 120; i++) {
+    const r = await askShare({ currentRegion: () => ke });
+    keSeen.add(r.host);
+    for (const h of (r.hosts || [])) keSeen.add(h);
+  }
   ck([...keSeen].every(h => ['shy.example.test', 'm4te.example.test'].includes(h)),
     'a Kenyan member’s invite only ever carries a Kenyan address: ' + [...keSeen].sort().join(', '));
 
@@ -1449,8 +1465,8 @@ async function askShare(opts) {
     'the server picks; no hostname is accepted from the request');
   ck(/const region = currentRegion\(\);/.test(body) && /\(region\.labels \|\| \[\]\)/.test(body),
     'drawn from the member’s own region’s claimed address list and nothing else');
-  ck(/crypto\.randomInt\(pool\.length\)/.test(body),
-    'and picked with the CSPRNG, not Math.random');
+  ck(/crypto\.randomInt\(/.test(body) && !/Math\.random/.test(body),
+    'and shuffled with the CSPRNG, not Math.random');
 }
 {
   // The app half: the link the member copies, and WHEN it is re-picked.
@@ -1514,8 +1530,16 @@ async function askShare(opts) {
   const rr = stripComments(fnSource(client, 'renderReferral'));
   ck(/refreshShareHost\(\)/.test(rr),
     'and it is re-picked when the Referral screen is opened');
-  ck(/Promise\.all\(\[ api\('\/team\/stats'\), refreshShareHost\(\) \]\)/.test(rr),
+  ck(/Promise\.all\(\[ api\('\/team\/stats'\), shareReady \]\)/.test(rr),
     'alongside the stats, not as a second round trip in front of the screen');
+  // Round 162: the address is advanced BEFORE the first paint, so the link is
+  // painted once with its final address rather than changing under him a
+  // beat later. Order matters, so it is asserted as order.
+  {
+    const iRef = rr.indexOf('refreshShareHost()'), iPaint = rr.indexOf('paintReferral()');
+    ck(iRef !== -1 && iPaint !== -1 && iRef < iPaint,
+      'and the next address is taken before the first paint, so the link never changes under him');
+  }
   // Re-picked per OPEN, not once per session: boot() must not be the only
   // place it happens, or going back to the screen would keep one address.
   ck(!/refreshShareHost/.test(stripComments(fnSource(client, 'boot'))),
@@ -1546,8 +1570,185 @@ async function askShare(opts) {
     'and it repaints even when the stats call fails, because the ADDRESS may still have changed');
   ck(badRun.share === 1, 'the address is still fetched on a failed stats call');
   const rsh = stripComments(fnSource(client, 'refreshShareHost'));
-  ck(/STATE\.shareHost = r\.host/.test(rsh) && !/STATE\.settings/.test(rsh),
+  ck(!/STATE\.settings/.test(rsh),
     'the pick is kept on STATE itself, never written into STATE.settings');
+
+  // ── ROUND 162: CHANGING THE ADDRESS COSTS NO ROUND TRIP ──
+  // Owner: "l also need ... faster changing of the subdomain rations."
+  // RUN, not grepped: the whole claim is about how many requests it makes
+  // and which address comes out, and neither is visible in the text.
+  {
+    const pool = ['b5dh.x.test', 't3gs.x.test', 'x7k2.x.test', 'g26e.x.test'];
+    function build() {
+      const calls = { n: 0 };
+      const STATE = {};
+      const ctx = new Function('deps', `
+        const STATE = deps.STATE;
+        const api = async () => { deps.calls.n++; return { status: 'success', host: deps.pool[0], hosts: deps.pool.slice() }; };
+        ${fnSource(client, 'nextShareHost')}
+        ${fnSource(client, 'refreshShareHost')}
+        ${fnSource(client, 'shareOrigin')}
+        var _shareHosts = [], _shareIdx = -1, _sharePoolAt = 0;
+        var SHARE_POOL_MS = ${/SHARE_POOL_MS = ([^;]+);/.exec(client)[1]};
+        return { refreshShareHost, nextShareHost, host: () => STATE.shareHost };
+      `)({ calls, pool, STATE });
+      return { ctx, calls };
+    }
+    const { ctx, calls } = build();
+    const got = [];
+    for (let i = 0; i < 4; i++) { await ctx.refreshShareHost(); got.push(ctx.host()); }
+    ck(calls.n === 1, `four opens of the screen cost ONE request, not four (${calls.n})`);
+    ck(new Set(got).size === 4,
+      'and each open shows a different address: ' + got.join(', '));
+    ck(got.every(h => pool.includes(h)), 'every one of them from the pool the server sent');
+    await ctx.refreshShareHost();
+    ck(ctx.host() === got[0],
+      'a fifth open wraps back round rather than running out of addresses');
+    ck(calls.n === 1, 'still without asking again');
+    // The pool is re-read eventually, or an address the owner adds (or
+    // retires) would never reach a member who leaves the app open.
+    ck(/_sharePoolAt/.test(rsh) && /SHARE_POOL_MS/.test(rsh),
+      'the pool is re-read after a while, so a newly added address is picked up');
+    await ctx.refreshShareHost(true);
+    ck(calls.n === 2, 'and a forced refresh really does ask again');
+    // An older backend that only sends one host must still work: one address
+    // is a pool of one, not a broken link.
+    const one = new Function('deps', `
+      const STATE = deps.STATE;
+      const api = async () => ({ status: 'success', host: 'only.x.test' });
+      ${fnSource(client, 'nextShareHost')}
+      ${fnSource(client, 'refreshShareHost')}
+      var _shareHosts = [], _shareIdx = -1, _sharePoolAt = 0;
+      var SHARE_POOL_MS = 600000;
+      return { refreshShareHost, host: () => STATE.shareHost };
+    `)({ STATE: {} });
+    await one.refreshShareHost();
+    ck(one.host() === 'only.x.test',
+      'a backend that sends a single host still gives a working invite link');
+  }
+
+  // ── ROUND 162: A PLAIN READ IS ONE ROUND TRIP ──
+  // Content-Type: application/json is not CORS-safelisted, so sending it on
+  // a GET forces an OPTIONS preflight before EVERY read (measured in
+  // test-boot-speed.py against a real server). Run api() and read the
+  // headers it actually sends.
+  {
+    async function headersFor(path, opts) {
+      let sent = null;
+      const fn = new Function('deps', `
+        const STATE = { authEpoch: 0 };
+        const API_BASE = 'https://api.test';
+        const window = { fbAuth: null };
+        const showHostParked = () => {};
+        const fetch = async (u, o) => { deps.seen(o && o.headers); return { json: async () => ({ status: 'success' }) }; };
+        ${fnSource(client, 'api')}
+        return api;
+      `)({ seen: h => { sent = h; } });
+      await fn(path, opts);
+      return sent || {};
+    }
+    const get = await headersFor('/public/settings');
+    ck(!('Content-Type' in get),
+      'a read sends no Content-Type, so it is never preflighted: ' + JSON.stringify(get));
+    const post = await headersFor('/checkin', { method: 'POST', body: '{}' });
+    ck(post['Content-Type'] === 'application/json',
+      'a write still declares its JSON body');
+    ck(/maxAge: 86400/.test(bare),
+      'and the preflight a write does need is cached for a day rather than Chromium’s five seconds');
+  }
+
+  // ── ROUND 162: THE LOADER WAITS FOR FOUR REPLIES, NOT SEVEN ──
+  // The three heavy ones are still FIRED at the same instant (delaying them
+  // would only move the wait later) -- they are simply not awaited. Asserted
+  // on boot()'s own text because the runtime proof lives in
+  // test-boot-speed.py, which is far too slow for the mutation suite.
+  {
+    const b = stripComments(fnSource(client, 'boot'));
+    const awaited = /await Promise\.all\(\[ pSettings, pProducts, pFeed, pBanner \]\)/.test(b);
+    ck(awaited, 'the loader awaits settings, products, the feed and the banner');
+    for (const heavy of ['announcement-image', 'manual-pay-images', 'chipz-images'])
+      ck(new RegExp("api\\('/public/" + heavy + "'\\)").test(b),
+        `/public/${heavy} is still fetched at start-up`);
+    const iArt = b.indexOf('_artPromise'), iAwait = b.indexOf('await Promise.all([ pSettings');
+    ck(iArt !== -1 && iAwait !== -1 && iArt < iAwait,
+      'and the heavy three are fired BEFORE the wait, not after it');
+    ck(!/await Promise\.all\(\[ api\('\/public\/announcement-image'\)/.test(b),
+      'but the loader does not block on them');
+    const art = stripComments(fnSource(client, 'applyBootArtwork'));
+    ck(/paintHome\(\)/.test(art),
+      'and Home repaints when they land, or the spin banner and profile GIF never appear');
+    // The announcement dialog is the one thing that must NOT open before its
+    // own picture arrives -- it paints once and never repaints.
+    // showPage is `window.showPage = async function(name){...}`, so it has no
+    // name for fnSource to find -- sliced by its assignment instead, the
+    // same way this file already handles doLogin.
+    {
+      const at = client.indexOf('window.showPage = async function');
+      const sp = stripComments(client.slice(at, client.indexOf('\nwindow.', at + 10)));
+      ck(/_artPromise/.test(sp),
+        'the announcement waits for the artwork it needs rather than opening blank');
+    }
+  }
+
+  // ── ROUND 162: THE HEAVY REPLIES CARRY AN ETag ──
+  {
+    const pj = new Function('crypto', `
+      ${fnSource(bare, 'publicJson')}
+      return publicJson;
+    `)(require('crypto'));
+    function call(req) {
+      const out = { headers: {}, code: 200, body: null, ended: false };
+      const res = {
+        set: (k, v) => { out.headers[String(k).toLowerCase()] = v; return res; },
+        vary: () => res,
+        status: c => { out.code = c; return res; },
+        end: () => { out.ended = true; return res; },
+        send: b => { out.body = b; return res; },
+        json: b => { out.body = JSON.stringify(b); return res; },
+      };
+      pj(req, res, { status: 'success', image: 'x'.repeat(1000) }, 'public, max-age=60');
+      return out;
+    }
+    const first = call({ headers: {} });
+    ck(first.code === 200 && first.body && first.body.length > 900, 'a first read sends the body');
+    ck(!!first.headers.etag, 'with an ETag: ' + first.headers.etag);
+    ck(first.headers['cache-control'] === 'public, max-age=60', 'and the cache policy asked for');
+    const again = call({ headers: { 'if-none-match': first.headers.etag } });
+    ck(again.code === 304 && again.body === null,
+      'and a browser that already has it gets a 304 with NO body -- the whole saving');
+    // The tag has to depend on the CONTENT, or an upload would be served
+    // from a stale cache forever.
+    const other = new Function('crypto', `${fnSource(bare, 'publicJson')} return publicJson;`)(require('crypto'));
+    let tag2 = null;
+    other({ headers: {} }, { set: (k, v) => { if (String(k).toLowerCase() === 'etag') tag2 = v; }, vary(){}, status(){ return this; }, end(){}, send(){}, json(){} },
+      { status: 'success', image: 'DIFFERENT' }, 'no-cache');
+    ck(tag2 && tag2 !== first.headers.etag,
+      'a different payload gets a different tag, so an upload is never hidden by the cache');
+
+    // WHICH route uses WHICH policy, asserted per route. Proving publicJson
+    // behaves correctly says nothing about whether the heavy replies
+    // actually go through it -- the mutation that dropped the artwork route
+    // back to a bare res.json() went undetected until this was added.
+    const routeBody = (path) => {
+      const at = bare.indexOf("app.get('" + path + "'");
+      return at === -1 ? '' : bare.slice(at, bare.indexOf('\napp.', at + 10));
+    };
+    for (const path of ['/public/chipz-images', '/public/banner', '/public/announcement-image', '/public/manual-pay-images']) {
+      const b2 = routeBody(path);
+      ck(/publicJson\(req, res,/.test(b2) && /IMAGE_CACHE/.test(b2),
+        `${path} is served with an ETag and a short cache, not as a fresh megabyte every launch`);
+      ck(!/\bres\.json\(/.test(b2), `and ${path} has no uncached res.json() left`);
+    }
+    // Settings and prices deliberately take NO max-age: maintenance mode and
+    // a rate change have to bite on the next launch, not a minute later. The
+    // ETag still removes the bytes.
+    for (const path of ['/public/settings', '/public/products']) {
+      const b2 = routeBody(path);
+      ck(/publicJson\(req, res,/.test(b2), `${path} still carries an ETag`);
+      ck(!/IMAGE_CACHE/.test(b2),
+        `but ${path} is revalidated every time -- a stale rate or maintenance flag is not acceptable`);
+    }
+  }
 }
 }
 

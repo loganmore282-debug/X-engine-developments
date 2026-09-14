@@ -684,8 +684,8 @@ MUTATIONS = [
 
     # ── the invite link carries a random address of the member's own country ──
     ('the invite link stops rotating and names one address forever', SERVER,
-     "    res.json({ status: 'success', host: pool[crypto.randomInt(pool.length)], count: pool.length });",
-     "    res.json({ status: 'success', host: pool[0], count: pool.length });"),
+     "    res.json({ status: 'success', host: shuffled[0], hosts: shuffled, count: shuffled.length });",
+     "    res.json({ status: 'success', host: pool[0], hosts: [pool[0]], count: 1 });"),
 
     ('the invite link can carry another country address', SERVER,
      "    const pool = (region.labels || [])\n      .map(l => (_baseDomain ? l + '.' + _baseDomain : ''))\n      .filter(Boolean);\n    if (!pool.length) return res.json(stay);",
@@ -695,21 +695,22 @@ MUTATIONS = [
      "  } catch (e) { res.json(stay); }\n});\n// Members must never be shown a payout",
      "  } catch (e) { res.status(500).json({ status: 'error' }); }\n});\n// Members must never be shown a payout"),
 
-    ('the share address is picked with Math.random instead of the CSPRNG', SERVER,
-     "host: pool[crypto.randomInt(pool.length)]",
-     "host: pool[Math.floor(Math.random() * pool.length)]"),
+    # OBSOLETE: there is no single "pick" any more -- the handler shuffles
+    # the whole pool, and "the pool is shuffled with Math.random instead of
+    # the CSPRNG" below replaces this exactly.
+
 
     ('the invite link goes back to the address he is browsing on', CLIENT,
      "  const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';",
      "  const link = code ? `${location.origin}/?ref=${encodeURIComponent(code)}` : '';"),
 
     ('the rotated address is never fetched', CLIENT,
-     "  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);",
-     "  const [r] = await Promise.all([ api('/team/stats') ]);"),
+     "  const shareReady = refreshShareHost();",
+     "  const shareReady = Promise.resolve();"),
 
     ('the screen does not repaint when the stats call fails, so the new address is never shown', CLIENT,
-     "  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);\n  if (r.status === 'success') STATE.teamStats = r;",
-     "  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);\n  if (r.status !== 'success') return;\n  STATE.teamStats = r;"),
+     "  const [r] = await Promise.all([ api('/team/stats'), shareReady ]);\n  if (r.status === 'success') STATE.teamStats = r;",
+     "  const [r] = await Promise.all([ api('/team/stats'), shareReady ]);\n  if (r.status !== 'success') return;\n  STATE.teamStats = r;"),
 
     ('an empty pick blanks the invite link instead of falling back', CLIENT,
      "  return h ? (location.protocol + '//' + h) : location.origin;",
@@ -883,6 +884,79 @@ MUTATIONS = [
     ('the panel resolves a one-country screen differently from the server', ADMIN,
      "function adminOneRegion(){ return (!ADMIN_REGION || ADMIN_REGION === 'all') ? 'ug' : ADMIN_REGION; }",
      "function adminOneRegion(){ return ADMIN_REGION; }"),
+    # ── Round 162: faster loading, and instant address rotation ──
+    ('the invite pool shrinks back to one address per request', SERVER,
+     "res.json({ status: 'success', host: shuffled[0], hosts: shuffled, count: shuffled.length });",
+     "res.json({ status: 'success', host: shuffled[0], count: shuffled.length });"),
+    ('the pool is shuffled with Math.random instead of the CSPRNG', SERVER,
+     "    const shuffled = pool.slice();\n    for (let i = shuffled.length - 1; i > 0; i--) {\n      const j = crypto.randomInt(i + 1);",
+     "    const shuffled = pool.slice();\n    for (let i = shuffled.length - 1; i > 0; i--) {\n      const j = Math.floor(Math.random() * (i + 1));"),
+    ('the pool is handed out in a fixed order, so one address is everybody’s first', SERVER,
+     """    const shuffled = pool.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {""",
+     """    const shuffled = pool.slice();
+    for (let i = 0; i > 0; i--) {"""),
+    ('an older app build loses its invite link', SERVER,
+     "res.json({ status: 'success', host: shuffled[0], hosts: shuffled, count: shuffled.length });",
+     "res.json({ status: 'success', hosts: shuffled, count: shuffled.length });"),
+
+    ('every open of the Referral screen asks the server again', CLIENT,
+     "  if (!force && _shareHosts.length && (Date.now() - _sharePoolAt) < SHARE_POOL_MS) {",
+     "  if (false) {"),
+    ('the address stops advancing, so every open shows the same one', CLIENT,
+     "  _shareIdx = (_shareIdx + 1) % _shareHosts.length;",
+     "  _shareIdx = 0;"),
+    ('the pool is never re-read, so a newly added address never reaches anyone', CLIENT,
+     "  if (!force && _shareHosts.length && (Date.now() - _sharePoolAt) < SHARE_POOL_MS) {",
+     "  if (_shareHosts.length) {"),
+    ('a backend that sends one host leaves the member with no invite link', CLIENT,
+     """  const pool = (Array.isArray(r.hosts) && r.hosts.length) ? r.hosts.slice()
+             : (r.host ? [r.host] : []);""",
+     "  const pool = (Array.isArray(r.hosts) && r.hosts.length) ? r.hosts.slice() : [];"),
+    ('the address is taken after the first paint, so the link changes under him', CLIENT,
+     """  const shareReady = refreshShareHost();
+  paintReferral();""",
+     """  paintReferral();
+  const shareReady = refreshShareHost();"""),
+
+    ('every read is preflighted again', CLIENT,
+     "  const headers = Object.assign({}, opts.headers || {});\n  if (opts.body != null && !headers['Content-Type']) headers['Content-Type'] = 'application/json';",
+     "  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});"),
+    ('a write stops declaring its JSON body', CLIENT,
+     "  if (opts.body != null && !headers['Content-Type']) headers['Content-Type'] = 'application/json';",
+     ""),
+    ('the preflight cache goes back to five seconds', SERVER,
+     "  maxAge: 86400\n}));",
+     "}));"),
+
+    ('the loading screen waits for the artwork again', CLIENT,
+     "  const [s, p, f, b] = await Promise.all([ pSettings, pProducts, pFeed, pBanner ]);",
+     "  const [s, p, f, b] = await Promise.all([ pSettings, pProducts, pFeed, pBanner, _artPromise ]);"),
+    ('the artwork is fetched lazily instead of at start-up', CLIENT,
+     "  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images') ])",
+     "  _artPromise = Promise.resolve([{}, {}, {}])\n    .then(() => [{}, {}, {}])"),
+    ('Home never repaints, so the spin banner and profile GIF never appear', CLIENT,
+     "  try { if (STATE.page === 'home' && $('app') && $('app').style.display !== 'none') paintHome(); } catch (_) {}",
+     ""),
+    ('the announcement opens before its own picture has arrived', CLIENT,
+     "    const afterArt = (fn) => (_artPromise ? withTimeout(_artPromise, 4000).then(fn).catch(fn) : fn());",
+     "    const afterArt = (fn) => fn();"),
+
+    ('the public reads lose their ETag, so every launch re-downloads them', SERVER,
+     "  const etag = 'W/\"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '\"';",
+     "  const etag = '';"),
+    ('a matching ETag still gets the whole body back', SERVER,
+     "  if (req.headers['if-none-match'] === etag) return res.status(304).end();\n  res.set('Content-Type', 'application/json; charset=utf-8');",
+     "  res.set('Content-Type', 'application/json; charset=utf-8');"),
+    ('the ETag stops depending on the content, so an upload is hidden by the cache', SERVER,
+     "crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22)",
+     "'fixed'"),
+    ('the seven-slot image bundle goes back to no cache headers at all', SERVER,
+     "    publicJson(req, res, { status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard }, IMAGE_CACHE);",
+     "    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard });"),
+    ('settings are cached for a minute, so maintenance mode takes a minute to bite', SERVER,
+     "    }, region: publicRegionView(), regionCount: (await getRegions()).filter(r => r.active).length });",
+     "    }, region: publicRegionView(), regionCount: (await getRegions()).filter(r => r.active).length }, IMAGE_CACHE);"),
 ]
 
 

@@ -388,7 +388,25 @@ async function api(path, opts){
   // every single page load.
   const isPublicCall = path.indexOf('/public/') === 0;
   const startEpoch = STATE.authEpoch;
-  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  // ── Content-Type ONLY WHEN THERE IS A BODY ──
+  // MEASURED (test-boot-speed.py, against a real cross-origin server):
+  // `Content-Type: application/json` is not a CORS-safelisted request
+  // header, so sending it turns even a plain GET into a PREFLIGHTED request
+  // -- an OPTIONS round trip before every single call, per URL. With eight
+  // reads on the boot path that was eight wasted round trips, on the one
+  // connection where latency costs the most.
+  //
+  // It was never needed on a GET: there is no body to describe. Express's
+  // JSON parser only runs when a body is present, so nothing on the server
+  // depends on it either. The harness proves both directions -- with the
+  // header the server logs ['OPTIONS','GET'], without it ['GET'], same
+  // answer.
+  //
+  // POSTs still send it, and their preflight is now cached for a day
+  // (cors({maxAge}) in server.js) rather than Chromium's five-second
+  // default.
+  const headers = Object.assign({}, opts.headers || {});
+  if (opts.body != null && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   if (window.fbAuth && window.fbAuth.currentUser) {
     try { headers['Authorization'] = 'Bearer ' + (await window.fbAuth.currentUser.getIdToken()); } catch (_) {}
   }
@@ -806,8 +824,34 @@ window.doLogout = async function(){
 // strip on Home for a beat. Now the activity feed is prefetched here too,
 // and every caller awaits this same promise (capped by withTimeout, see
 // below) before the spinner ever comes down, so nothing pops in afterward.
+// ── WHAT THE LOADING SCREEN IS ALLOWED TO WAIT FOR ──
+// Owner: "l also need faster loading."
+//
+// MEASURED (test-boot-speed.py, against the real built app): the loader used
+// to wait on about 1.3 MB of JSON, and 900 KB of it was /public/chipz-images
+// -- SEVEN admin-uploaded images, base64'd inside one reply. Of those seven,
+// exactly two can appear on the first screen (Home's spin banner and the
+// profile GIF); the rest belong to screens nobody has opened yet -- the
+// Download backdrop, the manual-payment logos, the announcement picture, the
+// Referral banner, the Account logo, the two sign-in backdrops.
+//
+// So the three heavy replies are fired at the same instant as everything
+// else -- they are NOT delayed, and nothing is fetched lazily later -- but
+// the app stops BLOCKING on them. They land underneath and repaint what is
+// on screen.
+//
+// _artPromise is that work, exposed so the one thing that genuinely needs a
+// picture before it appears (the announcement dialog) can wait for it
+// instead of opening blank.
+var _artPromise = null;
 async function boot(){
-  const [s, p, f, b, ai, mpi, ci] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner'), api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images') ]);
+  // Fired together. Only the first four are awaited.
+  const pSettings = api('/public/settings'), pProducts = api('/public/products');
+  const pFeed = api('/public/activity-feed'), pBanner = api('/public/banner');
+  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images') ])
+    .then(([ai, mpi, ci]) => { applyBootArtwork(ai, mpi, ci); })
+    .catch(() => {});
+  const [s, p, f, b] = await Promise.all([ pSettings, pProducts, pFeed, pBanner ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   // The region that owns this hostname, so the landing screen, Sign Up and
   // the product list already read in the right currency before anybody has
@@ -849,11 +893,15 @@ async function boot(){
   // Cheap and self-limiting: it only touches the DOM when the URL actually
   // differs from what is on screen.
   refreshHomeBannerIfChanged();
-  // Same "prefetch alongside settings, zero added visible latency" reasoning
-  // as STATE.homeBanner just above -- fetched unconditionally every boot
-  // (cheap when unset, matches the existing banner's own tradeoff) so the
-  // announcement dialog's image is already known the instant
-  // maybeShowAnnouncement() runs, not fetched lazily after the dialog opens.
+  applyNumberFont();
+}
+// Everything the first screen does not need. Called when the three heavy
+// replies land -- which may be before or after the app becomes visible, so
+// it repaints whatever is currently on screen rather than assuming.
+function applyBootArtwork(ai, mpi, ci){
+  // Fetched with the rest rather than lazily on open, so the announcement
+  // dialog's image is known by the time it opens (maybeShowAnnouncement
+  // waits on _artPromise) instead of being fetched after it is already up.
   STATE.announceImage = (ai.status === 'success' && ai.image) ? ai.image : null;
   // Same reasoning again -- a member could reach the manual-deposit flow
   // moments after the app becomes visible, so both optional replacement
@@ -883,7 +931,11 @@ async function boot(){
   STATE.authCardImage = (ci.status === 'success' && ci.authcard) ? ci.authcard : null;
   applyAuthTagline();
   applyAuthBackgrounds();
-  applyNumberFont();
+  // Repaint what is actually on screen. Home is the one first screen that
+  // shows any of this (the spin banner and the profile GIF), and it is the
+  // page the app opens on -- every other consumer renders on open and reads
+  // STATE then, so it needs nothing here.
+  try { if (STATE.page === 'home' && $('app') && $('app').style.display !== 'none') paintHome(); } catch (_) {}
 }
 function applyNumberFont(){
   // Defaults to the app's own face, not the old serif. This line was the
@@ -1337,6 +1389,11 @@ async function bootFromNetwork(uid){
   $('app').style.display = '';
   maybeResumeManualPayment();
   showPage(STATE.page || 'home');
+  // The invite-address pool, fetched behind the app rather than in front of
+  // it, so even the FIRST open of the Referral screen has an address ready
+  // and costs no round trip. Tiny (a few hostnames), un-awaited, and a
+  // failure is silent -- shareOrigin() falls back to the current origin.
+  refreshShareHost().catch(() => {});
   // Still prefetched, just not in front of the member. Each screen's own
   // render() re-fetches what it needs anyway, so whichever tab is open
   // repaints itself when its data arrives -- nothing here has to push to it.
@@ -1761,8 +1818,14 @@ window.showPage = async function(name){
     // nothing cached yet and a still-in-flight live settings fetch -- a real
     // edge case, not the normal path.
     const showAnnouncementNow = () => { if (STATE.page === 'home' && !isAnyOverlayOpen()) maybeShowAnnouncement(); };
-    if (STATE.settings) showAnnouncementNow();
-    else withTimeout(_bootPromise, 6000).then(showAnnouncementNow);
+    // The dialog's own picture is one of the three heavy replies the loader
+    // no longer blocks on, so wait for THAT rather than for boot as a whole:
+    // opening the dialog a moment before its banner arrives would show the
+    // placeholder and never repaint. Capped, and a failure still shows the
+    // dialog -- an announcement with no picture beats no announcement.
+    const afterArt = (fn) => (_artPromise ? withTimeout(_artPromise, 4000).then(fn).catch(fn) : fn());
+    if (STATE.settings) afterArt(showAnnouncementNow);
+    else withTimeout(_bootPromise, 6000).then(() => afterArt(showAnnouncementNow));
   }
   else if (name === 'catalog') await renderCatalog();
   else if (name === 'products') await renderProducts();
@@ -1935,7 +1998,15 @@ var _bannerPreloadEl = null;
 // meant the error had already fired while it was detached, so the fallback
 // never ran and the banner sat blank.
 var _bannerPreloadOk = false;
-var BANNER_PRELOAD_MS = 10000;
+// Ten seconds was too long to hold a member on a loading screen for a
+// decorative clip. The wait exists because the owner asked for it ("the
+// start up loader must have loaded also the video before it"), and it is
+// paid ONCE per upload -- the year-long immutable cache makes every later
+// open resolve from the phone -- so the cap only bites on a first open after
+// a new video, which is exactly when four seconds of loader is plenty and
+// ten is a member deciding the app is broken. A clip still buffering when
+// the cap expires keeps loading behind the app.
+var BANNER_PRELOAD_MS = 4000;
 function preloadBannerVideo(ms){
   const src = STATE.homeBannerVideo;
   if (!src) return Promise.resolve('none');
@@ -2369,19 +2440,65 @@ function paintCatalog(){
 // immediately instead of flashing the address the member is browsing on.
 // And a failure is silent by design: the link falls back to this origin,
 // which is always a working invite.
-async function refreshShareHost(){
+// ── THE INVITE ADDRESS CHANGES WITHOUT A ROUND TRIP ──
+// Owner: "l also need ... faster changing of the subdomain rations"
+// (rotations).
+//
+// The server hands over its country's whole shuffled pool (see
+// /public/share-host), so advancing to the next address is local: opening
+// the Referral screen picks the next one instantly instead of waiting on a
+// request, and the link is painted ONCE with its final address rather than
+// changing under the member a moment later.
+//
+// The pool is still entirely the server's choice -- which addresses exist,
+// and in what order. This only walks it.
+var _shareHosts = [], _shareIdx = -1, _sharePoolAt = 0;
+var SHARE_POOL_MS = 10 * 60 * 1000;
+function nextShareHost(){
+  if (!_shareHosts.length) return '';
+  // Walks the pool in order rather than picking at random each time: over a
+  // few opens that visits EVERY address, which is the whole point ("so only
+  // rotation such that every subdomain is used"), where random picking
+  // leaves some unused and repeats others.
+  _shareIdx = (_shareIdx + 1) % _shareHosts.length;
+  STATE.shareHost = _shareHosts[_shareIdx];
+  return STATE.shareHost;
+}
+async function refreshShareHost(force){
+  // A pool that is still fresh is not re-fetched -- that is the round trip
+  // being removed. Re-read after ten minutes so an address the owner adds
+  // (or retires) reaches a member who leaves the app open all day.
+  if (!force && _shareHosts.length && (Date.now() - _sharePoolAt) < SHARE_POOL_MS) {
+    nextShareHost();
+    return;
+  }
   const r = await api('/public/share-host');
-  if (r && r.status === 'success' && r.host) STATE.shareHost = r.host;
+  if (!r || r.status !== 'success') return;
+  // `hosts` is the pool; `host` is what an older backend sends, and one
+  // address is a pool of one. Either way the rest of this works unchanged.
+  const pool = (Array.isArray(r.hosts) && r.hosts.length) ? r.hosts.slice()
+             : (r.host ? [r.host] : []);
+  if (!pool.length) return;
+  _shareHosts = pool;
+  _sharePoolAt = Date.now();
+  _shareIdx = -1;
+  nextShareHost();
 }
 function shareOrigin(){
   const h = STATE.shareHost;
   return h ? (location.protocol + '//' + h) : location.origin;
 }
 async function renderReferral(){
+  // Called BEFORE the first paint on purpose. With the pool already known,
+  // refreshShareHost() advances to the next address synchronously (its warm
+  // branch has no await in front of it), so the link is painted ONCE with
+  // its final address. Painting first and repainting after meant the member
+  // watched the address change a beat after opening the screen.
+  const shareReady = refreshShareHost();
   paintReferral();
   // Both at once -- the rotated address must not add a second round trip in
   // front of a screen the member opened to copy one line of text.
-  const [r] = await Promise.all([ api('/team/stats'), refreshShareHost() ]);
+  const [r] = await Promise.all([ api('/team/stats'), shareReady ]);
   if (r.status === 'success') STATE.teamStats = r;
   // Repainted whether or not the stats call succeeded: the ADDRESS may have
   // changed even when nothing else did, and that is the whole feature.
