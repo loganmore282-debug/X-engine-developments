@@ -3963,3 +3963,20 @@ clothes:**
 One mutation was **deleted rather than propped up**: removing the empty-pool guard makes
 `crypto.randomInt(0)` throw, the catch answers the identical `stay` reply, and the
 observable behaviour is unchanged — so no honest assertion can fail on it.
+
+### Round 157 follow-up — a port collision is not a test failure
+
+The full suite reported `test-banner-video-corp.py` failing with
+`OSError: [Errno 98] Address already in use`. That was **me**: I ran
+`test-region-currency.py` alongside the batch to save time, and both bound port **8871**.
+Whichever starts second cannot open its server and dies — which reads exactly like a real
+failure and is not one. It passed on its own immediately.
+
+`test-region-currency.py` now binds **8869**, and the two were then run **at the same
+time** to prove it (both exit 0). Every harness in this suite picks its own fixed port;
+keep it that way, and when one dies with "Address already in use", check for a second
+harness on the same port **before** looking for a bug in the app.
+
+Ports currently in use across the suite: 8000, 8640, 8763, 8769, 8771, 8773, 8796,
+8798–8799, 8801, 8803–8805, 8812–8814, 8825, 8831, 8833, 8835, 8841, 8843, 8847, 8851,
+8853, 8857, 8859, 8861, 8867, 8869, 8871, 8873, 8875, 8877, 8879, 8881, 8883, 8891.

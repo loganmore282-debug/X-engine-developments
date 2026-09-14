@@ -22,7 +22,12 @@ from playwright.async_api import async_playwright
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/region-currency'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
-PORT = 8871
+# 8869, not 8871: test-banner-video-corp.py already binds 8871, and two
+# harnesses on one port cannot run at the same time -- it surfaces as
+# "OSError: Address already in use" in whichever one starts second, which
+# reads like a real failure and is not. Every harness in this suite picks
+# its own port; keep it that way.
+PORT = 8869
 API = 'https://chipz-server.onrender.com'
 
 # Exactly the shape publicRegionView() sends, usesBareLocal included --
