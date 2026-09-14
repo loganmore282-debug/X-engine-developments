@@ -781,6 +781,26 @@ var ADMIN_REGION = 'ug';
 var ADMIN_REGIONS = [{ key:'ug', name:'Uganda', currency:'UGX', dialCode:'256', localLength:9, prefixes:['7'], utcOffsetMin:180, hosts:[], active:true, isDefault:true }];
 const REGION_SCOPED_READS = ['/admin/settings', '/admin/products'];
 const REGION_SCOPED_WRITES = ['/admin/settings/update', '/admin/products/save', '/admin/manual-numbers/save'];
+// ── THE COUNTRY TOGGLE, ON EVERY SCREEN ──
+// Owner: "make sure dashboards can be categorized so one toggle to see a
+// country settings ie dashboard, analytics, referrals, transactions,
+// settings, admins, deposits, withdrawals etc."
+//
+// These are the LISTS and TOTALS, and they differ from the two config routes
+// above in one important way: the region is stamped on ALWAYS, Uganda
+// included. For settings and products, "no region" already means the
+// founding country, so leaving it off was the same thing. For a list, "no
+// region" means EVERY country -- so not stamping it while Uganda is picked
+// would show a mixed list under a label saying Uganda.
+const REGION_FILTERED_READS = ['/admin/users', '/admin/stats', '/admin/referrals/list'];
+const REGION_FILTERED_WRITES = ['/admin/deposits/list', '/admin/withdrawals/list', '/admin/transactions/list', '/admin/analytics'];
+// Every screen the toggle actually changes, so the picker is shown there and
+// nowhere it would be decoration.
+const REGION_AWARE_TABS = ['dashboard', 'analytics', 'users', 'deposits', 'withdrawals', 'transactions', 'referrals', 'settings', 'products'];
+// Screens that can only ever mean ONE country. Picking "All countries" and
+// opening one of these would otherwise silently edit the founding country's
+// figures under an "All countries" label.
+const REGION_SINGLE_TABS = ['settings', 'products'];
 // Mirrors GLOBAL_ONLY_SETTINGS in server.js. The Rates card saves ONE
 // payload that mixes per-country rates with these backend-wide controls, so
 // with another country picked the server would refuse the whole save and the
@@ -794,14 +814,22 @@ function curOf(key){ const r = regionByKeyAdmin(key); return (r && r.currency) |
 function adminCur(){ return curOf(ADMIN_REGION); }
 async function api(path, body, method){
   method = method || (body ? 'POST' : 'GET');
-  if (ADMIN_REGION && ADMIN_REGION !== 'ug') {
-    if (REGION_SCOPED_READS.includes(path)) path += '?region=' + encodeURIComponent(ADMIN_REGION);
-    else if (REGION_SCOPED_WRITES.includes(path)) {
-      body = Object.assign({ region: ADMIN_REGION }, body || {});
-      if (body.settings && typeof body.settings === 'object') {
-        body.settings = Object.assign({}, body.settings);
-        for (const k of ADMIN_GLOBAL_ONLY) delete body.settings[k];
-      }
+  // The lists and totals: always stamped, including Uganda and including
+  // 'all'. See REGION_FILTERED_READS for why.
+  if (REGION_FILTERED_READS.includes(path)) path += '?region=' + encodeURIComponent(ADMIN_REGION || 'all');
+  else if (REGION_FILTERED_WRITES.includes(path)) body = Object.assign({ region: ADMIN_REGION || 'all' }, body || {});
+  // Settings and products belong to exactly one country, so "All countries"
+  // is not a thing they can be asked for -- they fall back to the founding
+  // country, which is what the tab itself says it is showing.
+  else {
+    const one = (!ADMIN_REGION || ADMIN_REGION === 'all') ? 'ug' : ADMIN_REGION;
+    if (one !== 'ug') {
+      if (REGION_SCOPED_READS.includes(path)) path += '?region=' + encodeURIComponent(one);
+      else if (REGION_SCOPED_WRITES.includes(path)) body = Object.assign({ region: one }, body || {});
+    }
+    if (REGION_SCOPED_WRITES.includes(path) && body && body.settings && typeof body.settings === 'object') {
+      body.settings = Object.assign({}, body.settings);
+      for (const k of ADMIN_GLOBAL_ONLY) delete body.settings[k];
     }
   }
   try{
@@ -1027,9 +1055,32 @@ function switchTab(name){
   try { sessionStorage.setItem('snow_admin_tab', name); } catch (_) {}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
   const c=$('content'); c.innerHTML=spinnerHtml();
-  ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
+  const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings, regions:renderRegions, admins:renderAdmins, auditlog:renderAuditLog }[name])();
+     referrals:renderReferrals, settings:renderSettings, regions:renderRegions, admins:renderAdmins, auditlog:renderAuditLog }[name]);
+  // The country toggle is added AFTER the tab paints, centrally, rather than
+  // by editing every render function -- and only on the tabs it actually
+  // changes (REGION_AWARE_TABS). Settings and Products paint their own
+  // picker with a longer caption, so paintRegionPicker leaves those alone.
+  Promise.resolve(fn()).then(() => { if (_tab === name) paintRegionPicker(name); }).catch(() => {});
+}
+// Puts the country toggle at the top of a tab that does not paint one
+// itself. Idempotent: a tab that already has one (Settings, Products) is
+// left as it is, so its own caption survives.
+function paintRegionPicker(name){
+  try {
+    if (!REGION_AWARE_TABS.includes(name)) return;
+    if ($('regionPick')) { wireRegionPicker(); return; }
+    const html = regionPickerHtml('');
+    if (!html) return;
+    const holder = document.createElement('div');
+    holder.innerHTML = html;
+    const card = holder.firstElementChild;
+    const c = $('content');
+    if (!card || !c) return;
+    c.insertBefore(card, c.firstChild);
+    wireRegionPicker();
+  } catch (_) {}
 }
 async function refreshBadges(){
   const s = await api('/admin/badges');
@@ -1116,6 +1167,11 @@ function liveTick(){
   const scrollY = window.scrollY;
   Promise.resolve((RENDERERS[tab]||(()=>{}))()).then(()=>{
     if(staleTab(tab)) return; // admin switched tabs while this was loading -- don't touch whatever's shown now
+    // A full render on tick rebuilds the panel shell, which takes the
+    // country toggle with it. The quiet* refreshes patch in place and leave
+    // it alone; paintRegionPicker is idempotent, so calling it either way
+    // is correct and cheap.
+    paintRegionPicker(tab);
     window.scrollTo(0, scrollY);
   }).catch(()=>{});
 }
@@ -2482,7 +2538,10 @@ async function loadAdminRegions(){
     if (r.baseDomain) ADMIN_BASE_DOMAIN = r.baseDomain;
     // A country that has since been deleted must not stay selected, or
     // every save would be refused with "there is no region".
-    if (!ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';
+    // 'all' is a real selection on the list and total screens, not a
+    // country id, so it must survive this check -- without the exception it
+    // snapped straight back to Uganda the moment any tab reloaded regions.
+    if (ADMIN_REGION !== 'all' && !ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';
   }
   return ADMIN_REGIONS;
 }
@@ -2491,13 +2550,26 @@ async function loadAdminRegions(){
 // should not have to look at a country selector on every screen.
 function regionPickerHtml(label){
   if (ADMIN_REGIONS.length < 2) return '';
-  const opts = ADMIN_REGIONS.map(r =>
+  // "All countries" is offered on the lists and totals, but not on Settings
+  // or Products -- those belong to exactly one country.
+  const single = REGION_SINGLE_TABS.includes(_tab);
+  const all = single ? '' :
+    `<option value="all" ${ADMIN_REGION === 'all' ? 'selected' : ''}>All countries</option>`;
+  const opts = all + ADMIN_REGIONS.map(r =>
     `<option value="${esc(r.key)}" ${r.key === ADMIN_REGION ? 'selected' : ''}>${esc(r.name)} (${esc(r.currency)})${r.active === false ? ' - off' : ''}</option>`).join('');
+  // With "All countries" picked, the figures on screen are in more than one
+  // currency at once, so say so rather than letting them read as one.
+  const mixed = !single && ADMIN_REGION === 'all'
+    ? 'Showing every country together &mdash; amounts are in each row\'s own currency, so totals mix currencies. Pick one country for figures that add up.'
+    : '';
+  const note = single && ADMIN_REGION === 'all'
+    ? `Showing <b>${esc(regionByKeyAdmin('ug').name)}</b> &mdash; this screen belongs to one country at a time.`
+    : '';
   return `<div class="card" style="margin-bottom:12px">
     <div class="row" style="align-items:center;gap:10px">
       <b style="flex:0 0 auto">Country</b>
       <select id="regionPick" style="flex:0 0 auto;max-width:260px">${opts}</select>
-      <span class="muted" style="flex:1">${esc(label || '')}</span>
+      <span class="muted" style="flex:1">${note || mixed || esc(label || '')}</span>
     </div>
   </div>`;
 }
@@ -2533,6 +2605,16 @@ async function renderRegions(){
       <h2 class="sec" style="flex:1;margin:0">Countries (${ADMIN_REGIONS.length})</h2>
       <button class="btn sm" id="newRegion">+ New country</button>
     </div>
+    ${baseDomainWarningHtml()}
+    <div class="card">
+      <h2 class="sec" style="margin:0 0 4px;font-size:15px">Which country does an address serve?</h2>
+      <p class="muted" style="margin:0 0 8px">Paste a web address to find out which country it shows, and why. Use this whenever a subdomain behaves oddly &mdash; wrong currency, a correct password refused, or a referral code rejected.</p>
+      <div class="row" style="gap:8px">
+        <input id="hostCheck" placeholder="g26e.${esc(ADMIN_BASE_DOMAIN)}" style="flex:1">
+        <button class="btn sm" id="hostCheckBtn">Check</button>
+      </div>
+      <div id="hostCheckOut" style="margin-top:10px"></div>
+    </div>
     <div class="card">
       <p class="muted" style="margin:0 0 10px">Each country has its own subdomain, currency, dialling code and number shape.
       Its rates and its product prices are edited on the <b>Settings</b> and <b>Products</b> tabs with that country picked at the top.
@@ -2549,6 +2631,77 @@ async function renderRegions(){
     b.addEventListener('click', () => generateRegionLabel(b.dataset.genRegion, b, Number(b.dataset.genCount) || 1)));
   document.querySelectorAll('[data-del-region]').forEach(b =>
     b.addEventListener('click', () => deleteRegion(b.dataset.delRegion)));
+  const hcb = $('hostCheckBtn');
+  if (hcb) hcb.addEventListener('click', () => checkHost());
+  const hci = $('hostCheck');
+  if (hci) hci.addEventListener('keydown', e => { if (e.key === 'Enter') checkHost(); });
+  const fixBtn = $('useThisDomainBtn');
+  if (fixBtn) fixBtn.addEventListener('click', () => useThisDomainAsBase(fixBtn));
+}
+// ── THE MISCONFIGURATION THAT BREAKS EVERY SHORT ADDRESS AT ONCE ──
+// Short addresses are built as <short name>.<base domain>. If the base
+// domain still holds the built-in default while the real site is on a
+// domain of the owner's own, NOTHING matches: every subdomain quietly falls
+// back to the founding country, so members see the wrong currency, a
+// correct password is refused (the login address carries the wrong
+// dialling code) and every referral code is rejected as belonging to
+// another country. Nothing on screen says so -- which is exactly how it
+// went unnoticed. The panel knows its OWN hostname, so it can just check.
+function adminOwnDomain(){
+  const h = String(location.hostname || '').toLowerCase();
+  // The panel is often hosted somewhere else entirely (Render, EdgeOne), in
+  // which case its own hostname says nothing about the members' domain.
+  if (!h || h === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return '';
+  if (/\.(onrender\.com|edgeone\.app|edgeone\.site|edgeone\.dev|pages\.dev)$/.test(h)) return '';
+  const parts = h.split('.');
+  return parts.length > 2 ? parts.slice(-2).join('.') : h;
+}
+function baseDomainWarningHtml(){
+  const withLabels = ADMIN_REGIONS.filter(r => (r.labels || []).length);
+  const own = adminOwnDomain();
+  const mismatch = own && ADMIN_BASE_DOMAIN && own !== ADMIN_BASE_DOMAIN;
+  if (!mismatch && (ADMIN_BASE_DOMAIN || !withLabels.length)) return '';
+  const warn = 'background:#fff4e5;border:1px solid #f0b357;border-radius:10px;padding:12px 14px;margin-bottom:12px';
+  if (!ADMIN_BASE_DOMAIN) return `<div style="${warn}"><b>No base domain is set.</b> Short addresses are built from it, so none of them resolve to a country right now. Set it under <b>Settings &rarr; Where the app may be opened from</b>.</div>`;
+  return `<div style="${warn}">
+    <b>Your short addresses probably do not work.</b>
+    The base domain is set to <code>${esc(ADMIN_BASE_DOMAIN)}</code>, but you are using this panel on <code>${esc(own)}</code>.
+    Short addresses are built as <code>&lt;short name&gt;.${esc(ADMIN_BASE_DOMAIN)}</code>, so an address on <code>${esc(own)}</code> matches no country &mdash;
+    it falls back to the founding country, which shows the wrong currency, refuses correct passwords and rejects every referral code.
+    <div style="margin-top:10px"><button class="btn sm" id="useThisDomainBtn">Use ${esc(own)} as the base domain</button></div>
+  </div>`;
+}
+async function useThisDomainAsBase(btn){
+  const own = adminOwnDomain();
+  if (!own) return;
+  if (!confirm(`Set the base domain to ${own}? Every country's short addresses will then be built as <short name>.${own}.`)) return;
+  const was = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  // baseDomain is backend-wide, so it is saved on the founding country --
+  // the panel's api() strips backend-wide fields from another country's save.
+  const keep = ADMIN_REGION; ADMIN_REGION = 'ug';
+  const d = await api('/admin/settings/update', { settings: { baseDomain: own } });
+  ADMIN_REGION = keep;
+  btn.disabled = false; btn.textContent = was;
+  if (d.status !== 'success') return toast(d.message || 'Could not save the base domain', 'err');
+  toast('Base domain set to ' + own, 'ok');
+  await loadAdminRegions();
+  switchTab('regions');
+}
+async function checkHost(){
+  const host = ($('hostCheck').value || '').trim();
+  const out = $('hostCheckOut');
+  if (!host) { out.innerHTML = '<span class="muted">Type an address first.</span>'; return; }
+  out.innerHTML = '<span class="muted">Checking…</span>';
+  const d = await api('/admin/regions/check-host', { host });
+  if (d.status !== 'success') { out.innerHTML = `<span class="muted">${esc(d.message || 'Could not check that address')}</span>`; return; }
+  const bad = !d.claimed || d.parked;
+  const box = bad ? 'background:#fff4e5;border:1px solid #f0b357' : 'background:#eefaf0;border:1px solid #8ccfa0';
+  out.innerHTML = `<div style="${box};border-radius:10px;padding:12px 14px">
+    <div><code>${esc(d.host)}</code> serves <b>${esc(d.region.name)}</b> &mdash; ${esc(d.region.currency)}, +${esc(d.region.dialCode)}${d.parked ? ' <b>(refused: this address does not serve the app)</b>' : ''}</div>
+    <ul style="margin:8px 0 0;padding-left:20px">${(d.reasons || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+    <div class="muted" style="margin-top:8px">A member signing in here uses the login address <code>${esc(d.loginExample)}</code>. If that is not the shape your existing members were created with, their correct passwords will be refused.</div>
+  </div>`;
 }
 // "+3:00" / "-5:30", from the stored minutes.
 function offsetLabel(min){

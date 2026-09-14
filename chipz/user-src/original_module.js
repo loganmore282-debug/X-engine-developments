@@ -52,11 +52,44 @@ function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? RE
 function applyRegion(r){
   if (!r || typeof r !== 'object') return;
   const out = {};
-  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault']) {
+  // usesBareLocal MUST be in this list. It is whitelisted copying, so a
+  // field left out is silently dropped -- and this one decides the login
+  // address, so dropping it sends every member of a country that carries
+  // its dialling code to the wrong Firebase account. Caught by
+  // test-region-currency.py, which read the address off the running app.
+  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault','usesBareLocal']) {
     if (r[k] !== undefined && r[k] !== null && r[k] !== '') out[k] = r[k];
   }
   REGION = Object.assign({}, REGION, out);
   try { localStorage.setItem('chipzRegion', JSON.stringify(REGION)); } catch(_){}
+  paintRegionChrome();
+}
+// The bits of the SIGN-IN screen that name a country. Repainted from here,
+// because the region arrives from the network AFTER that screen is already
+// on display -- and the two dialling-code chips were static "+256" in the
+// markup with nothing ever updating them, so every country's address showed
+// Uganda's code. Reported: "why when you tap the other country domain,
+// still returns the 256 on login and register".
+//
+// That was worse than a cosmetic slip: the chip is the ONLY thing telling a
+// member which country the address he opened belongs to, so an address
+// pointing at the wrong country looked completely normal right up until the
+// password that had always worked was refused.
+function paintRegionChrome(){
+  try {
+    const d = dialPlus();
+    for (const id of ['loginDial', 'regDial']) { const el = $(id); if (el) el.textContent = d; }
+    // Named only when there IS more than one country to be on the wrong one
+    // of. regionCount arrives with the same reply as the region itself.
+    const many = Number(STATE && STATE.regionCount) > 1;
+    const note = many ? (regionName() + ' · ' + cur()) : '';
+    for (const id of ['loginRegionNote', 'regRegionNote']) {
+      const el = $(id);
+      if (!el) continue;
+      el.textContent = note;
+      el.style.display = note ? '' : 'none';
+    }
+  } catch(_){}
 }
 // The last region this device saw, restored before the first paint so a
 // returning member never sees Uganda's currency flash on a Kenyan phone
@@ -432,9 +465,38 @@ function localDigits(raw){
 // login changes; every other region carries its dialling code, because the
 // same local number exists in more than one country and the bare digits
 // alone would put a Kenyan inside a Ugandan's account.
+// The login address for a number, in THIS region's shape. Must match
+// server.js's phoneToEmail() exactly, character for character -- they are
+// two implementations of one string, and a disagreement means a member
+// creates one Firebase account and then signs in looking for another.
+//
+// `usesBareLocal` comes from the server (publicRegionView) because the
+// answer depends on the FOUNDING region's dialling code, which the app
+// cannot see. The `!== false` default keeps the bare form when talking to a
+// server that is a deploy behind and does not send the flag -- that is the
+// shape every account created before regions existed already has.
 function phoneToEmail(phone){
+  return loginAddressFor(phone, REGION && REGION.usesBareLocal !== false);
+}
+function loginAddressFor(phone, bare){
   const local = localDigits(phone) || String(phone).replace(/\D/g,'').replace(/^0+/, '');
-  return ((REGION && REGION.isDefault === false) ? dial() + local : local) + '@chipz-platform.com';
+  return (bare ? local : dial() + local) + '@chipz-platform.com';
+}
+// Every address this number could have been registered under, most likely
+// first. Firebase folds "no such account" into the same
+// auth/invalid-credential as a wrong password, so a member locked out by a
+// region setting changing under him is indistinguishable from someone
+// typing the wrong password -- he just sees "Incorrect phone number or
+// password" for a password that is correct, which is exactly what was
+// reported from a live subdomain.
+//
+// So sign-in tries the other shape too. Deliberately only the two shapes for
+// THIS region -- never another country's -- so it cannot become a way to
+// sign in to a Kenyan account on the Ugandan site.
+function loginAddressCandidates(phone){
+  const bare = !!(REGION && REGION.usesBareLocal !== false);
+  const list = [loginAddressFor(phone, bare), loginAddressFor(phone, !bare)];
+  return list.filter((e, i) => list.indexOf(e) === i);
 }
 function cleanPhone(raw){
   const local = localDigits(raw);
@@ -538,8 +600,23 @@ window.doLogin = async function(){
   $('loginError').innerHTML = '';
   setBtnLoading('loginBtn', true, 'Log In', 'Logging in…');
   try {
-    const email = phoneToEmail(phone);
-    await window.fbSignIn(email, pass);
+    // Tries this region's address, then the other shape for the same region
+    // -- see loginAddressCandidates(). The LAST error is the one reported, so
+    // a genuinely wrong password still reads as a wrong password.
+    const tries = loginAddressCandidates(phone);
+    let email = tries[0], lastErr = null;
+    for (const cand of tries) {
+      try { await window.fbSignIn(cand, pass); email = cand; lastErr = null; break; }
+      catch (e) {
+        lastErr = e;
+        // Only an "address not known / credentials rejected" answer is worth
+        // retrying under a different address. A throttle, a network failure
+        // or a disabled account means stop.
+        const code = (e && e.code) || '';
+        if (code !== 'auth/invalid-credential' && code !== 'auth/wrong-password' && code !== 'auth/user-not-found') break;
+      }
+    }
+    if (lastErr) throw lastErr;
     // "Remember me" (Main.dc.html) gates the saved-credential store that
     // drives tryAutoSignIn() on the next visit. Unchecked -> nothing is
     // saved, so the login screen asks again next time.
@@ -733,7 +810,11 @@ async function boot(){
   // outright on a reply whose `settings` key was missing (caught by
   // test-cache-quota.py's own fixture, which sends one) -- taking the whole
   // boot down over a number used only to word a login error.
-  if (s.status === 'success') { applyRegion(s.region); STATE.regionCount = s.regionCount; }
+  // regionCount BEFORE applyRegion: applyRegion repaints the sign-in
+  // screen's country line, and that line only appears when more than one
+  // country exists -- set the other way round it paints with the count still
+  // undefined and the line stays hidden on the very load that needed it.
+  if (s.status === 'success') { STATE.regionCount = s.regionCount; applyRegion(s.region); }
   // The name has just arrived; paint it into the static markup and the tab
   // title. Three call sites in all -- here, the auth-screen prefetch, and the
   // cached instant-boot path -- because each is a way STATE.settings gets
@@ -5640,6 +5721,11 @@ captureReferralFromUrl();
 // decision that, most of the time, is "stay where you are". If the answer is
 // "move", the page navigates and whatever boot() had started is discarded
 // with it.
+// The dialling-code chips are static "+256" in the markup; a returning
+// device already knows its region from localStorage (restoreRegion above),
+// so paint them from it before the first network reply lands rather than
+// showing Uganda's code to a Kenyan for a beat.
+paintRegionChrome();
 var _entryPromise = maybeRotateEntry();
 var _bootPromise = boot();
 

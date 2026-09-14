@@ -25,10 +25,19 @@ ROOT = os.path.join(HERE, 'user')
 PORT = 8871
 API = 'https://chipz-server.onrender.com'
 
+# Exactly the shape publicRegionView() sends, usesBareLocal included --
+# which country's accounts use the bare local digits as their login address
+# and which carry the dialling code. It is computed SERVER-side because the
+# answer depends on the founding region's dialling code, so the fixture has
+# to supply it the same way a real reply does; leaving it out makes the app
+# fall back to the bare legacy shape (its deliberate answer for a server
+# that is a deploy behind).
 UG_REGION = {"key": "ug", "name": "Uganda", "currency": "UGX", "dialCode": "256",
-             "localLength": 9, "prefixes": ["7"], "utcOffsetMin": 180, "isDefault": True}
+             "localLength": 9, "prefixes": ["7"], "utcOffsetMin": 180, "isDefault": True,
+             "usesBareLocal": True}
 KE_REGION = {"key": "ke", "name": "Kenya", "currency": "KES", "dialCode": "254",
-             "localLength": 9, "prefixes": ["7", "1"], "utcOffsetMin": 180, "isDefault": False}
+             "localLength": 9, "prefixes": ["7", "1"], "utcOffsetMin": 180, "isDefault": False,
+             "usesBareLocal": False}
 
 ACCOUNT = {"phone": "0712345678", "walletBalance": 2500, "totalDeposited": 5000,
            "totalEarned": 900, "totalWithdrawn": 0, "totalInvested": 3000,
@@ -116,6 +125,9 @@ PROBE = """()=>{
     witBal: t('.wit-card .val').trim() || t('.wallet-card .val').trim(),
     fmt: typeof cur === 'function' ? cur() : null,
     sampleFmt: typeof fmtUGX === 'function' ? fmtUGX(1234) : null,
+    loginDial: t('#loginDial').trim(),
+    regDial: t('#regDial').trim(),
+    loginNote: t('#loginRegionNote').trim(),
     cleanKe: typeof cleanPhone === 'function' ? cleanPhone('0712345678') : null,
     cleanUgOnly: typeof cleanPhone === 'function' ? cleanPhone('0412345678') : null,
     email: typeof phoneToEmail === 'function' ? phoneToEmail('0712345678') : null,
@@ -261,6 +273,52 @@ async def main():
         ck("KES" in cross["wallet"], "and the balance is shown in the member's own currency: " + cross["wallet"])
         ck(cross["prices"] == ["KES"], "with no Ugandan figure anywhere on screen: %s" % (cross["prices"],))
         ck(cross["depPrefix"] == "+254", "and their own dialling code on the number field: " + cross["depPrefix"])
+
+        print('\n— the sign-in screen names the country it belongs to —')
+        # Owner: "why when you tap the other country domain, still returns
+        # the 256 on login and register". Both dialling-code chips were the
+        # literal text "+256" in the markup with nothing updating them, so
+        # every country's address showed Uganda's code -- and that chip is
+        # the only thing on the screen naming the country, so an address
+        # pointing at the wrong one looked completely normal right up until
+        # a correct password was refused.
+        #
+        # Read off the REAL sign-in screen of the built app, as Kenya, with
+        # the loading screen down but nobody signed in.
+        current["region"] = KE_REGION; current["account"] = None
+        current["entry"] = {"status": "success", "rotate": False, "mode": "off", "host": ""}
+        await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
+        await page.evaluate("()=>{try{localStorage.clear();sessionStorage.clear()}catch(e){}}")
+        await page.evaluate("()=>{try{window.fbAuth.currentUser=null}catch(e){}}")
+        await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
+        await page.wait_for_timeout(3200)
+        await page.evaluate("()=>{try{showAuthTab('login')}catch(e){}}")
+        chips = await page.evaluate(
+            "()=>({login:((document.getElementById('loginDial')||{}).textContent||'').trim(),"
+            " reg:((document.getElementById('regDial')||{}).textContent||'').trim(),"
+            " note:((document.getElementById('loginRegionNote')||{}).textContent||'').trim(),"
+            " regNote:((document.getElementById('regRegionNote')||{}).textContent||'').trim()})")
+        for k, v in chips.items():
+            print("  %-9s %s" % (k, v))
+        ck(chips["login"] == "+254", "Login shows this country's dialling code, not Uganda's: " + chips["login"])
+        ck(chips["reg"] == "+254", "and so does Sign Up: " + chips["reg"])
+        ck("Kenya" in chips["note"] and "KES" in chips["note"],
+           "with the country named so a wrongly-mapped address is visible: " + chips["note"])
+        ck("Kenya" in chips["regNote"], "on the Sign Up pane too: " + chips["regNote"])
+        await page.screenshot(path=f"{OUT}/auth-kenya.png", full_page=True)
+
+        # Back to Uganda: a test that only ever sees Kenya cannot tell a live
+        # chip from one hardcoded the other way.
+        current["region"] = UG_REGION
+        await page.evaluate("()=>{try{localStorage.clear();sessionStorage.clear()}catch(e){}}")
+        await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
+        await page.wait_for_timeout(3200)
+        ugChips = await page.evaluate(
+            "()=>({login:((document.getElementById('loginDial')||{}).textContent||'').trim(),"
+            " note:((document.getElementById('loginRegionNote')||{}).textContent||'').trim()})")
+        print("  uganda   ", ugChips)
+        ck(ugChips["login"] == "+256", "and Uganda reads +256: " + ugChips["login"])
+        ck("Uganda" in ugChips["note"], "named as Uganda: " + ugChips["note"])
 
         print('\n— an arrival is moved onto a different address in his own country —')
         # Owner: "if one joined the site or visited the site with a subdomain

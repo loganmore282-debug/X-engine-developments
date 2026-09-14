@@ -19,6 +19,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SERVER = os.path.join(ROOT, 'server.js')
 CLIENT = os.path.join(ROOT, 'user-src', 'original_module.js')
 ADMIN = os.path.join(ROOT, 'admin-src', 'index.html')
+SHELL = os.path.join(ROOT, 'user-src', 'index.html')
 
 
 def read(p):
@@ -71,10 +72,13 @@ MUTATIONS = [
      "      regionKey: currentRegionKey(),\n      date, time, createdAt: FieldValue.serverTimestamp()",
      "      regionKey: req.body.regionKey,\n      date, time, createdAt: FieldValue.serverTimestamp()"),
 
-    ('a referral code from another country is accepted', SERVER,
-     """      if (refRegion !== myRegion)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'That referral code belongs to a member in another country. Ask for a code from someone signed up on this site.' } };""",
-     """      void refRegion; void myRegion;"""),
+    ('a referral code from another currency is accepted', SERVER,
+     """      if (refRegion !== myRegion) {
+        const a = regionByKey(refRegion), b = regionByKey(myRegion);
+        if (String(a.currency || '') !== String(b.currency || ''))""",
+     """      if (false) {
+        const a = regionByKey(refRegion), b = regionByKey(myRegion);
+        if (String(a.currency || '') !== String(b.currency || ''))"""),
 
     ("one country's prices wipe every other country's", SERVER,
      "        batch.set(db.collection('products').doc(p.key), { key: p.key, ['regions.' + region.key]: over }, { merge: true });",
@@ -99,16 +103,20 @@ MUTATIONS = [
      "  return 'main';"),
 
     ('the server drops the dialling code from a login address', SERVER,
-     "  return (r.isDefault ? local : String(r.dialCode || '') + local) + '@chipz-platform.com';",
+     "  return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@chipz-platform.com';",
      "  return local + '@chipz-platform.com';"),
 
     ('the server puts a dialling code on Ugandan logins too', SERVER,
-     "  return (r.isDefault ? local : String(r.dialCode || '') + local) + '@chipz-platform.com';",
+     "  return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@chipz-platform.com';",
      "  return String(r.dialCode || '') + local + '@chipz-platform.com';"),
 
     ('the app drops the dialling code from a login address', CLIENT,
-     "  return ((REGION && REGION.isDefault === false) ? dial() + local : local) + '@chipz-platform.com';",
+     "  return (bare ? local : dial() + local) + '@chipz-platform.com';",
      "  return local + '@chipz-platform.com';"),
+
+    ('the app puts a dialling code on Ugandan logins too', CLIENT,
+     "  return (bare ? local : dial() + local) + '@chipz-platform.com';",
+     "  return dial() + local + '@chipz-platform.com';"),
 
     ('money is labelled UGX everywhere on the server', SERVER,
      "  return cur + ' ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});",
@@ -327,16 +335,16 @@ MUTATIONS = [
      "    const members = { empty: true };"),
 
     ('the panel sends a backend-wide setting with a country’s rates, failing the whole save', ADMIN,
-     "        for (const k of ADMIN_GLOBAL_ONLY) delete body.settings[k];",
-     "        void ADMIN_GLOBAL_ONLY;"),
+     "      for (const k of ADMIN_GLOBAL_ONLY) delete body.settings[k];",
+     "      void ADMIN_GLOBAL_ONLY;"),
 
     ('the panel and the server disagree about which settings are backend-wide', ADMIN,
      "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
      "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'brandName'];"),
 
     ('the picked country is no longer stamped on admin reads', ADMIN,
-     "    if (REGION_SCOPED_READS.includes(path)) path += '?region=' + encodeURIComponent(ADMIN_REGION);",
-     "    if (false) path += '?region=' + encodeURIComponent(ADMIN_REGION);"),
+     "      if (REGION_SCOPED_READS.includes(path)) path += '?region=' + encodeURIComponent(one);",
+     "      if (false) path += '?region=' + encodeURIComponent(one);"),
 
     ('an admin list labels every row in the panel’s own currency', ADMIN,
      "function ugx(n, regionKey){",
@@ -468,6 +476,169 @@ MUTATIONS = [
     ('the sticky rule stops covering the sign-in screen', CLIENT,
      "st.textContent = '#loadingScreen,#app,#authScreen{display:none !important}';",
      "st.textContent = '#loadingScreen,#app{display:none !important}';"),
+
+    # ── the reported login lockout, the lying chip, referrals, per-country admin ──
+    ('the login address goes back to depending on the region id', SERVER,
+     "  return String(r.dialCode || '') === String(founding.dialCode || '');",
+     "  return !!r.isDefault;"),
+
+    ('the app is left to guess the login-address shape', SERVER,
+     "    usesBareLocal: regionUsesBareLocal(reg),\n",
+     ""),
+
+    ('sign-in stops trying the other address shape', CLIENT,
+     "  const list = [loginAddressFor(phone, bare), loginAddressFor(phone, !bare)];",
+     "  const list = [loginAddressFor(phone, bare)];"),
+
+    ('sign-in reports success after every address failed', CLIENT,
+     "    if (lastErr) throw lastErr;\n",
+     ""),
+
+    ('a throttled sign-in burns the second address too', CLIENT,
+     "        if (code !== 'auth/invalid-credential' && code !== 'auth/wrong-password' && code !== 'auth/user-not-found') break;",
+     "        /* keep trying whatever went wrong */"),
+
+    ('the login screen ignores the candidate addresses', CLIENT,
+     "    const tries = loginAddressCandidates(phone);",
+     "    const tries = [phoneToEmail(phone)];"),
+
+    ('the dialling-code chips go back to static text', SHELL,
+     '<span class="prefix" id="loginDial">+256</span>',
+     '<span class="prefix">+256</span>'),
+
+    ('the chips are never painted from the region', CLIENT,
+     "    for (const id of ['loginDial', 'regDial']) { const el = $(id); if (el) el.textContent = d; }",
+     "    /* chips left as they were rendered */"),
+
+    ('the sign-in screen stops naming the country', CLIENT,
+     "    const note = many ? (regionName() + ' · ' + cur()) : '';",
+     "    const note = '';"),
+
+    ('the country line shows on a single-country platform too', CLIENT,
+     "    const many = Number(STATE && STATE.regionCount) > 1;",
+     "    const many = true;"),
+
+    ('the region arrives without repainting the screen', CLIENT,
+     "  paintRegionChrome();\n}\n// The bits of the SIGN-IN screen that name a country.",
+     "}\n// The bits of the SIGN-IN screen that name a country."),
+
+    ('the country count is set after the repaint, so the line stays hidden', CLIENT,
+     "  if (s.status === 'success') { STATE.regionCount = s.regionCount; applyRegion(s.region); }",
+     "  if (s.status === 'success') { applyRegion(s.region); STATE.regionCount = s.regionCount; }"),
+
+    ('referral codes are refused across region ids again', SERVER,
+     "        if (String(a.currency || '') !== String(b.currency || ''))",
+     "        if (true)"),
+
+    ('a referral code from a different currency is accepted', SERVER,
+     """      if (refRegion !== myRegion) {
+        const a = regionByKey(refRegion), b = regionByKey(myRegion);""",
+     """      if (false) {
+        const a = regionByKey(refRegion), b = regionByKey(myRegion);"""),
+
+    ('the admin filter ignores the query string', SERVER,
+     "  const raw = String((req.query && req.query.region) || (req.body && req.body.region) || '').trim().toLowerCase();",
+     "  const raw = String((req.body && req.body.region) || '').trim().toLowerCase();"),
+
+    ('an unfiltered admin call silently narrows to the founding country', SERVER,
+     "  if (!raw || raw === 'all') return null;",
+     "  if (!raw) return DEFAULT_REGION_KEY;\n  if (raw === 'all') return null;"),
+
+    ('a legacy row with no country is not placed by its member', SERVER,
+     "  const viaUser = (userRegions && row && row.userId) ? userRegions.get(row.userId) : null;\n  return viaUser || DEFAULT_REGION_KEY;",
+     "  return DEFAULT_REGION_KEY;"),
+
+    ('a row carrying its own country is overridden by the member', SERVER,
+     """  const own = String((row && row.regionKey) || '').trim().toLowerCase();
+  if (own) return own;
+  const viaUser = (userRegions && row && row.userId) ? userRegions.get(row.userId) : null;
+  return viaUser || DEFAULT_REGION_KEY;""",
+     """  const viaUser = (userRegions && row && row.userId) ? userRegions.get(row.userId) : null;
+  if (viaUser) return viaUser;
+  return String((row && row.regionKey) || '').trim().toLowerCase() || DEFAULT_REGION_KEY;"""),
+
+    ('the dashboard stops being per-country', SERVER,
+     "    const want = adminRegionFilter(req);\n    const userRegions = new Map();\n    usersSnap.forEach(d => userRegions.set(d.id, String(d.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY));\n    const mine = row => !want || rowRegionKey(row, userRegions) === want;\n    let totalUsers = 0, activeUsers = 0, bannedUsers = 0, walletTotal = 0;",
+     "    const want = null;\n    const mine = () => true;\n    let totalUsers = 0, activeUsers = 0, bannedUsers = 0, walletTotal = 0;"),
+
+    ('the members list stops being per-country', SERVER,
+     "    }).filter(u => !want || u.regionKey === want);",
+     "    });"),
+
+    ('the referrals list stops being per-country', SERVER,
+     "    const rows = want ? all.filter(r => r.regionKey === want) : all;",
+     "    const rows = all;"),
+
+    ('the records list stops being per-country', SERVER,
+     "    const transactions = scopeRowsToRegion(raw, want, want ? await adminUserRegions() : null);",
+     "    const transactions = raw;"),
+
+    ('the recharge totals describe every country while the rows describe one', SERVER,
+     """    const scoped = scopeRowsToRegion(rows, want, userRegions);
+    rows.length = 0; rows.push(...scoped);
+    rows.forEach(r => { r.accountPhone = phones[r.userId] || ''; r.referralCode = refCodes[r.userId] || ''; counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1; });""",
+     """    rows.forEach(r => { r.accountPhone = phones[r.userId] || ''; r.referralCode = refCodes[r.userId] || ''; counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1; });"""),
+
+    ('a truncated records page is called complete once filtered', SERVER,
+     """    const truncated = raw.length >= TX_ADMIN_LIST_LIMIT;
+    const want = adminRegionFilter(req);
+    const transactions = scopeRowsToRegion(raw, want, want ? await adminUserRegions() : null);
+    res.json({ status: 'success', transactions, truncated, regionKey: want || 'all' });""",
+     """    const want = adminRegionFilter(req);
+    const transactions = scopeRowsToRegion(raw, want, want ? await adminUserRegions() : null);
+    res.json({ status: 'success', transactions, truncated: transactions.length >= TX_ADMIN_LIST_LIMIT, regionKey: want || 'all' });"""),
+
+    ('the panel only stamps the country when it is not Uganda', ADMIN,
+     "  if (REGION_FILTERED_READS.includes(path)) path += '?region=' + encodeURIComponent(ADMIN_REGION || 'all');",
+     "  if (REGION_FILTERED_READS.includes(path) && ADMIN_REGION !== 'ug') path += '?region=' + encodeURIComponent(ADMIN_REGION || 'all');"),
+
+    ('the POST-shaped screens lose their country stamp', ADMIN,
+     "  else if (REGION_FILTERED_WRITES.includes(path)) body = Object.assign({ region: ADMIN_REGION || 'all' }, body || {});",
+     "  else if (false) body = Object.assign({ region: ADMIN_REGION || 'all' }, body || {});"),
+
+    ('the toggle is never added to the tabs that need it', ADMIN,
+     "  Promise.resolve(fn()).then(() => { if (_tab === name) paintRegionPicker(name); }).catch(() => {});",
+     "  Promise.resolve(fn()).catch(() => {});"),
+
+    ('a live refresh wipes the toggle off the tab', ADMIN,
+     "    paintRegionPicker(tab);\n",
+     ""),
+
+    ('All countries snaps back to Uganda on every region reload', ADMIN,
+     "    if (ADMIN_REGION !== 'all' && !ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';",
+     "    if (!ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';"),
+
+    ('Settings is edited under an All-countries label', ADMIN,
+     "    const one = (!ADMIN_REGION || ADMIN_REGION === 'all') ? 'ug' : ADMIN_REGION;",
+     "    const one = ADMIN_REGION;"),
+
+    ('an All-countries view stops saying its figures mix currencies', ADMIN,
+     "    ? 'Showing every country together &mdash; amounts are in each row\\'s own currency, so totals mix currencies. Pick one country for figures that add up.'",
+     "    ? ''"),
+
+    ('the address checker stops naming the wrong-base-domain cause', SERVER,
+     "        reasons.push(`It is not under the base domain, which is set to \"${_baseDomain}\". Short addresses are built as <short name>.${_baseDomain}, so an address on any other domain can never match one.`);",
+     "        reasons.push('It does not match a country.');"),
+
+    ('the address checker stops showing the login address it would use', SERVER,
+     "      loginExample: phoneToEmail('0700000000', resolved),\n",
+     ""),
+
+    ('the panel stops warning that the base domain is not its own domain', ADMIN,
+     "function baseDomainWarningHtml(){",
+     "function baseDomainWarningHtml(){ if (1) return '';"),
+
+    ('the base-domain warning fires on the platform own hosts', ADMIN,
+     "  if (/\\.(onrender\\.com|edgeone\\.app|edgeone\\.site|edgeone\\.dev|pages\\.dev)$/.test(h)) return '';",
+     "  /* platform hosts treated as the members' domain */"),
+
+    ('there is no one-tap base-domain fix', ADMIN,
+     "    <div style=\"margin-top:10px\"><button class=\"btn sm\" id=\"useThisDomainBtn\">Use ${esc(own)} as the base domain</button></div>",
+     ""),
+
+    ('the app drops the published login-address shape on the floor', CLIENT,
+     "  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault','usesBareLocal']) {",
+     "  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault']) {"),
 ]
 
 
@@ -479,7 +650,7 @@ def main():
         return 1
     print('baseline: test-regions.js passes on the untouched tree\n')
 
-    originals = {SERVER: read(SERVER), CLIENT: read(CLIENT), ADMIN: read(ADMIN)}
+    originals = {SERVER: read(SERVER), CLIENT: read(CLIENT), ADMIN: read(ADMIN), SHELL: read(SHELL)}
     missed, applied = [], 0
     try:
         for label, path, old, new in MUTATIONS:

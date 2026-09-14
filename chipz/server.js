@@ -1591,10 +1591,30 @@ function localDigits(raw, region) {
 // dialling code, which is what keeps the prefixed forms distinct too.
 // The client builds this same string to sign in with (see phoneToEmail in
 // user-src/original_module.js) -- the two MUST agree exactly.
+// Whether a region's accounts use the BARE local digits as their login
+// address, or carry the dialling code in front.
+//
+// Keyed on the DIALLING CODE, not on `isDefault`. This looked like a
+// harmless detail and was a real lockout: `isDefault` means "key === 'ug'",
+// so the moment a SECOND region was configured with Uganda's +256 -- which
+// is exactly what happens if a short address gets attached to the wrong
+// country, or a country is re-created under a different id -- every deployed
+// Ugandan account's address changed from 769968158@ to 256769968158@ and
+// the password that had always worked started reading "Incorrect phone
+// number or password". Reported from a live subdomain.
+//
+// Tied to the founding region's dial code, ANY region configured for Uganda
+// keeps producing the address every existing account already has, whatever
+// its id is.
+function regionUsesBareLocal(region) {
+  const r = region || currentRegion();
+  const founding = defaultRegion();
+  return String(r.dialCode || '') === String(founding.dialCode || '');
+}
 function phoneToEmail(phone, region) {
   const r = region || currentRegion();
   const local = localDigits(phone, r) || String(phone).replace(/\D/g, '').replace(/^0+/, '');
-  return (r.isDefault ? local : String(r.dialCode || '') + local) + '@chipz-platform.com';
+  return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@chipz-platform.com';
 }
 // STRICT on purpose — for Uganda every real mobile number is 256 + exactly 9
 // digits starting with 7, and each other region declares its own length and
@@ -2900,6 +2920,12 @@ function publicRegionView(r) {
     key: reg.key, name: reg.name, currency: reg.currency, dialCode: reg.dialCode,
     localLength: reg.localLength, prefixes: (reg.prefixes || []).slice(),
     utcOffsetMin: reg.utcOffsetMin, isDefault: !!reg.isDefault,
+    // Which login-address shape this region's accounts use. Sent rather than
+    // worked out in the app: it depends on the FOUNDING region's dialling
+    // code, which the app has no way of knowing, and the two must agree
+    // exactly or a member creates one Firebase account and then signs in
+    // looking for another.
+    usesBareLocal: regionUsesBareLocal(reg),
   };
 }
 app.get('/public/settings', async (_req, res) => {
@@ -3376,16 +3402,28 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' } };
       if (refDoc.data().status === 'banned')
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } };
-      // A code from ANOTHER COUNTRY is refused. Commission is a percentage
-      // of what the new member spends, paid into the referrer's wallet: pay
-      // 27% of a 30,000 KES purchase into a Ugandan wallet and the figure is
-      // arithmetically right and worth roughly eight times what it should
-      // be. Teams therefore do not cross regions, and the member is told
-      // plainly rather than having their upline silently dropped.
+      // A code from a country on a DIFFERENT CURRENCY is refused. Commission
+      // is a percentage of what the new member spends, paid into the
+      // referrer's wallet: pay 27% of a 30,000 KES purchase into a Ugandan
+      // wallet and the figure is arithmetically right and worth roughly
+      // eight times what it should be.
+      //
+      // Matched on CURRENCY, not on the region id. It used to refuse any
+      // code from a different region id, and that made signing up
+      // impossible: a short address pointing at the wrong country (or a
+      // country re-created under a new id) puts the new member in a
+      // different region from every existing member, so every real referral
+      // code was refused -- and a referral code is required to sign up, so
+      // the whole country was shut. Reported as "make sure referrals are
+      // working". Two regions sharing a currency have no arithmetic problem,
+      // which is the only thing this rule was ever protecting.
       const refRegion = String(refDoc.data().regionKey || DEFAULT_REGION_KEY);
       const myRegion = String(currentRegionKey() || DEFAULT_REGION_KEY);
-      if (refRegion !== myRegion)
-        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'That referral code belongs to a member in another country. Ask for a code from someone signed up on this site.' } };
+      if (refRegion !== myRegion) {
+        const a = regionByKey(refRegion), b = regionByKey(myRegion);
+        if (String(a.currency || '') !== String(b.currency || ''))
+          return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: `That referral code belongs to a member in ${a.name || 'another country'}, which uses ${a.currency || 'another currency'}. Ask for a code from someone signed up on this site.` } };
+      }
       referrerId = refDoc.id;
     }
 
@@ -7281,6 +7319,56 @@ app.get('/admin/regions', async (req, res) => {
     });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load regions' }); }
 });
+// ── WHICH COUNTRY DOES THIS ADDRESS SERVE, AND WHY ──
+// Owner: "those subdomain are not working well why".
+//
+// A short address serving the wrong country is close to invisible from the
+// outside: the app just shows that country's prices and refuses logins and
+// referral codes that belong to members of another one. This answers the
+// question directly, and -- the part that matters -- says WHY, because the
+// usual cause is that the base domain setting still holds the built-in
+// default while the real site is on a domain of the owner's own, so no
+// country's short address matches anything at all.
+app.post('/admin/regions/check-host', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    await getSettings(DEFAULT_REGION_KEY);
+    const regions = await getRegions();
+    const host = hostOnly(req.body.host || '');
+    if (!host) return res.status(400).json({ status: 'error', message: 'Type an address to check.' });
+    const claimedBy = regions.find(r => r.active && regionHostnames(r).includes(host)) || null;
+    const resolved = regionForHost(host);
+    const parked = hostIsParked(host);
+    const reasons = [];
+    if (parked) {
+      reasons.push(_blockRootDomain && _baseDomain && (host === _baseDomain || host === 'www.' + _baseDomain)
+        ? 'This is the root domain, and "the root domain does not serve the app" is switched on.'
+        : (_parkedHosts.includes(host)
+          ? 'This address is on the retired list.'
+          : 'No country claims this address and "only a country\'s own addresses work" is switched on.'));
+    }
+    if (isInfraHost(host)) reasons.push('This is one of the platform\'s own service addresses, so it is never treated as retired.');
+    if (!claimedBy) {
+      reasons.push(`No country claims this exact address, so it falls back to ${resolved.name} — the founding country.`);
+      // The single most common cause, named outright.
+      if (_baseDomain && !host.endsWith('.' + _baseDomain) && host !== _baseDomain)
+        reasons.push(`It is not under the base domain, which is set to "${_baseDomain}". Short addresses are built as <short name>.${_baseDomain}, so an address on any other domain can never match one.`);
+      else if (_baseDomain)
+        reasons.push(`It is under the base domain "${_baseDomain}", so adding its first label as a short name on the country you want would claim it.`);
+    } else {
+      reasons.push(`${claimedBy.name} claims this address.`);
+    }
+    res.json({
+      status: 'success', host,
+      claimed: !!claimedBy,
+      region: { key: resolved.key, name: resolved.name, currency: resolved.currency, dialCode: resolved.dialCode },
+      usesBareLocal: regionUsesBareLocal(resolved),
+      loginExample: phoneToEmail('0700000000', resolved),
+      parked, reasons,
+      baseDomain: _baseDomain, blockRootDomain: _blockRootDomain, strictRegionHosts: _strictRegionHosts,
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not check that address' }); }
+});
 const REGION_KEY_RE = /^[a-z0-9][a-z0-9-]{0,23}$/;
 app.post('/admin/regions/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -8192,12 +8280,63 @@ app.post('/admin/promocodes/deactivate', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ── ONE COUNTRY AT A TIME, ON EVERY ADMIN SCREEN ──
+// Owner: "make sure dashboards can be categorized so one toggle to see a
+// country settings ie dashboard, analytics, referrals, transactions,
+// settings, admins, deposits, withdrawals etc."
+//
+// Which country the panel is asking about. 'all' (or nothing at all, which
+// is what an older panel build sends) means every country, so a tab that
+// has not been taught about the toggle keeps showing what it always did
+// rather than silently narrowing to one country.
+function adminRegionFilter(req) {
+  const raw = String((req.query && req.query.region) || (req.body && req.body.region) || '').trim().toLowerCase();
+  if (!raw || raw === 'all') return null;
+  const r = regionByKey(raw);
+  return r.key === raw ? raw : null;
+}
+// uid -> region key. Filtering is done through the MEMBER's region, not only
+// the row's own `regionKey`: rows written before regions existed have no
+// such field, and a member's region is fixed for life, so their account is
+// the reliable answer. The row's own value still wins where it has one --
+// that is the region the money actually moved in.
+async function adminUserRegions() {
+  const snap = await db.collection('users').get();
+  const m = new Map();
+  snap.forEach(d => m.set(d.id, String(d.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY));
+  return m;
+}
+function rowRegionKey(row, userRegions) {
+  const own = String((row && row.regionKey) || '').trim().toLowerCase();
+  if (own) return own;
+  const viaUser = (userRegions && row && row.userId) ? userRegions.get(row.userId) : null;
+  return viaUser || DEFAULT_REGION_KEY;
+}
+// Stamps every row with the country it belongs to and drops the ones that
+// are not the country being asked about. The stamp goes on even when no
+// filter is in force, so an "All countries" view can label each figure with
+// its own currency instead of showing one country's label over all of them.
+function scopeRowsToRegion(rows, want, userRegions) {
+  const out = [];
+  for (const row of rows) {
+    const key = rowRegionKey(row, userRegions);
+    if (want && key !== want) continue;
+    row.regionKey = key;
+    out.push(row);
+  }
+  return out;
+}
 app.get('/admin/users', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
+    const want = adminRegionFilter(req);
     const snap = await db.collection('users').limit(10000).get();
-    const users = snap.docs.map(d => { const { transactionPinHash, ...safe } = d.data(); return { id: d.id, ...safe }; });
-    res.json({ status: 'success', users, count: users.length });
+    let users = snap.docs.map(d => { const { transactionPinHash, ...safe } = d.data(); return { id: d.id, ...safe }; });
+    users = users.map(u => {
+      u.regionKey = String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY;
+      return u;
+    }).filter(u => !want || u.regionKey === want);
+    res.json({ status: 'success', users, count: users.length, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/user/detail', async (req, res) => {
@@ -8831,6 +8970,14 @@ app.post('/admin/deposits/list', async (req, res) => {
     snap.docs.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
     unresolvedSnap.docs.forEach(d => { if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() }); });
     const rows = Array.from(byId.values());
+    // One country at a time. Filtered BEFORE the counts and the day
+    // groupings are built, or the totals on screen would describe every
+    // country while the rows beneath them describe one.
+    const want = adminRegionFilter(req);
+    const userRegions = new Map();
+    usersSnap.forEach(u => userRegions.set(u.id, String(u.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY));
+    const scoped = scopeRowsToRegion(rows, want, userRegions);
+    rows.length = 0; rows.push(...scoped);
     rows.forEach(r => { r.accountPhone = phones[r.userId] || ''; r.referralCode = refCodes[r.userId] || ''; counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1; });
     const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(r => r.status === 'matched'), 'creditedAt');
     // Subagent-audit-caught: this had a real 5000-row cap on each underlying
@@ -8842,7 +8989,7 @@ app.post('/admin/deposits/list', async (req, res) => {
     // row count, since de-duplication can make the merged total look under
     // the cap even when one of the two source queries was truncated.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
-    res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount, truncated });
+    res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/deposit/force-credit', async (req, res) => {
@@ -8875,6 +9022,12 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     snap.docs.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
     unresolvedSnap.docs.forEach(d => { if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() }); });
     const rows = Array.from(byId.values());
+    // Same reasoning as the deposits list: scope first, then count.
+    const want = adminRegionFilter(req);
+    const userRegions = new Map();
+    usersSnap.forEach(u => userRegions.set(u.id, String(u.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY));
+    const scoped = scopeRowsToRegion(rows, want, userRegions);
+    rows.length = 0; rows.push(...scoped);
     rows.forEach(w => { w.accountPhone = phones[w.userId] || ''; w.referralCode = refCodes[w.userId] || ''; counts[w.status] = (counts[w.status] || 0) + 1; });
     const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(w => w.status === 'processed'), 'processedAt', 'net');
     // The tab needs to know which real payout path is active -- it changes
@@ -8885,7 +9038,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     // Subagent-audit-caught: same missing-truncated-flag gap as the deposits
     // list above, fixed the same way.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett), truncated });
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett), truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {
@@ -8928,20 +9081,33 @@ app.get('/admin/stats', async (req, res) => {
       db.collection('withdrawals').where('status', '==', 'processed').limit(50000).get(),
       db.collection('investments').limit(50000).get(),
     ]);
+    // One country at a time. Every figure on this screen is money in a
+    // currency, so mixing countries into a single total produces a number
+    // that means nothing -- adding shillings to shillings of a different
+    // kind. With a country picked, each total is that country's alone.
+    const want = adminRegionFilter(req);
+    const userRegions = new Map();
+    usersSnap.forEach(d => userRegions.set(d.id, String(d.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY));
+    const mine = row => !want || rowRegionKey(row, userRegions) === want;
     let totalUsers = 0, activeUsers = 0, bannedUsers = 0, walletTotal = 0;
     usersSnap.forEach(d => {
       const u = d.data();
+      if (want && (String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY) !== want) return;
       totalUsers++;
       if (u.status === 'banned') bannedUsers++; else activeUsers++;
       walletTotal += finiteMoney(u.walletBalance);
     });
-    let depositAmount = 0; depSnap.forEach(d => depositAmount += finiteMoney(d.data().amount));
-    let withdrawAmount = 0; witSnap.forEach(d => withdrawAmount += finiteMoney(d.data().net));
+    let depositAmount = 0; depSnap.forEach(d => { const r = { ...d.data() }; if (mine(r)) depositAmount += finiteMoney(r.amount); });
+    let withdrawAmount = 0; witSnap.forEach(d => { const r = { ...d.data() }; if (mine(r)) withdrawAmount += finiteMoney(r.net); });
     let investedAmount = 0, activeInvestments = 0;
-    invSnap.forEach(d => { const inv = d.data(); investedAmount += finiteMoney(inv.amount); if (inv.status === 'active') activeInvestments++; });
-    const pendingDepCount = (await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get()).size;
-    const pendingWitCount = (await db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get()).size;
-    res.json({ status: 'success', stats: { totalUsers, activeUsers, bannedUsers, walletTotal, depositAmount, withdrawAmount, investedAmount, activeInvestments, pendingDepCount, pendingWitCount } });
+    invSnap.forEach(d => { const inv = { ...d.data() }; if (!mine(inv)) return; investedAmount += finiteMoney(inv.amount); if (inv.status === 'active') activeInvestments++; });
+    const [pendDepSnap, pendWitSnap] = await Promise.all([
+      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get(),
+      db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get(),
+    ]);
+    const pendingDepCount = pendDepSnap.docs.filter(d => mine({ ...d.data() })).length;
+    const pendingWitCount = pendWitSnap.docs.filter(d => mine({ ...d.data() })).length;
+    res.json({ status: 'success', regionKey: want || 'all', stats: { totalUsers, activeUsers, bannedUsers, walletTotal, depositAmount, withdrawAmount, investedAmount, activeInvestments, pendingDepCount, pendingWitCount } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Owner: "let us put on dashboard so as it checks marzpy available
@@ -8976,8 +9142,14 @@ app.post('/admin/transactions/list', async (req, res) => {
     const requested = parseInt(req.body.limit, 10);
     const TX_ADMIN_LIST_LIMIT = Number.isFinite(requested) ? Math.min(5000, Math.max(50, requested)) : 300;
     const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(TX_ADMIN_LIST_LIMIT).get();
-    const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    res.json({ status: 'success', transactions, truncated: transactions.length >= TX_ADMIN_LIST_LIMIT });
+    const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // `truncated` is judged on the RAW page, before the country filter: the
+    // cap was hit or it was not, and saying "complete" because one country's
+    // share of a truncated page happens to be small would be a lie.
+    const truncated = raw.length >= TX_ADMIN_LIST_LIMIT;
+    const want = adminRegionFilter(req);
+    const transactions = scopeRowsToRegion(raw, want, want ? await adminUserRegions() : null);
+    res.json({ status: 'success', transactions, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/referrals/list', async (req, res) => {
@@ -9003,14 +9175,19 @@ app.get('/admin/referrals/list', async (req, res) => {
     const referrerSnaps = await Promise.all(referrerIds.map(id => db.collection('users').doc(id).get()));
     const codeById = {};
     referrerSnaps.forEach((s, i) => { codeById[referrerIds[i]] = s.exists ? (s.data().referralCode || '') : ''; });
-    const rows = snap.docs.map(d => {
+    const want = adminRegionFilter(req);
+    const all = snap.docs.map(d => {
       const u = d.data();
       return {
         id: d.id, phone: u.phone || '', referrerId: u.referredBy,
         referrerCode: codeById[u.referredBy] || '', invested: finiteMoney(u.totalInvested), status: u.status || 'active',
+        regionKey: String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY,
       };
     });
-    res.json({ status: 'success', referrals: rows, truncated: rows.length >= REFERRALS_LIST_LIMIT });
+    // Judged on the raw page, same reasoning as the transactions list.
+    const truncated = all.length >= REFERRALS_LIST_LIMIT;
+    const rows = want ? all.filter(r => r.regionKey === want) : all;
+    res.json({ status: 'success', referrals: rows, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Full-depth referral chain trace -- deliberately separate from
@@ -9150,6 +9327,13 @@ app.post('/admin/analytics', async (req, res) => {
       db.collection('investments').where('status', '==', 'active').limit(10000).get(),
       getSettings(),
     ]);
+    // One country at a time -- every amount below is money in a currency,
+    // so a mixed total is meaningless. Built once here and applied at each
+    // forEach rather than pre-filtering four snapshots.
+    const want = adminRegionFilter(req);
+    const userRegions = new Map();
+    usersSnap.forEach(d => userRegions.set(d.id, String(d.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY));
+    const mine = row => !want || rowRegionKey(row, userRegions) === want;
     const byHour = Array.from({ length: 24 }, (_, h) => ({ h, depAmt: 0, depCnt: 0, witAmt: 0, witCnt: 0 }));
     const bands = { morning: { dep: 0, wit: 0 }, afternoon: { dep: 0, wit: 0 }, evening: { dep: 0, wit: 0 }, night: { dep: 0, wit: 0 } };
     const dayMap = {};
@@ -9159,6 +9343,7 @@ app.post('/admin/analytics', async (req, res) => {
     depSnap.forEach(d => {
       const dep = d.data();
       if (dep.status !== 'matched') return;
+      if (!mine(dep)) return;
       const ms = tsMillis(dep.createdAt);
       if (ms < sinceMs) return;
       const a = finiteMoney(dep.amount);
@@ -9174,6 +9359,7 @@ app.post('/admin/analytics', async (req, res) => {
     witSnap.forEach(d => {
       const w = d.data();
       if (w.status !== 'processed') return;
+      if (!mine(w)) return;
       const ms = tsMillis(w.createdAt);
       bigWits.push({ phone: w.phone || w.holder || '', amount: finiteMoney(w.net) || finiteMoney(w.amount), when: ms });
       if (ms < sinceMs) return;
@@ -9234,7 +9420,9 @@ app.post('/admin/analytics', async (req, res) => {
     let totalUsers = 0, newUsers = 0, activeInvestors = 0, investedAmount = 0, commissionsPaid = 0;
     const referrers = [], depositors = [];
     usersSnap.forEach(d => {
-      const u = d.data(); totalUsers++;
+      const u = d.data();
+      if (want && (String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY) !== want) return;
+      totalUsers++;
       const ms = tsMillis(u.createdAt);
       if (ms >= sinceMs) { newUsers++; const { day } = eatParts(u.createdAt); ensureDay(day).users++; }
       if ((u.totalInvested || 0) > 0) activeInvestors++;
@@ -9252,7 +9440,7 @@ app.post('/admin/analytics', async (req, res) => {
     let teamRewardsPaid = 0;
     try {
       const rewardTxSnap = await db.collection('transactions').where('type', '==', 'team_reward').limit(200000).get();
-      rewardTxSnap.forEach(d => { teamRewardsPaid += finiteMoney(d.data().amount); });
+      rewardTxSnap.forEach(d => { const t = d.data(); if (mine(t)) teamRewardsPaid += finiteMoney(t.amount); });
     } catch (e) { console.error('teamRewardsPaid query error:', e.message); }
     referrers.sort((a, b) => (b.team - a.team) || (b.earned - a.earned));
     depositors.sort((a, b) => b.amount - a.amount);
@@ -9276,6 +9464,7 @@ app.post('/admin/analytics', async (req, res) => {
     let maturingCount = 0, maturingPayout = 0;
     activeInvSnap.forEach(d => {
       const inv = d.data();
+      if (!mine(inv)) return;
       const paidOut = finiteMoney(inv.paidOut), dailyPayout = finiteMoney(inv.dailyPayout), expected = finiteMoney(inv.expectedReturn);
       if (expected > 0 && paidOut + dailyPayout >= expected) { maturingCount++; maturingPayout += Math.max(0, expected - paidOut); }
     });
@@ -9285,9 +9474,13 @@ app.post('/admin/analytics', async (req, res) => {
     let pipelineUserCount = 0;
     usersSnap.forEach(d => {
       const u = d.data();
+      if (want && (String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY) !== want) return;
       if (tsMillis(u.createdAt) >= pipelineCutoff && (u.totalDeposited || 0) === 0) pipelineUserCount++;
     });
-    const pipelineEstimate = Math.round(pipelineUserCount * (sett.minDeposit || 0) * (CONVERSION_RATE_PCT / 100));
+    // This country's own minimum recharge, not the founding country's --
+    // the estimate is in this country's currency.
+    const pipelineSett = want ? await getSettings(want) : sett;
+    const pipelineEstimate = Math.round(pipelineUserCount * (pipelineSett.minDeposit || 0) * (CONVERSION_RATE_PCT / 100));
     const maturingReinvestEstimate = Math.round(maturingPayout * (REINVEST_RATE_PCT / 100));
     const forecast = {
       withdrawals: { estimate: Math.round(witTrend), likelyWithdrawerCount: maturingCount, trendReference: Math.round(witTrend) },
@@ -9299,7 +9492,7 @@ app.post('/admin/analytics', async (req, res) => {
     };
 
     res.json({
-      status: 'success', period: days,
+      status: 'success', period: days, regionKey: want || 'all',
       kpis: {
         depositsAmount: depAmount, depositsCount: depCount,
         withdrawalsAmount: witAmount, withdrawalsCount: witCount,

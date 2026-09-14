@@ -2258,9 +2258,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
         <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
         <div id="loginError"></div>
         <div class="auth-field">
-          <span class="prefix">+256</span>
+          <span class="prefix" id="loginDial">+256</span>
           <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
+        <!-- Which country this web address serves. Shown only when the
+             platform actually runs in more than one, so a single-country
+             app gains no clutter -- and so a short address quietly
+             pointing at the wrong country is visible instead of showing
+             up later as "Incorrect phone number or password". Filled by
+             paintRegionChrome(). -->
+        <div id="loginRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#8c7f76;text-align:center;"></div>
         <div class="auth-field">
           <span class="emoji">&#128274;</span>
           <input id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
@@ -2276,9 +2283,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
         <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
         <div id="regError"></div>
         <div class="auth-field">
-          <span class="prefix">+256</span>
+          <span class="prefix" id="regDial">+256</span>
           <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
+        <!-- Which country this web address serves. Shown only when the
+             platform actually runs in more than one, so a single-country
+             app gains no clutter -- and so a short address quietly
+             pointing at the wrong country is visible instead of showing
+             up later as "Incorrect phone number or password". Filled by
+             paintRegionChrome(). -->
+        <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#8c7f76;text-align:center;"></div>
         <div class="auth-field">
           <span class="emoji">&#128274;</span>
           <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">

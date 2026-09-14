@@ -3682,3 +3682,112 @@ destroyed".
 Give each country **several** short addresses (Countries → **+ 5**) before turning this
 on, then set **Settings → Move arrivals to another address** to **Visitors only** for
 that country. With no wildcard on a domain, every label still needs its own DNS record.
+
+## Round 155 — Why the subdomains were broken, and one country toggle everywhere
+
+> "l wanted other subdomain ... see that is Ugandan subdomain but you can see it is saying
+> wrong password, yet on root domain, everything was working perfectly, and that password
+> is correct, also why when you tap the other country domain, still returns the 256 on
+> login and register ... make sure referrals are working bro, and those subdomain are not
+> working well why"
+
+**One misconfiguration was breaking four things at once**, and nothing on screen said so.
+A short address resolving to a country its members are not in silently breaks: the login
+address, the referral code check, the currency, and the dialling code — and the chip that
+should have revealed it was hardcoded.
+
+### Four real bugs, all confirmed in the code
+1. **The `+256` chip was static text.** `user-src/index.html` had
+   `<span class="prefix">+256</span>` on **both** Login and Sign Up, with nothing ever
+   updating it — every country's address showed Uganda's code. Worse than cosmetic: that
+   chip is the ONLY thing on that screen naming the country, so an address pointing at
+   the wrong one looked completely normal until a correct password was refused. Now
+   `#loginDial`/`#regDial`, painted by `paintRegionChrome()` from `applyRegion`, plus a
+   "Uganda · UGX" line shown only when more than one country exists.
+2. **The login address depended on the region KEY.** `phoneToEmail` chose bare-vs-prefixed
+   on `isDefault`, which means `key === 'ug'`. So a **second** region configured with
+   Uganda's +256 — what you get when a short address is attached to the wrong country, or
+   a country is re-created under a new id — moved every deployed account from
+   `769968158@` to `256769968158@`, and the password that had always worked started being
+   refused. Now keyed on the **founding region's dialling code**
+   (`regionUsesBareLocal`), published to the app as `usesBareLocal` because the app cannot
+   see the founding region. Plus `loginAddressCandidates()`: sign-in tries this region's
+   shape, then the bare legacy shape — never another **country's**, which would become a
+   way into a Kenyan account on the Ugandan site.
+3. **Signing up was impossible on a mis-mapped address.** Registration refused any referral
+   code whose region **id** differed from the hostname's — and a referral code is
+   *required*, so the whole country was shut: every real member's code read as "belongs to
+   another country". Now judged on **currency**, which is the only thing the rule was ever
+   protecting (commission is a percentage paid into the referrer's wallet).
+4. **`applyRegion` dropped the new flag** — it copies a **whitelist** of fields and I
+   forgot to add `usesBareLocal`, so the server's answer never reached `REGION`. Found by
+   `test-region-currency.py` reading the login address off the running app; none of the
+   static checks saw it. **A whitelist is a place bugs hide: adding a published field means
+   editing that list.**
+
+### Making the misconfiguration impossible to miss
+The likely root cause is that **Base domain** still holds the built-in default while the
+real site is on the owner's own domain — short addresses are built as
+`<short name>.<base domain>`, so nothing matches and every subdomain falls back to the
+founding country. So:
+- the **Countries** tab warns when the base domain is not the domain the panel itself is
+  being used on (skipped when the panel is on `*.onrender.com`/`*.edgeone.app`/localhost,
+  which say nothing about the members' domain), with a one-tap **"Use <domain> as the base
+  domain"**;
+- `POST /admin/regions/check-host` + a **"Which country does an address serve?"** box
+  answers it directly and says **why**, including the login address a member there would
+  use — the thing that was silently wrong.
+
+### One country toggle on every screen
+`adminRegionFilter(req)` reads `?region=` or `body.region`; `'all'` (or nothing, which an
+older panel build sends) means every country, so an untaught tab keeps working.
+`rowRegionKey()` places a row by its own `regionKey` where it has one (that is where the
+money moved) and otherwise by its **member's** country, which is how rows written before
+regions existed are placed. Filtering is applied to `/admin/stats`, `/admin/analytics`,
+`/admin/users`, `/admin/deposits/list`, `/admin/withdrawals/list`,
+`/admin/transactions/list` and `/admin/referrals/list`, **before** counts and day-totals
+are built — otherwise the totals describe every country while the rows beneath describe
+one. `truncated` stays judged on the **raw** page, so a partial list is never called
+complete. The picker is injected centrally by `paintRegionPicker()` after each tab paints
+and after each live refresh, gains an **All countries** option (with a caption saying the
+figures then mix currencies), and is withheld from Settings/Products, which belong to one
+country at a time.
+
+**`REGION_FILTERED_*` routes are stamped ALWAYS, Uganda included** — unlike the two config
+routes, where "no region" already meant the founding country. For a *list*, "no region"
+means *every* country, so not stamping it while Uganda is picked would show a mixed list
+under a label saying Uganda.
+
+### Tests
+`test-regions.js` gained the second-Uganda lockout case, the candidate-address list, the
+live chips, the currency-based referral rule, and the whole admin toggle; it now **runs**
+`baseDomainWarningHtml()` in a sandbox rather than describing it.
+`test-region-currency.py` reads both dialling-code chips and the country line off the real
+built app as Kenya **and then as Uganda**. `verify-regions-discriminates.py` is **136
+mutations**, all caught.
+
+**Six of this round's own assertions did not discriminate at first:**
+1. **"the country count is set before the repaint" passed with boot()'s order swapped** —
+   the auth-screen prefetch has the same pair of statements, so a file-wide match still
+   hit. Checked inside `boot()` now. (Same lesson as Round 152's: *check inside the
+   function, not across the file* — it keeps recurring.)
+2. **`indexOf` returns −1 when a thing is ABSENT, and −1 is less than every real index** —
+   so "the filter runs before the totals" passed with the filtering deleted outright. Now
+   a `before()` helper that requires both to be found.
+3. **"each list is per-country" passed with the `.filter()` removed** — asking for the
+   country is not filtering by it; the assertions only checked that
+   `adminRegionFilter(req)` was *called*. Each route now has its applied-filter shape
+   asserted.
+4. **The base-domain warning was asserted to EXIST**, so an `if (1) return ''` bolted into
+   it went unnoticed. Now the function is run for a mismatch, a match, four platform
+   hosts, and an unset base domain.
+5. **The one-tap fix was asserted by its handler name**, which survives deleting the
+   button. Now asserted on the markup the function returns.
+6. A blanket `clientApi(region)` → `clientApi(pubView(region))` replace also hit the
+   **function declaration**. Same family as Round 154's string-for-itself no-op: *a bulk
+   replace in a test harness needs its hit count checked, not just its result.*
+
+### Owner still has to
+Set **Settings → Base domain** to his real domain (the Countries tab now says so outright,
+with a one-tap fix), then give each country its short addresses. Everything else in this
+round is already live on push.

@@ -90,6 +90,7 @@ const api = new Function('normalizeAllowedHost', `
   ${fnSource(src, 'applyRegionToProduct')}
   ${fnSource(src, 'localDigits')}
   ${fnSource(src, 'cleanPhone')}
+  ${fnSource(src, 'regionUsesBareLocal')}
   ${fnSource(src, 'phoneToEmail')}
   ${fnSource(src, 'phoneFormatHint')}
   ${fnSource(src, 'badPhoneMessage')}
@@ -100,13 +101,19 @@ const api = new Function('normalizeAllowedHost', `
   return { DEFAULT_REGION, normalizeRegion, regionForHost, settingsDocId, applyRegionToProduct,
            localDigits, cleanPhone, phoneToEmail, phoneFormatHint, badPhoneMessage,
            looksLikeRegionMobile, fmtMoney, setRegions, setCurrent, PRODUCT_REGION_FIELDS,
-           hostIsParked, regionHostnames, isInfraHost, setHostPolicy,
+           hostIsParked, regionHostnames, isInfraHost, setHostPolicy, regionUsesBareLocal,
            corsHosts: () => _corsExtraHosts.slice() };
 `)(new Function('raw', fnSource(src, 'normalizeAllowedHost').replace(/^function [^{]*/, '') + '')
    // normalizeAllowedHost is a plain function; wrap it so the new Function
    // above can take it as an argument instead of re-declaring it.
    );
 
+// The region as the SERVER publishes it (publicRegionView), which is the
+// only form the app ever sees. usesBareLocal is computed server-side on
+// purpose -- it depends on the founding region's dialling code.
+function pubView(region) {
+  return Object.assign({}, region, { usesBareLocal: api.regionUsesBareLocal(region) });
+}
 // The client's own copy of the same two functions, with its region hooks.
 function clientApi(region) {
   return new Function(`
@@ -117,10 +124,12 @@ function clientApi(region) {
     function localLen(){ return Number(REGION && REGION.localLength) || 9; }
     function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? REGION.prefixes.filter(Boolean) : []); }
     ${fnSource(client, 'localDigits')}
+    ${fnSource(client, 'loginAddressFor')}
     ${fnSource(client, 'phoneToEmail')}
+    ${fnSource(client, 'loginAddressCandidates')}
     ${fnSource(client, 'cleanPhone')}
     ${fnSource(client, 'fmtUGX')}
-    return { localDigits, phoneToEmail, cleanPhone, fmtUGX };
+    return { localDigits, phoneToEmail, loginAddressCandidates, cleanPhone, fmtUGX };
   `)();
 }
 
@@ -201,7 +210,7 @@ console.log('\n— the login address, which the app and the server must agree on
 for (const [region, local] of [[UG, '0742730382'], [UG, '742730382'], [KE, '0712345678'], [KE, '712345678']]) {
   api.setCurrent(region);
   const server = api.phoneToEmail(api.cleanPhone(local) || local);
-  const app = clientApi(region).phoneToEmail(clientApi(region).cleanPhone(local) || local);
+  const app = clientApi(pubView(region)).phoneToEmail(clientApi(pubView(region)).cleanPhone(local) || local);
   ck(server === app, `${region.key}/${local}: app and server build the same address (${server})`);
 }
 api.setCurrent(UG);
@@ -218,6 +227,257 @@ ck(api.phoneToEmail('+254712345678') === '254712345678@chipz-platform.com',
   api.setCurrent(KE);
   const ke = api.phoneToEmail('+254712345678');
   ck(ug !== ke, `0712345678 in Uganda and in Kenya are different accounts (${ug} vs ${ke})`);
+}
+
+{
+  // ── THE LOCKOUT THAT WAS REPORTED FROM A LIVE SUBDOMAIN ──
+  // "that is Ugandan subdomain but you can see it is saying wrong password,
+  // yet on root domain, everything was working perfectly, and that password
+  // is correct."
+  //
+  // The shape used to be chosen by `isDefault`, which means "key === 'ug'".
+  // So a SECOND region configured with Uganda's +256 -- which is what you
+  // get if a short address is attached to the wrong country, or a country is
+  // re-created under a new id -- moved every deployed Ugandan account's
+  // login address from 769968158@ to 256769968158@, and the password that
+  // had always worked started being refused. Keyed on the DIALLING CODE
+  // instead, any Uganda-configured region keeps the address that exists.
+  const ug2 = api.normalizeRegion({ key: 'ug2', name: 'Uganda (second)', currency: 'UGX',
+    dialCode: '256', localLength: 9, prefixes: ['7'] }, 'ug2');
+  ck(ug2.isDefault === false, 'a second Uganda is not the founding region');
+  api.setCurrent(ug2);
+  ck(api.phoneToEmail('0769968158') === '769968158@chipz-platform.com',
+    'but its members still sign in with the address every deployed account already has');
+  const appSide = clientApi(pubView(ug2));
+  ck(appSide.phoneToEmail('0769968158') === '769968158@chipz-platform.com',
+    'and the app agrees, because the server tells it which shape to use');
+  // The flag has to travel, or the app cannot know: it depends on the
+  // FOUNDING region's dialling code, which is not in its own region block.
+  ck(pubView(ug2).usesBareLocal === true, 'usesBareLocal is published with the region');
+  ck(pubView(KE).usesBareLocal === false, 'and is false for a country on its own dialling code');
+  ck(/usesBareLocal: regionUsesBareLocal\(reg\)/.test(bare),
+    'computed on the server, never guessed in the app');
+  // applyRegion copies a WHITELIST of fields, so a field left out of that
+  // list is silently dropped. This one decides the login address, and
+  // dropping it sent every member of a country that carries its dialling
+  // code to the wrong Firebase account -- caught by test-region-currency.py
+  // reading the address off the running app, not by any of the checks above.
+  const applied = stripComments(fnSource(client, 'applyRegion'));
+  const keys = /for \(const k of \[([^\]]*)\]\)/.exec(applied);
+  ck(!!keys && /'usesBareLocal'/.test(keys[1]),
+    'and the app actually copies it out of the reply instead of dropping it');
+}
+{
+  // Sign-in tries the other shape for the SAME country too, so a member is
+  // never locked out by a region setting changing under him. Firebase folds
+  // "no such account" into the same auth/invalid-credential as a wrong
+  // password, so without this the member just sees "Incorrect phone number
+  // or password" for a password that is correct.
+  const ke = clientApi(pubView(KE));
+  const cands = ke.loginAddressCandidates('0712345678');
+  ck(cands.length === 2, 'sign-in has two addresses to try');
+  ck(cands[0] === '254712345678@chipz-platform.com', 'this country’s own shape first');
+  ck(cands[1] === '712345678@chipz-platform.com', 'then the bare legacy shape');
+  // Never another COUNTRY's shape -- that would become a way to sign in to a
+  // Kenyan account on the Ugandan site.
+  api.setCurrent(UG);
+  const ugAddr = api.phoneToEmail('0712345678');
+  ck(!cands.includes(ugAddr) || ugAddr === cands[1],
+    'and never an address built from a different country’s dialling code');
+  const ugCands = clientApi(pubView(UG)).loginAddressCandidates('0742730382');
+  ck(ugCands[0] === '742730382@chipz-platform.com', 'Uganda tries the bare address first');
+  // doLogin is `window.doLogin = async function(){...}`, not a named
+  // declaration, so fnSource cannot find it -- sliced by hand.
+  const loginAt = client.indexOf('window.doLogin = async function');
+  const rot = stripComments(client.slice(loginAt, client.indexOf('\n};', loginAt)));
+  ck(/loginAddressCandidates\(phone\)/.test(rot), 'the login screen really uses them');
+  ck(/if \(lastErr\) throw lastErr/.test(rot),
+    'and a genuinely wrong password still reports as a wrong password');
+  ck(/auth\/too-many-requests|code !== 'auth\/invalid-credential'/.test(rot),
+    'a throttle or a network failure stops the retry rather than burning the second attempt');
+}
+{
+  // ── THE CHIP THAT LIED ──
+  // "why when you tap the other country domain, still returns the 256 on
+  // login and register". Both prefix chips were the literal text "+256" in
+  // the markup with nothing ever updating them, so every country's address
+  // showed Uganda's code -- and the chip is the only thing on that screen
+  // naming the country, so an address pointing at the wrong one looked
+  // completely normal until a correct password was refused.
+  const shell = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
+  ck(/id="loginDial"/.test(shell) && /id="regDial"/.test(shell),
+    'both dialling-code chips can be addressed');
+  ck(!/<span class="prefix">\+256<\/span>/.test(shell),
+    'and neither is left as un-updatable static text');
+  const paint = stripComments(fnSource(client, 'paintRegionChrome'));
+  ck(/loginDial/.test(paint) && /regDial/.test(paint) && /dialPlus\(\)/.test(paint),
+    'they are painted from the region, not hardcoded');
+  ck(/loginRegionNote/.test(paint) && /regionName\(\)/.test(paint),
+    'and the country is named on the sign-in screen');
+  ck(/Number\(STATE && STATE\.regionCount\) > 1/.test(paint),
+    'only once there is more than one country to be on the wrong one of');
+  ck(new RegExp('paintRegionChrome\\(\\);').test(stripComments(fnSource(client, 'applyRegion'))),
+    'repainted whenever the region arrives, which is after that screen is already up');
+  // regionCount must be set BEFORE applyRegion or the country line paints
+  // with the count still undefined and stays hidden on the very load that
+  // needed it.
+  const bootBody = stripComments(fnSource(client, 'boot'));
+  const cAt = bootBody.indexOf('STATE.regionCount = s.regionCount');
+  const aAt = bootBody.indexOf('applyRegion(s.region)');
+  ck(cAt !== -1 && aAt !== -1 && cAt < aAt,
+    'and the country count is known before the repaint runs');
+}
+{
+  // ── SIGNING UP WAS IMPOSSIBLE ON A MIS-MAPPED ADDRESS ──
+  // "make sure referrals are working bro". Registration refused any
+  // referral code whose region id differed from the hostname's region --
+  // and a referral code is REQUIRED to sign up, so an address pointing at
+  // the wrong country shut that country completely: every real member's
+  // code was rejected as belonging to somewhere else.
+  const reg = bare.slice(bare.indexOf('BAD_REFERRAL_REGION') - 4000, bare.indexOf('BAD_REFERRAL_REGION') + 600);
+  ck(/String\(a\.currency \|\| ''\) !== String\(b\.currency \|\| ''\)/.test(reg),
+    'a referral code is now judged on CURRENCY, not on the region id');
+  ck(!/if \(refRegion !== myRegion\)\s*\n?\s*return \{ code: 400/.test(reg),
+    'so two countries sharing a currency no longer reject each other’s codes');
+  ck(/BAD_REFERRAL_REGION/.test(reg) && /another currency|uses \$\{/.test(reg),
+    'and a genuinely different currency is still refused, because commission is a percentage paid into the referrer’s wallet');
+}
+
+console.log('\n— one country at a time, on every admin screen —');
+{
+  // Owner: "make sure dashboards can be categorized so one toggle to see a
+  // country settings ie dashboard, analytics, referrals, transactions,
+  // settings, admins, deposits, withdrawals etc."
+  ck(/function adminRegionFilter\(req\)/.test(bare), 'the panel can ask for one country');
+  const f = stripComments(fnSource(src, 'adminRegionFilter'));
+  ck(/req\.query && req\.query\.region/.test(f) && /req\.body && req\.body\.region/.test(f),
+    'on a GET and on a POST alike');
+  ck(/!raw \|\| raw === 'all'/.test(f),
+    'and "all" (or an older panel sending nothing) means every country, so a tab that has not been taught the toggle keeps working');
+  const rk = stripComments(fnSource(src, 'rowRegionKey'));
+  ck(/userRegions.*\.get\(row\.userId\)/.test(rk),
+    'a row written before regions existed is placed by its MEMBER’s country');
+  ck(/const own = String\(\(row && row\.regionKey\) \|\| ''\)/.test(rk) && rk.indexOf('own') < rk.indexOf('viaUser'),
+    'and a row that carries its own country keeps it -- that is where the money actually moved');
+  // Every screen that shows money or members, filtered.
+  for (const [route, kind] of [["app.get('/admin/stats'", 'the dashboard'],
+                               ["app.post('/admin/analytics'", 'analytics'],
+                               ["app.get('/admin/users'", 'members'],
+                               ["app.post('/admin/deposits/list'", 'recharges'],
+                               ["app.post('/admin/withdrawals/list'", 'cash-outs'],
+                               ["app.post('/admin/transactions/list'", 'records'],
+                               ["app.get('/admin/referrals/list'", 'referrals']]) {
+    const at = bare.indexOf(route);
+    const body = bare.slice(at, bare.indexOf('\napp.', at + 10));
+    ck(at !== -1 && /adminRegionFilter\(req\)/.test(body), `${kind} can be shown for one country`);
+    ck(/regionKey: want \|\| 'all'/.test(body), `  and ${kind} says which country it is showing`);
+    // Asking for the country is not filtering by it. Each route has to
+    // actually drop the other countries' rows -- checked per route, because
+    // they each do it in the shape that suits their own data.
+    ck(/scopeRowsToRegion\(|\.filter\(u => !want \|\| u\.regionKey === want\)|want \? all\.filter\(r => r\.regionKey === want\) : all|!want \|\| rowRegionKey/.test(body),
+      `  and ${kind} really drops the other countries' rows`);
+  }
+  // The totals have to be filtered BEFORE they are added up, or the numbers
+  // on screen would describe every country while the rows beneath them
+  // describe one.
+  const dep = bare.slice(bare.indexOf("app.post('/admin/deposits/list'"));
+  const depBody = dep.slice(0, dep.indexOf('\napp.', 10));
+  // indexOf returns -1 when a thing is ABSENT, and -1 is less than every
+  // real index -- so a bare "a comes before b" check passes when a was
+  // deleted outright. Both have to be found first.
+  const before = (text, a, b) => {
+    const i = text.indexOf(a), j = text.indexOf(b);
+    return i !== -1 && j !== -1 && i < j;
+  };
+  ck(before(depBody, 'scopeRowsToRegion', 'groupProcessedByDay'),
+    'the recharge day-totals are built from the filtered rows, not all of them');
+  ck(before(depBody, 'scopeRowsToRegion', 'counts[r.status'),
+    'and so are the status counts');
+  const wit = bare.slice(bare.indexOf("app.post('/admin/withdrawals/list'"));
+  const witBody = wit.slice(0, wit.indexOf('\napp.', 10));
+  ck(before(witBody, 'scopeRowsToRegion', 'groupProcessedByDay'),
+    'the cash-out day-totals likewise');
+  // Truncation is a fact about the page that was read, not about one
+  // country's share of it.
+  const tx = bare.slice(bare.indexOf("app.post('/admin/transactions/list'"));
+  const txBody = tx.slice(0, tx.indexOf('\napp.', 10));
+  ck(/const truncated = raw\.length >= TX_ADMIN_LIST_LIMIT;/.test(txBody) &&
+     txBody.indexOf('const truncated') < txBody.indexOf('scopeRowsToRegion'),
+    'and "there is more than this" is judged before the filter, so it cannot claim a partial list is complete');
+}
+{
+  const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+  const readsM = /const REGION_FILTERED_READS = \[([^\]]*)\]/.exec(admin);
+  const writesM = /const REGION_FILTERED_WRITES = \[([^\]]*)\]/.exec(admin);
+  ck(!!readsM && !!writesM, 'the panel knows which screens take a country');
+  // ALWAYS stamped, Uganda included. For a LIST, "no region" means every
+  // country -- so not stamping it while Uganda is picked would show a mixed
+  // list under a label saying Uganda.
+  ck(/if \(REGION_FILTERED_READS\.includes\(path\)\) path \+= '\?region=' \+ encodeURIComponent\(ADMIN_REGION \|\| 'all'\)/.test(admin),
+    'and stamps it on every time, not only when the country is not Uganda');
+  ck(/REGION_FILTERED_WRITES\.includes\(path\)\) body = Object\.assign\(\{ region: ADMIN_REGION \|\| 'all' \}/.test(admin),
+    'on the POST-shaped ones too');
+  ck(/function paintRegionPicker\(name\)/.test(admin) && /REGION_AWARE_TABS\.includes\(name\)/.test(admin),
+    'the toggle is put on every screen it changes');
+  ck(/Promise\.resolve\(fn\(\)\)\.then\(\(\) => \{ if \(_tab === name\) paintRegionPicker\(name\); \}\)/.test(admin),
+    'after the tab paints, so it is not wiped by the render');
+  ck(/paintRegionPicker\(tab\);/.test(admin),
+    'and put back after a live refresh rebuilds the tab');
+  ck(/ADMIN_REGION !== 'all' && !ADMIN_REGIONS\.some/.test(admin),
+    '"All countries" survives a region reload instead of snapping back to Uganda');
+  ck(/REGION_SINGLE_TABS = \['settings', 'products'\]/.test(admin),
+    'Settings and Products stay one country at a time');
+  ck(/const one = \(!ADMIN_REGION \|\| ADMIN_REGION === 'all'\) \? 'ug' : ADMIN_REGION;/.test(admin),
+    'so picking "All countries" and opening them shows the founding country rather than editing it under the wrong label');
+  ck(/amounts are in each row/.test(admin),
+    'and an "All countries" view says its figures are in more than one currency');
+}
+{
+  // "those subdomain are not working well why" -- answerable in one tap
+  // instead of by guessing.
+  const at = bare.indexOf("app.post('/admin/regions/check-host'");
+  const body = bare.slice(at, bare.indexOf('\napp.', at + 10));
+  ck(at !== -1, 'an address can be checked from the panel');
+  ck(/claimedBy/.test(body) && /regionForHost\(host\)/.test(body),
+    'it says which country actually serves it');
+  ck(/loginExample: phoneToEmail/.test(body),
+    'and which login address a member there would use -- the thing that was silently wrong');
+  ck(/not under the base domain/.test(body),
+    'naming the usual cause outright: the address is not under the configured base domain');
+  const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+  // RUN, not described. An early `return ''` bolted into the function
+  // leaves every "does this function exist" check passing while the warning
+  // never appears -- which is the whole failure being guarded against.
+  function warnFor(ownHost, baseDomain, regions) {
+    return new Function('deps', `
+      const esc = deps.esc, location = deps.location;
+      let ADMIN_BASE_DOMAIN = deps.baseDomain;
+      let ADMIN_REGIONS = deps.regions;
+      const REGION_SINGLE_TABS = ['settings', 'products'];
+      ${fnSource(admin, 'adminOwnDomain')}
+      ${fnSource(admin, 'baseDomainWarningHtml')}
+      return baseDomainWarningHtml();
+    `)({
+      esc: x => String(x == null ? '' : x),
+      location: { hostname: ownHost },
+      baseDomain, regions,
+    });
+  }
+  const withLabel = [{ key: 'ug', name: 'Uganda', currency: 'UGX', labels: ['g26e'] }];
+  const mismatch = warnFor('panel.example.com', 'chipz-platform.com', withLabel);
+  ck(/chipz-platform\.com/.test(mismatch) && /example\.com/.test(mismatch),
+    'the panel warns on its own when the base domain is not the domain it is being used on, naming both');
+  ck(/useThisDomainBtn/.test(mismatch), 'and offers a one-tap fix');
+  ck(/function useThisDomainAsBase/.test(admin) && /baseDomain: own/.test(admin),
+    'which really saves it');
+  ck(warnFor('app.chipz-platform.com', 'chipz-platform.com', withLabel) === '',
+    'and says nothing when the base domain IS the domain in use');
+  // A panel hosted on Render or EdgeOne says nothing about where the
+  // MEMBERS' site lives, so its own hostname must not trigger the warning.
+  for (const h of ['chipz-admin.onrender.com', 'chipz.edgeone.app', 'localhost', '127.0.0.1'])
+    ck(warnFor(h, 'chipz-platform.com', withLabel) === '', `  nor when the panel itself is on ${h}`);
+  ck(/No base domain is set/.test(warnFor('panel.example.com', '', withLabel)),
+    'and an unset base domain is called out on its own terms');
 }
 
 console.log('\n— the format hint, and picking a payer out of an SMS —');
@@ -791,9 +1051,9 @@ ck(/localStorage\.setItem\('chipzRegion'/.test(bareClient),
   'the last known region is remembered, so a cold start does not flash the wrong currency');
 {
   // Every money figure in the app funnels through these three.
-  const r = clientApi(KE);
+  const r = clientApi(pubView(KE));
   ck(r.fmtUGX(30000) === 'KES 30,000', 'the appʼs own formatter reads the regionʼs currency');
-  const one = clientApi(api.normalizeRegion({ key: 'x', name: 'X', currency: 'KSH', dialCode: '111', localLength: 9, prefixes: ['7'] }, 'x'));
+  const one = clientApi(pubView(api.normalizeRegion({ key: 'x', name: 'X', currency: 'KSH', dialCode: '111', localLength: 9, prefixes: ['7'] }, 'x')));
   ck(one.fmtUGX(1000) === 'KSH 1,000', 'including a label that is not three letters long');
 }
 ck(!/'UGX ' \+|"UGX " \+|>UGX</.test(bareClient), 'no screen still prints a hardcoded UGX');
