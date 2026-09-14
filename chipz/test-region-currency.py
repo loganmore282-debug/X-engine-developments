@@ -347,13 +347,23 @@ async def main():
         await page.evaluate("()=>{try{localStorage.clear();sessionStorage.clear()}catch(e){}}")
         current["entry"] = {"status": "success", "rotate": True, "mode": "always", "host": "localhost"}
         hops = []
-        page.on("framenavigated", lambda f: hops.append(f.url) if f == page.main_frame else None)
+        on_nav = lambda f: hops.append(f.url) if f == page.main_frame else None
+        page.on("framenavigated", on_nav)
         # "commit", not "load": the hop fires from start-up code, so the
         # original page is navigated away from before it ever finishes
         # loading and a wait_until="load" goto times out instead of passing.
         await page.goto(f"http://127.0.0.1:{PORT}/index.html?ref=ABC123", wait_until="commit")
+        # Generous, and its outcome is RECORDED rather than printed. This
+        # harness went red in a full-suite run and green on its own: the hop
+        # waits on a heavy obfuscated bundle parsing and one request
+        # resolving, so on a loaded machine it lands late. A late hop then
+        # navigated the page out from under the NEXT goto, which failed with
+        # an unrelated 30s timeout -- so the real cause was three steps away
+        # from the error. Hence the longer window, and the guard below.
+        hop_ok = False
         try:
-            await page.wait_for_url(f"http://localhost:{PORT}/**", timeout=20000)
+            await page.wait_for_url(f"http://localhost:{PORT}/**", timeout=60000)
+            hop_ok = True
         except Exception as e:
             print("  never reached the other address:", type(e).__name__)
         # Long enough for a second hop to have happened if the guard failed.
@@ -372,19 +382,36 @@ async def main():
            "and he was moved ONCE, not round a loop (landings on the new address: %d)" % len(later))
         moved_flag = await page.evaluate("()=>{try{return sessionStorage.getItem('chipzEntryMoved')}catch(e){return 'unreadable'}}")
         ck(moved_flag == "1", "the marker is recorded on the address he landed on: %s" % moved_flag)
+        # Nothing is listening for navigations after this point, and `hops`
+        # must not keep collecting them into a later scenario's count.
+        page.remove_listener("framenavigated", on_nav)
 
         # A member with an account on this address is left alone: his saved
         # password, his cached app shell and his installed icon all live on
         # this one hostname. Same answer as above except for the mode, and
         # the server still says rotate -- so if the app obeyed it blindly he
         # would be moved.
-        current["entry"] = {"status": "success", "rotate": True, "mode": "visitors", "host": "127.0.0.1"}
-        await page.evaluate("()=>{try{sessionStorage.clear();localStorage.setItem('snow_state_cache', JSON.stringify({uid:'u1'}))}catch(e){}}")
-        held_on = page.url.split("?")[0]
-        await page.goto(held_on, wait_until="load")
-        await page.wait_for_timeout(6000)
-        ck(page.url.startswith(f"http://localhost:{PORT}/"),
-           "a browser already holding an account here is not moved: " + page.url)
+        #
+        # Only run once the hop above actually landed. Otherwise a hop still
+        # in flight lands in the middle of THIS load, and what gets reported
+        # is a goto timeout here rather than the failure that really
+        # happened a step earlier.
+        if not hop_ok:
+            print("  (skipping the signed-in case: the hop above never landed)")
+        else:
+            current["entry"] = {"status": "success", "rotate": True, "mode": "visitors", "host": "127.0.0.1"}
+            await page.evaluate("()=>{try{sessionStorage.clear();localStorage.setItem('snow_state_cache', JSON.stringify({uid:'u1'}))}catch(e){}}")
+            held_on = page.url.split("?")[0]
+            # "commit" here too, and tolerated: this page must not be moved,
+            # but a goto that waits for "load" is breakable by any stray
+            # navigation, which turns a passing case into a timeout.
+            try:
+                await page.goto(held_on, wait_until="commit")
+            except Exception as e:
+                print("  load interrupted:", type(e).__name__)
+            await page.wait_for_timeout(6000)
+            ck(page.url.startswith(f"http://localhost:{PORT}/"),
+               "a browser already holding an account here is not moved: " + page.url)
 
         # Back to where the next scenario expects to start.
         current["entry"] = {"status": "success", "rotate": False, "mode": "off", "host": ""}

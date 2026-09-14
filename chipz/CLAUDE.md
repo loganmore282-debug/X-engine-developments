@@ -3858,3 +3858,33 @@ empty entries out, so `''` matches nothing either way. The `if (!h) return false
 stays as belt-and-braces, but no honest assertion can fail on it, so claiming a test for
 it would have been a lie. *A mutation that cannot fail for the right reason should be
 deleted, not propped up.*
+
+### Round 156 follow-up — the rotation harness was flaky, not the app
+
+`test-region-currency.py` passed on its own and went **red in the full-suite run**. The
+app was fine; the harness was.
+
+The rotation scenario waited a fixed 20s for the hop. The hop depends on a heavy
+obfuscated bundle parsing *and* one request resolving, so on a loaded machine it lands
+late — and a **late hop then navigated the page out from under the NEXT `page.goto`**,
+which failed with an unrelated `Page.goto: Timeout 30000ms exceeded`. So the reported
+error was three steps away from the cause, and the timed-out wait had only been
+`print`ed, never asserted.
+
+Fixed three ways:
+- the hop window is 60s and its outcome is **recorded in `hop_ok`**, not printed;
+- the signed-in case only runs **if the hop actually landed** — otherwise a hop still in
+  flight lands mid-load and the failure that gets reported is not the one that happened;
+- that load uses `wait_until="commit"` inside a `try`, because a goto waiting for `"load"`
+  is breakable by any stray navigation;
+- the `framenavigated` listener is removed at the end, so `hops` cannot keep collecting
+  into a later scenario's "moved once, not round a loop" count.
+
+Verified by running it **twice on its own and once under three other Playwright harnesses
+in parallel** — the condition that produced the original failure. All green.
+
+**Lessons worth keeping.** A fixed timeout around a navigation the page starts itself is a
+flake generator: wait long, and record the outcome as a value the assertions can see. Never
+`print` the failure of a wait you are relying on — assert it, or a later, unrelated error
+becomes the only symptom. And where one step failing makes the next step meaningless,
+**guard the next step** rather than letting it produce a second, more confusing failure.
