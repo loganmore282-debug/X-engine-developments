@@ -24,10 +24,21 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Normalize Round 158 project-log formatting
+      - name: Finish audited source hardening and align regression tests
         run: |
           python3 - <<'PY'
           from pathlib import Path
+
+          def rep(path, old, new, label):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              n = s.count(old)
+              if n != 1:
+                  raise SystemExit(f'{label}: expected 1 match, found {n}')
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+              print('patched', label)
+
+          # The first repair pass logged Round 158 using escaped newlines.
           p = Path('chipz/CLAUDE.md')
           s = p.read_text(encoding='utf-8')
           marker = r'\n\n## Round 158 — 2026-09-14 — money/region audit repairs'
@@ -36,6 +47,41 @@ jobs:
               tail = ('## Round 158 — 2026-09-14 — money/region audit repairs' + tail).replace(r'\n', '\n')
               s = head.rstrip() + '\n\n' + tail.lstrip()
               p.write_text(s, encoding='utf-8')
+
+          # Small DB primitive used where a deterministic id must be created
+          # exactly once across processes, without ever overwriting an existing
+          # money-entitlement row.
+          rep('chipz/db.js',
+          """  async updateIf(extraFilter, updates) {\n    const op = buildMongoUpdate(updates);\n    if (!Object.keys(op).length) return false;\n    const result = await _mdb.collection(this._col).updateOne({ _id: this.id, ...extraFilter }, op);\n    return result.matchedCount > 0;\n  }\n""",
+          """  async updateIf(extraFilter, updates) {\n    const op = buildMongoUpdate(updates);\n    if (!Object.keys(op).length) return false;\n    const result = await _mdb.collection(this._col).updateOne({ _id: this.id, ...extraFilter }, op);\n    return result.matchedCount > 0;\n  }\n  // Atomic create-if-missing for deterministic idempotency records. Unlike\n  // set(..., { merge:true }), this never changes an existing document, so a\n  // retry from another process cannot reset a spin that was already used.\n  async createIfAbsent(data) {\n    const plain = resolveFieldValues(data);\n    const result = await _mdb.collection(this._col).updateOne(\n      { _id: this.id },\n      { $setOnInsert: { ...plain, _id: this.id } },\n      { upsert: true }\n    );\n    return result.upsertedCount > 0;\n  }\n""",
+          'db createIfAbsent primitive')
+
+          # Referral history: preserve an already-existing legacy row, but when
+          # a row is missing use one deterministic id and atomic create so two
+          # processes repairing the same credit cannot append duplicate ledger rows.
+          rep('chipz/server.js',
+          """      if (priorCommissionTx.empty) {\n        await db.collection('transactions').add({\n          userId: id, type: 'commission', description: `Level ${i + 1} reward`,\n          amount: reward, status: 'success', date, time, investmentId, commissionLevel: i,\n          createdAt: FieldValue.serverTimestamp()\n        });\n      }\n""",
+          """      if (priorCommissionTx.empty) {\n        const commissionTxId = `commission:${investmentId}:${i}:${id}`;\n        await db.collection('transactions').doc(commissionTxId).createIfAbsent({\n          userId: id, type: 'commission', description: `Level ${i + 1} reward`,\n          amount: reward, status: 'success', date, time, investmentId, commissionLevel: i,\n          createdAt: FieldValue.serverTimestamp()\n        });\n      }\n""",
+          'deterministic commission ledger repair')
+
+          # Product-spin rows get deterministic ordinals and are create-only.
+          # Counting legacy rows still lets old partial grants be completed;
+          # deterministic ids make new grants safe even if two Node processes
+          # execute the same purchase at once.
+          rep('chipz/server.js',
+          """      await db.collection('turntableSpins').add({\n        // investmentId ties the spin to the purchase that paid for it: it is\n        // what makes the guard above work, and it is the only way to answer\n        // \"where did this spin come from\" when auditing a member's account.\n        userId, investmentId: investmentId || null,\n        spinMin: lo, spinMax: hi, source: 'product',\n        productKey: product.key, productName: product.name,\n        used: false, date, time, createdAt: FieldValue.serverTimestamp(),\n      });\n""",
+          """      const spinData = {\n        // investmentId ties the spin to the purchase that paid for it: it is\n        // what makes the guard above work, and it is the only way to answer\n        // \"where did this spin come from\" when auditing a member's account.\n        userId, investmentId: investmentId || null, grantOrdinal: i,\n        spinMin: lo, spinMax: hi, source: 'product',\n        productKey: product.key, productName: product.name,\n        used: false, date, time, createdAt: FieldValue.serverTimestamp(),\n      };\n      if (investmentId) {\n        await db.collection('turntableSpins')\n          .doc(`grant:${investmentId}:${i}`).createIfAbsent(spinData);\n      } else {\n        await db.collection('turntableSpins').add(spinData);\n      }\n""",
+          'deterministic product-spin rows')
+
+          # The old test encoded the unsafe behaviour as a requirement. A
+          # non-founding country must now have exactly one candidate: its own
+          # dial-prefixed namespace. Uganda may keep its safe 256-prefixed
+          # migration fallback because no other configured region may reuse
+          # Uganda's dial code.
+          rep('chipz/test-regions.js',
+          """  // Sign-in tries the other shape for the SAME country too, so a member is\n  // never locked out by a region setting changing under him. Firebase folds\n  // \"no such account\" into the same auth/invalid-credential as a wrong\n  // password, so without this the member just sees \"Incorrect phone number\n  // or password\" for a password that is correct.\n  const ke = clientApi(pubView(KE));\n  const cands = ke.loginAddressCandidates('0712345678');\n  ck(cands.length === 2, 'sign-in has two addresses to try');\n  ck(cands[0] === '254712345678@chipz-platform.com', 'this country’s own shape first');\n  ck(cands[1] === '712345678@chipz-platform.com', 'then the bare legacy shape');\n  // Never another COUNTRY's shape -- that would become a way to sign in to a\n  // Kenyan account on the Ugandan site.\n  api.setCurrent(UG);\n  const ugAddr = api.phoneToEmail('0712345678');\n  ck(!cands.includes(ugAddr) || ugAddr === cands[1],\n    'and never an address built from a different country’s dialling code');\n  const ugCands = clientApi(pubView(UG)).loginAddressCandidates('0742730382');\n  ck(ugCands[0] === '742730382@chipz-platform.com', 'Uganda tries the bare address first');\n""",
+          """  // A non-founding country gets ONE login namespace only. Trying the\n  // founding bare-local shape as a fallback can resolve the same local digits\n  // to a different country's Firebase UID when the password happens to match.\n  const ke = clientApi(pubView(KE));\n  const cands = ke.loginAddressCandidates('0712345678');\n  ck(cands.length === 1, 'a dial-code country has exactly one login namespace');\n  ck(cands[0] === '254712345678@chipz-platform.com', 'that namespace is this country’s own canonical shape');\n  api.setCurrent(UG);\n  const ugAddr = api.phoneToEmail('0712345678');\n  ck(!cands.includes(ugAddr), 'it never falls back into the founding country’s bare-local namespace');\n  const ugCands = clientApi(pubView(UG)).loginAddressCandidates('0742730382');\n  ck(ugCands[0] === '742730382@chipz-platform.com', 'Uganda tries the bare address first');\n  ck(ugCands.includes('256742730382@chipz-platform.com'),\n    'the founding country may keep its own dial-prefixed migration fallback');\n""",
+          'region login regression expectations')
           PY
 
       - name: Install pinned dependencies
@@ -51,7 +97,9 @@ jobs:
       - name: Validate JavaScript syntax
         run: |
           node --check chipz/server.js
+          node --check chipz/db.js
           node --check chipz/user-src/original_module.js
+          node --check chipz/test-regions.js
 
       - name: Audit dependencies
         working-directory: chipz
@@ -75,14 +123,10 @@ jobs:
       - name: Remove one-shot workflow
         run: rm .github/workflows/chipz-rebuild-after-audit.yml
 
-      - name: Commit rebuilt deploy artifacts
+      - name: Commit repaired sources and rebuilt deploy artifacts
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add chipz/CLAUDE.md chipz/user chipz/admin .github/workflows/chipz-rebuild-after-audit.yml
-          if git diff --cached --quiet; then
-            echo "nothing changed"
-            exit 0
-          fi
-          git commit -m "build(chipz): rebuild audited fixes"
+          git add chipz/server.js chipz/db.js chipz/test-regions.js chipz/CLAUDE.md chipz/user chipz/admin .github/workflows/chipz-rebuild-after-audit.yml
+          git commit -m "fix(chipz): complete audited money and region repairs"
           git push origin HEAD:claude/chipz-platform-build
