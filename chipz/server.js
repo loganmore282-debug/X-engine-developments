@@ -192,6 +192,32 @@ function sanitizeAllowedOrigins(raw) {
   }
   return { hosts };
 }
+// ── WHY EVERY SHORT ADDRESS WAS REFUSED BY THE BACKEND ──
+// Owner: "other country domains are not working, no fetching images".
+//
+// This used to be an EXACT hostname match, and that is why: the owner types
+// the domain he registered into the allowlist, but the short addresses are
+// GENERATED (g26e, b5dh, ...) and never typed anywhere. So the root domain
+// worked and every subdomain of it was refused -- and a refused origin means
+// the browser throws the reply away before any of our code sees it, so the
+// app just reports a network error. Practically everything on screen comes
+// through this API, including every photo (they travel as data: URLs inside
+// the JSON), which is exactly what "no fetching images" looks like.
+//
+// So a host the owner allowed now covers its SUBDOMAINS too. That is the
+// whole premise of a wildcard DNS record: every label under his domain is
+// his. Matched on '.' + domain, which cannot be spoofed from outside --
+// "chipz-platform.com.evil.com" ends with ".evil.com", not
+// ".chipz-platform.com".
+//
+// Deliberately NOT dependent on the base domain being set correctly: that
+// is a separate setting for a separate job (deciding which COUNTRY a label
+// belongs to), and reaching the backend at all must not be gated on it.
+function corsHostAllowed(host) {
+  const h = String(host || '').trim().toLowerCase();
+  if (!h) return false;
+  return _corsExtraHosts.some(d => h === d || h.endsWith('.' + d));
+}
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
@@ -200,9 +226,8 @@ app.use(cors({
       const h = new URL(origin).hostname.toLowerCase();
       if (CORS_ALLOWED_SUFFIXES.some(sfx => h.endsWith(sfx))) return cb(null, true);
       // Owner-added custom domains, checked LAST and only ever additive --
-      // see _corsExtraHosts. Exact hostname match, so "chipz-platform.com"
-      // never accidentally admits "chipz-platform.com.evil.com".
-      if (_corsExtraHosts.includes(h)) return cb(null, true);
+      // see _corsExtraHosts.
+      if (corsHostAllowed(h)) return cb(null, true);
       if (h === 'localhost' || h === '127.0.0.1') return cb(null, true);
     } catch (_) {}
     cb(null, false);
@@ -443,7 +468,13 @@ function hostIsParked(rawHost) {
   // Only a hostname some country actually claims serves the app. Worth
   // having once a wildcard DNS record exists, or every made-up label under
   // the base domain would quietly serve the founding country.
-  if (_strictRegionHosts && !_regionHosts.includes(h)) return true;
+  //
+  // A domain the owner typed into the allowlist HIMSELF is never parked by
+  // this, only by the retired list above. Strict mode depends on the base
+  // domain being set correctly to know what a country's addresses even
+  // are, and if it is not, this would refuse every address on the platform
+  // at once -- including the ones he explicitly allowed.
+  if (_strictRegionHosts && !_regionHosts.includes(h) && !_mainAllowedHosts.includes(h)) return true;
   return false;
 }
 // The hostname the app was loaded from. Origin, because the app is served
@@ -7358,13 +7389,20 @@ app.post('/admin/regions/check-host', async (req, res) => {
     } else {
       reasons.push(`${claimedBy.name} claims this address.`);
     }
+    // The question that was actually breaking the platform, answered
+    // outright: a refused origin shows the app a bare network error, so
+    // "allowed to reach the backend" is invisible from the outside.
+    const reachable = corsHostAllowed(host) || isInfraHost(host);
+    reasons.push(reachable
+      ? 'It is allowed to reach the backend.'
+      : 'It is NOT allowed to reach the backend, so the app there cannot load anything at all -- no prices, no photos. Add its domain under Settings -> Allowed website domains; subdomains of anything listed there are covered automatically.');
     res.json({
       status: 'success', host,
       claimed: !!claimedBy,
       region: { key: resolved.key, name: resolved.name, currency: resolved.currency, dialCode: resolved.dialCode },
       usesBareLocal: regionUsesBareLocal(resolved),
       loginExample: phoneToEmail('0700000000', resolved),
-      parked, reasons,
+      parked, reachable, reasons,
       baseDomain: _baseDomain, blockRootDomain: _blockRootDomain, strictRegionHosts: _strictRegionHosts,
     });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not check that address' }); }

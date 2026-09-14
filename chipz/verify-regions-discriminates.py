@@ -230,10 +230,6 @@ MUTATIONS = [
      '  if (!h) return false;\n  if (isInfraHost(h)) return false;',
      '  if (isInfraHost(h)) return false;'),
 
-    ('strict mode stops refusing unclaimed addresses', SERVER,
-     '  if (_strictRegionHosts && !_regionHosts.includes(h)) return true;',
-     '  void _strictRegionHosts;'),
-
     ('a retired address keeps working', SERVER,
      '  if (_parkedHosts.includes(h)) return true;',
      '  void _parkedHosts;'),
@@ -510,14 +506,6 @@ MUTATIONS = [
      "    for (const id of ['loginDial', 'regDial']) { const el = $(id); if (el) el.textContent = d; }",
      "    /* chips left as they were rendered */"),
 
-    ('the sign-in screen stops naming the country', CLIENT,
-     "    const note = many ? (regionName() + ' · ' + cur()) : '';",
-     "    const note = '';"),
-
-    ('the country line shows on a single-country platform too', CLIENT,
-     "    const many = Number(STATE && STATE.regionCount) > 1;",
-     "    const many = true;"),
-
     ('the region arrives without repainting the screen', CLIENT,
      "  paintRegionChrome();\n}\n// The bits of the SIGN-IN screen that name a country.",
      "}\n// The bits of the SIGN-IN screen that name a country."),
@@ -639,6 +627,35 @@ MUTATIONS = [
     ('the app drops the published login-address shape on the floor', CLIENT,
      "  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault','usesBareLocal']) {",
      "  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault']) {"),
+
+    # ── every subdomain refused by the backend, so nothing loaded at all ──
+    ('a generated subdomain is refused by the backend again', SERVER,
+     "  return _corsExtraHosts.some(d => h === d || h.endsWith('.' + d));",
+     "  return _corsExtraHosts.includes(h);"),
+
+    ('the subdomain rule drops the dot, admitting lookalike domains', SERVER,
+     "  return _corsExtraHosts.some(d => h === d || h.endsWith('.' + d));",
+     "  return _corsExtraHosts.some(d => h === d || h.endsWith(d));"),
+
+    ('the CORS check goes back to exact hostnames', SERVER,
+     "      if (corsHostAllowed(h)) return cb(null, true);",
+     "      if (_corsExtraHosts.includes(h)) return cb(null, true);"),
+
+    ('strict mode parks a domain the owner allowed himself', SERVER,
+     "  if (_strictRegionHosts && !_regionHosts.includes(h) && !_mainAllowedHosts.includes(h)) return true;",
+     "  if (_strictRegionHosts && !_regionHosts.includes(h)) return true;"),
+
+    ('strict mode stops refusing unclaimed addresses at all', SERVER,
+     "  if (_strictRegionHosts && !_regionHosts.includes(h) && !_mainAllowedHosts.includes(h)) return true;\n  return false;",
+     "  return false;"),
+
+    ('the address checker stops saying whether it can reach the backend', SERVER,
+     "    const reachable = corsHostAllowed(host) || isInfraHost(host);",
+     "    const reachable = true;"),
+
+    ('the country and currency are put back in front of members', CLIENT,
+     "      el.textContent = '';\n      el.style.display = 'none';",
+     "      el.textContent = regionName() + ' · ' + cur();\n      el.style.display = '';"),
 ]
 
 

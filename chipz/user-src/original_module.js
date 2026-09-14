@@ -79,15 +79,18 @@ function paintRegionChrome(){
   try {
     const d = dialPlus();
     for (const id of ['loginDial', 'regDial']) { const el = $(id); if (el) el.textContent = d; }
-    // Named only when there IS more than one country to be on the wrong one
-    // of. regionCount arrives with the same reply as the region itself.
-    const many = Number(STATE && STATE.regionCount) > 1;
-    const note = many ? (regionName() + ' · ' + cur()) : '';
+    // The country and currency are NOT printed on the sign-in screen. They
+    // were, briefly, as a way to make a wrongly-mapped address visible --
+    // owner: "why showing the country and currency, that should not be
+    // shown". The dialling-code chip above already differs per country, and
+    // the address checker in the admin panel answers the same question
+    // without putting operator diagnostics in front of members. Left in
+    // place, blank, so nothing has to move if it is ever wanted again.
     for (const id of ['loginRegionNote', 'regRegionNote']) {
       const el = $(id);
       if (!el) continue;
-      el.textContent = note;
-      el.style.display = note ? '' : 'none';
+      el.textContent = '';
+      el.style.display = 'none';
     }
   } catch(_){}
 }

@@ -302,9 +302,11 @@ async def main():
             print("  %-9s %s" % (k, v))
         ck(chips["login"] == "+254", "Login shows this country's dialling code, not Uganda's: " + chips["login"])
         ck(chips["reg"] == "+254", "and so does Sign Up: " + chips["reg"])
-        ck("Kenya" in chips["note"] and "KES" in chips["note"],
-           "with the country named so a wrongly-mapped address is visible: " + chips["note"])
-        ck("Kenya" in chips["regNote"], "on the Sign Up pane too: " + chips["regNote"])
+        # Owner: "why showing the country and currency, that should not be
+        # shown." The chip differs per country; the name and currency do not
+        # go in front of members.
+        ck(chips["note"] == "" and chips["regNote"] == "",
+           "and the country/currency line is NOT shown: %r / %r" % (chips["note"], chips["regNote"]))
         await page.screenshot(path=f"{OUT}/auth-kenya.png", full_page=True)
 
         # Back to Uganda: a test that only ever sees Kenya cannot tell a live
@@ -318,7 +320,7 @@ async def main():
             " note:((document.getElementById('loginRegionNote')||{}).textContent||'').trim()})")
         print("  uganda   ", ugChips)
         ck(ugChips["login"] == "+256", "and Uganda reads +256: " + ugChips["login"])
-        ck("Uganda" in ugChips["note"], "named as Uganda: " + ugChips["note"])
+        ck(ugChips["note"] == "", "still with no country line: %r" % ugChips["note"])
 
         print('\n— an arrival is moved onto a different address in his own country —')
         # Owner: "if one joined the site or visited the site with a subdomain

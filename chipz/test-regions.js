@@ -80,6 +80,7 @@ const api = new Function('normalizeAllowedHost', `
     if (o.strictRegionHosts !== undefined) _strictRegionHosts = o.strictRegionHosts;
     rebuildRegionHosts(); };
   ${fnSource(src, 'refreshCorsSnapshot')}
+  ${fnSource(src, 'corsHostAllowed')}
   ${fnSource(src, 'hostOnly')}
   ${fnSource(src, 'regionHostnames')}
   ${fnSource(src, 'rebuildRegionHosts')}
@@ -102,6 +103,7 @@ const api = new Function('normalizeAllowedHost', `
            localDigits, cleanPhone, phoneToEmail, phoneFormatHint, badPhoneMessage,
            looksLikeRegionMobile, fmtMoney, setRegions, setCurrent, PRODUCT_REGION_FIELDS,
            hostIsParked, regionHostnames, isInfraHost, setHostPolicy, regionUsesBareLocal,
+           corsHostAllowed, setMainAllowed: h => { _mainAllowedHosts = h; refreshCorsSnapshot(); },
            corsHosts: () => _corsExtraHosts.slice() };
 `)(new Function('raw', fnSource(src, 'normalizeAllowedHost').replace(/^function [^{]*/, '') + '')
    // normalizeAllowedHost is a plain function; wrap it so the new Function
@@ -312,10 +314,13 @@ ck(api.phoneToEmail('+254712345678') === '254712345678@chipz-platform.com',
   const paint = stripComments(fnSource(client, 'paintRegionChrome'));
   ck(/loginDial/.test(paint) && /regDial/.test(paint) && /dialPlus\(\)/.test(paint),
     'they are painted from the region, not hardcoded');
-  ck(/loginRegionNote/.test(paint) && /regionName\(\)/.test(paint),
-    'and the country is named on the sign-in screen');
-  ck(/Number\(STATE && STATE\.regionCount\) > 1/.test(paint),
-    'only once there is more than one country to be on the wrong one of');
+  // Owner: "why showing the country and currency, that should not be
+  // shown." The chips stay live per country; the name and currency do not
+  // go in front of members.
+  ck(!/regionName\(\)/.test(paint) && !/' · '/.test(paint),
+    'and the country and currency are NOT printed on the sign-in screen');
+  ck(/el\.style\.display = 'none'/.test(paint),
+    'the slot is left hidden rather than removed, so nothing has to move if it is wanted again');
   ck(new RegExp('paintRegionChrome\\(\\);').test(stripComments(fnSource(client, 'applyRegion'))),
     'repainted whenever the region arrives, which is after that screen is already up');
   // regionCount must be set BEFORE applyRegion or the country line paints
@@ -444,6 +449,10 @@ console.log('\n— one country at a time, on every admin screen —');
     'and which login address a member there would use -- the thing that was silently wrong');
   ck(/not under the base domain/.test(body),
     'naming the usual cause outright: the address is not under the configured base domain');
+  ck(/const reachable = corsHostAllowed\(host\) \|\| isInfraHost\(host\)/.test(body) && /reachable,/.test(body),
+    'and whether it is even allowed to reach the backend -- the thing that made every subdomain load nothing');
+  ck(/NOT allowed to reach the backend/.test(body),
+    'said in words, with what to do about it');
   const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
   // RUN, not described. An early `return ''` bolted into the function
   // leaves every "does this function exist" check passing while the warning
@@ -621,6 +630,91 @@ console.log('\n— short addresses per country (g26e, shy) —');
   // confusion HOST_PARKED exists to remove.
   ck(api.corsHosts().includes('chipz-platform.com'),
     'and the root domain is allowed through CORS so it can read its own refusal');
+  // ── THE BUG THAT MADE EVERY SUBDOMAIN LOAD NOTHING ──
+  // Owner: "other country domains are not working, no fetching images".
+  //
+  // The check was an EXACT hostname match. The owner types the domain he
+  // REGISTERED into the allowlist; the short addresses are GENERATED and
+  // never typed anywhere -- so the root domain worked and every subdomain
+  // of it was refused. A refused origin means the browser throws the reply
+  // away before any code sees it, so the app reports a plain network error
+  // and shows nothing: no prices, and no photos, because every photo
+  // travels as a data: URL inside that JSON.
+  api.setMainAllowed(['ownersite.example']);
+  ck(api.corsHostAllowed('ownersite.example'),
+    'the domain the owner listed reaches the backend');
+  ck(api.corsHostAllowed('g26e.ownersite.example'),
+    'and so does a generated short address under it, which he never typed anywhere');
+  ck(api.corsHostAllowed('b5dh.ownersite.example') && api.corsHostAllowed('deep.nested.ownersite.example'),
+    'any label under it, however many levels deep');
+  // The reason an exact match was used in the first place. A suffix match on
+  // '.' + domain cannot be spoofed from outside: the attacker's host ends
+  // with THEIR domain, not the owner's.
+  ck(!api.corsHostAllowed('ownersite.example.evil.test'),
+    'but a lookalike that merely CONTAINS the domain is still refused');
+  ck(!api.corsHostAllowed('notownersite.example'),
+    'and neither is a domain that merely ends with the same letters');
+  ck(!api.corsHostAllowed('ownersite.example.co'), 'nor a different TLD');
+  // The middleware has to actually USE it. Every check above calls the
+  // function directly, so a CORS block that quietly went back to exact
+  // matching would pass all of them.
+  // The middleware's own decision, RUN. Every check above calls
+  // corsHostAllowed directly, so a CORS block that quietly went back to its
+  // own exact-match list would pass all of them.
+  const corsAt = bare.indexOf('origin: (origin, cb) => {');
+  let depth = 0, corsEnd = -1;
+  for (let k = bare.indexOf('{', corsAt); k < bare.length; k++) {
+    if (bare[k] === '{') depth++;
+    else if (bare[k] === '}') { depth--; if (depth === 0) { corsEnd = k + 1; break; } }
+  }
+  const decide = new Function('deps', `
+    const corsHostAllowed = deps.corsHostAllowed;
+    const CORS_ALLOWED_ORIGINS = deps.CORS_ALLOWED_ORIGINS;
+    const CORS_ALLOWED_SUFFIXES = deps.CORS_ALLOWED_SUFFIXES;
+    const cb = (_e, ok) => { deps.out.ok = ok; };
+    const fn = ${bare.slice(corsAt + 'origin: '.length, corsEnd)};
+    return origin => { deps.out.ok = null; fn(origin, cb); return deps.out.ok; };
+  `)({
+    corsHostAllowed: api.corsHostAllowed,
+    CORS_ALLOWED_ORIGINS: new Set(['https://chipz-platform.com']),
+    CORS_ALLOWED_SUFFIXES: ['.onrender.com', '.edgeone.app'],
+    out: {},
+  });
+  api.setMainAllowed(['ownersite.example']);
+  ck(decide('https://g26e.ownersite.example') === true,
+    'the CORS middleware itself admits a generated short address');
+  ck(decide('https://ownersite.example') === true, 'and the domain it hangs off');
+  ck(decide('https://ownersite.example.evil.test') === false,
+    'and the middleware itself refuses a lookalike');
+  ck(decide('https://chipz-app.onrender.com') === true, 'the platform host still works');
+  ck(decide(undefined) === true,
+    'and a request with no Origin at all is allowed -- that is the payment webhooks, which must never be blocked by a domain rule');
+  api.setMainAllowed([]);
+  ck(decide('https://g26e.ownersite.example') === false,
+    'while a domain that is not allowed at all is refused');
+  // This sandbox carries shared mutable state, so every block puts the host
+  // policy back the way it found it -- clearing the allowlist here and
+  // leaving it cleared failed the very next assertion.
+  api.setMainAllowed(['ownersite.example']);
+  // Reaching the backend must NOT depend on the base domain being right --
+  // that setting exists to decide which COUNTRY a label belongs to, and
+  // getting it wrong should not take the whole platform off the air.
+  api.setHostPolicy({ baseDomain: '' });
+  ck(api.corsHostAllowed('g26e.ownersite.example'),
+    'and it still works with no base domain set at all, because that is a different job');
+  api.setHostPolicy({ baseDomain: 'chipz-platform.com' });
+  api.setMainAllowed([]);
+  // Strict mode must not refuse a domain the owner allowed himself: it
+  // depends on the base domain to know what a country's addresses are, and
+  // if that is wrong it would otherwise park every address at once.
+  api.setMainAllowed(['ownersite.example']);
+  api.setHostPolicy({ strictRegionHosts: true });
+  ck(api.hostIsParked('unclaimed.chipz-platform.com'),
+    'strict mode still refuses an address no country claims');
+  ck(!api.hostIsParked('ownersite.example'),
+    'but never one the owner typed into the allowlist himself');
+  api.setHostPolicy({ strictRegionHosts: false });
+  api.setMainAllowed([]);
   // normalizeRegion() stays PERMISSIVE on purpose: it also runs over
   // whatever is already stored, and refusing there would take a country
   // offline. Whitespace and commas both separate, so "sp ace" is two

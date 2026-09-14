@@ -3791,3 +3791,70 @@ mutations**, all caught.
 Set **Settings → Base domain** to his real domain (the Countries tab now says so outright,
 with a one-tap fix), then give each country its short addresses. Everything else in this
 round is already live on push.
+
+## Round 156 — Why every subdomain loaded nothing: CORS was an exact hostname match
+
+> "other country domains are not working, no fetching images, please check out
+> systematically ... subdomains are not working, what is going on"
+> "why showing the country and currency, that should not be shown"
+
+### The cause, found by walking the whole chain
+1. **DNS** — wildcard `*` CNAME at the registrar → the app. Working (he verified).
+2. **TLS + static serving** — wildcard custom domain, certificate issued. Working (the
+   sign-in screen rendered on a subdomain).
+3. **`API_BASE`** — absolute (`https://chipz-server.onrender.com`), so correct from any
+   origin. Fine.
+4. **CSP** (`render.yaml`) — `connect-src` includes the backend, `img-src` includes
+   `data:`. Fine on any subdomain.
+5. **CORS — BROKEN.** `_corsExtraHosts.includes(h)` was an **exact hostname match**.
+
+The owner types the domain he *registered* into **Allowed website domains**. The short
+addresses are **generated** (`g26e`, `b5dh`, …) and never typed anywhere. So the root
+domain worked and **every subdomain of it was refused** — which is also why the root
+domain kept looking fine while the subdomains did not.
+
+**Why it looked like "no images":** a refused origin means the browser throws the reply
+away before any of our code sees it, so `api()` can only report a generic network error.
+Practically everything on screen comes through that API, and **every photo travels as a
+`data:` URL inside the JSON** — so the visible symptom is an app with no prices and no
+pictures. (The few images served as their own binary endpoints are `<img src>` loads,
+which need no CORS, which is why it was not *completely* blank.)
+
+### The fix
+`corsHostAllowed()` — a host the owner allowed now covers its **subdomains** too. That is
+the whole premise of a wildcard DNS record: every label under his domain is his. Matched
+on `'.' + domain`, which cannot be spoofed from outside (`ownersite.example.evil.test`
+ends with `.evil.test`, not `.ownersite.example`).
+
+**Deliberately independent of the base domain setting.** That setting exists to decide
+which *country* a label belongs to; being able to reach the backend at all must not be
+gated on it, or one wrong field takes the entire platform off the air. Tested with
+`baseDomain` blank.
+
+Also: **strict mode no longer parks a domain the owner typed in himself.** It depends on
+the base domain to know what a country's addresses are, so with that wrong it would have
+refused every address at once — including the ones he explicitly allowed. And the address
+checker now reports **"Can reach the backend: yes/NO"**, because this was the one thing
+invisible from outside.
+
+### Removed
+The **"Uganda · UGX" line on the sign-in screen** (Round 155) is gone — operator
+diagnostics do not belong in front of members. The dialling-code chip stays live per
+country, which is what Round 155 actually needed to fix. The slot is left in the markup,
+blank and hidden, so nothing has to move if it is ever wanted again.
+
+### Tests
+`test-regions.js` covers the generated-subdomain case, the lookalike-domain refusals
+(`ownersite.example.evil.test`, `notownersite.example`, `ownersite.example.co`), the
+no-base-domain case, and strict mode sparing an allowlisted domain — **and that the CORS
+middleware is what calls the rule**, since every other check calls the function directly
+and would pass a middleware that quietly went back to exact matching.
+`verify-regions-discriminates.py` is **140 mutations**, all caught.
+
+**Four mutations were deleted as obsolete rather than re-anchored** — three described the
+country line that no longer exists and the old strict-mode rule, and one ("an empty origin
+is admitted") turned out **not to describe a real bug**: `refreshCorsSnapshot` filters
+empty entries out, so `''` matches nothing either way. The `if (!h) return false` guard
+stays as belt-and-braces, but no honest assertion can fail on it, so claiming a test for
+it would have been a lie. *A mutation that cannot fail for the right reason should be
+deleted, not propped up.*
