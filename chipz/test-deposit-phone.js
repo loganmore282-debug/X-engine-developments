@@ -24,7 +24,13 @@ const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const slice = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
 // cleanPhone is what decides a valid Uganda number; lift it rather than
 // restate it, or this tests a stricter/looser rule than the one that ships.
-eval(slice('function cleanPhone(raw)', 'const NETWORK_NAMES'));
+// cleanPhone() now asks the REGION for the dialling code, number length and
+// allowed prefixes (see the REGIONS section in server.js), so localDigits()
+// and a region come with it. Uganda is pinned here because every case below
+// is a Ugandan number -- the region layer itself is covered by
+// test-regions.js.
+const currentRegion = () => ({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true });
+eval(slice('function localDigits(raw, region)', 'const NETWORK_NAMES'));
 
 let failed = 0;
 const check = (ok, label) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`); };

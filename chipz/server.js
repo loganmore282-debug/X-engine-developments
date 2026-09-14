@@ -304,6 +304,196 @@ function proxyFetch(url, opts) {
   return fetch(url, { ...opts, dispatcher: quotaGuardAgent });
 }
 
+// ── REGIONS (one subdomain = one country) ──
+//
+// Owner: "l wanted other subdomain to fetch other country code and
+// currency, ie fgdr.chipz-platform.com in ugx, and country code changeable
+// to other country or created, and another can be sfhd.chipz-platform in
+// KES shs, or any country created, also make when l can edit prices of each
+// product and all settings as these of ugx."
+//
+// A region is one country the platform runs in. It owns:
+//   * its hostname(s)        -- the subdomain(s) the app is served from
+//   * its currency label     -- "UGX", "KES", whatever the admin types
+//   * its dialling code and mobile-number shape (length + allowed prefixes)
+//   * its clock offset       -- cash-out hours and product windows are that
+//                               country's local time, not always Kampala's
+//   * its own copy of every admin setting, and its own price for every
+//     product (see settingsDocId() and applyRegionToProduct())
+//
+// HOW A REQUEST GETS ITS REGION
+//   * a VISITOR (not signed in) gets the region that owns the hostname the
+//     app was loaded from, so the landing screen, Sign Up and the product
+//     list read in the right currency before anybody has an account.
+//   * a MEMBER always gets THEIR OWN region -- the one stamped on the
+//     account at registration -- no matter which hostname they opened.
+//
+// That second rule is the money-safety rule of this whole feature. If the
+// region came from the request, somebody could register where a product
+// costs 30,000 KES and then buy it on the host where the same product costs
+// 30,000 UGX. The region is never something a caller can choose; it is a
+// property of the account.
+//
+// Resolution happens once per request, in regionMiddleware(), and is
+// carried in an AsyncLocalStorage store. That is what lets getSettings(),
+// getProducts(), fmtMoney(), cleanPhone() and the clock helpers all be
+// region-correct without threading an argument through ~250 call sites --
+// and it is why the region middleware must be installed BEFORE the
+// maintenance gate below, which reads settings itself.
+const { AsyncLocalStorage } = require('node:async_hooks');
+const _regionCtx = new AsyncLocalStorage();
+// The founding region. Its key is fixed ('ug'): the region a member has no
+// stamp for is this one, the 'settings/main' document is this one's
+// settings, and every product's plain `price` field is this one's price. A
+// 'regions/ug' document, if the admin saves one, overrides the fields below
+// (name, currency, dial code, hosts, clock) but can never be deleted and
+// can never stop being the default -- there is always somewhere for an
+// unknown hostname and an unstamped account to land.
+const DEFAULT_REGION_KEY = 'ug';
+const DEFAULT_REGION = Object.freeze({
+  key: DEFAULT_REGION_KEY, name: 'Uganda', currency: 'UGX', dialCode: '256',
+  localLength: 9, prefixes: ['7'], utcOffsetMin: 180, hosts: [], active: true, isDefault: true,
+});
+// Regions as a plain synchronous array, refreshed on the same 60s cadence as
+// settings and products. Synchronous because currentRegion() is called from
+// fmtMoney() and the clock helpers, which cannot await anything.
+let _regionsSnapshot = [DEFAULT_REGION];
+let _regionsCacheTs = 0;
+// Hostnames owned by a region are allowed to call this backend, always --
+// a region whose subdomain is CORS-refused is a region that does not work,
+// and the owner would have no way to tell that apart from a dead server.
+// Merged with the admin's own allowedOrigins list in _corsExtraHosts.
+let _regionHosts = [];
+let _mainAllowedHosts = [];
+function refreshCorsSnapshot() {
+  const all = _mainAllowedHosts.concat(_regionHosts);
+  _corsExtraHosts = all.filter((h, i) => h && all.indexOf(h) === i);
+}
+// One region record, with every field forced into the shape the rest of the
+// server relies on. Applied to admin input at save time AND to whatever is
+// read back out of the database, so a hand-edited or half-written document
+// can never produce (say) a zero-length phone number rule.
+function normalizeRegion(raw, key) {
+  const k = String((raw && raw.key) || key || '').trim().toLowerCase();
+  const isDefault = k === DEFAULT_REGION_KEY;
+  const base = isDefault ? DEFAULT_REGION : { localLength: 9, prefixes: [], utcOffsetMin: 180 };
+  const digitsOnly = v => String(v == null ? '' : v).replace(/\D/g, '');
+  const dialCode = digitsOnly(raw && raw.dialCode) || base.dialCode || '';
+  const localLength = Math.round(Number(raw && raw.localLength)) || base.localLength || 9;
+  const prefixes = (Array.isArray(raw && raw.prefixes) ? raw.prefixes : String((raw && raw.prefixes) || '').split(/[\s,]+/))
+    .map(digitsOnly).filter(Boolean);
+  const off = Number(raw && raw.utcOffsetMin);
+  const hosts = (Array.isArray(raw && raw.hosts) ? raw.hosts : String((raw && raw.hosts) || '').split(/[\s,\n]+/))
+    .map(h => { const r = normalizeAllowedHost(h); return r.host || null; }).filter(Boolean);
+  return {
+    key: k, name: String((raw && raw.name) || base.name || k).trim().slice(0, 48),
+    currency: String((raw && raw.currency) || base.currency || 'UGX').trim().slice(0, 8).toUpperCase(),
+    dialCode, localLength,
+    prefixes: prefixes.length ? prefixes : (base.prefixes || []).slice(),
+    utcOffsetMin: Number.isFinite(off) ? Math.round(off) : (base.utcOffsetMin != null ? base.utcOffsetMin : 180),
+    hosts: hosts.filter((h, i) => hosts.indexOf(h) === i),
+    // The founding region can never be switched off -- see DEFAULT_REGION.
+    active: isDefault ? true : (raw && raw.active) !== false,
+    isDefault,
+  };
+}
+async function getRegions() {
+  if (Date.now() - _regionsCacheTs < 60 * 1000 && _regionsSnapshot.length) return _regionsSnapshot;
+  try {
+    const snap = await db.collection('regions').get();
+    const stored = snap.docs.map(d => normalizeRegion(d.data(), d.id)).filter(r => r.key);
+    const ug = stored.find(r => r.key === DEFAULT_REGION_KEY) || DEFAULT_REGION;
+    const others = stored.filter(r => r.key !== DEFAULT_REGION_KEY);
+    others.sort((a, b) => a.key.localeCompare(b.key));
+    _regionsSnapshot = [ug].concat(others);
+  } catch (_) {
+    // A read failure must not take the platform down to no regions at all.
+    _regionsSnapshot = _regionsSnapshot.length ? _regionsSnapshot : [DEFAULT_REGION];
+  }
+  _regionsCacheTs = Date.now();
+  _regionHosts = [];
+  for (const r of _regionsSnapshot) for (const h of r.hosts) _regionHosts.push(h);
+  refreshCorsSnapshot();
+  return _regionsSnapshot;
+}
+function defaultRegion() { return _regionsSnapshot[0] || DEFAULT_REGION; }
+// The region in force for whatever is running right now. Returns the
+// founding region outside a request (boot, reconcilers, the scheduler) --
+// background work that touches ONE member's money wraps itself in that
+// member's region with withUserRegion() instead of relying on this.
+function currentRegion() {
+  const store = _regionCtx.getStore();
+  return (store && store.region) || defaultRegion();
+}
+function currentRegionKey() { return currentRegion().key; }
+function regionByKey(key) {
+  const k = String(key || '').trim().toLowerCase();
+  if (!k) return defaultRegion();
+  return _regionsSnapshot.find(r => r.key === k) || defaultRegion();
+}
+// Which region owns a hostname. Unknown hostnames fall back to the founding
+// region rather than being refused: the API is reached from EdgeOne previews,
+// the Render domain, localhost and the admin panel, none of which belong to
+// a country, and all of which must keep working.
+function regionForHost(host) {
+  const h = String(host || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+  if (!h) return defaultRegion();
+  for (const r of _regionsSnapshot) if (r.active && r.hosts.includes(h)) return r;
+  return defaultRegion();
+}
+// Run fn with an explicit region in force. Used by the admin panel (editing
+// another region's settings and prices) and by background jobs.
+function runInRegion(region, fn) {
+  const r = typeof region === 'string' ? regionByKey(region) : (region || defaultRegion());
+  return _regionCtx.run({ region: r }, fn);
+}
+// uid -> region key. A member's region is fixed at registration and never
+// changes, so this is cached hard: without it the middleware would add a
+// users/{uid} read to every single authenticated request, which an M0
+// cluster cannot afford.
+const _userRegionCache = new Map();
+const USER_REGION_TTL = 10 * 60 * 1000;
+async function userRegionKey(uid) {
+  if (!uid) return null;
+  const hit = _userRegionCache.get(uid);
+  if (hit && Date.now() - hit.ts < USER_REGION_TTL) return hit.key;
+  let key = null;
+  try {
+    const snap = await db.collection('users').doc(uid).get();
+    if (snap.exists) key = String(snap.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY;
+  } catch (_) { return hit ? hit.key : null; } // a read failure keeps the last known answer
+  if (key) _userRegionCache.set(uid, { key, ts: Date.now() });
+  return key;
+}
+function forgetUserRegion(uid) { if (uid) _userRegionCache.delete(uid); }
+// Run fn in the region of ONE member, for work that happens outside any
+// request: maturity payouts, referral commissions, the reconcilers. Their
+// descriptions carry money amounts, and an amount labelled in the wrong
+// currency is a support ticket at best.
+async function withUserRegion(userId, fn) {
+  let key = null;
+  try { key = await userRegionKey(userId); } catch (_) {}
+  return runInRegion(key || DEFAULT_REGION_KEY, fn);
+}
+app.use(async (req, res, next) => {
+  let region = defaultRegion();
+  try {
+    await getRegions();
+    // The app is served from a different origin than this API, so the
+    // hostname that identifies the region is the one in Origin. Host is the
+    // fallback for a same-origin or server-to-server call.
+    region = regionForHost(req.headers.origin || req.headers.host);
+    // A signed-in caller overrides the hostname with their own account's
+    // region -- see the money-safety rule at the top of this section.
+    if ((req.headers.authorization || '').startsWith('Bearer ')) {
+      const uid = await verifyAuth(req);
+      const key = uid ? await userRegionKey(uid) : null;
+      if (key) region = regionByKey(key);
+    }
+  } catch (_) {}
+  _regionCtx.run({ region }, next);
+});
+
 // ── MAINTENANCE GATE ──
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team'];
 // Subagent-audit-caught real gap (Round 104): '/deposit/manual/sms-forwarder'
@@ -564,9 +754,36 @@ const DEFAULT_PRODUCTS = [
   { key: 'product-12', name: 'Product-12', price: 8000000,  cycle: 150, expectedReturn: 240000000,  image: '/products/product-12.jpg' },
 ];
 
+// Settings that govern the whole backend rather than one country, and so
+// can never be overridden per region. The app's name is here because there
+// is one brand; the domain allowlist, the maintenance switch and the
+// pre-launch countdown are here because they are operator controls, and a
+// maintenance mode that only some members saw would be worse than none.
+// Everything else -- rates, minimums, the product return multiple, the
+// payment providers, the cash-out window, the turntable bands -- is
+// per-region, which is what the owner asked for ("all settings as these of
+// ugx").
+const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];
+// Which settings document belongs to which region. The founding region
+// keeps 'main' -- the document every deployment already has, so nothing
+// migrates -- and every other region gets its own, holding only what it has
+// been set to differ on.
+function settingsDocId(key) {
+  return String(key || DEFAULT_REGION_KEY) === DEFAULT_REGION_KEY ? 'main' : 'region-' + String(key);
+}
+// Per-region settings, all sharing one staleness clock. A region's document
+// is layered ON TOP of 'main' rather than replacing it: a newly created
+// region therefore starts out behaving exactly like Uganda, and the admin
+// only has to type the figures that actually differ. Once a field is saved
+// for a region it is that region's own, and later edits to Uganda no longer
+// reach it.
+const _settingsByRegion = new Map();
 let _settingsCache = null, _settingsCacheTs = 0;
-async function getSettings() {
-  if (Date.now() - _settingsCacheTs < 60 * 1000 && _settingsCache) return _settingsCache;
+async function getSettings(regionKey) {
+  const key = String(regionKey || currentRegionKey() || DEFAULT_REGION_KEY).toLowerCase();
+  const fresh = Date.now() - _settingsCacheTs < 60 * 1000;
+  if (fresh && _settingsByRegion.has(key)) return _settingsByRegion.get(key);
+  if (!fresh) _settingsByRegion.clear();
   try {
     const snap = await db.collection('settings').doc('main').get();
     const stored = snap.exists ? snap.data() : {};
@@ -584,16 +801,38 @@ async function getSettings() {
       stored.depositPayAEnabled = !legacyManualOnly;
       stored.depositPayBEnabled = legacyManualOnly;
     }
-    _settingsCache = Object.assign({}, DEFAULT_SETTINGS, stored);
-  } catch (_) { _settingsCache = _settingsCache || DEFAULT_SETTINGS; }
-  _settingsCacheTs = Date.now();
-  // Keep the CORS check's synchronous snapshot in step with the settings it
-  // came from. Refreshed here rather than read per-request so the allowlist
-  // check never awaits anything (see _corsExtraHosts). Already sanitized at
-  // save time; re-sanitized here so a value written directly into the
-  // database, or left over from an older format, still can't widen access.
-  _corsExtraHosts = (sanitizeAllowedOrigins(_settingsCache.allowedOrigins).hosts) || [];
-  return _settingsCache;
+    let overlay = {};
+    if (key !== DEFAULT_REGION_KEY) {
+      const rs = await db.collection('settings').doc(settingsDocId(key)).get();
+      overlay = rs.exists ? rs.data() : {};
+      // Operator configuration is never per-region: the domain allowlist,
+      // the maintenance switch and the pre-launch countdown govern the whole
+      // backend, and letting one region's document shadow them would mean
+      // "maintenance mode" that only some members see.
+      for (const k of GLOBAL_ONLY_SETTINGS) delete overlay[k];
+    }
+    const merged = Object.assign({}, DEFAULT_SETTINGS, stored, overlay);
+    _settingsByRegion.set(key, merged);
+    if (key === DEFAULT_REGION_KEY) _settingsCache = merged;
+    // Keep the CORS check's synchronous snapshot in step with the settings it
+    // came from. Refreshed here rather than read per-request so the allowlist
+    // check never awaits anything (see _corsExtraHosts). Already sanitized at
+    // save time; re-sanitized here so a value written directly into the
+    // database, or left over from an older format, still can't widen access.
+    // Read from 'main' only, whichever region asked -- the allowlist is one
+    // backend-wide list, and the region hosts refreshCorsSnapshot() folds in
+    // alongside it come from getRegions().
+    _mainAllowedHosts = (sanitizeAllowedOrigins(stored.allowedOrigins).hosts) || [];
+    refreshCorsSnapshot();
+    _settingsCacheTs = Date.now();
+    return merged;
+  } catch (_) {
+    // A read failure serves the last known answer for this region, then the
+    // founding region's, then the built-in defaults -- and does NOT stamp
+    // the cache timestamp, so the next call retries instead of serving a
+    // fallback for a whole minute.
+    return _settingsByRegion.get(key) || _settingsCache || DEFAULT_SETTINGS;
+  }
 }
 // Normalizes a raw stored depositMethod/withdrawMethod value to one of
 // 'marzpay' | 'lipapay' | 'manual'. 'automatic' is the pre-LipaPay literal
@@ -635,7 +874,38 @@ function withdrawProvider(sett) {
 function payoutIsManual(sett) { return withdrawProvider(sett) === 'manual'; }
 
 let _productsCache = null, _productsCacheTs = 0;
-async function getProducts() {
+// The fields a region may set its own value for. The owner's ask was
+// prices, and everything a price drags with it has to come too: the payout
+// (an unmoved expectedReturn beside a halved price is a different multiple),
+// the cycle, the turntable band a purchase earns, and whether the product is
+// sold in that country at all. Name, image and order stay shared -- a
+// product is the same product everywhere, only its money differs.
+const PRODUCT_REGION_FIELDS = ['price', 'expectedReturn', 'multiplier', 'cycle', 'spinMin', 'spinMax', 'spinCount', 'active', 'comingSoon', 'openAt', 'openFrom', 'openTo'];
+// A product as one region sells it. The plain `price`/`expectedReturn`
+// fields on the document are the FOUNDING region's -- so a database written
+// before regions existed already reads correctly for Uganda with nothing
+// migrated -- and `regions: { ke: { price: ... } }` holds each other
+// country's overrides.
+//
+// An override is applied only when the region actually carries that field:
+// `expectedReturn` left blank for Kenya must fall through to the shared
+// value (and then to the region's own returnMultiple), not become 0.
+function applyRegionToProduct(p, regionKey) {
+  const key = String(regionKey || DEFAULT_REGION_KEY);
+  const over = key !== DEFAULT_REGION_KEY && p && p.regions && typeof p.regions === 'object' ? p.regions[key] : null;
+  const { regions, ...rest } = p || {};
+  if (!over) return rest;
+  const out = rest;
+  for (const f of PRODUCT_REGION_FIELDS) {
+    if (over[f] === undefined || over[f] === null || over[f] === '') continue;
+    out[f] = over[f];
+  }
+  return out;
+}
+// The raw documents, overrides and all, as the admin product editor needs
+// them. Every other reader goes through getProducts(), which resolves them
+// down to one region's view.
+async function getProductsRaw() {
   if (Date.now() - _productsCacheTs < 60 * 1000 && _productsCache) return _productsCache;
   try {
     const snap = await db.collection('products').orderBy('order', 'asc').get();
@@ -649,8 +919,14 @@ async function getProducts() {
   _productsCacheTs = Date.now();
   return _productsCache;
 }
-async function getProductByKey(key) {
-  const list = await getProducts();
+async function getProducts(regionKey) {
+  const key = regionKey || currentRegionKey();
+  const raw = await getProductsRaw();
+  if (String(key) === DEFAULT_REGION_KEY) return raw.map(p => applyRegionToProduct(p, DEFAULT_REGION_KEY));
+  return raw.map(p => applyRegionToProduct(p, key));
+}
+async function getProductByKey(key, regionKey) {
+  const list = await getProducts(regionKey);
   return list.find(p => p.key === key) || null;
 }
 // Single admin-configurable Home banner (per snow/CLAUDE.md Nav/IA). Kept
@@ -975,10 +1251,20 @@ async function getAboutContent() {
 // everywhere it always was, and only shows cents on the one figure that
 // can actually carry them, with no per-call-site changes needed anywhere
 // in this file or either frontend.
-function fmtUGX(n) {
+// Labelled in the CURRENCY OF THE REGION THIS REQUEST BELONGS TO -- see the
+// REGIONS section. A member never sees an amount in another country's
+// currency, including in the descriptions stored against their own
+// transactions, because those are written inside their own region's context
+// (request-scoped for anything they do themselves, withUserRegion() for
+// maturity payouts and referral commissions).
+function fmtMoney(n, currency) {
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  return 'UGX ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
+  const cur = currency || currentRegion().currency || 'UGX';
+  // Grouping only -- 'en-UG' is a digit-grouping locale here, not a
+  // currency, so the same "1,234,567" shape is right for every region and
+  // the label in front of it is what changes.
+  return cur + ' ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
 }
 // Rounds to the nearest UGX cent (2 decimal places) -- every gift-code
 // reward amount (admin-entered min/max, and the randomly rolled value
@@ -986,7 +1272,14 @@ function fmtUGX(n) {
 // input or arithmetic never leaks into a stored money field.
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function stripHtml(s) { return String(s || '').replace(/<[^>]*>/g, '').trim(); }
-function eatNow()  { return new Date(Date.now() + 3 * 3600000); } // Kampala (UTC+3)
+// The region's own wall clock. Kampala (UTC+3) for Uganda, and whatever
+// utcOffsetMin the admin set for any other country -- a cash-out window of
+// "09:00 to 17:00" has to mean nine in the morning where the member lives,
+// not nine in Kampala. Named eatNow() still because every caller and every
+// stored date/time field was written against EAT and Uganda is still the
+// only region with data in it.
+function tzOffMs() { return (currentRegion().utcOffsetMin != null ? currentRegion().utcOffsetMin : 180) * 60000; }
+function eatNow()  { return new Date(Date.now() + tzOffMs()); }
 function nowStr() {
   const d = eatNow();
   const pad = n => String(n).padStart(2, '0');
@@ -1002,7 +1295,7 @@ function tsMillis(v) {
   return 0;
 }
 function eatDayKey(ts) {
-  const d = new Date(tsMillis(ts) + 3 * 3600000);
+  const d = new Date(tsMillis(ts) + tzOffMs());
   return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
 }
 // Owner: "make daily checkin to reset at 00:00 not 24hrs" -- reverts Round
@@ -1032,12 +1325,12 @@ function computeCheckinStreak(timestampsMs) {
 }
 // UTC ms instant of the next EAT (UTC+3) midnight strictly after `ts`.
 function eatNextMidnight(ts) {
-  const dayStart = Math.floor((ts + 3 * 3600000) / 86400000) * 86400000;
-  return dayStart + 86400000 - 3 * 3600000;
+  const dayStart = Math.floor((ts + tzOffMs()) / 86400000) * 86400000;
+  return dayStart + 86400000 - tzOffMs();
 }
 function eatParts(ts) {
   const ms = tsMillis(ts) || Date.now();
-  const d = new Date(ms + 3 * 3600000);
+  const d = new Date(ms + tzOffMs());
   const pad = n => String(n).padStart(2, '0');
   return { day: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, hour: d.getUTCHours() };
 }
@@ -1079,26 +1372,88 @@ function withdrawWindowState(sett, ts) {
   const enabled = !!(sett && sett.withdrawWindowEnabled) && from != null && to != null && from !== to;
   const label = { from: hhmmLabel(sett && sett.withdrawOpenFrom), to: hhmmLabel(sett && sett.withdrawOpenTo) };
   if (!enabled) return { enabled: false, open: true, from: label.from, to: label.to };
-  const d = new Date(tsMillis(ts || Date.now()) + 3 * 3600000);
+  const d = new Date(tsMillis(ts || Date.now()) + tzOffMs());
   const now = d.getUTCHours() * 60 + d.getUTCMinutes();
   const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
   return { enabled: true, open, from: label.from, to: label.to };
 }
+// The local (national) part of a number, for whatever region is in force --
+// the digits with the dialling code or the leading 0 taken off, and nothing
+// else. Returns null unless the number reduces to EXACTLY that region's
+// length, so a garbled or wrong-country number never reaches a payment
+// provider.
+function localDigits(raw, region) {
+  const r = region || currentRegion();
+  const dial = String(r.dialCode || '256');
+  const len = Number(r.localLength) || 9;
+  const s = String(raw || '').replace(/\D/g, '');
+  if (s.startsWith(dial) && s.length === dial.length + len) return s.slice(dial.length);
+  if (s.startsWith('0') && s.length === len + 1) return s.slice(1);
+  if (s.length === len) return s;
+  return null;
+}
 // Synthetic login email — same convention as space8's phoneToEmail, using
 // the domain already established in Snow's own design (referral links use
 // snow-platform.com).
-function phoneToEmail(phone) { return String(phone).replace(/\D/g, '').replace(/^0+/, '') + '@chipz-platform.com'; }
-// STRICT on purpose — every real Uganda mobile number is 256 + exactly 9
-// digits starting with 7. Rejects anything that doesn't reduce to exactly
-// that, so a garbled/wrong-country number never reaches MarzPay.
-function cleanPhone(raw) {
-  const s = String(raw || '').replace(/\D/g, '');
-  let local9 = null;
-  if (s.startsWith('256') && s.length === 12) local9 = s.slice(3);
-  else if (s.startsWith('0') && s.length === 10) local9 = s.slice(1);
-  else if (s.length === 9) local9 = s;
-  if (!local9 || !/^7\d{8}$/.test(local9)) return null;
-  return '+256' + local9;
+//
+// MULTI-REGION: the same local number exists in more than one country
+// (0712345678 is a real number in both Uganda and Kenya), so once there is a
+// second region the local digits alone are no longer a unique account name --
+// a Kenyan signing up would land straight inside a Ugandan member's Firebase
+// account. Every region except the founding one therefore carries its
+// dialling code in the email. Uganda keeps the bare-digits form it has
+// always had, so no existing member's login changes, and it cannot collide
+// with a prefixed one: a Ugandan address is exactly 9 digits, a prefixed one
+// is always longer. Regions are refused at save time if they share a
+// dialling code, which is what keeps the prefixed forms distinct too.
+// The client builds this same string to sign in with (see phoneToEmail in
+// user-src/original_module.js) -- the two MUST agree exactly.
+function phoneToEmail(phone, region) {
+  const r = region || currentRegion();
+  const local = localDigits(phone, r) || String(phone).replace(/\D/g, '').replace(/^0+/, '');
+  return (r.isDefault ? local : String(r.dialCode || '') + local) + '@chipz-platform.com';
+}
+// STRICT on purpose — for Uganda every real mobile number is 256 + exactly 9
+// digits starting with 7, and each other region declares its own length and
+// allowed leading digits in the admin panel. Rejects anything that doesn't
+// reduce to exactly that, so a garbled/wrong-country number never reaches a
+// payment provider.
+function cleanPhone(raw, region) {
+  const r = region || currentRegion();
+  const local = localDigits(raw, r);
+  if (!local) return null;
+  const prefixes = Array.isArray(r.prefixes) ? r.prefixes.filter(Boolean) : [];
+  // No prefix list means the region has not narrowed it -- any number of the
+  // right length passes. An empty list is deliberately permissive rather
+  // than deliberately closed: a region saved without prefixes should still
+  // be able to take deposits.
+  if (prefixes.length && !prefixes.some(p => local.startsWith(p))) return null;
+  return '+' + String(r.dialCode || '') + local;
+}
+// The two shapes a number may be typed in, spelled out for THIS region, so
+// "use the format 07XXXXXXXX or +2567XXXXXXXX" is right in Uganda and right
+// everywhere else without a second sentence to maintain.
+function phoneFormatHint(region) {
+  const r = region || currentRegion();
+  const len = Number(r.localLength) || 9;
+  const lead = (Array.isArray(r.prefixes) && r.prefixes[0]) || '';
+  const body = lead + 'X'.repeat(Math.max(0, len - lead.length));
+  return { local: '0' + body, intl: '+' + String(r.dialCode || '') + body, name: r.name || '' };
+}
+function badPhoneMessage(region) {
+  const h = phoneFormatHint(region);
+  return `That is not a valid ${h.name} mobile-money number. Use the format ${h.local} or ${h.intl}.`;
+}
+// Does a cleaned number look like a MOBILE line in this region -- i.e. does
+// it start with one of the prefixes the admin listed? Used when picking the
+// payer's number out of a free-text SMS field, where digits of every kind
+// turn up.
+function looksLikeRegionMobile(cleaned, region) {
+  const r = region || currentRegion();
+  if (!cleaned) return false;
+  const prefixes = Array.isArray(r.prefixes) ? r.prefixes.filter(Boolean) : [];
+  if (!prefixes.length) return true;
+  return prefixes.some(p => cleaned.startsWith('+' + String(r.dialCode || '') + p));
 }
 // Which number a deposit should charge, and the loophole this closes.
 //
@@ -1348,21 +1703,31 @@ function withLock2(keyA, keyB, fn) {
   return withLock(first, () => withLock(second, fn));
 }
 
+// Verifies the caller's Firebase token ONCE per request and remembers the
+// answer on the request object. The region middleware needs the caller's uid
+// before any handler runs (to pick the member's own region), and every
+// handler then asks again -- without this cache that would be two network
+// round-trips to Firebase, and a revoked-token check, on every single
+// authenticated call. The cached value includes the failure: a bad token
+// stays bad for the life of the request.
+async function _decodeAuth(req) {
+  if (req && '_authDecoded' in req) return req._authDecoded;
+  const header = (req && req.headers.authorization) || '';
+  let decoded = null;
+  if (header.startsWith('Bearer ')) {
+    try { decoded = await admin.auth().verifyIdToken(header.slice(7), true); } // checkRevoked
+    catch (_) { decoded = null; }
+  }
+  if (req) { try { req._authDecoded = decoded; } catch (_) {} }
+  return decoded;
+}
 async function verifyAuth(req) {
-  const header = req.headers.authorization || '';
-  if (!header.startsWith('Bearer ')) return null;
-  try {
-    const decoded = await admin.auth().verifyIdToken(header.slice(7), true); // checkRevoked
-    return decoded.uid;
-  } catch (_) { return null; }
+  const decoded = await _decodeAuth(req);
+  return decoded ? decoded.uid : null;
 }
 async function verifyAuthWithEmail(req) {
-  const header = req.headers.authorization || '';
-  if (!header.startsWith('Bearer ')) return null;
-  try {
-    const decoded = await admin.auth().verifyIdToken(header.slice(7), true);
-    return { uid: decoded.uid, email: decoded.email || '' };
-  } catch (_) { return null; }
+  const decoded = await _decodeAuth(req);
+  return decoded ? { uid: decoded.uid, email: decoded.email || '' } : null;
 }
 // Prefers the phone derivable from the caller's OWN verified Firebase email
 // over the client-supplied body value — an authenticated caller can't label
@@ -1596,7 +1961,7 @@ async function markDepositFailed(depRef, userId, reason) {
       const txSnap = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
       await Promise.all(txSnap.docs.map(txDoc => {
         const amt = Math.abs(Number(txDoc.data().amount) || 0);
-        return txDoc.ref.update({ status: 'failed', description: `Deposit: Failed (${fmtUGX(amt)})`, amount: 0 });
+        return txDoc.ref.update({ status: 'failed', description: `Deposit: Failed (${fmtMoney(amt)})`, amount: 0 });
       }));
     } catch (e) { console.warn('markDepositFailed: could not update ledger row:', e.message); }
   });
@@ -1976,7 +2341,8 @@ async function lipaGetStatement(startDate, endDate) {
 // input a second time.
 function lipaTraderId(canonicalPhone) {
   const digits = String(canonicalPhone || '').replace(/\D/g, '');
-  if (digits.startsWith('256') && digits.length === 12) return '0' + digits.slice(3);
+  const local = localDigits(digits);
+  if (local) return '0' + local;
   return digits; // already local, or an unexpected shape -- let LipaPay's own validation catch it
 }
 // Snow's own NETWORK_NAMES ('MTN Mobile Money'/'Airtel Money', already
@@ -1996,7 +2362,14 @@ function lipaChannel(network) {
 // total always telescopes to EXACTLY expectedReturn at completion, for any
 // ratio — not just ones that divide evenly.
 const _creditingPayouts = new Set();
+// Maturity payouts run from the reconciler, outside any request, so they
+// have no region of their own -- and the description they stamp on the
+// transaction carries a money amount. Run in the OWNER's region so the
+// figure is labelled in the currency that member actually holds.
 async function settleInvestmentIfDue(doc) {
+  return withUserRegion(doc && doc.data() && doc.data().userId, () => _settleDueInvestmentNow(doc));
+}
+async function _settleDueInvestmentNow(doc) {
   const inv = doc.data();
   if (inv.status !== 'active') return false;
   const total = Number(inv.payoutsTotal) || 0;
@@ -2084,7 +2457,14 @@ async function settleAllForUser(userId) {
 // referrer at all) -- callers that report "commission credited" to an
 // admin/owner should use this instead of assuming a qualifying investment
 // existing means money moved.
+// Same reasoning as settleInvestmentIfDue(): the reconciler pays these with
+// no region in force. Referral teams never cross regions (see the
+// BAD_REFERRAL_REGION check in completeRegistrationCore), so the buyer's
+// region is every payee's region too.
 async function creditReferralCommission(investmentId, buyerId, amount) {
+  return withUserRegion(buyerId, () => _payReferralCommissionNow(investmentId, buyerId, amount));
+}
+async function _payReferralCommissionNow(investmentId, buyerId, amount) {
   return withLock('comm:' + investmentId, async () => {
     let paidAny = false;
     const invRef = db.collection('investments').doc(investmentId);
@@ -2274,8 +2654,8 @@ app.post('/team/milestone/claim', async (req, res) => {
   try {
     const progress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
     if (progress < m.target) {
-      const need = isDeposit ? fmtUGX(m.target) : m.target;
-      const have = isDeposit ? fmtUGX(progress) : progress;
+      const need = isDeposit ? fmtMoney(m.target) : m.target;
+      const have = isDeposit ? fmtMoney(progress) : progress;
       return res.status(400).json({ status: 'error', message: `You need ${need} to claim this, you have ${have}.` });
     }
     const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
@@ -2292,7 +2672,7 @@ app.post('/team/milestone/claim', async (req, res) => {
         t.update(uRef, { walletBalance: FieldValue.increment(m.reward), totalEarned: FieldValue.increment(m.reward), [claimFlag]: true });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'team_reward',
-          description: isDeposit ? `Task Center: whole team deposits ${fmtUGX(m.target)}` : `Task Center: ${m.target} active referrals`,
+          description: isDeposit ? `Task Center: whole team deposits ${fmtMoney(m.target)}` : `Task Center: ${m.target} active referrals`,
           amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
         done = true;
@@ -2300,7 +2680,7 @@ app.post('/team/milestone/claim', async (req, res) => {
     });
     if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now. Please try again.' });
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
-    res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
+    res.json({ status: 'success', amount: m.reward, message: `${fmtMoney(m.reward)} added to your wallet` });
   } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
 });
 
@@ -2327,6 +2707,18 @@ app.get('/health', async (_req, res) => {
   const dbUp = await pingDb();
   res.json({ status: dbUp ? 'ok' : 'degraded', db: dbUp });
 });
+// What the app is told about its region: the currency label it prints in
+// front of every amount, the dialling code it shows beside the phone field,
+// and the number shape it validates against. Hostnames are left out -- the
+// app knows which one it was loaded from.
+function publicRegionView(r) {
+  const reg = r || currentRegion();
+  return {
+    key: reg.key, name: reg.name, currency: reg.currency, dialCode: reg.dialCode,
+    localLength: reg.localLength, prefixes: (reg.prefixes || []).slice(),
+    utcOffsetMin: reg.utcOffsetMin, isDefault: !!reg.isDefault,
+  };
+}
 app.get('/public/settings', async (_req, res) => {
   try {
     const s = await getSettings();
@@ -2344,7 +2736,12 @@ app.get('/public/settings', async (_req, res) => {
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
       payoutManual: payoutIsManual(s),
       referralRequired: await referralRequiredNow(),
-    } });
+    // How many countries this platform runs in. The app only uses it to add
+    // "if you signed up on another country's site, sign in there" to a
+    // failed login -- an account belongs to one region and its synthetic
+    // login address carries that region's dialling code, so signing in on
+    // the wrong subdomain genuinely cannot find it.
+    }, region: publicRegionView(), regionCount: (await getRegions()).filter(r => r.active).length });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Members must never be shown a payout the purchase won't actually honour,
@@ -2399,8 +2796,8 @@ function productOpenState(p, nowMs) {
   if (from == null || to == null || from === to) return { open: true, mode: null, opensAt: null };
   const DAY = 86400000, MIN = 60000;
   // Minutes since EAT midnight, and the instant that midnight happened.
-  const eatNow = now + 3 * 3600000;
-  const eatMidnight = Math.floor(eatNow / DAY) * DAY - 3 * 3600000;
+  const eatNow = now + tzOffMs();
+  const eatMidnight = Math.floor(eatNow / DAY) * DAY - tzOffMs();
   const minsIn = Math.floor((eatNow - Math.floor(eatNow / DAY) * DAY) / MIN);
   const wraps = to < from;
   const inside = wraps ? (minsIn >= from || minsIn < to) : (minsIn >= from && minsIn < to);
@@ -2569,11 +2966,15 @@ const _DEPOSIT_LADDER = [
   900000, 950000, 1000000, 1250000, 1500000, 2000000, 2550000, 3000000, 4500000
 ];
 function maskedMsisdn(used) {
+  // The region's own dialling code, so the ticker on a Kenyan subdomain does
+  // not scroll Ugandan-looking numbers past its members.
+  const dial = String(currentRegion().dialCode || '256');
+  const one = () => dial + '****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
   for (let tries = 0; tries < 50; tries++) {
-    const n = '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    const n = one();
     if (!used.has(n)) { used.add(n); return n; }
   }
-  return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  return one();
 }
 async function buildActivityFeed() {
   const sett = await getSettings();
@@ -2625,8 +3026,15 @@ app.get('/public/activity-feed', async (_req, res) => {
 // existing one is being verified.
 function isWeakPin(pin) { return /^(\d)\1{5}$/.test(String(pin || '')); }
 
-function defaultProfileDoc(phone) {
+// `regionKey` is stamped here, ONCE, from the region that owns the hostname
+// the account was created on, and is never written again. Everything the
+// member ever sees or is charged -- currency, product prices, minimums,
+// cash-out hours, their number's shape -- is read from it for the life of
+// the account, on whatever hostname they open next. See the REGIONS section
+// for why it must not come from the request.
+function defaultProfileDoc(phone, regionKey) {
   return {
+    regionKey: String(regionKey || currentRegionKey() || DEFAULT_REGION_KEY),
     phone: phone || '', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
     checkinStreak: 0, lastCheckinAt: null,
     teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, teamCommission: 0,
@@ -2729,6 +3137,16 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' } };
       if (refDoc.data().status === 'banned')
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } };
+      // A code from ANOTHER COUNTRY is refused. Commission is a percentage
+      // of what the new member spends, paid into the referrer's wallet: pay
+      // 27% of a 30,000 KES purchase into a Ugandan wallet and the figure is
+      // arithmetically right and worth roughly eight times what it should
+      // be. Teams therefore do not cross regions, and the member is told
+      // plainly rather than having their upline silently dropped.
+      const refRegion = String(refDoc.data().regionKey || DEFAULT_REGION_KEY);
+      const myRegion = String(currentRegionKey() || DEFAULT_REGION_KEY);
+      if (refRegion !== myRegion)
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL_REGION', message: 'That referral code belongs to a member in another country. Ask for a code from someone signed up on this site.' } };
       referrerId = refDoc.id;
     }
 
@@ -2834,7 +3252,11 @@ app.get('/account', async (req, res) => {
       checkinStreak: u.checkinStreak || 0, lastCheckinAt: u.lastCheckinAt || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
-    } });
+    // The member's OWN region, which the middleware has already put in
+    // force for this request. The app re-reads its currency, dialling code
+    // and number rules from here on every account load, so a member who
+    // opens another country's subdomain still sees their own figures.
+    }, region: publicRegionView() });
   } catch (e) {
     console.error('Account error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your account' });
@@ -3226,7 +3648,7 @@ app.post('/invest/create', async (req, res) => {
       // Carries a code so the app can react to this specific failure (send
       // the member to Deposit) instead of string-matching the message.
       if (bal < liveTier.price) {
-        const shortErr = new Error(`Need ${fmtUGX(liveTier.price)}, have ${fmtUGX(bal)}`);
+        const shortErr = new Error(`Need ${fmtMoney(liveTier.price)}, have ${fmtMoney(bal)}`);
         shortErr.code = 'INSUFFICIENT_BALANCE';
         throw shortErr;
       }
@@ -3270,7 +3692,7 @@ app.post('/invest/create', async (req, res) => {
     // a bonus, and failing to grant one must never fail a purchase the member
     // has already paid for.
     grantTurntableSpins(userId, liveTier, invId);
-    res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtUGX(liveTier.price)}` });
+    res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
@@ -3314,7 +3736,7 @@ app.post('/deposit/marzpay', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtUGX(MAX_MONEY_AMOUNT)}).` });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
   try {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
@@ -3345,7 +3767,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     // minimum deposit is 30k, when you try again deposit with that very
     // minimum amount, it says deposit is already being processed!!, when
     // you try again once more it says account suspended."
-    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
     const _ph = depositSenderPhone(req.body, uSnap.data().phone, ['phone']);
     if (_ph.error) return res.status(400).json({ status: 'error', message: _ph.error });
     const phone = _ph.phone;
@@ -3378,6 +3800,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
     await depRef.set({
       userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider,
+      // Which country's money this is, stamped once so the admin lists can
+      // label the figure correctly without a user lookup per row.
+      regionKey: currentRegionKey(),
       date, time, createdAt: FieldValue.serverTimestamp()
     });
     // Owner: "deposits are not recorded why" -- withdrawals have always
@@ -3399,7 +3824,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       // the walletBalance/totalDeposited integrity math stays honest, but
       // Records' own amount column reads THIS field so a failed deposit
       // still shows what was actually attempted instead of "+UGX 0".
-      userId, type: 'deposit', description: `Deposit: Processing (${fmtUGX(amt)})`,
+      userId, type: 'deposit', description: `Deposit: Processing (${fmtMoney(amt)})`,
       amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
     }).catch(e => console.error(`Deposit ledger row create failed for dep=${depRef.id}:`, e.message));
     // Respond the instant our own write lands — do not wait on the provider's
@@ -3496,7 +3921,14 @@ const _creditingDeposits = new Set();
 // /admin/deposit/force-credit's own guard, both short-circuited on status
 // alone and never retried the actual credit.
 function depositFullyCredited(d) { return d.status === 'matched' && !d.needsManualCredit; }
+// Credited from a gateway webhook, a status poll, a forwarded SMS or an
+// admin's hand -- most of which arrive with no region of their own. The
+// description stamped on the member's ledger row carries the amount, so it
+// is written in the DEPOSITOR's currency.
 async function creditDeposit(depDoc) {
+  return withUserRegion(depDoc && depDoc.data() && depDoc.data().userId, () => _creditDepositNow(depDoc));
+}
+async function _creditDepositNow(depDoc) {
   const dep = depDoc.data();
   if (depositFullyCredited(dep)) return true;
   if (_creditingDeposits.has(depDoc.id)) return false;
@@ -3606,13 +4038,13 @@ async function creditDeposit(depDoc) {
           // outcome always means the ledger row reflects what actually
           // happened, regardless of what state it was in before.
           await Promise.all(txSnap.docs.map(txDoc => txDoc.ref.update({
-            status: 'success', description: `Deposit: Success (${fmtUGX(depAmount)})`,
+            status: 'success', description: `Deposit: Success (${fmtMoney(depAmount)})`,
             amount: depAmount, displayAmount: depAmount,
           })));
         } else {
           const { date, time } = nowStr();
           await db.collection('transactions').add({
-            userId: depUserId, type: 'deposit', description: `Deposit: Success (${fmtUGX(depAmount)})`,
+            userId: depUserId, type: 'deposit', description: `Deposit: Success (${fmtMoney(depAmount)})`,
             amount: depAmount, displayAmount: depAmount, status: 'success', date, time, ref: fd.ref, depositId: depDoc.id,
             createdAt: FieldValue.serverTimestamp()
           });
@@ -3634,7 +4066,7 @@ async function creditDeposit(depDoc) {
     // retried webhook/poll must never fire a duplicate push for the same money.
     if (justCredited) {
       markDepositAttemptSucceeded(dep.userId);
-      sendAdminPush('Deposit completed', `${fmtUGX(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id }).catch(() => {});
+      sendAdminPush('Deposit completed', `${fmtMoney(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id }).catch(() => {});
     }
     return credited;
   } finally { _creditingDeposits.delete(depDoc.id); }
@@ -3948,7 +4380,7 @@ function _smsCounterparty(t, keyword) {
   if (!candidates || !candidates.length) return '';
   for (const c of candidates) {
     const cleaned = cleanPhone(c);
-    if (cleaned && /^\+2567/.test(cleaned)) return c.replace(/[\s\-]/g, '');
+    if (looksLikeRegionMobile(cleaned)) return c.replace(/[\s\-]/g, '');
   }
   return candidates[0].replace(/[\s\-]/g, '');
 }
@@ -4048,7 +4480,7 @@ function parseReversalSms(text) {
   let payerPhone = '';
   for (const c of candidates) {
     const cleaned = cleanPhone(c);
-    if (cleaned && /^\+2567/.test(cleaned)) { payerPhone = c.replace(/[\s\-]/g, ''); break; }
+    if (looksLikeRegionMobile(cleaned)) { payerPhone = c.replace(/[\s\-]/g, ''); break; }
   }
   return { amount, payerPhone, raw: t };
 }
@@ -4074,6 +4506,9 @@ function parseReversalSms(text) {
 // negative amount subtracts correctly), so a later "Recalculate totals" run
 // can never silently wipe this correction back out.
 async function applyDepositReversal(userId, amount, raw, receivingNumber, payerPhone) {
+  return withUserRegion(userId, () => _applyDepositReversalNow(userId, amount, raw, receivingNumber, payerPhone));
+}
+async function _applyDepositReversalNow(userId, amount, raw, receivingNumber, payerPhone) {
   const amt = Math.round(amount);
   const uRef = db.collection('users').doc(userId);
   await withLock('bal:' + userId, async () => {
@@ -4084,12 +4519,12 @@ async function applyDepositReversal(userId, amount, raw, receivingNumber, payerP
       walletBalance: FieldValue.increment(-amt),
       totalDeposited: FieldValue.increment(-amt),
       status: 'banned',
-      banReason: `Automatic: MTN deposit reversal detected (${fmtUGX(amt)} reversed by network)`,
+      banReason: `Automatic: MTN deposit reversal detected (${fmtMoney(amt)} reversed by network)`,
       bannedAt: FieldValue.serverTimestamp(),
     });
     await db.collection('transactions').add({
       userId, type: 'deposit_reversal',
-      description: `Deposit reversed by network. ${fmtUGX(amt)} debited, account banned.`,
+      description: `Deposit reversed by network. ${fmtMoney(amt)} debited, account banned.`,
       amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
     });
   });
@@ -4140,10 +4575,19 @@ async function applyDepositReversal(userId, amount, raw, receivingNumber, payerP
 // so a concurrent call's own clash-check can never run in the gap between
 // "picked" and "written" -- there no longer is one.
 async function assignManualNumberAndCreateDeposit(network, amount, depositFields) {
-  return withLock('manual-number-assign:' + network, async () => {
+  const regionKey = currentRegionKey();
+  return withLock('manual-number-assign:' + regionKey + ':' + network, async () => {
     const numsSnap = await db.collection('manualPaymentNumbers')
       .where('network', '==', network).where('active', '==', true).get();
-    const pool = numsSnap.docs.map(d => ({ id: d.id, number: d.data().number, holderName: d.data().holderName }));
+    // Scoped to THIS region -- a Ugandan MTN number is not somewhere a
+    // Kenyan member can send money. Filtered here in JavaScript rather than
+    // in the query because every number added before regions existed has no
+    // regionKey field at all, and a `where('regionKey','==','ug')` would
+    // match none of them and turn away every Ugandan payer. The pool is a
+    // handful of documents, so this costs nothing.
+    const pool = numsSnap.docs
+      .filter(d => String(d.data().regionKey || DEFAULT_REGION_KEY) === regionKey)
+      .map(d => ({ id: d.id, number: d.data().number, holderName: d.data().holderName }));
     // 'none' and 'busy' are different problems and need different words. Now
     // that the tapped operator really is the operator assigned (owner: "mtn
     // to mtn, airtel to airtel"), an admin who has only ever added Airtel
@@ -4183,7 +4627,7 @@ app.post('/deposit/manual/init', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtUGX(MAX_MONEY_AMOUNT)}).` });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
   const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
   if (!network) return res.status(400).json({ status: 'error', message: 'Select a network' });
   try {
@@ -4194,7 +4638,7 @@ app.post('/deposit/manual/init', async (req, res) => {
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
     // Same validate-before-touching-abuse-counters ordering as
     // /deposit/marzpay -- see its own comment for why this order matters.
-    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
     const _sph = depositSenderPhone(req.body, uSnap.data().phone, ['senderPhone', 'phone']);
     if (_sph.error) return res.status(400).json({ status: 'error', message: _sph.error });
     const senderPhone = _sph.phone;
@@ -4219,7 +4663,7 @@ app.post('/deposit/manual/init', async (req, res) => {
     const expiresAt = Date.now() + MANUAL_DEPOSIT_WINDOW_MS;
     const result = await assignManualNumberAndCreateDeposit(network, amt, {
       userId, phone: senderPhone, senderPhone, network, amount: amt, ref, status: 'pending',
-      method: 'manual', expiresAt, date, time, createdAt: FieldValue.serverTimestamp(),
+      method: 'manual', expiresAt, regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp(),
     });
     if (!result) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
     if (result.empty) {
@@ -4231,14 +4675,14 @@ app.post('/deposit/manual/init', async (req, res) => {
     // Same "recorded immediately, not eventually" reasoning as
     // /deposit/marzpay's own ledger-row-up-front comment.
     await db.collection('transactions').add({
-      userId, type: 'deposit', description: `Deposit: Processing (${fmtUGX(amt)})`,
+      userId, type: 'deposit', description: `Deposit: Processing (${fmtMoney(amt)})`,
       amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
     }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${depRef.id}:`, e.message));
 
     res.json({
       status: 'success', depositId: depRef.id, reference: ref,
       assignedNumber: assigned.number, holderName: assigned.holderName, network, amount: amt, expiresAt,
-      message: `Send exactly ${fmtUGX(amt)} to ${assigned.number} (${assigned.holderName}).`
+      message: `Send exactly ${fmtMoney(amt)} to ${assigned.number} (${assigned.holderName}).`
     });
   } catch (e) {
     console.error('Manual deposit init error:', e.message);
@@ -4379,7 +4823,7 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
       const candidateUserIds = [...new Set(depSnap.docs.map(d => d.data().userId).filter(Boolean))];
       if (!candidateUserIds.length) {
         await revRef.update({ matchedUserId: null, reviewReason: 'No credited deposit found for this receiving number/payer' }).catch(() => {});
-        console.warn(`MANUAL_REVERSAL_UNMATCHED: ${fmtUGX(reversal.amount)} reversal reported on ${receivingNumber} from ${reversal.payerPhone || 'unknown payer'} -- no matching credited deposit found. Needs a human.`);
+        console.warn(`MANUAL_REVERSAL_UNMATCHED: ${fmtMoney(reversal.amount)} reversal reported on ${receivingNumber} from ${reversal.payerPhone || 'unknown payer'} -- no matching credited deposit found. Needs a human.`);
         trackManual(receivingNumber, 'reversalUnmatched', { amount: reversal.amount });
         return res.json({ status: 'reversal-unmatched', amount: reversal.amount });
       }
@@ -4388,7 +4832,7 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
         // credited deposits match this (receivingNumber, payer) pair, so
         // nobody is auto-debited/banned. Flagged for a human instead.
         await revRef.update({ ambiguous: true, candidateUserIds }).catch(() => {});
-        console.warn(`MANUAL_REVERSAL_AMBIGUOUS: ${fmtUGX(reversal.amount)} reversal on ${receivingNumber} matches ${candidateUserIds.length} different members -- flagged for review, nobody auto-debited/banned.`);
+        console.warn(`MANUAL_REVERSAL_AMBIGUOUS: ${fmtMoney(reversal.amount)} reversal on ${receivingNumber} matches ${candidateUserIds.length} different members -- flagged for review, nobody auto-debited/banned.`);
         trackManual(receivingNumber, 'reversalAmbiguous', { amount: reversal.amount });
         return res.json({ status: 'reversal-ambiguous', amount: reversal.amount });
       }
@@ -4473,7 +4917,7 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
     const candidates = snap.docs.filter(d => (d.data().expiresAt || 0) > now);
     if (!candidates.length) {
       await seenRef.update({ matched: false }).catch(() => {});
-      console.warn(`Manual deposit SMS unmatched: ${fmtUGX(info.amount)} to ${receivingNumber}`);
+      console.warn(`Manual deposit SMS unmatched: ${fmtMoney(info.amount)} to ${receivingNumber}`);
       trackManual(receivingNumber, 'unmatched', { amount: info.amount });
       return res.json({ status: 'unmatched', amount: info.amount });
     }
@@ -4484,7 +4928,7 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
       // a human, credits none automatically.
       await Promise.all(candidates.map(d => d.ref.update({ status: 'review', reviewReason: 'Multiple pending orders matched this SMS (same number + amount)' }).catch(() => {})));
       await seenRef.update({ matched: false, ambiguous: true }).catch(() => {});
-      console.warn(`Manual deposit SMS AMBIGUOUS: ${fmtUGX(info.amount)} to ${receivingNumber} -- ${candidates.length} candidates flagged for review`);
+      console.warn(`Manual deposit SMS AMBIGUOUS: ${fmtMoney(info.amount)} to ${receivingNumber} -- ${candidates.length} candidates flagged for review`);
       trackManual(receivingNumber, 'ambiguous', { amount: info.amount });
       return res.json({ status: 'ambiguous', amount: info.amount });
     }
@@ -4515,7 +4959,7 @@ app.post('/deposit/manual/sms-forwarder', async (req, res) => {
     if (!smsSett.manualSmsAutoCredit) {
       await match.ref.update({
         status: 'review',
-        reviewReason: `Forwarded SMS matched this order automatically (${fmtUGX(info.amount)}${info.txId ? ', id ' + info.txId : ''}) -- automatic crediting is off, so it needs your approval`,
+        reviewReason: `Forwarded SMS matched this order automatically (${fmtMoney(info.amount)}${info.txId ? ', id ' + info.txId : ''}) -- automatic crediting is off, so it needs your approval`,
         // The forwarded message as it arrived, not the parser's
         // whitespace-collapsed working copy -- same reasoning as the
         // member-paste route below.
@@ -4595,7 +5039,7 @@ app.post('/deposit/manual/paste-sms', async (req, res) => {
     const notes = [info
       ? (sent ? 'Member pasted their own sent-money SMS' : 'Member pasted a received-money SMS')
       : 'Member pasted a message this server could not read automatically -- check it by hand'];
-    if (info && !amountMatches) notes.push(`amount says ${fmtUGX(info.amount)} but the order is ${fmtUGX(dep.amount)}`);
+    if (info && !amountMatches) notes.push(`amount says ${fmtMoney(info.amount)} but the order is ${fmtMoney(dep.amount)}`);
     if (paidRightNumber === false) notes.push(`paid ${counterparty} but was assigned ${dep.assignedNumber}`);
 
     await depSnap.ref.update({
@@ -4922,7 +5366,7 @@ app.post('/admin/manual-numbers/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('manualPaymentNumbers').orderBy('network', 'asc').orderBy('order', 'asc').get();
-    res.json({ status: 'success', numbers: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    res.json({ status: 'success', numbers: snap.docs.map(d => ({ id: d.id, ...d.data(), regionKey: String(d.data().regionKey || DEFAULT_REGION_KEY) })) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/manual-numbers/save', async (req, res) => {
@@ -4930,11 +5374,16 @@ app.post('/admin/manual-numbers/save', async (req, res) => {
   try {
     const { id, network, number, holderName, active, order } = req.body;
     if (!NETWORK_NAMES.has(network)) return res.status(400).json({ status: 'error', message: 'Select a valid network' });
-    const cleanNumber = cleanPhone(number);
-    if (!cleanNumber) return res.status(400).json({ status: 'error', message: 'Enter a valid phone number' });
+    // The number is validated against the REGION it is being added for, not
+    // against the admin panel's own host: a Kenyan collection line is not a
+    // valid Ugandan number and would otherwise be refused outright.
+    await getRegions();
+    const numRegion = regionByKey(req.body.region || DEFAULT_REGION_KEY);
+    const cleanNumber = cleanPhone(number, numRegion);
+    if (!cleanNumber) return res.status(400).json({ status: 'error', message: badPhoneMessage(numRegion) });
     const name = String(holderName || '').trim().slice(0, 80);
     if (!name) return res.status(400).json({ status: 'error', message: 'Enter the account holder name' });
-    const doc = { network, number: cleanNumber, holderName: name, active: active !== false, order: Number(order) || 0 };
+    const doc = { network, number: cleanNumber, holderName: name, active: active !== false, order: Number(order) || 0, regionKey: numRegion.key };
     if (id) await db.collection('manualPaymentNumbers').doc(String(id)).set(doc, { merge: true });
     else await db.collection('manualPaymentNumbers').add({ ...doc, createdAt: FieldValue.serverTimestamp() });
     logAdminAction(req, 'manual_number_saved', { id: id || null, network, number: cleanNumber });
@@ -5039,7 +5488,7 @@ app.post('/withdraw/request', async (req, res) => {
   try {
     const amt = parseInt(req.body.amount, 10);
     if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-    if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtUGX(MAX_MONEY_AMOUNT)}).` });
+    if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
     const rawNetwork = String(req.body.network || '').trim();
     if (!NETWORK_NAMES.has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const destValue = cleanPhone(req.body.phone || '');
@@ -5055,7 +5504,7 @@ app.post('/withdraw/request', async (req, res) => {
     if (win.enabled && !win.open)
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
         message: `Cash-out is open from ${win.from} to ${win.to}. Please come back then.` });
-    if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
+    if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtMoney(sett.minWithdraw)}` });
     // Checked HERE, not only in the app: the client's own check is a
     // courtesy so a member sees the rule before submitting, but /withdraw/
     // request is a plain authenticated POST and the amount in its body is
@@ -5064,7 +5513,7 @@ app.post('/withdraw/request', async (req, res) => {
     if (wMult > 0 && amt % wMult !== 0) {
       const low = Math.floor(amt / wMult) * wMult, high = low + wMult;
       return res.status(400).json({ status: 'error',
-        message: `Cash-out must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(Math.max(low, sett.minWithdraw))} or ${fmtUGX(high)}.` });
+        message: `Cash-out must be a multiple of ${fmtMoney(wMult)}. Try ${fmtMoney(Math.max(low, sett.minWithdraw))} or ${fmtMoney(high)}.` });
     }
     const check = await pinCheck(userId, req.body.pin);
     if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
@@ -5094,7 +5543,7 @@ app.post('/withdraw/request', async (req, res) => {
       const bal = fresh.data().walletBalance || 0;
       if (bal < amt) {
         logSecurityEvent(userId, 'withdraw_insufficient_funds', { attempted: amt, balance: bal });
-        throw new Error(`Not enough balance, you have ${fmtUGX(bal)}`);
+        throw new Error(`Not enough balance, you have ${fmtMoney(bal)}`);
       }
       // ONE UNRESOLVED CASH-OUT AT A TIME. Owner: "no requesting another
       // withdrawal yet another one is on pending, so one should have got his
@@ -5110,7 +5559,7 @@ app.post('/withdraw/request', async (req, res) => {
         .limit(1).get();
       if (!openSnap.empty) {
         const w = openSnap.docs[0].data();
-        const e = new Error(`You already have a cash-out of ${fmtUGX(w.amount || 0)} waiting. Once it is paid you can request another.`);
+        const e = new Error(`You already have a cash-out of ${fmtMoney(w.amount || 0)} waiting. Once it is paid you can request another.`);
         e.code = 'WITHDRAW_PENDING';
         throw e;
       }
@@ -5126,7 +5575,7 @@ app.post('/withdraw/request', async (req, res) => {
       await uRef.update({ walletBalance: FieldValue.increment(-amt) });
       const { date, time } = nowStr();
       try {
-        await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref, status: 'pending', date, time, createdAt: FieldValue.serverTimestamp() });
+        await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref, status: 'pending', regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp() });
         // Owner: "instead of putting many words make it simple, no need to
         // put name, need only withdrawal, status, amount" -- dropped the
         // holder name, network, and fee breakdown that used to be spelled
@@ -5139,7 +5588,7 @@ app.post('/withdraw/request', async (req, res) => {
           // walletBalance/totalDeposited integrity math honest -- but that
           // used to also make Records' amount column show "+UGX 0" for a
           // refunded withdrawal instead of what was actually attempted.
-          userId, type: 'withdraw', description: `Withdrawal: Processing (${fmtUGX(amt)})`,
+          userId, type: 'withdraw', description: `Withdrawal: Processing (${fmtMoney(amt)})`,
           amount: -amt, displayAmount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
         });
       } catch (createErr) {
@@ -5158,7 +5607,7 @@ app.post('/withdraw/request', async (req, res) => {
         throw createErr;
       }
     });
-    sendAdminPush('New withdrawal request', `${fmtUGX(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
+    sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
     sendWithdrawalSmsAlert().catch(() => {});
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested, processing now' });
   } catch (e) {
@@ -5178,6 +5627,14 @@ app.post('/withdraw/request', async (req, res) => {
 // reconciler, once completeWithdrawalRefund actually succeeds — finalizes
 // it with refunded:true.
 async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome, refunded) {
+  let ownerId = null;
+  try {
+    const w = await db.collection('withdrawals').doc(withdrawalId).get();
+    if (w.exists) ownerId = w.data().userId || null;
+  } catch (_) {}
+  return withUserRegion(ownerId, () => _finalizeWithdrawalTxNow(withdrawalId, outcome, refunded));
+}
+async function _finalizeWithdrawalTxNow(withdrawalId, outcome, refunded) {
   try {
     const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(10).get();
     if (txSnap.empty) return;
@@ -5188,7 +5645,7 @@ async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome, refund
       // the old text -- simpler and no longer coupled to the exact
       // "processing" suffix the description used to always end with.
       const amt = Math.abs(Number(txDoc.data().amount) || 0);
-      const update = { status: newStatus, description: `Withdrawal: ${statusLabel} (${fmtUGX(amt)})` };
+      const update = { status: newStatus, description: `Withdrawal: ${statusLabel} (${fmtMoney(amt)})` };
       if (newStatus === 'failed' && refunded) update.amount = 0; // wallet was CONFIRMED refunded in full, zero this row so the ledger sum stays correct
       return txDoc.ref.update(update);
     }));
@@ -5332,7 +5789,19 @@ async function markWithdrawalProcessed(witRef, userId) {
   });
   return didTransition;
 }
+// Started by an ADMIN, whose own request region is whichever host the panel
+// is on -- but every amount in the replies and in the member's ledger row
+// belongs to the MEMBER. The region is switched to theirs as soon as the
+// withdrawal document names them.
 async function processWithdrawalCore(withdrawalId, processedBy) {
+  let ownerId = null;
+  try {
+    const pre = await db.collection('withdrawals').doc(withdrawalId).get();
+    if (pre.exists) ownerId = pre.data().userId || null;
+  } catch (_) {}
+  return withUserRegion(ownerId, () => _processWithdrawalNow(withdrawalId, processedBy));
+}
+async function _processWithdrawalNow(withdrawalId, processedBy) {
   if (_withdrawInFlight.has(withdrawalId))
     return { code: 409, body: { status: 'error', message: 'Another admin is already acting on this withdrawal. Check the list in a moment.' } };
   _withdrawInFlight.add(withdrawalId);
@@ -5381,7 +5850,7 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
       await finalizeWithdrawalTransactionRecord(withdrawalId, 'processed');
       return {
         code: 200,
-        body: { status: 'success', manual: true, message: `Recorded as paid by hand: ${fmtUGX(wit.net)} to ${wit.phone}` },
+        body: { status: 'success', manual: true, message: `Recorded as paid by hand: ${fmtMoney(wit.net)} to ${wit.phone}` },
         meta: { amount: wit.net, dest: wit.phone, userId: wit.userId, payoutMethod: 'manual' },
       };
     }
@@ -5439,7 +5908,7 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
       } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
       return {
         code: 200,
-        body: { status: 'success', sandbox: false, message: `Sending ${fmtUGX(wit.net)} to ${wit.phone}` },
+        body: { status: 'success', sandbox: false, message: `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
         meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
       };
     }
@@ -5513,7 +5982,7 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
     }
     return {
       code: 200,
-      body: { status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtUGX(wit.net)} to ${wit.phone}` : `Sending ${fmtUGX(wit.net)} to ${wit.phone}` },
+      body: { status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtMoney(wit.net)} to ${wit.phone}` : `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
       meta: { amount: wit.net, dest: wit.phone, userId: wit.userId }
     };
   } catch (e) {
@@ -5813,7 +6282,7 @@ app.post('/bank/save', async (req, res) => {
   const rawNetwork = String(req.body.network || '').trim();
   if (!holder || !NETWORK_NAMES.has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   const phone = cleanPhone(req.body.phone || '');
-  if (!phone) return res.status(400).json({ status: 'error', message: 'That is not a valid Uganda mobile-money number. Use the format 07XXXXXXXX or +2567XXXXXXXX.' });
+  if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
@@ -6325,10 +6794,27 @@ app.post('/admin/push/clear-all', async (req, res) => {
     res.json({ status: 'success', cleared: snap.size });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// `?region=ke` reads THAT region's settings. `overrides` names the fields
+// the region has actually been given its own value for -- everything else
+// on the screen is still inherited from Uganda, and the panel says so
+// rather than letting the admin think they have already set it.
 app.get('/admin/settings', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', settings: await getSettings() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  try {
+    await getRegions();
+    const key = String(req.query.region || DEFAULT_REGION_KEY).toLowerCase();
+    const region = regionByKey(key);
+    let overrides = [];
+    if (region.key !== DEFAULT_REGION_KEY) {
+      const snap = await db.collection('settings').doc(settingsDocId(region.key)).get();
+      overrides = snap.exists ? Object.keys(snap.data()).filter(k => k !== '_id' && !GLOBAL_ONLY_SETTINGS.includes(k)) : [];
+    }
+    res.json({
+      status: 'success', settings: await getSettings(region.key),
+      region: publicRegionView(region), regionKey: region.key,
+      overrides, globalOnly: GLOBAL_ONLY_SETTINGS,
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 const SETTINGS_CRITICAL_RANGES = {
   withdrawFeePct: [0, 100], minWithdraw: [0, MAX_MONEY_AMOUNT], minDeposit: [0, MAX_MONEY_AMOUNT],
@@ -6379,6 +6865,30 @@ app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const updates = req.body.settings || {};
+    // Which region's settings are being saved. Absent (or 'ug') means the
+    // founding region, writing 'settings/main' exactly as this route always
+    // has -- so every existing admin screen keeps working untouched.
+    await getRegions();
+    const regionKey = String(req.body.region || DEFAULT_REGION_KEY).toLowerCase();
+    const targetRegion = regionByKey(regionKey);
+    if (regionKey !== targetRegion.key)
+      return res.status(400).json({ status: 'error', message: `There is no region "${regionKey}".` });
+    const isRegionOverlay = targetRegion.key !== DEFAULT_REGION_KEY;
+    if (isRegionOverlay) {
+      // Backend-wide controls cannot be set per country -- see
+      // GLOBAL_ONLY_SETTINGS. Refused rather than dropped: an admin who
+      // typed a maintenance message into a region's screen and got a silent
+      // success would believe that region was closed when it was not.
+      const offending = GLOBAL_ONLY_SETTINGS.filter(k => k in updates);
+      if (offending.length)
+        return res.status(400).json({ status: 'error', message: `These apply to the whole platform, not one region, so set them on ${DEFAULT_REGION.name}: ${offending.join(', ')}.` });
+    }
+    // Fields the region should stop overriding and inherit from the founding
+    // region again. Cleared by rewriting the region's document without them
+    // rather than storing a null, which Object.assign() in getSettings()
+    // would happily layer over a perfectly good inherited value.
+    const clearFields = (Array.isArray(req.body.clear) ? req.body.clear : [])
+      .map(k => String(k)).filter(k => k && k !== '_id' && !GLOBAL_ONLY_SETTINGS.includes(k));
     for (const [key, [min, max]] of Object.entries(SETTINGS_CRITICAL_RANGES)) {
       if (!(key in updates)) continue;
       const n = Number(updates[key]);
@@ -6453,16 +6963,127 @@ app.post('/admin/settings/update', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'lipapay'` });
     if ('withdrawMethod' in updates && !['follow', 'marzpay', 'lipapay', 'manual'].includes(updates.withdrawMethod))
       return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'lipapay' or 'manual'` });
-    await db.collection('settings').doc('main').set(updates, { merge: true });
+    if (isRegionOverlay) {
+      const docId = settingsDocId(targetRegion.key);
+      const ref = db.collection('settings').doc(docId);
+      const cur = await ref.get();
+      const next = Object.assign({}, cur.exists ? cur.data() : {}, updates);
+      delete next._id;
+      for (const k of clearFields) delete next[k];
+      for (const k of GLOBAL_ONLY_SETTINGS) delete next[k];
+      await ref.set(next, { merge: false });
+    } else {
+      await db.collection('settings').doc('main').set(updates, { merge: true });
+    }
     _settingsCacheTs = 0;
+    _settingsByRegion.clear();
     // Apply a domain change NOW rather than up to 60s later: the owner saves
     // this field precisely because a site is currently being refused, and
     // being told "wait a minute" while staring at a broken page is how a
     // working fix gets mistaken for a broken one.
-    if ('allowedOrigins' in updates) _corsExtraHosts = updates.allowedOrigins;
-    logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });
+    if ('allowedOrigins' in updates) { _mainAllowedHosts = updates.allowedOrigins; refreshCorsSnapshot(); }
+    logAdminAction(req, 'settings_updated', { region: targetRegion.key, fields: Object.keys(updates), cleared: clearFields });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save settings' }); }
+});
+// ── REGIONS: ADMIN CRUD ──
+// Owner: "any country created". A region is created here, given its
+// hostname(s), currency, dialling code and number shape, and from then on
+// its settings and its product prices are edited through the same Settings
+// and Products screens with that region picked.
+app.get('/admin/regions', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    _regionsCacheTs = 0;
+    res.json({ status: 'success', regions: await getRegions(), defaultKey: DEFAULT_REGION_KEY });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load regions' }); }
+});
+const REGION_KEY_RE = /^[a-z0-9][a-z0-9-]{0,23}$/;
+app.post('/admin/regions/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const raw = req.body.region || {};
+  const key = String(raw.key || '').trim().toLowerCase();
+  if (!REGION_KEY_RE.test(key))
+    return res.status(400).json({ status: 'error', message: 'The region id must be lowercase letters, digits or dashes (for example "ke"), 24 characters or fewer.' });
+  const r = normalizeRegion(raw, key);
+  if (!r.name) return res.status(400).json({ status: 'error', message: 'Give the region a country name.' });
+  if (!/^[A-Z][A-Z0-9 .$]{0,7}$/.test(r.currency))
+    return res.status(400).json({ status: 'error', message: 'The currency label must be 1 to 8 characters, letters and digits only (for example UGX or KES).' });
+  if (!/^\d{1,4}$/.test(r.dialCode))
+    return res.status(400).json({ status: 'error', message: 'The dialling code must be 1 to 4 digits, with no + sign (for example 256 or 254).' });
+  if (!(r.localLength >= 5 && r.localLength <= 12))
+    return res.status(400).json({ status: 'error', message: 'The local number length must be between 5 and 12 digits.' });
+  if (r.prefixes.length > 12 || r.prefixes.some(p => p.length > 4))
+    return res.status(400).json({ status: 'error', message: 'List at most 12 number prefixes, each 4 digits or fewer (for example 7 for Uganda).' });
+  if (r.prefixes.some(p => p.length >= r.localLength))
+    return res.status(400).json({ status: 'error', message: 'A number prefix cannot be as long as the whole local number.' });
+  if (!(r.utcOffsetMin >= -720 && r.utcOffsetMin <= 840))
+    return res.status(400).json({ status: 'error', message: 'The clock offset must be between -720 and +840 minutes.' });
+  try {
+    _regionsCacheTs = 0;
+    const existing = await getRegions();
+    // Two regions sharing a dialling code would collide in the synthetic
+    // login email (see phoneToEmail) -- the same local number in both would
+    // resolve to one Firebase account. Refused here, which is what keeps
+    // that function's guarantee true.
+    const dialClash = existing.find(o => o.key !== key && o.dialCode === r.dialCode);
+    if (dialClash)
+      return res.status(400).json({ status: 'error', message: `Dialling code ${r.dialCode} is already used by ${dialClash.name} (${dialClash.key}). Each region needs its own.` });
+    // A hostname can only belong to one region, or regionForHost() would
+    // pick whichever happened to sort first and the currency shown would
+    // depend on document order.
+    for (const h of r.hosts) {
+      const owner = existing.find(o => o.key !== key && o.hosts.includes(h));
+      if (owner) return res.status(400).json({ status: 'error', message: `${h} already belongs to ${owner.name} (${owner.key}).` });
+    }
+    await db.collection('regions').doc(key).set(r, { merge: false });
+    _regionsCacheTs = 0;
+    _settingsCacheTs = 0;
+    await getRegions();
+    logAdminAction(req, 'region_saved', { key, currency: r.currency, hosts: r.hosts.length });
+    res.json({ status: 'success', region: r });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this region' }); }
+});
+app.post('/admin/regions/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const key = String(req.body.key || '').trim().toLowerCase();
+  if (!key) return res.status(400).json({ status: 'error', message: 'key required' });
+  if (key === DEFAULT_REGION_KEY)
+    return res.status(400).json({ status: 'error', message: 'The founding region cannot be deleted -- it is where every unknown domain and every account without a region lands.' });
+  try {
+    // Refused while anyone is signed up there. Deleting the region would
+    // silently move those members onto Uganda's prices and currency, which
+    // is a repricing of live accounts, not a tidy-up.
+    const members = await db.collection('users').where('regionKey', '==', key).limit(1).get();
+    if (!members.empty)
+      return res.status(400).json({ status: 'error', message: 'There are members signed up in this region. Switch it off instead of deleting it, so their accounts keep their own currency and prices.' });
+    await db.collection('regions').doc(key).delete();
+    // Its settings and its product prices go with it. Left behind, they
+    // would silently come back into force the day somebody recreated a
+    // region under the same id -- with figures nobody remembers setting.
+    // The confirm dialog in the panel promises this; keep it true.
+    try { await db.collection('settings').doc(settingsDocId(key)).delete(); } catch (_) {}
+    try {
+      const prods = await db.collection('products').get();
+      const batch = db.batch();
+      let touched = 0;
+      for (const d of prods.docs) {
+        const r = d.data().regions;
+        if (r && typeof r === 'object' && r[key] !== undefined) {
+          batch.update(d.ref, { ['regions.' + key]: FieldValue.delete() });
+          touched++;
+        }
+      }
+      if (touched) await batch.commit();
+    } catch (e) { console.warn('Region delete: could not clear product overrides for ' + key + ':', e.message); }
+    _regionsCacheTs = 0;
+    _settingsCacheTs = 0;
+    _settingsByRegion.clear();
+    _productsCacheTs = 0;
+    await getRegions();
+    logAdminAction(req, 'region_deleted', { key });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this region' }); }
 });
 app.get('/admin/chipz-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -6864,15 +7485,42 @@ function sanitizeProductInput(p, fallbackOrder) {
   const order = p?.order != null ? Number(p.order) : fallbackOrder;
   return { key, name, price, cycle, expectedReturn, multiplier, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
+// `?region=ke` hands the editor that region's view of every product -- its
+// own price where it has one, Uganda's where it has not -- plus `overrides`,
+// the per-product list of fields that region has actually set, so the panel
+// can show which figures are its own and which are still inherited.
+// Without a region it returns the RAW documents exactly as before, which is
+// the founding region's own editor.
 app.get('/admin/products', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', products: await getProducts() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  try {
+    await getRegions();
+    const key = String(req.query.region || DEFAULT_REGION_KEY).toLowerCase();
+    const region = regionByKey(key);
+    const raw = await getProductsRaw();
+    if (region.key === DEFAULT_REGION_KEY)
+      return res.json({ status: 'success', products: raw.map(p => { const { regions, ...rest } = p; return rest; }), regionKey: region.key, region: publicRegionView(region), overrides: {} });
+    const overrides = {};
+    for (const p of raw) {
+      const o = p.regions && p.regions[region.key];
+      overrides[p.key] = o ? PRODUCT_REGION_FIELDS.filter(f => o[f] !== undefined && o[f] !== null && o[f] !== '') : [];
+    }
+    res.json({
+      status: 'success', products: raw.map(p => applyRegionToProduct(p, region.key)),
+      regionKey: region.key, region: publicRegionView(region), overrides,
+      regionFields: PRODUCT_REGION_FIELDS,
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/products/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
+    await getRegions();
+    const regionKey = String(req.body.region || DEFAULT_REGION_KEY).toLowerCase();
+    const region = regionByKey(regionKey);
+    if (regionKey !== region.key)
+      return res.status(400).json({ status: 'error', message: `There is no region "${regionKey}".` });
     const sanitized = [];
     for (let i = 0; i < list.length; i++) {
       const clean = sanitizeProductInput(list[i], i);
@@ -6880,10 +7528,33 @@ app.post('/admin/products/save', async (req, res) => {
       sanitized.push(clean);
     }
     const batch = db.batch();
-    sanitized.forEach(p => batch.set(db.collection('products').doc(p.key), p, { merge: true }));
+    if (region.key === DEFAULT_REGION_KEY) {
+      // The founding region writes the document's own fields, exactly as
+      // this route always did. `regions` is untouched because merge:true
+      // leaves fields the payload does not mention -- so repricing Uganda
+      // never disturbs another country's prices.
+      sanitized.forEach(p => batch.set(db.collection('products').doc(p.key), p, { merge: true }));
+    } else {
+      // Another region writes ONLY into its own corner of the document, and
+      // only the fields it is allowed its own value for: name, image and
+      // order stay shared, so a region cannot quietly rename a product for
+      // everyone else.
+      sanitized.forEach(p => {
+        const over = {};
+        for (const f of PRODUCT_REGION_FIELDS) if (p[f] !== undefined && p[f] !== null && p[f] !== '') over[f] = p[f];
+        // A DOTTED path, deliberately: `{ regions: { ke: ... } }` under this
+        // Mongo compatibility layer becomes `$set: { regions: {...} }`,
+        // which replaces the whole map and would wipe every OTHER region's
+        // prices on each save. `regions.ke` touches only this region.
+        // Replacing this region's own object (rather than merging into it)
+        // is what lets a field blanked in the editor go back to inheriting
+        // Uganda's value instead of keeping the figure it had.
+        batch.set(db.collection('products').doc(p.key), { key: p.key, ['regions.' + region.key]: over }, { merge: true });
+      });
+    }
     await batch.commit();
     _productsCacheTs = 0;
-    logAdminAction(req, 'products_saved', { count: sanitized.length });
+    logAdminAction(req, 'products_saved', { region: region.key, count: sanitized.length });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save products' }); }
 });
@@ -7342,7 +8013,7 @@ app.post('/admin/user/repair-wallet', async (req, res) => {
       const diff = Math.round(real) - Math.round(stored);
       if (diff === 0) return { ok: true, message: 'Already correct -- nothing to repair.', diff: 0 };
       if (diff < 0) {
-        return { ok: false, message: `The real ledger total (${fmtUGX(Math.round(real))}) is LOWER than the stored wallet balance (${fmtUGX(stored)}). This direction is never auto-repaired -- diagnose by hand (a duplicate/erroneous credit somewhere is more likely than a missing debit).` };
+        return { ok: false, message: `The real ledger total (${fmtMoney(Math.round(real))}) is LOWER than the stored wallet balance (${fmtMoney(stored)}). This direction is never auto-repaired -- diagnose by hand (a duplicate/erroneous credit somewhere is more likely than a missing debit).` };
       }
       // Deliberately does NOT write a new transactions row for this top-up --
       // the ledger ALREADY contains whatever real event(s) this diff
@@ -7357,7 +8028,7 @@ app.post('/admin/user/repair-wallet', async (req, res) => {
       // already correct -- rebuilds each stat from the real ledger by type)
       // is the right tool for those; this one is walletBalance-only.
       await uRef.update({ walletBalance: FieldValue.increment(diff) });
-      return { ok: true, message: `Wallet topped up by ${fmtUGX(diff)} to match the real ledger total. Run "Recalculate totals" too if totalDeposited/Earned/Invested were also flagged.`, diff };
+      return { ok: true, message: `Wallet topped up by ${fmtMoney(diff)} to match the real ledger total. Run "Recalculate totals" too if totalDeposited/Earned/Invested were also flagged.`, diff };
     });
     if (!result.ok) return res.status(409).json({ status: 'error', message: result.message });
     if (result.diff) logAdminAction(req, 'wallet_repaired', { userId, diff: result.diff });
@@ -7704,7 +8375,7 @@ app.post('/admin/deposit', async (req, res) => {
   const { userId, amount, note } = req.body;
   const amt = Math.round(parseFloat(amount || 0));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
-    return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtUGX(MAX_MONEY_AMOUNT)}) required` });
+    return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtMoney(MAX_MONEY_AMOUNT)}) required` });
   const lastCredit = _adminCreditDebounce.get(userId) || 0;
   if (Date.now() - lastCredit < 10000) return res.status(429).json({ status: 'error', message: 'This user was just credited seconds ago. Wait a moment before crediting again.' });
   _adminCreditDebounce.set(userId, Date.now());
@@ -7727,7 +8398,7 @@ app.post('/admin/deposit', async (req, res) => {
       t.set(db.collection('transactions').doc(), { userId, type: 'admin_credit', description: creditDesc, amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
     }));
     logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
-    res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
+    res.json({ status: 'success', message: `Credited ${fmtMoney(amt)}` });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/debit', async (req, res) => {
@@ -7735,7 +8406,7 @@ app.post('/admin/debit', async (req, res) => {
   const { userId, amount, note } = req.body;
   const amt = Math.round(Math.abs(parseFloat(amount || 0)));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
-    return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtUGX(MAX_MONEY_AMOUNT)}) required` });
+    return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtMoney(MAX_MONEY_AMOUNT)}) required` });
   const lastDebit = _adminDebitDebounce.get(userId) || 0;
   if (Date.now() - lastDebit < 10000) return res.status(429).json({ status: 'error', message: 'This user was just debited seconds ago. Wait a moment before debiting again.' });
   _adminDebitDebounce.set(userId, Date.now());
@@ -7747,13 +8418,13 @@ app.post('/admin/debit', async (req, res) => {
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
       const bal = uSnap.data().walletBalance || 0;
-      if (amt > bal) throw new Error(`Cannot debit ${fmtUGX(amt)}, this wallet only holds ${fmtUGX(bal)}`);
+      if (amt > bal) throw new Error(`Cannot debit ${fmtMoney(amt)}, this wallet only holds ${fmtMoney(bal)}`);
       newBal = bal - amt;
       t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
       t.set(db.collection('transactions').doc(), { userId, type: 'admin_debit', description: note || 'Balance adjustment', amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
     }));
     logAdminAction(req, 'manual_debit', { userId, amount: amt, note });
-    res.json({ status: 'success', message: `Removed ${fmtUGX(amt)}. New balance ${fmtUGX(newBal)}`, newBalance: newBal });
+    res.json({ status: 'success', message: `Removed ${fmtMoney(amt)}. New balance ${fmtMoney(newBal)}`, newBalance: newBal });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/ban', async (req, res) => {
@@ -7824,7 +8495,7 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
     const ok = await creditDeposit(snap);
     if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit. Try again' });
     logAdminAction(req, 'deposit_force_credited', { depositId, amount: snap.data().amount });
-    res.json({ status: 'success', message: `Force-credited ${fmtUGX(snap.data().amount)} to the user` });
+    res.json({ status: 'success', message: `Force-credited ${fmtMoney(snap.data().amount)} to the user` });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdrawals/list', async (req, res) => {
@@ -8836,7 +9507,20 @@ function runReconciler() {
 // Owner-toggleable: approves every still-pending withdrawal automatically,
 // a few seconds after it was requested — shares processWithdrawalCore with
 // the manual "Send" button, so it's exactly as safe/idempotent.
+// Runs once per region, because auto-approval is one of the settings each
+// region owns: Uganda can be auto-paying while Kenya is still hand-checked,
+// and each region's own interval and safety cap apply to its own members'
+// cash-outs. A withdrawal with no regionKey (raised before regions existed)
+// belongs to the founding region.
 async function autoApproveWithdrawalsTick() {
+  try {
+    for (const region of await getRegions()) {
+      await runInRegion(region, () => _autoApproveTickForRegion(region.key))
+        .catch(e => console.error('Auto-approve tick error (' + region.key + '):', e.message));
+    }
+  } catch (e) { console.error('Auto-approve tick error:', e.message); }
+}
+async function _autoApproveTickForRegion(regionKey) {
   try {
     const sett = await getSettings();
     if (!sett.autoApproveWithdrawalsEnabled) return;
@@ -8851,6 +9535,7 @@ async function autoApproveWithdrawalsTick() {
     const snap = await db.collection('withdrawals').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {
       const wit = doc.data();
+      if (String(wit.regionKey || DEFAULT_REGION_KEY) !== regionKey) continue; // another region's rules apply
       if (tsMillis(wit.createdAt) > cutoff.getTime()) continue; // not old enough yet
       const cap = Number(sett.autoApproveMaxAmount) || 0;
       if (cap > 0 && wit.amount > cap) continue; // above the safety cap — leave for manual review

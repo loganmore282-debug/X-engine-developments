@@ -3285,3 +3285,172 @@ service worker otherwise intercepts API calls before `page.route` sees them, whi
 looks exactly like a broken endpoint. Firebase's ESM modules are stubbed by routing
 `https://www.gstatic.com/firebasejs/**/firebase-{app,auth}.js` to a tiny fake module
 that reports an already-signed-in user.
+
+## Round 152 — Multi-country subdomains (regions)
+
+Owner: *"l wanted other subdomain to fetch other country code and currency, ie
+fgdr.chipz-platform.com in ugx, and country code changeable to other country or
+created, and another can be sfhd.chipz-platform in KES shs, or any country created,
+also make when l can edit prices of each product and all settings as these of ugx."*
+
+Chipz is now multi-tenant by country. A **region** owns:
+
+| what | where it is set |
+|---|---|
+| its subdomain(s) | Admin → **Countries** → Web addresses |
+| currency label ("UGX", "KES") | Admin → Countries |
+| dialling code + number length + allowed prefixes | Admin → Countries |
+| clock offset (its cash-out hours and product windows are in ITS local time) | Admin → Countries |
+| every rate, limit, bonus, payment method, cash-out window | Admin → **Settings** with that country picked |
+| every product's price, payout, cycle, spin band, availability | Admin → **Products** with that country picked |
+| its own mobile-money collection numbers | Admin → Settings → payment numbers, with that country picked |
+
+### How a request gets its region (the money-safety rule)
+- a **visitor** (not signed in) gets the region that owns the hostname the app was
+  loaded from — so the landing screen, Sign Up and the product list read in the right
+  currency before anybody has an account.
+- a **member** always gets **their own** region, stamped on the account at
+  registration, no matter which hostname they opened.
+
+That second rule is the whole point. If the region came from the request, somebody
+could register where a product costs 30,000 KES and buy it on the host where the same
+product costs 30,000 UGX. `regionKey` is never read from a request body; the region is
+resolved once per request in the region middleware (hostname, then overridden by
+`users/{uid}.regionKey`) and carried in an **`AsyncLocalStorage`** store. That store is
+what makes `getSettings()`, `getProducts()`, `fmtMoney()`, `cleanPhone()` and the clock
+helpers region-correct without an argument threaded through ~250 call sites.
+
+Background jobs (maturity payouts, referral commission, deposit crediting, withdrawal
+processing) have no request, so each wraps itself in the member's own region with
+`withUserRegion(userId, fn)` — otherwise a Kenyan's payout description would read UGX.
+
+### The founding region
+Key `ug`, name Uganda, UGX, +256, 9 digits starting 7, UTC+3. It cannot be deleted and
+cannot be switched off: it is where an unrecognised hostname and an account with no
+`regionKey` land. Its settings document is still `settings/main` and its prices are
+still the plain `price`/`expectedReturn` fields on each product document — **nothing
+migrates**, and a database written before this round reads correctly as Uganda.
+
+### Storage
+- `regions/<key>` — `{ key, name, currency, dialCode, localLength, prefixes[],
+  utcOffsetMin, hosts[], active }`. Cached 60 s with a synchronous snapshot
+  (`currentRegion()` is called from `fmtMoney()`, which cannot await).
+- `settings/region-<key>` — that country's settings, **layered on top of
+  `settings/main`**. A new country therefore starts out behaving exactly like Uganda
+  and the admin only types what differs. `GLOBAL_ONLY_SETTINGS`
+  (`allowedOrigins`, `maintenanceMode`, `maintenanceMsg`, `openingCountdownEnabled`,
+  `openingCountdownAt`, `brandName`) can never be per-country — a region trying to set
+  one is **refused**, not silently dropped.
+- each product document gains `regions: { ke: { price, … } }`, written at the **dotted
+  path** `regions.ke`. Not as a nested map: this Mongo compatibility layer turns
+  `set({regions:{ke:…}}, {merge:true})` into `$set: {regions: …}`, which replaces the
+  whole map and would wipe every other country's prices on each save.
+  `PRODUCT_REGION_FIELDS` is the whitelist — name, image and order stay shared, so one
+  country cannot rename a product for everyone.
+- `pendingDeposits` / `withdrawals` / `manualPaymentNumbers` carry `regionKey`, so the
+  admin lists can label a figure and the number pool can be scoped without a per-row
+  user lookup. A document with no `regionKey` is Uganda (filtered in JavaScript, not
+  in the query — a `where('regionKey','==','ug')` matches none of the existing rows).
+
+### Login addresses — the collision this closes
+The synthetic Firebase email was the local digits alone (`742730382@chipz-platform.com`).
+`0712345678` is a real number in **both** Uganda and Kenya, so a second country would
+have put a Kenyan straight inside a Ugandan member's account. Now: **Uganda keeps the
+bare local digits** (no deployed login changes) and **every other country carries its
+dialling code** (`254712345678@…`). They cannot collide — a Ugandan address is exactly
+9 digits, a prefixed one is always longer — and two regions are **refused at save time
+if they share a dialling code**, which is what keeps the prefixed forms distinct too.
+
+`phoneToEmail()` exists twice, in `server.js` and in `user-src/original_module.js`, and
+they MUST produce the same string. `test-regions.js` lifts both and compares them.
+
+**Consequence to know:** a member signs in on their **own country's** subdomain. On
+another country's address their login address does not exist, and the login error says
+so once more than one country is configured (`regionCount` on `/public/settings`).
+
+### Also per-region now
+- referral codes do **not** cross countries — a code from another region is refused at
+  registration (`BAD_REFERRAL_REGION`). Paying 27% of a 30,000 KES purchase into a
+  Ugandan wallet is arithmetically right and worth about eight times what it should be.
+- auto-approval of cash-outs runs **once per country**, with that country's own
+  interval, cap and enable flag, and only touches its own members' withdrawals.
+- a region's hostnames are folded into the CORS allowlist automatically
+  (`_regionHosts` + `refreshCorsSnapshot()`), so a new subdomain never needs adding to
+  Settings → Allowed website domains. A CORS-refused subdomain is indistinguishable
+  from a dead server, which this file already warns about twice.
+
+### New endpoints
+`GET /admin/regions`, `POST /admin/regions/save`, `POST /admin/regions/delete`
+(refused for `ug`, and refused while any member is signed up in that region — switch it
+off instead, so those accounts keep their own currency and prices).
+`GET /admin/settings?region=` and `GET /admin/products?region=` read one country's view
+and also return `overrides` (which fields that country has actually set, so the panel
+can show what is still inherited). `POST /admin/settings/update`,
+`POST /admin/products/save` and `POST /admin/manual-numbers/save` take `region`.
+
+The admin panel stamps all of that on in **one** place — its `api()` helper — rather
+than at a dozen call sites; `ADMIN_REGION` is the picked country and `ugx(n, regionKey)`
+labels a figure in the right currency. The picker is **hidden entirely while there is
+only one country**.
+
+### Not done / known limits
+- `NETWORK_NAMES` is still MTN / Airtel. Those are Uganda's operators; a Kenyan region
+  would want Safaricom M-Pesa. Networks are not yet per-region.
+- MarzPay and LipaPay are Uganda-only gateways. A new country should run on **manual
+  payments (PAY B)** until a provider for it is wired in.
+- The SMS parser (`parseMoMoSms` and friends) is written against real MTN/Airtel Uganda
+  message formats. It picks the payer's number using the region's own prefixes now, but
+  the message *shapes* are still Ugandan.
+- Admin analytics day-bucketing stays on EAT — it aggregates across every country, so
+  one clock is the right answer there.
+
+### Tests
+`test-regions.js` runs the real functions out of both files: the region model and its
+normalisation, hostname → country (including a country switched off), per-country
+settings documents, phone shapes per country, the currency label, **the app/server
+login-address agreement**, the Uganda↔Kenya collision, format hints, per-country
+product pricing (including a blanked field going back to inheriting rather than
+becoming 0), and code-level checks on every money-safety rule above.
+
+`test-region-currency.py` drives the **built, obfuscated** app in a real browser
+against a backend answering as Kenya, and checks what a member would actually see:
+the wallet balance and every visible currency label reading KES, the Deposit number
+field showing **+254**, the Withdraw amount field labelled KES, a Kenyan number
+accepted where a Ugandan one is refused, and the login address carrying the dialling
+code. It then reloads the **same build** served as Uganda and requires every one of
+those to read the Ugandan way — a test that only ever sees Kenya cannot tell a working
+region layer apart from a build with "KES" compiled into it. A third scenario is the
+money-safety rule itself: `/public/settings` says **Uganda** (the hostname) while
+`/account` says **Kenya** (the account), and the screen must come out Kenyan.
+That third scenario is not optional — verified by mutation: dropping
+`applyRegion(r.region)` from the `/account` reply goes **undetected** by the first two
+runs, because there the two regions agree.
+
+`verify-regions-discriminates.py` re-breaks the feature **43 ways** — region taken from
+the request, hostname winning over the account, registration not stamping, a
+cross-region referral accepted, the nested-map product save that wipes other countries,
+a global setting made per-country, both `phoneToEmail` halves losing their prefix,
+hardcoded UGX on either side, the `.slice(3)` cents bug, the region filters dropped from
+auto-approval and the number pool, `withUserRegion` removed from the background jobs,
+the app deciding its own region — and requires the test to **exit non-zero** every
+time. All 35 are caught. Two were NOT, first time round, and both were real holes in the
+test, fixed: a file-wide `region: publicRegionView()` check passed with the
+`/public/settings` one deleted (the `/account` one still matched), and a file-wide
+`_regionHosts` check passed with the code that fills the list deleted (the declaration
+still matched). **Check inside the function, not across the file.**
+
+### Two bugs this round's own tests caught in this round's own work
+1. **`STATE.settings.regionCount = …` took the whole boot down.** `STATE.settings` is
+   whatever `/public/settings` sent, and on a success reply with no `settings` key it
+   is `undefined` — so writing into it threw, the loading screen never lifted, and
+   `test-cache-quota.py` and `test-mockup-proportions.py` both went red on "no page
+   errors" (they pass at HEAD; checked). `regionCount` now lives on `STATE` itself.
+   **Do not write into `STATE.settings`** — it is the server's object, not ours.
+2. **A second country's rates could never be saved at all.** The Settings screen's
+   Rates card sends ONE payload that mixes per-country rates with the backend-wide
+   controls (`allowedOrigins`, `maintenanceMode`, `maintenanceMsg`,
+   `openingCountdown*`). With Kenya picked, the server's (correct) refusal of those
+   fields failed the entire save. The panel now strips them in its `api()` helper —
+   `ADMIN_GLOBAL_ONLY`, which `test-regions.js` asserts is **exactly** the server's
+   `GLOBAL_ONLY_SETTINGS`, so nothing is stripped that should save and nothing is sent
+   that will be refused. The server refusal stays as the backstop for a direct POST.

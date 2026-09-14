@@ -83,7 +83,12 @@ function run(text, order = ORDER) {
   written = null; replied = null; code = 200;
   const sandbox = {
     verifyAuth: async () => 'u1',
-    cleanPhone: null, fmtUGX: null, parseMoMoSms: null, parseSentMoMoSms: null,
+    cleanPhone: null, fmtMoney: null, parseMoMoSms: null, parseSentMoMoSms: null,
+    // The currency label, the dialling code, the number length and the
+    // mobile prefixes all come from the region now (see the REGIONS section
+    // in server.js). Pinned to Uganda -- these are real Ugandan operator
+    // messages.
+    currentRegion: () => ({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true }),
     FieldValue: { serverTimestamp: () => '<ts>' },
     console,
     db: { collection: () => ({ doc: () => ({
@@ -95,9 +100,11 @@ function run(text, order = ORDER) {
     }) }) },
   };
   const fn = new Function('sandbox', `
-    const { verifyAuth, FieldValue, db, console } = sandbox;
+    const { verifyAuth, FieldValue, db, console, currentRegion } = sandbox;
     ${grab('function _smsAmount', 'function parseMoMoSms')}
-    ${fnSource('fmtUGX')}
+    ${fnSource('fmtMoney')}
+    ${fnSource('localDigits')}
+    ${fnSource('looksLikeRegionMobile')}
     ${fnSource('cleanPhone')}
     ${fnSource('parseMoMoSms')}
     ${fnSource('parseSentMoMoSms')}

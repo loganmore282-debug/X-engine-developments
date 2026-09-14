@@ -12,10 +12,65 @@ function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:
 // display. Now only shows decimals on a value that actually has them --
 // everything else (deposits, withdrawals, prices, cashback) keeps its old,
 // clean whole-number look with no changes needed at any call site.
+// ── REGION (which country this app is running as) ──
+//
+// Owner: "l wanted other subdomain to fetch other country code and
+// currency, ie fgdr.chipz-platform.com in ugx, and country code changeable
+// to other country or created, and another can be sfhd.chipz-platform in
+// KES shs, or any country created, also make when l can edit prices of each
+// product and all settings as these of ugx."
+//
+// The SERVER decides which region this is, never the app: it comes back on
+// /public/settings (the region that owns the hostname we were loaded from,
+// so Sign Up reads in the right currency) and again on /account (the
+// signed-in member's OWN region, which wins -- a member who opens another
+// country's subdomain still sees their own currency, prices and number
+// rules). Nothing here is ever sent back up; the server re-derives it on
+// every request. See the REGIONS section in server.js.
+//
+// The values below are Uganda's, and they are also what an offline first
+// paint uses -- so a cold start with no network still formats money and
+// validates a phone number the way it always did.
+var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true };
+function cur(){ return (REGION && REGION.currency) || 'UGX'; }
+function regionName(){ return (REGION && REGION.name) || 'Uganda'; }
+// "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
+// its local length, used in the placeholders that show the shape to type.
+function phoneHintBody(){
+  const pfx = regionPrefixes();
+  const lead = pfx.length ? pfx[0] : '';
+  return lead + 'X'.repeat(Math.max(0, localLen() - lead.length));
+}
+function dial(){ return (REGION && REGION.dialCode) || '256'; }
+function dialPlus(){ return '+' + dial(); }
+function localLen(){ return Number(REGION && REGION.localLength) || 9; }
+function regionPrefixes(){ return (REGION && Array.isArray(REGION.prefixes) ? REGION.prefixes.filter(Boolean) : []); }
+// Applied from whichever response carried a region block. Only the fields
+// the server actually sent are taken, so a server that is one deploy behind
+// (no region in its replies at all) leaves Uganda's defaults standing
+// instead of blanking the currency.
+function applyRegion(r){
+  if (!r || typeof r !== 'object') return;
+  const out = {};
+  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault']) {
+    if (r[k] !== undefined && r[k] !== null && r[k] !== '') out[k] = r[k];
+  }
+  REGION = Object.assign({}, REGION, out);
+  try { localStorage.setItem('chipzRegion', JSON.stringify(REGION)); } catch(_){}
+}
+// The last region this device saw, restored before the first paint so a
+// returning member never sees Uganda's currency flash on a Kenyan phone
+// while /public/settings is still in flight.
+(function restoreRegion(){
+  try {
+    const raw = localStorage.getItem('chipzRegion');
+    if (raw) { const r = JSON.parse(raw); if (r && r.currency) REGION = Object.assign({}, REGION, r); }
+  } catch(_){}
+})();
 function fmtUGX(n){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
-  return 'UGX ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
+  return cur() + ' ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
 }
 // subagent-audit-caught: the deposit/withdraw amount fields have no
 // oninput sanitizer, and every amount the app itself shows (quick-amount
@@ -50,7 +105,8 @@ function linkifyText(text){
 // the stored format must never change.
 function toLocalPhoneDisplay(num){
   const s = String(num || '').trim();
-  return s.indexOf('+256') === 0 ? '0' + s.slice(4) : s;
+  const p = dialPlus();
+  return s.indexOf(p) === 0 ? '0' + s.slice(p.length) : s;
 }
 // Every phone field is now local-number-only -- the "+256" country code is
 // a static chip next to the input (see .phone-field/.phone-prefix), not
@@ -238,8 +294,9 @@ function chipzMarkHtml(size){
 }
 function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
-  if (digits.startsWith('256') && digits.length > 9) digits = digits.slice(3);
-  const maxDigits = digits.startsWith('0') ? 10 : 9;
+  const len = localLen(), d = dial();
+  if (digits.startsWith(d) && digits.length > len) digits = digits.slice(d.length);
+  const maxDigits = digits.startsWith('0') ? len + 1 : len;
   if (digits.length > maxDigits) digits = digits.slice(0, maxDigits);
   el.value = digits;
 }
@@ -313,15 +370,34 @@ async function api(path, opts){
 function post(path, body){ return api(path, { method: 'POST', body: JSON.stringify(body || {}) }); }
 
 // ── AUTH ──
-function phoneToEmail(phone){ return String(phone).replace(/\D/g,'').replace(/^0+/, '') + '@chipz-platform.com'; }
-function cleanPhone(raw){
+// The local (national) digits for THIS region -- the dialling code or the
+// leading 0 taken off, and the right length or nothing. Mirrors
+// localDigits() in server.js.
+function localDigits(raw){
+  const d = dial(), len = localLen();
   const s = String(raw||'').replace(/\D/g,'');
-  let local9 = null;
-  if (s.startsWith('256') && s.length === 12) local9 = s.slice(3);
-  else if (s.startsWith('0') && s.length === 10) local9 = s.slice(1);
-  else if (s.length === 9) local9 = s;
-  if (!local9 || !/^7\d{8}$/.test(local9)) return null;
-  return '+256' + local9;
+  if (s.startsWith(d) && s.length === d.length + len) return s.slice(d.length);
+  if (s.startsWith('0') && s.length === len + 1) return s.slice(1);
+  if (s.length === len) return s;
+  return null;
+}
+// The synthetic address this account signs in to Firebase with. It MUST
+// produce exactly the same string as phoneToEmail() in server.js, or a
+// member would create one account and then log in looking for another.
+// Uganda keeps the bare local digits it has always used, so no existing
+// login changes; every other region carries its dialling code, because the
+// same local number exists in more than one country and the bare digits
+// alone would put a Kenyan inside a Ugandan's account.
+function phoneToEmail(phone){
+  const local = localDigits(phone) || String(phone).replace(/\D/g,'').replace(/^0+/, '');
+  return ((REGION && REGION.isDefault === false) ? dial() + local : local) + '@chipz-platform.com';
+}
+function cleanPhone(raw){
+  const local = localDigits(raw);
+  if (!local) return null;
+  const pfx = regionPrefixes();
+  if (pfx.length && !pfx.some(p => local.startsWith(p))) return null;
+  return dialPlus() + local;
 }
 // Owner: manual-pay's own network-selector screen deliberately assigns the
 // OPPOSITE network's admin account to whichever tile the member taps (see
@@ -337,13 +413,19 @@ function cleanPhone(raw){
 // unconfirmed) -- so this only screens out something that clearly ISN'T a
 // mobile number (a landline, a toll-free number, garbled digits), never a
 // specific network match.
+// Uganda's own two-digit mobile blocks, still used as the sanity check on
+// the founding region. Other regions are screened on the prefix list the
+// admin gave them (REGION.prefixes) instead -- there is no way to know
+// another country's operator blocks from here, and a wrong hardcoded list
+// would refuse real numbers.
 var UGANDA_MOBILE_PREFIXES = ['70', '73', '74', '75', '76', '77', '78', '79'];
 function isValidUgandaMobileNumber(raw){
-  let d = String(raw || '').replace(/\D/g, '');
-  if (d.startsWith('256') && d.length === 12) d = d.slice(3);
-  else if (d.startsWith('0') && d.length === 10) d = d.slice(1);
-  if (d.length !== 9 || d[0] !== '7') return false;
-  return UGANDA_MOBILE_PREFIXES.indexOf(d.slice(0, 2)) !== -1;
+  const d = localDigits(raw);
+  if (!d) return false;
+  if (REGION && REGION.isDefault !== false && dial() === '256')
+    return d[0] === '7' && UGANDA_MOBILE_PREFIXES.indexOf(d.slice(0, 2)) !== -1;
+  const pfx = regionPrefixes();
+  return !pfx.length || pfx.some(p => d.startsWith(p));
 }
 function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
@@ -407,7 +489,7 @@ async function tryAutoSignIn(){
 window.doLogin = async function(){
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
-  if (!phone) return $('loginError').innerHTML = '<div class="auth-error">Enter a valid Uganda mobile number.</div>';
+  if (!phone) return $('loginError').innerHTML = '<div class="auth-error">Enter a valid ' + esc(regionName()) + ' mobile number.</div>';
   if (!pass) return $('loginError').innerHTML = '<div class="auth-error">Enter your password.</div>';
   $('loginError').innerHTML = '';
   setBtnLoading('loginBtn', true, 'Log In', 'Logging in…');
@@ -420,7 +502,19 @@ window.doLogin = async function(){
     const remember = $('rememberMe');
     if (!remember || remember.checked) storeCredentialIfPossible(email, pass);
   }
-  catch (e) { $('loginError').innerHTML = `<div class="auth-error">${esc(fbErrMsg(e))}</div>`; setBtnLoading('loginBtn', false, 'Log In'); }
+  catch (e) {
+    // An account's login address carries its own region's dialling code
+    // (see phoneToEmail), so a member signing in on another country's
+    // subdomain genuinely cannot be found here. Said out loud rather than
+    // left as a bare "no account found", but only once there IS more than
+    // one country to confuse.
+    let msg = fbErrMsg(e);
+    const many = Number(STATE.regionCount) > 1;
+    if (many && /no account|not found|password|credential/i.test(msg))
+      msg += ' If you signed up on another country\'s site, please sign in there.';
+    $('loginError').innerHTML = `<div class="auth-error">${esc(msg)}</div>`;
+    setBtnLoading('loginBtn', false, 'Log In');
+  }
 };
 window.doRegister = async function(){
   const phone = cleanPhone($('regPhone').value);
@@ -432,7 +526,7 @@ window.doRegister = async function(){
   // whether that's the link's code, untouched, or something typed by hand.
   // Chipz makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
-  if (!phone) return $('regError').innerHTML = '<div class="auth-error">Enter a valid Uganda mobile number.</div>';
+  if (!phone) return $('regError').innerHTML = '<div class="auth-error">Enter a valid ' + esc(regionName()) + ' mobile number.</div>';
   if (!pass || pass.length < 6) return $('regError').innerHTML = '<div class="auth-error">Password must be at least 6 characters.</div>';
   if (pass !== pass2) return $('regError').innerHTML = '<div class="auth-error">The two login passwords do not match.</div>';
   if (!/^\d{6}$/.test(pin)) return $('regError').innerHTML = '<div class="auth-error">Trade Password must be exactly 6 digits.</div>';
@@ -586,6 +680,16 @@ window.doLogout = async function(){
 async function boot(){
   const [s, p, f, b, ai, mpi, ci] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner'), api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images') ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
+  // The region that owns this hostname, so the landing screen, Sign Up and
+  // the product list already read in the right currency before anybody has
+  // signed in. Replaced by the MEMBER's own region the moment /account
+  // lands -- see enterApp().
+  // regionCount lives on STATE itself, NOT inside STATE.settings: that
+  // object is exactly what the server sent, and writing into it threw
+  // outright on a reply whose `settings` key was missing (caught by
+  // test-cache-quota.py's own fixture, which sends one) -- taking the whole
+  // boot down over a number used only to word a login error.
+  if (s.status === 'success') { applyRegion(s.region); STATE.regionCount = s.regionCount; }
   // The name has just arrived; paint it into the static markup and the tab
   // title. Three call sites in all -- here, the auth-screen prefetch, and the
   // cached instant-boot path -- because each is a way STATE.settings gets
@@ -764,7 +868,7 @@ function captureReferralFromUrl(){
 async function loadAuthSettings(){
   try {
     const s = await api('/public/settings');
-    if (s && s.status === 'success') { STATE.settings = s.settings || {}; applyBrandName(); }
+    if (s && s.status === 'success') { STATE.settings = s.settings || {}; STATE.regionCount = s.regionCount; applyRegion(s.region); applyBrandName(); }
   } catch (_) {}
   updateReferralFieldHint();
 }
@@ -1071,6 +1175,11 @@ async function bootFromNetwork(uid){
     return;
   }
   STATE.account = r.account;
+  // The member's OWN region wins over the hostname's: somebody who signed
+  // up on the Kenyan site and then opens the Ugandan one still sees Kenyan
+  // shillings, Kenyan prices and their own number rules, because that is
+  // what the server will charge and pay them in.
+  applyRegion(r.region);
   // Prefetch everything every tab needs, all in parallel, before the loading
   // screen ever comes down -- so the very first tab switch (and opening
   // Withdraw/Withdrawal Accounts/Records) is already cache-first-instant
@@ -2928,13 +3037,17 @@ async function renderAccount(){
 }
 // "+256 742 730 382" -- the shape the mockups show, from whatever the
 // server stored (0742730382 / 256742730382 / +256742730382 all normalise).
+// The dialling code is the region's; the 3-3-3 grouping is applied only to
+// a 9-digit local number, so a country with a different length gets its
+// digits printed whole rather than half-grouped.
 function formatPhoneDisplay(phone){
   let d = String(phone || '').replace(/\D/g, '');
   if (!d) return '';
-  if (d.slice(0, 3) === '256') d = d.slice(3);
+  const dc = dial();
+  if (d.slice(0, dc.length) === dc) d = d.slice(dc.length);
   d = d.replace(/^0+/, '');
-  const groups = d.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
-  return '+256 ' + groups;
+  const groups = d.length === 9 ? d.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') : d;
+  return dialPlus() + ' ' + groups;
 }
 
 // ── WALLET (Wallet.dc.html) ──
@@ -3220,11 +3333,17 @@ function balTabMatch(cat, t){
 // "UGX2,000.00" -- no space after UGX, always 2 decimals. Only this screen
 // and the wallet band use it; every other screen keeps fmtUGX().
 // "UGX 2,000.00" -- the spaced variant Account.dc.html's wallet balance uses.
-function fmtUGXCents(n){ return 'UGX ' + fmtUGX2(n).slice(3); }
-function fmtUGX2(n){
+// Built from the grouped digits rather than by slicing the currency back
+// off fmtUGX2()'s answer -- .slice(3) was right only while the label was
+// always the three letters "UGX", and a region labelled "KES" or "TZS" is
+// three too, but "KSH" or a 4-character label would have shaved a digit off
+// every amount on the screen.
+function fmtUGXCents(n){ return cur() + ' ' + moneyDigits2(n); }
+function moneyDigits2(n){
   const v = Math.abs(Number(n) || 0);
-  return 'UGX' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function fmtUGX2(n){ return cur() + moneyDigits2(n); }
 // One-letter avatar + its colour: withdrawals get the wine treatment, and
 // everything that adds money gets the green one.
 function balAvatar(t){
@@ -3832,8 +3951,9 @@ function customerServiceUrl(){
   // Digits (with or without +, spaces or dashes) -> WhatsApp.
   const digits = raw.replace(/[^0-9]/g, '');
   if (digits && /^[0-9+][0-9\s+-]*$/.test(raw)) {
-    // A local 07... number needs Uganda's country code, or wa.me rejects it.
-    const intl = digits.charAt(0) === '0' ? '256' + digits.slice(1) : digits;
+    // A local 07... number needs the region's country code, or wa.me
+    // rejects it.
+    const intl = digits.charAt(0) === '0' ? dial() + digits.slice(1) : digits;
     return 'https://wa.me/' + intl;
   }
   return 'https://t.me/' + raw.replace(/^\/+/, '');
@@ -3925,8 +4045,11 @@ window.openAboutSheet = async function(){
 // countdown (same startCheckinCountdown() ticking pattern
 // startPlanCountdowns() already uses on My Products) is kept -- it now
 // counts down to that real midnight instant instead of a moving +24h target.
-function eatDayIndex(ts){ return Math.floor((ts + 3 * 3600000) / 86400000); }
-function eatMidnightAfter(ts){ return (eatDayIndex(ts) + 1) * 86400000 - 3 * 3600000; }
+// The region's own clock offset, not Kampala's -- "resets at midnight" has
+// to mean midnight where the member lives. Mirrors tzOffMs() in server.js.
+function tzOffMs(){ const m = REGION && REGION.utcOffsetMin; return (m == null ? 180 : Number(m)) * 60000; }
+function eatDayIndex(ts){ return Math.floor((ts + tzOffMs()) / 86400000); }
+function eatMidnightAfter(ts){ return (eatDayIndex(ts) + 1) * 86400000 - tzOffMs(); }
 window.openCheckinSheet = function(){
   const a = STATE.account || {};
   const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
@@ -4019,7 +4142,12 @@ function depWitStatusLabel(desc){
 function recordsRowAmount(t){
   if (t.displayAmount !== undefined && t.displayAmount !== null) return Number(t.displayAmount) || 0;
   if ((Number(t.amount) || 0) === 0 && t.description) {
-    const m = String(t.description).match(/UGX\s*([\d,]+)/);
+    // The currency label the SERVER wrote into this description, which is
+    // the member's own region's -- "UGX" for Uganda, "KES" for Kenya. Any
+    // 2-to-6-letter label is accepted rather than only the region's current
+    // one, so a row written before an admin relabelled the currency still
+    // reads. Fixed "UGX" here would have made every non-Ugandan row show 0.
+    const m = String(t.description).match(/\b[A-Z]{2,6}\s*([\d,]+(?:\.\d+)?)/);
     if (m) {
       const parsed = Number(m[1].replace(/,/g, ''));
       if (Number.isFinite(parsed)) return t.type === 'withdraw' ? -parsed : parsed;
@@ -4111,10 +4239,10 @@ function openDepositFormSheet(payA, payB){
 
     <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
     <div class="dep-phone">
-      <span class="prefix">+256</span>
-      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (7XXXXXXXX)" oninput="sanitizePhoneInput(this)">
+      <span class="prefix">${esc(dialPlus())}</span>
+      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (${esc(phoneHintBody())})" oninput="sanitizePhoneInput(this)">
     </div>
-    <div class="dep-hint">Phone number must start with 0 and be 10 digits</div>
+    <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>
 
     <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDepositChoice()">Confirm Deposit</button>
 
@@ -4344,8 +4472,8 @@ function openManualPayFlow(amount){
             </button>
           </div>
           <div class="mp-phone-wrap">
-            <div class="mp-prefix">+256</div>
-            <input id="manPayPhone" inputmode="numeric" maxlength="10" placeholder="Please enter your actual payment account" oninput="this.value=this.value.replace(/\D/g,'')">
+            <div class="mp-prefix">${esc(dialPlus())}</div>
+            <input id="manPayPhone" inputmode="numeric" maxlength="${localLen() + 1}" placeholder="Please enter your actual payment account" oninput="this.value=this.value.replace(/\D/g,'')">
           </div>
           <div class="mp-warning">
             <span class="mp-bang">!</span>
@@ -4375,7 +4503,7 @@ function openManualPayFlow(amount){
             <div class="mp-sub">Copy this <b id="manPayMethodName">MTN</b> account and make payment</div>
             <div class="mp-detail-box">
               <div class="mp-label">Total Amount:</div>
-              <div class="mp-total"><small>UGX</small><span id="manPayTotal"></span></div>
+              <div class="mp-total"><small>${esc(cur())}</small><span id="manPayTotal"></span></div>
 
               <div class="mp-label"><span id="manPayAccountMethod">MTN</span> Account:</div>
               <div class="mp-account-value">
@@ -4401,7 +4529,7 @@ function openManualPayFlow(amount){
               <div class="mp-paid-row">
                 <div>
                   <div class="mp-paid-label">Amount paid:</div>
-                  <div class="mp-paid-value" id="manPayPaidValue">UGX 0</div>
+                  <div class="mp-paid-value" id="manPayPaidValue">${esc(cur())} 0</div>
                 </div>
                 <button type="button" class="mp-refresh-btn" id="manPayRefreshBtn" onclick="manualPayRefresh()">Refresh</button>
               </div>
@@ -4410,7 +4538,7 @@ function openManualPayFlow(amount){
             <div class="mp-sms-fallback" id="manPaySmsFallback">
               <div class="mp-sms-title">Send us your payment message</div>
               <div class="mp-sms-sub">Paste the whole confirmation message your phone received after you sent the money. Our team checks it and credits your balance.</div>
-              <textarea id="manDepPastedSms" rows="4" placeholder="You have sent UGX xxx to xxx xxx, 256xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
+              <textarea id="manDepPastedSms" rows="4" placeholder="You have sent ${esc(cur())} xxx to xxx xxx, ${esc(dial())}xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
               <div class="mp-sms-warn">*Filling in the wrong payment SMS/transaction ID will result in payment loss.</div>
               <div class="mp-confirm-wrap">
                 <button type="button" class="mp-confirm-btn" id="manDepPasteBtn" onclick="submitManualPasteSms()">Submit <span>&rarr;</span></button>
@@ -4546,7 +4674,7 @@ function presentManualPayCodeScreen(data){
   const methodLabel = data.network === 'Airtel Money' ? 'Airtel' : 'MTN';
   $('manPayMethodName').textContent = methodLabel;
   $('manPayAccountMethod').textContent = methodLabel;
-  $('manPayTotal').textContent = fmtUGX(data.amount).replace('UGX ', '');
+  $('manPayTotal').textContent = fmtUGX(data.amount).replace(cur() + ' ', '');
   $('manPayMerchantNumber').textContent = toLocalPhoneDisplay(data.assignedNumber);
   $('manPayMerchantName').textContent = data.holderName;
   $('manPayYourNumber').textContent = data.senderPhone;
@@ -4881,7 +5009,7 @@ function setDepositStatusPending(amount, phone, network){
   $('depStatusTitle').textContent = 'Processing your recharge';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
-  const displayPhone = cleanPhone(phone) || ('+256' + String(phone || '').replace(/\D/g, ''));
+  const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
   // Owner: "put another statement, that dial *165# to approve, this is
   // just a fallback bro because a payment prompt can come or it may fail
   // and one may dial *165# so he see pending approval" -- the USSD push
@@ -5082,7 +5210,7 @@ function withdrawWindow(s){
   const from = witMinutes(s && s.withdrawOpenFrom), to = witMinutes(s && s.withdrawOpenTo);
   if (!(s && s.withdrawWindowEnabled) || from == null || to == null || from === to)
     return { enabled: false, open: true, from: '', to: '' };
-  const d = new Date(Date.now() + 3 * 3600000);   // EAT, as the server judges it
+  const d = new Date(Date.now() + tzOffMs());   // the region's clock, as the server judges it
   const now = d.getUTCHours() * 60 + d.getUTCMinutes();
   // The window may WRAP past midnight -- 18:00 to 17:00 is his own example.
   const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
@@ -5107,7 +5235,7 @@ function paintWithdrawSheet(s){
       <div class="val">${fmtUGX2(balance)}</div>
     </div>
     <div class="wit-amt">
-      <span>UGX</span>
+      <span>${esc(cur())}</span>
       <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="syncWithdrawReceiveAmt()">
     </div>
 

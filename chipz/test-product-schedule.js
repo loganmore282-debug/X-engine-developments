@@ -28,8 +28,11 @@ if (from === -1 || to === -1 || to <= from) {
   console.log('FAIL  could not lift productOpenState out of server.js');
   process.exit(1);
 }
+// productOpenState() reads the region's own clock offset (server.js
+// tzOffMs()). Every case below is written in Kampala time, so pin it to
+// Uganda's +180 instead of lifting the whole region layer in here.
 const { hhmmToMin, productOpenState } =
-  new Function(src.slice(from, to) + '; return { hhmmToMin, productOpenState };')();
+  new Function('const tzOffMs = () => 180 * 60000;' + src.slice(from, to) + '; return { hhmmToMin, productOpenState };')();
 
 let failed = 0;
 const check = (ok, label) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`); };

@@ -43,6 +43,10 @@ const grab = (a, b) => {
 // ── the window, as a pure function ───────────────────────────────────────
 const winApi = new Function(`
   const tsMillis = t => Number(t) || 0;
+  // The clock offset is a property of the REGION now (server.js tzOffMs()).
+  // These cases are all written in Kampala time, so pin it to Uganda's +180
+  // rather than lifting the region machinery into this harness.
+  const tzOffMs = () => 180 * 60000;
   ${fnSource('hhmmToMin')}
   ${fnSource('hhmmLabel')}
   ${fnSource('withdrawWindowState')}
@@ -133,7 +137,10 @@ function run(state, body) {
     cleanPhone: p => String(p || '').replace(/\D/g, '') || '',
     uniqueRef: async () => 'S1',
     nowStr: () => ({ date: '15/01/2026', time: '12:00' }),
-    fmtUGX: n => 'UGX ' + Number(n).toLocaleString('en-US'),
+    fmtMoney: n => 'UGX ' + Number(n).toLocaleString('en-US'),
+    // The route stamps the member's region onto the withdrawal document now.
+    currentRegionKey: () => 'ug',
+    DEFAULT_REGION_KEY: 'ug',
     logSecurityEvent: () => {},
     sendAdminPush: async () => {},
     sendWithdrawalSmsAlert: async () => {},
@@ -167,10 +174,10 @@ function run(state, body) {
   };
   const fn = new Function('sandbox', `
     const { console, verifyAuth, withLock, getSettings, pinCheck, cleanPhone,
-            uniqueRef, nowStr, fmtUGX, logSecurityEvent, sendAdminPush,
+            uniqueRef, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
             sendWithdrawalSmsAlert, NETWORK_NAMES, MAX_MONEY_AMOUNT,
             _witRequestInFlight, _userBeingDeleted, FieldValue, db,
-            withdrawWindowState } = sandbox;
+            withdrawWindowState, currentRegionKey, DEFAULT_REGION_KEY } = sandbox;
     let handler;
     const app = { post: (p, h) => { if (p === '/withdraw/request') handler = h; } };
     ${grab("app.post('/withdraw/request'", '// `refunded` MUST be the real')}

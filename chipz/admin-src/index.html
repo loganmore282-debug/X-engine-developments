@@ -299,6 +299,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
+        <button class="tab hidden" data-tab="regions" id="regionsTab">Countries</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -339,9 +340,14 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 // against this same stored value). This is DISPLAY-ONLY, applied wherever
 // the admin panel shows a saved number back, so a number typed as
 // "07XXXXXXXX" doesn't visibly "change" after saving.
-function toLocalPhoneDisplay(num){
+// The stored number is always canonical "+<dial><local>"; this is a
+// display-only conversion to the local "07..." shape. The dialling code
+// comes from whichever country is being edited, so a Kenyan collection
+// number is not left with a +254 stuck on the front of it.
+function toLocalPhoneDisplay(num, regionKey){
   const s = String(num || '').trim();
-  return s.indexOf('+256') === 0 ? '0' + s.slice(4) : s;
+  const p = '+' + ((regionByKeyAdmin(regionKey) || {}).dialCode || '256');
+  return s.indexOf(p) === 0 ? '0' + s.slice(p.length) : s;
 }
 async function copyText(str, btn){
   try {
@@ -358,10 +364,14 @@ function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-righ
 // so this only shows decimals on a value that actually has them, and
 // everything else keeps its old, clean whole-number look with no changes
 // needed at any individual call site. Mirrors server.js's own fmtUGX().
-function ugx(n){
+// The second argument is a REGION KEY, for rows that carry one (deposits,
+// withdrawals, members). Left off, it labels in the currency of whichever
+// region the panel is currently editing -- which for a single-region
+// platform is Uganda, exactly as before.
+function ugx(n, regionKey){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
-  return 'UGX ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
+  return curOf(regionKey) + ' ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
 }
 // Mirrors server.js's own normalizeProviderValue() -- 'automatic' is the
 // pre-LipaPay literal a value could still be if this database predates
@@ -754,8 +764,46 @@ function fileToRawDataUrl(file, maxBytes, accept, what){
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
+// ── WHICH REGION THIS PANEL IS EDITING ──
+//
+// Owner: "make when l can edit prices of each product and all settings as
+// these of ugx." One picker, at the top of Settings and of Products,
+// chooses the country; everything typed under it is saved for that country
+// alone. Rather than threading a region argument through the dozen
+// /admin/settings/update calls and the product editor, it is stamped on
+// here, in the one place every admin request already passes through:
+//   * reading  /admin/settings or /admin/products  ->  ?region=<key>
+//   * saving   /admin/settings/update, /admin/products/save,
+//              /admin/manual-numbers/save  ->  region:'<key>' in the body
+// Uganda ('ug') is the default and sends nothing extra, so with one region
+// configured every request is byte-for-byte what it always was.
+var ADMIN_REGION = 'ug';
+var ADMIN_REGIONS = [{ key:'ug', name:'Uganda', currency:'UGX', dialCode:'256', localLength:9, prefixes:['7'], utcOffsetMin:180, hosts:[], active:true, isDefault:true }];
+const REGION_SCOPED_READS = ['/admin/settings', '/admin/products'];
+const REGION_SCOPED_WRITES = ['/admin/settings/update', '/admin/products/save', '/admin/manual-numbers/save'];
+// Mirrors GLOBAL_ONLY_SETTINGS in server.js. The Rates card saves ONE
+// payload that mixes per-country rates with these backend-wide controls, so
+// with another country picked the server would refuse the whole save and the
+// admin could never set that country's rates at all. They are dropped from
+// the payload here instead -- the picker's own caption says these apply to
+// every country and are edited on the founding one. The server still refuses
+// them, which is what stops a direct POST.
+const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];
+function regionByKeyAdmin(key){ return ADMIN_REGIONS.find(r => r.key === (key || ADMIN_REGION)) || ADMIN_REGIONS[0]; }
+function curOf(key){ const r = regionByKeyAdmin(key); return (r && r.currency) || 'UGX'; }
+function adminCur(){ return curOf(ADMIN_REGION); }
 async function api(path, body, method){
   method = method || (body ? 'POST' : 'GET');
+  if (ADMIN_REGION && ADMIN_REGION !== 'ug') {
+    if (REGION_SCOPED_READS.includes(path)) path += '?region=' + encodeURIComponent(ADMIN_REGION);
+    else if (REGION_SCOPED_WRITES.includes(path)) {
+      body = Object.assign({ region: ADMIN_REGION }, body || {});
+      if (body.settings && typeof body.settings === 'object') {
+        body.settings = Object.assign({}, body.settings);
+        for (const k of ADMIN_GLOBAL_ONLY) delete body.settings[k];
+      }
+    }
+  }
   try{
     const opts = { method, headers:{ ...(SESSION_TOKEN?{ Authorization:'Bearer '+SESSION_TOKEN }:{}) }, signal:AbortSignal.timeout(30000) };
     if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
@@ -804,10 +852,15 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
   let lastTab = 'dashboard';
   try { const saved = sessionStorage.getItem('snow_admin_tab'); if (saved && VALID_TABS.has(saved)) lastTab = saved; } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'promocodesTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'promocodesTab', 'regionsTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'promocodes'].includes(lastTab)) lastTab = 'dashboard';
-  switchTab(lastTab); refreshBadges(); startLive();
+  if (!isOwner && ['products', 'settings', 'promocodes', 'regions'].includes(lastTab)) lastTab = 'dashboard';
+  // The country list is needed before anything renders: every money figure
+  // in this panel is labelled from it (see ugx()/curOf()), and the region
+  // picker on Settings and Products is built from it. Failure is silent and
+  // leaves Uganda standing, which is what a single-region platform is.
+  loadAdminRegions().then(() => { switchTab(lastTab); }).catch(() => { switchTab(lastTab); });
+  refreshBadges(); startLive();
   if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
   resyncPushToken();
   // The app's name, for the topbar and the tab title. Fetched here rather
@@ -964,7 +1017,7 @@ try { setPushUIState(!!localStorage.getItem('snow_admin_push_token')); } catch(_
 }); })();
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','regions','admins','auditlog']);
 let _tab='dashboard';
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
@@ -976,7 +1029,7 @@ function switchTab(name){
   const c=$('content'); c.innerHTML=spinnerHtml();
   ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings, admins:renderAdmins, auditlog:renderAuditLog }[name])();
+     referrals:renderReferrals, settings:renderSettings, regions:renderRegions, admins:renderAdmins, auditlog:renderAuditLog }[name])();
 }
 async function refreshBadges(){
   const s = await api('/admin/badges');
@@ -1337,7 +1390,7 @@ function numberCard(n){
   return `<div class="panel-card" style="margin-bottom:10px">
     <div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
       <div style="flex:1">
-        <b>${esc(n.holderName||'Unnamed')}</b> <span class="muted">${esc(toLocalPhoneDisplay(n.number))}</span>
+        <b>${esc(n.holderName||'Unnamed')}</b> <span class="muted">${esc(toLocalPhoneDisplay(n.number, n.regionKey))}</span>
         <div class="muted" style="font-size:11px">${esc(n.network||'')}${n.active?'':' · disabled'}${n.device?' · '+esc(n.device):''}${n.appVersion?' · app '+esc(n.appVersion):''}${n.battery!==null&&n.battery!==undefined?' · battery '+n.battery+'%':''}</div>
       </div>
       ${healthPill(n)}
@@ -1608,7 +1661,7 @@ async function openUser(uid){
     <button class="btn ghost sm" id="viewChainBtn" title="Full upline-to-root and downline tree, not just L1/L2/L3" style="margin:4px 0 6px">View referral chain</button>
     <div class="kv"><span class="k">Check-in streak</span><span id="streakVal">${u.checkinStreak||0}</span>${SESSION_ROLE==='owner'?` <button class="btn ghost sm" id="reconcileStreakBtn" title="Recompute this member's streak from their real check-in history right now" style="margin-left:8px">Reconcile</button>`:''}</div>
     ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned</div>`:''}
-    <label>Amount (UGX)</label><input id="adjAmt" type="number" placeholder="0">
+    <label>Amount (${adminCur()})</label><input id="adjAmt" type="number" placeholder="0">
     <label>Note (optional)</label><input id="adjNote" placeholder="Reason">
     <div class="row" style="margin-top:14px">
       ${SESSION_ROLE==='owner'?`<button class="btn ok sm" id="creditBtn">Credit</button>
@@ -1669,7 +1722,7 @@ async function openUser(uid){
         const paidTo = d.method==='manual' ? esc(d.assignedNumber||'Not set')
           : `Automatic (${d.provider==='lipapay'?'LipaPay':'MarzPay'})`;
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
-        return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
+        return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
       }).join('')}
     </tbody></table></div>`:'<p class="muted" style="margin:0">No deposits yet.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
@@ -1916,7 +1969,7 @@ function drawDeps(){
       <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
       <td>${esc(paidFrom)}</td>
       <td>${methodLabel}</td>
-      <td><b>${ugx(d.amount)}</b></td>
+      <td><b>${ugx(d.amount, d.regionKey)}</b></td>
       <td>${esc(d.ref||'Not set')}</td>
       <td>${statusPill(d.status)}${reviewNote}</td>
       <td>${actions}</td></tr>${smsBlock}`;
@@ -2030,7 +2083,7 @@ function drawWits(){
     const who = esc(w.holder||'');
     const dest = `${esc(w.network||'Not set')}<br><span class="muted" style="font-size:11px">${esc(w.phone||'')}</span>`;
     return `<tr class="clickable" data-uid="${esc(w.userId)}"><td>${fdate(w.createdAt)}</td><td>${who}${code?`<br><span class="muted">${esc(code)}</span>`:''}</td>
-    <td>${ugx(w.amount)}</td><td><b>${ugx(w.net)}</b></td><td>${dest}</td>
+    <td>${ugx(w.amount, w.regionKey)}</td><td><b>${ugx(w.net, w.regionKey)}</b></td><td>${dest}</td>
     <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">${_witManualPayouts?'Mark as paid':'Send via '+PROVIDER_LABEL[normalizeProv(_witProvider)]}</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
@@ -2114,7 +2167,8 @@ async function renderProducts(){
   if(staleTab('products')) return;
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products (${list.length})</h2>
+    ${regionPickerHtml('Prices, payouts, spins and the opening schedule are saved for the country picked here. Names, photos and order are shared by every country.')}
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products (${list.length})${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
       <button class="btn sm ghost" id="syncProdPricing" title="Updates price/cycle/expectedReturn on any saved product back to the current code defaults -- leaves images, active/coming-soon, and order untouched">Sync pricing to defaults</button>
       <button class="btn sm ghost" id="fixLegacyKeys" title="A now-fixed bug could turn saving product-1 into a SEPARATE product1 -- this finds and merges any it made">Fix duplicate keys</button>
       <button class="btn sm ghost" id="clearProd">Clear all</button>
@@ -2129,6 +2183,7 @@ async function renderProducts(){
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
         </div>
       </div>`).join(''):'<div class="empty">No products yet. The app catalogue reverts to defaults until you add one.</div>'}</div>`;
+  wireRegionPicker();
   $('newProd').addEventListener('click',()=>editProduct(null,list.length));
   $('syncProdPricing').addEventListener('click',async()=>{
     if(!confirm('Update price/total-payout/cycle on every saved product to match the current built-in pricing table? Images, active/coming-soon, and order are left untouched. A product that was never individually saved is already correct and is skipped.'))return;
@@ -2167,11 +2222,11 @@ function editProduct(p, order){
     <label>Name</label><input id="pLabel" value="${esc(p.name||p.label||'')}" placeholder="e.g. Ferrero Rocher">
     <label>Key (slug, lowercase, leave blank to auto)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="blackhole" ${p.key?'disabled':''}>
     <div class="row">
-      <div><label>Price (UGX)</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="500000"></div>
+      <div><label>Price (${adminCur()})</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="500000"></div>
       <div><label>Multiplier (&times;)</label><input id="pMult" type="number" step="0.1" min="0" value="${p.multiplier!=null?p.multiplier:''}" placeholder="3"></div>
     </div>
     <div class="row">
-      <div><label>Total payout (UGX)</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
+      <div><label>Total payout (${adminCur()})</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
       <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||180}"></div>
     </div>
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
@@ -2182,8 +2237,8 @@ function editProduct(p, order){
     <p class="muted" style="margin:0 0 8px;font-size:11.5px">How many spins buying THIS product earns, and what each of those spins can win. Leave spins at 0 for products that earn none. Each spin pays a random amount between the two figures — set them the same for a fixed amount.</p>
     <div class="row">
       <div><label>Spins per purchase</label><input id="pSpinCount" type="number" min="0" max="20" value="${p.spinCount||0}"></div>
-      <div><label>Win from (UGX)</label><input id="pSpinMin" type="number" min="0" value="${p.spinMin!=null?p.spinMin:''}" placeholder="200"></div>
-      <div><label>Win to (UGX)</label><input id="pSpinMax" type="number" min="0" value="${p.spinMax!=null?p.spinMax:''}" placeholder="1000"></div>
+      <div><label>Win from (${adminCur()})</label><input id="pSpinMin" type="number" min="0" value="${p.spinMin!=null?p.spinMin:''}" placeholder="200"></div>
+      <div><label>Win to (${adminCur()})</label><input id="pSpinMax" type="number" min="0" value="${p.spinMax!=null?p.spinMax:''}" placeholder="1000"></div>
     </div>
     <label>Product image <span class="muted" style="font-weight:400">— saved at ${PRODUCT_IMG_W} × ${PRODUCT_IMG_H} px (4:3)</span></label>
     <div class="img-picker">
@@ -2347,8 +2402,8 @@ async function renderPromoCodes(){
     <h2 class="sec">Gift codes</h2>
     <div class="panel-card">
       <div class="row">
-        <div><label>Min reward (UGX)</label><input id="cMinReward" type="number" step="0.01" min="0.01" placeholder="100.00"></div>
-        <div><label>Max reward (UGX)</label><input id="cMaxReward" type="number" step="0.01" min="0.01" placeholder="500.00"></div>
+        <div><label>Min reward (${adminCur()})</label><input id="cMinReward" type="number" step="0.01" min="0.01" placeholder="100.00"></div>
+        <div><label>Max reward (${adminCur()})</label><input id="cMaxReward" type="number" step="0.01" min="0.01" placeholder="500.00"></div>
         <div><label>How many</label><input id="cCount" type="number" value="1" min="1" max="50"></div>
       </div>
       <div class="row" style="margin-top:6px">
@@ -2407,6 +2462,151 @@ async function renderPromoCodes(){
 }
 
 // ── ADMINS (owner only) ──
+// ── COUNTRIES (REGIONS) ──
+//
+// Owner: "l wanted other subdomain to fetch other country code and
+// currency, ie fgdr.chipz-platform.com in ugx, and country code changeable
+// to other country or created, and another can be sfhd.chipz-platform in
+// KES shs, or any country created."
+//
+// One row per country. A country owns the subdomain(s) it is served from,
+// the currency label printed in front of every amount, the dialling code
+// and number shape its members type, and the clock its cash-out hours and
+// product windows are judged against. Its RATES and its PRODUCT PRICES are
+// edited on the Settings and Products tabs, with this country picked there.
+async function loadAdminRegions(){
+  const r = await api('/admin/regions');
+  if (r && r.status === 'success' && Array.isArray(r.regions) && r.regions.length) {
+    ADMIN_REGIONS = r.regions;
+    // A country that has since been deleted must not stay selected, or
+    // every save would be refused with "there is no region".
+    if (!ADMIN_REGIONS.some(x => x.key === ADMIN_REGION)) ADMIN_REGION = 'ug';
+  }
+  return ADMIN_REGIONS;
+}
+// The picker that sits at the top of Settings and Products. Hidden entirely
+// while there is only one country -- a platform running in Uganda alone
+// should not have to look at a country selector on every screen.
+function regionPickerHtml(label){
+  if (ADMIN_REGIONS.length < 2) return '';
+  const opts = ADMIN_REGIONS.map(r =>
+    `<option value="${esc(r.key)}" ${r.key === ADMIN_REGION ? 'selected' : ''}>${esc(r.name)} (${esc(r.currency)})${r.active === false ? ' - off' : ''}</option>`).join('');
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="row" style="align-items:center;gap:10px">
+      <b style="flex:0 0 auto">Country</b>
+      <select id="regionPick" style="flex:0 0 auto;max-width:260px">${opts}</select>
+      <span class="muted" style="flex:1">${esc(label || '')}</span>
+    </div>
+  </div>`;
+}
+// Called by renderSettings()/renderProducts() right after they paint.
+function wireRegionPicker(){
+  const sel = $('regionPick');
+  if (!sel) return;
+  sel.addEventListener('change', () => { ADMIN_REGION = sel.value; switchTab(_tab); });
+}
+async function renderRegions(){
+  await loadAdminRegions();
+  if (staleTab('regions')) return;
+  const rows = ADMIN_REGIONS.map(r => `
+    <tr>
+      <td><b>${esc(r.name)}</b><div class="muted">${esc(r.key)}${r.isDefault ? ' &middot; founding' : ''}</div></td>
+      <td>${esc(r.currency)}</td>
+      <td>+${esc(r.dialCode)}</td>
+      <td>${esc(String(r.localLength))} digits${(r.prefixes || []).length ? '<div class="muted">starts ' + esc((r.prefixes || []).join(', ')) + '</div>' : ''}</td>
+      <td>${esc(offsetLabel(r.utcOffsetMin))}</td>
+      <td>${(r.hosts || []).length ? (r.hosts || []).map(h => esc(h)).join('<br>') : '<span class="muted">none yet</span>'}</td>
+      <td>${r.active === false ? '<span class="pill-tag t-bad">Off</span>' : '<span class="pill-tag t-ok">On</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn sm ghost" data-edit-region="${esc(r.key)}">Edit</button>
+        ${r.isDefault ? '' : `<button class="btn sm ghost" data-del-region="${esc(r.key)}">Delete</button>`}
+      </td>
+    </tr>`).join('');
+  $('content').innerHTML = `
+    <div class="row" style="align-items:center;margin-bottom:12px">
+      <h2 class="sec" style="flex:1;margin:0">Countries (${ADMIN_REGIONS.length})</h2>
+      <button class="btn sm" id="newRegion">+ New country</button>
+    </div>
+    <div class="card">
+      <p class="muted" style="margin:0 0 10px">Each country has its own subdomain, currency, dialling code and number shape.
+      Its rates and its product prices are edited on the <b>Settings</b> and <b>Products</b> tabs with that country picked at the top.
+      A member belongs to the country they signed up on, for good: they always see that country's currency and prices, even if they open another country's address.</p>
+      <div class="table-scroll"><table><thead><tr>
+        <th>Country</th><th>Currency</th><th>Code</th><th>Number</th><th>Clock</th><th>Web address</th><th>Status</th><th></th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  $('newRegion').addEventListener('click', () => regionForm(null));
+  document.querySelectorAll('[data-edit-region]').forEach(b =>
+    b.addEventListener('click', () => regionForm(regionByKeyAdmin(b.dataset.editRegion))));
+  document.querySelectorAll('[data-del-region]').forEach(b =>
+    b.addEventListener('click', () => deleteRegion(b.dataset.delRegion)));
+}
+// "+3:00" / "-5:30", from the stored minutes.
+function offsetLabel(min){
+  const m = Number(min == null ? 180 : min);
+  const sign = m < 0 ? '-' : '+';
+  const a = Math.abs(m);
+  return sign + Math.floor(a / 60) + ':' + String(a % 60).padStart(2, '0');
+}
+function regionForm(r){
+  const isNew = !r;
+  const cur = r || { key:'', name:'', currency:'', dialCode:'', localLength:9, prefixes:[], utcOffsetMin:180, hosts:[], active:true };
+  openModal(`
+    <h3>${isNew ? 'New country' : 'Edit ' + esc(cur.name)}</h3>
+    <div class="row2">
+      <div><label>Short id</label><input id="rgKey" value="${esc(cur.key)}" placeholder="ke" ${isNew ? '' : 'disabled'}></div>
+      <div><label>Country name</label><input id="rgName" value="${esc(cur.name)}" placeholder="Kenya"></div>
+    </div>
+    <div class="row2">
+      <div><label>Currency label</label><input id="rgCur" value="${esc(cur.currency)}" placeholder="KES"></div>
+      <div><label>Dialling code (no +)</label><input id="rgDial" value="${esc(cur.dialCode)}" placeholder="254"></div>
+    </div>
+    <div class="row2">
+      <div><label>Local number length</label><input id="rgLen" type="number" min="5" max="12" value="${esc(String(cur.localLength || 9))}"></div>
+      <div><label>Number starts with</label><input id="rgPfx" value="${esc((cur.prefixes || []).join(', '))}" placeholder="7, 1"></div>
+    </div>
+    <label>Clock offset, minutes from UTC <span class="muted" style="font-weight:400">— 180 is Uganda and Kenya, 120 is Nigeria +1</span></label>
+    <input id="rgOff" type="number" min="-720" max="840" value="${esc(String(cur.utcOffsetMin == null ? 180 : cur.utcOffsetMin))}">
+    <div class="switch-row" style="margin-top:10px"><span><b>Open for business</b> <span class="muted">(off hides it from its own web address)</span></span>
+      <label style="width:auto;margin:0"><input type="checkbox" id="rgActive" ${cur.active === false ? '' : 'checked'} style="width:auto"${cur.isDefault ? ' disabled' : ''}></label></div>
+    <label>Web addresses, one per line</label>
+    <textarea id="rgHosts" rows="3" placeholder="sfhd.chipz-platform.com">${esc((cur.hosts || []).join('\n'))}</textarea>
+    <p class="muted" style="margin:6px 0 0">The subdomain(s) this country is served from. A member opening one of these sees this country's currency and prices. These addresses are also allowed to reach the backend automatically, so there is nothing to add to the domain allowlist.</p>
+    ${cur.isDefault ? '<p class="muted" style="margin:8px 0 0">This is the founding country. Its id cannot change and it cannot be switched off -- it is where any unrecognised address, and any account with no country of its own, lands.</p>' : ''}
+    <div class="row" style="margin-top:14px;justify-content:flex-end;gap:8px">
+      <button class="btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" id="rgSave">Save country</button>
+    </div>`);
+  $('rgSave').addEventListener('click', async () => {
+    const btn = $('rgSave'); btn.disabled = true; btn.textContent = 'Saving…';
+    const d = await api('/admin/regions/save', { region: {
+      key: (isNew ? $('rgKey').value : cur.key).trim().toLowerCase(),
+      name: $('rgName').value.trim(),
+      currency: $('rgCur').value.trim(),
+      dialCode: $('rgDial').value.trim(),
+      localLength: Number($('rgLen').value),
+      prefixes: $('rgPfx').value.split(/[\s,]+/).filter(Boolean),
+      utcOffsetMin: Number($('rgOff').value),
+      hosts: $('rgHosts').value.split(/[\s,\n]+/).filter(Boolean),
+      active: $('rgActive').checked,
+    } });
+    btn.disabled = false; btn.textContent = 'Save country';
+    if (d.status !== 'success') return toast(d.message || 'Could not save this country', 'err');
+    closeModal(); toast('Country saved', 'ok');
+    await loadAdminRegions();
+    switchTab('regions');
+  });
+}
+async function deleteRegion(key){
+  const r = regionByKeyAdmin(key);
+  if (!confirm(`Delete ${r.name}? Its own rates and product prices are removed with it, and its web addresses stop resolving to a country.`)) return;
+  const d = await api('/admin/regions/delete', { key });
+  if (d.status !== 'success') return toast(d.message || 'Could not delete this country', 'err');
+  toast('Country deleted', 'ok');
+  if (ADMIN_REGION === key) ADMIN_REGION = 'ug';
+  await loadAdminRegions();
+  switchTab('regions');
+}
 async function renderAdmins(){
   const r = await api('/admin/admins/list');
   if(staleTab('admins')) return;
@@ -2672,12 +2872,16 @@ async function renderSettings(){
   const linkPreviewImage = bar.linkPreview||'';
   const linkPreviewCustom = !!bar.linkPreviewCustom;
   const pushTokenCount = pr.status==='success' ? pr.count : null;
-  _manualNumbers = mnr.numbers||[];
+  // Only the picked country's collection numbers -- a Ugandan MTN line is
+  // not somewhere a Kenyan member can send money, and the server assigns
+  // them per country too (see assignManualNumberAndCreateDeposit).
+  _manualNumbers = (mnr.numbers||[]).filter(n => String(n.regionKey || 'ug') === ADMIN_REGION);
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
   applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
-    <h2 class="sec">Rates &amp; limits</h2>
+    ${regionPickerHtml('Rates, limits, bonuses, payment methods and the cash-out window are saved for the country picked here. The app name, the domain allowlist, maintenance mode and the opening countdown apply to every country and are only editable on ' + esc(ADMIN_REGIONS[0].name) + '.')}
+    <h2 class="sec">Rates &amp; limits${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
     <div class="panel-card">
       <div class="row">
         <div><label>Min deposit</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
@@ -2724,7 +2928,7 @@ async function renderSettings(){
       <textarea id="sAllowedOrigins" rows="4" placeholder="chipz-platform.com&#10;www.chipz-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only websites listed here may talk to the backend. Add your own custom domain when you buy one &mdash; <b>one per line</b>, and add the <b>www.</b> version too if you use it. If a site is not allowed, its pages show "Network error" even though the server is perfectly fine, so this is the first place to look when that happens.<br><br>You do <b>not</b> need to add the Render or EdgeOne addresses: <b>onrender.com</b>, <b>edgeone.app</b>, <b>edgeone.site</b> and <b>edgeone.dev</b> are permanently built in and cannot be removed from here. That is on purpose &mdash; it means a mistake in this box can never lock you out of this admin panel. Exact domains only, no <b>*</b> wildcards.</p>
       <h2 class="sec" style="margin:14px 0 4px">Appearance</h2>
-      <label>Number/digit font (every UGX figure in the app)</label>
+      <label>Number/digit font (every money figure in the app)</label>
       <select id="sNumberFont">${NUMBER_FONT_OPTIONS.map(f=>`<option value="${esc(f)}" ${v('numberFont','Bodoni Moda')===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
       <label>Home activity ticker speed (px/second)</label>
       <input id="sTickerSpeed" type="number" min="10" max="2000" value="${esc(v('activityTickerSpeed',160))}">
@@ -2861,8 +3065,8 @@ async function renderSettings(){
       <h4 style="margin:10px 0 6px;font-size:14px">Daily free spin</h4>
       <p class="muted" style="margin:0 0 8px;font-size:12px">Each member gets one free spin per day, resetting at midnight (EAT). The win is a random amount between these two. Set them to the SAME number for a fixed amount every time.</p>
       <div class="row">
-        <div><label>Minimum win (UGX)</label><input id="ttMin" type="number" min="0" value="${esc(v('turntableDailyMin',200))}"></div>
-        <div><label>Maximum win (UGX)</label><input id="ttMax" type="number" min="0" value="${esc(v('turntableDailyMax',1000))}"></div>
+        <div><label>Minimum win (${adminCur()})</label><input id="ttMin" type="number" min="0" value="${esc(v('turntableDailyMin',200))}"></div>
+        <div><label>Maximum win (${adminCur()})</label><input id="ttMax" type="number" min="0" value="${esc(v('turntableDailyMax',1000))}"></div>
       </div>
       <h4 style="margin:16px 0 6px;font-size:14px">Spins earned by buying products</h4>
       <p class="muted" style="margin:0 0 8px;font-size:12px">Set per product, not here — open <b>Products</b>, edit a product, and use its "Turntable spins from this product" section to set how many spins it earns and what each can win. That way every product can pay differently.</p>
@@ -3063,6 +3267,7 @@ async function renderSettings(){
     _manualNumbers.push({ id:'', network:'MTN Mobile Money', number:'', holderName:'', active:true, order:(_manualNumbers.length?Math.max(...(_manualNumbers.map(n=>n.order||0)))+1:1), _new:true });
     renderManualNumbersEditor();
   });
+  wireRegionPicker();
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, withdrawMultiple:+$('sWitMult').value, welcomeBonus:+$('sWelcome').value,
@@ -3499,7 +3704,7 @@ function renderManualNumbersEditor(){
         <div><label>Network</label><select data-mn-network="${i}">${NETWORK_OPTIONS.map(net=>`<option value="${esc(net)}" ${n.network===net?'selected':''}>${esc(net)}</option>`).join('')}</select></div>
         <div><label>Order</label><input type="number" data-mn-order="${i}" value="${n.order||0}"></div>
       </div>
-      <label>Phone number</label><input data-mn-number="${i}" value="${esc(toLocalPhoneDisplay(n.number||''))}" placeholder="0770000001">
+      <label>Phone number</label><input data-mn-number="${i}" value="${esc(toLocalPhoneDisplay(n.number||'', n.regionKey))}" placeholder="0770000001">
       <label>Account holder name</label><input data-mn-holder="${i}" value="${esc(n.holderName||'')}" placeholder="Chipz MTN 1">
       <label style="width:auto;display:flex;align-items:center;gap:8px;margin:8px 0;"><input type="checkbox" data-mn-active="${i}" ${n.active!==false?'checked':''} style="width:auto"> Active (eligible for round-robin)</label>
       <div class="row">
@@ -3523,7 +3728,10 @@ function renderManualNumbersEditor(){
     if (d.status !== 'success') { btn.disabled = false; btn.textContent = prevText; return toast(d.message||'Failed', 'err'); }
     toast('Payment number saved', 'ok');
     const mnr = await api('/admin/manual-numbers/list', {});
-    _manualNumbers = mnr.numbers||[];
+    // Only the picked country's collection numbers -- a Ugandan MTN line is
+  // not somewhere a Kenyan member can send money, and the server assigns
+  // them per country too (see assignManualNumberAndCreateDeposit).
+  _manualNumbers = (mnr.numbers||[]).filter(n => String(n.regionKey || 'ug') === ADMIN_REGION);
     renderManualNumbersEditor();
   }));
   box.querySelectorAll('[data-mn-del]').forEach(btn=>btn.addEventListener('click', async()=>{
@@ -3533,7 +3741,7 @@ function renderManualNumbersEditor(){
     // /admin/manual-numbers/delete now refuses (409) outright if a live
     // pending deposit is still assigned to this number, rather than deleting
     // it "unaffected". Corrected so the dialog matches what actually happens.
-    if (!confirm(`Delete ${n.holderName||toLocalPhoneDisplay(n.number)}? It will stop being handed out to new deposits right away. If a member currently has a live pending order on it, the delete will be refused until that order resolves (within 15 minutes).`)) return;
+    if (!confirm(`Delete ${n.holderName||toLocalPhoneDisplay(n.number, n.regionKey)}? It will stop being handed out to new deposits right away. If a member currently has a live pending order on it, the delete will be refused until that order resolves (within 15 minutes).`)) return;
     btn.disabled = true;
     const d = await api('/admin/manual-numbers/delete', { id: n.id });
     if (d.status !== 'success') { btn.disabled = false; return toast(d.message||'Failed', 'err'); }
