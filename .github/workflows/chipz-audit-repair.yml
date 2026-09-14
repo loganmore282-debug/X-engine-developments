@@ -1,0 +1,38 @@
+name: Chipz audited repair
+
+on:
+  push:
+    branches:
+      - claude/chipz-platform-build
+    paths:
+      - .github/workflows/chipz-audit-repair.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/chipz-platform-build
+          fetch-depth: 0
+      - name: Apply audited source repairs
+        run: python3 chipz/fix_audit_round_158.py
+      - name: Validate JavaScript syntax
+        run: |
+          node --check chipz/server.js
+          node --check chipz/user-src/original_module.js
+      - name: Remove one-shot repair machinery
+        run: |
+          rm chipz/fix_audit_round_158.py
+          rm .github/workflows/chipz-audit-repair.yml
+      - name: Commit repaired sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add chipz/server.js chipz/user-src/original_module.js chipz/admin-src/index.html chipz/CLAUDE.md chipz/fix_audit_round_158.py .github/workflows/chipz-audit-repair.yml
+          git commit -m "fix(chipz): harden money and multi-country flows"
+          git push origin HEAD:claude/chipz-platform-build
