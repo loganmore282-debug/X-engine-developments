@@ -270,24 +270,20 @@ ck(api.phoneToEmail('+254712345678') === '254712345678@chipz-platform.com',
     'and the app actually copies it out of the reply instead of dropping it');
 }
 {
-  // Sign-in tries the other shape for the SAME country too, so a member is
-  // never locked out by a region setting changing under him. Firebase folds
-  // "no such account" into the same auth/invalid-credential as a wrong
-  // password, so without this the member just sees "Incorrect phone number
-  // or password" for a password that is correct.
+  // A non-founding country gets ONE login namespace only. Trying the
+  // founding bare-local shape as a fallback can resolve the same local digits
+  // to a different country's Firebase UID when the password happens to match.
   const ke = clientApi(pubView(KE));
   const cands = ke.loginAddressCandidates('0712345678');
-  ck(cands.length === 2, 'sign-in has two addresses to try');
-  ck(cands[0] === '254712345678@chipz-platform.com', 'this country’s own shape first');
-  ck(cands[1] === '712345678@chipz-platform.com', 'then the bare legacy shape');
-  // Never another COUNTRY's shape -- that would become a way to sign in to a
-  // Kenyan account on the Ugandan site.
+  ck(cands.length === 1, 'a dial-code country has exactly one login namespace');
+  ck(cands[0] === '254712345678@chipz-platform.com', 'that namespace is this country’s own canonical shape');
   api.setCurrent(UG);
   const ugAddr = api.phoneToEmail('0712345678');
-  ck(!cands.includes(ugAddr) || ugAddr === cands[1],
-    'and never an address built from a different country’s dialling code');
+  ck(!cands.includes(ugAddr), 'it never falls back into the founding country’s bare-local namespace');
   const ugCands = clientApi(pubView(UG)).loginAddressCandidates('0742730382');
   ck(ugCands[0] === '742730382@chipz-platform.com', 'Uganda tries the bare address first');
+  ck(ugCands.includes('256742730382@chipz-platform.com'),
+    'the founding country may keep its own dial-prefixed migration fallback');
   // doLogin is `window.doLogin = async function(){...}`, not a named
   // declaration, so fnSource cannot find it -- sliced by hand.
   const loginAt = client.indexOf('window.doLogin = async function');

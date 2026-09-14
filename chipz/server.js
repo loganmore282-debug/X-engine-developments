@@ -2786,7 +2786,8 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount) {
         .where('commissionLevel', '==', i)
         .limit(1).get();
       if (priorCommissionTx.empty) {
-        await db.collection('transactions').add({
+        const commissionTxId = `commission:${investmentId}:${i}:${id}`;
+        await db.collection('transactions').doc(commissionTxId).createIfAbsent({
           userId: id, type: 'commission', description: `Level ${i + 1} reward`,
           amount: reward, status: 'success', date, time, investmentId, commissionLevel: i,
           createdAt: FieldValue.serverTimestamp()
@@ -3786,15 +3787,21 @@ async function writeTurntableSpinDocs(userId, product, investmentId, existingCou
       // A member who earned a spin under one configuration keeps that deal
       // even if the admin retunes the product afterwards -- and an admin
       // lowering a payout cannot retroactively shrink spins already earned.
-      await db.collection('turntableSpins').add({
+      const spinData = {
         // investmentId ties the spin to the purchase that paid for it: it is
         // what makes the guard above work, and it is the only way to answer
         // "where did this spin come from" when auditing a member's account.
-        userId, investmentId: investmentId || null,
+        userId, investmentId: investmentId || null, grantOrdinal: i,
         spinMin: lo, spinMax: hi, source: 'product',
         productKey: product.key, productName: product.name,
         used: false, date, time, createdAt: FieldValue.serverTimestamp(),
-      });
+      };
+      if (investmentId) {
+        await db.collection('turntableSpins')
+          .doc(`grant:${investmentId}:${i}`).createIfAbsent(spinData);
+      } else {
+        await db.collection('turntableSpins').add(spinData);
+      }
     }
 }
 // One shared roll for both spin kinds -- the daily band from settings, or a

@@ -149,6 +149,12 @@ function makeDb(state) {
           }
           applyInc(u, p); return true;
         },
+        createIfAbsent: async doc => {
+          const rows = name === 'turntableSpins' ? state.spins : state.tx;
+          if (rows.some(r => r.id === id)) return false;
+          rows.push({ id, ...doc });
+          return true;
+        },
       }),
       add: async doc => {
         const id = 'd' + (++state.seq);

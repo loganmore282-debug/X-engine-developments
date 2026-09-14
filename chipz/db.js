@@ -419,6 +419,18 @@ class DocumentReference {
     const result = await _mdb.collection(this._col).updateOne({ _id: this.id, ...extraFilter }, op);
     return result.matchedCount > 0;
   }
+  // Atomic create-if-missing for deterministic idempotency records. Unlike
+  // set(..., { merge:true }), this never changes an existing document, so a
+  // retry from another process cannot reset a spin that was already used.
+  async createIfAbsent(data) {
+    const plain = resolveFieldValues(data);
+    const result = await _mdb.collection(this._col).updateOne(
+      { _id: this.id },
+      { $setOnInsert: { ...plain, _id: this.id } },
+      { upsert: true }
+    );
+    return result.upsertedCount > 0;
+  }
 }
 
 function resolveFieldValues(data) {
