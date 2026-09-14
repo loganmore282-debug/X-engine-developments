@@ -2751,12 +2751,42 @@ function adminOwnDomain(){
   const parts = h.split('.');
   return parts.length > 2 ? parts.slice(-2).join('.') : h;
 }
+// The value server.js ships as its built-in default. It is a placeholder, not
+// a domain anybody owns, so finding it still in place means the setting has
+// never been filled in.
+const BASE_DOMAIN_PLACEHOLDER = 'chipz-platform.com';
 function baseDomainWarningHtml(){
   const withLabels = ADMIN_REGIONS.filter(r => (r.labels || []).length);
   const own = adminOwnDomain();
   const mismatch = own && ADMIN_BASE_DOMAIN && own !== ADMIN_BASE_DOMAIN;
-  if (!mismatch && (ADMIN_BASE_DOMAIN || !withLabels.length)) return '';
+  // The base domain is STILL THE FACTORY PLACEHOLDER.
+  //
+  // This case had no warning at all, and it is the one that actually happens.
+  // The mismatch warning below can only fire when the panel is opened on the
+  // owner's own domain -- adminOwnDomain() deliberately returns '' on Render,
+  // EdgeOne, localhost and bare IPs, because those say nothing about where the
+  // MEMBERS are. This panel is hosted on Render. So an owner who never set the
+  // base domain saw nothing, anywhere, ever: short addresses matched no
+  // country, and the bare domain and www were not closed, with no warning
+  // attached to either symptom.
+  //
+  // Checked FIRST, and independently of the panel's own hostname, which is the
+  // whole point of it.
+  const placeholder = ADMIN_BASE_DOMAIN === BASE_DOMAIN_PLACEHOLDER;
   const warn = 'background:#fff4e5;border:1px solid #f0b357;border-radius:10px;padding:12px 14px;margin-bottom:12px';
+  if (placeholder) return `<div style="${warn}">
+    <b>The base domain is still the built-in placeholder.</b>
+    It reads <code>${esc(BASE_DOMAIN_PLACEHOLDER)}</code>, which is the value this app ships with rather than a domain you own. Two things follow from it, and neither says so on its own:
+    <ul style="margin:8px 0 0;padding-left:18px">
+      <li><b>Short addresses match no country.</b> They are built as <code>&lt;short name&gt;.${esc(BASE_DOMAIN_PLACEHOLDER)}</code>, so every one of yours falls back to the founding country &mdash; wrong currency, correct passwords refused, referral codes rejected.</li>
+      <li><b>Your root domain and <code>www</code> are not closed.</b> "The root domain does not serve the app" can only recognise them once this setting names your real domain, so until then they serve the app like any other address.</li>
+    </ul>
+    <div style="margin-top:10px">${own
+      ? `<button class="btn sm" id="useThisDomainBtn">Use ${esc(own)} as the base domain</button>`
+      : `Set it under <b>Settings &rarr; Where the app may be opened from</b>. This panel is on <code>${esc(String(location.hostname || ''))}</code>, which says nothing about your members' domain, so it cannot be filled in for you.`}</div>
+    <div class="muted" style="margin-top:8px">If <code>${esc(BASE_DOMAIN_PLACEHOLDER)}</code> genuinely is your domain, this notice is wrong and you can ignore it.</div>
+  </div>`;
+  if (!mismatch && (ADMIN_BASE_DOMAIN || !withLabels.length)) return '';
   if (!ADMIN_BASE_DOMAIN) return `<div style="${warn}"><b>No base domain is set.</b> Short addresses are built from it, so none of them resolve to a country right now. Set it under <b>Settings &rarr; Where the app may be opened from</b>.</div>`;
   return `<div style="${warn}">
     <b>Your short addresses probably do not work.</b>
@@ -3220,6 +3250,9 @@ async function renderSettings(){
       <p class="muted" style="font-size:12px;margin:6px 0 0">Every country's short address is built from this &mdash; <code>g26e</code> becomes <code>g26e.&lt;base domain&gt;</code>. Set the short names per country on the <b>Countries</b> tab.</p>
       <div class="switch-row" style="margin-top:12px"><span><b>The root domain does not serve the app</b> <span class="muted">(the bare domain and its www. form show a short notice instead)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sBlockRoot" ${v('blockRootDomain',true)!==false?'checked':''} style="width:auto"></label></div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0"><b>This only works once the base domain above names your real domain</b> &mdash; it is how the server recognises which two addresses to refuse.<br><br>
+      <b>What it does and does not do to <code>www</code>.</b> Deleting the root <code>A</code> record makes the bare domain stop resolving, but <b>not</b> <code>www</code>: a wildcard <code>*</code> record answers for <code>www</code> too, so it keeps loading and this switch is what makes it show the notice instead of the app.<br><br>
+      To make <code>www</code> stop resolving <b>at all</b> (the browser's own "site can't be reached" page, as the bare domain now gives): add <b>any</b> record at the name <code>www</code> in your DNS &mdash; a <b>TXT</b> record with any value is enough. A wildcard only applies to a name that has no records of its own, so one record at <code>www</code> removes it from the wildcard's reach. Do <b>not</b> point it at an address; the point is that it has no address.</p>
       <div class="switch-row"><span><b>Only a country's own addresses work</b> <span class="muted">(anything else on the base domain shows the notice &mdash; turn this on once you have a wildcard DNS record)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sStrictHosts" ${v('strictRegionHosts',false)?'checked':''} style="width:auto"></label></div>
       <label style="margin-top:12px">Retired addresses, one per line</label>

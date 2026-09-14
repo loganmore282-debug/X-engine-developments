@@ -585,6 +585,7 @@ console.log('\n— one country at a time, on every admin screen —');
       let ADMIN_BASE_DOMAIN = deps.baseDomain;
       let ADMIN_REGIONS = deps.regions;
       const REGION_SINGLE_TABS = ['settings', 'products'];
+      ${(admin.match(/const BASE_DOMAIN_PLACEHOLDER = '[^']*';/) || [''])[0]}
       ${fnSource(admin, 'adminOwnDomain')}
       ${fnSource(admin, 'baseDomainWarningHtml')}
       return baseDomainWarningHtml();
@@ -595,20 +596,55 @@ console.log('\n— one country at a time, on every admin screen —');
     });
   }
   const withLabel = [{ key: 'ug', name: 'Uganda', currency: 'UGX', labels: ['g26e'] }];
-  const mismatch = warnFor('panel.example.com', 'chipz-platform.com', withLabel);
-  ck(/chipz-platform\.com/.test(mismatch) && /example\.com/.test(mismatch),
+  // NOTE ON THE FIXTURE: these cases now configure a base domain of
+  // 'ownersite.example', NOT 'chipz-platform.com'. That string is the value
+  // server.js ships as its DEFAULT, and as of the www round it raises a
+  // warning of its own -- so using it as the "correctly configured" fixture
+  // would have meant asserting that a never-configured platform looks fine.
+  const mismatch = warnFor('panel.example.com', 'ownersite.example', withLabel);
+  ck(/ownersite\.example/.test(mismatch) && /panel\.example\.com|example\.com/.test(mismatch),
     'the panel warns on its own when the base domain is not the domain it is being used on, naming both');
   ck(/useThisDomainBtn/.test(mismatch), 'and offers a one-tap fix');
   ck(/function useThisDomainAsBase/.test(admin) && /baseDomain: own/.test(admin),
     'which really saves it');
-  ck(warnFor('app.chipz-platform.com', 'chipz-platform.com', withLabel) === '',
+  ck(warnFor('app.ownersite.example', 'ownersite.example', withLabel) === '',
     'and says nothing when the base domain IS the domain in use');
   // A panel hosted on Render or EdgeOne says nothing about where the
-  // MEMBERS' site lives, so its own hostname must not trigger the warning.
+  // MEMBERS' site lives, so its own hostname must not trigger the MISMATCH
+  // warning. (The placeholder warning below is a different thing and does
+  // fire there, deliberately.)
   for (const h of ['chipz-admin.onrender.com', 'chipz.edgeone.app', 'localhost', '127.0.0.1'])
-    ck(warnFor(h, 'chipz-platform.com', withLabel) === '', `  nor when the panel itself is on ${h}`);
+    ck(warnFor(h, 'ownersite.example', withLabel) === '', `  nor when the panel itself is on ${h}`);
   ck(/No base domain is set/.test(warnFor('panel.example.com', '', withLabel)),
     'and an unset base domain is called out on its own terms');
+
+  // ── the base domain never got filled in at all ──
+  //
+  // THE ASSERTION DIRECTLY ABOVE USED TO COVER THIS CASE AND GOT IT WRONG.
+  // It required silence on a Render-hosted panel with the base domain still
+  // reading 'chipz-platform.com' -- which is the factory placeholder, so that
+  // was the exact state of a platform whose owner had never touched the
+  // setting, and the panel was asserted to say nothing about it. Two live
+  // symptoms had no warning attached to either: short addresses matched no
+  // country, and the root domain and www were not closed, because
+  // blockRootDomain can only recognise them once this setting names the real
+  // domain. Rewritten rather than dropped, with the history here, because an
+  // assertion that pins the current shape defends a bug as loyally as a
+  // feature.
+  const placeholder = warnFor('chipz-admin.onrender.com', 'chipz-platform.com', withLabel);
+  ck(placeholder !== '',
+    'the placeholder base domain is called out even on a Render-hosted panel, where the panel\'s own hostname says nothing about the members\' domain');
+  ck(/www/.test(placeholder),
+    'and it says www is among what stays open, which is the symptom that does not otherwise announce itself');
+  ck(/short name/i.test(placeholder) || /Short addresses/.test(placeholder),
+    'and that short addresses match no country, which is the other one');
+  ck(!/useThisDomainBtn/.test(placeholder),
+    'with NO one-tap fix offered there -- the panel is on onrender.com, and filling that in as the members\' domain would be a guess, and a wrong one');
+  const placeholderOnOwn = warnFor('panel.ownersite.example', 'chipz-platform.com', withLabel);
+  ck(/useThisDomainBtn/.test(placeholderOnOwn),
+    'but the one-tap fix IS offered when the panel is on a domain worth suggesting');
+  ck(warnFor('chipz-admin.onrender.com', 'ownersite.example', []) === '',
+    'and a platform that HAS set its base domain is left alone');
 }
 
 // ── GIFT CODES AND INBOX MESSAGES BELONG TO A COUNTRY ──
