@@ -1188,20 +1188,31 @@ async function renderDashboard(){
   if(staleTab('dashboard')) return;
   if(s.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load stats. '+esc(s.message||'')+'</div>'; return; }
   const stats = s.stats||{};
+  const allMoney = s.regionKey === 'all';
+  const moneyRows = Array.isArray(s.moneyByRegion) ? s.moneyByRegion : [];
+  const moneyCards = allMoney ? '' : `
+      <div class="stat"><div class="n">${ugx(stats.walletTotal)}</div><div class="l">Wallet balances</div></div>
+      <div class="stat"><div class="n">${ugx(stats.depositAmount)}</div><div class="l">Total deposited</div></div>
+      <div class="stat"><div class="n">${ugx(stats.withdrawAmount)}</div><div class="l">Total withdrawn</div></div>
+      <div class="stat"><div class="n">${ugx(stats.investedAmount)}</div><div class="l">Total invested</div></div>`;
+  const moneyBreakdown = allMoney ? `<div class="panel-card">
+      <h2 class="sec" style="margin-top:0">Money by country</h2>
+      <p class="muted" style="margin-top:0">Currencies stay separate in All countries view; unlike counts, they cannot be added together.</p>
+      <div class="table-scroll"><table><thead><tr><th>Country</th><th>Wallets</th><th>Deposited</th><th>Withdrawn</th><th>Invested</th></tr></thead><tbody>
+      ${moneyRows.length?moneyRows.map(r=>`<tr><td><b>${esc(r.name||r.regionKey)}</b><br><span class="muted">${esc(r.currency||'')}</span></td><td>${ugx(r.walletTotal,r.regionKey)}</td><td>${ugx(r.depositAmount,r.regionKey)}</td><td>${ugx(r.withdrawAmount,r.regionKey)}</td><td>${ugx(r.investedAmount,r.regionKey)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No money activity yet</td></tr>'}
+      </tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <h2 class="sec">Overview</h2>
     <div class="cards">
       <div class="stat"><div class="n">${stats.totalUsers||0}</div><div class="l">Total users</div></div>
       <div class="stat"><div class="n">${stats.activeUsers||0}</div><div class="l">Active users</div></div>
       <div class="stat"><div class="n">${stats.bannedUsers||0}</div><div class="l">Banned users</div></div>
-      <div class="stat"><div class="n">${ugx(stats.walletTotal)}</div><div class="l">Wallet balances</div></div>
-      <div class="stat"><div class="n">${ugx(stats.depositAmount)}</div><div class="l">Total deposited</div></div>
-      <div class="stat"><div class="n">${ugx(stats.withdrawAmount)}</div><div class="l">Total withdrawn</div></div>
-      <div class="stat"><div class="n">${ugx(stats.investedAmount)}</div><div class="l">Total invested</div></div>
+      ${moneyCards}
       <div class="stat"><div class="n">${stats.activeInvestments||0}</div><div class="l">Active plans</div></div>
       <div class="stat"><div class="n">${stats.pendingDepCount||0}</div><div class="l">Pending deposits</div></div>
       <div class="stat"><div class="n">${stats.pendingWitCount||0}</div><div class="l">Pending withdrawals</div></div>
     </div>
+    ${moneyBreakdown}
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">MarzPay available balance</h2>
       <p class="muted" style="margin-top:0">The real float sitting in MarzPay's own account -- what payouts actually get sent from, distinct from members' own wallet balances above.</p>
@@ -1219,7 +1230,7 @@ async function renderDashboard(){
   const list = (r.transactions || []).slice(0, 12);
   $('dashTx').innerHTML = list.length ? list.map(t=>`
     <tr><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
-    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">No transactions</td></tr>';
+    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0), t.regionKey)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">No transactions</td></tr>';
   $('marzBalance').innerHTML = mb.status==='success'
     ? `<div class="n" style="font-size:26px">${ugx(mb.amount)}</div>${mb.accountStatus?`<p class="muted" style="margin:4px 0 0">Account status: ${esc(mb.accountStatus)}</p>`:''}`
     : `<p class="muted" style="margin:0">${esc(mb.message||'Could not check MarzPay balance right now.')}</p>`;
@@ -2906,7 +2917,7 @@ function drawTxns(){
   $('txRows').innerHTML = list.length?list.map(t=>`
     <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
     <td style="font-family:monospace;font-size:12px;white-space:nowrap">${esc(t.ref||'Not set')}</td>
-    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
+    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0), t.regionKey)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
   document.querySelectorAll('#txRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 // Live-refresh counterpart to renderTransactions() -- see

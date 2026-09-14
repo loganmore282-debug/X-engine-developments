@@ -498,7 +498,12 @@ function loginAddressFor(phone, bare){
 // sign in to a Kenyan account on the Ugandan site.
 function loginAddressCandidates(phone){
   const bare = !!(REGION && REGION.usesBareLocal !== false);
-  const list = [loginAddressFor(phone, bare), loginAddressFor(phone, !bare)];
+  const list = [loginAddressFor(phone, bare)];
+  // Only the founding/legacy bare namespace may try its own dial-prefixed
+  // migration shape. A non-bare country must NEVER try a bare-local address:
+  // that address belongs to the founding country's namespace, so doing so
+  // can resolve the same local digits to another country's Firebase user.
+  if (bare) list.push(loginAddressFor(phone, false));
   return list.filter((e, i) => list.indexOf(e) === i);
 }
 function cleanPhone(raw){

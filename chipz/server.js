@@ -2761,17 +2761,42 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount) {
       if (snap.data().status === 'banned') { anyLevelBlockedByBan = true; continue; }
       const reward = Math.round(amount * pct / 100);
       if (reward <= 0) continue;
+      // A level is not considered paid merely because we STARTED paying it.
+      // Put a durable idempotency token beside the wallet increment in the
+      // same atomic user-document update. If anything after this line fails,
+      // a retry sees the token and repairs history/metadata without crediting
+      // the wallet twice; if this update itself fails, nothing was claimed.
+      const commissionKey = investmentId + ':' + i;
+      const payeeRef = db.collection('users').doc(id);
+      const applied = await withLock('bal:' + id, () => payeeRef.updateIf(
+        { creditedCommissionKeys: { $ne: commissionKey } },
+        {
+          walletBalance: FieldValue.increment(reward),
+          teamCommission: FieldValue.increment(reward),
+          totalEarned: FieldValue.increment(reward),
+          creditedCommissionKeys: FieldValue.arrayUnion(commissionKey),
+        }
+      ));
+      // History is idempotent too. A retry after the wallet landed but this
+      // insert failed must fill the missing row, not append a duplicate.
+      const priorCommissionTx = await db.collection('transactions')
+        .where('userId', '==', id)
+        .where('type', '==', 'commission')
+        .where('investmentId', '==', investmentId)
+        .where('commissionLevel', '==', i)
+        .limit(1).get();
+      if (priorCommissionTx.empty) {
+        await db.collection('transactions').add({
+          userId: id, type: 'commission', description: `Level ${i + 1} reward`,
+          amount: reward, status: 'success', date, time, investmentId, commissionLevel: i,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      }
+      // Mark the investment level resolved LAST. A failure here is harmless:
+      // the next reconciler pass sees the wallet token/history and only
+      // finishes this marker; it cannot pay again.
       await invRef.update({ commissionPaidLevels: FieldValue.arrayUnion(i) });
-      // Nested under bal:<id> -- see settleInvestmentIfDue's own comment.
-      await withLock('bal:' + id, () => db.collection('users').doc(id).update({
-        walletBalance: FieldValue.increment(reward), teamCommission: FieldValue.increment(reward),
-        totalEarned: FieldValue.increment(reward)
-      }));
-      await db.collection('transactions').add({
-        userId: id, type: 'commission', description: `Level ${i + 1} reward`,
-        amount: reward, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
-      });
-      paidAny = true;
+      if (applied) paidAny = true;
     }
     // Only close out commissionPending once every unpaid level has been
     // genuinely resolved (paid, or permanently ineligible -- a nonexistent
@@ -3718,12 +3743,15 @@ async function grantTurntableSpins(userId, product, investmentId) {
     // /invest/create with no .catch(), so a returned promise would carry any
     // rejection straight past the handler below and out as an unhandled
     // rejection.
-    if (!investmentId) { await writeTurntableSpinDocs(userId, product, null); return; }
+    if (!investmentId) { await writeTurntableSpinDocs(userId, product, null, 0); return; }
     await withLock('spingrant:' + investmentId, async () => {
       const already = await db.collection('turntableSpins')
-        .where('investmentId', '==', investmentId).limit(1).get();
-      if (!already.empty) return;
-      await writeTurntableSpinDocs(userId, product, investmentId);
+        .where('investmentId', '==', investmentId).get();
+      // A previous attempt may have died halfway through the loop. The old
+      // existence-only guard treated one surviving row as "all spins were
+      // granted" forever. Count the durable rows and fill only the missing
+      // tail while this investment lock excludes concurrent grant attempts.
+      await writeTurntableSpinDocs(userId, product, investmentId, already.size);
     });
   } catch (e) {
     // Never let this break a purchase that has already been paid for. The
@@ -3736,7 +3764,7 @@ async function grantTurntableSpins(userId, product, investmentId) {
 // these can share one lock; it has no try/catch of its own because its single
 // caller already wraps it, and swallowing an error here would let that caller
 // report a grant it did not make.
-async function writeTurntableSpinDocs(userId, product, investmentId) {
+async function writeTurntableSpinDocs(userId, product, investmentId, existingCount) {
     // Per-product config: how many spins this purchase grants, and the band
     // each of those spins pays from. A product with no spinCount grants
     // none, which is how "the cheapest product earns nothing" is expressed --
@@ -3752,7 +3780,8 @@ async function writeTurntableSpinDocs(userId, product, investmentId) {
     const hi = Math.min(MAX_MONEY_AMOUNT, Math.max(lo, Number(product.spinMax) || 0));
     if (hi <= 0) return;
     const { date, time } = nowStr();
-    for (let i = 0; i < count; i++) {
+    const start = Math.min(count, Math.max(0, Math.floor(Number(existingCount) || 0)));
+    for (let i = start; i < count; i++) {
       // The band is SNAPSHOT onto the spin, not looked up when it is spun.
       // A member who earned a spin under one configuration keeps that deal
       // even if the admin retunes the product afterwards -- and an admin
@@ -3910,16 +3939,27 @@ app.post('/turntable/spin', async (req, res) => {
           walletBalance: FieldValue.increment(reward),
           totalEarned: FieldValue.increment(reward),
         }));
-        const { date, time } = nowStr();
+      } catch (creditErr) {
+        // The wallet did NOT move, so hand the entitlement back. This catch
+        // deliberately covers only the wallet update: if the money already
+        // landed and a later history write fails, re-arming the spin would
+        // let the same entitlement pay a second time on retry.
+        if (spinDoc) await spinDoc.ref.update({ used: false, usedAt: null }).catch(() => {});
+        else await ref.update({ lastTurntableAt: u.lastTurntableAt || null }).catch(() => {});
+        throw creditErr;
+      }
+      const { date, time } = nowStr();
+      try {
         await db.collection('transactions').add({
           userId: uid, type: 'turntable', description: label, amount: reward,
           status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
         });
-      } catch (creditErr) {
-        // Hand the spin back so the member is not simply robbed of it.
-        if (spinDoc) await spinDoc.ref.update({ used: false, usedAt: null }).catch(() => {});
-        else await ref.update({ lastTurntableAt: u.lastTurntableAt || null }).catch(() => {});
-        throw creditErr;
+      } catch (ledgerErr) {
+        // MONEY-SAFETY: the spendable balance is already correct. Never
+        // restore the spin here; doing so is a direct double-credit path.
+        // Surface the missing history row loudly for the integrity tools /
+        // operator instead of turning a bookkeeping failure into free money.
+        console.error(`MONEY-SAFETY: turntable reward ${reward} credited to ${uid} but its transaction row failed; entitlement remains consumed to prevent a double credit.`, ledgerErr.message);
       }
 
       const earnedLeft = await db.collection('turntableSpins')
@@ -9159,10 +9199,13 @@ app.get('/admin/stats', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const [usersSnap, depSnap, witSnap, invSnap] = await Promise.all([
-      db.collection('users').limit(10000).get(),
-      db.collection('pendingDeposits').where('status', '==', 'matched').limit(50000).get(),
-      db.collection('withdrawals').where('status', '==', 'processed').limit(50000).get(),
-      db.collection('investments').limit(50000).get(),
+      // These feed exact financial TOTALS, not a rendered page. A hard limit
+      // silently turns a total into "first N rows" once the platform grows,
+      // so these deliberately read the complete matching sets.
+      db.collection('users').get(),
+      db.collection('pendingDeposits').where('status', '==', 'matched').get(),
+      db.collection('withdrawals').where('status', '==', 'processed').get(),
+      db.collection('investments').get(),
     ]);
     // One country at a time. Every figure on this screen is money in a
     // currency, so mixing countries into a single total produces a number
@@ -9172,25 +9215,67 @@ app.get('/admin/stats', async (req, res) => {
     const userRegions = new Map();
     usersSnap.forEach(d => userRegions.set(d.id, String(d.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY));
     const mine = row => !want || rowRegionKey(row, userRegions) === want;
+    const moneyByRegion = new Map();
+    const bucket = key => {
+      const regionKey = String(key || DEFAULT_REGION_KEY).trim().toLowerCase() || DEFAULT_REGION_KEY;
+      if (!moneyByRegion.has(regionKey)) {
+        const r = regionByKey(regionKey);
+        moneyByRegion.set(regionKey, {
+          regionKey, name: r.name || regionKey, currency: r.currency || '',
+          walletTotal: 0, depositAmount: 0, withdrawAmount: 0, investedAmount: 0,
+        });
+      }
+      return moneyByRegion.get(regionKey);
+    };
     let totalUsers = 0, activeUsers = 0, bannedUsers = 0, walletTotal = 0;
     usersSnap.forEach(d => {
       const u = d.data();
-      if (want && (String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY) !== want) return;
+      const key = String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY;
+      if (want && key !== want) return;
       totalUsers++;
       if (u.status === 'banned') bannedUsers++; else activeUsers++;
-      walletTotal += finiteMoney(u.walletBalance);
+      const amount = finiteMoney(u.walletBalance);
+      walletTotal += amount;
+      bucket(key).walletTotal += amount;
     });
-    let depositAmount = 0; depSnap.forEach(d => { const r = { ...d.data() }; if (mine(r)) depositAmount += finiteMoney(r.amount); });
-    let withdrawAmount = 0; witSnap.forEach(d => { const r = { ...d.data() }; if (mine(r)) withdrawAmount += finiteMoney(r.net); });
+    let depositAmount = 0; depSnap.forEach(d => {
+      const r = { ...d.data() }; if (!mine(r)) return;
+      const amount = finiteMoney(r.amount), key = rowRegionKey(r, userRegions);
+      depositAmount += amount; bucket(key).depositAmount += amount;
+    });
+    let withdrawAmount = 0; witSnap.forEach(d => {
+      const r = { ...d.data() }; if (!mine(r)) return;
+      const amount = finiteMoney(r.net), key = rowRegionKey(r, userRegions);
+      withdrawAmount += amount; bucket(key).withdrawAmount += amount;
+    });
     let investedAmount = 0, activeInvestments = 0;
-    invSnap.forEach(d => { const inv = { ...d.data() }; if (!mine(inv)) return; investedAmount += finiteMoney(inv.amount); if (inv.status === 'active') activeInvestments++; });
+    invSnap.forEach(d => {
+      const inv = { ...d.data() }; if (!mine(inv)) return;
+      const amount = finiteMoney(inv.amount), key = rowRegionKey(inv, userRegions);
+      investedAmount += amount; bucket(key).investedAmount += amount;
+      if (inv.status === 'active') activeInvestments++;
+    });
     const [pendDepSnap, pendWitSnap] = await Promise.all([
-      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get(),
-      db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get(),
+      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).get(),
+      db.collection('withdrawals').where('status', '==', 'pending').get(),
     ]);
     const pendingDepCount = pendDepSnap.docs.filter(d => mine({ ...d.data() })).length;
     const pendingWitCount = pendWitSnap.docs.filter(d => mine({ ...d.data() })).length;
-    res.json({ status: 'success', regionKey: want || 'all', stats: { totalUsers, activeUsers, bannedUsers, walletTotal, depositAmount, withdrawAmount, investedAmount, activeInvestments, pendingDepCount, pendingWitCount } });
+    // In a one-country view the scalar fields stay backward-compatible. In
+    // All countries they are null on purpose: UGX + KES is not money. The
+    // grouped rows are the only meaningful financial totals in that mode.
+    res.json({
+      status: 'success', regionKey: want || 'all',
+      moneyByRegion: Array.from(moneyByRegion.values()).sort((a, b) => a.regionKey.localeCompare(b.regionKey)),
+      stats: {
+        totalUsers, activeUsers, bannedUsers,
+        walletTotal: want ? walletTotal : null,
+        depositAmount: want ? depositAmount : null,
+        withdrawAmount: want ? withdrawAmount : null,
+        investedAmount: want ? investedAmount : null,
+        activeInvestments, pendingDepCount, pendingWitCount
+      }
+    });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Owner: "let us put on dashboard so as it checks marzpy available
