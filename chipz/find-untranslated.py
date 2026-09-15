@@ -51,6 +51,19 @@ REPORT_FOR = lambda lang: os.path.join(HERE, f'untranslated-report-{lang}.json')
 # run in a half-filled language reports its own blanks as findings and buries
 # the real ones -- but EVERY column has to come back clean, which is the whole
 # of "not missing English and any language", so run it per language.
+LANG_CODES_ARGV = ('en', 'lg', 'sw', 'fr', 'rw', 'nyn')
+# THE LANGUAGE IS argv[2]; argv[1] IS THE OUTPUT DIRECTORY.
+#
+# `find-untranslated.py fr` silently set the OUTPUT PATH to "fr" and swept
+# SWAHILI, then wrote the Swahili report -- so four "clean in fr/lg/rw/nyn"
+# runs were one language measured four times, and the mismatched filename in
+# the output was waved away as a display quirk. Refusing the ambiguous form
+# is the whole fix: a harness that quietly measures something other than what
+# it was asked to is worse than one that stops.
+if len(sys.argv) > 1 and sys.argv[1].lower() in LANG_CODES_ARGV:
+    sys.exit(f'usage: {sys.argv[0]} <out-dir> <lang>   '
+             f'(you passed "{sys.argv[1]}" as the OUTPUT DIRECTORY; '
+             f'did you mean: {sys.argv[0]} /tmp/out {sys.argv[1]})')
 LANG = (sys.argv[2] if len(sys.argv) > 2 else 'sw').lower()
 
 # ── the table, read out of the app's own source ───────────────────────────
@@ -320,7 +333,12 @@ def routes(reg):
         "/turntable/status": {"status": "success", "enabled": True, "spins": 2,
                               "canDaily": True, "min": 200, "max": 1000},
         "/checkin/status": {"status": "success", "claimedToday": False, "streak": 3, "bonus": 500},
-        "/manual-pay/numbers": {"status": "success", "numbers": []},
+        # Real numbers, not an empty list. With none configured the manual
+        # flow answers "busy" and the code screen -- a whole screen of copy --
+        # can never render, which is exactly how it went unmeasured.
+        "/manual-pay/numbers": {"status": "success", "numbers": [
+            {"id": "n1", "number": "0770000001", "holderName": "Jane Doe",
+             "network": "MTN Mobile Money", "active": True}]},
     }
 
 
@@ -369,13 +387,31 @@ SWEEP = """() => {
         ? '.' + n.className.trim().split(/\\s+/)[0] : n.tagName.toLowerCase()));
     return bits.join(' ');
   };
-  const push = (txt, el, kind) => {
+  // A sentence that inline markup broke up is now translated AS ONE BLOCK by
+  // the engine, so what the sweep must report is the WHOLE sentence -- the key
+  // a row actually needs -- not its three pieces. The rule for "is this one
+  // block?" is the ENGINE'S OWN, reached through window.__i18nBlockOk: a copy
+  // of it here would be a second source of truth, and the row it told you to
+  // write would be keyed on a sentence the engine never forms.
+  // Its own list rather than borrowing the one the fragment detector uses:
+  // that one does not exist in every copy of this sweep, and a helper that
+  // depends on a declaration somewhere above it fails at runtime in the file
+  // that lacks it -- which is exactly what happened here first.
+  const INLINE_OWN = { B:1, I:1, EM:1, STRONG:1, CODE:1, A:1, SPAN:1, U:1, SMALL:1, MARK:1 };
+  const blockOwner = el => {
+    let n = el;
+    while (n && n.parentElement && INLINE_OWN[n.tagName]) n = n.parentElement;
+    return n;
+  };
+  const okBlock = window.__i18nBlockOk || null;
+  const maxLen = window.__i18nMaxLen ? window.__i18nMaxLen() : 160;
+  const push = (txt, el, kind, blockKey) => {
     const t = String(txt || '').replace(/\\s+/g, ' ').trim();
     if (!t) return;
     const key = kind + '\\u0000' + t;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ text: t, at: where(el), kind });
+    out.push({ text: t, at: where(el), kind, blockKey: blockKey || '' });
   };
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -385,7 +421,20 @@ SWEEP = """() => {
     if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA') continue;
     if (p.closest('[data-no-i18n]')) continue;
     if (!vis(p)) continue;
-    push(n.nodeValue, p, 'text');
+    // The PIECE is still what gets classified: a sentence whose pieces are
+    // all translated already is working, and reporting it again just because
+    // the engine could now also do it whole would be noise. What the block key
+    // buys is that when a piece IS missing, the report names the whole
+    // sentence -- which is the key a row actually needs.
+    let blockKey = '';
+    const owner = blockOwner(p);
+    if (okBlock && owner && okBlock(owner)) {
+      const whole = String(owner.textContent || '').replace(/\s+/g, ' ').trim();
+      // Over the cap the engine will not look at it either, so asking for a
+      // row that could never apply would be worse than saying nothing.
+      if (whole && whole.length <= maxLen && whole !== String(n.nodeValue || '').trim()) blockKey = whole;
+    }
+    push(n.nodeValue, p, 'text', blockKey);
   }
   for (const el of document.querySelectorAll('[placeholder],[aria-label],[title]')) {
     if (el.closest('[data-no-i18n]')) continue;
@@ -404,7 +453,8 @@ async def collect(page, label, found):
         found.setdefault('_errors', []).append(f'{label}: {e}')
         return
     for r in rows:
-        found.setdefault(r['text'], {'at': r['at'], 'kind': r['kind'], 'screens': set()})
+        found.setdefault(r['text'], {'at': r['at'], 'kind': r['kind'],
+                                     'blockKey': r.get('blockKey', ''), 'screens': set()})
         found[r['text']]['screens'].add(label)
 
 
@@ -453,6 +503,21 @@ SIGNED_IN_STEPS = [
     # They are passed as table strings on purpose: a literal of my own invention
     # would be reported as untranslated app copy, which it is not.
     ('confirm',         "openSimpleConfirm('Confirm', 'Enter a valid amount.', ()=>{})"),
+    # THE MANUAL PAYMENT FLOW -- a whole screen of copy that had never been
+    # measured once. The old 'deposit/pay-b' step only clicks the PAY B radio
+    # on the deposit form; it never reaches the operator selector, and never
+    # the code screen behind it. Owner: "the manual payment page everything
+    # should be the changed language".
+    ('manual-pay/selector', "openManualPayFlow(30000)"),
+    ('manual-pay/selected',  "openManualPayFlow(30000); await new Promise(r=>setTimeout(r,300));"
+                             "const m=document.querySelector('.mp-method'); if(m) m.click();"),
+    # The code screen is driven directly rather than through a real confirm:
+    # its arguments are what the server would have sent, so the screen renders
+    # exactly as a member meets it, including the reminder and the timer.
+    ('manual-pay/code',      "openManualPayFlow(30000); await new Promise(r=>setTimeout(r,300));"
+                             "presentManualPayCodeScreen({depositId:'d1', network:'MTN Mobile Money',"
+                             "amount:30000, assignedNumber:'0770000001', holderName:'Jane Doe',"
+                             "senderPhone:'0772000019', expiresAt: Date.now()+15*60000});"),
 ]
 
 # Sub-tabs and states that only appear once you are already on a screen.
@@ -574,6 +639,7 @@ async def main():
     missing_rows, missing_cells, not_swept, data = [], [], [], []
     for text, info in sorted(found.items()):
         entry = {'text': text, 'at': info['at'], 'kind': info['kind'],
+                 'blockKey': info.get('blockKey', ''),
                  'screens': sorted(info['screens'])}
         if is_data(text):
             data.append(entry)
@@ -595,9 +661,22 @@ async def main():
                 entry['pattern'] = hit[0]
                 missing_cells.append(entry)
             elif looks_english(text):
+                # A piece of a sentence that inline markup broke up: report
+                # the WHOLE sentence, because that is the key the engine now
+                # forms and therefore the key a row has to be written against.
+                # A row for ", then add the" would be nonsense in isolation.
+                bk = entry.get('blockKey') or ''
+                if bk and bk not in EN_KEYS and looks_english(bk):
+                    entry = dict(entry, text=bk, piece=text)
                 missing_rows.append(entry)
             else:
                 data.append(entry)
+
+    # One row per sentence: several failing pieces of the same sentence all
+    # resolve to the same whole-sentence key.
+    seen_rows = set()
+    missing_rows = [e for e in missing_rows
+                    if not (e['text'] in seen_rows or seen_rows.add(e['text']))]
 
     report = {'language': LANG, 'rows_in_table': len(ROWS),
               'translated_for_language': len(TRANSLATED),

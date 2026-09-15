@@ -5879,3 +5879,160 @@ judge a mutation by the exit code.*
 3. **Leave the disbursement IP allowlist OFF** until Render's outbound addresses are
    known and entered, or payouts will fail with everything else looking healthy.
 4. The three outstanding questions above, in particular what `sk_` is for.
+
+## Round 172 — The cash-out clock, the loader, and sentences that markup broke up
+
+> "also withdrawal time has problems is it in 24hrs or, please make sure every withdrawal
+> time is reading very well on each country, and still more words still in English ie
+> loader 'Loading...' also the manual payment page everything should be the changed
+> language, even in admin panel, whether instructions, settings, sentences ... check
+> everything whether deposits, withdrawals, giftCodes, users, details, everything should
+> change language"
+
+### FIRST, A CORRECTION: "clean in all five languages" was Swahili five times
+Both coverage sweeps take the language as **`argv[2]`** — `argv[1]` is an output
+directory. So `find-untranslated.py fr` set the OUTPUT PATH to "fr" and swept **Swahili**,
+then wrote the Swahili report. Every "0 findings in five languages" claim in Rounds 167,
+170 and the first half of this one was **one language measured five times**, and the
+mismatched filename in the output was there each time and was waved away as a display
+quirk.
+
+Both sweeps now **refuse** the ambiguous form, naming the right invocation. A harness
+that quietly measures something other than what it was asked to is worse than one that
+stops. Re-run properly, the member app **is** clean in all five — and French reports 271
+usable cells against Swahili's 277, which is the tell that the language really differed.
+
+### The cash-out window: enforcement was right, the CLOCK was wrong
+Owner: *"is it in 24hrs or"*. Enforcement was already per country — `tzOffMs()` reads
+`currentRegion().utcOffsetMin` on both sides, and `sett` is that country's own settings
+overlay — so a country on another offset already got its own hours and its own "open
+now". Nothing there needed changing, and the code now says so where it is easy to doubt.
+
+**What was wrong was the label: 12-hour AM/PM**, on the server (`hhmmLabel`) and in the
+app (`witClock`). Three separate faults, any one of them enough:
+- this app has **one clock everywhere else** — the ledger's `23:21`, the plan countdown's
+  `HH:MM:SS`, `Joined 07/09/2026 01:21` — and this was the single screen disagreeing;
+- the owner **types 18:00** into the panel's `<input type="time">` and was then shown
+  *"6:00 PM"*, so the rule on screen did not look like the rule he set;
+- **"AM"/"PM" are English words** spliced into a sentence the translator had already
+  translated, so a French member read *"18:00 à 5:00 PM"*.
+
+The earlier note reasoned from his phrase *"6pm to 5pm"* that members want a 12-hour
+clock. That was reading a casual description as a spec.
+
+The panel's own help text was wrong twice over and is fixed with it: it said **"East
+Africa Time"** (untrue the moment a second country exists) and gave its example in
+12-hour. It now says *"Times are 24-hour, in the selected country's own local time."*
+
+### "Loading......" — two reasons it could never be translated
+1. It is **thirteen text nodes, one per letter**, because each letter carries its own
+   `animation-delay` for the wave. The translator replaces a WHOLE text node, and no row
+   can ever match a node holding `"L"`. Same shape as the About page's one-span-per-word
+   bug.
+2. It is on screen **precisely while the core is inflating**, so even as one node there
+   is no translator yet.
+
+So it follows the brand name's own solution: `applyLanguage()` writes the resolved word
+to `localStorage`, and a plain `<script>` beside the markup rebuilds the letters from it
+before the core loads. Nothing holds a second copy of the table — which is what keeps it
+from drifting. A genuinely first-ever launch in a new language shows English once and is
+right every launch after.
+
+`test-languages.py` drives a **real reload** and reads `Inapakia......` back: the word,
+the owner's six dots, one `<i>` per character, a distinct delay on each, the accessible
+label following the visible word, and the script's position ahead of the core in the
+document. **`wait_until="commit"` measured nothing** — the paint script is inline, so the
+document has not parsed it yet and what comes back is the shipped English markup. It
+passed on the first run only because the stored word was "Loading" too.
+
+### The manual payment page had never been swept — at all
+`deposit/pay-b` only clicked the PAY B radio; nothing ever opened the operator selector
+or the code screen behind it. And the fixture returned **zero payment numbers**, so the
+flow could not have reached the code screen even if it had been asked to. Three new steps
+walk it now, with a real number in the fixture. **Sixth instance of "a fixture that cannot
+reach a state cannot test it."**
+
+What it found: `Click <b>"Refresh"</b> to check if it is successful` — a sentence in three
+text nodes — plus one missing warning row. Three fields that are **data** are marked
+`data-no-i18n` rather than translated: the collection number, the account holder's name,
+and the sample SMS placeholder (it mirrors a real operator message, which arrives in
+English whatever language the app is in; translating the example would stop it looking
+like what the member is about to paste).
+
+### The engine change that answers "everything should change language"
+`Click <b>"Refresh"</b> to check...` is the same shape as **164 fragments in the admin
+panel** — nearly all of its instructions and settings copy. One change fixes both:
+
+**A block whose only element children are inline formatting is now translated AS ONE
+SENTENCE**, keyed on its flattened text. What disqualifies a block, each rule load-bearing:
+- a child that is not inline formatting (a button, an input, a table row) — rewriting
+  those destroys real structure;
+- any descendant carrying an **`id`** — an id is the hook app code writes into
+  (`$('manPayTotal').textContent = ...`), so replacing the block would throw it away and
+  the next write would land nowhere;
+- **no text of its own.** A sentence has text outside its emphasis; a box holding only
+  elements is layout. `<div><span>Wallet balance</span><span>UGX 128,500</span></div>`
+  flattens to *"Wallet balanceUGX 128,500"*, which is not a phrase in any language and
+  carries a member's money in it.
+
+The translated sentence may carry inline emphasis of its own, so `<code>*</code>` in an
+instruction survives; everything is escaped first and only the inline tags are allowed
+back. English is left **exactly as authored**, which is what keeps its own bold and code
+formatting. The block pass runs **before** the per-node pass (the per-node pass mutates
+text in place, so the whole-sentence key would no longer match) and marks what it handled
+so the pieces are not pulled apart again.
+
+**It runs in its own try/catch.** It touches a wider slice of the DOM API than the
+per-node pass, and under the shared catch a throw would leave the WHOLE screen
+untranslated — a new feature taking the old, working one down with it.
+
+### The 160-character cap is now per host
+The cap stops the translator being dragged through a wall of **member-written content**.
+The admin panel has none on screen — the one exception, a member's pasted payment SMS,
+already carries `data-no-i18n` and `translate="no"` — and its long strings **are** the
+operator documentation the owner asked to have translated. `I18N_MAX_LEN_OVERRIDE = 700`
+in the panel; the member app is unchanged at 160. `build-admin-rows.py` and
+`test-admin-i18n.js` read both numbers out of the sources and refuse a panel that
+*lowers* the cap.
+
+Result in the panel: **too-long 43 → 0, fragment 164 → 78**, and 59 real findings —
+the instruction paragraphs themselves, now translatable where before no row could ever
+have applied.
+
+### The sweeps use the ENGINE'S block rule, not a copy of it
+`window.__i18nBlockOk` / `__i18nMaxLen` are exported for them. A Python copy of that rule
+would be a second source of truth, and the row it told you to write would be keyed on a
+sentence the engine never forms. The sweeps report the **whole sentence** in place of a
+failing piece — and only when a piece is actually failing, so a sentence already working
+piecewise is not reported as noise.
+
+`dump-admin-blocks.py` (port **8907**) is new and exists for one reason: the sweep renders
+in the target language, so by the time it reads a block the per-node pass has already
+turned `<b>Settings</b>` into `<b>Mipangilio</b>`, and the flattened text is a hybrid that
+is **not the key**. Rendered in English nothing is translated, so what a block flattens to
+IS the key.
+
+### Test-harness lessons from this round
+- **`test-withdraw-rules.js` was pinning the bug.** It required `'6:00 PM'`. Fourth
+  harness in this project found defending the shape of a defect rather than the property
+  behind it.
+- **The stub DOM conflated `children` and `childNodes`.** A real DOM's `children` is
+  ELEMENTS ONLY, and the stub put text nodes there — so `i18nBlockOk()` saw text among an
+  element's children and refused every block. The stub was wrong, not the engine; it now
+  has `childNodes`, an elements-only `children`, `firstChild`, `nextSibling`, `innerHTML`
+  and `removeAttribute`, and nine indexed accesses moved to `childNodes`.
+- **Don't rebuild while a sweep is running.** Four language runs raced two
+  `node build-core.js` calls; their reports were stale and their screen counts wrong.
+  Same family as the standing rule about the mutation harness.
+- **Port 8907 collided with my own earlier run of the same script** — fifth instance.
+
+### Still open, and named plainly
+The 59 admin instruction paragraphs are now **translatable** but **not yet translated**;
+that is a large, mechanical writing job (59 strings × 5 languages, several over 400
+characters) and it is the next unit of work. 78 fragments remain untranslatable without
+markup changes — blocks holding a button, an input, or an element with an id.
+
+**When they are written, the three Bantu columns want a native speaker's eye more here
+than anywhere else so far:** these are technical instructions about DNS records, payment
+gateways and money settings, and an admin acting on a mistranslated one can misconfigure
+the platform.

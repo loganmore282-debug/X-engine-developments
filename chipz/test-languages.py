@@ -338,6 +338,63 @@ async def main():
             ck(not flash,
                "returning to a level already fetched shows no loader at all -- it renders from what is held, and a mark that appears for one frame reads as a glitch")
 
+            # ── THE LOADING SCREEN'S OWN WORD ──────────────────────────
+            # Owner: "still more words still in English ie loader
+            # 'Loading...'". It could not be translated for two reasons and
+            # both had to go: it is ONE <i> PER LETTER (the wave needs a
+            # per-letter animation-delay) so no row could ever match a node
+            # holding "L", and it is painted while the core is still
+            # inflating, before a translator exists. So the resolved word is
+            # remembered on the device and a plain script paints it first.
+            #
+            # Driven through a REAL RELOAD, because "before the core loads" is
+            # the whole claim -- reading it in an already-booted page would
+            # prove nothing about the frame that actually matters.
+            # Put the device in a language first and let it boot: the word is
+            # written by applyLanguage(), so reading it while the page happens
+            # to be in English would measure nothing. (It read 'Loading' on the
+            # first run for exactly that reason.)
+            await page.evaluate(
+                "() => { try { localStorage.setItem('chipz_lang','sw'); } catch(e){} }")
+            await page.reload(wait_until="load")
+            await page.wait_for_timeout(1500)
+            word = await page.evaluate(
+                "() => { try { return localStorage.getItem('chipz_loading_word'); } catch(e){ return null; } }")
+            ck(word and word != 'Loading',
+               "the resolved loading word is remembered on the device (%r)" % word)
+            # domcontentloaded, not "commit": the paint script is INLINE, so with
+            # "commit" the document has not parsed it yet and what comes back is
+            # the shipped English markup -- which is exactly what this read
+            # measured on its first run, and it passed only because the stored
+            # word was "Loading" too.
+            await page.reload(wait_until="domcontentloaded")
+            painted = await page.evaluate("""() => {
+              const box = document.querySelector('#loadingScreen .ls-text');
+              if (!box) return null;
+              const its = [...box.querySelectorAll('i')];
+              return { text: its.map(i => i.textContent).join(''),
+                       letters: its.length,
+                       label: box.getAttribute('aria-label'),
+                       delays: its.map(i => i.style.animationDelay) };
+            }""")
+            ck(painted and painted['text'].startswith(word),
+               "and the loader paints it in the first frame, before the core inflates (%r)"
+               % (painted and painted['text']))
+            ck(painted and painted['text'].endswith('......'),
+               "with the owner's six dots still after it")
+            ck(painted and painted['letters'] == len(word) + 6,
+               "one <i> per character, which is what the wave animates")
+            ck(painted and len(set(painted['delays'])) == painted['letters'],
+               "each with its own animation-delay, so the wave still travels along the word")
+            ck(painted and painted['label'] == word,
+               "and the accessible label follows the visible word")
+            # "Before the core inflates" is a claim about ORDER IN THE
+            # DOCUMENT, and that is where it is checked: the paint script is
+            # inline and must sit ahead of the core's own <script>.
+            built = open(os.path.join(HERE, "user", "index.html"), encoding="utf8").read()
+            ck(0 < built.find("__paintLoadingWord") < built.find("data-nx-core"),
+               "and its script sits ahead of the core script in the document")
+
             await ctx.close()
             await b.close()
     finally:

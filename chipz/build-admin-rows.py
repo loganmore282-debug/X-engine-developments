@@ -29,7 +29,34 @@ import importlib.util, os, re, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADMIN = os.path.join(HERE, 'admin-src', 'index.html')
 APP = os.path.join(HERE, 'user-src', 'original_module.js')
-CAP = 160          # i18nTextNode()'s own limit; read back and checked below
+# The cap the PANEL runs under. The engine defaults to 160 to keep the member
+# app from being dragged through member-written content; the panel raises it,
+# because its long strings are the operator documentation the owner asked to
+# have translated. Read from the two sources below rather than trusted, so this
+# file can never go on enforcing a number the code has moved past.
+def _cap():
+    """The cap the admin panel actually runs under.
+
+    The engine's default lives in original_module.js; the panel overrides it in
+    its own source. Both are read, and the override has to be at least the
+    default -- a panel that quietly LOWERED it would make rows stop applying
+    with nothing at runtime saying so.
+    """
+    eng = open(APP, encoding='utf8').read()
+    adm = open(ADMIN, encoding='utf8').read()
+    d = re.search(r'I18N_MAX_LEN_OVERRIDE : (\d+);', eng)
+    o = re.search(r'var I18N_MAX_LEN_OVERRIDE = (\d+);', adm)
+    if not d:
+        raise SystemExit("ABORT: could not find the engine's default text cap")
+    if not o:
+        return int(d.group(1))
+    if int(o.group(1)) < int(d.group(1)):
+        raise SystemExit(f'ABORT: the panel LOWERS the text cap to {o.group(1)} '
+                         f'from the engine default {d.group(1)}')
+    return int(o.group(1))
+
+
+CAP = None   # filled in main(), from the sources
 
 
 def load(name):
@@ -97,6 +124,8 @@ def splice(src, name, body):
 
 
 def main():
+    global CAP
+    CAP = _cap()
     shared = app_keys()
     rows, pats, seen, pseen = [], [], set(), set()
     for name in sorted(f for f in os.listdir(HERE)
@@ -122,13 +151,6 @@ def main():
                                  f'{sorted(got)}, the English has {sorted(want)}')
 
     src = open(ADMIN, encoding='utf8').read()
-    # The cap is read back out of the engine rather than trusted, so this file
-    # cannot go on enforcing 160 after the engine's own limit has moved.
-    app = open(APP, encoding='utf8').read()
-    m = re.search(r'key\.length > (\d+)', app)
-    if not m or int(m.group(1)) != CAP:
-        raise SystemExit(f'ABORT: the engine\'s text-node cap is {m and m.group(1)}, '
-                         f'this script enforces {CAP}. Update both together.')
 
     src = splice(src, 'ADMIN_LANG_ROWS', js_rows(rows))
     src = splice(src, 'ADMIN_LANG_PATTERNS', js_rows(pats))

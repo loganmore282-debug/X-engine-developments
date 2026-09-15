@@ -1626,21 +1626,36 @@ function eatParts(ts) {
 // slice all over again in a new way. Never write a scanner's anchor verbatim
 // in the file it scans.
 //
-// 13:05 -> "1:05 PM". The member reads this, not a 24-hour clock, and the
-// owner wrote his own example as "6pm to 5pm".
+// 18:00 -> "18:00". TWENTY-FOUR HOUR, and it was 12-hour AM/PM before.
+//
+// Owner: "withdrawal time has problems, is it in 24hrs or". Three things were
+// wrong with the 12-hour form and each is enough on its own:
+//   * this app has ONE clock everywhere else -- the ledger's 23:21, the plan
+//     countdown's HH:MM:SS, "Joined 07/09/2026 01:21" -- and this was the
+//     single screen disagreeing with it;
+//   * the owner TYPES 18:00 into an <input type="time"> in the admin panel
+//     and the app then said "6:00 PM", so the rule on screen did not look
+//     like the rule he set;
+//   * "AM"/"PM" are English words spliced into a sentence the translator had
+//     already translated, so a French member read "18:00 à 5:00 PM".
+// The earlier note here reasoned from his phrase "6pm to 5pm" that members
+// want a 12-hour clock. That was reading a casual description as a spec.
 function hhmmLabel(v) {
   const t = hhmmToMin(v);
   if (t == null) return '';
-  const h24 = Math.floor(t / 60), mi = t % 60;
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h12}:${String(mi).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`;
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
 // Whether cash-out is open right now, plus the labels the client shows.
 //
 // The window MAY WRAP past midnight, and that is not an edge case: the
 // owner's own example is 18:00 to 17:00, which wraps and is open for 23 of
 // the 24 hours. A naive `from <= now && now < to` reads that as never open.
-// Judged in EAT, the same zone every other daily reset in this file uses.
+//
+// Judged in THE REGION'S OWN LOCAL TIME -- tzOffMs() reads
+// currentRegion().utcOffsetMin, and `sett` is that country's own settings
+// overlay, so a country on a different offset gets its own hours and its own
+// "is it open now" rather than Uganda's. The client uses the same offset from
+// the same published region, so the screen and this check cannot disagree.
 function withdrawWindowState(sett, ts) {
   const from = hhmmToMin(sett && sett.withdrawOpenFrom);
   const to = hhmmToMin(sett && sett.withdrawOpenTo);

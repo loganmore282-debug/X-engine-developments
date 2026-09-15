@@ -164,7 +164,19 @@ function makeDom() {
   function textNode(v, parent) { return { nodeType: 3, nodeValue: v, parentElement: parent }; }
   function el(tag, opts) {
     const e = {
-      nodeType: 1, tagName: tag.toUpperCase(), children: [], attrs: (opts && opts.attrs) || {},
+      nodeType: 1, tagName: tag.toUpperCase(), childNodes: [], attrs: (opts && opts.attrs) || {},
+      // A REAL DOM's `children` is ELEMENTS ONLY, and `childNodes` is
+      // everything. The stub used to conflate them, which made
+      // i18nBlockOk() see text nodes among an element's children and refuse
+      // every block -- the stub was wrong, not the engine.
+      get children(){ return this.childNodes.filter(n => n.nodeType === 1); },
+      get firstChild(){ return this.childNodes[0] || null; },
+      get innerHTML(){
+        return this.childNodes.map(n => n.nodeType === 3 ? n.nodeValue
+          : '<' + n.tagName.toLowerCase() + '>' + n.innerHTML + '</' + n.tagName.toLowerCase() + '>').join('');
+      },
+      set innerHTML(v){ this._wrote = String(v); },
+      removeAttribute(a){ delete this.attrs[a]; },
       parentElement: null, _noI18n: !!(opts && opts.noI18n),
       hasAttribute(a) { return a in this.attrs; },
       getAttribute(a) { return this.attrs[a]; },
@@ -179,7 +191,7 @@ function makeDom() {
       querySelectorAll() {
         const out = [];
         (function walk(n) {
-          for (const c of n.children) {
+          for (const c of n.childNodes) {
             if (c.nodeType === 1) {
               if (Object.keys(c.attrs).some(a => ['placeholder', 'aria-label', 'title'].includes(a))) out.push(c);
               walk(c);
@@ -188,7 +200,16 @@ function makeDom() {
         })(this);
         return out;
       },
-      add(...kids) { for (const k of kids) { k.parentElement = this; this.children.push(k); } return this; },
+      add(...kids) {
+        for (const k of kids) {
+          k.parentElement = this;
+          const prev = this.childNodes[this.childNodes.length - 1];
+          this.childNodes.push(k);
+          if (prev) Object.defineProperty(prev, 'nextSibling', { configurable: true, get: () => k });
+          Object.defineProperty(k, 'nextSibling', { configurable: true, get: () => null });
+        }
+        return this;
+      },
       text(v) { return this.add(textNode(v, this)); },
     };
     return e;
@@ -199,7 +220,7 @@ function makeDom() {
 function treeWalkerFor(root, filter) {
   const nodes = [];
   (function walk(n) {
-    for (const c of (n.children || [])) {
+    for (const c of (n.childNodes || [])) {
       if (c.nodeType === 3) { if (filter.acceptNode(c) === 1) nodes.push(c); }
       else walk(c);
     }
@@ -217,6 +238,19 @@ function buildI18n(startLang) {
       createTreeWalker: (root, what, filter) => treeWalkerFor(root, filter),
       get body(){ return _body; },
       documentElement: { setAttribute(){} },
+      // Enough of an element for i18nBlock(): it builds one detached div to
+      // flatten a block's html to text, and one to escape a translation
+      // before letting the inline tags back in.
+      createElement: () => ({
+        _t: '', _h: '',
+        set textContent(v){ this._t = String(v == null ? '' : v);
+          this._h = this._t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); },
+        get textContent(){ return this._t; },
+        set innerHTML(v){ this._h = String(v == null ? '' : v);
+          this._t = this._h.replace(/<[^>]*>/g, '')
+            .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'); },
+        get innerHTML(){ return this._h; },
+      }),
     };
     const localStorage = { _v: {}, getItem(k){ return this._v[k] === undefined ? null : this._v[k]; }, setItem(k, v){ this._v[k] = String(v); } };
     const $ = () => null;
@@ -241,7 +275,13 @@ function buildI18n(startLang) {
     ${fnSource(client, 'langMeta')}
     ${fnSource(client, 'tPattern')}
     ${fnSource(client, 't')}
+    ${constSource(client, 'I18N_MAX_LEN')}
+    ${constSource(client, 'I18N_INLINE_TAGS')}
+    ${constSource(client, '_i18nBlock')}
     ${fnSource(client, 'i18nTextNode')}
+    ${fnSource(client, 'i18nBlockOk')}
+    ${fnSource(client, 'i18nSetBlockHtml')}
+    ${fnSource(client, 'i18nBlock')}
     ${fnSource(client, 'i18nElementAttrs')}
     ${fnSource(client, 'translateTree')}
     ${fnSource(client, 'resolveLang')}
@@ -258,6 +298,7 @@ function buildI18n(startLang) {
       lang: () => LANG,
       allowed: () => LANG_ALLOWED,
       setLang, translateTree, applyRegionLanguages, resolveLang, i18nElementAttrs,
+      i18nBlockOk, i18nBlock,
       dict: DICT, rows: LANG_ROWS, langs: LANGS, patterns: LANG_PATTERNS,
     };
   `)(el, treeWalkerFor, startLang);
@@ -301,7 +342,10 @@ for (const l of i18n.langs.slice(1)) {
 // hand-copied 20s taught this project last round.
 console.log('\n— no row is longer than the sweep will look at —');
 {
-  const cap = Number((/key\.length > (\d+)\) return;/.exec(client) || [])[1]);
+  // The cap moved from a literal in the guard to a named constant with a
+  // per-host override (the admin panel raises it), so it is read from the
+  // DEFAULT arm of that constant -- still out of the source, never restated.
+  const cap = Number((/I18N_MAX_LEN_OVERRIDE : (\d+);/.exec(client) || [])[1]);
   ck(Number.isFinite(cap) && cap > 40, `the length cap was found in the source (${cap})`);
   const over = i18n.rows.filter(r => r[0].length > cap);
   ck(over.length === 0,
@@ -547,6 +591,40 @@ console.log('\n— an attribute replaced after the sweep —');
     'and running it again over its own output changes nothing');
 }
 
+// ── A SENTENCE THAT INLINE MARKUP BROKE INTO PIECES ──────────────────────
+// `Click <b>"Refresh"</b> to check...` is three text nodes, none of them a
+// sentence, so before the block pass no row could ever apply to it. Run
+// against the REAL i18nBlockOk/i18nBlock, because what matters is which
+// blocks the engine accepts, not which ones a description of it would.
+console.log('\n— sentences broken up by inline markup —');
+{
+  const { el, i18n } = buildI18n();
+  i18n.setLang('sw');
+  const mk = () => {
+    const p = el('p');
+    p.text('Click ');
+    const b = el('b'); b.text('"Refresh"'); p.add(b);
+    p.text(' to check if it is successful');
+    return p;
+  };
+  const p = mk();
+  ck(i18n.i18nBlockOk(p) === true,
+     'a paragraph whose only markup is <b> counts as one sentence');
+  // A block holding an element with an id must NOT: that id is where app code
+  // writes, and replacing the block would throw it away.
+  const withId = mk();
+  withId.children.find(c => c.nodeType === 1).id = 'manPayTotal';
+  ck(i18n.i18nBlockOk(withId) === false,
+     'but not one containing an element with an id -- app code writes there');
+  // Nor a layout box that is elements only: "Wallet balanceUGX 128,500" is
+  // not a phrase in any language and carries a member's money in it.
+  const box = el('div');
+  const l = el('span'); l.text('Wallet balance'); box.add(l);
+  const v = el('span'); v.text('UGX 128,500'); box.add(v);
+  ck(i18n.i18nBlockOk(box) === false,
+     'nor a box with no text of its own -- that is layout, not a sentence');
+}
+
 console.log('\n— what it will and will not rewrite —');
 ({ el, i18n } = buildI18n());
 const body = el('div');
@@ -562,26 +640,26 @@ i18n.setBody(body);
 i18n.setLang('sw');
 i18n.translateTree(body);
 
-ck(head.children[0].nodeValue === 'Timu', 'a heading that matches a row is translated');
-ck(amount.children[0].nodeValue === 'UGX 45,000.00', 'an amount is left exactly alone');
-ck(name.children[0].nodeValue === 'Home Cell Battery',
+ck(head.childNodes[0].nodeValue === 'Timu', 'a heading that matches a row is translated');
+ck(amount.childNodes[0].nodeValue === 'UGX 45,000.00', 'an amount is left exactly alone');
+ck(name.childNodes[0].nodeValue === 'Home Cell Battery',
   'a product name is left alone even though it starts with a word that IS in the table -- only a whole node match is replaced, never a substring');
-ck(mixed.children[0].nodeValue === 'Tap Withdraw to cash out',
+ck(mixed.childNodes[0].nodeValue === 'Tap Withdraw to cash out',
   'and a sentence merely containing a translated word is left alone for the same reason');
 ck(field.attrs.placeholder === 'Weka namba ya simu', 'a placeholder is translated');
 ck(field.attrs['aria-label'] === 'Weka namba ya simu', 'and so is an aria-label, so a screen reader agrees with the screen');
-ck(guarded.children[0].nodeValue === 'Team', 'anything inside [data-no-i18n] is left alone');
-ck(script.children[0].nodeValue === 'Team', 'and the contents of a <script> are never touched');
+ck(guarded.childNodes[0].nodeValue === 'Team', 'anything inside [data-no-i18n] is left alone');
+ck(script.childNodes[0].nodeValue === 'Team', 'and the contents of a <script> are never touched');
 
 console.log('\n— switching, twice, and back —');
 i18n.setLang('fr');
 i18n.translateTree(body);
-ck(head.children[0].nodeValue === 'Équipe',
+ck(head.childNodes[0].nodeValue === 'Équipe',
   'Swahili -> French reads the stored English, not the Swahili already on screen');
 ck(field.attrs.placeholder === 'Entrez le numéro de téléphone', 'the attribute follows it');
 i18n.setLang('en');
 i18n.translateTree(body);
-ck(head.children[0].nodeValue === 'Team', 'and going back to English restores the original word for word');
+ck(head.childNodes[0].nodeValue === 'Team', 'and going back to English restores the original word for word');
 ck(field.attrs.placeholder === 'Enter phone number', 'attributes included');
 
 // Whitespace around a node's text is part of the rendered markup's layout,
@@ -595,7 +673,7 @@ padded.add(padText);
 i18n.setBody(padded);
 i18n.setLang('sw');
 i18n.translateTree(padded);
-ck(padText.children[0].nodeValue === '\n      Weka Pesa\n    ',
+ck(padText.childNodes[0].nodeValue === '\n      Weka Pesa\n    ',
   'the surrounding whitespace of a text node survives translation');
 
 console.log('\n— which language a device opens in —');

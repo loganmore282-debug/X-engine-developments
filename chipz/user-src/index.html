@@ -2329,6 +2329,50 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   window.__paintBrandMarks();
   document.addEventListener('DOMContentLoaded', window.__paintBrandMarks);
 })();
+
+/* THE LOADING WORD, PAINTED BEFORE THE CORE INFLATES.
+ *
+ * Owner: "still more words still in English ie loader 'Loading...'".
+ *
+ * The word is built here from a STRING rather than shipped as letters,
+ * because the wave needs one <i> per character (each carries its own
+ * animation-delay) and a per-letter node can never be matched by the
+ * translator -- it only ever replaces a whole text node, and a node holding
+ * "L" matches nothing. The English letters stay in the markup above as the
+ * first-launch fallback, so a device that has never stored a word still shows
+ * something and still waves.
+ *
+ * The word itself is whatever the module last resolved through the real
+ * string table; nothing here holds a table of its own, which is what keeps
+ * this from drifting away from LANG_ROWS.
+ *
+ * Six dots, per the owner's own count, appended to whatever the word is.
+ * Built with createElement/createTextNode: the value has been through
+ * localStorage, and building nodes is injection-proof by construction rather
+ * than by remembering to escape.
+ */
+(function(){
+  var LKEY = 'chipz_loading_word';
+  var STEP_MS = 95;            // the wave's step, matching the shipped markup
+  window.__paintLoadingWord = function(word){
+    var w = String(word == null ? '' : word).trim();
+    var box = document.querySelector('#loadingScreen .ls-text');
+    if (!box || !w) return;
+    box.setAttribute('aria-label', w);
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var chars = (w + '......').split('');
+    for (var i = 0; i < chars.length; i++) {
+      var it = document.createElement('i');
+      it.style.animationDelay = (i * STEP_MS) + 'ms';
+      if (chars[i] === ' ') { it.className = 'sp'; it.appendChild(document.createTextNode(' ')); }
+      else it.appendChild(document.createTextNode(chars[i]));
+      box.appendChild(it);
+    }
+  };
+  var stored = '';
+  try { stored = (localStorage.getItem(LKEY) || '').trim(); } catch (e) {}
+  if (stored) window.__paintLoadingWord(stored);
+})();
 </script>
 
 

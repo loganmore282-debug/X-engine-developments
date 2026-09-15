@@ -38,6 +38,19 @@ ROOT = os.path.join(HERE, 'admin')
 # Two harnesses on one port die with "Address already in use" in whichever
 # starts second, which reads like a real failure and is not.
 PORT = 8901
+LANG_CODES_ARGV = ('en', 'lg', 'sw', 'fr', 'rw', 'nyn')
+# THE LANGUAGE IS argv[2]; argv[1] IS THE OUTPUT DIRECTORY.
+#
+# `find-untranslated.py fr` silently set the OUTPUT PATH to "fr" and swept
+# SWAHILI, then wrote the Swahili report -- so four "clean in fr/lg/rw/nyn"
+# runs were one language measured four times, and the mismatched filename in
+# the output was waved away as a display quirk. Refusing the ambiguous form
+# is the whole fix: a harness that quietly measures something other than what
+# it was asked to is worse than one that stops.
+if len(sys.argv) > 1 and sys.argv[1].lower() in LANG_CODES_ARGV:
+    sys.exit(f'usage: {sys.argv[0]} <out-dir> <lang>   '
+             f'(you passed "{sys.argv[1]}" as the OUTPUT DIRECTORY; '
+             f'did you mean: {sys.argv[0]} /tmp/out {sys.argv[1]})')
 LANG = (sys.argv[2] if len(sys.argv) > 2 else 'sw').lower()
 REPORT = os.path.join(HERE, f'admin-untranslated-{LANG}.json')
 
@@ -185,6 +198,11 @@ def is_data(s):
     return any(r.match(s) for r in DATA_RE)
 
 
+# Filled from the page once the panel is up; 160 is only the default the
+# member app uses, and is never assumed to be what this host runs.
+MAX_LEN = [160]
+
+
 def classify(s):
     """CLEAN, DELIBERATE, DATA or a finding. A finding is a string the table
     cannot ACCOUNT FOR -- not a string that looks foreign, which is the test
@@ -211,9 +229,15 @@ def classify(s):
             if cell and cell.strip():
                 return 'english-pattern-not-applied'
             return 'missing-pattern'
-    if len(n) > 160:
+    if len(n) > MAX_LEN[0]:
         # The engine skips anything longer than its own cap, so a row for this
         # could never apply. Reported separately rather than as a missing row.
+        #
+        # THE CAP IS READ OFF THE LIVE PAGE (window.__i18nMaxLen), not written
+        # down here. The admin panel raises it, and a hardcoded 160 would have
+        # gone on reporting 43 paragraphs as impossible long after they had
+        # become translatable -- a second source of truth about the engine's
+        # own limit.
         return 'too-long'
     return 'missing'
 
@@ -262,13 +286,31 @@ SWEEP = """() => {
     while (n && n.parentElement && INLINE[n.tagName]) n = n.parentElement;
     return !!(n && n.childNodes && n.childNodes.length > 1);
   };
-  const push = (txt, el, kind) => {
+  // A sentence that inline markup broke up is now translated AS ONE BLOCK by
+  // the engine, so what the sweep must report is the WHOLE sentence -- the key
+  // a row actually needs -- not its three pieces. The rule for "is this one
+  // block?" is the ENGINE'S OWN, reached through window.__i18nBlockOk: a copy
+  // of it here would be a second source of truth, and the row it told you to
+  // write would be keyed on a sentence the engine never forms.
+  // Its own list rather than borrowing the one the fragment detector uses:
+  // that one does not exist in every copy of this sweep, and a helper that
+  // depends on a declaration somewhere above it fails at runtime in the file
+  // that lacks it -- which is exactly what happened here first.
+  const INLINE_OWN = { B:1, I:1, EM:1, STRONG:1, CODE:1, A:1, SPAN:1, U:1, SMALL:1, MARK:1 };
+  const blockOwner = el => {
+    let n = el;
+    while (n && n.parentElement && INLINE_OWN[n.tagName]) n = n.parentElement;
+    return n;
+  };
+  const okBlock = window.__i18nBlockOk || null;
+  const maxLen = window.__i18nMaxLen ? window.__i18nMaxLen() : 160;
+  const push = (txt, el, kind, blockKey) => {
     const t = String(txt || '').replace(/\\s+/g, ' ').trim();
     if (!t) return;
     const key = kind + '\\u0000' + t;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ text: t, at: where(el), kind, mixed: kind === 'text' && mixed(el) });
+    out.push({ text: t, at: where(el), kind, mixed: kind === 'text' && mixed(el), blockKey: blockKey || '' });
   };
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -278,7 +320,20 @@ SWEEP = """() => {
     if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA') continue;
     if (p.closest('[data-no-i18n]')) continue;
     if (!vis(p)) continue;
-    push(n.nodeValue, p, 'text');
+    // The PIECE is still what gets classified: a sentence whose pieces are
+    // all translated already is working, and reporting it again just because
+    // the engine could now also do it whole would be noise. What the block key
+    // buys is that when a piece IS missing, the report names the whole
+    // sentence -- which is the key a row actually needs.
+    let blockKey = '';
+    const owner = blockOwner(p);
+    if (okBlock && owner && okBlock(owner)) {
+      const whole = String(owner.textContent || '').replace(/\s+/g, ' ').trim();
+      // Over the cap the engine will not look at it either, so asking for a
+      // row that could never apply would be worse than saying nothing.
+      if (whole && whole.length <= maxLen && whole !== String(n.nodeValue || '').trim()) blockKey = whole;
+    }
+    push(n.nodeValue, p, 'text', blockKey);
   }
   for (const el of document.querySelectorAll('[placeholder],[aria-label],[title]')) {
     if (el.closest('[data-no-i18n]')) continue;
@@ -309,7 +364,8 @@ async def collect(page, label, found):
             f'{label}: the screen rendered NO text -- nothing was measured here')
     for r in rows:
         found.setdefault(r['text'], {'at': r['at'], 'kind': r['kind'],
-                                     'mixed': r.get('mixed', False), 'screens': set()})
+                                     'mixed': r.get('mixed', False),
+                                     'blockKey': r.get('blockKey', ''), 'screens': set()})
         # A string that renders whole ANYWHERE is translatable, even if some
         # other screen splices it into a sentence -- so one clean rendering
         # clears the fragment flag rather than the other way round.
@@ -347,6 +403,13 @@ async def main():
 
         await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
         await page.wait_for_timeout(600)
+        # The engine's own cap, off the live page. Anything else here would be
+        # a second opinion about a limit only the engine gets to set.
+        try:
+            MAX_LEN[0] = int(await page.evaluate(
+                "() => window.__i18nMaxLen ? window.__i18nMaxLen() : 160"))
+        except Exception as e:
+            notes.append(f'could not read the engine cap: {e}')
         await collect(page, 'sign-in', found)
 
         await page.fill('#keyInput', 'x')
@@ -399,13 +462,24 @@ async def main():
     buckets = {}
     for text, info in found.items():
         why = classify(text)
-        # A piece of a sentence that inline markup broke up. Reported, not a
-        # finding, for the reason given beside `mixed` in SWEEP above.
+        # A piece of a sentence that inline markup broke up. The engine
+        # translates such a block AS ONE SENTENCE now, so this is a real
+        # finding again -- reported against the WHOLE sentence, which is the
+        # key a row has to be written against. Only a piece with no block key
+        # (its owner does not qualify: it holds a button, an input, an element
+        # with an id) stays a fragment, because for those nothing can be done
+        # without changing the markup.
         if why == 'missing' and info.get('mixed'):
-            why = 'fragment'
-        buckets.setdefault(why, []).append(
-            {'text': text, 'at': info['at'], 'kind': info['kind'],
-             'screens': sorted(info['screens'])})
+            bk = norm(info.get('blockKey') or '')
+            if bk and len(bk) <= MAX_LEN[0] and classify(bk) == 'missing':
+                text = bk
+            else:
+                why = 'fragment'
+        row = {'text': text, 'at': info['at'], 'kind': info['kind'],
+               'screens': sorted(info['screens'])}
+        bucket = buckets.setdefault(why, [])
+        if not any(r['text'] == text for r in bucket):
+            bucket.append(row)
 
     # 'too-long' is reported but is NOT a finding, and the distinction is a
     # real one rather than a convenience: the engine skips any text node over
@@ -421,6 +495,13 @@ async def main():
 
     json.dump({'lang': LANG, 'findings': findings, 'blind': blind,
                'counts': {k: len(v) for k, v in buckets.items()},
+               # The two buckets that stay English by construction are written
+               # out in FULL, not just counted. They are the panel's own
+               # instructions and settings copy -- the owner asked for those
+               # too ("whether instructions, settings, sentences"), and a bare
+               # count gives nobody anything to work from.
+               'fragment': buckets.get('fragment', []),
+               'tooLong': buckets.get('too-long', []),
                'pageErrors': errs, 'notes': notes},
               open(REPORT, 'w', encoding='utf8'), indent=1, ensure_ascii=False)
 

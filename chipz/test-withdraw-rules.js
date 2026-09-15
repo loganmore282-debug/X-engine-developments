@@ -66,11 +66,23 @@ ck(winApi.hhmmToMin('09:05') === 545, '09:05 is 545');
 for (const junk of ['', 'abc', '25:00', '12:60', '1200', null, undefined, '12', '9:00']) {
   ck(winApi.hhmmToMin(junk) === null, `${JSON.stringify(junk)} is refused, not coerced to midnight`);
 }
-console.log('\n— and labelled the way he writes them —');
-ck(winApi.hhmmLabel('18:00') === '6:00 PM', `18:00 reads "${winApi.hhmmLabel('18:00')}"`);
-ck(winApi.hhmmLabel('17:00') === '5:00 PM', `17:00 reads "${winApi.hhmmLabel('17:00')}"`);
-ck(winApi.hhmmLabel('00:30') === '12:30 AM', `00:30 reads "${winApi.hhmmLabel('00:30')}"`);
-ck(winApi.hhmmLabel('12:00') === '12:00 PM', `12:00 reads "${winApi.hhmmLabel('12:00')}"`);
+// REWRITTEN, and the previous version was defending the bug. It required
+// 12-hour AM/PM -- "6:00 PM" -- which is what the owner was asking about:
+// "withdrawal time has problems, is it in 24hrs or". Three things were wrong
+// with it: this app is 24-hour everywhere else (the ledger, the plan
+// countdown, the join stamp), the owner TYPES 18:00 into the panel and was
+// then shown "6:00 PM", and "AM"/"PM" are English words spliced into a
+// sentence the translator had already translated. The old assertion was
+// written from his casual phrase "6pm to 5pm", which was a description, not
+// a spec. This is the fourth harness in this project found pinning the shape
+// of a defect rather than the property behind it.
+console.log('\n— labelled 24-hour, the one clock this app uses —');
+ck(winApi.hhmmLabel('18:00') === '18:00', `18:00 reads "${winApi.hhmmLabel('18:00')}"`);
+ck(winApi.hhmmLabel('17:00') === '17:00', `17:00 reads "${winApi.hhmmLabel('17:00')}"`);
+ck(winApi.hhmmLabel('00:30') === '00:30', `00:30 reads "${winApi.hhmmLabel('00:30')}"`);
+ck(winApi.hhmmLabel('12:00') === '12:00', `12:00 reads "${winApi.hhmmLabel('12:00')}"`);
+ck(!/AM|PM/i.test(winApi.hhmmLabel('18:00') + winApi.hhmmLabel('00:30')),
+   'and carries no AM/PM -- two English words no translation can reach');
 
 console.log('\n— a normal window, 09:00 to 17:00 —');
 const normal = { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' };
@@ -87,8 +99,8 @@ for (const [h, want] of [[18, true], [21, true], [0, true], [3, true], [12, true
   ck(st.open === want, `${lbl} EAT -> ${st.open ? 'open' : 'shut'} (wanted ${want ? 'open' : 'shut'})`);
 }
 const wl = winApi.withdrawWindowState(wrap, eatAt(20));
-ck(wl.from === '6:00 PM' && wl.to === '5:00 PM',
-   `and the member is told "${wl.from} to ${wl.to}"`);
+ck(wl.from === '18:00' && wl.to === '17:00',
+   `and the member is told "${wl.from} to ${wl.to}" -- the same figures the owner typed`);
 
 console.log('\n— off, or set to nonsense, means always open —');
 ck(winApi.withdrawWindowState({ withdrawWindowEnabled: false, withdrawOpenFrom: '18:00', withdrawOpenTo: '17:00' }, eatAt(17)).open,
@@ -233,8 +245,8 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   r = await run(st, REQ);
   ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED',
      `21:00 EAT is refused (${r.code} ${r.replied && r.replied.code})`);
-  ck(/9:00 AM to 5:00 PM/.test((r.replied || {}).message || ''),
-     `  naming the hours: ${(r.replied || {}).message}`);
+  ck(/09:00 to 17:00/.test((r.replied || {}).message || ''),
+     `  naming the hours, 24-hour: ${(r.replied || {}).message}`);
   ck(st.user.walletBalance === 100000, '  and nothing is debited');
 
   st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });

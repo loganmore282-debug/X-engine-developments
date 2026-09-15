@@ -105,6 +105,9 @@ ck(adminPats.length > 5, `and its own templates (${adminPats.length})`);
 
 const width = langs.length;
 ck(width === 6, `six languages, so six cells per row (${width})`);
+// The panel's own cap, read from its source -- the loop below needs it before
+// the assertions further down compute it again for their messages.
+const CAP_FOR_ROWS = Number((/var I18N_MAX_LEN_OVERRIDE = (\d+);/.exec(adminSrc) || [])[1]) || 160;
 let badWidth = 0, blank = 0, repeats = 0, tooLong = 0;
 for (const r of adminRows.concat(adminPats)) {
   if (r.length !== width) badWidth++;
@@ -112,19 +115,29 @@ for (const r of adminRows.concat(adminPats)) {
     if (typeof r[i] !== 'string' || !r[i].trim()) blank++;
     if (i && r[i].trim() === r[0].trim() && r[i] !== '=') repeats++;
   }
-  if (r[0].length > 160) tooLong++;
+  if (r[0].length > CAP_FOR_ROWS) tooLong++;
 }
 ck(badWidth === 0, 'every row has exactly one cell per language');
 ck(blank === 0, 'no cell is blank in any language');
 ck(repeats === 0, "no cell merely repeats its English -- '=' says that on purpose");
-// i18nTextNode() skips any text node longer than this, so a row over it could
-// never apply however carefully it were written. Read out of the engine rather
-// than restated, so this cannot go on enforcing a number the engine has moved
-// past -- a constant copied into a test is a second source of truth nobody
-// updates.
-const cap = Number(/key\.length > (\d+)/.exec(engine)[1]);
-ck(cap === 160, `the engine's text-node cap is the 160 this test assumes (${cap})`);
-ck(tooLong === 0, `no English key is over the ${cap}-character cap`);
+// The engine skips any text node longer than this, so a row over it could
+// never apply however carefully it were written. Read out of the SOURCES
+// rather than restated -- a constant copied into a test is a second source of
+// truth nobody updates.
+//
+// THE PANEL RAISES IT. The cap defends the member app against being dragged
+// through a wall of member-written content; the panel has none on screen, and
+// its long strings are the operator documentation the owner asked to have
+// translated. So the number this file enforces is the panel's own override,
+// and the engine's default is asserted separately as the floor it cannot
+// silently fall below.
+const capDefault = Number((/I18N_MAX_LEN_OVERRIDE : (\d+);/.exec(engine) || [])[1]);
+const capPanel = Number((/var I18N_MAX_LEN_OVERRIDE = (\d+);/.exec(adminSrc) || [])[1]);
+ck(capDefault === 160, `the engine's own default cap is 160 (${capDefault})`);
+ck(Number.isFinite(capPanel) && capPanel >= capDefault,
+   `the panel raises it rather than lowering it (${capPanel})`);
+const cap = capPanel;
+ck(tooLong === 0, `no English key is over the panel's ${cap}-character cap`);
 
 const appKeys = new Set(appRows.map(r => r[0].trim()));
 const dupShared = adminRows.filter(r => appKeys.has(r[0].trim())).map(r => r[0]);

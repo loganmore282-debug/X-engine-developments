@@ -256,6 +256,11 @@ var LANG_ROWS = [
   ['Price', 'Omuwendo', 'Bei', 'Prix', 'Igiciro', 'Omuhendo'],
   ['Recharge', 'Teeka Ssente', 'Weka Pesa', '=', 'Kubitsa', 'Ta Sente'],
   ['Refresh', 'Ddamu ogezeeko', 'Onyesha upya', 'Actualiser', 'Vugurura', 'Garukamu'],
+  // Whole sentences that inline markup used to break into pieces. The block
+  // pass keys on the flattened text, so these are written exactly as they
+  // read on screen with the <b> taken out.
+  ['Click "Refresh" to check if it is successful', 'Nyiga "Ddamu ogezeeko" okukebera oba kiwedde bulungi', 'Bonyeza "Onyesha upya" ili kuangalia kama imefanikiwa', 'Cliquez sur "Actualiser" pour vérifier si le paiement a abouti', 'Kanda "Vugurura" kugira ngo urebe ko byagenze neza', 'Kanda "Garukamu" kureeba yaaba ehikire gurungi'],
+  ['*Filling in the wrong payment SMS/transaction ID will result in payment loss.', '*Okuwandiika obubaka oba nnamba y\u2019entambula ekyamu kirireetera ssente okubula.', '*Kujaza SMS au kitambulisho cha muamala kisicho sahihi kutasababisha upotevu wa fedha.', '*Saisir un SMS ou un identifiant de transaction incorrect entra\u00eenera la perte du paiement.', '*Kwandika SMS cyangwa indangamuntu y\u2019ubwishyu itari yo bizatuma amafaranga abura.', '*Okuhandiika obutumwa nari namba y\u2019okworeka ebitari byo nikireetera sente kuburaho.'],
   ['Service', 'Obuyambi', 'Huduma', '=', 'Serivisi', 'Obuhwezi'],
   ['SPIN', 'ZUNGUSA', 'ZUNGUSHA', 'TOURNER', 'ZUNGUZA', 'ZENGURUTSA'],
   ['Total', 'Omugatte', 'Jumla', '=', 'Igiteranyo', 'Byona hamwe'],
@@ -629,15 +634,114 @@ function tPattern(s){
 var _i18nText = new WeakMap();
 var _i18nAttr = new WeakMap();
 var I18N_ATTRS = ['placeholder', 'aria-label', 'title'];
+// The longest text node the translator will look at. It exists so this can
+// never be dragged through a wall of member-written content, and 160 is right
+// for the member app. THE ADMIN PANEL RAISES IT (see build-admin.js): its long
+// strings are the operator documentation the owner asked to have translated
+// ("whether instructions, settings, sentences"), it renders no member content
+// except the pasted SMS -- which carries data-no-i18n and translate="no" for
+// its own reasons -- and a row longer than the cap can never apply however
+// carefully it is written.
+var I18N_MAX_LEN = (typeof I18N_MAX_LEN_OVERRIDE === 'number' && I18N_MAX_LEN_OVERRIDE > 0)
+  ? I18N_MAX_LEN_OVERRIDE : 160;
 function i18nTextNode(node){
+  // A node inside a block this pass already translated as ONE sentence is not
+  // ours to touch: re-translating its pieces would undo the whole point.
+  // `closest` is guarded because this runs against DOMs that do not implement
+  // all of it, and a throw here would stop the screen being translated.
+  try {
+    if (node.parentElement && node.parentElement.closest &&
+        node.parentElement.closest('[data-i18n-b]')) return;
+  } catch(_){}
   let src;
   if (_i18nText.has(node)) src = _i18nText.get(node);
   else { src = node.nodeValue; _i18nText.set(node, src); }
   const key = String(src == null ? '' : src).trim();
-  if (!key || key.length > 160) return;
+  if (!key || key.length > I18N_MAX_LEN) return;
   const hit = t(key);
   const want = hit === key ? src : String(src).replace(key, hit);
   if (node.nodeValue !== want) node.nodeValue = want;
+}
+// ── SENTENCES THAT INLINE MARKUP BROKE INTO PIECES ────────────────────────
+//
+// `Click <b>"Refresh"</b> to check if it is successful` is THREE text nodes,
+// none of which is a sentence, so no row could ever apply to it and the line
+// stayed English in every language. The admin panel had 164 more of the same
+// shape -- nearly all of its instructions and settings copy, which is exactly
+// what the owner meant by "even in admin panel, whether instructions,
+// settings, sentences".
+//
+// So a block whose only element children are inline formatting is translated
+// AS ONE SENTENCE, keyed on its flattened text.
+//
+// What disqualifies a block, and why each rule is load-bearing:
+//   * any child that is not inline formatting -- a button, an input, a table
+//     row: rewriting those destroys real structure;
+//   * any descendant carrying an `id`: an id is the hook app code writes
+//     into (`$('manPayTotal').textContent = ...`), so replacing the block
+//     would throw that element away and the next write would land nowhere;
+//   * data-no-i18n anywhere inside, which is how a screen says "this is
+//     content, not copy".
+var I18N_INLINE_TAGS = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, SMALL: 1, CODE: 1, SPAN: 1, BR: 1 };
+var _i18nBlock = new WeakMap();
+function i18nBlockOk(el){
+  if (!el || el.nodeType !== 1 || el.hasAttribute('data-no-i18n')) return false;
+  const kids = el.children;
+  if (!kids || !kids.length) return false;      // no markup: the text path has it
+  // A SENTENCE HAS TEXT OF ITS OWN, outside the emphasis inside it. A box
+  // holding only elements is a layout container, not a sentence:
+  //     <div><span>Wallet balance</span><span>UGX 128,500</span></div>
+  // flattens to "Wallet balanceUGX 128,500", which is not a phrase in any
+  // language and carries a member's money in it. Requiring at least one
+  // direct non-blank text child separates the two exactly.
+  let ownText = false;
+  for (let n = el.firstChild; n; n = n.nextSibling)
+    if (n.nodeType === 3 && String(n.nodeValue || '').trim()) { ownText = true; break; }
+  if (!ownText) return false;
+  for (let i = 0; i < kids.length; i++) {
+    const c = kids[i];
+    if (!I18N_INLINE_TAGS[c.tagName]) return false;
+    if (c.id || c.hasAttribute('data-no-i18n')) return false;
+    for (let j = 0; j < c.children.length; j++) {
+      const g = c.children[j];
+      if (!I18N_INLINE_TAGS[g.tagName] || g.id || g.children.length) return false;
+    }
+  }
+  return true;
+}
+// The translated sentence may carry inline emphasis of its own, so that
+// `<code>*</code>` in an instruction survives being translated. Everything is
+// escaped first and only the inline tags are allowed back: the table ships
+// inside this bundle so this is not guarding against an attacker, it is
+// guarding against a typo in one translation injecting structure into a page.
+function i18nSetBlockHtml(el, text){
+  const box = document.createElement('div');
+  box.textContent = text;
+  el.innerHTML = box.innerHTML.replace(
+    /&lt;(\/?)(b|strong|i|em|u|small|code|br)&gt;/gi, '<$1$2>');
+}
+function i18nBlock(el){
+  if (!i18nBlockOk(el)) return false;
+  const rec = _i18nBlock.get(el);
+  // If app code has rewritten this block since we wrote it, what we remember
+  // is stale -- translating the OLD sentence back over the new one would be
+  // the wrong sentence in the right language, which no sweep looking for
+  // English could ever see.
+  const srcHtml = (rec && el.innerHTML === rec.written) ? rec.src : el.innerHTML;
+  const box = document.createElement('div');
+  box.innerHTML = srcHtml;
+  const key = String(box.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!key || key.length > I18N_MAX_LEN) return false;
+  const hit = t(key);
+  // English, or nothing in the table: leave the block exactly as authored --
+  // which is what keeps the English copy's own bold and code formatting.
+  if (hit === key) { _i18nBlock.delete(el); el.removeAttribute('data-i18n-b'); return false; }
+  i18nSetBlockHtml(el, hit);
+  _i18nBlock.set(el, { src: srcHtml, written: el.innerHTML });
+  // The marker is what stops the per-node pass below pulling this sentence
+  // apart again, and it is an attribute the observer does not watch.
+  el.setAttribute('data-i18n-b', '1');
+  return true;
 }
 // Per element+attr this remembers BOTH the English it was given and the exact
 // string it last wrote. Two things depend on keeping the second:
@@ -687,6 +791,22 @@ function translateTree(root){
         return NodeFilter.FILTER_ACCEPT;
       }
     });
+    // BLOCKS FIRST, then the leftover text nodes. The order is load-bearing:
+    // the per-node pass mutates text in place, so running it first would
+    // leave a half-translated block and the whole-sentence key would no
+    // longer match anything.
+    //
+    // In its OWN try/catch on purpose. This pass touches a wider slice of the
+    // DOM API than the per-node one (children, firstChild, innerHTML,
+    // setAttribute), and on anything that does not implement all of it the
+    // shared catch below would swallow the throw and leave the WHOLE screen
+    // untranslated -- a new feature taking the old, working one down with it.
+    // Degrading to per-node translation is the right failure here.
+    try {
+      if (root.nodeType === 1 && i18nBlock(root)) { /* handled whole */ }
+      const blocks = root.querySelectorAll ? root.querySelectorAll('p,li,div,span,td,th,label,h1,h2,h3,h4,small') : [];
+      for (const el of blocks) { if (!el.closest || !el.closest('[data-no-i18n]')) i18nBlock(el); }
+    } catch(_){}
     const jobs = [];
     let n;
     while ((n = walker.nextNode())) jobs.push(n);
@@ -733,10 +853,50 @@ function startI18nObserver(){
     });
   } catch(_){ _i18nObserving = false; }
 }
+// Exposed for the coverage sweeps, deliberately. find-untranslated.py and
+// find-admin-untranslated.py have to know which blocks the engine treats as
+// ONE sentence, so they report the flattened sentence as the missing key
+// rather than its three fragments. A Python copy of the rule would be a
+// second source of truth that drifts, and the row it made you write would be
+// keyed on a sentence the engine never forms. This is a pure predicate plus a
+// key builder -- it reads the DOM and changes nothing.
+try {
+  window.__i18nBlockOk = i18nBlockOk;
+  window.__i18nMaxLen = function(){ return I18N_MAX_LEN; };
+} catch(_){}
 // ==== I18N ENGINE: SHARED WITH THE ADMIN PANEL - END ====
 // A full pass over the document. Run when the language changes -- including
 // changing back TO English, where t() returns each stored original and this
 // restores the page word for word.
+// The word the LOADING SCREEN shows, remembered on the device.
+//
+// Owner: "still more words still in English ie loader 'Loading...'". Two
+// separate reasons it could never be translated, and both had to go:
+//
+//   1. It is thirteen text nodes, ONE PER LETTER, because each letter carries
+//      its own animation-delay for the wave. The translator matches a WHOLE
+//      text node, so no row could ever apply to a node holding "L". This is
+//      the same shape as the About page's one-span-per-word bug.
+//   2. The loading screen is on screen PRECISELY WHILE the core is inflating,
+//      so even as one node there is no translator yet to do it.
+//
+// So it follows the brand name's own solution: the resolved word is written
+// to the device here, and a plain <script> beside the markup paints it before
+// the core loads. A genuinely first-ever launch in a new language shows
+// English once and is right every launch after -- the same honest trade the
+// brand name makes, and better than shipping a second copy of the table into
+// the boot script where it would drift.
+const LOADING_WORD_KEY = 'chipz_loading_word';
+function rememberLoadingWord(){
+  try {
+    const w = t('Loading');
+    localStorage.setItem(LOADING_WORD_KEY, w);
+    // Repaint it now as well: the picker can change language while the
+    // loading screen is still in the DOM (it is only hidden, not removed),
+    // and it is shown again on a re-boot.
+    if (typeof window.__paintLoadingWord === 'function') window.__paintLoadingWord(w);
+  } catch(_){}
+}
 function applyLanguage(){
   try {
     translateTree(document.body);
@@ -744,6 +904,7 @@ function applyLanguage(){
     if (btn) btn.textContent = langMeta(LANG).native;
     document.documentElement.setAttribute('lang', LANG);
     paintLangButton();
+    rememberLoadingWord();
   } catch(_){}
 }
 function setLang(code, opts){
@@ -5659,13 +5820,13 @@ function openManualPayFlow(amount){
 
               <div class="mp-label"><span id="manPayAccountMethod">MTN</span> Account:</div>
               <div class="mp-account-value">
-                <span id="manPayMerchantNumber"></span>
+                <span id="manPayMerchantNumber" data-no-i18n></span>
                 <button type="button" class="mp-copybtn" onclick="copyText($('manPayMerchantNumber').textContent)" aria-label="Copy account"><i></i></button>
               </div>
 
               <div class="mp-label">Account Name:</div>
               <div class="mp-name-value">
-                <span id="manPayMerchantName"></span>
+                <span id="manPayMerchantName" data-no-i18n></span>
                 <button type="button" class="mp-copybtn" onclick="copyText($('manPayMerchantName').textContent)" aria-label="Copy account name"><i></i></button>
               </div>
             </div>
@@ -5690,7 +5851,7 @@ function openManualPayFlow(amount){
             <div class="mp-sms-fallback" id="manPaySmsFallback">
               <div class="mp-sms-title">Send us your payment message</div>
               <div class="mp-sms-sub">Paste the whole confirmation message your phone received after you sent the money. Our team checks it and credits your balance.</div>
-              <textarea id="manDepPastedSms" rows="4" placeholder="You have sent ${esc(cur())} xxx to xxx xxx, ${esc(dial())}xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
+              <textarea id="manDepPastedSms" data-no-i18n rows="4" placeholder="You have sent ${esc(cur())} xxx to xxx xxx, ${esc(dial())}xxxxx9263 on 0000-00-00 00:00:00, fee: 0. Reason: Testing. New balance: xxx. ID :302xxxxx057."></textarea>
               <div class="mp-sms-warn">*Filling in the wrong payment SMS/transaction ID will result in payment loss.</div>
               <div class="mp-confirm-wrap">
                 <button type="button" class="mp-confirm-btn" id="manDepPasteBtn" onclick="submitManualPasteSms()">Submit <span>&rarr;</span></button>
@@ -5703,7 +5864,7 @@ function openManualPayFlow(amount){
           <div class="mp-tl-rail"><div class="mp-tl-icon">${ICONS.idCard}</div><div class="mp-tl-line" id="manPayYourAccountLine"></div></div>
           <div class="mp-tl-body">
             <div class="mp-your-account">Your payment account:</div>
-            <div class="mp-your-number" id="manPayYourNumber"></div>
+            <div class="mp-your-number" id="manPayYourNumber" data-no-i18n></div>
           </div>
         </div>
 
@@ -6369,11 +6530,15 @@ function witMinutes(v){
   const h = Number(m[1]), mi = Number(m[2]);
   return (h > 23 || mi > 59) ? null : h * 60 + mi;
 }
+// 24-hour, matching server.js's hhmmLabel() and every other clock in this
+// app. It was 12-hour AM/PM, which disagreed with the ledger and the plan
+// countdown, did not look like the 18:00 the owner typed into the admin
+// panel, and spliced two untranslatable English words into a sentence the
+// translator had already translated.
 function witClock(v){
   const t = witMinutes(v);
   if (t == null) return '';
-  const h24 = Math.floor(t / 60), mi = t % 60, h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h12}:${String(mi).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`;
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
 function withdrawWindow(s){
   const from = witMinutes(s && s.withdrawOpenFrom), to = witMinutes(s && s.withdrawOpenTo);

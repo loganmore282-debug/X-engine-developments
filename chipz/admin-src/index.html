@@ -2167,7 +2167,11 @@ function drawDeps(){
       if (isManual && d.status==='review') actions += ` <button class="btn danger sm" data-mreject="${esc(d.id)}">Reject</button>`;
     }
     const methodLabel = isManual
-      ? `Manual<br><span class="muted" style="font-size:11px">${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
+      // data-no-i18n: the network and the collection number are DATA, and the
+      // cell flattens to "Manualmtn · 0770000001", which is not a sentence in
+      // any language. Marking it says so once instead of leaving every sweep
+      // to rediscover it.
+      ? `Manual<br><span class="muted" style="font-size:11px" data-no-i18n>${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
       // provider is only set on deposits created since Round 102 -- an
       // older row with none falls back to the same plain "Automatic" label
       // it always had (it can only ever have gone through MarzPay).
@@ -3312,7 +3316,14 @@ async function renderSettings(){
         <div><label>Cash-out opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
         <div><label>Cash-out closes at</label><input id="sWitTo" type="time" value="${esc(v('withdrawOpenTo','17:00'))}"></div>
       </div>
-      <p class="muted" style="margin:6px 0 0">East Africa Time. The window may run past midnight &mdash; set <b>18:00</b> to <b>17:00</b> and cash-out is open all day except between 5pm and 6pm. Members always see exactly these hours, and the server refuses a request outside them, not just the app.</p>
+      <!-- It said "East Africa Time" and gave its example in 12-hour ("between
+           5pm and 6pm"), and both were wrong once countries existed. The window
+           is judged in THE PICKED COUNTRY'S OWN local time -- withdrawWindowState()
+           reads currentRegion().utcOffsetMin -- and every clock in this project
+           is 24-hour. Owner: "withdrawal time has problems, is it in 24hrs or,
+           please make sure every withdrawal time is reading very well on each
+           country". -->
+      <p class="muted" style="margin:6px 0 0">Times are 24-hour, in the selected country's own local time. The window may run past midnight &mdash; set <b>18:00</b> to <b>17:00</b> and cash-out is open all day except between 17:00 and 18:00. Members always see exactly these hours, and the server refuses a request outside them, not just the app.</p>
       <p class="muted" style="margin:6px 0 0"><b>One cash-out at a time, always.</b> A member with a request still Pending, Sending or Processing cannot start another until it is paid or rejected. That is not a setting.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a referral code to sign up</b> <span class="muted">(every new member must be invited by an existing one)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqReferral" ${s.requireReferralCode!==false?'checked':''} style="width:auto"></label></div>
@@ -4598,6 +4609,16 @@ var LANG_PATTERNS = [];
 LANG_ROWS = LANG_ROWS.concat(ADMIN_LANG_ROWS);
 LANG_PATTERNS = LANG_PATTERNS.concat(ADMIN_LANG_PATTERNS);
 
+// The engine's length cap, raised for THIS host only. It defaults to 160 in
+// the member app so the translator can never be dragged through a wall of
+// member-written content. The admin panel has no such content on screen --
+// the one exception, a member's pasted payment SMS, carries data-no-i18n and
+// translate="no" so it reaches an admin exactly as it was sent -- and its own
+// long strings ARE its instructions and settings copy, which is what the
+// owner asked to have translated. A row longer than the cap can never apply,
+// so without this those 43 paragraphs would stay English however carefully
+// they were written. Declared BEFORE the engine, which reads it at load.
+var I18N_MAX_LEN_OVERRIDE = 700;
 // ==== SHARED I18N ENGINE: REPLACED BY build-admin.js - BEGIN ====
 // ==== SHARED I18N ENGINE: REPLACED BY build-admin.js - END ====
 
