@@ -210,7 +210,10 @@ function build(state, opts = {}) {
     eatDayKey: d => new Date(d).toISOString().slice(0, 10),
     eatNextMidnight: () => 9999999999999,
     MAX_MONEY_AMOUNT: 100000000,
-    MAX_SPINS_PER_PURCHASE: 20,
+    // Read out of server.js so the sandbox exercises the bound that actually
+    // ships. It was a hand-copied 20; when the real cap moved to 200 that copy
+    // would have silently kept clamping this fixture at the old number.
+    MAX_SPINS_PER_PURCHASE: Number((/const MAX_SPINS_PER_PURCHASE = (\d+);/.exec(src) || [])[1]),
   };
   const code = `
     const { db, FieldValue, crypto, console, withLock, verifyAuth, getSettings,

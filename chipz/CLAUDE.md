@@ -4752,3 +4752,70 @@ it. All seven are caught now.
 of `test-product-config.js`. `sanitizeProductInput()` calls that parser for a product's
 daily window, and the new field-naming cases exercise that path — lifted where it used to
 be, they died on an undefined helper instead of failing an assertion.
+
+### Round 164 follow-up — the spin cap was an invented number
+
+> "stop limiting everything bro, they are above 25 even"
+
+`MAX_SPINS_PER_PURCHASE` was **20**, and 20 was a figure I made up. It is **200** now.
+
+**What that number actually bounds is the write loop**, not a product decision:
+`writeTurntableSpinDocs()` writes **one Mongo document per spin**, one `await` at a
+time, so the cost of a grant is linear in it. That is the only reason it is not simply
+removed — a typed `100000` would try to write a hundred thousand money documents. At 200
+the worst case is a couple of seconds of work that happens **after** the purchase has
+already answered (`grantTurntableSpins` is fire-and-forget from `/invest/create`) and
+inside that investment's own lock, so nothing a member waits on gets slower.
+
+**The sequential await is load-bearing** and is now recorded as such in the comment: a
+mid-loop failure leaves the surviving rows as a **contiguous prefix**, which is exactly
+what the resume logic (`start = existingCount`) assumes. Making that loop concurrent to
+speed up a big count would silently reintroduce the Round 158 partial-grant bug — the
+resume would have to fill **missing ordinals** instead of counting rows.
+
+### Four hand-copied 20s, and why none of them will happen again
+Raising one constant broke assertions in three harnesses, because each had **written the
+number down** instead of reading it: `test-product-config.js` declared its own
+`MAX_SPINS_PER_PURCHASE = 20` to feed the lifted validator, `test-spin-and-withdraw.js`
+asserted `/const MAX_SPINS_PER_PURCHASE = 20;/` and restated the grant clamp as
+`Math.min(20, …)`, and `test-spin-sources.js`'s sandbox handed the real
+`writeTurntableSpinDocs` a stub value of 20 — which would have kept clamping that fixture
+at the old cap while the shipped code allowed 200, i.e. the test would have gone on
+passing while testing a bound that no longer existed.
+
+All four now **parse the constant out of `server.js`** (`serverConst(name)` in
+test-product-config.js; a regex in the other two), and the fixtures are written as
+`MAX_SPINS_PER_PURCHASE + 1` rather than `99` — which, note, **stopped being over the cap
+at all** when it moved, so the "absurd spin count rejected" case would have started
+asserting that a valid product is refused. What is pinned about the value itself is only
+that it **leaves room above 25** (his words), not that it is any particular figure.
+
+**A constant restated in a test is a second source of truth that nobody updates.** This
+file already warned "keep them in step with it" at the top of test-product-config.js;
+that instruction is the tell that it should have been read rather than copied.
+
+### One more MISSED mutation: a refusal that quotes a number
+Five mutations were run over the raise and four were caught. The one that was not:
+hardcoding *"between 0 and 20"* back into the spins refusal **message** while the cap
+stayed at 200. Every field-naming assertion stayed green — they check `why.field`, not
+the sentence — so the owner would have been told a limit that does not exist, which is
+the exact class of defect this whole round was about. There is now an assertion that the
+refusal quotes the live constant, and both mutation sets (12 in total) are caught.
+
+### The other caps, stated so they are his to raise rather than mine to guess
+None of these were touched, and each is either structural or already far past anything
+he has used. If any of them is in the way, it is one number:
+
+| cap | value | what it is |
+|---|---|---|
+| `MAX_MONEY_AMOUNT` | 999,999,999 | every price, payout, spin band, deposit, cash-out. Product-12 sits at 240,000,000, so about a quarter of it. Raisable — exact-integer safety in cents runs to ~90,000,000,000,000 — but it is the whole money layer's sanity bound, so it is a decision, not a tidy-up. |
+| `multiplier` | ×1000 | per product |
+| `cycle` / `cycleDays` | 3650 days | ten years |
+| `returnMultiple` | ×1000 | the global fallback multiple |
+| `maxWithdrawalsPerDay` | 1000 | |
+| `withdrawFeePct`, `commL1/2/3` | 0–100 | these are percentages; the range IS the unit |
+| `authHeroBlur` / `authCardBlur` | 40 px | past it a photo is a flat wash and only costs GPU |
+| product name / key | 100 / 64 chars | |
+
+Every settings refusal already names its field and its range
+(`${key} must be a number between ${min} and ${max}`), so a limit met there says which.

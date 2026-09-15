@@ -133,7 +133,12 @@ ck(/Math\.min\(MAX_MONEY_AMOUNT/.test(grant),
 // refusal names the box the owner has to go and fix -- "product 12 failed to
 // save spins" was unanswerable when every refusal shared one sentence.
 {
-  const MAX_SPINS_PER_PURCHASE = 20;
+  // READ from server.js, never written down here. The cap has already moved
+  // once (20 -> 200) and a hand-copied copy in a test is how a suite ends up
+  // asserting against a rule that no longer exists.
+  const capMatch = /const MAX_SPINS_PER_PURCHASE = (\d+);/.exec(src);
+  ck(!!capMatch, 'MAX_SPINS_PER_PURCHASE is declared as a plain number this file can read');
+  const MAX_SPINS_PER_PURCHASE = Number(capMatch && capMatch[1]);
   // new Function, not eval: the dependencies are handed in by name, so a
   // helper this validator starts using cannot be silently satisfied by
   // something that happens to exist in this file's scope.
@@ -149,17 +154,28 @@ ck(/Math\.min\(MAX_MONEY_AMOUNT/.test(grant),
      `a count at the cap (${MAX_SPINS_PER_PURCHASE}) saves`);
   ck(sanitizeProductInput({ ...base, spinCount: MAX_SPINS_PER_PURCHASE + 1 }, 0) === null,
      'the admin save path refuses a bigger count using the SAME constant');
-  ck(why({ spinCount: 99 }).field === 'Spins per purchase',
+  ck(why({ spinCount: MAX_SPINS_PER_PURCHASE + 1 }).field === 'Spins per purchase',
      'and the refusal names the spins field, not "key, name, price"');
-  ck(/const MAX_SPINS_PER_PURCHASE = 20;/.test(src), 'which is 20');
+  // Owner: "stop limiting everything bro, they are above 25 even." The cap is
+  // a loop bound, not a product decision, so what is pinned is that it leaves
+  // real room -- not a particular number.
+  ck(MAX_SPINS_PER_PURCHASE > 25, `and it leaves room above 25 (it is ${MAX_SPINS_PER_PURCHASE})`);
+  ck(sanitizeProductInput({ ...base, spinCount: 30, spinMax: 1000 }, 0) !== null,
+     '30 spins per purchase saves');
   ck(sanitizeProductInput({ ...base, spinMin: 1000, spinMax: 200 }, 0) === null,
      'and refuses a band saved backwards rather than quietly fixing it');
   ck(why({ spinMin: 1000, spinMax: 200 }).field === 'Win to', 'naming the band field too');
 }
 
-// Run the real clamp: a stored value the validator never saw.
-const clampCount = c => Math.min(20, Math.max(0, Math.floor(Number(c) || 0)));
-for (const [stored, want] of [[3, 3], [20, 20], [500, 20], [1e9, 20], [-4, 0], ['x', 0], [null, 0]])
+// Run the real clamp on a stored value the validator never saw -- the grant
+// loop reads products/ directly, and the legacy-key migration writes there
+// without passing through the validator. The bound is read out of server.js
+// rather than restated, for the same reason as above.
+const GRANT_CAP = Number((/const MAX_SPINS_PER_PURCHASE = (\d+);/.exec(src) || [])[1]);
+const clampCount = c => Math.min(GRANT_CAP, Math.max(0, Math.floor(Number(c) || 0)));
+for (const [stored, want] of [[3, 3], [30, 30], [GRANT_CAP, GRANT_CAP],
+                              [GRANT_CAP + 1, GRANT_CAP], [1e9, GRANT_CAP],
+                              [-4, 0], ['x', 0], [null, 0]])
   ck(clampCount(stored) === want,
      `a stored spinCount of ${JSON.stringify(stored)} grants ${want} spin(s)`);
 

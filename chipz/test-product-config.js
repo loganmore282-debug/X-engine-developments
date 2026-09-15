@@ -12,11 +12,19 @@
  */
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
-// Both restated from server.js. Keep them in step with it: these feed the
-// real sanitizeProductInput() lifted below, so a wrong value here tests a
-// validator that does not exist.
-const MAX_MONEY_AMOUNT = 999_999_999;
-const MAX_SPINS_PER_PURCHASE = 20;
+// READ out of server.js, not restated. These feed the real
+// sanitizeProductInput() lifted below, so a wrong value here would test a
+// validator that does not exist -- and the spin cap has already been raised
+// once (20 -> 200, owner: "stop limiting everything bro, they are above 25
+// even"), which left four hand-copied 20s scattered through this suite. A
+// constant that is only ever read cannot drift.
+const serverConst = name => {
+  const m = new RegExp('const ' + name + ' = ([0-9_]+)').exec(src);
+  if (!m) throw new Error(`server.js no longer declares ${name} as a plain number`);
+  return Number(m[1].replace(/_/g, ''));
+};
+const MAX_MONEY_AMOUNT = serverConst('MAX_MONEY_AMOUNT');
+const MAX_SPINS_PER_PURCHASE = serverConst('MAX_SPINS_PER_PURCHASE');
 const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
 // rollSpinReward() below is lifted out of server.js and now leans on two
 // more things from that file's scope: crypto (it draws the payout from a
@@ -56,7 +64,8 @@ for (const [p, shouldAccept, label] of [
   [{ key: 'p2', name: 'Product-2', price: 90000, spinCount: 2, spinMin: 200, spinMax: 1000 }, true, 'valid band, 2 spins per purchase'],
   [{ key: 'p1', name: 'Product-1', price: 30000, spinCount: 0 }, true, 'a product that earns no spins'],
   [{ key: 'p3', name: 'Product-3', price: 1, spinCount: 1, spinMin: 1000, spinMax: 200 }, false, 'backwards band rejected at save, not clamped later'],
-  [{ key: 'p4', name: 'Product-4', price: 1, spinCount: 99 }, false, 'absurd spin count rejected'],
+  [{ key: 'p4', name: 'Product-4', price: 1, spinCount: 25 }, true, '25 spins per purchase — the owner said his are above that'],
+  [{ key: 'p4', name: 'Product-4', price: 1, spinCount: MAX_SPINS_PER_PURCHASE + 1 }, false, 'a count past the cap rejected'],
   [{ key: 'p5', name: 'Product-5', price: 1, multiplier: -2 }, false, 'negative multiplier rejected'],
 ]) check(!!sanitizeProductInput(p, 0) === shouldAccept, label);
 
@@ -77,11 +86,11 @@ for (const [p, field, label] of [
   [{ key: 'p', name: 'X' }, 'Price', 'no price'],
   [{ key: 'p', name: 'X', price: 1, cycle: 1.5 }, 'Cycle (days)', 'a fractional cycle'],
   [{ key: 'p', name: 'X', price: 1, expectedReturn: -5 }, 'Total payout', 'a negative payout'],
-  [{ key: 'p', name: 'X', price: 1, multiplier: 5000 }, 'Multiplier (×)', 'a multiplier past 1000'],
+  [{ key: 'p', name: 'X', price: 1, multiplier: 5000 }, 'Multiplier (×)', 'a multiplier past the ×1000 ceiling'],
   [{ key: 'p', name: 'X', price: 1, spinMin: -1 }, 'Win from', 'a negative win floor'],
   [{ key: 'p', name: 'X', price: 1, spinMax: MAX_MONEY_AMOUNT + 1 }, 'Win to', 'a win ceiling past the money cap'],
   [{ key: 'p', name: 'X', price: 1, spinMin: 1000, spinMax: 200 }, 'Win to', 'a backwards band'],
-  [{ key: 'p', name: 'X', price: 1, spinCount: 99 }, 'Spins per purchase', 'more spins than the cap — THE REPORTED CASE'],
+  [{ key: 'p', name: 'X', price: 1, spinCount: MAX_SPINS_PER_PURCHASE + 1 }, 'Spins per purchase', 'more spins than the cap — THE REPORTED CASE'],
   [{ key: 'p', name: 'X', price: 1, openAt: 'not a date' }, 'Opens at (one-off)', 'an unreadable one-off date'],
   [{ key: 'p', name: 'X', price: 1, openFrom: '25:00', openTo: '16:45' }, 'Open daily from', 'an impossible from-time'],
   [{ key: 'p', name: 'X', price: 1, openFrom: '15:00', openTo: '16:99' }, 'until', 'an impossible until-time'],
@@ -93,6 +102,15 @@ for (const [p, field, label] of [
   check(clean === null && why.field === field && !!why.why,
     `${label} -> "${why.field}" ${why.why || '(no reason)'}`);
 }
+// A refusal that quotes a number must quote the REAL one. This was a MISSED
+// mutation: hardcoding "0 and 20" into the spins message left every assertion
+// above green while the sentence told the owner a cap that no longer existed.
+{
+  const w = {};
+  sanitizeProductInput({ key: 'p', name: 'X', price: 1, spinCount: MAX_SPINS_PER_PURCHASE + 1 }, 0, w);
+  check(String(w.why).includes(String(MAX_SPINS_PER_PURCHASE)),
+    `the spins refusal quotes the live cap: "${w.why}"`);
+}
 // The route's own sentence, built from what the validator reported.
 {
   const start = src.indexOf('const who = list[i]?.name');
@@ -101,7 +119,7 @@ for (const [p, field, label] of [
   check(start > 0 && refusal.includes('res.status(400)'), 'the route refusal block was found to run');
   const build = new Function('list', 'i', 'why', 'res', refusal);
   const why = {};
-  const p = { key: 'product-12', name: 'Product-12', price: 1000, spinCount: 99 };
+  const p = { key: 'product-12', name: 'Product-12', price: 1000, spinCount: MAX_SPINS_PER_PURCHASE + 1 };
   sanitizeProductInput(p, 0, why);
   let sent = null;
   build([p], 0, why, { status: () => ({ json: o => (sent = o) }) });
@@ -131,9 +149,9 @@ console.log('\n— the panel and the server agree on the spin cap —');
   const adminFile = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
   // The panel's pre-flight checks, RUN rather than grepped. They are only a
   // courtesy -- /admin/products/save is the guarantee -- but the courtesy is
-  // the whole point here: max="20" on a number input is a hint a typed 50
-  // sails straight past, and the owner then meets a refusal from the server
-  // instead of a sentence next to the box.
+  // the whole point here: a max attribute on a number input is a hint a
+  // bigger typed value sails straight past, and the owner then meets a
+  // refusal from the server instead of a sentence next to the box.
   const vFrom = '    if (!!body.openFrom !== !!body.openTo)';
   const vTo = "'err');";
   const vStart = adminFile.indexOf(vFrom);
@@ -142,11 +160,15 @@ console.log('\n— the panel and the server agree on the spin cap —');
   check(vStart > 0 && vLast > vStart && block.includes('spinCount'),
     "the panel's product pre-flight block was found to run");
   const preflight = new Function('body', 'toast', 'ADMIN_MAX_SPINS', block + '\nreturn null;');
-  const run = b => preflight({ price: '30000', spinCount: '0', spinMin: '', spinMax: '', openFrom: '', openTo: '', ...b }, m => m, 20);
+  // The cap is handed in from server.js, so the panel is checked against the
+  // real number rather than against one written down here twice.
+  const run = b => preflight({ price: '30000', spinCount: '0', spinMin: '', spinMax: '', openFrom: '', openTo: '', ...b }, m => m, MAX_SPINS_PER_PURCHASE);
+  const overCap = String(MAX_SPINS_PER_PURCHASE + 1);
   for (const [b, want, label] of [
     [{}, null, 'an ordinary product passes'],
-    [{ spinCount: '20', spinMax: '1000' }, null, 'a count at the cap passes'],
-    [{ spinCount: '50', spinMax: '1000' }, /0 to 20/, 'a typed 50 is caught BEFORE the round trip'],
+    [{ spinCount: String(MAX_SPINS_PER_PURCHASE), spinMax: '1000' }, null, `a count at the cap (${MAX_SPINS_PER_PURCHASE}) passes`],
+    [{ spinCount: '25', spinMax: '1000' }, null, '25 spins passes — the owner said his are above that'],
+    [{ spinCount: overCap, spinMax: '1000' }, new RegExp('0 to ' + MAX_SPINS_PER_PURCHASE), `${overCap} is caught BEFORE the round trip`],
     [{ spinCount: '2.5', spinMax: '1000' }, /whole number/, 'a fractional count is caught'],
     [{ spinCount: '3' }, /Set what a spin can win/, 'spins with no win band is caught'],
     [{ spinCount: '1', spinMin: '1000', spinMax: '200' }, /cannot be less than/, 'a backwards band is caught'],
@@ -163,7 +185,9 @@ console.log('\n— the panel and the server agree on the spin cap —');
   check(!!adminMax && !!serverMax && adminMax[1] === serverMax[1],
     `ADMIN_MAX_SPINS ${adminMax && adminMax[1]} === MAX_SPINS_PER_PURCHASE ${serverMax && serverMax[1]}`);
   check(!!serverMax && Number(serverMax[1]) === MAX_SPINS_PER_PURCHASE,
-    'and this test restates the same number');
+    'and the number this file read back is the same one');
+  check(MAX_SPINS_PER_PURCHASE > 25,
+    `the cap leaves room above 25 (owner: "they are above 25 even") — it is ${MAX_SPINS_PER_PURCHASE}`);
 }
 
 console.log('\n— spin payout stays inside its product band —');

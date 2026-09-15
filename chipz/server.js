@@ -1776,7 +1776,22 @@ const MAX_MONEY_AMOUNT = 999_999_999;
 // database. Not every write to products/ goes through the validator (the
 // legacy-key migration re-writes stored docs directly), so the loop must
 // not depend on the validator having been the only writer.
-const MAX_SPINS_PER_PURCHASE = 20;
+//
+// It was 20, and 20 was an invented number -- owner: "stop limiting
+// everything bro, they are above 25 even." It is 200 now. What this figure
+// actually bounds is the WRITE LOOP in writeTurntableSpinDocs(): one Mongo
+// document per spin, written one await at a time, so the cost of a purchase's
+// grant is linear in it. That is why it is not simply removed -- a typed
+// 100000 would try to write a hundred thousand money documents -- but 200
+// leaves the owner far more room than he asked for and costs at most a couple
+// of seconds of work that runs AFTER the purchase has already answered
+// (grantTurntableSpins is fire-and-forget from /invest/create) and inside
+// that investment's own lock, so nothing a member is waiting on is slowed.
+// The sequential await is also what makes the resume-after-failure logic
+// correct: surviving rows are a contiguous prefix, which is what
+// `existingCount` assumes. Do not make this loop concurrent without making
+// that resume fill MISSING ordinals instead of counting rows.
+const MAX_SPINS_PER_PURCHASE = 200;
 function finiteMoney(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
