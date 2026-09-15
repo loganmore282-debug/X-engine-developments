@@ -6295,11 +6295,28 @@ window.submitDeposit = async function(){
   openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
 };
+// Owner: "callback speed is low, so try to make the system solid and faster
+// validation on payments."
+//
+// The old loop slept a flat 3s BEFORE its first check, so even a member who
+// approved the prompt instantly watched a screen that said nothing for three
+// seconds -- and every later tick was 3s too. Two changes, and neither asks
+// the provider for more than it needs:
+//
+//   * the FIRST check is at 1.2s. That is the case worth optimising: the
+//     member had the prompt open and approved it immediately.
+//   * later checks are 2.5s apart, which is the cadence PesaJet's own SDK
+//     uses in pollUntilComplete.
+//
+// The 60-second budget is unchanged -- 24 ticks at the new spacing is the same
+// wall-clock window, so nothing gives up on a payment any sooner than before.
+var DEP_POLL_FIRST_MS = 1200;
+var DEP_POLL_EVERY_MS = 2500;
 async function pollDepositStatus(depositId){
   _depActiveDepositId = depositId;
   _depPollDone = false;
-  for (let i = 0; i < 20; i++) {
-    await new Promise(r => setTimeout(r, 3000));
+  for (let i = 0; i < 24; i++) {
+    await new Promise(r => setTimeout(r, i === 0 ? DEP_POLL_FIRST_MS : DEP_POLL_EVERY_MS));
     // A Verify tap may have settled it between ticks -- stop rather than
     // firing another provider call for an answer already in hand.
     if (_depPollDone) return;
@@ -6314,7 +6331,7 @@ async function pollDepositStatus(depositId){
     // landing mid-tick joins THIS request instead of starting a second one.
     if (await applyDepositStatusResult(await depositStatusCheck(depositId))) return;
   }
-  // Ending the loop is the autopoll giving up on its own 60s budget, not the
+  // Ending the loop is the autopoll giving up on its own ~60s budget, not the
   // payment being over -- _depPollDone stays false on purpose so Verify keeps
   // working on this deposit afterwards.
   if (!_depPollDone) setDepositStatusUnknown();

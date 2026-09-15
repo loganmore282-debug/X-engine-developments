@@ -100,6 +100,7 @@ function buildModule({ apiKey = 'pk_test_abc', secret = 'shh', base } = {}) {
     ${constSource('PESAJET_KEY')}
     ${constSource('PESAJET_WEBHOOK_SECRET')}
     ${constSource('PESAJET_TIMEOUT')}
+    ${constSource('PESAJET_READ_TIMEOUT')}
     ${fnSource('pesajetConfigured')}
     ${fnSource('pesajetPhone')}
     ${fnSource('pesajetProviderFor')}
@@ -478,6 +479,76 @@ function finish() {
     ck(/does NOT mean nothing was sent/.test(body),
        'and never reports an unverifiable payout as "nothing was sent"');
   }
+
+  // ── how fast a payment resolves ─────────────────────────────────────────
+  // Owner: "callback speed is low, so try to make the system solid and faster
+  // validation on payments, and sometimes a prompt may come when the screen is
+  // just redirecting to payment page, so it is slow to redirect."
+  //
+  // These are the three places the waiting actually was. Pinned as NUMBERS
+  // read out of the sources, because every one of them is a value somebody
+  // could quietly restore to a "safer"-looking default.
+  console.log('\n— how fast a payment resolves —');
+  const app = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+  const num = (text, re, what) => {
+    const m = re.exec(text);
+    if (!m) throw new Error('not found: ' + what);
+    return Number(m[1]);
+  };
+  // 1. A status read is polled every couple of seconds. The SDK's blanket 30s
+  //    default is the wrong shape for that: one slow read stalls the poll
+  //    behind it, and with a retry the worst case was a full minute of a
+  //    screen saying nothing.
+  const readMs = num(src, /const PESAJET_READ_TIMEOUT = (\d+);/, 'PESAJET_READ_TIMEOUT');
+  const createMs = num(src, /const PESAJET_TIMEOUT = (\d+);/, 'PESAJET_TIMEOUT');
+  ck(readMs <= 10000, `a status read gives up after ${readMs}ms, not the SDK's 30000`);
+  ck(readMs < createMs, `and sooner than a create (${readMs}ms vs ${createMs}ms)`);
+  ck(/timeoutMs: PESAJET_READ_TIMEOUT/.test(strip(fnSource('pesajetGetTx'))),
+     'and pesajetGetTx actually uses it');
+  // 2. On the path a member is watching, the retry only doubles the silence --
+  //    their next poll is the retry.
+  {
+    const body = S.slice(S.indexOf("if (dep.provider === 'pesajet')"));
+    ck(/pesajetGetTx\(dep\.pesajetTxId, \{ attempts: 1 \}\)/.test(body.slice(0, 900)),
+       "the member's own status poll makes ONE attempt");
+    ck(/\{ attempts = 2 \}/.test(fnSource('pesajetGetTx')),
+       'while the webhook and reconciler keep the second attempt, where nobody is watching');
+  }
+  // 3. The redirect. The member stares at "Redirecting to payment..." until
+  //    the response lands, so nothing that the next screen does not need may
+  //    sit in front of it.
+  {
+    const dep = S.slice(S.indexOf("app.post('/deposit/marzpay'"), S.indexOf('_creditingDeposits'));
+    const iResp = dep.indexOf("res.json({ status: 'success', depositId: depRef.id");
+    const iLedger = dep.indexOf("db.collection('transactions').add({");
+    const iDepSet = dep.indexOf('await depRef.set({');
+    ck(iDepSet > 0 && iResp > iDepSet, 'the deposit row is written before the member is answered');
+    ck(iLedger > iResp,
+       'but the Records ledger row is NOT -- it no longer sits in front of the redirect');
+  }
+  // 4. The client poll: the first check used to be a flat 3s after the screen
+  //    opened, which is the whole of "it is slow" for a member who approved
+  //    the prompt at once.
+  {
+    const first = num(app, /var DEP_POLL_FIRST_MS = (\d+);/, 'DEP_POLL_FIRST_MS');
+    const every = num(app, /var DEP_POLL_EVERY_MS = (\d+);/, 'DEP_POLL_EVERY_MS');
+    ck(first <= 1500, `the first status check is ${first}ms after the screen opens`);
+    ck(every <= 2500, `and later ones every ${every}ms, PesaJet's own SDK cadence`);
+    const loop = app.slice(app.indexOf('async function pollDepositStatus'));
+    const ticks = num(loop, /for \(let i = 0; i < (\d+); i\+\+\)/, 'poll tick count');
+    const budget = first + (ticks - 1) * every;
+    ck(budget >= 55000,
+       `and the giving-up budget is still about a minute (${Math.round(budget / 1000)}s) -- ` +
+       'faster polling must not mean giving up on a payment sooner');
+  }
+  // 5. Retrying a create must not raise a second prompt. Their REST example
+  //    puts the key in the BODY and their SDK puts it in a HEADER; which one
+  //    is honoured is documented nowhere, and guessing wrong costs a
+  //    duplicate payment.
+  ck(/payload\.idempotencyKey = idempotencyKey/.test(fnSource('pesajetCreate')),
+     'the idempotency key is sent in the body (their REST example)');
+  ck(/headers\['Idempotency-Key'\] = idempotencyKey/.test(fnSource('_pesajetRequest')),
+     'and as a header (their SDK) -- both, because a wrong guess is a double payment');
 
   // ── uniqueness, or one transaction could land twice ─────────────────────
   console.log('\n— the database guards —');

@@ -5579,6 +5579,52 @@ not assume `pk_` alone is enough for a disbursement without asking.
 
 `verify-pesajet-discriminates.py` is now **41 mutations, all caught**, control behaved.
 
+### Round 169c — it works; making it fast
+> "its working but call back speed is low, so try to make the system solid and faster
+> validation on payments, and sometimes a prompt may come when the screen is just
+> redirecting to payment page, so it is slow to redirect"
+
+Two complaints, four causes, all of them measurable rather than a matter of feel.
+
+**1. The redirect waited on a write the next screen does not need.**
+`/deposit/marzpay` answers before calling the provider (it always has), but *before*
+answering it also `await`ed the Records ledger row — a whole Atlas round trip standing
+between the member's tap and the screen moving. The response now goes out straight after
+the `pendingDeposits` write, which is the only one the payment screen reads; the ledger
+row is written after. Safe because `creditDeposit()`'s find-or-create already covers a
+missing row, which is why that write was never load-bearing here.
+
+That is also why a prompt could beat the redirect: our own answer was slower than
+PesaJet's.
+
+**2. A status read carried the SDK's blanket 30-second timeout.** Right for creating a
+payment, badly wrong for a read polled every couple of seconds — one slow read stalls the
+whole poll behind it. Split into `PESAJET_TIMEOUT` (20s, creates, matching MarzPay and
+LipaPay) and **`PESAJET_READ_TIMEOUT` (7s)**.
+
+**3. And it retried inside the request.** `pesajetGetTx` took two attempts with a
+backoff, so the worst case was ~60 seconds of a screen saying nothing. It takes an
+`attempts` option now: **1 on the path a member is watching** — their next poll is the
+retry — and 2 for the webhook and the reconciler, where nobody is waiting and a blip
+really would mean another 30-second tick.
+
+**4. The client slept a flat 3 s before its FIRST check.** For a member who approved the
+prompt at once, that was the entire delay. First check at **1.2 s**, later ones every
+**2.5 s** (PesaJet's own `pollUntilComplete` cadence), and the tick count raised to 24 so
+the **giving-up budget stays ~59 s** — faster polling must not quietly mean abandoning a
+payment sooner, and the test asserts that arithmetic rather than the interval alone.
+
+**Also, from their REST example:** `idempotencyKey` appears as a **body field**, while
+their SDK sends an `Idempotency-Key` **header**. Which one their API honours is stated
+nowhere, and guessing wrong costs a **duplicate payment** on a retry — so both are sent.
+
+Their current docs also show `phoneNumber` as a local `0742730383` where the earlier
+example used `+256772…`, so PesaJet accept both. Chipz keeps sending E.164: unambiguous,
+and it is what `cleanPhone()` already produces.
+
+`verify-pesajet-discriminates.py` is now **48 mutations, all caught** — including one
+that buys speed by shortening the give-up budget, which is the tempting wrong fix.
+
 ### Owner still has to
 1. Set **`PESAJET_API_KEY`** (the `pk_…`) and **`PESAJET_WEBHOOK_SECRET`** (the
    `whsec_…`) in Render — never in this repo.  `PESAJET_BASE_URL` only if PesaJet give a

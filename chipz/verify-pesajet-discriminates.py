@@ -24,12 +24,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SERVER = os.path.join(HERE, 'server.js')
 DB = os.path.join(HERE, 'db.js')
 ADMIN = os.path.join(HERE, 'admin-src', 'index.html')
-TOUCHED = [SERVER, DB, ADMIN]
+APP = os.path.join(HERE, 'user-src', 'original_module.js')
+TOUCHED = [SERVER, DB, ADMIN, APP]
 
 M = [
     ('CONTROL: a variable nobody reads (must be MISSED)', SERVER,
-     'const PESAJET_TIMEOUT = 30000;',
-     'const PESAJET_TIMEOUT = 30000; const _unusedControl = 1;'),
+     'const PESAJET_READ_TIMEOUT = 7000;',
+     'const PESAJET_READ_TIMEOUT = 7000; const _unusedControl = 1;'),
 
     # ── the contract ──
     ('the endpoint path is wrong', SERVER,
@@ -82,9 +83,9 @@ M = [
      "        if (!pj.providerDown) await markDepositFailed(depRef, userId, pesajetUserMsg(pj, 'Could not start the payment'));",
      "        await markDepositFailed(depRef, userId, pesajetUserMsg(pj, 'Could not start the payment'));"),
 
-    ('the status re-read gives up after one attempt', SERVER,
-     '  for (let attempt = 1; attempt <= 2; attempt++) {\n    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`);',
-     '  for (let attempt = 1; attempt <= 1; attempt++) {\n    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`);'),
+    ('the status re-read gives up after one attempt everywhere', SERVER,
+     'async function pesajetGetTx(transactionId, { attempts = 2 } = {}) {',
+     'async function pesajetGetTx(transactionId, { attempts = 1 } = {}) {'),
 
     # ── the webhook ──
     ('a forged signature is reported as unverifiable rather than refused', SERVER,
@@ -184,6 +185,35 @@ M = [
     ('the payout sweep picks up ambiguous sending rows too', SERVER,
      "    const pjSnap = await db.collection('withdrawals').where('status', '==', 'processing').where('pesajetTxId', '>', '')",
      "    const pjSnap = await db.collection('withdrawals').where('status', '==', 'sending').where('pesajetTxId', '>', '')"),
+
+    # ── the speed fixes ──
+    ('a status read goes back to the SDK\'s 30s blanket timeout', SERVER,
+     'const PESAJET_READ_TIMEOUT = 7000;',
+     'const PESAJET_READ_TIMEOUT = 30000;'),
+
+    ('the status read stops using the short timeout', SERVER,
+     "    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`,\n      { timeoutMs: PESAJET_READ_TIMEOUT });",
+     "    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`);"),
+
+    ("the member's own poll retries inside the request again", SERVER,
+     '      const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });',
+     '      const t = await pesajetGetTx(dep.pesajetTxId);'),
+
+    ('the ledger write goes back in front of the redirect', SERVER,
+     "    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });\n    // The Records row.",
+     "    // The Records row."),
+
+    ('the idempotency key is sent only as a header, not in the body', SERVER,
+     '  if (idempotencyKey) payload.idempotencyKey = idempotencyKey;',
+     '  /* mutation */'),
+
+    ('the poll waits three seconds before its first check again', APP,
+     'var DEP_POLL_FIRST_MS = 1200;',
+     'var DEP_POLL_FIRST_MS = 3000;'),
+
+    ('faster polling is bought by giving up on the payment sooner', APP,
+     'for (let i = 0; i < 24; i++) {',
+     'for (let i = 0; i < 8; i++) {'),
 
     # ── the database ──
     ('the unique index loses its partial filter', DB,

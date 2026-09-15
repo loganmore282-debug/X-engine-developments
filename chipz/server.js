@@ -2698,7 +2698,18 @@ function lipaChannel(network) {
 const PESAJET_BASE = (process.env.PESAJET_BASE_URL || 'https://payments.pesajet.com/api/v1').replace(/\/+$/, '');
 const PESAJET_KEY = (process.env.PESAJET_API_KEY || '').trim();
 const PESAJET_WEBHOOK_SECRET = process.env.PESAJET_WEBHOOK_SECRET || '';
-const PESAJET_TIMEOUT = 30000;          // the SDK's own default
+// TWO timeouts, because the two call shapes have opposite needs.
+//
+// Creating a payment is a one-off that raises a prompt on a phone; 20s is what
+// MarzPay and LipaPay already allow and is worth waiting for.
+//
+// READING a status is polled every couple of seconds while a member watches
+// the screen, and the SDK's blanket 30s default is actively harmful there: one
+// slow read stalls the whole poll behind it, and pesajetGetTx's retry made the
+// worst case 60 seconds of a screen saying nothing. A read that has not
+// answered in 7s is better abandoned -- the next poll IS the retry.
+const PESAJET_TIMEOUT = 20000;
+const PESAJET_READ_TIMEOUT = 7000;
 function pesajetConfigured() { return !!PESAJET_KEY; }
 // E.164 with a leading '+', which is what PesaJet wants and what cleanPhone()
 // already produces. Kept anyway, and shaped exactly like the SDK's own
@@ -2742,7 +2753,7 @@ function pesajetProviderFor(network, phone) {
 // said no" and "we could not reach PesaJet" must never be collapsed, because
 // the first is safe to report as a failure and the second is ambiguous and
 // must leave the row alone for the reconciler.
-async function _pesajetRequest(path, { method = 'GET', body, idempotencyKey } = {}) {
+async function _pesajetRequest(path, { method = 'GET', body, idempotencyKey, timeoutMs } = {}) {
   const headers = { 'X-API-Key': PESAJET_KEY };
   if (body) headers['Content-Type'] = 'application/json';
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
@@ -2751,7 +2762,7 @@ async function _pesajetRequest(path, { method = 'GET', body, idempotencyKey } = 
     resp = await fetch(`${PESAJET_BASE}${path}`, {
       method, headers,
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(PESAJET_TIMEOUT),
+      signal: AbortSignal.timeout(timeoutMs || PESAJET_TIMEOUT),
     });
   } catch (e) {
     return { ok: false, providerDown: true, httpStatus: 0, data: { message: e.message } };
@@ -2776,6 +2787,13 @@ async function pesajetCreate({ type, amount, phone, network, reference, descript
   };
   const provider = pesajetProviderFor(network, phone);
   if (provider) payload.provider = provider;
+  // Sent BOTH ways on purpose. PesaJet's SDK puts the idempotency key in an
+  // `Idempotency-Key` header; their own REST example puts an `idempotencyKey`
+  // field in the body ("Use a unique idempotency key when retrying requests to
+  // prevent duplicate payments"). Which one their API actually reads is not
+  // stated anywhere, and the cost of guessing wrong is a DUPLICATE PAYMENT on
+  // a retry -- so send both and let whichever they honour do its job.
+  if (idempotencyKey) payload.idempotencyKey = idempotencyKey;
   return _pesajetRequest('/payments', { method: 'POST', body: payload, idempotencyKey });
 }
 async function pesajetCollect(opts)  { return pesajetCreate({ ...opts, type: 'COLLECTION' }); }
@@ -2783,10 +2801,16 @@ async function pesajetDisburse(opts) { return pesajetCreate({ ...opts, type: 'DI
 // The independent re-read every credit decision here is made from. Two
 // attempts with a short backoff, the same shape _marzFetchTxStatus() uses,
 // because a single transient failure must not read as "not paid".
-async function pesajetGetTx(transactionId) {
+// `attempts` is 1 on the paths a member is waiting on -- their own status
+// poll comes back in a couple of seconds and IS the retry, so retrying inside
+// one request only doubles how long the screen says nothing. The webhook and
+// the reconciler, where nobody is watching, keep the second attempt because
+// there a transient blip really would mean waiting for the next 30s tick.
+async function pesajetGetTx(transactionId, { attempts = 2 } = {}) {
   let last = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`);
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`,
+      { timeoutMs: PESAJET_READ_TIMEOUT });
     if (r.ok) {
       const t = r.data?.data || r.data || {};
       return {
@@ -2804,7 +2828,7 @@ async function pesajetGetTx(transactionId) {
     }
     last = r;
     console.error(`pesajetGetTx(${transactionId}) attempt ${attempt}: gateway unavailable (HTTP ${r.httpStatus})`);
-    if (attempt < 2) await new Promise(r2 => setTimeout(r2, 350));
+    if (attempt < attempts) await new Promise(r2 => setTimeout(r2, 350));
   }
   return { status: '', reference: null, transactionId, failureReason: null, providerDown: true, httpStatus: last && last.httpStatus };
 }
@@ -4804,6 +4828,21 @@ app.post('/deposit/marzpay', async (req, res) => {
       regionKey: currentRegionKey(),
       date, time, createdAt: FieldValue.serverTimestamp()
     });
+    // ANSWER FIRST. Owner: "sometimes a prompt may come when the screen is
+    // just redirecting to payment page, so it is slow to redirect."
+    //
+    // The member is staring at "Redirecting to payment..." until this line
+    // runs, and everything before it is a round trip to Atlas they are paying
+    // for. The only write the next screen actually needs is the pendingDeposits
+    // doc, which is already written above -- the ledger row below is
+    // bookkeeping for the Records screen, which nobody is looking at in this
+    // second, and creditDeposit()'s own find-or-create covers it if it fails.
+    // Moving it after the response took a whole Mongo round trip out of the
+    // redirect.
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
+    // The Records row. Written AFTER the response now (see the note above)
+    // -- still awaited, so the provider call below cannot race ahead of it,
+    // just no longer in front of the member's redirect.
     // Owner: "deposits are not recorded why" -- withdrawals have always
     // shown up in Records immediately, as "Processing", the instant they're
     // requested; deposits used to only get a ledger row once fully
@@ -4826,9 +4865,6 @@ app.post('/deposit/marzpay', async (req, res) => {
       userId, type: 'deposit', description: `Deposit: Processing (${fmtMoney(amt)})`,
       amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
     }).catch(e => console.error(`Deposit ledger row create failed for dep=${depRef.id}:`, e.message));
-    // Respond the instant our own write lands — do not wait on the provider's
-    // own round-trip. The status screen's own polling picks up the resolution.
-    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
 
     if (provider === 'pesajet') {
       // PesaJet branch -- same "claim as pending, let the webhook / the
@@ -5153,7 +5189,9 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     // here than it does for the other two gateways -- not less.
     if (dep.provider === 'pesajet') {
       if (!dep.pesajetTxId) return res.json({ status: 'success', state: 'pending' });
-      const t = await pesajetGetTx(dep.pesajetTxId);
+      // One attempt: a member is watching this, and their next poll is 2.5s
+      // away and is itself the retry.
+      const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
       if (t.providerDown) return res.json({ status: 'success', state: 'pending' });
       const realStatus = pesajetStatusLabel(t.status);
       if (realStatus === 'success') { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
