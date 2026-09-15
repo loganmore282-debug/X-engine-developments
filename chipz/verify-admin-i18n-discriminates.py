@@ -111,10 +111,22 @@ def run(cmd, timeout=900):
         return 99, 'TIMEOUT'
 
 
-def build():
-    """Rebuild the panel. A refusal is an outcome, not an error."""
-    code, out = run([shutil.which('node'), 'build-admin.js'], timeout=600)
-    return code, out
+def build(rows=False):
+    """Rebuild the panel. A refusal is an outcome, not an error.
+
+    `rows` merges the admin-rows-*.py batches into admin-src/index.html first.
+    That step is NOT optional for a mutation aimed at a rows file: the tests
+    read ADMIN_LANG_ROWS out of the SOURCE, and build-admin-rows.py is the only
+    thing that puts it there -- so without this, mutating a row was a no-op
+    pretending to be a mutation, and the first run of this harness duly
+    reported two of them MISSED. Its refusals are the guard on row shape, so a
+    non-zero exit here counts as caught exactly as the panel build's does.
+    """
+    if rows:
+        code, out = run([sys.executable, 'build-admin-rows.py'], timeout=300)
+        if code:
+            return code, out
+    return run([shutil.which('node'), 'build-admin.js'], timeout=600)
 
 
 def judge():
@@ -152,7 +164,7 @@ def main():
                 raise SystemExit(f'ABORT: mutation {i} substitutes a string for itself')
             open(path, 'w', encoding='utf8').write(src.replace(old, new, 1))
             try:
-                bcode, bout = build()
+                bcode, bout = build(rows=path.endswith('.py') and 'admin-rows-' in path)
                 if bcode:
                     verdict = 'CAUGHT (the build refused)'
                     hit = True
@@ -161,7 +173,8 @@ def main():
                     hit = code != 0
                     verdict = f'CAUGHT by {"+".join(why)}' if hit else 'MISSED'
             finally:
-                open(path, 'wb').write(backups[path])
+                for p2, b2 in backups.items():
+                    open(p2, 'wb').write(b2)
             (caught if hit else missed).append(label)
             if i == 0:
                 control_ok = not hit

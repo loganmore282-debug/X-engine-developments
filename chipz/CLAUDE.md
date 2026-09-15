@@ -5259,7 +5259,15 @@ longer being covered.
   many strings were accounted for so "0 findings" cannot mean "0 screens".
 - **`verify-admin-i18n-discriminates.py`** — 14 real mutations plus a control, rebuilding
   the panel each time, judged on the **exit code**. A refused build counts as caught,
-  because refusing is what it is for.
+  because refusing is what it is for. All 14 caught; the control behaved.
+
+**Two of them were MISSED on the first run, and it was the harness, not the guard.** Both
+mutate a row in `admin-rows-1.py` — but the tests read `ADMIN_LANG_ROWS` out of
+`admin-src/index.html`, and `build-admin-rows.py` is the only thing that puts it there.
+Without re-running the merge, mutating a row was **a no-op pretending to be a mutation**.
+The harness runs the merge for a rows-file mutation now, and its refusal counts as caught
+exactly as the panel build's does — both are then caught. *A mutation aimed at a source
+that something else has to compile is not applied until that something else runs.*
 
 ### A test trap worth keeping
 `test-admin-i18n.py` first looked for `Status` in the withdrawals table and **never found
