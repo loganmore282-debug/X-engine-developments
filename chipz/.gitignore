@@ -5,3 +5,6 @@
 untranslated-report-*.json
 # find-admin-untranslated.py's own output, same reasoning.
 admin-untranslated-*.json
+# dump-admin-blocks.py's own output -- regenerated whenever the panel's copy
+# changes, and only ever read while writing rows.
+admin-block-keys.json

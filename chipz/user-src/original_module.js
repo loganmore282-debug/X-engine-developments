@@ -656,10 +656,24 @@ function i18nTextNode(node){
   let src;
   if (_i18nText.has(node)) src = _i18nText.get(node);
   else { src = node.nodeValue; _i18nText.set(node, src); }
-  const key = String(src == null ? '' : src).trim();
+  const raw = String(src == null ? '' : src);
+  // WHITESPACE IS NORMALISED BEFORE THE LOOKUP, and `&nbsp;` is why. A
+  // paragraph written with "400&nbsp;KB" gives a text node holding U+00A0,
+  // which is not the ordinary space in the row -- so a perfectly good
+  // translation simply never applied, and nothing at runtime said so. (The
+  // sweep DID collapse it, so its report showed an ordinary space and the two
+  // looked identical; this file already records the same trap biting French.)
+  // Line breaks and indentation inside a paragraph are the same story.
+  const key = raw.trim().replace(/\s+/g, ' ');
   if (!key || key.length > I18N_MAX_LEN) return;
   const hit = t(key);
-  const want = hit === key ? src : String(src).replace(key, hit);
+  // Untranslated: leave the node exactly as authored, so nothing is reflowed
+  // for no reason. Translated: keep the node's own leading/trailing space --
+  // it is what separates this node from its neighbours in a sentence.
+  const want = hit === key
+    ? raw
+    : raw.slice(0, raw.length - raw.replace(/^\s+/, '').length) + hit +
+      raw.slice(raw.replace(/\s+$/, '').length);
   if (node.nodeValue !== want) node.nodeValue = want;
 }
 // ── SENTENCES THAT INLINE MARKUP BROKE INTO PIECES ────────────────────────

@@ -32,6 +32,7 @@ same walk.
 Run:  python3 find-untranslated.py [outdir]
 """
 import asyncio, json, os, re, sys, functools, threading, http.server, socketserver
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -73,7 +74,14 @@ def lang_rows():
     if not m:
         raise SystemExit('LANG_ROWS not found in original_module.js')
     import subprocess
-    out = subprocess.run(['node', '-e', 'console.log(JSON.stringify([' + m.group(1) + ']))'],
+    # Through a FILE, not `node -e`. The table outgrew the argv limit --
+    # OSError: [Errno 7] Argument list too long -- the moment the panel's
+    # own instruction paragraphs went in, and an exec limit is not
+    # something to discover again later.
+    _tmp = tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf8')
+    _tmp.write('console.log(JSON.stringify([' + m.group(1) + ']))')
+    _tmp.close()
+    out = subprocess.run(['node', _tmp.name],
                          capture_output=True, text=True)
     if out.returncode:
         raise SystemExit('LANG_ROWS did not parse:\n' + out.stderr)
@@ -86,7 +94,14 @@ def lang_patterns():
     if not m:
         return []
     import subprocess
-    out = subprocess.run(['node', '-e', 'console.log(JSON.stringify([' + m.group(1) + ']))'],
+    # Through a FILE, not `node -e`. The table outgrew the argv limit --
+    # OSError: [Errno 7] Argument list too long -- the moment the panel's
+    # own instruction paragraphs went in, and an exec limit is not
+    # something to discover again later.
+    _tmp = tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf8')
+    _tmp.write('console.log(JSON.stringify([' + m.group(1) + ']))')
+    _tmp.close()
+    out = subprocess.run(['node', _tmp.name],
                          capture_output=True, text=True)
     if out.returncode:
         raise SystemExit('LANG_PATTERNS did not parse:\n' + out.stderr)

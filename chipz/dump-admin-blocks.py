@@ -84,7 +84,10 @@ async def main():
         await page.goto(f'http://127.0.0.1:{PORT}/index.html', wait_until='load')
         await page.wait_for_timeout(900)
         try:
-            await page.fill('#loginKey', 'k')
+            # The field is #keyInput, as find-admin-untranslated.py signs in.
+            # A wrong selector here does not fail loudly -- page.fill() waits
+            # for an element that never appears, and the whole run just hangs.
+            await page.fill('#keyInput', 'x')
             await page.click('#loginBtn')
             await page.wait_for_timeout(1500)
         except Exception as e:

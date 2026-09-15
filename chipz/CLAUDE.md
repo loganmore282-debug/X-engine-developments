@@ -6026,13 +6026,41 @@ IS the key.
   Same family as the standing rule about the mutation harness.
 - **Port 8907 collided with my own earlier run of the same script** — fifth instance.
 
-### Still open, and named plainly
-The 59 admin instruction paragraphs are now **translatable** but **not yet translated**;
-that is a large, mechanical writing job (59 strings × 5 languages, several over 400
-characters) and it is the next unit of work. 78 fragments remain untranslatable without
-markup changes — blocks holding a button, an input, or an element with an id.
+### And then they were written
+`admin-rows-8.py` through `admin-rows-12.py` carry them: **373 rows and 35 templates**
+in the panel's table, up from 322/26. The admin panel now reports **0 findings**.
 
-**When they are written, the three Bantu columns want a native speaker's eye more here
-than anywhere else so far:** these are technical instructions about DNS records, payment
-gateways and money settings, and an admin acting on a mistranslated one can misconfigure
-the platform.
+Which of them had to be **patterns** rather than rows was not a judgement call — a
+sentence naming the country in the switch, the currency, your domain, the address this
+panel is open on, or a count reads differently every time, so a whole-string row could
+only ever match one of them. `{0}` carries a country name or a currency, and a
+translation must never rewrite one.
+
+Two things had to be got right before a single row was written, and both would have
+produced rows that quietly never matched:
+- **The sweep's text is not the key.** It renders in the target language, so by the time
+  it reads a block the per-node pass has already turned `<b>Settings</b>` into
+  `<b>Mipangilio</b>` — the flattened text is a hybrid. `dump-admin-blocks.py` renders in
+  English, where nothing is translated, so what a block flattens to IS the key.
+- **`&nbsp;` is not a space.** A paragraph written with `400&nbsp;KB` gives a text node
+  holding U+00A0, and the row holds an ordinary space, so a perfectly good translation
+  simply never applied — and the sweep's own whitespace collapsing made the two look
+  identical in its report. `i18nTextNode()` now normalises whitespace before the lookup
+  and restores the node's own leading/trailing space after it. **Third time this
+  character has cost this project a round**; it is why the last finding of this round
+  read `english-row-not-applied` rather than `missing`.
+
+**The three Bantu columns want a native speaker's eye here more than anywhere else so
+far:** these are instructions about DNS records, payment gateways and money settings, and
+an admin acting on a mistranslated one can misconfigure the platform. Every correction is
+one cell in an `admin-rows-*.py`, and nothing else moves.
+
+**Still English by construction: 79 fragments** — blocks holding a button, an input, or
+an element with an `id`, which cannot be translated whole without changing the markup,
+because replacing the block would throw away the element app code writes into.
+
+### The table outgrew `node -e`
+Four tools parsed the table by passing it as a command-line argument, and the moment the
+instruction paragraphs went in that died with `OSError: [Errno 7] Argument list too
+long`. They write a temp file and run `node <file>` now. An exec limit is not something
+to discover twice.

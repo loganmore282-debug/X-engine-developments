@@ -25,6 +25,7 @@ Rules it enforces, each of them a real hazard rather than tidiness:
 Run:  python3 build-admin-rows.py
 """
 import importlib.util, os, re, subprocess, sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADMIN = os.path.join(HERE, 'admin-src', 'index.html')
@@ -70,7 +71,14 @@ def load(name):
 def app_keys():
     js = open(APP, encoding='utf8').read()
     m = re.search(r'var LANG_ROWS = \[([\s\S]*?)\n\];', js)
-    out = subprocess.run(['node', '-e', 'console.log(JSON.stringify([' + m.group(1) + ']))'],
+    # Through a FILE, not `node -e`. The table outgrew the argv limit --
+    # OSError: [Errno 7] Argument list too long -- the moment the panel's
+    # own instruction paragraphs went in, and an exec limit is not
+    # something to discover again later.
+    _tmp = tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf8')
+    _tmp.write('console.log(JSON.stringify([' + m.group(1) + ']))')
+    _tmp.close()
+    out = subprocess.run(['node', _tmp.name],
                          capture_output=True, text=True)
     if out.returncode:
         raise SystemExit('the app table did not parse:\n' + out.stderr)
