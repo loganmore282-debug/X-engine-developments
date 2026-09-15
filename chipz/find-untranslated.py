@@ -283,7 +283,16 @@ def routes(reg):
         "/public/settings": {"status": "success", "region": reg, "regionCount": 2,
                              "settings": dict(SETTINGS, referralRequired=REFERRAL_REQUIRED)},
         "/public/products": {"status": "success", "products": PRODUCTS},
-        "/public/activity-feed": {"status": "success", "feed": []},
+        # The Home activity ticker. It was an EMPTY feed, so the ticker never
+        # rendered and its two verbs ("topped up" / "cashed out") had never
+        # been on screen while anything was measuring -- they were missing
+        # from the table for as long as the table has existed. A fixture that
+        # renders nothing cannot test what renders.
+        "/public/activity-feed": {"status": "success", "feed": [
+            {"kind": "deposit", "phone": "256****4417", "amount": 30000},
+            {"kind": "withdraw", "phone": "256****9022", "amount": 25000},
+            {"kind": "deposit", "phone": "256****1180", "amount": 90000},
+        ]},
         "/public/banner": {"status": "success", "image": None},
         "/public/announcement-image": {"status": "success", "image": None},
         "/public/manual-pay-images": {"status": "success", "selector": None, "hero": None},

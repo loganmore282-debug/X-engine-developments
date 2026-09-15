@@ -3473,12 +3473,15 @@ app.get('/public/about-content', async (_req, res) => {
 // ── ACTIVITY FEED — simulated, NOT real transactions. Built once here,
 // server-side, and shared by every client (cached ~4s) so everyone watching
 // at the same moment sees the identical feed.
-const _WIRE_STEP = 5000, _WIRE_CAP = 900000;
-const _DEPOSIT_LADDER = [
-  30000, 40000, 50000, 60000, 70000, 90000, 100000, 120000, 150000, 197000,
-  200000, 250000, 300000, 355000, 400000, 500000, 560000, 700000, 800000,
-  900000, 950000, 1000000, 1250000, 1500000, 2000000, 2550000, 3000000, 4500000
-];
+// The figures the ticker scrolls are derived from the REGION's own products
+// and settings -- see activityPools(). There used to be two hardcoded ladders
+// here (a deposit list running 30,000 to 4,500,000 and withdrawals stepping
+// 5,000 to 900,000), and both were Ugandan amounts handed to every country.
+// On a market where a product costs 500 and the minimum cash-out is 300 that
+// is a ticker scrolling figures sixty times too large -- money nobody there
+// has ever moved. Owner: "make sure on currency change the activity checker
+// should be changing currency too basing on the products and values of the
+// system."
 function maskedMsisdn(used) {
   // The region's own dialling code, so the ticker on a Kenyan subdomain does
   // not scroll Ugandan-looking numbers past its members.
@@ -3490,45 +3493,95 @@ function maskedMsisdn(used) {
   }
   return one();
 }
+// What the ticker is allowed to show, for ONE region, built entirely from
+// that region's own catalogue and its own limits. Nothing here is a constant.
+//
+//   deposits    -- the prices its members actually pay: every active product's
+//                  price, plus the minimum recharge. Those ARE "the products
+//                  and values of the system", and they are already in the
+//                  region's own currency because getProducts() resolved them
+//                  through the region overlay.
+//   withdrawals -- whole multiples of the region's own withdrawal multiple,
+//                  from its own minimum upward. A cash-out that is not a legal
+//                  amount on that market is a number no member could ever have
+//                  requested, so inventing one makes the feed read as fake.
+//
+// Capped at 40 entries so a market with a 1-unit multiple does not build a
+// hundred-thousand-element array, and every pool falls back to something
+// non-empty: an empty pool would index undefined and scroll "UGX NaN".
+function activityPools(sett, products) {
+  const minDep = Math.max(0, finiteMoney(sett && sett.minDeposit));
+  const minWit = Math.max(0, finiteMoney(sett && sett.minWithdraw));
+  const prices = (products || [])
+    .filter(p => p && p.active !== false)
+    .map(p => Math.round(finiteMoney(p.price)))
+    .filter(n => n > 0);
+  let deposits = Array.from(new Set(prices.concat(minDep > 0 ? [minDep] : [])))
+    .filter(n => n >= minDep).sort((a, b) => a - b);
+  if (!deposits.length) deposits = [minDep > 0 ? minDep : 1];
+
+  // The multiple is a real setting (0 turns the rule off), so fall back to the
+  // minimum itself rather than to a number of our own choosing.
+  let step = Math.round(Math.max(0, finiteMoney(sett && sett.withdrawMultiple)));
+  if (step <= 0) step = minWit > 0 ? minWit : Math.max(1, Math.round(deposits[0] / 10));
+  const first = Math.max(step, Math.ceil(Math.max(minWit, step) / step) * step);
+  const ceiling = Math.max(first, deposits[deposits.length - 1]);
+  const withdrawals = [];
+  for (let a = first; a <= ceiling && withdrawals.length < 40; a += step) withdrawals.push(a);
+  if (!withdrawals.length) withdrawals.push(first);
+  return { deposits: deposits.slice(0, 40), withdrawals };
+}
 async function buildActivityFeed() {
   const sett = await getSettings();
-  const minDep = Number(sett.minDeposit) || 0;
-  const minWit = Number(sett.minWithdraw) || 0;
-  let depositPool = _DEPOSIT_LADDER.slice();
-  try {
-    const products = await getProducts();
-    const prices = products.map(p => Number(p.price)).filter(n => n > 0);
-    depositPool = Array.from(new Set(depositPool.concat(prices)));
-  } catch (_) {}
-  depositPool = depositPool.filter(n => n >= minDep);
-  const withdrawPool = [];
-  for (let a = _WIRE_STEP; a <= _WIRE_CAP; a += _WIRE_STEP) withdrawPool.push(a);
-  const withdrawPoolFiltered = withdrawPool.filter(n => n >= minWit);
-  if (!depositPool.length) depositPool = [minDep || 30000];
-  if (!withdrawPoolFiltered.length) withdrawPoolFiltered.push(minWit || 8000);
+  let products = [];
+  try { products = await getProducts(); } catch (_) {}
+  const { deposits, withdrawals } = activityPools(sett, products);
   const rows = [];
   const usedNumbers = new Set();
   for (let i = 0; i < 60; i++) {
     const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
-    const pool = kind === 'deposit' ? depositPool : withdrawPoolFiltered;
+    const pool = kind === 'deposit' ? deposits : withdrawals;
     rows.push({ kind, phone: maskedMsisdn(usedNumbers), amount: pool[Math.floor(Math.random() * pool.length)] });
   }
   return rows;
 }
-let _activityFeed = [], _activityTs = 0, _activityBuilding = false;
+// Cached PER REGION. It used to be one module-level array shared by every
+// country, and that was a real bug with an ugly shape: buildActivityFeed() is
+// already region-correct inside it -- getSettings(), getProducts() and
+// maskedMsisdn() all read the request's region out of the AsyncLocalStorage
+// store -- so whichever country's request happened to build the feed first
+// won, and every other country was served that country's amounts and dialling
+// code for as long as the process lived.
+//
+// It reads WORSE than an obviously wrong number, because the client labels the
+// amount with its OWN currency (fmtUGX -> cur()): a Kenyan member saw Ugandan
+// product prices with "KES" in front of them. Owner: "make sure on currency
+// change, the activity checker should be changing currency too basing on the
+// products and values of the system."
+//
+// A cache in front of a region-aware builder has to carry the region in its
+// key. The same trap is available to anything else module-level here.
+const _activityCache = new Map(); // regionKey -> { feed, ts, building }
+function activitySlot() {
+  const key = currentRegionKey() || DEFAULT_REGION_KEY;
+  let slot = _activityCache.get(key);
+  if (!slot) { slot = { feed: [], ts: 0, building: false }; _activityCache.set(key, slot); }
+  return slot;
+}
 app.get('/public/activity-feed', async (_req, res) => {
-  if (!_activityFeed.length && !_activityBuilding) {
-    _activityBuilding = true;
-    try { _activityFeed = await buildActivityFeed(); _activityTs = Date.now(); }
+  const slot = activitySlot();
+  if (!slot.feed.length && !slot.building) {
+    slot.building = true;
+    try { slot.feed = await buildActivityFeed(); slot.ts = Date.now(); }
     catch (e) { console.error('Activity feed error:', e.message); }
-    finally { _activityBuilding = false; }
-  } else if (!_activityBuilding && Date.now() - _activityTs > 4000) {
-    _activityBuilding = true;
-    buildActivityFeed().then(f => { _activityFeed = f; _activityTs = Date.now(); })
+    finally { slot.building = false; }
+  } else if (!slot.building && Date.now() - slot.ts > 4000) {
+    slot.building = true;
+    buildActivityFeed().then(f => { slot.feed = f; slot.ts = Date.now(); })
       .catch(e => console.error('Activity feed error:', e.message))
-      .finally(() => { _activityBuilding = false; });
+      .finally(() => { slot.building = false; });
   }
-  res.json({ status: 'success', feed: _activityFeed });
+  res.json({ status: 'success', feed: slot.feed });
 });
 
 // ═══════════════════════════════════════════

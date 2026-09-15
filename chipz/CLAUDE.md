@@ -5023,3 +5023,102 @@ the two cannot be run at the same time. The running list is in Round 157's note.
   `OSError: [Errno 98] Address already in use` and one clean pass. That is the **fourth**
   time this shape has appeared in this project; the rule stands — when a harness dies with
   that error, look for a second copy of it before looking for a bug in the app.
+
+## Round 166 — The popups, and the ticker that scrolled Uganda's money at every country
+
+> "I am sure you didn't even change the language of some instructions, popup notifies ⚠️
+> still in English, even make sure on currency change the activity checker should be
+> changing currency too basing on the products and values of the system"
+
+Both true. The i18n sweep had reported **zero** findings the round before, and the reason
+it could is the most useful thing here.
+
+### Why a 40-screen sweep saw no English popups
+**A popup only appears when something goes WRONG, and the sweep walks every screen
+SUCCESSFULLY.** It never submits a blank amount, never mistypes a password, never gets a
+refusal back from the server. So **58 `notify()` call sites existed and exactly one had
+ever been on screen** while anything was measuring — and that one was handed a string out
+of the table by the harness itself.
+
+Auditing the call sites instead of the screens (walk each call's argument expression, pull
+out every string literal) found **17 plain messages with no row** and **6 built with a
+figure spliced in**, which need templates. Among them every `r.message || 'Could not …'`
+fallback — which is exactly what a member reads when the server sends no message of its
+own, i.e. the worst moment to be handed a foreign sentence.
+
+**Runtime cannot close this class**: reaching all 58 means provoking 58 distinct failures.
+So `test-languages.js` now audits the **inventory** — every literal passed to
+`notify()`/`toast()`/`manualPayToast()` must be covered by a row or a template. That
+catches the real failure mode, which is a message added later with no row. 61 call sites
+audited, 0 missing.
+
+Three things that had to be right for that audit to be honest:
+- **Comments stripped first, line comments before block comments** — this file's own
+  explanations quote message text. Fifth shape of that trap in this project.
+- **Only the FIRST argument is the message.** `notify()` also takes an onClose callback,
+  and swallowing it turned the tail of a real sentence into one anonymous `{1}`, which
+  then failed to match a template that was perfectly correct.
+- **Concatenation is one message.** ``notify(`Cash-out of ${a} is processing. You will
+  receive ` + `${b} after the ${c}% charge.`)`` is ONE sentence on screen; looking at the
+  halves separately reported two correct templates as missing. The auditor splits on
+  top-level `+` and shapes the whole chain, so a non-literal gap becomes `{n}` exactly as
+  an interpolation does — which also covers `'…installing ' + brandName() + '.'`, whose
+  old ROW could never match the rendered string and had therefore never once applied.
+
+### The activity ticker: two faults, and the first hid the second
+**1. One module-level cache for every country.** `buildActivityFeed()` was already
+region-correct *inside* — `getSettings()`, `getProducts()` and `maskedMsisdn()` all read
+the request's region out of `AsyncLocalStorage` — but the result was stored in a single
+`_activityFeed` array. Whichever country's request built it first won, and every other
+country was served that one for the life of the process. **A cache in front of a
+region-aware builder has to carry the region in its key**; it is `Map<regionKey, slot>` now.
+
+**2. Two hardcoded Ugandan ladders**, which the cache bug was hiding. Deposits came from a
+fixed list running 30,000–4,500,000 and withdrawals stepped 5,000–900,000. On a market
+where a product costs 500 and the minimum cash-out is 300, that ticker scrolls figures
+**sixty times too large** — money nobody there has ever moved.
+
+`activityPools(sett, products)` replaces both, and **contains no money-sized literal at
+all**:
+- **deposits** — every active product's price plus the minimum recharge. Those *are* "the
+  products and values of the system", and they arrive already in that region's currency
+  because `getProducts()` resolved them through the region overlay.
+- **withdrawals** — whole multiples of that region's own `withdrawMultiple`, from its own
+  minimum upward. A cash-out that is not a *legal* amount on that market is a number no
+  member could have requested, so inventing one is what makes a feed read as fake.
+- Capped at 40 entries (a 1-unit multiple would otherwise build a huge array) and every
+  pool falls back to something non-empty — **an empty pool indexes `undefined` and scrolls
+  "UGX NaN"**.
+
+**Why it read worse than an obviously wrong number:** the client labels the amount with
+its OWN currency (`fmtUGX` → `cur()`), so a Kenyan member saw Ugandan prices with **KES**
+in front of them.
+
+`test-activity-feed-region.js` runs the real pools, `maskedMsisdn`, the builder and the
+route against two countries whose money **does not overlap** — that is the design of the
+fixture, so any figure traces to exactly one country and a leak cannot be mistaken for a
+coincidence. It also asserts the pool builder holds no 4-digit literal and that both old
+ladder constants are gone from `server.js` entirely.
+
+### The ticker's own words had never rendered either
+`topped up` / `cashed out` were missing from the table for as long as the table has
+existed, because `find-untranslated.py` fed the ticker an **empty feed**. A fixture that
+renders nothing cannot test what renders — the third time that exact sentence has been
+written in this file, after the ledger pill's `Failed`/`Paid` and the founder-account
+Sign Up wording last round. The fixture carries three real rows now.
+
+### Result
+| | before | after |
+|---|---|---|
+| table rows | 255 | **274** |
+| pattern templates | 22 | **28** |
+| row cells filled | 1269/1275 | **1364/1370** (6 deliberate `'='`, 0 blank) |
+| pattern cells filled | — | **140/140** |
+| popup call sites with no translation | **17 + 6 templates** | **0 of 61** |
+| ticker figures on a non-founding country | Uganda's | **its own** |
+
+### The control mutation, and why it is in the harness
+The mutation set opens with a deliberate **no-op** — a variable declared and never used —
+asserted to be reported **MISSED**. If a harness ever "catches" that, it is failing for
+some reason unrelated to the mutation, and every other CAUGHT in that run means nothing.
+Eight real mutations, all caught; the control behaved.

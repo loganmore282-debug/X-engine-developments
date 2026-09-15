@@ -310,6 +310,159 @@ console.log('\n— no row is longer than the sweep will look at —');
   ck(overP.length === 0, `and no pattern template does either (${overP.length})`);
 }
 
+// ── every popup message the app can raise ──
+// A popup only appears when something goes WRONG, and find-untranslated.py
+// walks every screen SUCCESSFULLY -- it never submits a blank amount, never
+// mistypes a password, never gets a refusal back from the server. So 58
+// notify() call sites existed and exactly ONE had ever been on screen while
+// anything was measuring, and that one was handed a string out of the table.
+// The sweep reported zero findings while the owner was looking at English
+// popups, which is the most expensive kind of green there is.
+//
+// Runtime cannot close this: reaching all 58 means provoking 58 distinct
+// failures. So the INVENTORY is checked instead -- every string literal passed
+// to notify()/toast()/manualPayToast(), pulled out by walking the argument
+// expression, must be covered by a row or a template. That catches the real
+// failure mode, which is a message added later with no row.
+console.log('\n— every popup message has a translation —');
+{
+  // Comments stripped FIRST, line comments before block comments: this file's
+  // own explanations quote message text, and a scan that reads them finds
+  // strings that are not in the code. (Fifth shape of that trap here.)
+  const code = client.replace(/(^|\s)\/\/[^\n]*/g, '$1').replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const TPL = 'TPL§';   // marks an interpolated message inside the set
+  const argsOf = (fn) => {
+    const out = [];
+    const re = new RegExp('(?:^|[^\\w.$])' + fn + '\\(', 'g');
+    let m;
+    while ((m = re.exec(code))) {
+      let i = m.index + m[0].length, depth = 1;
+      const start = i;
+      while (i < code.length && depth) {
+        const c = code[i];
+        if (c === '(' || c === '[' || c === '{') depth++;
+        else if (c === ')' || c === ']' || c === '}') depth--;
+        else if (c === "'" || c === '"' || c === '`') {
+          const q = c; i++;
+          while (i < code.length && code[i] !== q) { if (code[i] === '\\') i++; i++; }
+        }
+        i++;
+      }
+      out.push(code.slice(start, i - 1));
+    }
+    return out;
+  };
+  // Split an expression on TOP-LEVEL '+' only -- a message is often built by
+  // concatenation, and looking at the halves separately is how two correct
+  // templates got reported as missing: notify(`Cash-out of ${a} is processing.
+  // You will receive ` + `${b} after the ${c}% charge.`) is ONE sentence on
+  // screen and must be looked up as one.
+  const topSplit = (expr) => {
+    const parts = [];
+    let depth = 0, cur = '';
+    for (let i = 0; i < expr.length; i++) {
+      const c = expr[i];
+      if (c === '(' || c === '[' || c === '{') { depth++; cur += c; continue; }
+      if (c === ')' || c === ']' || c === '}') { depth--; cur += c; continue; }
+      if (c === "'" || c === '"' || c === '`') {
+        const q = c; cur += c; i++;
+        while (i < expr.length && expr[i] !== q) {
+          if (expr[i] === '\\') { cur += expr[i]; i++; }
+          cur += expr[i]; i++;
+        }
+        cur += q;
+        continue;
+      }
+      if (c === '+' && depth === 0) { parts.push(cur); cur = ''; continue; }
+      cur += c;
+    }
+    parts.push(cur);
+    return parts.map(p => p.trim());
+  };
+  const isStrLit = p => /^'[\s\S]*'$/.test(p) || /^"[\s\S]*"$/.test(p) || /^`[\s\S]*`$/.test(p);
+  const litText = p => p.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
+  const worth = v => v.trim().split(/\s+/).length >= 2 && /[A-Za-z]{3}/.test(v);
+  // One literal (or a concatenation) turned into a lookup key: plain text if
+  // nothing varies, a {0} SHAPE if anything does.
+  const shapeOf = (parts) => {
+    let n = 0, out = '', varied = false;
+    for (const p of parts) {
+      if (isStrLit(p)) {
+        const raw = litText(p);
+        if (/\$\{/.test(raw) && p.startsWith('`')) {
+          varied = true;
+          out += raw.replace(/\$\{[^}]*\}/g, () => '{' + (n++) + '}');
+        } else out += raw;
+      } else { varied = true; out += '{' + (n++) + '}'; }
+    }
+    return { text: out, varied };
+  };
+  const lits = new Set();
+  let sites = 0;
+  for (const fn of ['notify', 'toast', 'manualPayToast']) {
+    for (const a of argsOf(fn)) {
+      sites++;
+      // Only the FIRST argument is the message. notify() also takes an
+      // onClose callback, and swallowing it turned the tail of a real
+      // sentence into one anonymous {1} -- which then failed to match a
+      // template that was perfectly correct.
+      const firstArg = (() => {
+        let depth = 0;
+        for (let i = 0; i < a.length; i++) {
+          const c = a[i];
+          if (c === '(' || c === '[' || c === '{') depth++;
+          else if (c === ')' || c === ']' || c === '}') depth--;
+          else if (c === "'" || c === '"' || c === '`') {
+            const q = c; i++;
+            while (i < a.length && a[i] !== q) { if (a[i] === '\\') i++; i++; }
+          } else if (c === ',' && depth === 0) return a.slice(0, i);
+        }
+        return a;
+      })();
+      const parts = topSplit(firstArg);
+      if (parts.length > 1 && parts.some(isStrLit)) {
+        const { text, varied } = shapeOf(parts);
+        if (worth(text)) lits.add(varied ? TPL + text.replace(/\s+/g, ' ').trim() : text);
+        continue;
+      }
+      // Not a concatenation. Take every quoted string in the expression --
+      // deliberately including the `r.message || 'fallback'` form, which is
+      // exactly what a member reads when the server sends none of its own.
+      for (const q of firstArg.matchAll(/'((?:\\.|[^'])*)'|"((?:\\.|[^"])*)"/g)) {
+        const v = (q[1] !== undefined ? q[1] : q[2]).replace(/\\'/g, "'").replace(/\\"/g, '"');
+        if (worth(v)) lits.add(v);
+      }
+      for (const q of firstArg.matchAll(/`((?:\\.|[^`])*)`/g)) {
+        const raw = q[1];
+        if (!/\$\{/.test(raw)) { if (worth(raw)) lits.add(raw); continue; }
+        let n = 0;
+        const shape = raw.replace(/\$\{[^}]*\}/g, () => '{' + (n++) + '}');
+        lits.add(TPL + shape.replace(/\s+/g, ' ').trim());
+      }
+    }
+  }
+  ck(sites > 40, `found the popup call sites to audit (${sites})`);
+  const en = buildI18n().i18n;
+  const rowKeys = new Set(en.rows.map(r => r[0]));
+  const tplKeys = new Set((en.patterns || []).map(r => r[0].replace(/\s+/g, ' ').trim()));
+  const tplRe = [...tplKeys].map(k => new RegExp('^' + k
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{(\d+)\\\}/g, '[\\s\\S]+?') + '$'));
+  const missing = [];
+  for (const l of lits) {
+    if (l.startsWith(TPL)) {
+      const shape = l.slice(TPL.length);
+      if (!tplKeys.has(shape)) missing.push('template: ' + shape);
+      continue;
+    }
+    if (rowKeys.has(l)) continue;
+    if (tplRe.some(r => r.test(l))) continue;   // a template covers it
+    missing.push(l);
+  }
+  ck(missing.length === 0,
+    `every popup message is in the table (${missing.length} missing${missing.length
+      ? ': ' + missing.slice(0, 6).map(x => JSON.stringify(x)).join(', ') : ''})`);
+}
+
 console.log('\n— a sentence with a figure in it —');
 {
   const sw = buildI18n('sw').i18n;
