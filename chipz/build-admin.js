@@ -62,8 +62,55 @@ while ((m = scriptRe.exec(html))) {
   if (!best || m[2].length > best[2].length) best = m;
 }
 if (!best) { console.error('No plain inline <script> block found in admin-src/index.html'); process.exit(1); }
-const fullMatch = best[0], code = best[2], matchIndex = best.index;
+const fullMatch = best[0], matchIndex = best.index;
+let code = best[2];
 log('main script source:', code.length, 'bytes');
+
+// ── 1b. Lift the i18n engine + table out of the member app ────────────────
+// The panel runs the app's OWN translator and the app's own string table,
+// with its own rows concatenated on top -- see the long note beside the
+// SHARED I18N regions in admin-src/index.html for why. This is the copy: made
+// by the build, from one source, every time. Nothing in the repo holds a
+// second copy to keep in step.
+//
+// Both markers are asserted at both ends, and the result is checked for the
+// names it must contain. A silently missed injection would produce a panel
+// that boots fine and simply never translates anything, which is exactly the
+// kind of failure nobody notices until the owner does.
+const APP_JS = path.join(ROOT, 'user-src', 'original_module.js');
+const appSrc = fs.readFileSync(APP_JS, 'utf8');
+function lift(name) {
+  const b = `// ==== I18N ${name}: SHARED WITH THE ADMIN PANEL - BEGIN ====\n`;
+  const e = `// ==== I18N ${name}: SHARED WITH THE ADMIN PANEL - END ====\n`;
+  const i = appSrc.indexOf(b), j = appSrc.indexOf(e);
+  if (i < 0 || j < 0 || j < i) {
+    console.error(`Cannot lift the i18n ${name} from user-src/original_module.js -- its BEGIN/END markers are missing or out of order.`);
+    process.exit(1);
+  }
+  return appSrc.slice(i + b.length, j);
+}
+function injectShared(src, name, text) {
+  const b = `// ==== SHARED I18N ${name}: REPLACED BY build-admin.js - BEGIN ====\n`;
+  const e = `// ==== SHARED I18N ${name}: REPLACED BY build-admin.js - END ====\n`;
+  const i = src.indexOf(b), j = src.indexOf(e);
+  if (i < 0 || j < 0 || j < i) {
+    console.error(`Cannot inject the i18n ${name} -- admin-src/index.html's BEGIN/END markers are missing or out of order.`);
+    process.exit(1);
+  }
+  return src.slice(0, i + b.length) + text + src.slice(j);
+}
+const sharedTable = lift('TABLE'), sharedEngine = lift('ENGINE');
+code = injectShared(code, 'TABLE', sharedTable);
+code = injectShared(code, 'ENGINE', sharedEngine);
+for (const need of ['var LANG_ROWS = [', 'var LANG_PATTERNS = [', 'var DICT',
+                    'function t(', 'function tPattern', 'function translateTree',
+                    'function startI18nObserver']) {
+  if (!code.includes(need)) {
+    console.error(`i18n injection produced a script with no ${need.trim()} -- refusing to build.`);
+    process.exit(1);
+  }
+}
+log('i18n shared      :', sharedTable.length, 'bytes of table +', sharedEngine.length, 'bytes of engine lifted from the app');
 
 // ── 2. Syntax-check the raw source before touching it ─────────────────────
 fs.writeFileSync('/tmp/_snow_admin_src_check.js', code);

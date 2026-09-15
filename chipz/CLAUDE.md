@@ -5122,3 +5122,155 @@ The mutation set opens with a deliberate **no-op** — a variable declared and n
 asserted to be reported **MISSED**. If a harness ever "catches" that, it is failing for
 some reason unrelated to the mutation, and every other CAUGHT in that run means nothing.
 Eight real mutations, all caught; the control behaved.
+
+## Round 167 — The admin panel speaks every language, and it runs the app's translator
+
+> "also make when in admin, you can change its language too, everything there"
+
+### The panel does NOT have a second translator
+`build-admin.js` lifts the i18n **engine** and the member app's own **string table**
+straight out of `user-src/original_module.js` at build time, into two marked regions of
+`admin-src/index.html`, and the panel concatenates its own rows onto them. Not a copy
+checked into the repo — a copy made by the build, from one source, every time, so drift
+is impossible rather than merely tested for.
+
+Two reasons it is shared rather than written twice:
+- the engine is ~150 lines that took a round and eleven mutations to get right (the
+  pattern fallback, the whole-node rule, the WeakMap of originals, the attribute observer
+  that has to recognise its own output). A second implementation would be subtle in
+  exactly the places nobody re-reads. This project already keeps ONE such pair in step by
+  hand (`phoneToEmail`) and needs a dedicated test to prove they still agree.
+- the panel and the app share a couple of hundred **words** — Deposit, Withdraw, Save,
+  Cancel, Settings, Pending, Failed, Paid, Products, Messages. Two hand-kept tables would
+  drift cell by cell until the same button read differently on the two screens.
+
+**The order the three pieces run in is load-bearing and invisible**: `DICT` and
+`LANG_PATTERN_RE` are built ONCE, at the moment the engine's own text runs, so the
+concatenation has to sit **between** the two injected regions. A tidier placement after
+the engine would compile and translate nothing. `test-admin-i18n.js` pins the order by
+byte offset.
+
+`build-admin.js` **refuses to build** if either marker is missing at either end, or if
+the injected result carries no `translateTree`/`startI18nObserver`. The failure it is
+guarding against is a panel that boots perfectly and silently never translates anything,
+which nobody notices until the owner does.
+
+### Where the operator changes it
+| | |
+|---|---|
+| topbar, beside the country switch | on every screen, never hidden |
+| the sign-in card | the one screen standing between an operator and the panel |
+| remembered | `localStorage['chipz_admin_lang']`, per device |
+
+**The topbar picker is never hidden**, unlike the country switch. Which words the person
+reading the panel understands is not a property of the country they are administering.
+Both `<select>`s carry **`data-no-i18n`**: their options are each language's own native
+name, and a picker whose options change language as you change language is unusable.
+
+### The table: 311 rows and 24 templates, every one of them measured
+`find-admin-untranslated.py` (port **8901**) drives the **built, obfuscated** panel with
+the language forced, walks all 14 tabs plus their sub-tabs and the user-detail modal, and
+reads back every visible text node and every `placeholder`/`aria-label`/`title`. The
+panel's own copy is ~4× the member app's, so "I think I got them all" is worth nothing —
+and grepping `admin/index.html` proves nothing either, because every string literal is
+encoded.
+
+First run: **503 findings**. Final: **0, in all five languages** (317–350 strings
+accounted for per language). `test-admin-i18n-coverage.py` is the standing assertion and
+runs the sweep once per language, because every column is a separate claim.
+
+`admin-rows-*.py` hold the rows as a **table** rather than as JavaScript, and
+`build-admin-rows.py` is the only thing that writes them into the source. It refuses on:
+a row that is not exactly six cells (a short row silently shifts every language after the
+gap by one column, which reads as a working translation in the wrong language), a blank
+cell in any column, a cell that merely repeats its English (byte-identical to a blank at
+runtime, so a filled one is a claim nobody checked — use `'='`), an English key over the
+engine's 160-character cap, a duplicate key within the panel **or against the app's own
+table**, and a template whose translation drops a placeholder.
+
+**The cap applies to the ENGLISH only.** `i18nTextNode()` measures the text node it
+found — the key — and a translation is free to run longer, which most of them do. A first
+version of the guard capped every cell and rejected four correct rows.
+
+### `'='` now means the same thing in a template as in a row
+It was only ever handled in `DICT`. In `LANG_PATTERNS` a `'='` cell passed
+`tPattern()`'s truthiness check and would have been used **as the template**, rendering
+`Plans (0)` as a bare `=`. One line in the shared engine; the sweep and
+`build-admin-rows.py` were taught it too. French needs it for `Transactions ({0})` and
+`Plans ({0})`, and eleven row cells besides.
+
+### What deliberately stays English, and why it is not a fudge
+- **`fragment` (163)** — a piece of a sentence that inline markup broke up:
+  `<p class="muted">Set it under <b>Settings</b>, then add the <code>*</code> record.</p>`
+  is four text nodes, none of them a sentence. The translator matches WHOLE text nodes,
+  so no row can ever apply to one — and `", then add the"` translated out of context is
+  nonsense. Detected structurally (walk up past inline tags, ask whether the block owner
+  holds more than one node), not by a length guess. A string that renders whole on ANY
+  screen clears the flag, so one clean rendering wins over a spliced one.
+- **`too-long` (43)** — over the engine's own 160-character cap, so a row could never
+  apply. These are the long operator-documentation paragraphs in Settings and Countries.
+- **Admin-authored content and defaults** — message bodies, the announcement, About
+  blocks, the tagline and maintenance notice the panel ships for him to overwrite, the
+  USSD steps template. Nothing in this repo can translate a sentence written at runtime.
+- **Money, dates, account ids, hostnames, referral codes, a member's pasted payment
+  SMS.** Translating any of these would be a bug. The pasted SMS in particular is
+  somebody else's message and must reach the admin exactly as sent.
+
+The three Bantu columns want a native speaker's eye before launch, exactly as the member
+app's table says. Every correction is one cell in an `admin-rows-*.py`, nothing else
+moves.
+
+### The two tabs that had never rendered — and the check that now refuses to call that clean
+Deposits and Withdrawals produced **zero findings through five batches**, and both were
+correct-looking green. `switchTab()` runs each renderer as
+`Promise.resolve(fn()).catch(() => {})`, so a renderer that throws leaves `#content`
+empty, raises **no page error**, and the sweep cheerfully reports nothing to fix for the
+two screens where money is actually approved. The cause was my own fixture:
+`processedByDay` was an object where `renderWithdrawals` spreads an array
+(`Math.max(1, ...pbd.map(...))`, which runs *before* the `pbd.length ?` guard).
+
+`collect()` now records "the screen rendered NO text" as an **error**, not a note, and
+the sweep exits non-zero on it. Fixing the fixture immediately produced **29 more real
+findings** (Approve, Reject, Force-credit, Needs Review, Destination, Net, every counted
+filter label). That is the **fourth** time in this project that a fixture which could not
+reach a state was mistaken for a feature that worked — after the ledger pill's
+Failed/Paid, the founder Sign Up wording, and the activity ticker's own verbs.
+
+### Fixtures live in ONE file
+`find_admin_fixtures.py` — the sweep and `test-admin-i18n.py` both need every tab to
+paint, and two copies would drift, with the drift showing up as a screen quietly no
+longer being covered.
+
+### Tests
+- **`test-admin-i18n.js`** — performs the lift here and requires the result to hold every
+  engine name and none of the host-specific ones; pins the concat order; checks the build
+  really does refuse; then the whole table's hygiene; then **runs the real engine** in a
+  sandbox to prove `'='` behaves identically to a blank in both tables and that a
+  template copies its figure across untouched.
+- **`test-admin-i18n.py`** (port **8903**) — drives the BUILT panel: the sign-in card
+  translates before anyone signs in, the tab bar and dashboard after, a tab opened
+  **after** the switch (the observer, and the whole of "everything there"), switching back
+  to English restoring the panel word for word from stored originals, the choice surviving
+  a reload, and money/phone/referral code left alone. "Products"/"Messages" are asserted
+  specifically because they have **no row in the panel's table** — they can only be
+  translated if the shared table really was lifted, so they are the one assertion a no-op
+  injection fails.
+- **`test-admin-i18n-coverage.py`** — the sweep, once per language, with a floor on how
+  many strings were accounted for so "0 findings" cannot mean "0 screens".
+- **`verify-admin-i18n-discriminates.py`** — 14 real mutations plus a control, rebuilding
+  the panel each time, judged on the **exit code**. A refused build counts as caught,
+  because refusing is what it is for.
+
+### A test trap worth keeping
+`test-admin-i18n.py` first looked for `Status` in the withdrawals table and **never found
+it in either language** — the headings carry `text-transform:uppercase`, so `inner_text`
+returns `STATUS`. That failed a working panel, while its companion assertion ("no English
+heading left") passed having measured nothing at all. Both now match case-insensitively
+and are **scoped to `thead`**: "destination" also appears inside the manual-payments help
+paragraph, which is one of the fragmented sentences that stays English, so a whole-tab
+match would fail on prose rather than on a heading.
+
+### Ports
+`find-admin-untranslated.py` binds **8901** and `test-admin-i18n.py` **8903**;
+`test-admin-i18n-coverage.py` shells out to the sweep, so the two cannot run at once. The
+running list is in Round 157's note.

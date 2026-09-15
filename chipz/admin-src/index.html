@@ -114,6 +114,11 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   input,select,textarea{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:11px;
     font-size:14px;background:var(--card);color:var(--ink);outline:none;margin-top:6px}
   input:focus,select:focus,textarea:focus{border-color:var(--gold)}
+  /* The two language pickers. Every other select in this panel is a full-width
+     form control; these two are chrome, so they opt out of that width rather
+     than stretching the topbar row and the login card's brand line. */
+  #langLogin,#langSwitch{width:auto;margin-top:0;padding:7px 9px;border-radius:9px;font-size:12.5px}
+  #langLogin{margin-left:auto;flex:0 0 auto}
   label{display:block;font-size:12.5px;color:var(--sub);font-weight:600;margin-top:12px;text-align:left}
   .btn{background:linear-gradient(180deg,#C97785,var(--gold) 60%,var(--gold-deep));color:var(--gold-ink);border:0;border-radius:11px;padding:12px 18px;font-size:14px;
     font-weight:800;cursor:pointer}
@@ -273,6 +278,11 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
            Brand logo still replaces it -- see applyAdminBrandLogo(). -->
       <div class="mk" id="brandMarkLogin"><img src="/icon-192.png" alt="" width="40" height="40"></div>
       <b data-brandadmin>Chipz Admin</b>
+      <!-- The topbar picker lives inside #shell, which nobody has reached yet
+           on this screen. An operator who does not read English has to be able
+           to change the language BEFORE signing in, or the one screen standing
+           between them and the panel is the one screen they cannot read. -->
+      <select id="langLogin" title="The language this panel is shown in" data-no-i18n></select>
     </div>
     <p class="muted">Owner: leave username blank and enter your admin key. Staff: enter the username and password you were given.</p>
     <input id="userInput" type="text" placeholder="Username (leave blank if you're the owner)" autocomplete="off">
@@ -302,6 +312,18 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
              which tab happens to be open. It is hidden entirely while there
              is only one country. -->
         <select id="regionSwitch" class="hidden" title="Which country this panel is showing" style="max-width:190px"></select>
+        <!-- ── THE PANEL'S OWN LANGUAGE ──
+             Owner: "also make when in admin, you can change its language too,
+             everything there."
+
+             Beside the country switch on purpose: the two are the same kind of
+             control (what this panel is showing / what it is saying) and an
+             operator who works in one country in one language sets both once
+             and forgets them. Unlike the country switch it is NEVER hidden --
+             every language is offered to every operator, because which words
+             the person reading the panel understands is not a property of the
+             country they are administering. -->
+        <select id="langSwitch" title="The language this panel is shown in" style="max-width:150px" data-no-i18n></select>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
         <button class="btn ghost sm" id="pushBtn" title="Enable push notifications for new deposits and withdrawal requests on this device/browser. Tapping an alert opens this panel -- it does not approve or send anything by itself.">Notify</button>
         <button class="btn ghost sm hidden" id="installBtn">Install</button>
@@ -4110,7 +4132,449 @@ function renderManualNumbersEditor(){
 function openModal(html){ const r=$('modalRoot'); r.innerHTML=`<div class="modal-bg" data-close></div><div class="modal"><button class="modal-close" data-close>&times;</button>${html}</div>`; r.classList.remove('hidden'); r.querySelectorAll('[data-close]').forEach(e=>e.addEventListener('click',closeModal)); }
 function closeModal(){ const r=$('modalRoot'); r.classList.add('hidden'); r.innerHTML=''; }
 
+// ── LANGUAGES, IN THE PANEL ──
+// Owner: "also make when in admin, you can change its language too, everything
+// there."
+//
+// This runs the MEMBER APP'S translator, not a second one written to match it.
+// build-admin.js lifts the engine AND the app's own string table straight out
+// of user-src/original_module.js at build time, into the two SHARED I18N
+// regions below. Not a copy checked into this repo -- a copy made by the
+// build, from one source, every time, so drift is impossible rather than
+// merely tested for.
+//
+// Two reasons it is shared rather than written twice:
+//   * the engine is ~150 lines that took a round and eleven mutations to get
+//     right (the pattern fallback, the whole-node rule, the WeakMap of
+//     originals, the attribute observer that has to recognise its own
+//     output). A second implementation would be subtle in exactly the places
+//     nobody re-reads.
+//   * the panel and the app share a couple of hundred WORDS -- Deposit,
+//     Withdraw, Save, Cancel, Settings, Pending, Failed, Paid. Two hand-kept
+//     tables would drift cell by cell until the same button read differently
+//     on the two screens.
+//
+// Why a DOM sweep and not t() at every call site: the panel builds every
+// screen by assigning a template literal to innerHTML, exactly as the app
+// does. Wrapping each string would mean editing well over a thousand sites
+// and would still miss whatever the next round adds.
+var LANGS = ADMIN_LANGS;
+var LANG_CODES = LANGS.map(l => l.code);
+var LANG = 'en';
+// Per device, like the country switch beside it. Whoever sits at this browser
+// reads one language; re-picking it on every reload is how a panel ends up
+// being used in a language nobody chose.
+const ADMIN_LANG_KEY = 'chipz_admin_lang';
+
+// ── THE PANEL'S OWN WORDS ──
+// [english, lg, sw, fr, rw, nyn], exactly the app's table shape, and the same
+// rules apply: an EMPTY cell falls back to English on purpose (a wrong word on
+// a screen that moves money is worse than an English one), and '=' means the
+// right word in this language IS the English word -- a deliberate choice
+// rather than a cell nobody has filled in.
+//
+// These are only the strings the app's own table does not already carry.
+// find-admin-untranslated.py drives the BUILT panel and lists whatever is
+// still reaching the screen in English, so this table is measured rather than
+// guessed at.
+const ADMIN_LANG_ROWS = [
+  ['Dashboard', 'Olutimbe', 'Dashibodi', 'Tableau de bord', 'Imbonerahamwe', 'Orubaju rw\'ebikuru'],
+  ['Analytics', 'Okwekenneenya', 'Uchanganuzi', 'Analyses', 'Isesengura', 'Okucondooza'],
+  ['Users', 'Abakozesa', 'Watumiaji', 'Utilisateurs', 'Abakoresha', 'Abakozesa'],
+  ['Deposits', 'Ssente eziteekebwamu', 'Amana', 'Dépôts', 'Ubwishyu bwinjiye', 'Sente ezitairwemu'],
+  ['Withdrawals', 'Okuggyamu ssente', 'Utoaji', 'Retraits', 'Kubikuza', 'Okwihamu sente'],
+  ['Transactions', 'Emirimu gy\'ssente', 'Miamala', '=', 'Ibikorwa by\'amafaranga', 'Emirimo ya sente'],
+  ['Referrals', 'Okuyita', 'Mialiko', 'Parrainages', 'Gutumira', 'Okweta'],
+  ['Gift Codes', 'Koodi z\'ebirabo', 'Misimbo ya Zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
+  ['Gift codes', 'Koodi z\'ebirabo', 'Misimbo ya zawadi', 'Codes cadeaux', 'Kode z\'impano', 'Koodi z\'ebiconco'],
+  ['Countries', 'Amawanga', 'Nchi', 'Pays', 'Ibihugu', 'Amahanga'],
+  ['Admins', 'Abaduumizi', 'Wasimamizi', 'Administrateurs', 'Abayobozi', 'Abebembezi'],
+  ['Activity Log', 'Ekitabo ky\'ebikolwa', 'Kumbukumbu ya shughuli', 'Journal d\'activité', 'Igitabo cy\'ibikorwa', 'Ekitabo ky\'ebikorwa'],
+  ['Activity log', 'Ekitabo ky\'ebikolwa', 'Kumbukumbu ya shughuli', 'Journal d\'activité', 'Igitabo cy\'ibikorwa', 'Ekitabo ky\'ebikorwa'],
+  ['Overview', 'Okulabako', 'Muhtasari', 'Aperçu', 'Incamake', 'Okureeberera'],
+  ['Notify', 'Manyisa', 'Arifa', 'Notifier', 'Menyesha', 'Manyisa'],
+  ['Sign in', 'Yingira', 'Ingia', 'Se connecter', 'Injira', 'Taaha'],
+  ['Which country this panel is showing', 'Ggwanga ki lino olupapula lye lulaga', 'Ni nchi gani paneli hii inaonyesha', 'Quel pays ce panneau affiche', 'Ni igihugu iki iyi paneli yerekana', 'N\'ihanga ki eri orupapura eri rirukworeka'],
+  ['The language this panel is shown in', 'Olulimi lino olupapula lwe lulagibwamu', 'Lugha ambayo paneli hii inaonyeshwa', 'La langue dans laquelle ce panneau est affiché', 'Ururimi iyi paneli yerekanwamo', 'Orurimi eri orupapura rirukworekwamu'],
+  ['All countries', 'Amawanga gonna', 'Nchi zote', 'Tous les pays', 'Ibihugu byose', 'Amahanga goona'],
+  ['This screen is the same for every country.', 'Olupapula luno lwe lumu eri buli ggwanga.', 'Skrini hii ni sawa kwa kila nchi.', 'Cet écran est le même pour chaque pays.', 'Uru rupapuro ni rumwe kuri buri gihugu.', 'Orupapura ruru nirwo rumwe ahari buri ihanga.'],
+  ['Total users', 'Omuwendo gw\'abakozesa', 'Jumla ya watumiaji', 'Total des utilisateurs', 'Umubare w\'abakoresha', 'Omubaro gw\'abakozesa'],
+  ['Active users', 'Abakozesa abakola', 'Watumiaji hai', 'Utilisateurs actifs', 'Abakoresha bakora', 'Abakozesa abarikukora'],
+  ['Banned users', 'Abakozesa abagaanibwa', 'Watumiaji waliozuiwa', 'Utilisateurs bloqués', 'Abakoresha babujijwe', 'Abakozesa abarikuzibirwa'],
+  ['Wallet balances', 'Ssente eziri mu nsawo', 'Salio za pochi', 'Soldes des portefeuilles', 'Amafaranga ari mu mifuka', 'Sente eziri omu nsaho'],
+  ['Total deposited', 'Ssente zonna eziteekeddwamu', 'Jumla iliyowekwa', 'Total déposé', 'Amafaranga yose yabitswe', 'Sente zoona ezitairwemu'],
+  ['Total withdrawn', 'Ssente zonna eziggiddwamu', 'Jumla iliyotolewa', 'Total retiré', 'Amafaranga yose yabikujwe', 'Sente zoona ezihiirwemu'],
+  ['Total invested', 'Ssente zonna eziteekeddwa mu bizinensi', 'Jumla iliyowekezwa', 'Total investi', 'Amafaranga yose yashowe', 'Sente zoona ezitairwemu omu byamaguzi'],
+  ['Active plans', 'Enteekateeka ezikola', 'Mipango hai', 'Plans actifs', 'Gahunda zikora', 'Enteekateeka ezirikukora'],
+  ['Pending deposits', 'Ssente eziteekeddwamu ezirindiridde', 'Amana yanayosubiri', 'Dépôts en attente', 'Ubwishyu butegereje', 'Sente ezitairwemu ezirikutegyereza'],
+  ['Pending withdrawals', 'Okuggyamu ssente okurindiridde', 'Utoaji unaosubiri', 'Retraits en attente', 'Kubikuza gutegereje', 'Okwihamu sente okurikutegyereza'],
+  ['Recent transactions', 'Emirimu gy\'ssente egiyise', 'Miamala ya hivi karibuni', 'Transactions récentes', 'Ibikorwa bya vuba', 'Emirimo ya sente ey\'obwire obuhingwire'],
+  ['MarzPay available balance', 'Ssente eziriwo ku MarzPay', 'Salio linalopatikana la MarzPay', 'Solde disponible MarzPay', 'Amafaranga aboneka kuri MarzPay', 'Sente eziriho aha MarzPay'],
+  ['Crunching numbers…', 'Tubala emiwendo…', 'Tunahesabu namba…', 'Calcul en cours…', 'Kubara imibare…', 'Nitubara emibaro…'],
+  ['Type', 'Ekika', 'Aina', '=', 'Ubwoko', 'Ekika'],
+  ['Status', 'Embeera', 'Hali', 'Statut', 'Imimerere', 'Embeera'],
+  ['Reason', 'Ensonga', 'Sababu', 'Motif', 'Impamvu', 'Enshonga'],
+  ['Reference', 'Namba y\'okujuliza', 'Kumbukumbu', 'Référence', 'Inomero y\'icyitegererezo', 'Namba y\'okwijuka'],
+  ['Description', 'Ennyinyonnyola', 'Maelezo', '=', 'Ibisobanuro', 'Okushoboorora'],
+  ['Details', 'Ebisingawo', 'Maelezo zaidi', 'Détails', 'Ibisobanuro birambuye', 'Ebindi ebirikukiraho'],
+  ['Action', 'Ekikolwa', 'Kitendo', '=', 'Igikorwa', 'Ekikorwa'],
+  ['Who', 'Ani', 'Nani', 'Qui', 'Nde', 'Oha'],
+  ['When', 'Ddi', 'Lini', 'Quand', 'Ryari', 'Ryari'],
+  ['Phone', 'Essimu', 'Simu', 'Téléphone', 'Telefone', 'Esimu'],
+  ['Phone number', 'Namba y\'essimu', 'Namba ya simu', 'Numéro de téléphone', 'Nomero ya telefone', 'Namba ya esimu'],
+  ['Number', 'Namba', 'Namba', 'Numéro', 'Nomero', 'Namba'],
+  ['Network', 'Ekitongole ky\'essimu', 'Mtandao', 'Réseau', 'Uruhererekane', 'Ekitongore kya esimu'],
+  ['Country', 'Eggwanga', 'Nchi', 'Pays', 'Igihugu', 'Ihanga'],
+  ['Currency', 'Ssente z\'eggwanga', 'Sarafu', 'Devise', 'Ifaranga', 'Sente z\'ihanga'],
+  ['Clock', 'Essaawa', 'Saa', 'Horloge', 'Isaha', 'Eshaaha'],
+  ['Web address', 'Endagiriro y\'omukutu', 'Anwani ya tovuti', 'Adresse web', 'Aderesi ya interineti', 'Endagiriro y\'orubuga'],
+  ['Created', 'Yatondebwa', 'Iliundwa', 'Créé', 'Yaremwe', 'Ekahangwa'],
+  ['Last login', 'Okuyingira okusembayo', 'Kuingia mara ya mwisho', 'Dernière connexion', 'Kwinjira kwa nyuma', 'Okutaaha okwa buhereeru'],
+  ['Never', 'Tewali', 'Kamwe', 'Jamais', 'Nta na rimwe', 'Tikirimu'],
+  ['Not set', 'Tekitereddwa', 'Haijawekwa', 'Non défini', 'Ntibyashyizweho', 'Tikitairweho'],
+  ['Nothing set', 'Tewali kitereddwa', 'Hakuna kilichowekwa', 'Rien de défini', 'Nta cyashyizweho', 'Tihariho ekitairweho'],
+  ['None', 'Tewali', 'Hakuna', 'Aucun', 'Nta na kimwe', 'Tihariho'],
+  ['None saved.', 'Tewali kitereddwa.', 'Hakuna iliyohifadhiwa.', 'Aucun enregistré.', 'Nta cyabitswe.', 'Tihariho ekibiikirwe.'],
+  ['No transactions', 'Tewali mirimu gy\'ssente', 'Hakuna miamala', 'Aucune transaction', 'Nta bikorwa', 'Tihariho mirimo ya sente'],
+  ['On', 'Kikola', 'Imewashwa', 'Activé', 'Birakora', 'Nikikora'],
+  ['Off', 'Tekikola', 'Imezimwa', 'Désactivé', 'Ntibikora', 'Tikirikukora'],
+  ['Enabled', 'Kisobozesebbwa', 'Imewezeshwa', 'Activé', 'Birakoreshwa', 'Nikikozesibwa'],
+  ['Upcoming', 'Kijja mu maaso', 'Inakuja', 'À venir', 'Biri hafi kuza', 'Nikiija omu maisho'],
+  ['Used', 'Kikozeseddwa', 'Imetumika', 'Utilisé', 'Byakoreshejwe', 'Kikakozesibwa'],
+  ['Expires', 'Kiggwaako', 'Muda wake unaisha', 'Expire', 'Birangira', 'Nikihwaho'],
+  ['Code', 'Koodi', 'Msimbo', '=', 'Kode', 'Koodi'],
+  ['Codes', 'Koodi', 'Misimbo', '=', 'Kode', 'Koodi'],
+  ['Copy code', 'Koppa koodi', 'Nakili msimbo', 'Copier le code', 'Gukoporora kode', 'Koppa koodi'],
+  ['Title', 'Omutwe', 'Kichwa', 'Titre', 'Umutwe', 'Omutwe'],
+  ['Message', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa'],
+  ['Invested', 'Ssente eziteekeddwamu', 'Iliyowekezwa', 'Investi', 'Yashowe', 'Sente ezitairwemu'],
+  ['Referred user', 'Omukozesa ayitiddwa', 'Mtumiaji aliyealikwa', 'Utilisateur parrainé', 'Umukoresha watumiwe', 'Omukozesa oyetsirwe'],
+  ['Referrer\'s code', 'Koodi y\'oyo ayise', 'Msimbo wa mwalikaji', 'Code du parrain', 'Kode y\'uwatumiye', 'Koodi y\'oworikweta'],
+  ['Referred by', 'Yayitibwa', 'Alialikwa na', 'Parrainé par', 'Yatumiwe na', 'Yayetsirwe'],
+  ['Paid from', 'Yasasulwa okuva', 'Imelipwa kutoka', 'Payé depuis', 'Byishyuwe biva', 'Kishashuriirwe kuruga'],
+  ['Paid to', 'Yasasulwa eri', 'Imelipwa kwa', 'Payé à', 'Byishyuwe kuri', 'Kishashuriirwe ahari'],
+  ['Processing', 'Kirongoosebwa', 'Inashughulikiwa', 'En traitement', 'Birimo gutunganywa', 'Nikikorwaho'],
+  ['Check-in', 'Okukyalira', 'Kuhudhuria', 'Pointage', 'Kwiyandikisha', 'Okwoleka'],
+  ['Commissions', 'Ssente z\'okuyita', 'Kamisheni', '=', 'Komisiyo', 'Sente z\'okweta'],
+  ['Plans', 'Enteekateeka', 'Mipango', '=', 'Gahunda', 'Enteekateeka'],
+  ['L1 commission', 'Ssente ez\'omutendera 1', 'Kamisheni ya ngazi 1', 'Commission niveau 1', 'Komisiyo y\'urwego rwa 1', 'Sente z\'omurengo 1'],
+  ['l1 commission', 'ssente ez\'omutendera 1', 'kamisheni ya ngazi 1', 'commission niveau 1', 'komisiyo y\'urwego rwa 1', 'sente z\'omurengo 1'],
+  ['turntable', 'nnamuziga', 'gurudumu', 'roue', 'uruziga', 'orupiira'],
+  ['Turntable win', 'Okuwangula ku nnamuziga', 'Ushindi wa gurudumu', 'Gain à la roue', 'Gutsindira ku ruziga', 'Okusingura aha rupiira'],
+  ['Deposit: Paid', 'Okuteekamu: Kisasuddwa', 'Amana: Imelipwa', 'Dépôt : Payé', 'Ubwishyu: Byishyuwe', 'Okuteeramu: Kishashuriirwe'],
+  ['Withdrawal: Processing', 'Okuggyamu: Kirongoosebwa', 'Utoaji: Inashughulikiwa', 'Retrait : En traitement', 'Kubikuza: Birimo gutunganywa', 'Okwihamu: Nikikorwaho'],
+  ['Ban', 'Gaana', 'Zuia', 'Bloquer', 'Kubuza', 'Zibira'],
+  ['Credit', 'Muwe ssente', 'Ongeza pesa', 'Créditer', 'Kongeraho amafaranga', 'Mumuhe sente'],
+  ['Debit', 'Muggyeko ssente', 'Toa pesa', 'Débiter', 'Gukuraho amafaranga', 'Mwihyeho sente'],
+  ['Attach', 'Gattako', 'Ambatisha', 'Rattacher', 'Gushyiraho', 'Gyemesa'],
+  ['Attach referrer', 'Gattako oyo ayise', 'Ambatisha mwalikaji', 'Rattacher un parrain', 'Gushyiraho uwatumiye', 'Gyemesa oworikweta'],
+  ['Set PIN', 'Teekawo PIN', 'Weka PIN', 'Définir le PIN', 'Shyiraho PIN', 'Taho PIN'],
+  ['Reconcile', 'Tereeza', 'Linganisha', 'Réconcilier', 'Kuringaniza', 'Gyerenganisa'],
+  ['Delete account', 'Sazaamu akawunti', 'Futa akaunti', 'Supprimer le compte', 'Gusiba konti', 'Rihamu akaunti'],
+  ['View referral chain', 'Laba olunyiriri lw\'okuyita', 'Angalia mnyororo wa mialiko', 'Voir la chaîne de parrainage', 'Reba urunigi rwo gutumira', 'Reeba omunyororo gw\'okweta'],
+  ['Integrity audit', 'Okukebera obutuufu', 'Ukaguzi wa usahihi', 'Audit d\'intégrité', 'Igenzura ry\'ukuri', 'Okucondooza obwesigwa'],
+  ['Recalculate totals', 'Ddamu obale omugatte', 'Hesabu upya jumla', 'Recalculer les totaux', 'Kongera kubara ibiteranyo', 'Garuka obare omugatte'],
+  ['Shorten account ids', 'Kendeeza namba z\'akawunti', 'Fupisha vitambulisho vya akaunti', 'Raccourcir les identifiants', 'Kugabanya indangamuntu za konti', 'Kyeeneza namba za akaunti'],
+  ['Reset password (Firebase)', 'Kyusa ekisumuluzo (Firebase)', 'Weka upya nenosiri (Firebase)', 'Réinitialiser le mot de passe (Firebase)', 'Guhindura ijambobanga (Firebase)', 'Hindura ekisumuruzo (Firebase)'],
+  ['Correct phone number', 'Tereeza namba y\'essimu', 'Rekebisha namba ya simu', 'Corriger le numéro de téléphone', 'Gukosora nomero ya telefone', 'Gyerurura namba ya esimu'],
+  ['Save phone', 'Tereka essimu', 'Hifadhi simu', 'Enregistrer le téléphone', 'Bika telefone', 'Biika esimu'],
+  ['Looks malformed', 'Kirabika tekituufu', 'Inaonekana si sahihi', 'Semble mal formé', 'Bisa nk\'aho ari bibi', 'Nikireebeka kitahikire'],
+  ['Not set yet', 'Tekinnateekebwawo', 'Bado haijawekwa', 'Pas encore défini', 'Ntiryashyizweho', 'Tikirataho'],
+  ['New 6-digit trade password', 'Ekisumuluzo eky\'okusuubula ekipya eky\'ennamba 6', 'Nenosiri jipya la malipo la tarakimu 6', 'Nouveau mot de passe de transaction à 6 chiffres', 'Ijambobanga rishya ry\'ubucuruzi ry\'imibare 6', 'Ekisumuruzo kisya eky\'okushuubura eky\'embaro 6'],
+  ['New password (min 6 chars)', 'Ekisumuluzo ekipya (obutono nnukuta 6)', 'Nenosiri jipya (angalau herufi 6)', 'Nouveau mot de passe (6 caractères minimum)', 'Ijambobanga rishya (byibuze inyuguti 6)', 'Ekisumuruzo kisya (buriijo obuhandiiko 6)'],
+  ['Note (optional)', 'Obubaka (si bwa buwaze)', 'Dokezo (si lazima)', 'Note (facultatif)', 'Inyandiko (ntabwo ari itegeko)', 'Ekiraburo (tikya buriijo)'],
+  ['No plans purchased yet.', 'Tewali nteekateeka egguliddwa.', 'Hakuna mipango iliyonunuliwa bado.', 'Aucun plan acheté pour le moment.', 'Nta gahunda iraguzwa.', 'Tihariho nteekateeka egwiiribwe.'],
+  ['Saved cash-out accounts', 'Akawunti z\'okuggyamu ssente eziterekeddwa', 'Akaunti za utoaji zilizohifadhiwa', 'Comptes de retrait enregistrés', 'Konti zo kubikuza zabitswe', 'Akaunti z\'okwihamu sente ezibiikirwe'],
+  ['Search phone or referral code', 'Noonya essimu oba koodi y\'okuyita', 'Tafuta simu au msimbo wa mwaliko', 'Rechercher un téléphone ou un code de parrainage', 'Shakisha telefone cyangwa kode yo gutumira', 'Sherura esimu nari koodi y\'okweta'],
+  ['Search any phone number or referral code', 'Noonya namba y\'essimu yonna oba koodi y\'okuyita', 'Tafuta namba yoyote ya simu au msimbo wa mwaliko', 'Rechercher n\'importe quel numéro ou code de parrainage', 'Shakisha nomero iyo ari yo yose ya telefone cyangwa kode yo gutumira', 'Sherura namba ya esimu yoona nari koodi y\'okweta'],
+  ['Search description, type, user id, or a reference', 'Noonya ennyinyonnyola, ekika, namba y\'omukozesa, oba namba y\'okujuliza', 'Tafuta maelezo, aina, kitambulisho cha mtumiaji, au kumbukumbu', 'Rechercher une description, un type, un identifiant ou une référence', 'Shakisha ibisobanuro, ubwoko, indangamuntu y\'umukoresha, cyangwa icyitegererezo', 'Sherura okushoboorora, ekika, namba y\'omukozesa, nari namba y\'okwijuka'],
+  ['Admin accounts', 'Akawunti z\'abaduumizi', 'Akaunti za wasimamizi', 'Comptes administrateurs', 'Konti z\'abayobozi', 'Akaunti z\'abebembezi'],
+  ['Create admin account', 'Tondawo akawunti y\'omuduumizi', 'Tengeneza akaunti ya msimamizi', 'Créer un compte administrateur', 'Gukora konti y\'umuyobozi', 'Hanga akaunti y\'omwebembezi'],
+  ['Username', 'Erinnya ly\'omukozesa', 'Jina la mtumiaji', 'Nom d\'utilisateur', 'Izina ry\'umukoresha', 'Eiziina ry\'omukozesa'],
+  ['Password', 'Ekisumuluzo', 'Nenosiri', 'Mot de passe', 'Ijambobanga', 'Ekisumuruzo'],
+  ['Admin key / password', 'Ekisumuluzo ky\'omuduumizi', 'Ufunguo wa msimamizi / nenosiri', 'Clé administrateur / mot de passe', 'Urufunguzo rw\'umuyobozi / ijambobanga', 'Ekisumuruzo ky\'omwebembezi'],
+  ['At least 8 characters', 'Obutono nnukuta 8', 'Angalau herufi 8', 'Au moins 8 caractères', 'Byibuze inyuguti 8', 'Buriijo obuhandiiko 8'],
+  ['e.g. mary', 'okugeza mary', 'mfano mary', 'ex. mary', 'urugero mary', 'nk\'okugyera mary'],
+  ['Deactivate', 'Sirika', 'Zima', 'Désactiver', 'Guhagarika', 'Zimya'],
+  ['Reactivate', 'Ddamu okuteeka mu nkola', 'Washa tena', 'Réactiver', 'Kongera gukoresha', 'Garuka okimu omu mirimo'],
+  ['Deactivated', 'Kisiriddwa', 'Imezimwa', 'Désactivé', 'Byahagaritswe', 'Kizimirwe'],
+  ['Reset password', 'Kyusa ekisumuluzo', 'Weka upya nenosiri', 'Réinitialiser le mot de passe', 'Guhindura ijambobanga', 'Hindura ekisumuruzo'],
+  ['Delete', 'Sazaamu', 'Futa', 'Supprimer', 'Gusiba', 'Rihamu'],
+  ['Edit', 'Kyusa', 'Hariri', 'Modifier', 'Guhindura', 'Hindura'],
+  ['Log out', 'Fuluma', 'Toka', 'Se déconnecter', 'Gusohoka', 'Ruga omu'],
+  ['new', 'kipya', 'mpya', 'nouveau', 'gishya', 'kisya'],
+  ['Check', 'Kebera', 'Angalia', 'Vérifier', 'Kugenzura', 'Reeba'],
+  ['Order', 'Entegeka', 'Mpangilio', 'Ordre', 'Urutonde', 'Entegyeka'],
+  ['Clear all', 'Sazaamu byonna', 'Futa vyote', 'Tout effacer', 'Gusiba byose', 'Rihamu byona'],
+  ['+ New product', '+ Ekyamaguzi ekipya', '+ Bidhaa mpya', '+ Nouveau produit', '+ Igicuruzwa gishya', '+ Ekyamaguzi kisya'],
+  ['Fix duplicate keys', 'Tereeza ebisumuluzo ebyeddiŋŋana', 'Rekebisha funguo zinazorudiwa', 'Corriger les clés en double', 'Gukosora imfunguzo zisubiranamo', 'Gyerurura ebisumuruzo ebirikwegarukamu'],
+  ['Sync pricing to defaults', 'Zzaayo ebbeeyi ku ntereka entongole', 'Rejesha bei kwa chaguo-msingi', 'Rétablir les prix par défaut', 'Gusubiza ibiciro ku byahoze', 'Garuza ebiingana aha bitairweho'],
+  ['Cycle (days)', 'Ebbanga (ennaku)', 'Mzunguko (siku)', 'Cycle (jours)', 'Uruziga (iminsi)', 'Obwire (ebiro)'],
+  ['Return multiple (×)', 'Emirundi gy\'okuddizibwa (×)', 'Kizidishi cha marejesho (×)', 'Multiplicateur de retour (×)', 'Inshuro z\'inyungu (×)', 'Emirundi y\'okugarurwa (×)'],
+  ['Generate codes', 'Kola koodi', 'Tengeneza misimbo', 'Générer des codes', 'Gukora kode', 'Hanga koodi'],
+  ['How many', 'Mmeka', 'Ngapi', 'Combien', 'Zingahe', 'Ningahe'],
+  ['Reward range', 'Ekigero ky\'empeera', 'Kiwango cha zawadi', 'Fourchette de récompense', 'Urwego rw\'ibihembo', 'Ekigyero ky\'empeera'],
+  ['Min reward (UGX)', 'Empeera esinga obutono (UGX)', 'Zawadi ndogo (UGX)', 'Récompense minimale (UGX)', 'Igihembo gito (UGX)', 'Empeera erikukira obukye (UGX)'],
+  ['Max reward (UGX)', 'Empeera esinga obunene (UGX)', 'Zawadi kubwa (UGX)', 'Récompense maximale (UGX)', 'Igihembo kinini (UGX)', 'Empeera erikukira obwingi (UGX)'],
+  ['Max uses per code (optional)', 'Emirundi egisinga buli koodi (si kya buwaze)', 'Matumizi mengi kwa msimbo (si lazima)', 'Utilisations max par code (facultatif)', 'Inshuro ntarengwa kuri buri kode (ntabwo ari itegeko)', 'Emirundi erikukira aha buri koodi (tikya buriijo)'],
+  ['Expires after (seconds, optional)', 'Kiggwaako oluvannyuma (obutundutundu, si kya buwaze)', 'Inaisha baada ya (sekunde, si lazima)', 'Expire après (secondes, facultatif)', 'Birangira nyuma ya (amasegonda, ntabwo ari itegeko)', 'Nikihwaho bwanyima ya (obucweka, tikya buriijo)'],
+  ['e.g. 30 for a flash code', 'okugeza 30 ku koodi ey\'akaseera', 'mfano 30 kwa msimbo wa haraka', 'ex. 30 pour un code éclair', 'urugero 30 kuri kode y\'igihe gito', 'nk\'okugyera 30 aha koodi y\'akaanya'],
+  ['Total claimed', 'Omugatte oguggiddwa', 'Jumla iliyodaiwa', 'Total réclamé', 'Igiteranyo cyafashwe', 'Omugatte ogutwiirwe'],
+  ['Post message', 'Teeka obubaka', 'Tuma ujumbe', 'Publier le message', 'Kohereza ubutumwa', 'Tuma obutumwa'],
+  ['Posted messages', 'Obubaka obuweereddwa', 'Ujumbe uliotumwa', 'Messages publiés', 'Ubutumwa bwoherejwe', 'Obutumwa oburikuba butumirwe'],
+  ['ID (blank = new)', 'Namba (bwe kiba kyereere = kipya)', 'Kitambulisho (tupu = mpya)', 'ID (vide = nouveau)', 'Indangamuntu (ubusa = gishya)', 'Namba (ku erikuba etariho = kisya)'],
+  ['Title (optional)', 'Omutwe (si gwa buwaze)', 'Kichwa (si lazima)', 'Titre (facultatif)', 'Umutwe (ntabwo ari itegeko)', 'Omutwe (tigwa buriijo)'],
+  ['Write the message members will read...', 'Wandiika obubaka abakozesa bwe banaasoma...', 'Andika ujumbe ambao wanachama watasoma...', 'Écrivez le message que les membres liront...', 'Andika ubutumwa abanyamuryango bazasoma...', 'Handiika obutumwa abakozesa abu baraashome...'],
+  ['Settings', 'Entegeka', 'Mipangilio', 'Paramètres', 'Igenamiterere', 'Entebeekanisa'],
+  ['App name', 'Erinnya lya pulogulaamu', 'Jina la programu', 'Nom de l\'application', 'Izina rya porogaramu', 'Eiziina rya porogaraamu'],
+  ['Save app name', 'Tereka erinnya lya pulogulaamu', 'Hifadhi jina la programu', 'Enregistrer le nom', 'Bika izina rya porogaramu', 'Biika eiziina rya porogaraamu'],
+  ['App tagline (shown under the logo)', 'Akabonero k\'ebigambo (kalagibwa wansi w\'akabonero)', 'Kauli mbiu (inaonyeshwa chini ya nembo)', 'Slogan (affiché sous le logo)', 'Interuro ngufi (igaragara munsi y\'ikirango)', 'Ebigambo by\'obwesigwa (nibyorekwa ahansi y\'ekimanyiso)'],
+  ['Save tagline', 'Tereka akabonero k\'ebigambo', 'Hifadhi kauli mbiu', 'Enregistrer le slogan', 'Bika interuro ngufi', 'Biika ebigambo by\'obwesigwa'],
+  ['Min deposit', 'Ssente entono ez\'okuteekamu', 'Amana ya chini', 'Dépôt minimum', 'Ubwishyu buto', 'Sente enkye ez\'okuteeramu'],
+  ['Min withdrawal', 'Ssente entono ez\'okuggyamu', 'Utoaji wa chini', 'Retrait minimum', 'Kubikuza guto', 'Sente enkye ez\'okwihamu'],
+  ['Withdrawal fee (%)', 'Ssente z\'obuweereza ku kuggyamu (%)', 'Ada ya utoaji (%)', 'Frais de retrait (%)', 'Amafaranga ya serivisi yo kubikuza (%)', 'Sente z\'obuheereza aha kwihamu (%)'],
+  ['Withdrawal multiple', 'Ekigero ky\'okuggyamu', 'Kizidishi cha utoaji', 'Multiple de retrait', 'Igipimo cyo kubikuza', 'Ekigyero ky\'okwihamu'],
+  ['Max withdrawals per user per day', 'Okuggyamu okusinga buli mukozesa buli lunaku', 'Utoaji mkubwa kwa mtumiaji kwa siku', 'Retraits max par utilisateur par jour', 'Kubikuza ntarengwa kuri buri mukoresha ku munsi', 'Okwihamu okurikukira aha buri mukozesa aha izooba'],
+  ['L1 commission (%)', 'Ssente z\'omutendera 1 (%)', 'Kamisheni ya ngazi 1 (%)', 'Commission niveau 1 (%)', 'Komisiyo y\'urwego rwa 1 (%)', 'Sente z\'omurengo 1 (%)'],
+  ['L2 commission (%)', 'Ssente z\'omutendera 2 (%)', 'Kamisheni ya ngazi 2 (%)', 'Commission niveau 2 (%)', 'Komisiyo y\'urwego rwa 2 (%)', 'Sente z\'omurengo 2 (%)'],
+  ['L3 commission (%)', 'Ssente z\'omutendera 3 (%)', 'Kamisheni ya ngazi 3 (%)', 'Commission niveau 3 (%)', 'Komisiyo y\'urwego rwa 3 (%)', 'Sente z\'omurengo 3 (%)'],
+  ['Check-in bonus', 'Empeera y\'okukyalira', 'Bonasi ya kuhudhuria', 'Bonus de pointage', 'Igihembo cyo kwiyandikisha', 'Empeera y\'okwoleka'],
+  ['Welcome bonus', 'Empeera y\'okwanirizibwa', 'Bonasi ya karibu', 'Bonus de bienvenue', 'Igihembo cyo kwakira', 'Empeera y\'okwakiirwa'],
+  ['Save rates', 'Tereka ebigero', 'Hifadhi viwango', 'Enregistrer les taux', 'Bika ibipimo', 'Biika ebigyero'],
+  ['0 = no limit', '0 = tewali kkomo', '0 = hakuna kikomo', '0 = pas de limite', '0 = nta mupaka', '0 = tihariho mugyendo'],
+  ['Cash-out opens at', 'Okuggyamu ssente kutandika ku', 'Utoaji unafunguka saa', 'Les retraits ouvrent à', 'Kubikuza gutangira saa', 'Okwihamu sente nikutandika aha'],
+  ['Cash-out closes at', 'Okuggyamu ssente kuggalawo ku', 'Utoaji unafungwa saa', 'Les retraits ferment à', 'Kubikuza gufunga saa', 'Okwihamu sente nikwizibwa aha'],
+  ['Only allow cash-out between set hours', 'Kkiriza okuggyamu ssente mu ssaawa eziteereddwawo zokka', 'Ruhusu utoaji ndani ya saa zilizowekwa tu', 'N\'autoriser les retraits qu\'aux heures définies', 'Kwemerera kubikuza gusa mu masaha yashyizweho', 'Ikiriza okwihamu sente omu shaaha ezitairweho zoonka'],
+  ['Auto-approve withdrawals', 'Kkiriza okuggyamu ssente mu bwetwaze', 'Idhinisha utoaji kiotomatiki', 'Approuver automatiquement les retraits', 'Kwemeza kubikuza mu buryo bwikora', 'Ikiriza okwihamu sente kwonka'],
+  ['Enable auto-approve', 'Sobozesa okukkiriza okw\'obwetwaze', 'Wezesha idhini otomatiki', 'Activer l\'approbation automatique', 'Gukoresha kwemeza kwikora', 'Kozesa okwikirizibwa kwonka'],
+  ['Max amount to auto-approve', 'Omuwendo ogusinga ogw\'okukkiriza mu bwetwaze', 'Kiasi kikubwa cha kuidhinisha kiotomatiki', 'Montant max à approuver automatiquement', 'Umubare ntarengwa wo kwemeza mu buryo bwikora', 'Omubaro ogurikukira ogw\'okwikiriza kwonka'],
+  ['Wait after request before approving (seconds)', 'Lindako oluvannyuma lw\'okusaba nga tonnakkiriza (obutundutundu)', 'Subiri baada ya ombi kabla ya kuidhinisha (sekunde)', 'Attendre après la demande avant d\'approuver (secondes)', 'Tegereza nyuma yo gusaba mbere yo kwemeza (amasegonda)', 'Tegyereza bwanyima y\'okushaba otakaikiriza (obucweka)'],
+  ['Save auto-approve settings', 'Tereka entegeka y\'okukkiriza okw\'obwetwaze', 'Hifadhi mipangilio ya idhini otomatiki', 'Enregistrer les paramètres d\'approbation automatique', 'Bika igenamiterere ryo kwemeza kwikora', 'Biika entebeekanisa y\'okwikiriza kwonka'],
+  ['Turntable (spin wheel)', 'Nnamuziga (eddiba erizunguluka)', 'Gurudumu (la kuzungusha)', 'Roue (tourner)', 'Uruziga (ruzunguruka)', 'Orupiira (orurikuzengurutsa)'],
+  ['Daily free spin', 'Okuzungusa okwa buli lunaku okw\'obwereere', 'Mzungusho bure wa kila siku', 'Tour gratuit quotidien', 'Kuzunguza k\'ubuntu kwa buri munsi', 'Okuzengurutsa kwa buri izooba okwa busha'],
+  ['Minimum win (UGX)', 'Okuwangula okusinga obutono (UGX)', 'Ushindi mdogo (UGX)', 'Gain minimum (UGX)', 'Gutsinda guto (UGX)', 'Okusingura okurikukira obukye (UGX)'],
+  ['Maximum win (UGX)', 'Okuwangula okusinga obunene (UGX)', 'Ushindi mkubwa (UGX)', 'Gain maximum (UGX)', 'Gutsinda kunini (UGX)', 'Okusingura okurikukira obwingi (UGX)'],
+  ['Spins earned by buying products', 'Okuzungusa okufunibwa mu kugula ebyamaguzi', 'Mizungusho inayopatikana kwa kununua bidhaa', 'Tours gagnés en achetant des produits', 'Kuzunguza kuboneka mu kugura ibicuruzwa', 'Okuzengurutsa okurikutungwa omu kugura ebyamaguzi'],
+  ['Save turntable settings', 'Tereka entegeka ya nnamuziga', 'Hifadhi mipangilio ya gurudumu', 'Enregistrer les paramètres de la roue', 'Bika igenamiterere ry\'uruziga', 'Biika entebeekanisa y\'orupiira'],
+  ['Maintenance mode', 'Embeera y\'okuddaabiriza', 'Hali ya matengenezo', 'Mode maintenance', 'Uburyo bwo gusana', 'Embeera y\'okugyerurura'],
+  ['Maintenance message (shown to users)', 'Obubaka bw\'okuddaabiriza (bulagibwa abakozesa)', 'Ujumbe wa matengenezo (unaonyeshwa kwa watumiaji)', 'Message de maintenance (affiché aux utilisateurs)', 'Ubutumwa bwo gusana (bugaragarira abakoresha)', 'Obutumwa bw\'okugyerurura (nibworekwa abakozesa)'],
+  ['Opening countdown', 'Okubala ennaku ez\'okuggulawo', 'Kuhesabu siku za kufunguliwa', 'Compte à rebours d\'ouverture', 'Kubara iminsi yo gufungura', 'Okubara ebiro by\'okwigurwa'],
+  ['Opening date & time', 'Olunaku n\'essaawa ez\'okuggulawo', 'Tarehe na saa ya kufunguliwa', 'Date et heure d\'ouverture', 'Itariki n\'isaha byo gufungura', 'Ekiro n\'eshaaha by\'okwigurwa'],
+  ['Require a referral code to sign up', 'Kyetaagisa koodi y\'okuyita okwewandiisa', 'Hitaji msimbo wa mwaliko ili kujisajili', 'Exiger un code de parrainage à l\'inscription', 'Gusaba kode yo gutumira mu kwiyandikisha', 'Kyetengyesa koodi y\'okweta kwehandiisa'],
+  ['Require a plan before withdrawing', 'Kyetaagisa enteekateeka nga tonnaggyamu ssente', 'Hitaji mpango kabla ya kutoa pesa', 'Exiger un plan avant tout retrait', 'Gusaba gahunda mbere yo kubikuza', 'Kyetengyesa enteekateeka otakaihamu sente'],
+  ['Payment provider', 'Ekitongole ekisasula', 'Mtoa huduma ya malipo', 'Fournisseur de paiement', 'Utanga serivisi yo kwishyura', 'Ekitongore ekirikushashura'],
+  ['Enable PAY A', 'Sobozesa PAY A', 'Wezesha PAY A', 'Activer PAY A', 'Gukoresha PAY A', 'Kozesa PAY A'],
+  ['Enable PAY B', 'Sobozesa PAY B', 'Wezesha PAY B', 'Activer PAY B', 'Gukoresha PAY B', 'Kozesa PAY B'],
+  ['Save payment method', 'Tereka engeri y\'okusasula', 'Hifadhi njia ya malipo', 'Enregistrer le mode de paiement', 'Bika uburyo bwo kwishyura', 'Biika omuringo gw\'okushashura'],
+  ['Payment numbers', 'Namba z\'okusasulirako', 'Namba za malipo', 'Numéros de paiement', 'Nomero zo kwishyuriraho', 'Namba z\'okushashuriraho'],
+  ['+ Add payment number', '+ Yongerako namba y\'okusasulirako', '+ Ongeza namba ya malipo', '+ Ajouter un numéro de paiement', '+ Ongeraho nomero yo kwishyuriraho', '+ Yongyeraho namba y\'okushashuriraho'],
+  ['Account holder name', 'Erinnya ly\'nannyini akawunti', 'Jina la mwenye akaunti', 'Nom du titulaire du compte', 'Izina rya nyir\'ukonti', 'Eiziina rya nyineeka akaunti'],
+  ['MTN steps', 'Amatendera ga MTN', 'Hatua za MTN', 'Étapes MTN', 'Intambwe za MTN', 'Emitwarize ya MTN'],
+  ['Airtel steps', 'Amatendera ga Airtel', 'Hatua za Airtel', 'Étapes Airtel', 'Intambwe za Airtel', 'Emitwarize ya Airtel'],
+  ['e.g. Dial *185#, Select Send Money…', 'okugeza Kuba *185#, Londa Sindika Ssente…', 'mfano Piga *185#, Chagua Tuma Pesa…', 'ex. Composez *185#, Choisissez Envoyer de l\'argent…', 'urugero Hamagara *185#, Hitamo Kohereza amafaranga…', 'nk\'okugyera Teera *185#, Toorana Tuma Sente…'],
+  ['Save payment reminder', 'Tereka ekijjukizo ky\'okusasula', 'Hifadhi kikumbusho cha malipo', 'Enregistrer le rappel de paiement', 'Bika urwibutso rwo kwishyura', 'Biika ekiijukyo ky\'okushashura'],
+  ['Support contacts', 'Endagiriro z\'obuyambi', 'Mawasiliano ya usaidizi', 'Contacts d\'assistance', 'Aho wahamagara ubufasha', 'Endagiriro z\'obuhwezi'],
+  ['Support hours', 'Essaawa z\'obuyambi', 'Saa za usaidizi', 'Heures d\'assistance', 'Amasaha y\'ubufasha', 'Eshaaha z\'obuhwezi'],
+  ['Every day, 8am – 9pm', 'Buli lunaku, ku ssaawa 2 ez\'oku makya okutuuka ku 3 ez\'ekiro', 'Kila siku, saa 2 asubuhi – saa 3 usiku', 'Tous les jours, 8h – 21h', 'Buri munsi, saa 2 za mu gitondo – saa 3 z\'ijoro', 'Buri izooba, shaaha 2 ez\'omu kasheeshe – shaaha 3 ez\'ekiro'],
+  ['Telegram channel', 'Omukutu gwa Telegram', 'Chaneli ya Telegram', 'Canal Telegram', 'Umuyoboro wa Telegram', 'Omuyanja gwa Telegram'],
+  ['Telegram group', 'Ekibiina kya Telegram', 'Kikundi cha Telegram', 'Groupe Telegram', 'Itsinda rya Telegram', 'Ekibiina kya Telegram'],
+  ['WhatsApp contact', 'Endagiriro ya WhatsApp', 'Mawasiliano ya WhatsApp', 'Contact WhatsApp', 'Aho wahamagara kuri WhatsApp', 'Endagiriro ya WhatsApp'],
+  ['WhatsApp group', 'Ekibiina kya WhatsApp', 'Kikundi cha WhatsApp', 'Groupe WhatsApp', 'Itsinda rya WhatsApp', 'Ekibiina kya WhatsApp'],
+  ['Save support contacts', 'Tereka endagiriro z\'obuyambi', 'Hifadhi mawasiliano ya usaidizi', 'Enregistrer les contacts d\'assistance', 'Bika aho wahamagara ubufasha', 'Biika endagiriro z\'obuhwezi'],
+  ['Regulation page', 'Olupapula lw\'amateeka', 'Ukurasa wa kanuni', 'Page du règlement', 'Urupapuro rw\'amabwiriza', 'Orupapura rw\'ebiragiro'],
+  ['Platform rules and regulation…', 'Amateeka n\'ebiragiro bya pulatifoomu…', 'Sheria na kanuni za jukwaa…', 'Règles et règlement de la plateforme…', 'Amategeko n\'amabwiriza by\'urubuga…', 'Ebiragiro n\'ebiteekateeko by\'orubuga…'],
+  ['Save regulation', 'Tereka amateeka', 'Hifadhi kanuni', 'Enregistrer le règlement', 'Bika amabwiriza', 'Biika ebiragiro'],
+  ['Save about page', 'Tereka olupapula "Ku ffe"', 'Hifadhi ukurasa wa kuhusu', 'Enregistrer la page À propos', 'Bika urupapuro rwa "Abo turi bo"', 'Biika orupapura "Ahaitwe"'],
+  ['+ Add text block', '+ Yongerako ekitundu ky\'ebiwandiike', '+ Ongeza kizuizi cha maandishi', '+ Ajouter un bloc de texte', '+ Ongeraho igice cy\'inyandiko', '+ Yongyeraho ekicweka ky\'ebihandiike'],
+  ['+ Add image block', '+ Yongerako ekitundu ky\'ekifaananyi', '+ Ongeza kizuizi cha picha', '+ Ajouter un bloc image', '+ Ongeraho igice cy\'ifoto', '+ Yongyeraho ekicweka ky\'ekishushani'],
+  ['Write a paragraph…', 'Wandiika akatundu…', 'Andika aya…', 'Rédigez un paragraphe…', 'Andika igika…', 'Handiika akacweka…'],
+  ['Push notifications', 'Obubaka obuweerezebwa', 'Arifa za papo hapo', 'Notifications push', 'Ubutumwa buhita bugera', 'Obutumwa oburikutumwa'],
+  ['Enable push notifications', 'Sobozesa obubaka obuweerezebwa', 'Wezesha arifa za papo hapo', 'Activer les notifications push', 'Gukoresha ubutumwa buhita bugera', 'Kozesa obutumwa oburikutumwa'],
+  ['Reset all devices', 'Zzaayo ebyuma byonna', 'Weka upya vifaa vyote', 'Réinitialiser tous les appareils', 'Gusubiza ibikoresho byose', 'Garuza ebyoma byona'],
+  ['Home activity ticker speed (px/second)', 'Sipiidi y\'olukalala lw\'ebikolwa ku lupapula olusooka (px/obutundutundu)', 'Kasi ya mkanda wa shughuli za ukurasa wa nyumbani (px/sekunde)', 'Vitesse du bandeau d\'activité de l\'accueil (px/seconde)', 'Umuvuduko w\'umurongo w\'ibikorwa ku rupapuro rw\'ahabanza (px/isegonda)', 'Obwiru bw\'orukoora rw\'ebikorwa aha rupapura rw\'omuka (px/akacweka)'],
+  ['Appearance', 'Endabika', 'Muonekano', 'Apparence', 'Isura', 'Endeebeka'],
+  ['App icon', 'Akabonero ka pulogulaamu', 'Aikoni ya programu', 'Icône de l\'application', 'Ikimenyetso cya porogaramu', 'Ekimanyiso kya porogaraamu'],
+  ['Brand logo', 'Akabonero k\'ekika', 'Nembo ya chapa', 'Logo de la marque', 'Ikirango cy\'ikirangantego', 'Ekimanyiso ky\'eiziina'],
+  ['Brand gradient', 'Langi ez\'ekika', 'Rangi za chapa', 'Dégradé de la marque', 'Amabara y\'ikirangantego', 'Amarangi g\'eiziina'],
+  ['Plain white', 'Ekyeru kyereere', 'Nyeupe tupu', 'Blanc uni', 'Umweru gusa', 'Ekyeru kyonka'],
+  ['Default artwork', 'Ekifaananyi ekitongole', 'Mchoro wa chaguo-msingi', 'Illustration par défaut', 'Ishusho isanzwe', 'Ekishushani ekitairweho'],
+  ['Built-in Chipz icon', 'Akabonero ka Chipz akaliwo dda', 'Aikoni ya Chipz iliyojengwa ndani', 'Icône Chipz intégrée', 'Ikimenyetso cya Chipz kiri imbere', 'Ekimanyiso kya Chipz ekiriyo'],
+  ['Home banner', 'Ekifaananyi eky\'oku lupapula olusooka', 'Bango la ukurasa wa nyumbani', 'Bannière d\'accueil', 'Ibendera ry\'urupapuro rw\'ahabanza', 'Ekishushani eky\'aha rupapura rw\'omuka'],
+  ['Home spin banner', 'Ekifaananyi ky\'nnamuziga ku lupapula olusooka', 'Bango la gurudumu la ukurasa wa nyumbani', 'Bannière de la roue sur l\'accueil', 'Ibendera ry\'uruziga ku rupapuro rw\'ahabanza', 'Ekishushani ky\'orupiira aha rupapura rw\'omuka'],
+  ['Referral banner', 'Ekifaananyi ky\'okuyita', 'Bango la mialiko', 'Bannière de parrainage', 'Ibendera ryo gutumira', 'Ekishushani ky\'okweta'],
+  ['Help Centre banner', 'Ekifaananyi ky\'ekifo ky\'obuyambi', 'Bango la kituo cha usaidizi', 'Bannière du centre d\'aide', 'Ibendera ry\'ikigo cy\'ubufasha', 'Ekishushani ky\'ekicweka ky\'obuhwezi'],
+  ['Home announcement dialog', 'Ekiwandiiko ky\'amawulire ku lupapula olusooka', 'Kidirisha cha tangazo la ukurasa wa nyumbani', 'Fenêtre d\'annonce sur l\'accueil', 'Idirishya ry\'itangazo ku rupapuro rw\'ahabanza', 'Ekibaasa ky\'amakuru aha rupapura rw\'omuka'],
+  ['Download screen background', 'Ekifaananyi eky\'emabega ku lupapula lw\'okudaunloodinga', 'Mandhari ya skrini ya kupakua', 'Fond de l\'écran de téléchargement', 'Mbuganyuma y\'urupapuro rwo kumanura', 'Ekishushani ky\'enyima aha rupapura rw\'okuteekyera'],
+  ['Profile animation', 'Ekifaananyi ekitambula ku profayiro', 'Uhuishaji wa wasifu', 'Animation du profil', 'Ishusho inyeganyega ku mwirondoro', 'Ekishushani ekirikugyenda aha profairo'],
+  ['Link preview', 'Ekifaananyi ky\'ekinywanyizo', 'Muhtasari wa kiungo', 'Aperçu du lien', 'Incamake y\'umurongo', 'Ekishushani ky\'omukwate'],
+  ['Manual payment screen images', 'Ebifaananyi by\'olupapula lw\'okusasula n\'emikono', 'Picha za skrini ya malipo ya mkono', 'Images de l\'écran de paiement manuel', 'Amashusho y\'urupapuro rwo kwishyura intoki', 'Ebishushani by\'orupapura rw\'okushashura n\'emikono'],
+  ['Login & Sign Up screen', 'Olupapula lw\'okuyingira n\'okwewandiisa', 'Skrini ya kuingia na kujisajili', 'Écran de connexion et d\'inscription', 'Urupapuro rwo kwinjira no kwiyandikisha', 'Orupapura rw\'okutaaha n\'okwehandiisa'],
+  ['1. Top band (behind the CHIPZ logo)', '1. Omusipi ogw\'awaggulu (emabega w\'akabonero ka CHIPZ)', '1. Ukanda wa juu (nyuma ya nembo ya CHIPZ)', '1. Bandeau du haut (derrière le logo CHIPZ)', '1. Umukandara wo hejuru (inyuma y\'ikirango cya CHIPZ)', '1. Omukyeeka ogw\'ahaiguru (enyima y\'ekimanyiso kya CHIPZ)'],
+  ['2. The form card (behind the fields)', '2. Kaadi y\'ebibuuzo (emabega w\'ebifo ebijjuzibwa)', '2. Kadi ya fomu (nyuma ya sehemu za kuandika)', '2. La carte du formulaire (derrière les champs)', '2. Ikarita y\'ifishi (inyuma y\'imyanya yuzuzwa)', '2. Ekaadi y\'ebibuuzo (enyima y\'ebyanya ebirikwijuzibwa)'],
+  ['Opacity (0–100%)', 'Obuzibu bw\'ekifaananyi (0–100%)', 'Uzito wa rangi (0–100%)', 'Opacité (0–100 %)', 'Ubwijime bw\'ishusho (0–100%)', 'Obuzibu bw\'ekishushani (0–100%)'],
+  ['Blur (0–40 px)', 'Okusiikuula (0–40 px)', 'Ufifishaji (0–40 px)', 'Flou (0–40 px)', 'Ukwijima (0–40 px)', 'Okusiikuura (0–40 px)'],
+  ['Save opacity & blur', 'Tereka obuzibu n\'okusiikuula', 'Hifadhi uzito na ufifishaji', 'Enregistrer l\'opacité et le flou', 'Bika ubwijime n\'ukwijima', 'Biika obuzibu n\'okusiikuura'],
+  ['Banner video (optional)', 'Vidiyo y\'ekifaananyi (si ya buwaze)', 'Video ya bango (si lazima)', 'Vidéo de la bannière (facultatif)', 'Videwo y\'ibendera (ntabwo ari itegeko)', 'Vidiyo y\'ekishushani (tiya buriijo)'],
+  ['Save video link', 'Tereka ekinywanyizo kya vidiyo', 'Hifadhi kiungo cha video', 'Enregistrer le lien de la vidéo', 'Bika umurongo wa videwo', 'Biika omukwate gwa vidiyo'],
+  ['Save announcement', 'Tereka amawulire', 'Hifadhi tangazo', 'Enregistrer l\'annonce', 'Bika itangazo', 'Biika amakuru'],
+  ['No banner set', 'Tewali kifaananyi kitereddwa', 'Hakuna bango lililowekwa', 'Aucune bannière définie', 'Nta bendera ryashyizweho', 'Tihariho kishushani kitairweho'],
+  ['No image set', 'Tewali kifaananyi kitereddwa', 'Hakuna picha iliyowekwa', 'Aucune image définie', 'Nta shusho yashyizweho', 'Tihariho kishushani kitairweho'],
+  ['No video — the image above is the banner', 'Tewali vidiyo — ekifaananyi ekiri waggulu kye kifaananyi', 'Hakuna video — picha iliyo juu ni bango', 'Aucune vidéo — l\'image ci-dessus est la bannière', 'Nta videwo — ishusho iri hejuru ni ibendera', 'Tihariho vidiyo — ekishushani ekiri ahaiguru nikyo kishushani'],
+  ['…or link a video already uploaded with the app', '…oba nyweza vidiyo eyatereddwa ne pulogulaamu', '…au unganisha video iliyopakiwa na programu', '…ou liez une vidéo déjà fournie avec l\'application', '…cyangwa uhuze videwo isanzwe iri kuri porogaramu', '…nari kwata vidiyo eyaatairwe na porogaraamu'],
+  ['Nothing uploaded — links share the built-in card', 'Tewali kiteekeddwamu — ebinywanyizo bigabana kaadi eriwo dda', 'Hakuna kilichopakiwa — viungo hushiriki kadi iliyojengwa ndani', 'Rien de téléversé — les liens partagent la carte intégrée', 'Nta cyashyizwemo — imirongo isangira ikarita iri imbere', 'Tihariho ekitairwemu — emikwate nigigabana ekaadi eriyo'],
+  ['Number/digit font (every money figure in the app)', 'Ennukuta z\'emiwendo (buli muwendo gw\'ssente mu pulogulaamu)', 'Fonti ya namba (kila kiasi cha pesa katika programu)', 'Police des chiffres (tous les montants de l\'application)', 'Imyandiko y\'imibare (buri mubare w\'amafaranga muri porogaramu)', 'Obuhandiiko bw\'emibaro (buri mubaro gwa sente omu porogaraamu)'],
+  ['Upload icon', 'Teekamu akabonero', 'Pakia aikoni', 'Téléverser une icône', 'Shyiramo ikimenyetso', 'Taamu ekimanyiso'],
+  ['Upload image', 'Teekamu ekifaananyi', 'Pakia picha', 'Téléverser une image', 'Shyiramo ishusho', 'Taamu ekishushani'],
+  ['Upload video', 'Teekamu vidiyo', 'Pakia video', 'Téléverser une vidéo', 'Shyiramo videwo', 'Taamu vidiyo'],
+  ['Upload preview', 'Teekamu ekifaananyi ky\'okulabako', 'Pakia muhtasari', 'Téléverser l\'aperçu', 'Shyiramo incamake', 'Taamu ekishushani ky\'okureeberera'],
+  ['Upload GIF', 'Teekamu GIF', 'Pakia GIF', 'Téléverser un GIF', 'Shyiramo GIF', 'Taamu GIF'],
+  ['Upload top-band image', 'Teekamu ekifaananyi ky\'omusipi ogw\'awaggulu', 'Pakia picha ya ukanda wa juu', 'Téléverser l\'image du bandeau du haut', 'Shyiramo ishusho y\'umukandara wo hejuru', 'Taamu ekishushani ky\'omukyeeka ogw\'ahaiguru'],
+  ['Upload form-card image', 'Teekamu ekifaananyi ky\'kaadi y\'ebibuuzo', 'Pakia picha ya kadi ya fomu', 'Téléverser l\'image de la carte du formulaire', 'Shyiramo ishusho y\'ikarita y\'ifishi', 'Taamu ekishushani ky\'ekaadi y\'ebibuuzo'],
+  ['Cut the dark background off this logo', 'Salako ekifaananyi eky\'emabega ekiddugavu ku kabonero kano', 'Ondoa mandhari nyeusi kwenye nembo hii', 'Détacher le fond sombre de ce logo', 'Gukuraho mbuganyuma yijimye kuri iki kirango', 'Shaarukamu enyima y\'omwiragura aha kimanyiso eki'],
+  ['+ New country', '+ Eggwanga eripya', '+ Nchi mpya', '+ Nouveau pays', '+ Igihugu gishya', '+ Ihanga risya'],
+  ['+ Address', '+ Endagiriro', '+ Anwani', '+ Adresse', '+ Aderesi', '+ Endagiriro'],
+  ['Which country does an address serve?', 'Endagiriro eweereza ggwanga ki?', 'Anwani inahudumia nchi gani?', 'Quel pays une adresse dessert-elle ?', 'Ni igihugu iki aderesi ikorera?', 'Endagiriro neeheereza ihanga ki?'],
+  ['Base domain', 'Endagiriro ensingi', 'Kikoa msingi', 'Domaine de base', 'Urubuga shingiro', 'Endagiriro enkuru'],
+  ['Allowed website domains', 'Endagiriro z\'emikutu ezikkirizibwa', 'Vikoa vya tovuti vinavyoruhusiwa', 'Domaines autorisés', 'Imbuga zemewe', 'Endagiriro z\'orubuga ezirikwikirizibwa'],
+  ['Where the app may be opened from', 'Pulogulaamu gy\'esobola okuggulwa okuva', 'Wapi programu inaweza kufunguliwa kutoka', 'D\'où l\'application peut être ouverte', 'Aho porogaramu ishobora gufungurwa', 'Ahu porogaraamu erikubaasa kwigurwa'],
+  ['Retired addresses, one per line', 'Endagiriro eziwummudde, emu ku lunyiriri', 'Anwani zilizoachwa, moja kwa kila mstari', 'Adresses retirées, une par ligne', 'Aderesi zavanywe, imwe kuri buri murongo', 'Endagiriro ezirekiirwe, emwe aha buri mutwe'],
+  ['starts 7', 'esooka na 7', 'inaanza na 7', 'commence par 7', 'itangira na 7', 'nikitandika na 7'],
+  ['Auto-refresh the current tab as new activity arrives', 'Ddamu ozze oddamu olupapula luno nga ebikolwa ebipya bituuse', 'Onyesha upya ukurasa huu shughuli mpya zinapofika', 'Actualiser cet onglet dès qu\'une nouvelle activité arrive', 'Kuvugurura uru rupapuro igihe ibikorwa bishya bigeze', 'Garuka oyongyere orupapura ruru ebikorwa bisya ku birikuhika'],
+  ['Direct contact (Telegram), shown as "Customer Service"', 'Endagiriro ey\'obutereevu (Telegram), erabika nga "Obuweereza eri Abaguzi"', 'Mawasiliano ya moja kwa moja (Telegram), yanaonyeshwa kama "Huduma kwa Wateja"', 'Contact direct (Telegram), affiché comme « Service client »', 'Aho wahamagara ako kanya (Telegram), byerekanwa nka "Serivisi z\'abakiriya"', 'Endagiriro y\'obuhango (Telegram), neeyorekwa nka "Obuheereza aha Baguzi"'],
+  ['Full upline-to-root and downline tree, not just L1/L2/L3', 'Omuti gwonna okuva waggulu okutuuka wansi, si mitendera 1/2/3 yokka', 'Mti kamili kutoka juu hadi chini, si ngazi 1/2/3 tu', 'Arbre complet, vers le haut et vers le bas, pas seulement N1/N2/N3', 'Igiti cyuzuye kuva hejuru kugeza hasi, atari urwego rwa 1/2/3 gusa', 'Omuti gwona kuruga ahaiguru kuhitsya ahansi, tiy\'emirengo 1/2/3 yoonka'],
+  ['Tell members what\'s new, or invite them to your Telegram group…', 'Buulira abakozesa ekipya, oba bayite mu kibiina kyo ekya Telegram…', 'Waambie wanachama kipya, au wakaribishe kwenye kikundi chako cha Telegram…', 'Dites aux membres ce qui est nouveau, ou invitez-les sur votre groupe Telegram…', 'Bwira abanyamuryango ibishya, cyangwa ubatumire mu itsinda ryawe rya Telegram…', 'Gambira abakozesa ekisya, nari obayete omu kibiina kyawe kya Telegram…'],
+  ['Mint five at once -- what moving arrivals between addresses needs', 'Kola ttaano mu kiseera kimu -- kye kyetaagisa okukyusa abatuuka mu ndagiriro', 'Tengeneza tano kwa mara moja -- ndivyo kuhamisha wanaofika kati ya anwani kunahitaji', 'Créer cinq d\'un coup -- ce qu\'exige le déplacement des arrivants entre adresses', 'Gukora eshanu icyarimwe -- ni byo kwimura abaza hagati y\'aderesi bisaba', 'Hanga itaano omu kaanya kamwe -- nikyo okwimura abarikuhika omu ndagiriro kirikwetenga'],
+  ['The most recent 200 sensitive actions across the panel, newest first.', 'Ebikolwa 200 ebisembayo eby\'obwegendereza ku lupapula lwonna, ebipya bisooka.', 'Vitendo 200 vya hivi karibuni nyeti katika paneli nzima, vipya kwanza.', 'Les 200 actions sensibles les plus récentes du panneau, les plus récentes d\'abord.', 'Ibikorwa 200 bya vuba byitondewe muri paneli yose, bishya mbere.', 'Ebikorwa 200 eby\'obwegyendereza eby\'obwire obuhingwire, ebisya bikatandika.'],
+  ['Mint a new short address for this country, e.g. g26e.chipz-platform.com', 'Kola endagiriro empya ennyimpi ey\'eggwanga lino, okugeza g26e.chipz-platform.com', 'Tengeneza anwani fupi mpya kwa nchi hii, mfano g26e.chipz-platform.com', 'Créer une nouvelle adresse courte pour ce pays, ex. g26e.chipz-platform.com', 'Gukora aderesi ngufi nshya y\'iki gihugu, urugero g26e.chipz-platform.com', 'Hanga endagiriro empya engufu y\'ihanga eri, nk\'okugyera g26e.chipz-platform.com'],
+  ['Recompute this member\'s streak from their real check-in history right now', 'Ddamu obale olunyiriri lw\'okukyalira kw\'omukozesa ono okuva mu byafaayo bye kaakano', 'Hesabu upya mfululizo wa mwanachama huyu kutoka historia yake halisi sasa hivi', 'Recalculer la série de ce membre à partir de son historique réel, maintenant', 'Kongera kubara uruhererekane rw\'uyu munyamuryango uhereye ku mateka ye nyayo ubu', 'Garuka obare omunyororo gw\'okwoleka kw\'omukozesa ogu kuruga omu byafaayo bye hati'],
+  ['Uploading a picture saves it immediately. Opacity and blur need this button.', 'Okuteekamu ekifaananyi kikitereka mangu ago. Obuzibu n\'okusiikuula byetaaga akapeesa kano.', 'Kupakia picha huihifadhi papo hapo. Uzito na ufifishaji vinahitaji kitufe hiki.', 'Téléverser une image l\'enregistre aussitôt. L\'opacité et le flou demandent ce bouton.', 'Gushyiramo ishusho biyibika ako kanya. Ubwijime n\'ukwijima bisaba iyi buto.', 'Okutaamu ekishushani nikikibiika ahonaaho. Obuzibu n\'okusiikuura nibyetenga akapeera aka.'],
+  ['Shown under Account → Rules & Regulation. Blank leaves the page empty in the app.', 'Kirabika wansi wa Akawunti → Amateeka. Bwe kiba kyereere olupapula lusigala nga lwereere mu pulogulaamu.', 'Inaonyeshwa chini ya Akaunti → Sheria na Kanuni. Tupu huacha ukurasa mtupu kwenye programu.', 'Affiché sous Compte → Règles et règlement. Vide laisse la page vide dans l\'application.', 'Bigaragara munsi ya Konti → Amategeko n\'amabwiriza. Ubusa busiga urupapuro rutariho muri porogaramu.', 'Nikyorekwa ahansi ya Akaunti → Ebiragiro. Ku kiraaba kitariho orupapura nirusigara rutariho omu porogaraamu.'],
+  ['Shown at the top of the Home tab in the app. An empty slot uses the built-in default artwork.', 'Kirabika waggulu ku lupapula olusooka mu pulogulaamu. Ekifo ekyereere kikozesa ekifaananyi ekitongole.', 'Inaonyeshwa juu ya ukurasa wa nyumbani kwenye programu. Nafasi tupu hutumia mchoro wa chaguo-msingi.', 'Affiché en haut de l\'onglet Accueil dans l\'application. Un emplacement vide utilise l\'illustration par défaut.', 'Bigaragara hejuru ku rupapuro rw\'ahabanza muri porogaramu. Umwanya utariho ukoresha ishusho isanzwe.', 'Nikyorekwa ahaiguru aha rupapura rw\'omuka omu porogaraamu. Ekyanya ekitariho nikikozesa ekishushani ekitairweho.'],
+  ['Shown at the top of the app\'s Referral tab, above the share link. An empty slot uses the built-in gradient artwork.', 'Kirabika waggulu ku lupapula lw\'okuyita, waggulu w\'ekinywanyizo ky\'okugabana. Ekifo ekyereere kikozesa ekifaananyi eky\'langi ekitongole.', 'Inaonyeshwa juu ya ukurasa wa mialiko, juu ya kiungo cha kushiriki. Nafasi tupu hutumia mchoro wa rangi wa chaguo-msingi.', 'Affiché en haut de l\'onglet Parrainage, au-dessus du lien de partage. Un emplacement vide utilise le dégradé par défaut.', 'Bigaragara hejuru ku rupapuro rwo gutumira, hejuru y\'umurongo wo gusangiza. Umwanya utariho ukoresha amabara asanzwe.', 'Nikyorekwa ahaiguru aha rupapura rw\'okweta, ahaiguru y\'omukwate gw\'okugabana. Ekyanya ekitariho nikikozesa amarangi agatairweho.'],
+  ['Shown at the top of the app\'s Help Centre page, above the Telegram/support links below. Square corners by design, no rounding.', 'Kirabika waggulu ku lupapula lw\'obuyambi, waggulu w\'ebinywanyizo bya Telegram. Enkonvuba za kkona, tezeetoolooza.', 'Inaonyeshwa juu ya ukurasa wa usaidizi, juu ya viungo vya Telegram. Pembe za mraba kwa muundo, hakuna kuzungusha.', 'Affiché en haut de la page Centre d\'aide, au-dessus des liens Telegram. Coins carrés par conception, sans arrondi.', 'Bigaragara hejuru ku rupapuro rw\'ubufasha, hejuru y\'imirongo ya Telegram. Impande zifite inguni, ntizizengurutswa.', 'Nikyorekwa ahaiguru aha rupapura rw\'obuhwezi, ahaiguru y\'emikwate ya Telegram. Enkoona z\'obunywani, tizirikuzengurutsibwa.'],
+  ['Find any member here -- tap the result to see their team size and their team\'s total deposits.', 'Zuula omukozesa yenna wano -- kubako ku kivudde mu kunoonya olabe obunene bw\'ekibiina kye n\'ssente ze baateekamu.', 'Pata mwanachama yeyote hapa -- gusa matokeo kuona ukubwa wa timu yake na jumla ya amana za timu.', 'Trouvez n\'importe quel membre ici -- touchez le résultat pour voir la taille de son équipe et ses dépôts totaux.', 'Shakisha umunyamuryango uwo ari we wese hano -- kanda igisubizo urebe ingano y\'ikipe ye n\'ubwishyu bwayo bwose.', 'Sherura omukozesa weena hanu -- teera aha kirugiremu oreebe obwingi bw\'ekibiina kye na sente ezi baateiremu.'],
+  ['Rebuild every user\'s deposit/earning/invested totals AND check-in streaks from the real ledger', 'Ddamu ozimbe omugatte gw\'ssente eziteekeddwamu, ezifunibwa n\'eziteekeddwa mu bizinensi awamu n\'okukyalira okuva mu bitabo ebituufu', 'Jenga upya jumla za amana/mapato/uwekezaji NA mifululizo ya kuhudhuria kutoka daftari halisi', 'Reconstruire les totaux de dépôt/gains/investissement ET les séries de pointage depuis le registre réel', 'Kongera kubaka ibiteranyo by\'ubwishyu/inyungu/ishoramari N\'uruhererekane rwo kwiyandikisha bivuye mu gitabo nyacyo', 'Garuka oyombeke omugatte gwa sente ezitairwemu/ezitungirwe/ezitairwe omu byamaguzi N\'okwoleka kuruga omu bitabo ebihikire'],
+  ['Wipes every registered device -- each one (including yours) needs to tap "Notify" again afterward.', 'Kisangula buli kyuma ekiwandiisiddwa -- buli kimu (ne kikyo) kyetaaga okuddamu okukuba ku "Manyisa".', 'Inafuta kila kifaa kilichosajiliwa -- kila kimoja (pamoja na chako) kinahitaji kugusa "Arifa" tena baadaye.', 'Efface tous les appareils enregistrés -- chacun (y compris le vôtre) devra retoucher « Notifier ».', 'Bisiba buri gikoresho cyanditswe -- buri kimwe (harimo n\'icyawe) kigomba kongera gukanda "Menyesha".', 'Nikirihamu buri kyoma ekihandiikirwe -- buri kimwe (n\'ekyaawe) nikyetenga kugaruka kuteera aha "Manyisa".'],
+  ['A now-fixed bug could turn saving product-1 into a SEPARATE product1 -- this finds and merges any it made', 'Ensobi eyaatereezebwa yasobola okufuula okutereka product-1 okuba product1 eyawukana -- kino kizuula era kigatta ezo ze yakola', 'Hitilafu iliyorekebishwa ingeweza kugeuza kuhifadhi product-1 kuwa product1 TOFAUTI -- hii inapata na kuunganisha zozote ilizotengeneza', 'Un bug désormais corrigé pouvait transformer l\'enregistrement de product-1 en un product1 SÉPARÉ -- ceci les trouve et les fusionne', 'Ikibazo cyakosowe cyashoboraga guhindura kubika product-1 mu product1 ITANDUKANYE -- ibi birabishakisha kandi bikabihuza', 'Enshobe eyaayerurwa ekaba nebaasa kuhindura okubiika product-1 okuba product1 eyaahukaine -- eki nikisherura kandi kikagyemesa ezi ekahanga'],
+  ['Owner: leave username blank and enter your admin key. Staff: enter the username and password you were given.', 'Nannyini: leka erinnya ly\'omukozesa nga lyereere oteekemu ekisumuluzo kyo eky\'obuduumizi. Abakozi: teekamu erinnya n\'ekisumuluzo bye mwaweebwa.', 'Mmiliki: acha jina la mtumiaji tupu na weka ufunguo wako wa msimamizi. Wafanyakazi: weka jina na nenosiri mliyopewa.', 'Propriétaire : laissez le nom d\'utilisateur vide et saisissez votre clé admin. Personnel : saisissez le nom et le mot de passe fournis.', 'Nyir\'ubwite: siga izina ry\'umukoresha ubusa maze wandike urufunguzo rwawe rw\'ubuyobozi. Abakozi: andika izina n\'ijambobanga mwahawe.', 'Nyineeka: reka eiziina ry\'omukozesa ritariho otemu ekisumuruzo kyawe eky\'obwebembezi. Abakozi: tamu eiziina n\'ekisumuruzo ebi mwahairwe.'],
+  ['Username (leave blank if you\'re the owner)', 'Erinnya ly\'omukozesa (leka nga lyereere bw\'oba nannyini)', 'Jina la mtumiaji (acha tupu ikiwa wewe ni mmiliki)', 'Nom d\'utilisateur (laissez vide si vous êtes le propriétaire)', 'Izina ry\'umukoresha (siga ubusa niba uri nyir\'ubwite)', 'Eiziina ry\'omukozesa (reka ritariho ku oraabe ori nyineeka)'],
+  ['Only fixes their profile phone (search/display/referral matching) -- they still log in exactly how they always have.', 'Kitereeza essimu ku profayiro yokka (okunoonya/okulaga/okugeraageranya kw\'okuyita) -- bakyayingira nga bwe baabanga.', 'Inarekebisha simu ya wasifu tu (kutafuta/kuonyesha/kulinganisha mialiko) -- bado wanaingia jinsi walivyozoea.', 'Corrige uniquement le téléphone du profil (recherche/affichage/parrainage) -- la connexion reste exactement la même.', 'Ikosora gusa telefone y\'umwirondoro (gushakisha/kwerekana/guhuza gutumira) -- baracyinjira uko basanzwe.', 'Nigyerurura esimu aha profairo yoonka (okusherura/okworeka/okugyeranisa okweta) -- nibakyataaha nk\'oku bakaba nibataaha.'],
+  ['Permanently deletes the login and personal data. Investments/transactions/withdrawals are kept as financial records.', 'Kisazaamu olubeerera okuyingira n\'ebikwata ku muntu. Ebyamaguzi, emirimu gy\'ssente n\'okuggyamu bisigala nga byafaayo by\'ssente.', 'Inafuta kabisa kuingia na data binafsi. Uwekezaji/miamala/utoaji vinahifadhiwa kama kumbukumbu za kifedha.', 'Supprime définitivement la connexion et les données personnelles. Investissements/transactions/retraits sont conservés comme pièces comptables.', 'Isiba burundu kwinjira n\'amakuru bwite. Ishoramari/ibikorwa/kubikuza bibikwa nk\'inyandiko z\'imari.', 'Nirihamu kimwe okutaaha n\'ebirikukwata ahamuntu. Ebyamaguzi/emirimo ya sente/okwihamu nibisigara nk\'ebyafaayo bya sente.'],
+  ['Broadcast to every member\'s in-app Messages inbox. Leave the ID blank to post a new message; fill it to edit an existing one.', 'Kisindikibwa mu bubaka bwa buli mukozesa mu pulogulaamu. Leka namba nga yereere okuteeka obubaka obupya; gijjuze okukyusa obuliwo.', 'Hutumwa kwa kisanduku cha ujumbe cha kila mwanachama. Acha kitambulisho tupu kutuma ujumbe mpya; kijaze kuhariri uliopo.', 'Diffusé dans la boîte Messages de chaque membre. Laissez l\'ID vide pour publier un nouveau message ; remplissez-le pour en modifier un.', 'Bwoherezwa mu gasanduku k\'ubutumwa bwa buri munyamuryango. Siga indangamuntu ubusa kugira wohereze ubutumwa bushya; uyuzuze kugira uhindure ubusanzwe.', 'Nibutumirwa omu butumwa bwa buri mukozesa omu porogaraamu. Reka namba etariho kutuma obutumwa businga; ogyijuze kuhindura oburiho.'],
+  ['Members can only cash out in steps of this — 5,000 allows 5,000 / 10,000 / 25,000 and so on. Set 0 to allow any amount above the minimum.', 'Abakozesa basobola okuggyamu ssente mu bigero bino byokka — 5,000 kikkiriza 5,000 / 10,000 / 25,000 n\'ebirala. Teeka 0 okukkiriza omuwendo gwonna oguyisa ogusinga obutono.', 'Wanachama wanaweza kutoa pesa kwa hatua hizi tu — 5,000 inaruhusu 5,000 / 10,000 / 25,000 na kadhalika. Weka 0 kuruhusu kiasi chochote juu ya kiwango cha chini.', 'Les membres ne peuvent retirer que par multiples de ceci — 5 000 autorise 5 000 / 10 000 / 25 000, etc. Mettez 0 pour autoriser tout montant au-dessus du minimum.', 'Abanyamuryango bashobora kubikuza gusa mu bipimo nk\'ibi — 5.000 byemera 5.000 / 10.000 / 25.000 n\'ibindi. Shyiraho 0 kwemerera umubare uwo ari wo wose hejuru y\'umuto.', 'Abakozesa nibabaasa kwihamu sente omu bigyero ebi byonka — 5,000 nikikiriza 5,000 / 10,000 / 25,000 n\'ebindi. Taho 0 kwikiriza omubaro gwoona ogurikukira ogukye.'],
+  ['The real float sitting in MarzPay\'s own account -- what payouts actually get sent from, distinct from members\' own wallet balances above.', 'Ssente entuufu eziri ku akawunti ya MarzPay -- ze zisasulwamu, nga zaawukana ku ssente z\'abakozesa eziri waggulu.', 'Fedha halisi iliyo katika akaunti ya MarzPay -- ndizo malipo hutoka, tofauti na salio za pochi za wanachama hapo juu.', 'Le solde réel du compte MarzPay -- c\'est de là que partent les paiements, distinct des soldes des membres ci-dessus.', 'Amafaranga nyayo ari kuri konti ya MarzPay -- ni yo ibyishyurwa biva, bitandukanye n\'amafaranga y\'abanyamuryango hejuru.', 'Sente ezihikire eziri aha akaunti ya MarzPay -- nizo okushashura kurikuruga, ezahukaine na sente z\'abakozesa eziri ahaiguru.'],
+  ['Account ids are 5 digits now. This rewrites ids issued while they were 6 (000001 -> 00001). Ids that genuinely need 6 digits are left alone.', 'Namba z\'akawunti kaakano za nnamba 5. Kino kikyusa ezaaweebwa nga ziri 6 (000001 -> 00001). Ezo ezeetaaga nnamba 6 zisigala nga bwe ziri.', 'Vitambulisho vya akaunti sasa ni tarakimu 5. Hii inaandika upya vilivyotolewa vikiwa 6 (000001 -> 00001). Vinavyohitaji tarakimu 6 kweli vinaachwa.', 'Les identifiants de compte font 5 chiffres désormais. Ceci réécrit ceux émis à 6 (000001 -> 00001). Ceux qui ont vraiment besoin de 6 sont laissés tels quels.', 'Indangamuntu za konti ubu ni imibare 5. Ibi byandika bushya izatanzwe zifite 6 (000001 -> 00001). Izikeneye koko imibare 6 zisigara uko ziri.', 'Namba za akaunti hati n\'embaro 5. Eki nikihindura ezi baahairwe zaaba 6 (000001 -> 00001). Ezirikwetenga embaro 6 buzima nizisigara nk\'oku ziri.'],
+  ['How fast the scrolling deposit/withdraw activity strip on the user Home screen flows right to left. Higher is faster; 160 is the current default.', 'Sipiidi olukalala lw\'ebikolwa lwe lutambulira okuva ku ddyo okudda ku kkono ku lupapula olusooka. Omuwendo omunene gwe mwangu; 160 gwe gutongole.', 'Kasi ambayo mkanda wa shughuli za amana/utoaji kwenye ukurasa wa nyumbani unatembea kulia kwenda kushoto. Kubwa ni haraka zaidi; 160 ndiyo chaguo-msingi.', 'La vitesse à laquelle le bandeau d\'activité défile de droite à gauche sur l\'accueil. Plus élevé = plus rapide ; 160 est la valeur par défaut.', 'Umuvuduko umurongo w\'ibikorwa ugenda uva iburyo ujya ibumoso ku rupapuro rw\'ahabanza. Munini ni wihuta; 160 ni cyo gisanzwe.', 'Obwiru orukoora rw\'ebikorwa oru rurikugyendera kuruga aha buryo kuza aha bumosho aha rupapura rw\'omuka. Omubaro omwingi nigwo gw\'obwiru; 160 nigwo ogutairweho.'],
+  ['Updates price/cycle/expectedReturn on any saved product back to the current code defaults -- leaves images, active/coming-soon, and order untouched', 'Kikyusa ebbeeyi, ebbanga n\'ebisuubirwa ku kyamaguzi kyonna ekitereddwa okudda ku ntereka entongole -- ebifaananyi, embeera n\'entegeka tebikyusibwa', 'Inasasisha bei/mzunguko/marejesho yanayotarajiwa kwa bidhaa yoyote iliyohifadhiwa hadi chaguo-msingi -- picha, hali, na mpangilio haviguswi', 'Remet le prix/cycle/retour attendu de tout produit enregistré aux valeurs par défaut -- images, état et ordre restent inchangés', 'Ivugurura igiciro/uruziga/inyungu bitegerejwe ku gicuruzwa cyose cyabitswe bigasubira ku bisanzwe -- amashusho, imimerere n\'urutonde ntibihinduka', 'Nihindura ekiingana/obwire/ebirikutebeekanisibwa aha kyamaguzi kyoona ekibiikirwe kigaruke aha bitairweho -- ebishushani, embeera n\'entegyeka tibirikuhindurwa'],
+  ['The round logo on the app\'s Account profile card. An empty slot shows the CHIPZ wordmark instead. Square images work best -- it is cropped to a circle.', 'Akabonero akeetoolooze ku kaadi ya profayiro mu pulogulaamu. Ekifo ekyereere kiraga erinnya CHIPZ. Ebifaananyi ebya kkona bye bisinga -- kisalibwa okuba enkulungo.', 'Nembo ya duara kwenye kadi ya wasifu wa akaunti. Nafasi tupu inaonyesha jina CHIPZ badala yake. Picha za mraba ni bora -- inakatwa kuwa duara.', 'Le logo rond sur la carte de profil du compte. Un emplacement vide affiche le mot CHIPZ à la place. Les images carrées conviennent le mieux -- elle est recadrée en cercle.', 'Ikirango kizengurutse ku ikarita y\'umwirondoro wa konti. Umwanya utariho werekana izina CHIPZ. Amashusho afite impande zingana ni yo meza -- ikatwa mu ruziga.', 'Ekimanyiso ekizengurukire aha kaadi ya profairo ya akaunti. Ekyanya ekitariho nikyoreka eiziina CHIPZ. Ebishushani by\'enkoona nibyo birikukira -- nikishaarwa kuba oruzengurukiro.'],
+  ['Check every user\'s wallet balance/deposited/earned/invested against the real records, plus duplicate deposit credits, negative balances, and stuck registrations', 'Kebera ssente za buli mukozesa eziri mu nsawo, eziteekeddwamu, ezifunibwa n\'eziteekeddwa mu bizinensi ng\'ozigeraageranya n\'ebyafaayo ebituufu, n\'ssente eziweereddwa emirundi ebiri, n\'okwewandiisa okukwataganye', 'Angalia salio la pochi/amana/mapato/uwekezaji la kila mtumiaji dhidi ya kumbukumbu halisi, pamoja na amana zilizolipwa mara mbili, salio hasi, na usajili uliokwama', 'Vérifier le solde/dépôts/gains/investissements de chaque utilisateur face aux registres réels, plus les dépôts crédités deux fois, les soldes négatifs et les inscriptions bloquées', 'Genzura amafaranga ari mu mufuka/yabitswe/yinjiye/yashowe ya buri mukoresha ugereranyije n\'inyandiko nyazo, hamwe n\'ubwishyu bwishyuwe kabiri, amafaranga ari munsi ya zero, n\'iyandikwa ryanyuranye', 'Reeba sente za buri mukozesa eziri omu nsaho, ezitairwemu, ezitungirwe n\'ezitairwe omu byamaguzi n\'ozigyeranisa n\'ebyafaayo ebihikire, na sente ezihairwe emirundi ebiri, n\'okwehandiisa okukwatiine'],
+  ['Set a new login password for this user via Firebase', 'Teekawo ekisumuluzo ekipya eky\'okuyingira ku mukozesa ono ng\'oyita mu Firebase', 'Weka nenosiri jipya la kuingia kwa mtumiaji huyu kupitia Firebase', 'Définir un nouveau mot de passe de connexion pour cet utilisateur via Firebase', 'Shyiraho ijambobanga rishya ryo kwinjira kuri uyu mukoresha binyuze kuri Firebase', 'Taho ekisumuruzo kisya eky\'okutaaha aha mukozesa ogu orikuraba omu Firebase'],
+  ['"Telegram group" and "Direct contact" also show as the two buttons on the app\'s Help Centre page. Leave either blank to hide its button.', '"Ekibiina kya Telegram" ne "Endagiriro ey\'obutereevu" nabyo birabika ng\'obupeesa bubiri ku lupapula lw\'obuyambi. Leka kimu nga kyereere okukweka akapeesa kaakyo.', '"Kikundi cha Telegram" na "Mawasiliano ya moja kwa moja" pia huonyeshwa kama vitufe viwili kwenye ukurasa wa usaidizi. Acha chochote tupu kuficha kitufe chake.', '« Groupe Telegram » et « Contact direct » apparaissent aussi comme les deux boutons de la page Centre d\'aide. Laissez l\'un vide pour masquer son bouton.', '"Itsinda rya Telegram" na "Aho wahamagara ako kanya" na byo bigaragara nk\'buto ebyiri ku rupapuro rw\'ubufasha. Siga kimwe ubusa kugira uhishe buto yacyo.', '"Ekibiina kya Telegram" na "Endagiriro y\'obuhango" nabyo nibyorekwa nk\'obupeera bubiri aha rupapura rw\'obuhwezi. Reka kimwe kitariho kusherekyera akapeera kaakyo.'],
+  ['Cash out', 'Ggyamu ssente', 'Toa pesa', 'Retirer', 'Bikuza', 'Ihamu sente'],
+  ['Approve', 'Kkiriza', 'Idhinisha', 'Approuver', 'Kwemeza', 'Ikiriza'],
+  ['Reject', 'Gaana', 'Kataa', 'Refuser', 'Kwanga', 'Yanga'],
+  ['Force-credit', 'Muwe ssente ku ngalo', 'Lipa kwa lazima', 'Créditer de force', 'Kongeraho ku gahato', 'Muhe sente aha ngufu'],
+  ['Mark as paid', 'Teeka nga kisasulwa', 'Weka kama imelipwa', 'Marquer comme payé', 'Shyira nk\'ibyishyuwe', 'Taho nk\'ekishashuriirwe'],
+  ['Sync payments', 'Tereeza ebisasulwa', 'Sawazisha malipo', 'Synchroniser les paiements', 'Guhuza ubwishyu', 'Gyerenganisa ebishashuriirwe'],
+  ['Method', 'Engeri', 'Njia', 'Méthode', 'Uburyo', 'Omuringo'],
+  ['Destination', 'Gy\'agenda', 'Inakoenda', '=', 'Aho bijya', 'Ahu nikigyenda'],
+  ['Net', 'Ezisigala', 'Halisi', '=', 'Asigara', 'Ezirikusigara'],
+  ['Ref', 'Namba', 'Kumbukumbu', 'Réf', 'Inomero', 'Namba'],
+  ['Needs Review', 'Kyetaaga okukeberwa', 'Inahitaji Ukaguzi', 'À vérifier', 'Bikeneye Igenzura', 'Nikyetenga Okureebwa'],
+  ['Awaiting approval', 'Kirindirira okukkirizibwa', 'Inasubiri idhini', 'En attente d\'approbation', 'Bitegereje kwemezwa', 'Nikitegyereza okwikirizibwa'],
+  ['Successful', 'Kiwedde bulungi', 'Imefanikiwa', 'Réussi', 'Byagenze neza', 'Kihikire gurungi'],
+  ['Automatic', 'Kya bwetwaze', 'Kiotomatiki', 'Automatique', 'Byikora', 'Kyonka'],
+  ['completed', 'kiwedde', 'imekamilika', 'terminé', 'byarangiye', 'kihikire'],
+  ['No deposits', 'Tewali ssente eziteekeddwamu', 'Hakuna amana', 'Aucun dépôt', 'Nta bwishyu', 'Tihariho sente ezitairwemu'],
+  ['No withdrawals', 'Tewali kuggyamu ssente', 'Hakuna utoaji', 'Aucun retrait', 'Nta kubikuza', 'Tihariho kwihamu sente'],
+  ['Payment message from the member', 'Obubaka bw\'okusasula obuva ku mukozesa', 'Ujumbe wa malipo kutoka kwa mwanachama', 'Message de paiement envoyé par le membre', 'Ubutumwa bwo kwishyura buvuye ku munyamuryango', 'Obutumwa bw\'okushashura oburuga aha mukozesa'],
+  ['This server could not read the message automatically — read it yourself before approving.', 'Sivva teyasobodde kusoma bubaka buno yokka — busome ggwe nga tonnakkiriza.', 'Seva hii haikuweza kusoma ujumbe huu kiotomatiki — usome mwenyewe kabla ya kuidhinisha.', 'Ce serveur n\'a pas pu lire le message automatiquement — lisez-le vous-même avant d\'approuver.', 'Iyi seriveri ntiyashoboye gusoma ubu butumwa mu buryo bwikora — busome ubwawe mbere yo kwemeza.', 'Sirivere egi tikibaasiikire kushoma obutumwa obu yenka — obushome iwe otakaikiriza.'],
+];
+const ADMIN_LANG_PATTERNS = [
+  ['Users ({0})', 'Abakozesa ({0})', 'Watumiaji ({0})', 'Utilisateurs ({0})', 'Abakoresha ({0})', 'Abakozesa ({0})'],
+  ['Countries ({0})', 'Amawanga ({0})', 'Nchi ({0})', 'Pays ({0})', 'Ibihugu ({0})', 'Amahanga ({0})'],
+  ['Referrals ({0})', 'Okuyita ({0})', 'Mialiko ({0})', 'Parrainages ({0})', 'Gutumira ({0})', 'Okweta ({0})'],
+  ['Plans ({0})', 'Enteekateeka ({0})', 'Mipango ({0})', '=', 'Gahunda ({0})', 'Enteekateeka ({0})'],
+  ['Deposits ({0})', 'Ssente eziteekeddwamu ({0})', 'Amana ({0})', 'Dépôts ({0})', 'Ubwishyu bwinjiye ({0})', 'Sente ezitairwemu ({0})'],
+  ['Withdrawals ({0})', 'Okuggyamu ssente ({0})', 'Utoaji ({0})', 'Retraits ({0})', 'Kubikuza ({0})', 'Okwihamu sente ({0})'],
+  ['Transactions ({0})', 'Emirimu gy\'ssente ({0})', 'Miamala ({0})', '=', 'Ibikorwa ({0})', 'Emirimo ya sente ({0})'],
+  ['Products ({0}) · {1}', 'Ebyamaguzi ({0}) · {1}', 'Bidhaa ({0}) · {1}', 'Produits ({0}) · {1}', 'Ibicuruzwa ({0}) · {1}', 'Ebyamaguzi ({0}) · {1}'],
+  ['Rates & limits · {0}', 'Ebigero n\'obukomo · {0}', 'Viwango na mipaka · {0}', 'Taux et limites · {0}', 'Ibipimo n\'imipaka · {0}', 'Ebigyero n\'emigyendo · {0}'],
+  ['Referral code: {0}', 'Koodi y\'okuyita: {0}', 'Msimbo wa mwaliko: {0}', 'Code de parrainage : {0}', 'Kode yo gutumira: {0}', 'Koodi y\'okweta: {0}'],
+  ['Account status: {0}', 'Embeera ya akawunti: {0}', 'Hali ya akaunti: {0}', 'Statut du compte : {0}', 'Imimerere ya konti: {0}', 'Embeera ya akaunti: {0}'],
+  ['Newest first, {0} total.', 'Ebipya bisooka, omugatte {0}.', 'Vipya kwanza, jumla {0}.', 'Les plus récents d\'abord, {0} au total.', 'Bishya mbere, byose {0}.', 'Ebisya bikatandika, omugatte {0}.'],
+  ['Pays {0}', 'Esasula {0}', 'Inalipa {0}', 'Rapporte {0}', 'Itanga {0}', 'Neeshashura {0}'],
+  ['Amount ({0})', 'Omuwendo ({0})', 'Kiasi ({0})', 'Montant ({0})', 'Umubare ({0})', 'Omubaro ({0})'],
+  ['Investment cashback {0} · Referral commission {1} · Check-in {2} · Gift codes {3} · Task Center {4} · Mission Center {5}', 'Ssente z\'ebyamaguzi {0} · Ssente z\'okuyita {1} · Okukyalira {2} · Koodi z\'ebirabo {3} · Ekifo ky\'emirimu {4} · Ekifo ky\'obulambuzi {5}', 'Marejesho ya uwekezaji {0} · Kamisheni ya mialiko {1} · Kuhudhuria {2} · Misimbo ya zawadi {3} · Kituo cha kazi {4} · Kituo cha misheni {5}', 'Remise d\'investissement {0} · Commission de parrainage {1} · Pointage {2} · Codes cadeaux {3} · Centre de tâches {4} · Centre de missions {5}', 'Inyungu z\'ishoramari {0} · Komisiyo yo gutumira {1} · Kwiyandikisha {2} · Kode z\'impano {3} · Ikigo cy\'imirimo {4} · Ikigo cy\'ubutumwa {5}', 'Sente z\'ebyamaguzi {0} · Sente z\'okweta {1} · Okwoleka {2} · Koodi z\'ebiconco {3} · Ekicweka ky\'emirimo {4} · Ekicweka ky\'obutumwa {5}'],
+  ['All ({0})', 'Byonna ({0})', 'Zote ({0})', 'Tout ({0})', 'Byose ({0})', 'Byona ({0})'],
+  ['Pending ({0})', 'Ebirindiridde ({0})', 'Yanayosubiri ({0})', 'En attente ({0})', 'Bitegereje ({0})', 'Ebirikutegyereza ({0})'],
+  ['Needs Review ({0})', 'Ebyetaaga okukeberwa ({0})', 'Inahitaji Ukaguzi ({0})', 'À vérifier ({0})', 'Bikeneye Igenzura ({0})', 'Ebirikwetenga Okureebwa ({0})'],
+  ['Failed ({0})', 'Ebigaanye ({0})', 'Yaliyoshindwa ({0})', 'Échoué ({0})', 'Byanze ({0})', 'Ebyaremeire ({0})'],
+  ['Successful ({0})', 'Ebiwedde bulungi ({0})', 'Yaliyofanikiwa ({0})', 'Réussi ({0})', 'Byagenze neza ({0})', 'Ebihikire gurungi ({0})'],
+  ['Processed ({0})', 'Ebirongoosebbwa ({0})', 'Yaliyoshughulikiwa ({0})', 'Traité ({0})', 'Byatunganyijwe ({0})', 'Ebikorwaho ({0})'],
+  ['Processing ({0})', 'Ebirongoosebwa ({0})', 'Inashughulikiwa ({0})', 'En traitement ({0})', 'Birimo gutunganywa ({0})', 'Ebirikukorwaho ({0})'],
+  ['Sending ({0})', 'Ebisindikibwa ({0})', 'Inatumwa ({0})', 'Envoi ({0})', 'Birimo koherezwa ({0})', 'Ebirikutumwa ({0})'],
+  ['Declined ({0})', 'Ebigaaniddwa ({0})', 'Yaliyokataliwa ({0})', 'Refusé ({0})', 'Byanzwe ({0})', 'Ebyangirwe ({0})'],
+];
+
+// ==== SHARED I18N TABLE: REPLACED BY build-admin.js - BEGIN ====
+// Empty here so this file still parses on its own. build-admin.js replaces the
+// whole region with the app's real tables and REFUSES to build if it cannot
+// find either marker, so a silent miss is not one of the outcomes.
+var LANG_ROWS = [];
+var LANG_PATTERNS = [];
+// ==== SHARED I18N TABLE: REPLACED BY build-admin.js - END ====
+
+// The panel's rows go AFTER the app's, and this has to happen BETWEEN the two
+// injected regions rather than anywhere tidier: the engine builds DICT and
+// LANG_PATTERN_RE once, at the moment its own text runs, so a concatenation
+// after it would be invisible.
+LANG_ROWS = LANG_ROWS.concat(ADMIN_LANG_ROWS);
+LANG_PATTERNS = LANG_PATTERNS.concat(ADMIN_LANG_PATTERNS);
+
+// ==== SHARED I18N ENGINE: REPLACED BY build-admin.js - BEGIN ====
+// ==== SHARED I18N ENGINE: REPLACED BY build-admin.js - END ====
+
+// Both pickers -- the topbar one and the one on the sign-in card -- are filled
+// and kept in step here, so they can never offer different lists or disagree
+// about what is selected. Their option labels are each language's own NATIVE
+// name and must never be translated, which is what data-no-i18n on the two
+// <select>s is for: "Kiswahili" reads the same in every language, and a
+// picker whose options change language as you change language is unusable.
+function paintAdminLangPickers(){
+  const opts = LANGS.map(l => `<option value="${esc(l.code)}"${l.code === LANG ? ' selected' : ''}>${esc(l.native)}</option>`).join('');
+  for (const id of ['langSwitch', 'langLogin']) {
+    const sel = $(id);
+    if (!sel) continue;
+    if (sel.innerHTML !== opts) sel.innerHTML = opts;
+    sel.value = LANG;
+    if (!sel._wired) {
+      sel._wired = true;
+      sel.addEventListener('change', () => setAdminLang(sel.value));
+    }
+  }
+}
+// Switching BACK to English is not a special case: t() returns each node's
+// stored original, so a full pass restores the panel word for word.
+function setAdminLang(code){
+  LANG = LANG_CODES.includes(code) ? code : 'en';
+  try { localStorage.setItem(ADMIN_LANG_KEY, LANG); } catch (_) {}
+  try { translateTree(document.body); } catch (_) {}
+  paintAdminLangPickers();
+}
+function startAdminI18n(){
+  let stored = '';
+  try { stored = localStorage.getItem(ADMIN_LANG_KEY) || ''; } catch (_) {}
+  LANG = LANG_CODES.includes(stored) ? stored : 'en';
+  paintAdminLangPickers();
+  // Newly rendered HTML is translated as it lands -- which is the whole of
+  // "everything there", since every tab in this panel is an innerHTML assign.
+  try { startI18nObserver(); } catch (_) {}
+  if (LANG !== 'en') { try { translateTree(document.body); } catch (_) {} }
+}
+
 // ── BOOT ──
+startAdminI18n();
 if(SESSION_TOKEN){ openShell(); }
 </script>
 <script>

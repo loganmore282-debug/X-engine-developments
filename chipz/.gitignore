@@ -3,3 +3,5 @@
 # The report that matters is the printed one, and test-i18n-coverage.py's
 # exit code is what the suite judges.
 untranslated-report-*.json
+# find-admin-untranslated.py's own output, same reasoning.
+admin-untranslated-*.json

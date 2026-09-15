@@ -123,8 +123,15 @@ def _tpl_re(tpl):
 # Both directions: an English template still on screen is a MISSING pattern
 # cell; a translated template on screen is the pattern working.
 PATTERN_EN = [(_tpl_re(r[0]), r) for r in PATTERNS if r and r[0]]
+# '=' in a template means the same as in a row: the right wording in this
+# language IS the English one. So it is never something to match OUTPUT
+# against, and a template carrying it is a DELIBERATE match rather than a
+# template this language has not been given yet.
 PATTERN_OUT = [_tpl_re(r[LANG_IDX]) for r in PATTERNS
-               if len(r) > LANG_IDX and r[LANG_IDX] and r[LANG_IDX].strip()]
+               if len(r) > LANG_IDX and r[LANG_IDX] and r[LANG_IDX].strip()
+               and r[LANG_IDX] != '=']
+PATTERN_SAME = [_tpl_re(r[0]) for r in PATTERNS
+                if len(r) > LANG_IDX and r[LANG_IDX] == '=']
 
 # ── what is NOT a translatable word ───────────────────────────────────────
 # Data, not copy. A member's own phone number, a figure, a product name, an
@@ -572,7 +579,7 @@ async def main():
             data.append(entry)
         elif text in TRANSLATED_VALUES or any(r.match(text) for r in PATTERN_OUT):
             data.append(entry)              # the table's own output
-        elif text in DELIBERATE_SAME:
+        elif text in DELIBERATE_SAME or any(r.match(text) for r in PATTERN_SAME):
             data.append(entry)              # chosen to read the same
         elif text in TRANSLATED:
             # In the table, translated for this language, and STILL on screen
