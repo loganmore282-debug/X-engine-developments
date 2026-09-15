@@ -128,6 +128,14 @@ async def main():
             ck(sel == 'sw', f"and it shows the language in force ({sel})")
 
             # ── 6a. what must NOT be translated ────────────────────────────
+            # What the BROWSER is told the page is in. Chrome's own translator
+            # decides whether to offer a translation by comparing this with the
+            # reader's preference -- left saying "en" over a Kiswahili panel it
+            # offers to machine-translate our translation, which is the one way
+            # this gets worse instead of better.
+            html_lang = await page.eval_on_selector('html', 'e => e.lang')
+            ck(html_lang == 'sw', f"<html lang> says what the panel is really in ({html_lang!r})")
+
             ck('UGX' in dash, "money keeps its currency label")
             ck('128,500' in dash.replace('\u00a0', ' '),
                "and its figures are untouched")

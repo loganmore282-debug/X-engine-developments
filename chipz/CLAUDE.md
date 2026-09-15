@@ -5278,6 +5278,36 @@ and are **scoped to `thead`**: "destination" also appears inside the manual-paym
 paragraph, which is one of the fragmented sentences that stays English, so a whole-tab
 match would fail on prose rather than on a heading.
 
+### Why not just let Chrome translate the page?
+Owner: *"what if we use it but it triggers chrome translator? instead of taking long time
+doing the stuff"*. A fair question, and the answer is four things Chrome's translator
+cannot do, none of which depend on its quality:
+
+- **An installed app has no translate menu.** Chrome's translate UI lives in browser
+  chrome — the address bar and the three-dot menu. A PWA added to the home screen runs
+  standalone with none of it. Both the app and the panel are installable on purpose, so
+  for anyone who installed them it is simply not reachable.
+- **Runyankole is not in Google Translate at all.** Luganda was added in the 2022 batch;
+  Runyankole was left out of it. One of the six languages would not exist.
+- **It translates everything, including what must never be touched.** The Deposits tab
+  renders a member's pasted mobile-money SMS *verbatim* precisely so a person can check a
+  real payment against it. Machine-translating that is worse than showing nothing; the
+  same goes for holder names, product names and reference ids.
+- **It is the viewer's browser setting, not the owner's.** He asked to set the panel's
+  language *from the panel*. A site cannot enable Chrome translate, choose its target
+  language, or set it for staff.
+
+**Where it IS useful, and what was done about that:** the long help paragraphs that stay
+English by construction (over the engine's cap, or split into fragments) are exactly what
+Chrome's translator handles well in a browser tab. So the two are made not to fight:
+`markAdminPageLanguage()` keeps `<html lang>` on the language the panel is really
+rendering in — left saying `en` over a Kiswahili panel, Chrome offers to
+machine-translate our own translation, which is the one way this gets worse rather than
+better — and the pasted-SMS `<pre>` carries **`translate="no"`** so that even with Chrome
+translate running, the one message an admin verifies a real payment against reaches them
+as it was sent. `<html lang>` also decides how a screen reader pronounces the page, so it
+was worth setting regardless. The member app already set it.
+
 ### Ports
 `find-admin-untranslated.py` binds **8901** and `test-admin-i18n.py` **8903**;
 `test-admin-i18n-coverage.py` shells out to the sweep, so the two cannot run at once. The

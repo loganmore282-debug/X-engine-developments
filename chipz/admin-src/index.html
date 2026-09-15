@@ -2143,7 +2143,7 @@ function drawDeps(){
     if (d.pastedSmsSource === 'forwarder') smsChecks.push('<span class="muted">Arrived from the forwarder app, held for approval</span>');
     const smsBlock = d.pastedSms ? `<tr class="sms-detail"><td colspan="8" style="background:rgba(0,0,0,.03);padding:10px 14px">
         <div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.7;margin-bottom:6px">Payment message from the member${d.pastedAt?` · ${fdate(d.pastedAt)}`:''}</div>
-        <pre style="margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;background:var(--card,#fff);border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:10px">${esc(d.pastedSms)}</pre>
+        <pre translate="no" data-no-i18n style="margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;background:var(--card,#fff);border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:10px">${esc(d.pastedSms)}</pre>
         ${smsChecks.length?`<div style="font-size:12px;line-height:1.7">${smsChecks.join('<br>')}</div>`:''}
       </td></tr>` : '';
     // Owner: "let me see even user number he used to send besides account
@@ -4560,12 +4560,31 @@ function setAdminLang(code){
   LANG = LANG_CODES.includes(code) ? code : 'en';
   try { localStorage.setItem(ADMIN_LANG_KEY, LANG); } catch (_) {}
   try { translateTree(document.body); } catch (_) {}
+  markAdminPageLanguage();
   paintAdminLangPickers();
+}
+// Tell the BROWSER what language the page ended up in. Two things depend on
+// it and neither is ours:
+//   * Chrome's own translator decides whether to offer a translation by
+//     comparing <html lang> with the reader's preference. Left saying "en"
+//     while the panel is rendering Kiswahili, it offers to translate an
+//     already-translated page -- and machine-translating our translation is
+//     the one way this gets worse rather than better.
+//   * a screen reader picks its pronunciation from the same attribute.
+// Chrome's translator is not a substitute for any of the above (an installed
+// panel has no browser menu to reach it from, Runyankole is not in Google
+// Translate at all, and it would happily rewrite a member's pasted payment
+// SMS) -- but for the long help paragraphs that stay English by construction
+// it is a perfectly good fallback in a browser tab, so it is worth not
+// confusing it.
+function markAdminPageLanguage(){
+  try { document.documentElement.setAttribute('lang', LANG); } catch (_) {}
 }
 function startAdminI18n(){
   let stored = '';
   try { stored = localStorage.getItem(ADMIN_LANG_KEY) || ''; } catch (_) {}
   LANG = LANG_CODES.includes(stored) ? stored : 'en';
+  markAdminPageLanguage();
   paintAdminLangPickers();
   // Newly rendered HTML is translated as it lands -- which is the whole of
   // "everything there", since every tab in this panel is an innerHTML assign.

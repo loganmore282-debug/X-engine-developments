@@ -192,5 +192,21 @@ ck(/startAdminI18n\(\);\s*\n\s*if\(SESSION_TOKEN\)/.test(adminSrc),
 ck(/function startAdminI18n\(\)[\s\S]*?startI18nObserver\(\)/.test(adminSrc),
    'and the observer is started, so a tab rendered later is translated as it lands');
 
+// ── 5. not fighting the browser's own translator ──────────────────────────
+// Chrome's translator cannot do this job -- an installed panel has no browser
+// menu to reach it from, Runyankole is not in Google Translate at all, and it
+// would rewrite a member's pasted payment SMS. But it IS a reasonable
+// fallback in a browser tab for the long help paragraphs that stay English by
+// construction, so the two must not work against each other.
+ck(/function markAdminPageLanguage\(\)[\s\S]*?setAttribute\('lang', LANG\)/.test(adminSrc),
+   "<html lang> is set to the language the panel is actually rendering in");
+for (const caller of ['setAdminLang', 'startAdminI18n'])
+  ck(new RegExp('function ' + caller + '\\([\\s\\S]*?markAdminPageLanguage\\(\\)').test(adminSrc),
+     `and ${caller}() sets it, so it is right at boot and after every switch`);
+const pre = /<pre translate="no"[^>]*>\$\{esc\(d\.pastedSms\)\}<\/pre>/.test(adminSrc);
+ck(pre, "the member's pasted payment SMS is translate=\"no\" -- a machine " +
+        'translation of the message an admin verifies a real payment against ' +
+        'is worse than no translation at all');
+
 console.log(failed ? `\n${failed} FAILED` : '\nall good');
 process.exit(failed ? 1 : 0);
