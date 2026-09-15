@@ -8251,22 +8251,38 @@ function productExpectedReturn(p, sett) {
   if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
   return Math.round(price * ((sett && sett.returnMultiple) || 30));
 }
-function sanitizeProductInput(p, fallbackOrder) {
+// `out`, when given, is written with WHICH field refused and why, so the save
+// route can name the box the owner has to go and fix. There are fifteen
+// separate ways to be refused in here and they all used to arrive as ONE
+// sentence naming four fields ("key, name, price, or cycle/return"), which
+// made a refused save pure guesswork -- the report that prompted this was
+// "product 12 failed to save spins", and spins were not among the four things
+// the message listed. The `null` return is unchanged: it is the contract
+// test-product-config.js drives, and every caller still reads truthiness.
+// Named `refuse`, not `bad`: several harnesses lift this function into their
+// own scope with eval/new Function, and `bad` is already the failure counter
+// in test-spin-and-withdraw.js.
+function sanitizeProductInput(p, fallbackOrder, out) {
+  const refuse = (field, why) => { if (out) { out.field = field; out.why = why; } return null; };
   const key = String(p?.key || '').trim();
-  if (!key || key.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(key)) return null;
+  if (!key || key.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(key))
+    return refuse('Key', 'must be 1-64 characters, letters/numbers/hyphen/underscore only');
   const name = String(p?.name || '').trim().slice(0, 100);
-  if (!name) return null;
+  if (!name) return refuse('Name', 'cannot be blank');
   const price = Math.round(Number(p?.price));
-  if (!Number.isFinite(price) || price < 1 || price > MAX_MONEY_AMOUNT) return null;
+  if (!Number.isFinite(price) || price < 1 || price > MAX_MONEY_AMOUNT)
+    return refuse('Price', `must be a number between 1 and ${MAX_MONEY_AMOUNT}`);
   let cycle = null;
   if (p?.cycle != null && p.cycle !== '') {
     cycle = Number(p.cycle);
-    if (!Number.isFinite(cycle) || cycle <= 0 || cycle > 3650 || !Number.isInteger(cycle)) return null;
+    if (!Number.isFinite(cycle) || cycle <= 0 || cycle > 3650 || !Number.isInteger(cycle))
+      return refuse('Cycle (days)', 'must be a whole number of days between 1 and 3650');
   }
   let expectedReturn = null;
   if (p?.expectedReturn != null && p.expectedReturn !== '') {
     expectedReturn = Math.round(Number(p.expectedReturn));
-    if (!Number.isFinite(expectedReturn) || expectedReturn < 1 || expectedReturn > MAX_MONEY_AMOUNT) return null;
+    if (!Number.isFinite(expectedReturn) || expectedReturn < 1 || expectedReturn > MAX_MONEY_AMOUNT)
+      return refuse('Total payout', `must be a number between 1 and ${MAX_MONEY_AMOUNT}`);
   }
   // Owner: "products will have different rates of multipliers so don't fix
   // it in settings." So the multiple lives on the PRODUCT. When set it wins
@@ -8276,7 +8292,8 @@ function sanitizeProductInput(p, fallbackOrder) {
   let multiplier = null;
   if (p?.multiplier != null && p.multiplier !== '') {
     multiplier = Number(p.multiplier);
-    if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1000) return null;
+    if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1000)
+      return refuse('Multiplier (×)', 'must be a number greater than 0 and no more than 1000');
   }
   // Owner: "make when l can configure every spin price for each product like
   // product 2 buying, amount 200 to 1000 number of spins like that." Each
@@ -8285,19 +8302,23 @@ function sanitizeProductInput(p, fallbackOrder) {
   let spinMin = null, spinMax = null;
   if (p?.spinMin != null && p.spinMin !== '') {
     spinMin = Math.round(Number(p.spinMin));
-    if (!Number.isFinite(spinMin) || spinMin < 0 || spinMin > MAX_MONEY_AMOUNT) return null;
+    if (!Number.isFinite(spinMin) || spinMin < 0 || spinMin > MAX_MONEY_AMOUNT)
+      return refuse('Win from', `must be a number between 0 and ${MAX_MONEY_AMOUNT}`);
   }
   if (p?.spinMax != null && p.spinMax !== '') {
     spinMax = Math.round(Number(p.spinMax));
-    if (!Number.isFinite(spinMax) || spinMax < 0 || spinMax > MAX_MONEY_AMOUNT) return null;
+    if (!Number.isFinite(spinMax) || spinMax < 0 || spinMax > MAX_MONEY_AMOUNT)
+      return refuse('Win to', `must be a number between 0 and ${MAX_MONEY_AMOUNT}`);
   }
   // A band that runs backwards would silently pay the wrong amount, so it is
   // rejected at save time rather than clamped quietly at spin time.
-  if (spinMin != null && spinMax != null && spinMax < spinMin) return null;
+  if (spinMin != null && spinMax != null && spinMax < spinMin)
+    return refuse('Win to', 'cannot be less than "Win from"');
   let spinCount = 0;
   if (p?.spinCount != null && p.spinCount !== '') {
     spinCount = Math.round(Number(p.spinCount));
-    if (!Number.isFinite(spinCount) || spinCount < 0 || spinCount > MAX_SPINS_PER_PURCHASE) return null;
+    if (!Number.isFinite(spinCount) || spinCount < 0 || spinCount > MAX_SPINS_PER_PURCHASE)
+      return refuse('Spins per purchase', `must be a whole number between 0 and ${MAX_SPINS_PER_PURCHASE}`);
   }
   // Opening schedule -- see productOpenState() for what each field means and
   // why the two shapes (a one-off moment, and a daily window) coexist.
@@ -8306,21 +8327,31 @@ function sanitizeProductInput(p, fallbackOrder) {
   let openAt = null;
   if (p?.openAt != null && p.openAt !== '') {
     openAt = typeof p.openAt === 'number' ? p.openAt : Date.parse(p.openAt);
-    if (!Number.isFinite(openAt) || openAt <= 0) return null;
+    if (!Number.isFinite(openAt) || openAt <= 0) return refuse('Opens at (one-off)', 'is not a date the server can read');
   }
+  // Padded BEFORE parsing, exactly as the cash-out-hours settings route does:
+  // hhmmToMin() demands a two-digit hour, so a stored or hand-sent "9:00"
+  // would be refused on a technicality that has nothing to do with the owner.
+  // An <input type="time"> always hands over "HH:MM", so this only ever
+  // matters for a legacy document or a direct POST -- but the two routes
+  // disagreeing about what a valid time looks like is the kind of difference
+  // that surfaces as an unexplainable refusal.
+  const padHHMM = v => { const s = String(v).trim(); return /^\d:\d\d$/.test(s) ? '0' + s : s; };
   let openFrom = null, openTo = null;
   if (p?.openFrom != null && p.openFrom !== '') {
-    if (hhmmToMin(p.openFrom) == null) return null;
-    openFrom = String(p.openFrom).trim();
+    openFrom = padHHMM(p.openFrom);
+    if (hhmmToMin(openFrom) == null) return refuse('Open daily from', 'must be a time of day like 15:00');
   }
   if (p?.openTo != null && p.openTo !== '') {
-    if (hhmmToMin(p.openTo) == null) return null;
-    openTo = String(p.openTo).trim();
+    openTo = padHHMM(p.openTo);
+    if (hhmmToMin(openTo) == null) return refuse('until', 'must be a time of day like 16:45');
   }
   // Half a window is not a schedule -- it would read as "opens at 14:00" and
   // silently never close, or never open. Both ends, or neither.
-  if ((openFrom == null) !== (openTo == null)) return null;
-  if (openFrom != null && openFrom === openTo) return null;
+  if ((openFrom == null) !== (openTo == null))
+    return refuse('Open daily from / until', 'a daily window needs BOTH times, or neither');
+  if (openFrom != null && openFrom === openTo)
+    return refuse('Open daily from / until', 'a daily window cannot start and end at the same minute');
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
   const order = p?.order != null ? Number(p.order) : fallbackOrder;
   return { key, name, price, cycle, expectedReturn, multiplier, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
@@ -8363,8 +8394,13 @@ app.post('/admin/products/save', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `There is no region "${regionKey}".` });
     const sanitized = [];
     for (let i = 0; i < list.length; i++) {
-      const clean = sanitizeProductInput(list[i], i);
-      if (!clean) return res.status(400).json({ status: 'error', message: `Product #${i + 1} (${list[i]?.name || list[i]?.key || 'unnamed'}) has an invalid key, name, price, or (if given) cycle/return. Nothing was saved.` });
+      const why = {};
+      const clean = sanitizeProductInput(list[i], i, why);
+      if (!clean) {
+        const who = list[i]?.name || list[i]?.key || 'unnamed';
+        const what = why.field ? `"${why.field}" ${why.why}` : 'has a field the server cannot read';
+        return res.status(400).json({ status: 'error', message: `${who}: ${what}. Nothing was saved.`, field: why.field || '' });
+      }
       sanitized.push(clean);
     }
     const batch = db.batch();

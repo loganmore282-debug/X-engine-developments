@@ -31,6 +31,13 @@ const slice = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
 eval(slice('function productExpectedReturn', 'function sanitizeProductInput'));
 eval(slice('function sanitizeProductInput', "app.get('/admin/products'"));
 eval(slice('function rollSpinReward', "app.get('/turntable/status'"));
+// Lifted here rather than further down (where publicProductView is needed)
+// because sanitizeProductInput() calls the HH:MM parser for a product's daily
+// window -- the field-naming cases below exercise that path, and without this
+// they would die on an undefined helper instead of failing an assertion. The
+// slice runs to /public/products because the product view calls
+// productOpenState, which sits between the two.
+eval(slice('function hhmmToMin', "app.get('/public/products'"));
 
 let failed = 0;
 const check = (ok, label) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`); };
@@ -53,6 +60,112 @@ for (const [p, shouldAccept, label] of [
   [{ key: 'p5', name: 'Product-5', price: 1, multiplier: -2 }, false, 'negative multiplier rejected'],
 ]) check(!!sanitizeProductInput(p, 0) === shouldAccept, label);
 
+// ── A refused save must name the field that refused it ──
+// Report that prompted this: "product 12 failed to save spins". The panel
+// printed "has an invalid key, name, price, or (if given) cycle/return" --
+// spins are not in that list, so the one thing the owner had actually changed
+// was the one thing the message did not mention. There are fifteen separate
+// refusals in sanitizeProductInput() and they all shared that sentence.
+//
+// Asserted by RUNNING the validator with the out-parameter and then RUNNING
+// the route's own message builder over what it wrote: a text match on the
+// template would pass for a route that fills in the wrong field, or none.
+console.log('\n— a refused product save names the failing field —');
+for (const [p, field, label] of [
+  [{ key: 'bad key!', name: 'X', price: 1 }, 'Key', 'a key with a space'],
+  [{ key: 'p', name: '', price: 1 }, 'Name', 'a blank name'],
+  [{ key: 'p', name: 'X' }, 'Price', 'no price'],
+  [{ key: 'p', name: 'X', price: 1, cycle: 1.5 }, 'Cycle (days)', 'a fractional cycle'],
+  [{ key: 'p', name: 'X', price: 1, expectedReturn: -5 }, 'Total payout', 'a negative payout'],
+  [{ key: 'p', name: 'X', price: 1, multiplier: 5000 }, 'Multiplier (×)', 'a multiplier past 1000'],
+  [{ key: 'p', name: 'X', price: 1, spinMin: -1 }, 'Win from', 'a negative win floor'],
+  [{ key: 'p', name: 'X', price: 1, spinMax: MAX_MONEY_AMOUNT + 1 }, 'Win to', 'a win ceiling past the money cap'],
+  [{ key: 'p', name: 'X', price: 1, spinMin: 1000, spinMax: 200 }, 'Win to', 'a backwards band'],
+  [{ key: 'p', name: 'X', price: 1, spinCount: 99 }, 'Spins per purchase', 'more spins than the cap — THE REPORTED CASE'],
+  [{ key: 'p', name: 'X', price: 1, openAt: 'not a date' }, 'Opens at (one-off)', 'an unreadable one-off date'],
+  [{ key: 'p', name: 'X', price: 1, openFrom: '25:00', openTo: '16:45' }, 'Open daily from', 'an impossible from-time'],
+  [{ key: 'p', name: 'X', price: 1, openFrom: '15:00', openTo: '16:99' }, 'until', 'an impossible until-time'],
+  [{ key: 'p', name: 'X', price: 1, openFrom: '15:00' }, 'Open daily from / until', 'half a daily window'],
+  [{ key: 'p', name: 'X', price: 1, openFrom: '15:00', openTo: '15:00' }, 'Open daily from / until', 'a zero-length window'],
+]) {
+  const why = {};
+  const clean = sanitizeProductInput(p, 0, why);
+  check(clean === null && why.field === field && !!why.why,
+    `${label} -> "${why.field}" ${why.why || '(no reason)'}`);
+}
+// The route's own sentence, built from what the validator reported.
+{
+  const start = src.indexOf('const who = list[i]?.name');
+  const endMark = "field: why.field || '' });";
+  const refusal = src.slice(start, src.indexOf(endMark, start) + endMark.length);
+  check(start > 0 && refusal.includes('res.status(400)'), 'the route refusal block was found to run');
+  const build = new Function('list', 'i', 'why', 'res', refusal);
+  const why = {};
+  const p = { key: 'product-12', name: 'Product-12', price: 1000, spinCount: 99 };
+  sanitizeProductInput(p, 0, why);
+  let sent = null;
+  build([p], 0, why, { status: () => ({ json: o => (sent = o) }) });
+  check(!!sent && sent.status === 'error' && sent.message.includes('Product-12')
+    && sent.message.includes('Spins per purchase') && sent.field === 'Spins per purchase',
+    `route says: ${sent && sent.message}`);
+}
+
+// An <input type="time"> always hands over "HH:MM", but a document written
+// before this validator existed (or a direct POST) can carry "9:00", and
+// hhmmToMin() demands a two-digit hour. The cash-out-hours settings route
+// already pads before parsing; this one used not to, so the two routes
+// disagreed about what a valid time is.
+console.log('\n— a one-digit hour is padded, not refused —');
+for (const [p, ok, label] of [
+  [{ key: 'p', name: 'X', price: 1, openFrom: '9:00', openTo: '17:00' }, true, 'from "9:00" accepted'],
+  [{ key: 'p', name: 'X', price: 1, openFrom: '09:00', openTo: '5:30' }, true, 'until "5:30" accepted'],
+  [{ key: 'p', name: 'X', price: 1, openFrom: '15:00', openTo: '16:45' }, true, 'an ordinary padded window'],
+]) check(!!sanitizeProductInput(p, 0) === ok, label);
+check(sanitizeProductInput({ key: 'p', name: 'X', price: 1, openFrom: '9:00', openTo: '17:00' }, 0).openFrom === '09:00',
+  'the padded form is what gets STORED, so productOpenState can read it back');
+
+// The panel's own cap must be the server's, or the input hints at one number
+// and the save refuses at another.
+console.log('\n— the panel and the server agree on the spin cap —');
+{
+  const adminFile = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+  // The panel's pre-flight checks, RUN rather than grepped. They are only a
+  // courtesy -- /admin/products/save is the guarantee -- but the courtesy is
+  // the whole point here: max="20" on a number input is a hint a typed 50
+  // sails straight past, and the owner then meets a refusal from the server
+  // instead of a sentence next to the box.
+  const vFrom = '    if (!!body.openFrom !== !!body.openTo)';
+  const vTo = "'err');";
+  const vStart = adminFile.indexOf(vFrom);
+  const vLast = adminFile.indexOf("+ADMIN_MAX_SPINS,'err');", vStart);
+  const block = adminFile.slice(vStart, vLast + "+ADMIN_MAX_SPINS,'err');".length);
+  check(vStart > 0 && vLast > vStart && block.includes('spinCount'),
+    "the panel's product pre-flight block was found to run");
+  const preflight = new Function('body', 'toast', 'ADMIN_MAX_SPINS', block + '\nreturn null;');
+  const run = b => preflight({ price: '30000', spinCount: '0', spinMin: '', spinMax: '', openFrom: '', openTo: '', ...b }, m => m, 20);
+  for (const [b, want, label] of [
+    [{}, null, 'an ordinary product passes'],
+    [{ spinCount: '20', spinMax: '1000' }, null, 'a count at the cap passes'],
+    [{ spinCount: '50', spinMax: '1000' }, /0 to 20/, 'a typed 50 is caught BEFORE the round trip'],
+    [{ spinCount: '2.5', spinMax: '1000' }, /whole number/, 'a fractional count is caught'],
+    [{ spinCount: '3' }, /Set what a spin can win/, 'spins with no win band is caught'],
+    [{ spinCount: '1', spinMin: '1000', spinMax: '200' }, /cannot be less than/, 'a backwards band is caught'],
+    [{ price: '' }, /Enter a price/, 'a missing price is caught'],
+    [{ openFrom: '15:00' }, /BOTH/, 'half a daily window is caught'],
+    [{ openFrom: '15:00', openTo: '15:00' }, /same minute/, 'a zero-length window is caught'],
+  ]) {
+    const got = run(b);
+    check(want === null ? got === null : (typeof got === 'string' && want.test(got)),
+      `${label} -> ${got === null ? 'saves' : JSON.stringify(got)}`);
+  }
+  const adminMax = /const ADMIN_MAX_SPINS = (\d+);/.exec(adminFile);
+  const serverMax = /const MAX_SPINS_PER_PURCHASE = (\d+)/.exec(src);
+  check(!!adminMax && !!serverMax && adminMax[1] === serverMax[1],
+    `ADMIN_MAX_SPINS ${adminMax && adminMax[1]} === MAX_SPINS_PER_PURCHASE ${serverMax && serverMax[1]}`);
+  check(!!serverMax && Number(serverMax[1]) === MAX_SPINS_PER_PURCHASE,
+    'and this test restates the same number');
+}
+
 console.log('\n— spin payout stays inside its product band —');
 for (const [lo, hi] of [[200, 1000], [5000, 5000], [0, 300]]) {
   let bad = 0;
@@ -67,10 +180,9 @@ for (const [lo, hi] of [[200, 1000], [5000, 5000], [0, 300]]) {
 // inherited expectedReturn they disagreed outright: the app quoted the old
 // stored total, the server paid price x multiplier. This pins all four to
 // the same function by pulling each one out of the file that ships it.
-// Starts at hhmmToMin, not at publicProductView: the view now reports whether
-// a product is open, so it calls productOpenState, and lifting the view alone
-// leaves that undefined. The schedule helpers sit directly above it.
-eval(slice('function hhmmToMin', "app.get('/public/products'"));
+// The schedule helpers and publicProductView were lifted at the top of this
+// file: the view reports whether a product is open, so it calls
+// productOpenState, and lifting the view alone leaves that undefined.
 const userSrc = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 const uslice = (a, b) => userSrc.slice(userSrc.indexOf(a), userSrc.indexOf(b));
 eval(uslice('function planFigures', '// One shared product-card renderer'));

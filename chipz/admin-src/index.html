@@ -478,6 +478,11 @@ function fileToDataUrl(file, maxDim=900, quality=0.82){
 // cover-fit onto 16:9 with about 6% trimmed off the left and right edges,
 // which on a centred product shot with margins takes nothing that matters.
 const PRODUCT_IMG_W = 1600, PRODUCT_IMG_H = 900;
+// Mirrors MAX_SPINS_PER_PURCHASE in server.js, which refuses a bigger number
+// at save time and clamps the grant loop at purchase time. It is the input's
+// max attribute AND the typed-value check, so the hint and the refusal cannot
+// drift apart. test-product-config.js asserts the two files agree.
+const ADMIN_MAX_SPINS = 20;
 const NAME_MIME = { mp4:'video/mp4', m4v:'video/mp4', webm:'video/webm', mov:'video/quicktime',
                     png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp' };
 function guessMimeFromName(name){
@@ -2398,7 +2403,7 @@ function editProduct(p, order){
     <h4 style="margin:16px 0 4px;font-size:14px">Turntable spins from this product</h4>
     <p class="muted" style="margin:0 0 8px;font-size:11.5px">How many spins buying THIS product earns, and what each of those spins can win. Leave spins at 0 for products that earn none. Each spin pays a random amount between the two figures — set them the same for a fixed amount.</p>
     <div class="row">
-      <div><label>Spins per purchase</label><input id="pSpinCount" type="number" min="0" max="20" value="${p.spinCount||0}"></div>
+      <div><label>Spins per purchase <span class="muted" style="font-weight:400">— up to ${ADMIN_MAX_SPINS}</span></label><input id="pSpinCount" type="number" min="0" max="${ADMIN_MAX_SPINS}" value="${p.spinCount||0}"></div>
       <div><label>Win from (${adminCur()})</label><input id="pSpinMin" type="number" min="0" value="${p.spinMin!=null?p.spinMin:''}" placeholder="200"></div>
       <div><label>Win to (${adminCur()})</label><input id="pSpinMax" type="number" min="0" value="${p.spinMax!=null?p.spinMax:''}" placeholder="1000"></div>
     </div>
@@ -2495,6 +2500,11 @@ function editProduct(p, order){
       return toast('Spin "win to" cannot be less than "win from"','err');
     if(parseFloat(body.spinCount) > 0 && !(sMax > 0))
       return toast('Set what a spin can win, or set spins per purchase to 0','err');
+    // max="20" on the input is only a hint -- a typed 50 sails past it and the
+    // server refuses the whole save. Say so here, where the box is.
+    const sCount = parseFloat(body.spinCount);
+    if(Number.isFinite(sCount) && (sCount < 0 || sCount > ADMIN_MAX_SPINS || !Number.isInteger(sCount)))
+      return toast('Spins per purchase must be a whole number from 0 to '+ADMIN_MAX_SPINS,'err');
     const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';
     const d=await api('/admin/products/save', { products:[body] });
     $('pSave').disabled=false; $('pSave').textContent=restore;

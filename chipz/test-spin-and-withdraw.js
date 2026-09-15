@@ -125,11 +125,37 @@ ck(/Math\.min\(MAX_MONEY_AMOUNT/.test(grant),
    'and the band is clamped to MAX_MONEY_AMOUNT at grant time too');
 // The validator caps it as well -- both, on purpose, because not every write
 // to products/ goes through the validator.
-ck(/spinCount > MAX_SPINS_PER_PURCHASE\) return null/.test(src),
-   'the admin save path refuses a bigger count using the SAME constant');
-ck(/const MAX_SPINS_PER_PURCHASE = 20;/.test(src), 'which is 20');
-ck(/spinMax < spinMin\) return null/.test(src),
-   'and refuses a band saved backwards rather than quietly fixing it');
+//
+// These two used to be text matches on `return null` and they went red when
+// the refusals started reporting WHICH field failed (the shape changed, the
+// rule did not). Running the real validator is the assertion that was wanted
+// all along: it cannot be defeated by a rewrite, and it also proves the
+// refusal names the box the owner has to go and fix -- "product 12 failed to
+// save spins" was unanswerable when every refusal shared one sentence.
+{
+  const MAX_SPINS_PER_PURCHASE = 20;
+  // new Function, not eval: the dependencies are handed in by name, so a
+  // helper this validator starts using cannot be silently satisfied by
+  // something that happens to exist in this file's scope.
+  const sanitizeProductInput = new Function(
+    'MAX_MONEY_AMOUNT', 'MAX_SPINS_PER_PURCHASE', 'hhmmToMin',
+    grab('function sanitizeProductInput', "app.get('/admin/products'")
+      + '\nreturn sanitizeProductInput;',
+  )(999_999_999, MAX_SPINS_PER_PURCHASE,
+    new Function(grab('function hhmmToMin', 'function productOpenState') + '\nreturn hhmmToMin;')());
+  const base = { key: 'p12', name: 'Product-12', price: 30000 };
+  const why = w => { const o = {}; sanitizeProductInput({ ...base, ...w }, 0, o); return o; };
+  ck(sanitizeProductInput({ ...base, spinCount: MAX_SPINS_PER_PURCHASE }, 0) !== null,
+     `a count at the cap (${MAX_SPINS_PER_PURCHASE}) saves`);
+  ck(sanitizeProductInput({ ...base, spinCount: MAX_SPINS_PER_PURCHASE + 1 }, 0) === null,
+     'the admin save path refuses a bigger count using the SAME constant');
+  ck(why({ spinCount: 99 }).field === 'Spins per purchase',
+     'and the refusal names the spins field, not "key, name, price"');
+  ck(/const MAX_SPINS_PER_PURCHASE = 20;/.test(src), 'which is 20');
+  ck(sanitizeProductInput({ ...base, spinMin: 1000, spinMax: 200 }, 0) === null,
+     'and refuses a band saved backwards rather than quietly fixing it');
+  ck(why({ spinMin: 1000, spinMax: 200 }).field === 'Win to', 'naming the band field too');
+}
 
 // Run the real clamp: a stored value the validator never saw.
 const clampCount = c => Math.min(20, Math.max(0, Math.floor(Number(c) || 0)));

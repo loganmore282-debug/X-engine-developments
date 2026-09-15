@@ -4681,3 +4681,74 @@ list is in Round 157's note.
   `test-regions.js` going red on five label assertions while every other harness
   passed; the whole Node suite is the cheap way to confirm the tree is clean
   afterwards, because exactly one mutation is ever applied at a time.
+
+## Round 164 — "Product 12 failed to save spins": one sentence for fifteen refusals
+
+> "continue however product 12 failed to save spins"
+
+The panel printed:
+
+> Product #1 (Product-12) has an invalid key, name, price, or (if given) cycle/return.
+> Nothing was saved.
+
+**Spins are not in that list, and spins were the only thing he had changed.**
+`sanitizeProductInput()` has **fifteen** separate `return null` paths — key, name,
+price, cycle, total payout, multiplier, win-from, win-to, a backwards band, spin count,
+the one-off date, both window times, half a window, a zero-length window — and every one
+of them arrived as that single sentence naming four fields. So the message did not merely
+fail to help; it pointed at the wrong boxes. **The defect was the diagnosis, not the
+validation** — every one of those refusals is a rule worth keeping.
+
+### The fix
+- `sanitizeProductInput(p, fallbackOrder, out)` takes an optional out-parameter. Each
+  refusal writes `{field, why}` into it and **still returns `null`**, which is the
+  contract `test-product-config.js` drives and the only thing any caller reads. The
+  field names are the panel's own labels ("Spins per purchase", "Win to", "Cycle
+  (days)"), so the sentence names the box rather than a variable.
+- `/admin/products/save` says `Product-12: "Spins per purchase" must be a whole number
+  between 0 and 20. Nothing was saved.` and returns `field` alongside `message`.
+  The old `Product #1` numbering went with it — the panel saves **one** product per
+  request, so "#1" was always 1 and never told anyone anything.
+- The helper is named **`refuse`, not `bad`**: several harnesses lift this function into
+  their own scope, and `bad` is already the failure counter in
+  `test-spin-and-withdraw.js`.
+- **`openFrom`/`openTo` are padded before parsing**, exactly as the cash-out-hours
+  settings route already does. `hhmmToMin()` demands a two-digit hour; an
+  `<input type="time">` always sends one, so this only bites a legacy document or a
+  direct POST — but the two routes disagreeing about what a valid time looks like is
+  precisely the kind of difference that surfaces as an unexplainable refusal. The
+  **padded** form is what gets stored, so `productOpenState()` reads it back.
+- **`ADMIN_MAX_SPINS = 20` in the panel**, mirroring `MAX_SPINS_PER_PURCHASE`. It is the
+  input's `max` attribute, the label's "— up to 20" hint, and a typed-value check.
+  `max="20"` on a number input is **only a hint**: a typed 50 sails straight past it, and
+  that is the most likely thing that actually happened here — it is the one spins refusal
+  with no client-side check in front of it.
+
+### What made this worth a round rather than a one-line message change
+**Two existing assertions were pinned on the `return null` text** and went red on a
+rewrite that changed no rule:
+`/spinCount > MAX_SPINS_PER_PURCHASE\) return null/` and `/spinMax < spinMin\) return null/`
+in `test-spin-and-withdraw.js`. They were replaced by **running the real validator**
+(`new Function` with `MAX_MONEY_AMOUNT`, `MAX_SPINS_PER_PURCHASE` and the real
+`hhmmToMin` handed in **by name**, so a helper the validator starts using cannot be
+silently satisfied by something that happens to exist in the test's own scope). That is
+the assertion that was wanted all along: it cannot be defeated by a rewrite, and it also
+pins that the refusal names the right field. **That is the sixth harness in this project
+to have been defending the shape of a thing rather than the thing.**
+
+`test-product-config.js` now covers all fifteen refusals by field name, **runs the
+route's own message builder** over what the validator wrote (a text match on the template
+would pass for a route filling in the wrong field, or none), asserts the padding both
+accepts and stores, asserts `ADMIN_MAX_SPINS === MAX_SPINS_PER_PURCHASE` across the two
+files, and **runs the panel's pre-flight block** with a stub `toast` — nine cases,
+including the typed 50.
+
+That last one only exists because the first mutation run reported it **MISSED**: six of
+seven mutations were caught and "the panel's own spin-count check is removed" was not,
+because nothing anywhere executed the panel's courtesy checks. A grep would have "passed"
+it. All seven are caught now.
+
+**One ordering note:** `eval(slice('function hhmmToMin', …))` had to move to the **top**
+of `test-product-config.js`. `sanitizeProductInput()` calls that parser for a product's
+daily window, and the new field-naming cases exercise that path — lifted where it used to
+be, they died on an undefined helper instead of failing an assertion.
