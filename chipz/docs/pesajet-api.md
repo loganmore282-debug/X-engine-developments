@@ -1,16 +1,27 @@
 # PesaJet Pay — API contract
 
-**Provenance.** `pay.pesajet.com` is not reachable from the build environment
-(the egress proxy refuses it), so this was extracted from the **official SDK**,
-`@pesajet/sdk@1.0.2` on npm (`npm pack @pesajet/sdk`, then its `dist/`). That
-is the same contract the SDK itself speaks, so it is authoritative for
-endpoints, headers, field names and status values — but it is NOT the docs
-site, and anything the SDK does not exercise is listed under "Not answered
-here" at the bottom. Do not invent those; confirm them with PesaJet.
+**Provenance.** Two sources, and where they disagree the docs win.
+
+1. **`pay.pesajet.com/docs` itself**, read on 2026-09-15 (the owner pasted the
+   page; the host is refused by this environment's egress proxy). This is the
+   authority for the endpoint list, the error shape, the webhook retry
+   schedule, sandbox behaviour and the IP controls.
+2. **The official SDK**, `@pesajet/sdk@1.0.2` on npm (`npm pack`, then its
+   `dist/`), which is where everything here came from first. Still useful: it
+   is executable and it pins field names the docs only summarise. Also
+   published: `pesajet` on PyPI — same surface, checked with `pip download`.
 
 SDK repo: `https://github.com/pesajet/pesajet-pay-demo` (`sdks/nodejs`).
-Also published: `pesajet` on PyPI. Chipz has no need of either package —
-`server.js` calls the REST API directly, as it does for MarzPay and LipaPay.
+Chipz has no need of either package — `server.js` calls the REST API directly,
+as it does for MarzPay and LipaPay.
+
+**Where the two disagreed, and what it cost.** The SDK's error type is FLAT;
+the docs show the error NESTED under `error`. Chipz read it the flat way, so a
+documented error body handed the error object straight to a member and printed
+`[object Object]` on a failed recharge. Both shapes are accepted now. The SDK
+also types `provider` as optional while the docs call it required-but-
+auto-detected; Chipz omits it only when neither the stored network nor the
+prefix resolves one, and lets their own detection answer.
 
 ## Base URL and authentication
 
@@ -190,23 +201,90 @@ has its own `UGANDA_MOBILE_PREFIXES`; the two lists must be reconciled rather
 than one silently overriding the other. Note PesaJet lists `39`, which Chipz's
 own prefix list does not.
 
+## Sandbox, and the KYC prerequisite
+
+There is **no separate sandbox host**. Sandbox transactions run end to end
+against the real MTN MoMo and Airtel Money networks, and before KYC approval
+they may only use **the phone number registered on the merchant profile**.
+Completing one successful sandbox transaction to that SIM is a **mandatory
+prerequisite for submitting KYC**.
+
+So `PESAJET_BASE_URL` needs no sandbox value, and the first real test has to be
+a recharge from the registered number for its own amount.
+
+## Merchant security controls — the IP allowlist
+
+An administrator can restrict **disbursements** by client IP. With enforcement
+on, a payout is accepted only from an allowed address; **collections and
+read-only requests are not affected.**
+
+**This is a live outage risk for Chipz and it would show up only as payouts
+failing.** `chipz-server` runs on Render, whose outbound addresses are not
+guaranteed stable on every plan. Leave enforcement OFF unless Render's
+outbound IPs are pinned and entered first.
+
+## Webhook delivery and retries
+
+Headers on every delivery:
+
+| header | |
+|---|---|
+| `X-Webhook-Signature` | HMAC-SHA256 hex digest of the payload |
+| `X-Webhook-Id` | UUID, unique per delivery attempt — for audit and de-duplication |
+| `Content-Type` | `application/json` |
+| `User-Agent` | `PesaJet-Webhooks/1.0` |
+
+If the endpoint does not answer 2xx within 30 seconds, PesaJet retry at
+**1 minute, 5 minutes, 15 minutes, 1 hour, then every 4 hours up to 24 hours**.
+
+So **a webhook will be delivered more than once** as a matter of routine, not
+as an edge case. Chipz's handler is idempotent at every step and credits only
+from an independent re-read, which is what makes that harmless.
+
+**The signing question is settled**, and in Chipz's favour: the docs say to
+take *"the raw body (or remove the `signature` key from the parsed JSON)"* —
+both candidates, exactly what `pesajetVerifyWebhook` already tries.
+
+## Errors
+
+Documented shape, nested:
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "Invalid phone number format",
+             "details": { "phoneNumber": "Use +256 format" },
+             "timestamp": "2026-07-26T10:30:00.000Z", "requestId": "req_123456" } }
+```
+
+| status | their instruction | what Chipz does |
+|---|---|---|
+| 400 | correct the fields | refuse the payment, show their message |
+| 401 | check `X-API-Key` | refuse; logged |
+| 404 | confirm it is your transaction | on a status read, "unknown to PesaJet" — an answer, not an outage |
+| **409** | **"reuse the original response"** | **NOT a refusal** — recover the transaction by reference; if it cannot be found, treat as in flight |
+| 429 | back off with jitter | treated as busy, left pending |
+| 500 | retry with the same idempotency key | treated as busy, left pending |
+
+`requestId` is logged on every non-2xx, because their own error table says to
+quote it to support.
+
 ## Not answered here — confirm with PesaJet before relying on it
 
-1. **Sandbox base URL** (the SDK only says `baseUrl` is overridable).
-2. **Amount units** — every example is whole shillings; confirm there is no
-   minor-unit mode.
-3. **Minimum and maximum per transaction.**
-4. **Whether disbursements draw on a pre-funded float**, and if so whether
-   there is a balance endpoint. The SDK exposes none, so the admin dashboard's
-   "available balance" card has no PesaJet equivalent yet.
-5. **Whether `reference` must be globally unique**, and what happens on a
-   repeat (this decides whether `Idempotency-Key` or `reference` is the
-   idempotency anchor).
-6. **Retry policy for webhooks** — how many times, over how long.
-7. Any **IP allowlist** for webhook senders — the dashboard mentions
-   "control IP security", so the feature exists; its shape is not recorded here.
-8. **What the `sk_` API secret is for.** It is issued and marked
-   "Restricted / use only in secure server-side environments", yet neither the
-   SDK nor PesaJet's own cURL sample sends it anywhere. If payouts or some
-   other call need it, that is invisible from both sources — ask before
-   assuming `pk_` alone is enough for a disbursement.
+1. **Maximum per transaction.** The minimum is documented as 1; no maximum is.
+2. **Whether disbursements draw on a pre-funded float.** The docs say
+   "your merchant balance sends funds", so a balance exists — but **the
+   complete endpoint reference lists no way to read it** (`POST /payments`,
+   `GET /payments/preview`, `GET /payments/:id`, `GET /payments`). That is why
+   the admin dashboard's PesaJet card reports Chipz's own records and says in
+   as many words that it is not their float.
+3. **What the `sk_` API secret is for.** Still nothing: not the SDK, not the
+   cURL samples, not the endpoint reference. Ask before assuming `pk_` alone
+   is enough for a disbursement.
+4. **The list endpoint's response envelope.** Its *parameters* are documented
+   (`page`, `limit`, `status`, `provider`, `startDate`, `endDate`) but the
+   shape it returns is not. `pesajetFindByReference()` accepts four plausible
+   envelopes and reports anything else as **unreadable** rather than as "no
+   rows" — an unrecognised shape must never become evidence that a payment
+   does not exist.
+5. **Whether `reference` must be unique.** `idempotencyKey` is clearly the
+   retry anchor; `reference` is documented only as "your payment or invoice
+   reference, up to 255 characters".

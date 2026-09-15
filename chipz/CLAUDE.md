@@ -5753,3 +5753,129 @@ of *a check defeated by the text of a comment*.
 ### Owner still has to
 Nothing new. This card needs no configuration — it appears on the Dashboard as soon as
 PesaJet is picked in Settings, or as soon as anything has gone through it.
+
+## Round 171 — Reading PesaJet's real docs, and the two bugs it found
+
+The owner pasted `pay.pesajet.com/docs` (the host is refused by this environment's egress
+proxy, so it had never been read — Round 169 worked from the published SDK instead). It
+answered six of the eight open questions **and exposed two defects in shipped money code**,
+one of which could tell a member their recharge failed while the prompt was ringing on
+their phone.
+
+**The SDK was a good source and not a sufficient one.** It is executable and pins field
+names, which is why it was the right call at the time; but it cannot describe an HTTP
+status it never returns, a retry schedule, or a dashboard control. Where the two disagree,
+the docs win — and they disagreed twice.
+
+### Bug 1 — the error body is NESTED, and a member was shown `[object Object]`
+The SDK's error type is flat. The docs' is not:
+
+```json
+{ "error": { "code": "…", "message": "…", "details": {…}, "timestamp": "…", "requestId": "…" } }
+```
+
+`pesajetUserMsg()` read `r.data.message || r.data.error`. Against the documented shape
+`message` is undefined and `error` is an **object** — truthy, so it was returned as the
+member-facing sentence. Somebody whose recharge had just failed would read
+`[object Object]`, which is worse than the generic message it replaced.
+
+`_pesajetRequest()` flattens both shapes into one now, and `pesajetUserMsg()` will only
+ever return a **string** — it picks the first candidate that actually is one. `requestId`
+is logged on every non-2xx, because their own error table says to quote it to support.
+
+### Bug 2 — a 409 was treated as a refusal. It is the opposite.
+Their error table's instruction for a conflict is **"reuse the original response for an
+idempotency conflict"**: the transaction ALREADY EXISTS. `_pesajetRequest()` classified
+only 5xx/408/429 as "busy", so a 409 fell through as a clean refusal — which fails the
+deposit and tells the member it did not work, while PesaJet may have a live prompt on
+their phone. On the payout side it would hand a withdrawal back for a retry that pays
+twice.
+
+`pesajetCreate()` now recovers the existing transaction by reference on a 409. If it
+cannot be found, the result is downgraded to **`providerDown`** — in flight, never
+refused — so the deposit stays pending for the reconciler and no payout is handed back.
+That is the posture the 5xx path already had; the 409 simply never reached it.
+
+### The hole this let me close: a deposit with no transaction id
+Not a new bug, but the first time it was fixable. If a create call is **accepted by
+PesaJet and its response is lost** (a timeout at our end), the row has no `pesajetTxId` —
+and every resolver here reads by that id. The reconciler even excluded such rows
+explicitly, and my own comment said so: *"a row whose create call never returned a
+transaction id can never be checked."* The member's money can leave their phone and
+nothing in this platform would ever credit it.
+
+The docs list a fourth endpoint the SDK does not expose: **`GET /payments`**, paginated,
+with `page` / `limit` / `status` / `provider` / `startDate` / `endDate`.
+`pesajetFindByReference()` uses **only those six** — there is no `reference` filter among
+them, so the window is narrowed with `startDate` and our own reference is matched here.
+Inventing a seventh parameter would be the same mistake as inventing a balance path.
+
+A second reconciler sweep now uses it, and every rule in it exists to avoid failing a
+real payment:
+- **Newest first**, unlike every other sweep here. A row is only recoverable while it is
+  still inside the window a lookup can page, so old ones age out rather than starving the
+  young ones — the same starvation the `pesajetTxId > ''` exclusion avoids.
+- **Younger than 10 minutes is left alone**: the member's own status poll owns it.
+- **A deposit is failed ONLY on a window scanned right to its end** (a short page — the
+  one thing that proves there was nothing more to see). A blip, a short read or an
+  unreadable envelope leaves the row pending, which is the outcome that cannot cost
+  anybody money.
+- **The list envelope is not documented, only its parameters are.** Four plausible shapes
+  are accepted and anything else is reported as **unreadable** rather than as "no rows" —
+  because "no rows" is the finding that licenses failing a deposit, and an unrecognised
+  shape must never become evidence that a payment does not exist.
+
+### What else the docs settled
+- **The signing question is closed, in our favour.** *"Take the raw body (or remove the
+  `signature` key from the parsed JSON)"* — both candidates, which is exactly what
+  `pesajetVerifyWebhook` already tries. Round 169's "two sources disagree, accept either"
+  turns out to be their own documented position.
+- **Webhooks retry at 1 min / 5 min / 15 min / 1 hour / every 4 hours up to 24 hours**,
+  and carry an `X-Webhook-Id` per delivery attempt. So redelivery is routine, not an edge
+  case; the handler is idempotent at every step and credits only from an independent
+  re-read, which is what makes that harmless.
+- **There is no sandbox host.** Sandbox runs against the real carriers, restricted to the
+  phone number on the merchant profile, and **one successful sandbox transaction to that
+  SIM is a prerequisite for submitting KYC**.
+- **Disbursements can be restricted by client IP** (collections and reads are not). That
+  is a live outage risk on Render, whose outbound addresses are not guaranteed stable —
+  leave enforcement OFF unless those IPs are pinned and entered first.
+- **Minimum amount is 1.** No maximum documented.
+- **No balance endpoint, confirmed by the complete endpoint reference** — four endpoints,
+  none of them a balance, while the docs do say "your merchant balance sends funds". So a
+  float exists and cannot be read. Round 170's card was the right call and stands.
+
+Still unanswered: the maximum per transaction, whether payouts draw on a pre-funded
+float, what the `sk_` secret is for, the list endpoint's response envelope, and whether
+`reference` must be unique.
+
+### Tests
+`test-pesajet.js` gained a section that RUNS the real functions against both error shapes,
+a 409 that resolves and a 409 that does not, and four list-endpoint outcomes (found, a
+short page, an unreadable envelope, a gateway blip) — plus checks inside the reconciler
+sweep, since the other two gateways carry similar-looking lines.
+`verify-pesajet-discriminates.py` is now **72 mutations, all caught**, control behaved.
+
+**One of the new mutations was MISSED, and deleting it was the right answer.** "An error
+object reaches the member as `[object Object]`" reverted `pesajetUserMsg()`'s string guard
+— and that is harmless, because `_pesajetRequest()` flattens the nested body *before*
+`pesajetUserMsg()` ever sees it, so by then `d.error` can only be a string or absent. The
+property itself IS defended, by the mutation that removes the flattening (caught). The
+guard stays as belt-and-braces against a future change to the flattener, but no honest
+assertion can fail on it today. This file's own rule applies: *a mutation that cannot fail
+for the right reason should be deleted, not propped up.*
+
+**One anchor matched nothing and aborted the run**, which is the only reason it was
+noticed rather than silently skipped: `pesajetCreate` now awaits its reply so it can
+handle a 409, so the old `return _pesajetRequest(...)` line no longer exists. The
+standing lesson holds — *re-check every anchor after changing the code it points at, and
+judge a mutation by the exit code.*
+
+### Owner still has to
+1. **Rotate the API key.** `pk_…` has now appeared twice in chat. Dashboard →
+   *Rotate API keys*.
+2. **Do the sandbox test from the registered number (0742730383, MTN)** — it is a
+   prerequisite for submitting KYC, and it exercises the whole path end to end.
+3. **Leave the disbursement IP allowlist OFF** until Render's outbound addresses are
+   known and entered, or payouts will fail with everything else looking healthy.
+4. The three outstanding questions above, in particular what `sk_` is for.

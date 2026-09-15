@@ -33,9 +33,13 @@ M = [
      'const PESAJET_READ_TIMEOUT = 7000; const _unusedControl = 1;'),
 
     # ── the contract ──
+    # Re-anchored: pesajetCreate now awaits the reply so it can handle a 409,
+    # so the old `return _pesajetRequest(...)` line no longer exists. An
+    # anchor that matches nothing aborts the run, which is the only reason
+    # this was noticed rather than silently skipped.
     ('the endpoint path is wrong', SERVER,
-     "return _pesajetRequest('/payments', { method: 'POST', body: payload, idempotencyKey });",
-     "return _pesajetRequest('/payment', { method: 'POST', body: payload, idempotencyKey });"),
+     "  const r = await _pesajetRequest('/payments', { method: 'POST', body: payload, idempotencyKey });",
+     "  const r = await _pesajetRequest('/payment', { method: 'POST', body: payload, idempotencyKey });"),
 
     ('the auth header is wrong', SERVER,
      "const headers = { 'X-API-Key': PESAJET_KEY };",
@@ -295,6 +299,53 @@ M = [
     ('a label drifts from the row that translates it', ADMIN,
      '<div class="l">Net through PesaJet</div>',
      '<div class="l">PesaJet net</div>'),
+
+    # ── what pay.pesajet.com/docs corrected ──
+    ('the nested error body is read the flat way again', SERVER,
+     "  if (data && typeof data === 'object' && data.error && typeof data.error === 'object') {",
+     '  if (false) {'),
+
+    # DELETED, not propped up: "an error object reaches the member". It was
+    # reported MISSED, and correctly so -- _pesajetRequest() flattens the
+    # nested body BEFORE pesajetUserMsg() ever sees it, so by that point
+    # `d.error` can only be a string or absent and reading it the flat way is
+    # harmless. The property itself IS defended, by the mutation above that
+    # removes the flattening. pesajetUserMsg's string guard stays as
+    # belt-and-braces for a future change to the flattener, but no honest
+    # assertion can fail on it today, and this file's rule is that such a
+    # mutation should be deleted rather than propped up.
+
+    ('a 409 idempotency conflict is treated as a refusal again', SERVER,
+     '  if (!r.conflict) return r;',
+     '  if (!r.conflict || true) return r;'),
+
+    ('a 409 nobody can resolve is reported as refused, not in flight', SERVER,
+     '  return { ...r, providerDown: true };',
+     '  return r;'),
+
+    ('the lookup invents a reference= filter their endpoint does not document', SERVER,
+     "    if (since) qs.set('startDate', since);",
+     "    if (since) qs.set('startDate', since);\n    qs.set('reference', ref);"),
+
+    ('an unrecognised list envelope reads as "no such payment"', SERVER,
+     '    if (!rows) {',
+     '    if (false) {'),
+
+    ('a short page no longer ends the scan, so nothing is ever conclusive', SERVER,
+     '    if (rows.length < PESAJET_FIND_LIMIT) return { found: false, complete: true, providerDown: false };',
+     '    if (rows.length < PESAJET_FIND_LIMIT) return { found: false, complete: false, providerDown: false };'),
+
+    ('a deposit is failed without the window having been scanned to its end', SERVER,
+     '      if (hit.complete) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);',
+     '      await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);'),
+
+    ('a gateway blip is allowed to fail a deposit', SERVER,
+     '      if (hit.providerDown || hit.unreadable) continue;',
+     '      /* mutation */'),
+
+    ('the lost-id sweep goes oldest-first and starves the recoverable rows', SERVER,
+     "    const pjLostSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').orderBy('createdAt', 'desc').limit(60).get();",
+     "    const pjLostSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').orderBy('createdAt', 'asc').limit(60).get();"),
 ]
 
 

@@ -95,7 +95,7 @@ function buildModule({ apiKey = 'pk_test_abc', secret = 'shh', base } = {}) {
     };
   };
   const mod = new Function('fetch', 'crypto', 'Buffer', 'process', 'console',
-    'PROVIDER_BUSY_MSG', 'DEPOSIT_FAILED_MSG', 'AbortSignal', `
+    'PROVIDER_BUSY_MSG', 'DEPOSIT_FAILED_MSG', 'AbortSignal', 'URLSearchParams', `
     ${constSource('PESAJET_BASE')}
     ${constSource('PESAJET_KEY')}
     ${constSource('PESAJET_WEBHOOK_SECRET')}
@@ -108,19 +108,23 @@ function buildModule({ apiKey = 'pk_test_abc', secret = 'shh', base } = {}) {
     ${fnSource('pesajetCreate')}
     ${fnSource('pesajetCollect')}
     ${fnSource('pesajetDisburse')}
+    ${constSource('PESAJET_FIND_LIMIT')}
+    ${constSource('PESAJET_FIND_PAGES')}
+    ${fnSource('pesajetFindByReference')}
     ${fnSource('pesajetGetTx')}
     ${fnSource('pesajetStatusLabel')}
     ${fnSource('pesajetFailureMsg')}
     ${fnSource('pesajetUserMsg')}
     ${fnSource('pesajetVerifyWebhook')}
     return { pesajetConfigured, pesajetPhone, pesajetProviderFor, pesajetCreate,
+             pesajetFindByReference,
              pesajetCollect, pesajetDisburse, pesajetGetTx, pesajetStatusLabel,
              pesajetFailureMsg, pesajetUserMsg, pesajetVerifyWebhook, PESAJET_BASE };
   `)(fakeFetch, crypto, Buffer,
      { env: { PESAJET_API_KEY: apiKey, PESAJET_WEBHOOK_SECRET: secret, PESAJET_BASE_URL: base } },
      { error(){}, warn(){}, log(){} },
      'BUSY', 'FAILED',
-     { timeout: () => undefined });
+     { timeout: () => undefined }, URLSearchParams);
   return { mod, calls, reply: fn => { next = fn; } };
 }
 
@@ -550,6 +554,116 @@ async function finish() {
      'the idempotency key is sent in the body (their REST example)');
   ck(/headers\['Idempotency-Key'\] = idempotencyKey/.test(fnSource('_pesajetRequest')),
      'and as a header (their SDK) -- both, because a wrong guess is a double payment');
+
+  // ── the live docs, and the three things they corrected ──────────────────
+  console.log('\n— read against pay.pesajet.com/docs —');
+  await (async () => {
+    // 1. THE ERROR BODY IS NESTED. Their docs show
+    //    { error: { code, message, details, timestamp, requestId } }; the SDK's
+    //    own type is flat. Reading the documented shape the flat way hands the
+    //    error OBJECT to a member, who sees "[object Object]" on a failed
+    //    recharge.
+    const p = buildModule();
+    p.reply(() => ({ status: 400, body: { error: {
+      code: 'VALIDATION_ERROR', message: 'Invalid phone number format',
+      details: { phoneNumber: 'Use +256 format' }, requestId: 'req_123456' } } }));
+    const r = await p.mod.pesajetCollect({ amount: 1000, phone: '0771234567',
+      network: 'MTN', reference: 'CHZ-E1' });
+    ck(r.data.message === 'Invalid phone number format',
+       'a nested error body is flattened to a plain message');
+    ck(r.data.errorCode === 'VALIDATION_ERROR', 'and its code is carried across');
+    ck(r.data.requestId === 'req_123456',
+       "and the requestId, which their own error table says to log");
+    const shown = p.mod.pesajetUserMsg(r, 'fallback');
+    ck(typeof shown === 'string' && !/\[object/.test(shown),
+       `what reaches a member is a sentence, never an object (${shown})`);
+    ck(shown === 'Invalid phone number format', 'and it is their own message');
+    // The flat shape has to keep working -- it is what the SDK types promise.
+    const p2 = buildModule();
+    p2.reply(() => ({ status: 400, body: { message: 'Insufficient balance' } }));
+    const r2 = await p2.mod.pesajetCollect({ amount: 1, phone: '0771234567', network: 'MTN', reference: 'x' });
+    ck(p2.mod.pesajetUserMsg(r2, 'fallback') === 'Insufficient balance',
+       'and the flat shape the SDK documents still works');
+
+    // 2. A 409 IS NOT A REFUSAL. Their error table: "Reuse the original
+    //    response for an idempotency conflict." The transaction already
+    //    exists, so failing the deposit here would tell a member their
+    //    recharge failed while the prompt was ringing on their phone.
+    const p3 = buildModule();
+    p3.reply((n, url) => n === 1
+      ? { status: 409, body: { error: { code: 'CONFLICT', message: 'Duplicate request' } } }
+      : { status: 200, body: { data: [
+          { transactionId: 'txn_other', reference: 'SOMEONE-ELSE', status: 'COMPLETED' },
+          { transactionId: 'txn_mine', reference: 'CHZ-409', status: 'PENDING' }] } });
+    const r3 = await p3.mod.pesajetCollect({ amount: 30000, phone: '0771234567',
+      network: 'MTN', reference: 'CHZ-409', idempotencyKey: 'dep-409' });
+    ck(r3.ok === true && r3.recovered === true,
+       'a 409 recovers the existing transaction instead of failing the payment');
+    ck(r3.data.transactionId === 'txn_mine',
+       '  and it is OUR reference that is matched, not whatever came first');
+    ck(p3.calls[1].url.includes('/payments?'),
+       '  looked up through the documented list endpoint');
+
+    // A 409 we cannot resolve must read as IN FLIGHT, never as refused --
+    // that is the difference between "leave it pending" and "tell them it
+    // failed" / "hand a payout back for a retry that pays twice".
+    const p4 = buildModule();
+    p4.reply((n) => n === 1
+      ? { status: 409, body: { error: { code: 'CONFLICT', message: 'Duplicate' } } }
+      : { status: 200, body: { data: [] } });
+    const r4 = await p4.mod.pesajetCollect({ amount: 1, phone: '0771234567', network: 'MTN', reference: 'CHZ-410' });
+    ck(r4.ok === false && r4.providerDown === true,
+       'an unrecoverable 409 is treated as in flight, not as a refusal');
+
+    // 3. THE LIST ENDPOINT, which is what makes a lost transaction id
+    //    recoverable at all.
+    const p5 = buildModule();
+    p5.reply(() => ({ status: 200, body: { data: [{ transactionId: 't1', reference: 'R1', status: 'COMPLETED' }] } }));
+    const f1 = await p5.mod.pesajetFindByReference('R1', { sinceMs: Date.UTC(2026, 0, 1) });
+    ck(f1.found && f1.transactionId === 't1' && f1.status === 'completed',
+       'a transaction is found by our own reference');
+    const q = p5.calls[0].url;
+    ck(/[?&]page=1/.test(q) && /[?&]limit=/.test(q) && /[?&]startDate=/.test(q),
+       'using only page, limit and startDate -- parameters their reference lists');
+    ck(!/reference=/.test(q),
+       'and NOT a reference= filter, which their endpoint does not document');
+
+    const p6 = buildModule();
+    p6.reply(() => ({ status: 200, body: { data: [] } }));
+    const f2 = await p6.mod.pesajetFindByReference('NOPE', { sinceMs: Date.now() });
+    ck(f2.found === false && f2.complete === true,
+       'a short page means the window really was scanned to its end');
+
+    // The list envelope is NOT documented, only its parameters are. An
+    // unrecognised shape must never read as "no rows" -- that reading is what
+    // licenses failing a deposit, so it has to be distinguishable.
+    const p7 = buildModule();
+    p7.reply(() => ({ status: 200, body: { ok: true, weird: 'shape' } }));
+    const f3 = await p7.mod.pesajetFindByReference('R1', { sinceMs: Date.now() });
+    ck(f3.unreadable === true && f3.complete === false,
+       'an unrecognised list envelope is unreadable, never evidence of absence');
+
+    const p8 = buildModule();
+    p8.reply(() => ({ status: 503, body: {} }));
+    const f4 = await p8.mod.pesajetFindByReference('R1', { sinceMs: Date.now() });
+    ck(f4.providerDown === true && f4.complete === false,
+       'and a gateway blip is not evidence of absence either');
+  })();
+
+  // The reconciler must only conclude "this never happened" from a scan that
+  // reached the end of its window. Checked inside the sweep, because the
+  // other two gateways carry similar-looking lines.
+  {
+    const at = src.indexOf('const pjLostSnap =');
+    ck(at !== -1, 'the reconciler sweeps PesaJet deposits that never got an id');
+    const sweep = src.slice(at, src.indexOf('\n    // Deposits stuck', at));
+    ck(/if \(hit\.providerDown \|\| hit\.unreadable\) continue;/.test(sweep),
+       '  a blip or an unreadable reply leaves the row pending');
+    ck(/if \(hit\.complete\) await markDepositFailed/.test(sweep),
+       '  and a deposit is only failed on a window scanned to its end');
+    ck(/orderBy\('createdAt', 'desc'\)/.test(sweep),
+       '  newest first, so recoverable rows are not starved by old ones');
+  }
 
   // ── what has gone through PesaJet (NOT a balance) ───────────────────────
   // PesaJet publish no balance endpoint in either official SDK, so the card

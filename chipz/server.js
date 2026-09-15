@@ -2771,10 +2771,29 @@ async function _pesajetRequest(path, { method = 'GET', body, idempotencyKey, tim
   let data;
   try { data = text ? JSON.parse(text) : {}; }
   catch (_) { data = { message: text }; }
+  // PesaJet's documented error body NESTS everything under `error`:
+  //   { error: { code, message, details, timestamp, requestId } }
+  // while their SDK's own error type is flat. Reading `data.message ||
+  // data.error` off the documented shape hands back the error OBJECT, which
+  // reaches a member as "[object Object]" on a failed recharge. Flattened
+  // here, once, so every caller sees one shape whichever the API sends.
+  if (data && typeof data === 'object' && data.error && typeof data.error === 'object') {
+    const e = data.error;
+    data = { message: e.message, errorCode: e.code, details: e.details,
+             requestId: e.requestId, raw: data };
+  }
+  // Their own error table says to log this when contacting support.
+  if (!resp.ok && data && data.requestId) {
+    console.error(`pesajet ${method} ${path}: HTTP ${resp.status} requestId=${data.requestId}`);
+  }
   // A 5xx or a 408/429 is the gateway struggling, not a verdict on this
   // payment -- same treatment as a thrown network error.
   const down = resp.status >= 500 || resp.status === 408 || resp.status === 429;
-  return { ok: resp.ok, providerDown: !resp.ok && down, httpStatus: resp.status, data };
+  // 409 is neither. Their error table's own instruction for a conflict is
+  // "reuse the original response", i.e. the transaction ALREADY EXISTS --
+  // handled by the caller, never as a refusal.
+  return { ok: resp.ok, providerDown: !resp.ok && down, conflict: resp.status === 409,
+           httpStatus: resp.status, data };
 }
 async function pesajetCreate({ type, amount, phone, network, reference, description, idempotencyKey }) {
   const payload = {
@@ -2794,7 +2813,25 @@ async function pesajetCreate({ type, amount, phone, network, reference, descript
   // stated anywhere, and the cost of guessing wrong is a DUPLICATE PAYMENT on
   // a retry -- so send both and let whichever they honour do its job.
   if (idempotencyKey) payload.idempotencyKey = idempotencyKey;
-  return _pesajetRequest('/payments', { method: 'POST', body: payload, idempotencyKey });
+  const r = await _pesajetRequest('/payments', { method: 'POST', body: payload, idempotencyKey });
+  if (!r.conflict) return r;
+  // A 409 IS NOT A REFUSAL, and treating it as one is how a live payment gets
+  // marked failed. PesaJet's own error table says of a conflict: "Reuse the
+  // original response for an idempotency conflict" -- the transaction already
+  // exists, so the prompt may be ringing on the member's phone right now, or
+  // a payout may already be on its way.
+  const hit = await pesajetFindByReference(payload.reference, { sinceMs: Date.now() - 6 * 3600 * 1000 });
+  if (hit.found && hit.transactionId) {
+    return { ok: true, providerDown: false, conflict: true, recovered: true, httpStatus: 200,
+             data: { transactionId: hit.transactionId,
+                     status: (hit.status || 'pending').toUpperCase(),
+                     reference: payload.reference } };
+  }
+  // Could not recover the id. The only safe reading left is "in flight": the
+  // caller then leaves a deposit pending for the reconciler and does not hand
+  // a payout back for a retry that would pay twice.
+  console.error('PesaJet 409 and the transaction could not be found by reference:', payload.reference);
+  return { ...r, providerDown: true };
 }
 async function pesajetCollect(opts)  { return pesajetCreate({ ...opts, type: 'COLLECTION' }); }
 async function pesajetDisburse(opts) { return pesajetCreate({ ...opts, type: 'DISBURSEMENT' }); }
@@ -2806,6 +2843,63 @@ async function pesajetDisburse(opts) { return pesajetCreate({ ...opts, type: 'DI
 // one request only doubles how long the screen says nothing. The webhook and
 // the reconciler, where nobody is watching, keep the second attempt because
 // there a transient blip really would mean waiting for the next 30s tick.
+// Find a transaction we have NO id for, by our own reference.
+//
+// This closes a real hole. If a create call is accepted by PesaJet but its
+// response is lost in flight (a timeout at our end), the deposit row has no
+// `pesajetTxId` -- and every resolver here reads by that id, so nothing could
+// ever check it again. The member's money may have left their phone and this
+// platform would never credit it. Until PesaJet documented a LIST endpoint
+// there was nothing to look such a row up with; now there is.
+//
+// It uses ONLY the six parameters their endpoint reference lists
+// (page/limit/status/provider/startDate/endDate). There is no `reference`
+// filter among them, so the window is narrowed with the documented startDate
+// and our own reference is matched here. Inventing a seventh parameter would
+// be the same mistake as inventing a balance path.
+const PESAJET_FIND_LIMIT = 100;   // rows per page asked for
+const PESAJET_FIND_PAGES = 3;     // at most 300 rows scanned per lookup
+// How the reconciler rations those lookups. A lookup costs up to three calls,
+// so a handful per 30s tick; younger than the minimum age the member's own
+// status poll owns the row, and older than the window there is nothing left
+// to page.
+const PESAJET_LOST_PER_TICK = 5;
+const PESAJET_LOST_MIN_AGE_MS = 10 * 60 * 1000;
+const PESAJET_LOST_WINDOW_MS = 6 * 3600 * 1000;
+async function pesajetFindByReference(reference, { sinceMs } = {}) {
+  const ref = String(reference || '');
+  if (!ref) return { found: false, complete: false, providerDown: false };
+  // A minute of slack either side of our own timestamp: their clock is not
+  // ours, and a row missed by a second would read as "never existed".
+  const since = sinceMs ? new Date(sinceMs - 60000).toISOString() : null;
+  for (let page = 1; page <= PESAJET_FIND_PAGES; page++) {
+    const qs = new URLSearchParams({ page: String(page), limit: String(PESAJET_FIND_LIMIT) });
+    if (since) qs.set('startDate', since);
+    const r = await _pesajetRequest(`/payments?${qs.toString()}`, { timeoutMs: PESAJET_READ_TIMEOUT });
+    if (!r.ok) return { found: false, complete: false, providerDown: !!r.providerDown, httpStatus: r.httpStatus };
+    const body = r.data || {};
+    const rows = Array.isArray(body) ? body
+      : Array.isArray(body.data) ? body.data
+      : Array.isArray(body.transactions) ? body.transactions
+      : Array.isArray(body.payments) ? body.payments : null;
+    // The list envelope is not documented, only its parameters are. If it is
+    // not recognisably a list, say so rather than reading "no rows" -- an
+    // unrecognised shape must never become evidence that a payment does not
+    // exist, because that evidence is what licenses failing a deposit below.
+    if (!rows) {
+      console.error('pesajetFindByReference: unrecognised list envelope', JSON.stringify(body).slice(0, 200));
+      return { found: false, complete: false, providerDown: false, unreadable: true };
+    }
+    const hit = rows.find(t => t && String(t.reference || '') === ref);
+    if (hit) return { found: true, complete: true, providerDown: false,
+                      transactionId: hit.transactionId || null,
+                      status: String(hit.status || '').toLowerCase() };
+    // A short page is the end of the window. That -- and only that -- means
+    // we have now seen everything there is to see.
+    if (rows.length < PESAJET_FIND_LIMIT) return { found: false, complete: true, providerDown: false };
+  }
+  return { found: false, complete: false, providerDown: false };
+}
 async function pesajetGetTx(transactionId, { attempts = 2 } = {}) {
   let last = null;
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -2854,8 +2948,12 @@ function pesajetFailureMsg(status) {
 }
 function pesajetUserMsg(r, fallback) {
   if (r && r.providerDown) return PROVIDER_BUSY_MSG;
-  const raw = r && r.data && (r.data.message || r.data.error);
-  if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway/i.test(String(raw || '')))
+  const d = (r && r.data) || {};
+  // Only ever a STRING reaches a member. The documented error body nests an
+  // object under `error`, and handing that straight back printed
+  // "[object Object]" in front of somebody whose recharge had just failed.
+  const raw = [d.message, d.error].find(v => typeof v === 'string' && v.trim()) || '';
+  if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway/i.test(raw))
     return PROVIDER_BUSY_MSG;
   return raw || fallback || PROVIDER_BUSY_MSG;
 }
@@ -11225,6 +11323,48 @@ async function reconcilePendingDeposits() {
       const realStatus = pesajetStatusLabel(t.status);
       if (realStatus === 'success') { await creditDeposit(doc); settled++; }
       else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(t.status));
+    }
+    // ...and the rows the sweep above deliberately cannot touch: PesaJet
+    // deposits with NO transaction id, because the create response was lost
+    // while PesaJet may well have accepted it. Nothing could ever check these
+    // and they sat pending forever -- the worst shape a money row can be in,
+    // since the member's money may have left and no path here would credit
+    // it. Their LIST endpoint is what makes them findable, by our own
+    // reference.
+    //
+    // Ordered DESCENDING, unlike every other sweep here: a row is only
+    // recoverable while it is still inside the window we can page, so the
+    // recent ones are the ones worth spending calls on. Older ones age out
+    // rather than starving the young ones, which is the same starvation the
+    // `pesajetTxId > ''` exclusion above exists to avoid.
+    const pjLostSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').orderBy('createdAt', 'desc').limit(60).get();
+    let lookedUp = 0;
+    for (const doc of pjLostSnap.docs) {
+      if (lookedUp >= PESAJET_LOST_PER_TICK) break;
+      const dep = doc.data();
+      if (dep.pesajetTxId) continue;                       // the sweep above owns it
+      const madeMs = tsMillis(dep.createdAt);
+      if (!madeMs) continue;
+      const age = Date.now() - madeMs;
+      // Young rows belong to the member's own status poll; older than the
+      // window is past what a lookup can see.
+      if (age < PESAJET_LOST_MIN_AGE_MS || age > PESAJET_LOST_WINDOW_MS) continue;
+      lookedUp++;
+      const hit = await pesajetFindByReference(dep.ref || doc.id, { sinceMs: madeMs });
+      if (hit.providerDown || hit.unreadable) continue;
+      if (hit.found && hit.transactionId) {
+        await doc.ref.update({ pesajetTxId: hit.transactionId }).catch(() => {});
+        const realStatus = pesajetStatusLabel(hit.status);
+        if (realStatus === 'success') { await creditDeposit(doc); settled++; }
+        else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(hit.status));
+        continue;
+      }
+      // Failed ONLY on a window scanned right to its end. PesaJet has no
+      // record of this reference, so no prompt was ever raised and nothing
+      // can have been taken. Anything less certain -- a short read, an
+      // unreadable envelope, a gateway blip -- leaves the row pending, which
+      // is the outcome that cannot cost anybody money.
+      if (hit.complete) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
     // Deposits stuck 'matched' with needsManualCredit:true (the wallet write
     // itself failed after status already claimed the credit) never show up
