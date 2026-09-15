@@ -38,7 +38,10 @@ const finiteMoney = v => { const n = Number(v); return Number.isFinite(n) ? n : 
 const slice = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
 eval(slice('function productExpectedReturn', 'function sanitizeProductInput'));
 eval(slice('function sanitizeProductInput', "app.get('/admin/products'"));
-eval(slice('function rollSpinReward', "app.get('/turntable/status'"));
+// From the wheel's slice list through the roll, not just rollSpinReward:
+// rollSpinReward is a wrapper over rollSpinSlice now, so lifting the wrapper
+// alone leaves it calling something that is not in scope.
+eval(slice('var SPIN_SLICES', "app.get('/turntable/status'"));
 // Lifted here rather than further down (where publicProductView is needed)
 // because sanitizeProductInput() calls the HH:MM parser for a product's daily
 // window -- the field-naming cases below exercise that path, and without this

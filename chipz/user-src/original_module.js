@@ -4261,6 +4261,49 @@ window.submitWallet = async function(){
 // product's price. All the amounts and thresholds are admin-set.
 var _ttSpinning = false;
 var _ttAngle = 0;
+// The eight amounts currently drawn on the wheel, as the server last sent
+// them. Kept so a spin can tell whether the wheel it is about to stop is
+// still labelled with the prizes that spin was actually drawn from.
+var _ttSlices = null;
+var TT_SLICE_DEG = 45;          // 360 / 8, matching .tt-wheel's conic-gradient
+// Owner: "why the spin wheel has no amounts?" -- it had none because there
+// were no fixed prizes; the payout was any figure inside the admin's band.
+// The server now picks one of eight slice amounts and tells us which, so the
+// wheel can be labelled and can stop on the exact figure being paid.
+//
+// The figures come from the SERVER, never derived here. The wheel and the
+// wallet must agree, and the only way to guarantee that is for one side to
+// compute them and the other to render what it was given.
+//
+// The currency is deliberately NOT repeated on each slice -- eight of
+// "UGX 1,000" is unreadable at this size -- it is stated once under the
+// wheel. Full figures, never shortened.
+// The figure alone, no currency and never shortened -- the same rule the rest
+// of the app follows for money the member cares about. Cents only appear if
+// the band actually has them, so a whole-number band reads 1,000 not 1,000.00.
+function ttSliceAmount(n){
+  const v = Number(n) || 0;
+  return v.toLocaleString('en-US', Math.round(v * 100) % 100
+    ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
+}
+function ttWheelLabelsHtml(slices){
+  if (!Array.isArray(slices) || !slices.length) return '';
+  return slices.map((amt, i) => {
+    const mid = (i * TT_SLICE_DEG + TT_SLICE_DEG / 2) * Math.PI / 180;
+    // 0deg is 12 o'clock and the gradient runs clockwise, so x follows sin
+    // and y follows -cos. 34% of the box is 68% of the radius: far enough out
+    // to sit in the fat part of the wedge, inside the rim either way.
+    const left = 50 + 34 * Math.sin(mid);
+    const top = 50 - 34 * Math.cos(mid);
+    return `<span class="tt-slice" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%">${esc(ttSliceAmount(amt))}</span>`;
+  }).join('');
+}
+function paintTurntableWheel(slices){
+  const wheel = $('ttWheel');
+  if (!wheel || !Array.isArray(slices) || !slices.length) return;
+  _ttSlices = slices.slice();
+  wheel.innerHTML = ttWheelLabelsHtml(slices) + '<span class="hub">SPIN</span>';
+}
 window.openTurntableSheet = async function(){
   _ttSpinning = false;
   openSheet('TURNTABLE', `<div class="reveal-in tt-stage">
@@ -4269,6 +4312,7 @@ window.openTurntableSheet = async function(){
       <div class="tt-wheel" id="ttWheel"><span class="hub">SPIN</span></div>
     </div>
     <div class="tt-spins" id="ttSpinCount">&nbsp;</div>
+    <p class="tt-cur" id="ttCur">&nbsp;</p>
     <p class="tt-sub" id="ttSub">Loading&hellip;</p>
     <div style="width:100%;">
       <button class="primary-button" id="ttSpinBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.1em;" onclick="doTurntableSpin()" disabled>SPIN</button>
@@ -4297,6 +4341,14 @@ async function refreshTurntable(){
     return;
   }
   STATE.turntable = r;
+  // Label the wheel with the band the NEXT spin is drawn from -- which is the
+  // daily one only while the daily spin is still free; after that it is the
+  // oldest earned spin, carrying its own product's band. The server resolves
+  // that the same way the spin route does and sends the slices.
+  paintTurntableWheel(r.slices);
+  const ttCur = $('ttCur');
+  if (ttCur) ttCur.textContent = Array.isArray(r.slices) && r.slices.length
+    ? `All amounts in ${cur()}` : '';
   const total = r.totalSpins || 0;
   count.textContent = total === 1 ? '1 spin available' : `${total} spins available`;
   sub.innerHTML = total
@@ -4345,7 +4397,40 @@ window.doTurntableSpin = async function(){
   // is nothing to fetch -- the refreshes now happen behind the open card.
   const WHEEL_MS = 4000;
   const remaining = Math.max(0, WHEEL_MS - (performance.now() - wheelStartedAt));
+  // LAND ON THE SLICE THAT WON. The wheel started turning at the tap toward a
+  // provisional angle; now that the server has said which of its eight slices
+  // paid, re-aim at that one.
+  //
+  // The re-aim SHORTENS the transition to whatever is left of the original 4s
+  // rather than starting a fresh one. Re-targeting a transform restarts the
+  // transition by default, which would serve the request time twice over --
+  // the exact delay the round above this one was written to remove. The
+  // wheel therefore still settles 4s after the tap, and now settles on the
+  // right number.
+  //
+  // Slice i's centre sits at i*45 + 22.5 degrees clockwise from 12 o'clock,
+  // so it reaches the pointer when the wheel has turned the negative of that.
+  // Only ever forward: the remainder is taken modulo 360 upward, so the wheel
+  // never visibly reverses to reach its answer.
+  let landMs = remaining;
+  if (Array.isArray(r.slices) && r.slices.length && Number.isInteger(r.sliceIndex)) {
+    // The spin actually taken may not be the one /turntable/status described
+    // -- another device could have used the daily spin in between -- so
+    // relabel before landing rather than stopping on a stale prize.
+    if (!_ttSlices || _ttSlices.join('|') !== r.slices.join('|')) paintTurntableWheel(r.slices);
+    const target = -(r.sliceIndex * TT_SLICE_DEG + TT_SLICE_DEG / 2);
+    _ttAngle += (((target - _ttAngle) % 360) + 360) % 360;
+    // A floor of 600ms so a request slower than the whole spin still shows
+    // the wheel arriving somewhere rather than teleporting -- and the card
+    // waits for it, or it would announce a prize the wheel has not reached.
+    landMs = Math.max(600, remaining);
+    wheel.style.transitionDuration = landMs + 'ms';
+    wheel.style.transform = `rotate(${_ttAngle}deg)`;
+  }
   setTimeout(() => {
+    // Hand the 4s transition back, or the next spin inherits this one's
+    // shortened duration and snaps round instead of turning.
+    wheel.style.transitionDuration = '';
     _ttSpinning = false;
     const before = Number((STATE.account || {}).walletBalance) || 0;
     const reward = Number(r.reward) || 0;
@@ -4355,7 +4440,7 @@ window.doTurntableSpin = async function(){
     showChestWin(reward, before, after, 'spin');
     refreshAfterWin();
     refreshTurntable();
-  }, remaining);
+  }, landMs);
 };
 
 // ── NOTIFY DIALOG (Notify.dc.html) ──

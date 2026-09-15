@@ -29,7 +29,12 @@ const ck = (o, l) => { if (!o) bad++; console.log((o ? 'PASS  ' : 'FAIL  ') + l)
 
 // ── the payout roll ───────────────────────────────────────────────────────
 console.log('— the spin payout is drawn from a CSPRNG, not Math.random —');
-const rollSrc = grab('function rollSpinReward', 'function turntableDailyReward');
+// The whole roll region, not just rollSpinReward: the wheel's slices, the
+// draw that picks one, and the wrapper. Slicing only the wrapper stopped
+// working the moment the CSPRNG moved into rollSpinSlice, and it was right to
+// -- the assertion below is about where the randomness comes from, so it has
+// to look at the function that actually calls for it.
+const rollSrc = grab('var SPIN_SLICES', 'function turntableDailyReward');
 ck(!/Math\.random/.test(noComments(rollSrc)),
    'rollSpinReward does not use Math.random');
 ck(/crypto\.randomInt/.test(rollSrc), 'it uses crypto.randomInt');
@@ -46,9 +51,10 @@ const round2 = n => Math.round(n * 100) / 100;
 // nothing else. An earlier copy here added `&& n > 0`, which would have
 // made this test exercise a stricter function than the one that ships.
 const finiteMoney = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const rollSpinReward = eval('(function(){const crypto=require("crypto");' +
+const roll = eval('(function(){const crypto=require("crypto");' +
   'const round2=' + round2.toString() + ';const finiteMoney=' + finiteMoney.toString() + ';' +
-  rollSrc + '\nreturn rollSpinReward;})()');
+  rollSrc + '\nreturn {rollSpinReward, rollSpinSlice, spinWheelSlices, SPIN_SLICES};})()');
+const { rollSpinReward, rollSpinSlice, spinWheelSlices, SPIN_SLICES } = roll;
 const N = 4000;
 let lo = Infinity, hi = -Infinity, sum = 0;
 for (let i = 0; i < N; i++) { const r = rollSpinReward(200, 1000); lo = Math.min(lo, r); hi = Math.max(hi, r); sum += r; }
@@ -61,6 +67,39 @@ ck(rollSpinReward(0, 0) === 0 && rollSpinReward(-5, -1) === 0,
    'and a broken band pays 0, never a negative');
 ck(rollSpinReward(1000, 200) === 1000,
    'a band stored backwards is clamped, not treated as a range down to 200');
+
+// ── the wheel's slices ARE the prize list ─────────────────────────────────
+// Owner: "why the spin wheel has no amounts?" -- there were none, because the
+// payout was any figure at all inside the band. It is now drawn from eight
+// named slices, and the wheel is labelled with those same eight. The property
+// that matters is that the two can never disagree: a wheel stopping on 600
+// while the wallet receives 587 is a money screen telling a lie.
+console.log('\n\u2014 the wheel is labelled with the prizes it actually pays \u2014');
+const slices = spinWheelSlices(200, 1000);
+ck(slices.length === SPIN_SLICES, `there are ${SPIN_SLICES} slices (${slices.length})`);
+ck(slices[0] === 200 && slices[slices.length - 1] === 1000,
+   `the ends are exactly the admin's own figures (${slices[0]} .. ${slices[slices.length-1]})`);
+ck(slices.every((v, i) => i === 0 || v >= slices[i - 1]), 'and they ascend');
+ck(slices.every(v => v >= 200 && v <= 1000), 'none falls outside the band');
+ck(slices.every(v => Number.isInteger(v)),
+   `they are round figures rather than arithmetic (${slices.join(', ')})`);
+// 4,000 draws: every payout has to BE one of the labels, and every label has
+// to be reachable -- a slice that can never win is a prize the wheel shows
+// and never pays.
+const seen = new Set();
+let offWheel = 0;
+for (let i = 0; i < N; i++) {
+  const d = rollSpinSlice(200, 1000);
+  if (d.slices[d.index] !== d.amount) offWheel++;
+  if (!slices.includes(d.amount)) offWheel++;
+  seen.add(d.amount);
+}
+ck(offWheel === 0, 'every payout is exactly the slice the wheel will stop on');
+ck(seen.size === SPIN_SLICES, `and every slice is reachable (${seen.size}/${SPIN_SLICES})`);
+ck(spinWheelSlices(500, 500).every(v => v === 500),
+   'a band set to a single amount shows that amount on all eight, rather than eight blanks');
+ck(spinWheelSlices(0, 0).every(v => v === 0) && spinWheelSlices(-5, -1).every(v => v === 0),
+   'and a broken band is eight zeroes, never a negative on the wheel');
 
 // ── the client cannot name its own prize ──────────────────────────────────
 console.log('\n— the client cannot influence the payout —');

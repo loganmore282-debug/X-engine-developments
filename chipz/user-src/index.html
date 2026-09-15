@@ -1284,6 +1284,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   background:conic-gradient(var(--snow-wine) 0deg 45deg,var(--chipz-orange) 45deg 90deg,var(--snow-wine) 90deg 135deg,var(--chipz-orange) 135deg 180deg,var(--snow-wine) 180deg 225deg,var(--chipz-orange) 225deg 270deg,var(--snow-wine) 270deg 315deg,var(--chipz-orange) 315deg 360deg);
   box-shadow:0 0 0 8px #1a1310,0 18px 34px -14px rgba(30,10,5,.6);
   transition:transform 4s cubic-bezier(.17,.67,.16,1);}
+/* Owner: "why the spin wheel has no amounts?" -- the eight prize figures, one
+   per wedge, sent by the server so the wheel and the wallet cannot disagree.
+   Placed by left/top from JS at each wedge's own centre and left UPRIGHT
+   rather than rotated to follow the wedge: eight rotated numbers on a 250px
+   wheel are a puzzle to read, and this is money. The currency is stated once
+   under the wheel instead of eight times on it, and the figures are never
+   shortened. pointer-events:none so a label can never swallow a tap. */
+.tt-slice{position:absolute;transform:translate(-50%,-50%);font-size:12.5px;font-weight:800;
+  color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55);white-space:nowrap;pointer-events:none;}
+.tt-cur{margin:2px 0 0;font-size:12.5px;color:var(--snow-sub,#8c7f76);letter-spacing:.02em;}
 .tt-wheel .hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;border-radius:50%;background:var(--snow-surface);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -4px rgba(0,0,0,.4);}
 .tt-pointer{position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-top:26px solid var(--chipz-gold);filter:drop-shadow(0 3px 4px rgba(0,0,0,.4));z-index:2;}
 .tt-spins{font-size:22px;margin:22px 0 2px;}

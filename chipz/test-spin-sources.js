@@ -33,6 +33,16 @@ const ck = (o, l) => { if (!o) bad++; console.log((o ? 'PASS  ' : 'FAIL  ') + l)
 // valid in async functions" on a file that is perfectly correct. Both
 // functions this test needs are async, and that is exactly how it first
 // failed.
+// Read a constant out of server.js rather than restating it here. A number
+// copied into a test is a second source of truth that nobody updates: raising
+// MAX_SPINS_PER_PURCHASE once left four hand-written 20s behind in three
+// harnesses, one of which went on clamping a fixture at the old cap while the
+// shipped code allowed the new one.
+function serverConst(name) {
+  const m = new RegExp('(?:var|const) ' + name + ' = (\\d+)').exec(src);
+  if (!m) throw new Error('no such constant in server.js: ' + name);
+  return Number(m[1]);
+}
 function fnSource(name) {
   let start = src.indexOf(`async function ${name}(`);
   if (start === -1) start = src.indexOf(`function ${name}(`);
@@ -221,7 +231,11 @@ function build(state, opts = {}) {
             MAX_SPINS_PER_PURCHASE } = sandbox;
     const round2 = n => Math.round(n * 100) / 100;
     const finiteMoney = n => { const x = Number(n); return Number.isFinite(x) ? x : 0; };
+    const SPIN_SLICES = ${serverConst('SPIN_SLICES')};
+    ${fnSource('spinWheelSlices')}
+    ${fnSource('rollSpinSlice')}
     ${fnSource('rollSpinReward')}
+    ${fnSource('spinBandOf')}
     ${fnSource('turntableDailyReward')}
     ${fnSource('grantTurntableSpins')}
     ${fnSource('writeTurntableSpinDocs')}

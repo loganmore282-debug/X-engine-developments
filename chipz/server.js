@@ -4085,16 +4085,76 @@ async function writeTurntableSpinDocs(userId, product, investmentId, existingCou
 //
 // Resolution is 1/100 of a shilling, matching round2()'s own precision, so
 // nothing is lost by working in integer cents here.
-function rollSpinReward(lo, hi) {
+// ── THE WHEEL'S OWN SLICES ──
+// Owner: "why the spin wheel has no amounts?" -- because there were none to
+// show. The payout used to be any figure at all between the admin's minimum
+// and maximum, so no slice could be labelled with anything.
+//
+// The eight amounts a member sees on the wheel and the eight the payout is
+// drawn from MUST be the same list, or the wheel lands on 600 while the
+// wallet gets 587 -- a money screen telling a lie. So they are computed HERE,
+// used by the roll, and handed to the client to render. One source of truth,
+// with no second copy in the app to keep in step (this project already keeps
+// one such pair by hand -- phoneToEmail -- and needs a dedicated test to
+// prove the two still agree; that is not a pattern worth repeating).
+//
+// The band is still the owner's: turntableDailyMin/Max for the free daily
+// spin, and each product's own spinMin/spinMax snapshotted onto the spins it
+// earned. Nothing new to configure, which is what he asked for -- "basing on
+// the set spin ranges on products amount ranges and that amount of daily
+// spin".
+var SPIN_SLICES = 8;
+function spinWheelSlices(lo, hi) {
   lo = Math.max(0, finiteMoney(lo));
   hi = Math.max(lo, finiteMoney(hi));
-  if (hi <= lo) return round2(lo);
-  const loC = Math.round(lo * 100), hiC = Math.round(hi * 100);
-  if (hiC <= loC) return round2(lo);
-  return round2(crypto.randomInt(loC, hiC + 1) / 100);
+  // A zero-width band is not a broken one: an admin who sets min == max means
+  // every spin pays exactly that, and the honest wheel shows it on all eight.
+  if (hi <= lo) return new Array(SPIN_SLICES).fill(round2(lo));
+  // Evenly spaced from lo to hi inclusive, then rounded to a step that suits
+  // the band's own width so the figures read as money rather than as
+  // arithmetic: 200 / 310 / 430 ... rather than 200 / 314.29 / 428.57. The
+  // two ENDS stay exactly lo and hi, because those are the numbers the copy
+  // under the wheel promises and the admin typed.
+  const span = hi - lo;
+  const step = span >= 8000 ? 500 : span >= 800 ? 50 : span >= 80 ? 5 : 1;
+  const out = [];
+  for (let i = 0; i < SPIN_SLICES; i++) {
+    if (i === 0) { out.push(round2(lo)); continue; }
+    if (i === SPIN_SLICES - 1) { out.push(round2(hi)); continue; }
+    const raw = lo + (span * i) / (SPIN_SLICES - 1);
+    out.push(round2(Math.min(hi, Math.max(lo, Math.round(raw / step) * step))));
+  }
+  return out;
+}
+// The roll IS the wheel: pick a slice, pay what that slice says. crypto, not
+// Math.random -- V8's Math.random is a seeded xorshift128+ whose state is
+// recoverable from a run of outputs, and a member sees every one of their own
+// results.
+function rollSpinSlice(lo, hi) {
+  const slices = spinWheelSlices(lo, hi);
+  const index = crypto.randomInt(0, slices.length);
+  return { slices, index, amount: slices[index] };
+}
+function rollSpinReward(lo, hi) {
+  return rollSpinSlice(lo, hi).amount;
 }
 function turntableDailyReward(sett) {
   return rollSpinReward(sett.turntableDailyMin, sett.turntableDailyMax);
+}
+// The band the NEXT spin will be paid from, which is not always the daily
+// one: the spin route takes the free daily spin first if it is available and
+// otherwise the OLDEST unused earned spin, each of which carries the band its
+// product had at the moment it was granted. The wheel has to be labelled with
+// whichever of those is actually about to be used, or it shows one product's
+// prizes and pays another's.
+function spinBandOf(doc) {
+  const d = doc && doc.data ? doc.data() : doc;
+  if (!d) return null;
+  if (d.spinMin != null || d.spinMax != null) return { lo: d.spinMin, hi: d.spinMax };
+  // Spins granted before per-product bands carry a flat `reward`. Honour it:
+  // every slice reads the same, which is exactly what such a spin pays.
+  const flat = round2(Number(d.reward) || 0);
+  return { lo: flat, hi: flat };
 }
 app.get('/turntable/status', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -4116,6 +4176,21 @@ app.get('/turntable/status', async (req, res) => {
     // enables the SPIN button) was wrong with it.
     const earnedCount = await db.collection('turntableSpins')
       .where('userId', '==', uid).where('used', '==', false).count();
+    // The wheel is labelled with the band of the spin that is actually next,
+    // resolved exactly the way /turntable/spin resolves it: the free daily
+    // spin if it is available, otherwise the oldest unused earned one. The
+    // extra read only happens when there IS an earned spin to describe.
+    let band = { lo: sett.turntableDailyMin, hi: sett.turntableDailyMax };
+    let nextSource = 'daily';
+    if (!dailyAvailable && earnedCount > 0) {
+      const earned = await db.collection('turntableSpins')
+        .where('userId', '==', uid).where('used', '==', false)
+        .orderBy('createdAt', 'asc').limit(1).get();
+      if (!earned.empty) {
+        band = spinBandOf(earned.docs[0]) || band;
+        nextSource = 'product';
+      }
+    }
     res.json({
       status: 'success',
       enabled: !!sett.turntableEnabled,
@@ -4125,6 +4200,10 @@ app.get('/turntable/status', async (req, res) => {
       nextDailyAt: eatNextMidnight(now),
       dailyMin: Number(sett.turntableDailyMin) || 0,
       dailyMax: Number(sett.turntableDailyMax) || 0,
+      nextSource,
+      nextMin: round2(Math.max(0, finiteMoney(band.lo))),
+      nextMax: round2(Math.max(0, finiteMoney(band.hi))),
+      slices: spinWheelSlices(band.lo, band.hi),
     });
   } catch (e) {
     console.error('Turntable status error:', e.message);
@@ -4153,7 +4232,9 @@ app.post('/turntable/spin', async (req, res) => {
       const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
       const dailyAvailable = lastKey !== todayKey;
 
-      let reward, source, label, spinDoc = null;
+      // `roll` carries the eight slices the wheel must land on and which of
+      // them won, so the animation can stop on the exact figure being paid.
+      let reward, source, label, spinDoc = null, roll = null;
       if (dailyAvailable) {
         // The day is CLAIMED here, atomically, before anything is paid.
         // withLock() is an in-process promise chain -- it serialises taps
@@ -4170,7 +4251,8 @@ app.post('/turntable/spin', async (req, res) => {
           result = { code: 400, body: { status: 'error', message: 'That spin was already used. Come back after midnight for your free daily spin.', nextDailyAt: eatNextMidnight(now) } };
           return;
         }
-        reward = turntableDailyReward(sett);
+        roll = rollSpinSlice(sett.turntableDailyMin, sett.turntableDailyMax);
+        reward = roll.amount;
         source = 'daily';
         label = 'Turntable daily spin';
       } else {
@@ -4184,12 +4266,12 @@ app.post('/turntable/spin', async (req, res) => {
           return;
         }
         spinDoc = earned.docs[0];
-        const d = spinDoc.data();
-        // Older spins (granted before per-product bands) carry a flat
-        // `reward` instead of a band -- honour it rather than paying 0.
-        reward = (d.spinMin != null || d.spinMax != null)
-          ? rollSpinReward(d.spinMin, d.spinMax)
-          : round2(Number(d.reward) || 0);
+        // spinBandOf() also covers the older spins, granted before
+        // per-product bands, which carry a flat `reward` instead of one --
+        // honoured as a zero-width band rather than paid as 0.
+        const band = spinBandOf(spinDoc);
+        roll = rollSpinSlice(band.lo, band.hi);
+        reward = roll.amount;
         source = 'product';
         label = `Turntable spin from ${spinDoc.data().productName || 'a purchase'}`;
       }
@@ -4270,6 +4352,15 @@ app.post('/turntable/spin', async (req, res) => {
         dailyAvailable: false,
         totalSpins: earnedLeft,
         nextDailyAt: eatNextMidnight(now),
+        // The eight amounts this spin was drawn from, and which one won, so
+        // the wheel can stop on the exact figure being credited. Sent even
+        // though the client already has a set from /turntable/status: the
+        // spin that was actually taken may not be the one that status
+        // described (another device may have used the daily spin in
+        // between), and the wheel must be relabelled rather than land on a
+        // stale prize.
+        slices: roll ? roll.slices : null,
+        sliceIndex: roll ? roll.index : null,
       } };
     });
     res.status(result.code).json(result.body);

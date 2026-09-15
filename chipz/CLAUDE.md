@@ -5312,3 +5312,102 @@ was worth setting regardless. The member app already set it.
 `find-admin-untranslated.py` binds **8901** and `test-admin-i18n.py` **8903**;
 `test-admin-i18n-coverage.py` shells out to the sweep, so the two cannot run at once. The
 running list is in Round 157's note.
+
+## Round 168 — The spin wheel shows what it pays
+
+> "why the spin wheel has no amounts?"
+
+Because there were none to show. The wheel was eight coloured wedges from a CSS
+`conic-gradient`, a pointer and a "SPIN" hub, with nothing written on it — and the code
+said as much in its own comment, *"the wheel is decoration"*. `rollSpinReward()` drew
+**any** figure between the admin's minimum and maximum (`crypto.randomInt` across the
+whole band), so there was no slice-to-prize mapping that could have been labelled. The
+band was stated, but in the rules list underneath; spins earned from products did not
+state theirs at all.
+
+Owner's steer when asked which way to fix it: *"Do the best basing on the set spin ranges
+on products amount ranges and that amount of daily spin"* — so no new admin config. The
+bands he already sets are the source.
+
+### The wheel and the wallet are now the same list
+`spinWheelSlices(lo, hi)` builds **eight amounts** from a band, `rollSpinSlice()` picks
+one of them, and `rollSpinReward()` is a wrapper over it. The slices are computed **on the
+server**, used by the roll, and sent to the client to render.
+
+**That direction is the whole point.** A wheel stopping on 600 while the wallet receives
+587 is a money screen telling a lie, and the only way to guarantee they agree is for one
+side to decide and the other to draw what it was given. Deriving the same list on both
+sides is the `phoneToEmail` hazard — two copies that agree until one is edited, needing a
+dedicated test to prove they still do.
+
+- the ends of the list are **exactly** `lo` and `hi`, because those are the figures the
+  admin typed and the copy under the wheel promises;
+- the middle six are evenly spaced, then rounded to a step that suits the band's width
+  (500 / 50 / 5 / 1), so a 200–1,000 band reads **200, 300, 450, 550, 650, 750, 900,
+  1,000** rather than 200, 314.29, 428.57;
+- **a zero-width band is not a broken one** — `min == max` means every spin pays that,
+  and all eight slices show it;
+- mean is unchanged (evenly spaced across the band has the same mean as uniform over it),
+  so this is not a payout change in cost terms. Measured: 4,000 rolls of 200–1,000 mean
+  **604**.
+
+### The wheel is labelled with the band of the spin that is actually next
+Not always the daily one. `/turntable/spin` takes the free daily spin if available and
+otherwise the **oldest unused earned spin**, which carries the band its product had when
+it was granted. `spinBandOf()` resolves that (including the pre-band spins that carry a
+flat `reward`, honoured as a zero-width band rather than paid as 0), and
+`/turntable/status` runs the same resolution so the wheel shows the prizes the next tap
+can actually win. The extra read only happens when there IS an earned spin to describe.
+
+`/turntable/spin` returns `slices` and `sliceIndex` **as well**, even though the client
+already has a set from status: the spin actually taken may not be the one status
+described — another device could have used the daily spin in between — so the wheel is
+relabelled before it lands rather than stopping on a stale prize.
+
+### Landing on the winning slice without re-introducing the delay
+Slice *i*'s centre sits at `i*45 + 22.5` degrees clockwise from 12 o'clock, so it reaches
+the pointer when the wheel has turned the negative of that. The remainder is taken modulo
+360 **upward**, so the wheel never visibly reverses to reach its answer.
+
+**The re-aim shortens the transition to what is left of the original 4s rather than
+starting a fresh one.** Re-targeting a `transform` restarts the transition by default,
+which would serve the request time twice over — exactly the delay Round "congratulations
+card" was written to remove. The wheel still settles 4s after the tap and now settles on
+the right number; a floor of 600ms covers a request slower than the whole spin, and the
+card waits for `landMs` rather than `remaining` or it would announce a prize the wheel has
+not reached. The 4s duration is handed back afterwards, or the next spin inherits the
+shortened one and snaps round instead of turning.
+
+Labels are **upright**, not rotated to follow the wedge: eight rotated numbers on a 250px
+wheel are a puzzle to read, and this is money. The currency is stated **once** under the
+wheel (`All amounts in UGX`, from the region) rather than eight times on it, and no figure
+is shortened.
+
+### Tests
+`test-spin-and-withdraw.js` runs the real slice builder and 4,000 real draws: eight
+slices, ends exactly the admin's figures, ascending, inside the band, round figures, every
+payout **is** the slice the wheel will stop on, and **every slice reachable** — a slice
+that can never win is a prize the wheel shows and never pays.
+
+`test-spin-wheel.py` (port **8905**) drives the BUILT app, because the obfuscator encodes
+every string literal and reading the deployed file proves nothing. It asserts the eight
+figures are on the wheel and are **the server's own list**, that each sits inside the rim
+and clear of the hub, that the wheel **stops on the slice that was paid** (computed from
+the rendered `matrix()`, not from a class name) and the win card names the same figure,
+and that a product band **relabels** the wheel — with the two fixture bands deliberately
+non-overlapping so "it was relabelled" cannot pass by coincidence. Verified by mutation:
+landing anywhere fails the landing assertion; having the app invent its own slices fails
+two.
+
+### Three harnesses lifted `rollSpinReward` and broke
+`test-spin-and-withdraw.js`, `test-spin-sources.js` and `test-product-config.js` all
+`eval` it out of `server.js`. It is a wrapper over `rollSpinSlice` now, so lifting the
+wrapper alone left it calling something not in scope. All three now lift from
+`var SPIN_SLICES` through the roll. `test-spin-and-withdraw.js`'s *"it uses
+crypto.randomInt"* assertion was right to fail meanwhile — the randomness moved into
+`rollSpinSlice`, and the assertion is about where the payout's randomness comes from, so
+it has to look at the function that actually calls for it.
+
+`test-spin-sources.js` also gained a `serverConst()` helper so `SPIN_SLICES` is read out
+of `server.js` rather than restated — the same lesson as the four hand-written `20`s that
+raising `MAX_SPINS_PER_PURCHASE` left behind.
