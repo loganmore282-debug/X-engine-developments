@@ -87,9 +87,34 @@ M = [
      '  for (let attempt = 1; attempt <= 1; attempt++) {\n    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`);'),
 
     # ── the webhook ──
-    ('a forged signature is accepted as unverifiable rather than refused', SERVER,
-     '  const verified = a.length === b.length && crypto.timingSafeEqual(a, b);\n  return verified ? { verified: true, reason: \'ok\' } : { verified: false, reason: \'mismatch\' };',
-     '  const verified = a.length === b.length && crypto.timingSafeEqual(a, b);\n  return { verified, reason: \'checked\' };'),
+    ('a forged signature is reported as unverifiable rather than refused', SERVER,
+     "  return { verified: false, reason: 'mismatch' };\n}",
+     "  return { verified: false, reason: 'checked' };\n}"),
+
+    # ── the three corrections the live dashboard forced ──
+    ('the raw payload is never hashed, only the re-serialised object', SERVER,
+     '  if (rawBody && rawBody.length) candidates.push(rawBody);',
+     '  /* mutation */'),
+
+    ('the raw body is never captured, so the dashboard digest can never match', SERVER,
+     "const keepRawBody = (req, res, buf) => { if (RAW_BODY_ROUTES.has(req.path)) req.rawBody = buf; };",
+     'const keepRawBody = (req, res, buf) => {};'),
+
+    ('the webhook is not routed to the raw-body parser', SERVER,
+     "const RAW_BODY_ROUTES = new Set(['/pesajet/webhook']);",
+     "const RAW_BODY_ROUTES = new Set([]);"),
+
+    ('the 200 is sent only AFTER the re-read, past PesaJet\'s 30-second deadline', SERVER,
+     "  res.status(200).json({ received: true });\n  // Everything past here runs after the ack. Nothing may throw out of it.\n  try {",
+     "  try {"),
+
+    ('the webhook stops handling payouts, so only deposits ever resolve', SERVER,
+     "    const witDoc = await db.collection('withdrawals').doc(reference).get();",
+     "    const witDoc = { exists: false };"),
+
+    ('the webhook stops handling deposits', SERVER,
+     "    const depQ = await db.collection('pendingDeposits').where('ref', '==', reference).limit(1).get();",
+     "    const depQ = { empty: true, docs: [] };"),
 
     ('the signature field is included in its own digest, so nothing ever verifies', SERVER,
      '  const { signature: _omit, ...clean } = obj;',
@@ -99,21 +124,21 @@ M = [
      "  if (!PESAJET_WEBHOOK_SECRET) return { verified: false, reason: 'no-secret' };",
      "  if (!PESAJET_WEBHOOK_SECRET) return { verified: false, reason: 'mismatch' };"),
 
-    ('the deposit webhook credits from its own body instead of re-reading', SERVER,
-     "    const t = await pesajetGetTx(dep.pesajetTxId);\n    if (t.providerDown) return res.status(200).json({ received: true }); // unverifiable -- the reconciler and the member's poll both retry\n    const realStatus = pesajetStatusLabel(t.status);",
-     "    const realStatus = pesajetStatusLabel(body.status);"),
+    ('the webhook credits from its own body instead of re-reading', SERVER,
+     "      const t = await pesajetGetTx(dep.pesajetTxId);\n      if (t.providerDown) return;   // unverifiable -- the reconciler and the member's own poll both retry\n      const realStatus = pesajetStatusLabel(t.status);",
+     "      const realStatus = pesajetStatusLabel(body.status);"),
 
-    ('the deposit webhook re-reads whatever id the CALLER sent', SERVER,
-     '    if (!dep.pesajetTxId) return res.status(200).json({ received: true });\n    const t = await pesajetGetTx(dep.pesajetTxId);',
-     '    const t = await pesajetGetTx(txId);'),
+    ('the webhook re-reads whatever id the CALLER sent', SERVER,
+     '      if (!dep.pesajetTxId) return;\n      const t = await pesajetGetTx(dep.pesajetTxId);',
+     '      const t = await pesajetGetTx(String(body.transactionId || ""));'),
 
     ('a ping event falls through into the money path', SERVER,
-     "    if (body.event === 'ping') return res.status(200).json({ received: true });\n    const reference = String(body.reference || '');\n    const txId = String(body.transactionId || '');",
-     "    const reference = String(body.reference || '');\n    const txId = String(body.transactionId || '');"),
+     "    if (body.event === 'ping') return;                 // a delivery test",
+     '    /* mutation */'),
 
     # ── the payout ──
     ("a 'sending' payout is auto-declined and refunded by the webhook", SERVER,
-     "      if (wit.status === 'sending') return res.status(200).json({ received: true }); // ambiguous -- admin-only resolution, see the comment above",
+     "      if (wit.status === 'sending') return;            // ambiguous -- admin-only resolution, see the note above",
      '      /* mutation */'),
 
     ('the payout reference is written only AFTER the provider is called', SERVER,
@@ -144,9 +169,9 @@ M = [
      "    if ('depositMethod' in updates && !['marzpay', 'lipapay', 'pesajet'].includes(updates.depositMethod))",
      "    if ('depositMethod' in updates && !['marzpay', 'lipapay'].includes(updates.depositMethod))"),
 
-    ('the webhooks are no longer guard-exempt, so every one is refused', SERVER,
-     "'/deposit/pesajet/callback', '/withdraw/pesajet/callback', ",
-     ''),
+    ('the webhook is no longer guard-exempt, so every one is refused', SERVER,
+     "'/withdraw/lipapay/callback', '/pesajet/webhook',",
+     "'/withdraw/lipapay/callback',"),
 
     ('the deposit reconciler stops sweeping pesajet rows', SERVER,
      "    const pjSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').where('pesajetTxId', '>', '').orderBy('createdAt', 'asc').limit(50).get();",

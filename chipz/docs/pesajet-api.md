@@ -18,12 +18,26 @@ Also published: `pesajet` on PyPI. Chipz has no need of either package —
 |---|---|
 | Base URL | `https://payments.pesajet.com/api/v1` (the SDK's default; it accepts a `baseUrl` override, so a sandbox host probably exists — ask) |
 | Auth header | `X-API-Key: <api key>` |
-| Key shape | `pk_live_…` (the landing page's example) |
+| Key shape | `pk_…` (the landing page's example says `pk_live_…`; a real one from the dashboard is `pk_` + 48 hex) |
 | Content type | `application/json` |
 | Client timeout | SDK default 30000 ms |
 
 Env vars for Chipz: `PESAJET_API_KEY`, `PESAJET_WEBHOOK_SECRET`, optionally
 `PESAJET_BASE_URL`. **Render env vars only — never in this repo.**
+
+The dashboard issues **three** credentials and only two have a documented use:
+
+| shown as | shape | used by |
+|---|---|---|
+| **API key** — "public credential", *Active* | `pk_...` | `X-API-Key`. What the SDK's `apiKey` is, and what their own cURL sample sends. |
+| **API secret** — "private credential", *Restricted* | `sk_...` | **Nothing in the SDK or their cURL sample uses it.** Open question below. |
+| **Webhook signing secret** | `whsec_...` | verifying the webhook HMAC |
+
+PesaJet call the `pk_` key "public", but it is the credential that
+authenticates every API request, so treating it as publishable would be a
+mistake — their own banner says to keep keys on the server and out of public
+repositories. Rotate it (the dashboard has *Rotate API keys*) if it is ever
+shown in a screenshot, a chat, or a commit.
 
 ## Endpoints
 
@@ -106,12 +120,33 @@ deserves its own wording.
 
 ## Webhooks
 
-- Delivered as `POST` with JSON.
-- Signature in the header **`x-webhook-signature`**, and also (sometimes) as a
-  `signature` field inside the body.
-- **HMAC-SHA256, hex**, keyed with the webhook secret, computed over
-  `JSON.stringify(payload)` **with the `signature` field removed**.
-- Compared with `crypto.timingSafeEqual` after a length check.
+Confirmed against the live merchant dashboard (screenshots, 2026-09-15), which
+adds three things the SDK does not say.
+
+- Delivered as `POST` with JSON, to **one** destination URL set in the
+  dashboard ("Webhook Destination URL", with a *Test endpoint* button beside
+  it). **There is only one field**, so a single endpoint must serve both
+  directions -- two per-direction callbacks could not both be registered, and
+  the unregistered half would fail invisibly because the reconciler covers
+  for it. Chipz's endpoint is **`POST /pesajet/webhook`**.
+- **`200 OK` is required within 30 seconds**, in the dashboard's own words. So
+  acknowledge first and do the work after; the status re-read can outlast it.
+- Signature in the header **`X-Webhook-Signature`** (matched
+  case-insensitively), and also sometimes as a `signature` field in the body.
+- **HMAC-SHA256, hex**, keyed with the webhook signing secret (`whsec_...`).
+
+**THE TWO SOURCES DISAGREE ON WHAT IS SIGNED, and it matters.** The dashboard
+says the digest is of the **raw request payload**. The SDK computes it over
+`JSON.stringify(payload)` **with the `signature` field removed** -- different
+bytes whenever spacing or key order differ, i.e. in general. Only one of them
+is what PesaJet's servers actually do.
+
+Chipz accepts **either**. That is not a weakening: both candidates are
+HMAC-SHA256 over data derived from the same request under the same secret, so
+forging either still needs the secret. What it buys is that the integration
+works whichever one is real, instead of 401-ing every live webhook until
+somebody reads the bytes off the wire. The raw form is tried first, because
+that is what the dashboard states.
 
 ```json
 { "event": "payment.completed", "transactionId": "...", "providerReference": "...",
@@ -123,13 +158,10 @@ deserves its own wording.
 Events: `payment.completed` | `payment.failed` | `payment.expired` | `ping`.
 `ping` is a delivery test and must be answered 200 without touching money.
 
-**A fragility to know about:** the HMAC is over a *re-serialised* object, not
-over the raw request body, so it depends on JSON key order surviving
-`parse → stringify`. Node preserves insertion order for string keys, so it
-normally matches — but it can break on a proxy that reorders or re-encodes.
-This is a further reason the signature is a filter and **never** the authority:
-verify it, refuse on mismatch, and still re-read `GET /payments/{id}` before
-crediting.
+**Either way the signature is a filter and never the authority.** Verify it,
+refuse a mismatch, and still re-read `GET /payments/{id}` before crediting --
+the re-read is what decides, so a signing scheme that turns out to be a third
+thing again cannot cost money.
 
 **There is no `callbackUrl` / `notifyUrl` field in the create payload.** Unlike
 MarzPay and LipaPay, the webhook URL is *not* passed per request — it is
@@ -171,4 +203,10 @@ own prefix list does not.
    repeat (this decides whether `Idempotency-Key` or `reference` is the
    idempotency anchor).
 6. **Retry policy for webhooks** — how many times, over how long.
-7. Any **IP allowlist** for webhook senders.
+7. Any **IP allowlist** for webhook senders — the dashboard mentions
+   "control IP security", so the feature exists; its shape is not recorded here.
+8. **What the `sk_` API secret is for.** It is issued and marked
+   "Restricted / use only in secure server-side environments", yet neither the
+   SDK nor PesaJet's own cURL sample sends it anywhere. If payouts or some
+   other call need it, that is invisible from both sources — ask before
+   assuming `pk_` alone is enough for a disbursement.

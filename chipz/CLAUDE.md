@@ -5534,17 +5534,66 @@ And one in the mutation harness itself: **`node --check` on `admin-src/index.htm
 fails**, so three admin mutations reported CAUGHT having measured nothing. The parse check
 is scoped to `.js` now.
 
+### Round 169b — the live dashboard corrected three things
+Screenshots of the real merchant dashboard arrived after the first build, and each one
+changed the implementation. **This is the value of seeing the console rather than only the
+SDK**: none of the three was visible from the package.
+
+1. **There is ONE "Webhook Destination URL" field.** Two per-direction callbacks
+   (`/deposit/pesajet/callback`, `/withdraw/pesajet/callback`, mirroring MarzPay and
+   LipaPay) **could not both be registered**, and the unregistered half would have failed
+   *invisibly* — the reconciler quietly covers for a missing webhook, so nothing would
+   ever have looked wrong. Collapsed into **one** `POST /pesajet/webhook` that dispatches
+   on whether the event's `reference` names a `pendingDeposits.ref` or a `withdrawals`
+   doc id.
+2. **The signature is over the RAW REQUEST PAYLOAD** — the dashboard says so in as many
+   words ("an HMAC-SHA256 digest of the raw request payload"). The SDK computes it over
+   `JSON.stringify(payload minus signature)`, which is a *different byte string* whenever
+   spacing or key order differ. The two sources disagree and only one is real, so
+   **both are accepted**: the raw buffer is kept for that one path
+   (`RAW_BODY_ROUTES` + a `verify` hook on its own parser, not on the shared one) and
+   tried first. Not a weakening — both candidates are HMACs over data derived from the
+   same request under the same secret, so forging either still needs the secret. What it
+   buys is not 401-ing every live webhook until somebody reads the bytes off the wire.
+3. **200 within 30 seconds** is required. The re-read is two attempts at a 30s timeout,
+   so it can outlast that. The ack now goes out **first** and the work happens after, as
+   `/deposit/callback` has always done for MarzPay. Safe only because every path below it
+   is idempotent.
+
+Also recorded: the dashboard issues **three** credentials, and the `sk_` "API secret" has
+**no use in the SDK or in PesaJet's own cURL sample**. That is now open question 8 — do
+not assume `pk_` alone is enough for a disbursement without asking.
+
+**Two more harness faults, both mine, both the same shape as before:**
+- The mutation *"the raw payload is never hashed"* came back MISSED, because the test's
+  raw fixture happened to **re-serialise to identical bytes** — so the fallback satisfied
+  it and the raw path was unobservable. Fixed with a fixture whose JSON carries **spaces**,
+  which only the raw digest can match. That is also the real-world case, since PesaJet's
+  formatting is theirs to choose.
+- A tamper case mutated the raw buffer but **left the parsed body intact**, which verified
+  (correctly) via the re-serialised candidate and looked like a hole that was not there.
+  A real tamper changes both, because one is parsed from the other.
+- And an anchor collided: `'/pesajet/webhook'` appears in `RAW_BODY_ROUTES` as well as
+  `GUARD_EXEMPT`, so the guard mutation hit twice and aborted the run. *Check the anchor
+  count, not just the result* — third time in this project.
+
+`verify-pesajet-discriminates.py` is now **41 mutations, all caught**, control behaved.
+
 ### Owner still has to
-1. Set **`PESAJET_API_KEY`** and **`PESAJET_WEBHOOK_SECRET`** in Render (never in this
-   repo). `PESAJET_BASE_URL` only if PesaJet give a sandbox host.
-2. **Set the webhook URLs in PesaJet's own dashboard** — there is no per-request callback
-   field: `https://chipz-server.onrender.com/deposit/pesajet/callback` and
-   `.../withdraw/pesajet/callback`.
-3. Pick it in **Admin → Settings → Manual payments**: PAY A's gateway, and/or
+1. Set **`PESAJET_API_KEY`** (the `pk_…`) and **`PESAJET_WEBHOOK_SECRET`** (the
+   `whsec_…`) in Render — never in this repo.  `PESAJET_BASE_URL` only if PesaJet give a
+   sandbox host.
+2. **Set the ONE webhook URL in PesaJet's dashboard** to
+   `https://chipz-server.onrender.com/pesajet/webhook`, and use its *Test endpoint*
+   button — a `ping` is answered 200 and touches no money, so it is a safe check.
+3. **Rotate the API key.** The `pk_…` was shown in a screenshot; PesaJet call it "public"
+   but it is the credential that authenticates every request, and the dashboard has a
+   *Rotate API keys* button. Same standing rule as the Atlas password.
+4. Pick it in **Admin → Settings → Manual payments**: PAY A's gateway, and/or
    "Always automatic (PesaJet sends payouts)".
-4. Ask PesaJet the seven open questions in `docs/pesajet-api.md` — in particular whether
+5. Ask PesaJet the EIGHT open questions in `docs/pesajet-api.md` — in particular whether
    payouts need a pre-funded float, since **there is no balance endpoint in their SDK**,
    so the dashboard's "available balance" card has no PesaJet equivalent.
-5. Decide which of PesaJet's `netAmount` / `totalCost` the 15% cash-out fee reconciles
+6. Decide which of PesaJet's `netAmount` / `totalCost` the 15% cash-out fee reconciles
    against once real figures exist. Chipz currently sends `wit.net` as the amount, so the
    member receives the net and PesaJet's fee is the platform's cost.

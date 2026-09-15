@@ -251,15 +251,46 @@ console.log('— the request matches the published SDK —');
                       reference: 'CHZ-1', status: 'COMPLETED', timestamp: 'now' };
     const good = crypto.createHmac('sha256', 'top-secret')
       .update(JSON.stringify(payload)).digest('hex');
+    // PesaJet's DASHBOARD says the digest is over the "raw request payload";
+    // their own SDK computes it over JSON.stringify(payload minus signature).
+    // Those are different bytes, only one is what their servers send, and
+    // both are accepted -- so BOTH have to be proven to verify, and a wrong
+    // signature still has to be refused.
+    const rawSent = '{"event":"payment.completed","transactionId":"txn_1","amount":30000,"reference":"CHZ-1","status":"COMPLETED","timestamp":"now"}';
+    const rawSig = crypto.createHmac('sha256', 'top-secret').update(rawSent).digest('hex');
+    ck(p5.mod.pesajetVerifyWebhook(JSON.parse(rawSent), rawSig, Buffer.from(rawSent)).verified === true,
+       'a digest over the RAW request payload verifies (what the dashboard states)');
+    // That case alone does NOT prove the raw path is used: rawSent happens to
+    // re-serialise to itself, so the fallback satisfies it too and deleting
+    // the raw candidate went undetected. This body has SPACES, so
+    // JSON.stringify(parse(it)) is a different byte string and only the raw
+    // digest can match -- which is the real-world case, since PesaJet's
+    // formatting is theirs to choose.
+    const spaced = '{"event": "payment.completed", "reference": "CHZ-1", "amount": 30000}';
+    const spacedSig = crypto.createHmac('sha256', 'top-secret').update(spaced).digest('hex');
+    ck(JSON.stringify(JSON.parse(spaced)) !== spaced,
+       '  (the fixture really does re-serialise to different bytes)');
+    ck(p5.mod.pesajetVerifyWebhook(JSON.parse(spaced), spacedSig, Buffer.from(spaced)).verified === true,
+       '  and a body whose formatting is NOT ours still verifies from the raw bytes');
     ck(p5.mod.pesajetVerifyWebhook(payload, good).verified === true,
-       'a correct HMAC-SHA256 over the payload verifies');
+       "and so does one over the re-serialised payload (what their SDK computes)");
+    ck(p5.mod.pesajetVerifyWebhook(payload, good, Buffer.from('{"different":"bytes"}')).verified === true,
+       '  -- the re-serialised form still verifies even when a raw body is present');
     ck(p5.mod.pesajetVerifyWebhook({ ...payload, signature: good }, null).verified === true,
-       'and so does one carried inside the body, with `signature` excluded from the digest');
+       'a signature carried inside the body works, with `signature` excluded from the digest');
     const forged = p5.mod.pesajetVerifyWebhook(payload, good.replace(/.$/, c => c === 'a' ? 'b' : 'a'));
     ck(forged.verified === false && forged.reason === 'mismatch',
-       'a forged signature is a MISMATCH, which the routes refuse outright');
+       'a forged signature is a MISMATCH, which the route refuses outright');
+    // A real tamper changes the body AND the bytes it was parsed from -- they
+    // always agree with each other, because one comes from the other. An
+    // earlier version of this case mutated only the raw buffer and left the
+    // parsed body intact, which verified (correctly) via the re-serialised
+    // candidate and looked like a hole that was not there.
+    const tampered = rawSent.replace('30000', '99999');
+    ck(p5.mod.pesajetVerifyWebhook(JSON.parse(tampered), rawSig, Buffer.from(tampered)).verified === false,
+       'a tampered body is refused -- neither candidate digest matches its signature');
     ck(p5.mod.pesajetVerifyWebhook({ ...payload, amount: 999999 }, good).verified === false,
-       'and tampering with the amount breaks it');
+       'tampering with the amount breaks it');
     const none = p5.mod.pesajetVerifyWebhook(payload, null);
     ck(none.verified === false && none.reason === 'no-signature',
        'a missing signature is distinguishable from a wrong one');
@@ -315,8 +346,7 @@ function finish() {
   // Webhooks arrive with no Origin. Without the exemption the host guard
   // refuses them and money silently stops resolving.
   const guard = /const GUARD_EXEMPT = new Set\(\[([^\]]+)\]\)/.exec(S)[1];
-  ck(guard.includes("'/deposit/pesajet/callback'"), 'the deposit callback is GUARD_EXEMPT');
-  ck(guard.includes("'/withdraw/pesajet/callback'"), 'and so is the payout callback');
+  ck(guard.includes("'/pesajet/webhook'"), 'the webhook is GUARD_EXEMPT');
 
   // Both routes exist and both re-read before deciding. Checked INSIDE each
   // route body, not file-wide: a file-wide match would pass with the re-read
@@ -334,22 +364,40 @@ function finish() {
     if (j < 0) throw new Error('end marker not found after ' + route + ': ' + end);
     return S.slice(i, j);
   };
-  for (const [route, end] of [["app.post('/deposit/pesajet/callback'", "app.post('/deposit/manual/init'"],
-                              ["app.post('/withdraw/pesajet/callback'", "app.post('/withdraw/lipapay/callback'"]]) {
-    const body = routeSlice(route, end);
-    ck(body.includes('pesajetVerifyWebhook'), `${route} verifies the signature`);
-    ck(/mismatch[\s\S]*?401/.test(body), '  and answers 401 to a forged one');
-    ck(body.includes('pesajetGetTx'),
-       '  and re-reads the transaction before deciding anything');
-    ck(/event === 'ping'/.test(body), '  and answers a ping without touching money');
-    ck(body.includes('providerDown'),
-       '  and leaves the row alone when the gateway cannot be reached');
-  }
+  // ONE endpoint, because PesaJet's dashboard has ONE "Webhook Destination
+  // URL" field. Two routes could not both be registered there, and the half
+  // that went unregistered would fail INVISIBLY -- the reconciler would
+  // quietly cover for it, so nothing would ever look wrong.
+  ck(!src.includes('/deposit/pesajet/callback') && !src.includes('/withdraw/pesajet/callback'),
+     'there are no per-direction PesaJet callbacks (the dashboard takes one URL)');
+  const hook = routeSlice("app.post('/pesajet/webhook'", "app.post('/withdraw/lipapay/callback'");
+  ck(hook.includes('pesajetVerifyWebhook'), 'the one webhook verifies the signature');
+  ck(/mismatch[\s\S]*?401/.test(hook), '  and answers 401 to a forged one');
+  ck(hook.includes('req.rawBody'),
+     '  over the RAW request payload, which is what PesaJet says it signs');
+  ck(hook.includes('pesajetGetTx'), '  and re-reads before deciding anything');
+  ck(/event === 'ping'/.test(hook), '  and answers a ping without touching money');
+  ck(hook.includes('providerDown'),
+     '  and leaves the row alone when the gateway cannot be reached');
+  ck(hook.includes("collection('pendingDeposits')") && hook.includes("collection('withdrawals')"),
+     '  and dispatches to BOTH a deposit and a payout from the one endpoint');
+  // 200 within 30 seconds is PesaJet's own requirement, and the re-read can
+  // outlast it (two attempts, 30s timeout each). So the ack goes first.
+  const iAck = hook.indexOf('res.status(200).json({ received: true })');
+  const iWork = hook.indexOf('pesajetGetTx');
+  ck(iAck > 0 && iWork > iAck,
+     "  the 200 is sent BEFORE the re-read -- PesaJet requires it within 30 seconds");
+  // The raw body has to actually be captured, or the dashboard's own digest
+  // can never match.
+  ck(/RAW_BODY_ROUTES = new Set\(\['\/pesajet\/webhook'\]\)/.test(src),
+     'the webhook path is in RAW_BODY_ROUTES');
+  ck(/verify: keepRawBody/.test(src) && /req\.rawBody = buf/.test(src),
+     'and the parser keeps the raw buffer for it');
   // The credit decision must come from the re-read, NOT from the body's
   // claimed status. If the body's status were trusted, anyone who can reach
   // the URL with a valid-looking payload could credit themselves.
   {
-    const body = routeSlice("app.post('/deposit/pesajet/callback'", "app.post('/deposit/manual/init'");
+    const body = hook;
     ck(!/creditDeposit\([\s\S]{0,80}body\./.test(body) && /realStatus === 'success'[\s\S]{0,40}creditDeposit/.test(body),
        'the credit is driven by the re-read, never by the webhook body');
     ck(!/body\.(status|amount)\b[\s\S]{0,200}creditDeposit/.test(body),
@@ -360,7 +408,7 @@ function finish() {
   // A 'sending' payout is ambiguous: a success may be recognised, a failure
   // may never be auto-refunded from an automated path.
   {
-    const body = routeSlice("app.post('/withdraw/pesajet/callback'", "app.post('/withdraw/lipapay/callback'");
+    const body = hook;
     ck(/realStatus === 'failed'[\s\S]{0,200}wit\.status === 'sending'[\s\S]{0,120}return/.test(body),
        "a 'sending' payout is never auto-declined and refunded -- admin only");
     ck(/declineWithdrawalAndRefund\([^)]*\['processing'\]/.test(body),
