@@ -207,12 +207,29 @@ async def main():
           const art = document.getElementById('aboutArticle');
           const r = art ? art.getBoundingClientRect() : null;
           return {words: w.length,
+                  spanWords: w.reduce((n,e)=>n+(e.textContent.trim().split(/\s+/).filter(Boolean).length),0),
                   opacities: [...new Set(w.map(e=>getComputedStyle(e).opacity))],
                   transforms: [...new Set(w.map(e=>getComputedStyle(e).transform))],
                   text: art ? art.textContent.trim().slice(0, 50) : null,
                   box: r ? {x:r.x, y:r.y, w:r.width, h:r.height} : null};}""")
         print("  ", {k: v for k, v in about.items() if k != 'box'})
-        ck(about["words"] > 5, "the article rendered words at all (%d)" % about["words"])
+        # This used to read `words > 5`, counting one <span class="reveal-word">
+        # PER WORD -- and that per-word split is gone. It was only ever there to
+        # stagger a reveal animation that had already been removed, and while it
+        # stayed it made this page untranslatable: the i18n sweep matches a WHOLE
+        # text node, so a sentence in fourteen one-word nodes matched nothing and
+        # the About screen read English in every language.
+        #
+        # The number was NOT simply lowered to 1. What this assertion is for is
+        # "the article rendered real content", so that is what it now measures --
+        # the words INSIDE the spans, which a one-span render satisfies honestly
+        # and an empty or one-word render still fails. The class itself is
+        # deliberately still here, and so is the one-rule guard above it: a stale
+        # `.reveal-word{opacity:0}` is what blanked this page in the first place.
+        ck(about["words"] >= 1,
+           "the article rendered at least one revealed block (%d)" % about["words"])
+        ck(about["spanWords"] > 5,
+           "and there are real words inside it (%d)" % about["spanWords"])
         ck(about["opacities"] == ["1"],
            "every word is fully opaque (%s)" % about["opacities"])
         ck(about["transforms"] == ["none"],

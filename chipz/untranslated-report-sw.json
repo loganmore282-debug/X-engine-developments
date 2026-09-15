@@ -2262,19 +2262,19 @@
    ]
   },
   {
-   "text": "Salio Jipya: UGX12,453.19",
-   "at": "body #chestWinBg .chest-win-card #chestWinBalance",
-   "kind": "text",
-   "screens": [
-    "spin-win"
-   ]
-  },
-  {
-   "text": "Salio Jipya: UGX12,881.69",
+   "text": "Salio Jipya: UGX12,637.50",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
     "chest-win"
+   ]
+  },
+  {
+   "text": "Salio Jipya: UGX13,300.09",
+   "at": "body #chestWinBg .chest-win-card #chestWinBalance",
+   "kind": "text",
+   "screens": [
+    "spin-win"
    ]
   },
   {
@@ -2659,7 +2659,7 @@
    ]
   },
   {
-   "text": "UGX120,197.25",
+   "text": "UGX120,078.18",
    "at": "#sheetBg #sheetBody .bal-band #balBandValue",
    "kind": "text",
    "screens": [

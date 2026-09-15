@@ -529,7 +529,7 @@
    ]
   },
   {
-   "text": "Amafaranga mashya: UGX12,439.61",
+   "text": "Amafaranga mashya: UGX12,304.40",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
@@ -537,7 +537,7 @@
    ]
   },
   {
-   "text": "Amafaranga mashya: UGX12,783.64",
+   "text": "Amafaranga mashya: UGX12,575.22",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
@@ -2500,7 +2500,7 @@
    ]
   },
   {
-   "text": "UGX119,315.67",
+   "text": "UGX120,135.02",
    "at": "#sheetBg #sheetBody .bal-band #balBandValue",
    "kind": "text",
    "screens": [

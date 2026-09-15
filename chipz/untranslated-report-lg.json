@@ -2215,7 +2215,7 @@
    ]
   },
   {
-   "text": "Ssente Empya: UGX13,004.34",
+   "text": "Ssente Empya: UGX12,426.05",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
@@ -2223,7 +2223,7 @@
    ]
   },
   {
-   "text": "Ssente Empya: UGX13,207.37",
+   "text": "Ssente Empya: UGX12,874.67",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
@@ -2694,7 +2694,7 @@
    ]
   },
   {
-   "text": "UGX120,009.63",
+   "text": "UGX119,649.54",
    "at": "#sheetBg #sheetBody .bal-band #balBandValue",
    "kind": "text",
    "screens": [

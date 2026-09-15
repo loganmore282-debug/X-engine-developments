@@ -5003,4 +5003,23 @@ were reported as untranslated English.** Normalise both sides, or the tool inven
   copy, which it is not.
 
 ### Ports
-`find-untranslated.py` binds **8899**. The running list is in Round 157's note.
+`find-untranslated.py` binds **8899**, and `test-i18n-coverage.py` shells out to it, so
+the two cannot be run at the same time. The running list is in Round 157's note.
+
+### Two harnesses went red in the first full-suite run, and only one was a defect
+- **`test-visible-text.py` was right to fail.** It asserted `words > 5` on the About
+  page, counting one `<span class="reveal-word">` **per word** — the very split this round
+  removed. The number was NOT simply lowered to 1: what that assertion is *for* is "the
+  article rendered real content", so it now counts the words **inside** the spans, which a
+  one-span render satisfies honestly and an empty or one-word render still fails. The
+  class and its one-rule guard stay, because a stale `.reveal-word{opacity:0}` is what
+  blanked that page in the first place. **This was predicted while making the change and
+  then forgotten** — the standing rule from Round 159 applies and was not followed: when
+  changing something a harness measures, grep every harness for it *before* running
+  anything.
+- **`test-i18n-coverage.py` was a port collision, not a failure.** I ran it by hand while
+  the batch was also running it, and both shell out to `find-untranslated.py` on 8899.
+  Reproduced deliberately to be sure rather than assumed: two concurrent runs give one
+  `OSError: [Errno 98] Address already in use` and one clean pass. That is the **fourth**
+  time this shape has appeared in this project; the rule stands — when a harness dies with
+  that error, look for a second copy of it before looking for a bug in the app.

@@ -2278,7 +2278,7 @@
    ]
   },
   {
-   "text": "Sente Ensya: UGX12,630.57",
+   "text": "Sente Ensya: UGX13,060.33",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
@@ -2286,7 +2286,7 @@
    ]
   },
   {
-   "text": "Sente Ensya: UGX13,185.97",
+   "text": "Sente Ensya: UGX13,553.02",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
@@ -2784,7 +2784,7 @@
    ]
   },
   {
-   "text": "UGX119,236.98",
+   "text": "UGX119,923.43",
    "at": "#sheetBg #sheetBody .bal-band #balBandValue",
    "kind": "text",
    "screens": [

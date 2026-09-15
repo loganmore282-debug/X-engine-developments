@@ -1809,7 +1809,7 @@
    ]
   },
   {
-   "text": "Nouveau solde : UGX11,436.50",
+   "text": "Nouveau solde : UGX12,317.88",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
@@ -1817,7 +1817,7 @@
    ]
   },
   {
-   "text": "Nouveau solde : UGX12,952.03",
+   "text": "Nouveau solde : UGX12,783.64",
    "at": "body #chestWinBg .chest-win-card #chestWinBalance",
    "kind": "text",
    "screens": [
@@ -2699,7 +2699,7 @@
    ]
   },
   {
-   "text": "UGX120,015.36",
+   "text": "UGX119,795.94",
    "at": "#sheetBg #sheetBody .bal-band #balBandValue",
    "kind": "text",
    "screens": [
