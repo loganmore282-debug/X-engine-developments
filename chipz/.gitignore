@@ -1,0 +1,5 @@
+# find-untranslated.py rewrites these on every run, so tracking them means
+# every suite run dirties the tree with output nobody reads from the repo.
+# The report that matters is the printed one, and test-i18n-coverage.py's
+# exit code is what the suite judges.
+untranslated-report-*.json
