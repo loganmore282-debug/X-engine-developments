@@ -232,6 +232,69 @@ M = [
     ('the payout option disappears from the panel', ADMIN,
      'name="witMethod" id="witMethodPesa" value="pesajet"',
      'name="witMethod" id="witMethodPesa" value="lipapay"'),
+
+    # ── what has gone through PesaJet (NOT a balance) ──
+    ('the summary calls a made-up PesaJet balance path', SERVER,
+     '    const [depSnap, witSnap, sett] = await Promise.all([',
+     "    const bal = await _pesajetRequest('/balance');\n"
+     '    const [depSnap, witSnap, sett] = await Promise.all([')
+    ,
+    ('a deposit claimed but never credited counts as money collected', SERVER,
+     '      if (depositFullyCredited(row)) { b.collected += amt; b.collectedCount++; }',
+     "      if (row.status === 'success' || row.status === 'matched') { b.collected += amt; b.collectedCount++; }"),
+
+    ('a recharge still in flight is counted as collected', SERVER,
+     "      else if (row.status === 'pending' || row.status === 'initiating') { b.pendingIn += amt; b.pendingInCount++; }",
+     "      else if (row.status === 'pending' || row.status === 'initiating') { b.collected += amt; b.collectedCount++; }"),
+
+    ('a payout still sending is counted as paid out', SERVER,
+     "      if (row.status === 'processed') { b.paidOut += amt; b.paidOutCount++; }",
+     "      if (row.status === 'processed' || row.status === 'processing') { b.paidOut += amt; b.paidOutCount++; }"),
+
+    ('a payout counts the gross, not what the member received', SERVER,
+     '      const amt = finiteMoney(row.net != null ? row.net : row.amount);',
+     '      const amt = finiteMoney(row.amount);'),
+
+    ('every country lands in one bucket, mixing currencies', SERVER,
+     '      const row = d.data(), key = rowRegionKey(row, userRegions);',
+     "      const row = d.data(), key = 'ug';"),
+
+    # Anchored with the line after it: `const want = adminRegionFilter(req);`
+    # alone occurs eleven times in server.js, which aborts the run. Checking
+    # the anchor COUNT before trusting a mutation is a standing lesson here.
+    ('the country switch is ignored', SERVER,
+     '    const want = adminRegionFilter(req);\n'
+     '    const [depSnap, witSnap, sett] = await Promise.all([',
+     '    const want = null;\n'
+     '    const [depSnap, witSnap, sett] = await Promise.all(['),
+
+    ('net is computed the wrong way round', SERVER,
+     '.map(b => Object.assign(b, { net: round2(b.collected - b.paidOut) }));',
+     '.map(b => Object.assign(b, { net: round2(b.paidOut - b.collected) }));'),
+
+    ('a page cut short is reported as complete', SERVER,
+     '    const truncated = depSnap.size >= PESAJET_SUMMARY_SCAN || witSnap.size >= PESAJET_SUMMARY_SCAN;',
+     '    const truncated = false;'),
+
+    ('the card claims to be in the payment path whether it is or not', SERVER,
+     "      selected: depositProvider(sett) === 'pesajet' || withdrawProvider(sett) === 'pesajet',",
+     '      selected: true,'),
+
+    ('the reply stops saying this is not their float', SERVER,
+     "      note: 'Chipz\\'s own record of money moved through PesaJet. PesaJet publishes no balance endpoint, so this is not the float in their account.',",
+     "      note: 'PesaJet balance.',"),
+
+    ("the card presents itself as PesaJet's own float", ADMIN,
+     '<p class="muted" style="margin-top:0">PesaJet does not publish a balance endpoint, so this is our own record of what has gone through them &mdash; not the float in their account.</p>',
+     '<p class="muted" style="margin-top:0">The real float sitting in PesaJet\'s own account.</p>'),
+
+    ('the card ships visible, cluttering a panel that does not use PesaJet', ADMIN,
+     '<div class="panel-card hidden" id="pesajetCard">',
+     '<div class="panel-card" id="pesajetCard">'),
+
+    ('a label drifts from the row that translates it', ADMIN,
+     '<div class="l">Net through PesaJet</div>',
+     '<div class="l">PesaJet net</div>'),
 ]
 
 

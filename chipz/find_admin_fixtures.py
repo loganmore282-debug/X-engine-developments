@@ -176,6 +176,22 @@ R = {
                             "sizes": {"appIcon": "512 × 512", "linkPreview": "1200 × 630"}},
     "/admin/marzpay/balance": {"status": "success", "amount": 0, "formatted": "UGX 0",
                                "currency": "UGX", "accountStatus": "active"},
+    # The PesaJet card is hidden unless the gateway is selected or has history,
+    # so a fixture that left either out would render nothing and the sweep would
+    # report the whole card as clean having never seen it -- the same shape of
+    # false green the Deposits/Withdrawals tabs produced. truncated and an unset
+    # key are both switched on here so their notes render too; the two branches
+    # one fixture cannot also reach (an empty summary, a failed read) are covered
+    # by the static inventory audit in test-pesajet.js instead.
+    "/admin/pesajet/summary": {
+        "status": "success", "regionKey": "ug", "truncated": True,
+        "configured": False, "selected": True,
+        "note": "Chipz's own record of money moved through PesaJet.",
+        "regions": [{"regionKey": "ug", "currency": "UGX",
+                     "collected": 450000, "collectedCount": 9,
+                     "paidOut": 180000, "paidOutCount": 3, "net": 270000,
+                     "pendingIn": 60000, "pendingInCount": 2,
+                     "pendingOut": 25000, "pendingOutCount": 1}]},
     "/admin/user/detail": {"status": "success", "user": USERS[0], "transactions": TRANSACTIONS,
                            "investments": [], "deposits": DEPOSITS[:1],
                            "withdrawals": WITHDRAWALS[:1]},

@@ -301,11 +301,12 @@ console.log('— the request matches the published SDK —');
     ck(noSecret.reason !== 'mismatch',
        "  -- and NOT as a mismatch, or an unconfigured secret would 401 every real webhook");
 
-    finish();
+    await finish();
   })().catch(e => { console.error(e); process.exit(1); });
 }
 
-function finish() {
+// async because the PesaJet-summary section below RUNS the real route handler.
+async function finish() {
   // ── the wiring, checked against the real source ─────────────────────────
   console.log('\n— wired into every path a provider has to reach —');
   const strip = t => t.replace(/(^|\s)\/\/[^\n]*/g, '$1').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -549,6 +550,187 @@ function finish() {
      'the idempotency key is sent in the body (their REST example)');
   ck(/headers\['Idempotency-Key'\] = idempotencyKey/.test(fnSource('_pesajetRequest')),
      'and as a header (their SDK) -- both, because a wrong guess is a double payment');
+
+  // ── what has gone through PesaJet (NOT a balance) ───────────────────────
+  // PesaJet publish no balance endpoint in either official SDK, so the card
+  // reports Chipz's own records. Two things therefore have to hold, and the
+  // second matters more than the arithmetic: the figures must come from our
+  // own collections, and nothing may present them as the float in PesaJet's
+  // account.
+  console.log('\n— what has gone through PesaJet —');
+  {
+    const at = src.indexOf("app.get('/admin/pesajet/summary'");
+    ck(at !== -1, 'GET /admin/pesajet/summary exists');
+    const end = src.indexOf('\n});', at);
+    const route = src.slice(at, end + 4);
+
+    // It must not invent a PesaJet path. Their SDK has create / read /
+    // preview and nothing else; a guessed /balance or /wallet against a money
+    // provider is API surface made up out of nothing.
+    ck(!/_pesajetRequest|pesajetGetTx|pesajetCreate/.test(route),
+       'it calls PesaJet not at all -- there is no balance endpoint to call');
+    ck(!/\/balance|\/wallet|\/float/.test(route),
+       'and invents no PesaJet path of its own');
+    ck(/pendingDeposits'\)\s*\.where\('provider', '==', 'pesajet'\)/.test(route),
+       "it reads our own PesaJet deposits");
+    ck(/withdrawals'\)\s*\.where\('pesajetRef', '>', ''\)/.test(route),
+       'and our own PesaJet payouts');
+    ck(/not the float in their account/.test(route),
+       'and the reply says in words that this is not their float');
+
+
+    // Run it. A text match cannot tell "collected" apart from "created", and
+    // getting that wrong overstates money received.
+    const rows = {
+      pendingDeposits: [
+        // credited, Uganda
+        { id: 'd1', provider: 'pesajet', userId: 'u1', status: 'success', creditedAt: 1, amount: 30000 },
+        // credited, Kenya -- and displayAmount is what the member was charged
+        { id: 'd2', provider: 'pesajet', userId: 'u2', status: 'success', creditedAt: 1, amount: 900, displayAmount: 900 },
+        // still in flight, Uganda
+        { id: 'd3', provider: 'pesajet', userId: 'u1', status: 'pending', amount: 50000 },
+        // failed -- neither collected nor pending
+        { id: 'd4', provider: 'pesajet', userId: 'u1', status: 'failed', amount: 70000 },
+        // claimed but the wallet write never finished: NOT collected
+        { id: 'd5', provider: 'pesajet', userId: 'u1', status: 'matched', amount: 11000 },
+      ],
+      withdrawals: [
+        { id: 'w1', pesajetRef: 'r1', userId: 'u1', status: 'processed', amount: 20000, net: 17000 },
+        { id: 'w2', pesajetRef: 'r2', userId: 'u1', status: 'processing', amount: 10000, net: 8500 },
+        { id: 'w3', pesajetRef: 'r3', userId: 'u2', status: 'rejected', amount: 5000, net: 4250 },
+      ],
+    };
+    const snap = list => ({ size: list.length, docs: list.map(r => ({ id: r.id, data: () => ({ ...r }) })) });
+    const q = name => ({ where: () => q(name), limit: () => q(name), get: async () => snap(rows[name]) });
+    let settings = { depositMethod: 'pesajet', withdrawMethod: 'marzpay' };
+    let scanCap = 200000;
+    const scope = {
+      db: { collection: name => q(name) },
+      verifyAdmin: () => true,
+      getSettings: async () => settings,
+      adminUserRegions: async () => ({ u1: 'ug', u2: 'ke' }),
+      rowRegionKey: (row, map) => row.regionKey || map[row.userId] || 'ug',
+      regionByKey: k => ({ ug: { currency: 'UGX' }, ke: { currency: 'KES' } })[k],
+      // The real one: status alone is not enough, because claim-before-credit
+      // can leave 'matched' with the wallet write unfinished.
+      depositFullyCredited: r => r.status === 'success' && !!r.creditedAt,
+      depositProvider: s => s.depositMethod,
+      withdrawProvider: s => s.withdrawMethod,
+      pesajetConfigured: () => true,
+      finiteMoney: n => (Number.isFinite(Number(n)) ? Number(n) : 0),
+      round2: n => Math.round(n * 100) / 100,
+      console,
+    };
+    const run = async wanted => {
+      let handler = null;
+      const app = { get: (_p, fn) => { handler = fn; } };
+      const names = Object.keys(scope);
+      new Function('app', 'adminRegionFilter', 'PESAJET_SUMMARY_SCAN', ...names, route)(
+        app, () => wanted, scanCap, ...names.map(n => scope[n]));
+      let out = null;
+      await handler({ query: {} }, { json: o => (out = o), status: () => ({ json: o => (out = o) }) });
+      return out;
+    };
+    const all = await run(null);
+    const ug = all.regions.find(r => r.regionKey === 'ug');
+    const ke = all.regions.find(r => r.regionKey === 'ke');
+    ck(ug && ug.collected === 30000 && ug.collectedCount === 1,
+       'only a deposit that really landed counts as collected');
+    ck(ug && ug.pendingIn === 50000 && ug.pendingInCount === 1,
+       'one still in flight, counted separately');
+    ck(ug && ug.paidOut === 17000 && ug.paidOutCount === 1,
+       'a payout counts what the member received (net), once processed');
+    ck(ug && ug.pendingOut === 8500 && ug.pendingOutCount === 1,
+       "and a payout still sending is 'still sending', not paid");
+    ck(ug && ug.net === 13000, 'net is collected minus paid out');
+    ck(ke && ke.collected === 900 && ke.currency === 'KES',
+       "another country is its own bucket, in its own currency");
+    ck(all.regions.length === 2, 'and nothing is summed across currencies');
+    ck(all.selected === true,
+       'selected says the gateway really is in the payment path');
+    ck(/not the float/.test(all.note || ''),
+       'the reply itself carries the caveat, so a raw reader is not misled either');
+
+    const kenyaOnly = await run('ke');
+    ck(kenyaOnly.regions.length === 1 && kenyaOnly.regions[0].regionKey === 'ke',
+       'the country switch narrows it to one country');
+
+    // 'selected' decides whether the card is ever shown, so it has to follow
+    // the real settings rather than being pinned on.
+    settings = { depositMethod: 'marzpay', withdrawMethod: 'marzpay' };
+    ck((await run(null)).selected === false,
+       'and says NOT selected when neither path uses PesaJet');
+    settings = { depositMethod: 'marzpay', withdrawMethod: 'pesajet' };
+    ck((await run(null)).selected === true, 'payouts alone count as selected');
+    settings = { depositMethod: 'pesajet', withdrawMethod: 'marzpay' };
+
+    // Reaching the cut-short case at all is why the scan ceiling is a named
+    // constant: with it shrunk to 2 the flag must be true, and must STAY true
+    // when the view is narrowed to a country holding fewer rows than the cap.
+    // Judging it on the filtered rows instead would call a partial total
+    // complete, which is the lie the flag exists to prevent.
+    scanCap = 2;
+    ck((await run(null)).truncated === true,
+       'a read that hits the scan ceiling is reported as incomplete');
+    ck((await run('ke')).truncated === true,
+       '  and still incomplete when narrowed to one small country');
+    scanCap = 200000;
+    ck((await run(null)).truncated === false,
+       'while a read well inside the ceiling is reported complete');
+
+    // ── the card's own words ──────────────────────────────────────────────
+    const cardAt = adminSrc.indexOf('id="pesajetCard"');
+    ck(cardAt !== -1, "the panel has the card");
+    const cardEnd = adminSrc.indexOf('</div>', adminSrc.indexOf('id="pesajetSummary"'));
+    const card = adminSrc.slice(cardAt - 200, cardEnd);
+    ck(!/balance/i.test(card.replace(/does not publish a balance endpoint/i, '')),
+       'and never calls this figure a balance');
+    ck(/not the float in their account/.test(card),
+       'it says outright that it is not the float in PesaJet\'s account');
+    // Matched on the div itself, not on the surrounding text: the comment
+    // above it explains that the card is hidden, and a loose match would be
+    // satisfied by that explanation with the class deleted. Sixth instance of
+    // that trap in this project.
+    ck(/<div class="panel-card hidden" id="pesajetCard">/.test(adminSrc),
+       'and it ships hidden, so an operator who does not use PesaJet never meets it');
+
+    // ── every word on it can be translated ────────────────────────────────
+    // The coverage sweep renders eight of these; the empty-summary and
+    // failed-read branches cannot be on screen at the same time as the rest,
+    // so the rows for them are checked from the other direction here: each
+    // must still occur VERBATIM in the panel. A row whose key has drifted
+    // from the string it is supposed to match is silently no translation at
+    // all, and nothing at runtime says so.
+    const rowsPy = fs.readFileSync(__dirname + '/admin-rows-7.py', 'utf8');
+    const keys = [...rowsPy.matchAll(/^    \['((?:[^'\\]|\\.)*)',$/gm)]
+      .map(m => m[1].replace(/\\'/g, "'"));
+    ck(keys.length >= 10, `admin-rows-7.py carries the card's strings (${keys.length})`);
+    //
+    // THE TABLE ITSELF HAS TO BE CUT OUT FIRST, and leaving it in made this
+    // whole check vacuous on its first run: build-admin-rows.py writes every
+    // English key into ADMIN_LANG_ROWS in this same file, so "the key appears
+    // in admin-src" was satisfied by the row rather than by the card, and a
+    // key that matched nothing on screen still passed.
+    const cut = s => {
+      for (const name of ['ADMIN_LANG_ROWS', 'ADMIN_LANG_PATTERNS']) {
+        const a = s.indexOf('const ' + name + ' = [');
+        const b = s.indexOf('\n];', a);
+        if (a === -1 || b === -1) throw new Error('could not find ' + name);
+        s = s.slice(0, a) + s.slice(b + 3);
+      }
+      return s;
+    };
+    const panelText = cut(adminSrc).replace(/&mdash;/g, '—').replace(/&middot;/g, '·');
+    ck(!panelText.includes("['Dashboard'"), 'the string table is cut out before looking');
+    // A template's figures are spliced in at render time, so it is matched by
+    // its literal halves -- everything either side of a {0}/{1}.
+    for (const k of keys) {
+      const shown = k.length > 46 ? k.slice(0, 46) + '…' : k;
+      const parts = k.split(/\{\d\}/).map(p => p.trim()).filter(p => p.length > 2);
+      ck(parts.length > 0 && parts.every(p => panelText.includes(p)),
+         `"${shown}" is really on the card`);
+    }
+  }
 
   // ── uniqueness, or one transaction could land twice ─────────────────────
   console.log('\n— the database guards —');

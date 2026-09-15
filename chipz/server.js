@@ -10323,6 +10323,96 @@ app.get('/admin/marzpay/balance', async (req, res) => {
     res.status(502).json({ status: 'error', message: PROVIDER_BUSY_MSG });
   }
 });
+// ── WHAT HAS GONE THROUGH PESAJET ──
+// Owner: "l also want to see the balance of jetpay just like we were doing on
+// marz."
+//
+// PESAJET PUBLISHES NO BALANCE ENDPOINT. Both of their official SDKs --
+// @pesajet/sdk on npm and pesajet on PyPI -- expose exactly three calls:
+// create a payment, read a payment, preview a fee. There is no float, wallet
+// or balance call in either, and their REST docs show none. MarzPay's own
+// card exists because MarzPay's SDK really does call GET /balance; guessing a
+// path here would be inventing API surface on a money provider, which this
+// file does not do.
+//
+// So this answers the question a balance is actually asked for -- "how much
+// has gone in and out through this gateway" -- from CHIPZ'S OWN RECORDS,
+// which are exact for what we sent and received. It is NOT their float: it
+// cannot see settlements to a bank account, their fees, or anything moved
+// outside Chipz, and the panel says so in those words rather than letting a
+// number imply more than it knows.
+//
+// The moment PesaJet give us a balance path this becomes a real reading and
+// the card keeps its place. That is open question 4 in docs/pesajet-api.md.
+//
+// A high ceiling rather than no ceiling, for the reason /admin/stats records:
+// this pulls whole collections into Node memory on a shared Atlas tier, and
+// the dashboard re-polls every 30 seconds. Past it the reply says so rather
+// than quietly calling a partial total complete. Named at module scope so the
+// test can shrink it and actually reach the truncated case.
+const PESAJET_SUMMARY_SCAN = 200000;
+app.get('/admin/pesajet/summary', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const want = adminRegionFilter(req);
+    const [depSnap, witSnap, sett] = await Promise.all([
+      db.collection('pendingDeposits').where('provider', '==', 'pesajet').limit(PESAJET_SUMMARY_SCAN).get(),
+      db.collection('withdrawals').where('pesajetRef', '>', '').limit(PESAJET_SUMMARY_SCAN).get(),
+      getSettings(),
+    ]);
+    // Judged on the RAW reads, BEFORE the country filter below: a page cut
+    // short is still cut short whichever country is being shown, and calling
+    // a partial list complete is the lie this flag exists to prevent. Same
+    // bargain /admin/stats and /admin/transactions/list already strike.
+    const truncated = depSnap.size >= PESAJET_SUMMARY_SCAN || witSnap.size >= PESAJET_SUMMARY_SCAN;
+    // adminUserRegions() is the file's own uid -> region map, used because a
+    // row written before regions existed carries no regionKey of its own and
+    // its member's country is the reliable answer.
+    const userRegions = await adminUserRegions();
+    const zero = () => ({ collected: 0, collectedCount: 0, paidOut: 0, paidOutCount: 0,
+                          pendingIn: 0, pendingInCount: 0, pendingOut: 0, pendingOutCount: 0 });
+    const byRegion = new Map();
+    const slot = key => {
+      if (!byRegion.has(key)) byRegion.set(key, Object.assign({ regionKey: key,
+        currency: (regionByKey(key) || {}).currency || 'UGX' }, zero()));
+      return byRegion.get(key);
+    };
+    for (const d of depSnap.docs) {
+      const row = d.data(), key = rowRegionKey(row, userRegions);
+      if (want && key !== want) continue;
+      const amt = finiteMoney(row.displayAmount != null ? row.displayAmount : row.amount);
+      const b = slot(key);
+      // depositFullyCredited() is the same test the rest of this file uses for
+      // "this deposit really landed" -- status alone is not enough, because
+      // claim-before-credit can leave 'matched' with the wallet write unfinished.
+      if (depositFullyCredited(row)) { b.collected += amt; b.collectedCount++; }
+      else if (row.status === 'pending' || row.status === 'initiating') { b.pendingIn += amt; b.pendingInCount++; }
+    }
+    for (const w of witSnap.docs) {
+      const row = w.data(), key = rowRegionKey(row, userRegions);
+      if (want && key !== want) continue;
+      const amt = finiteMoney(row.net != null ? row.net : row.amount);
+      const b = slot(key);
+      if (row.status === 'processed') { b.paidOut += amt; b.paidOutCount++; }
+      else if (row.status === 'processing' || row.status === 'sending') { b.pendingOut += amt; b.pendingOutCount++; }
+    }
+    const regions = [...byRegion.values()].map(b => Object.assign(b, { net: round2(b.collected - b.paidOut) }));
+    regions.sort((a, b2) => a.regionKey.localeCompare(b2.regionKey));
+    res.json({
+      status: 'success', regionKey: want || 'all', truncated, regions,
+      configured: pesajetConfigured(),
+      // Whether this gateway is actually in the path right now, so the panel
+      // can keep the card out of the way of an operator who does not use it.
+      selected: depositProvider(sett) === 'pesajet' || withdrawProvider(sett) === 'pesajet',
+      // Said here rather than only in the panel, so an operator reading the
+      // raw response is not misled either.
+      note: 'Chipz\'s own record of money moved through PesaJet. PesaJet publishes no balance endpoint, so this is not the float in their account.',
+    });
+  } catch (e) {
+    console.error('PesaJet summary error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not read the PesaJet summary' });
+  }
+});
 app.post('/admin/transactions/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

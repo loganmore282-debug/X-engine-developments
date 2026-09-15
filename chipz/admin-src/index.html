@@ -1341,13 +1341,31 @@ async function renderDashboard(){
       <p class="muted" style="margin-top:0">The real float sitting in MarzPay's own account -- what payouts actually get sent from, distinct from members' own wallet balances above.</p>
       <div id="marzBalance">${spinnerHtml()}</div>
     </div>
+    <!-- PesaJet. Deliberately NOT called a balance: PesaJet publishes no
+         balance endpoint (neither of their official SDKs has one), so this is
+         what Chipz itself has moved through them, which is exact for that and
+         silent about their float. The card is hidden entirely unless PesaJet
+         is actually in the payment path or has history, so it does not clutter
+         a panel for an operator who does not use it. -->
+    <div class="panel-card hidden" id="pesajetCard">
+      <h2 class="sec" style="margin-top:0">PesaJet money moved</h2>
+      <!-- Two paragraphs, not one with a <b> in it: the translator matches a
+           WHOLE text node, so inline markup would split this into fragments
+           that no row can ever apply to, and one 200-character sentence would
+           be over the engine's own 160-character cap. Split this way, both
+           halves translate. -->
+      <p class="muted" style="margin-top:0">PesaJet does not publish a balance endpoint, so this is our own record of what has gone through them &mdash; not the float in their account.</p>
+      <p class="muted" style="margin:4px 0 0">It cannot see PesaJet's fees, or anything settled out to a bank.</p>
+      <div id="pesajetSummary">${spinnerHtml()}</div>
+    </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Recent transactions</h2>
       <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th></tr></thead><tbody id="dashTx"><tr><td colspan="3">${spinnerHtml()}</td></tr></tbody></table></div>
     </div>`;
-  const [r, mb] = await Promise.all([
+  const [r, mb, pj] = await Promise.all([
     api('/admin/transactions/list', { limit: 12 }),
     api('/admin/marzpay/balance'),
+    api('/admin/pesajet/summary'),
   ]);
   if(staleTab('dashboard')) return;
   const list = (r.transactions || []).slice(0, 12);
@@ -1357,6 +1375,39 @@ async function renderDashboard(){
   $('marzBalance').innerHTML = mb.status==='success'
     ? `<div class="n" style="font-size:26px">${ugx(mb.amount)}</div>${mb.accountStatus?`<p class="muted" style="margin:4px 0 0">Account status: ${esc(mb.accountStatus)}</p>`:''}`
     : `<p class="muted" style="margin:0">${esc(mb.message||'Could not check MarzPay balance right now.')}</p>`;
+  paintPesajetSummary(pj);
+}
+// Hidden unless PesaJet is actually selected as a gateway or has moved money
+// before -- an operator on MarzPay alone should not be shown a card of zeroes.
+function paintPesajetSummary(pj){
+  const card = $('pesajetCard'), box = $('pesajetSummary');
+  if (!card || !box) return;
+  if (!pj || pj.status !== 'success') {
+    // A failed read still shows the card IF the gateway is in use, because
+    // silence would look like "nothing has gone through" rather than "we could
+    // not read it".
+    if (pj && pj.selected) { card.classList.remove('hidden'); box.innerHTML = `<p class="muted" style="margin:0">${esc((pj && pj.message) || 'Could not read the PesaJet summary right now.')}</p>`; }
+    return;
+  }
+  const regions = Array.isArray(pj.regions) ? pj.regions : [];
+  const anyHistory = regions.some(b => b.collectedCount || b.paidOutCount || b.pendingInCount || b.pendingOutCount);
+  if (!pj.selected && !anyHistory) return;          // stays hidden
+  card.classList.remove('hidden');
+  if (!regions.length) {
+    box.innerHTML = `<p class="muted" style="margin:0">Nothing has gone through PesaJet yet.</p>`;
+    return;
+  }
+  box.innerHTML = regions.map(b => `
+    ${regions.length>1?`<h3 class="sec" style="margin:10px 0 6px;font-size:14px">${esc(regionByKeyAdmin(b.regionKey).name)}</h3>`:''}
+    <div class="cards">
+      <div class="stat"><div class="n">${ugx(b.collected, b.regionKey)}</div><div class="l">Collected</div></div>
+      <div class="stat"><div class="n">${ugx(b.paidOut, b.regionKey)}</div><div class="l">Paid out</div></div>
+      <div class="stat"><div class="n">${ugx(b.net, b.regionKey)}</div><div class="l">Net through PesaJet</div></div>
+    </div>
+    <p class="muted" style="margin:8px 0 0">${b.pendingInCount||0} recharge(s) still arriving, worth ${ugx(b.pendingIn, b.regionKey)}</p>
+    <p class="muted" style="margin:2px 0 0">${b.pendingOutCount||0} payout(s) still sending, worth ${ugx(b.pendingOut, b.regionKey)}</p>`).join('');
+  if (pj.truncated) box.innerHTML += `<p class="muted" style="margin:8px 0 0;color:var(--danger)">These totals are incomplete &mdash; there is more history than this read can scan.</p>`;
+  if (!pj.configured) box.innerHTML += `<p class="muted" style="margin:8px 0 0">No PesaJet API key is set on the server yet.</p>`;
 }
 function statusPill(s){
   s=String(s||'success').toLowerCase();
@@ -4491,6 +4542,17 @@ const ADMIN_LANG_ROWS = [
   ['No withdrawals', 'Tewali kuggyamu ssente', 'Hakuna utoaji', 'Aucun retrait', 'Nta kubikuza', 'Tihariho kwihamu sente'],
   ['Payment message from the member', 'Obubaka bw\'okusasula obuva ku mukozesa', 'Ujumbe wa malipo kutoka kwa mwanachama', 'Message de paiement envoyé par le membre', 'Ubutumwa bwo kwishyura buvuye ku munyamuryango', 'Obutumwa bw\'okushashura oburuga aha mukozesa'],
   ['This server could not read the message automatically — read it yourself before approving.', 'Sivva teyasobodde kusoma bubaka buno yokka — busome ggwe nga tonnakkiriza.', 'Seva hii haikuweza kusoma ujumbe huu kiotomatiki — usome mwenyewe kabla ya kuidhinisha.', 'Ce serveur n\'a pas pu lire le message automatiquement — lisez-le vous-même avant d\'approuver.', 'Iyi seriveri ntiyashoboye gusoma ubu butumwa mu buryo bwikora — busome ubwawe mbere yo kwemeza.', 'Sirivere egi tikibaasiikire kushoma obutumwa obu yenka — obushome iwe otakaikiriza.'],
+  ['PesaJet money moved', 'Ssente eziyise mu PesaJet', 'Fedha zilizopita kupitia PesaJet', 'Argent passé par PesaJet', 'Amafaranga yanyuze muri PesaJet', 'Sente ezirabireho PesaJet'],
+  ['PesaJet does not publish a balance endpoint, so this is our own record of what has gone through them — not the float in their account.', 'PesaJet tewa kkubo lya balansi, kale zino ze bye twewandiikira ffe ebiyise mu bo — si ssente eziri ku akawunti yaabwe.', 'PesaJet haitoi kiungo cha salio, kwa hivyo hii ni kumbukumbu yetu wenyewe ya kilichopita kwao — si fedha zilizo kwenye akaunti yao.', 'PesaJet ne publie pas de point d\'accès au solde ; ceci est donc notre propre relevé de ce qui est passé chez eux — pas le solde de leur compte.', 'PesaJet ntitanga aho usoma amafaranga asigaye, bityo aya ni inyandiko yacu bwite y\'ibyanyuze muri bo — si amafaranga ari kuri konti yabo.', 'PesaJet terikutuha omuhanda gw\'okureeba sente ezisigaire, n\'ahabw\'ekyo egi n\'ekitabo kyaitu ky\'ebirabireho — ti sente eziri aha akaunti yaabo.'],
+  ['It cannot see PesaJet\'s fees, or anything settled out to a bank.', 'Tekisobola kulaba ssente PesaJet ze bakolako, oba ekisindikiddwa mu bbanka.', 'Haiwezi kuona ada za PesaJet, wala chochote kilicholipwa kwenda benki.', 'Elle ne voit pas les frais de PesaJet, ni ce qui a été versé vers une banque.', 'Ntibona amafaranga PesaJet yishyuza, cyangwa ibyoherejwe muri banki.', 'Tekirikubaasa kureeba sente ezi PesaJet erikwakira, nari ekyatwarirwe omu banka.'],
+  ['Collected', 'Ezikungaanyiziddwa', 'Zilizokusanywa', 'Encaissé', 'Yakiriwe', 'Ezisorooziibwe'],
+  ['Paid out', 'Ezisasuddwa', 'Zilizolipwa', 'Versé', 'Yishyuwe', 'Ezishashuriibwe'],
+  ['Net through PesaJet', 'Ezisigadde nga ziyise mu PesaJet', 'Salio halisi kupitia PesaJet', 'Net via PesaJet', 'Umubare nyawo wanyuze muri PesaJet', 'Ezisigaire nizirabire PesaJet'],
+  ['These totals are incomplete — there is more history than this read can scan.', 'Omuwendo guno tegujjuvu — ebyafaayo biri bingi okusinga ebisomeddwa wano.', 'Jumla hizi hazijakamilika — kuna historia nyingi kuliko usomaji huu unavyoweza kupitia.', 'Ces totaux sont incomplets — il y a plus d\'historique que cette lecture ne peut parcourir.', 'Ibi biteranyo ntibyuzuye — hari amateka menshi kuruta ibyo uku gusoma kwashoboye gusuzuma.', 'Emiwendo egi tirikuhikire — haine ebyabaireho bingi okukira ebi twasoma.'],
+  ['No PesaJet API key is set on the server yet.', 'Tewali kisumuluzo kya PesaJet API ekiteekeddwa ku sseva.', 'Hakuna ufunguo wa PesaJet API uliowekwa kwenye seva bado.', 'Aucune clé API PesaJet n\'est encore configurée sur le serveur.', 'Nta rufunguzo rwa PesaJet API rurashyirwa kuri seriveri.', 'Tihariho kishumuruzo kya PesaJet API ekitairweho aha seeva.'],
+  ['Nothing has gone through PesaJet yet.', 'Tewannabaawo ssente eziyise mu PesaJet.', 'Bado hakuna kilichopita kupitia PesaJet.', 'Rien n\'est encore passé par PesaJet.', 'Nta kintu kirarenga muri PesaJet.', 'Tihariho kintu ekirabireho PesaJet.'],
+  ['Could not read the PesaJet summary right now.', 'Tekisobose kusoma bufunze bwa PesaJet kaakano.', 'Haikuweza kusoma muhtasari wa PesaJet kwa sasa.', 'Impossible de lire le récapitulatif PesaJet pour le moment.', 'Ntibyashobotse gusoma incamake ya PesaJet ubu.', 'Tikirikubaasa kusoma enkomeko ya PesaJet hati.'],
+  ['Could not read the PesaJet summary', 'Tekisobose kusoma bufunze bwa PesaJet', 'Haikuweza kusoma muhtasari wa PesaJet', 'Impossible de lire le récapitulatif PesaJet', 'Ntibyashobotse gusoma incamake ya PesaJet', 'Tikirikubaasa kusoma enkomeko ya PesaJet'],
 ];
 const ADMIN_LANG_PATTERNS = [
   ['Users ({0})', 'Abakozesa ({0})', 'Watumiaji ({0})', 'Utilisateurs ({0})', 'Abakoresha ({0})', 'Abakozesa ({0})'],
@@ -4517,6 +4579,8 @@ const ADMIN_LANG_PATTERNS = [
   ['Processing ({0})', 'Ebirongoosebwa ({0})', 'Inashughulikiwa ({0})', 'En traitement ({0})', 'Birimo gutunganywa ({0})', 'Ebirikukorwaho ({0})'],
   ['Sending ({0})', 'Ebisindikibwa ({0})', 'Inatumwa ({0})', 'Envoi ({0})', 'Birimo koherezwa ({0})', 'Ebirikutumwa ({0})'],
   ['Declined ({0})', 'Ebigaaniddwa ({0})', 'Yaliyokataliwa ({0})', 'Refusé ({0})', 'Byanzwe ({0})', 'Ebyangirwe ({0})'],
+  ['{0} recharge(s) still arriving, worth {1}', 'Okuteekamu {0} kukyajja, kwa {1}', 'Malipo {0} bado yanakuja, yenye thamani ya {1}', '{0} recharge(s) encore en cours, pour {1}', 'Kongeramo {0} biracyaza, bifite agaciro ka {1}', 'Okutamu {0} nikuza, kwa {1}'],
+  ['{0} payout(s) still sending, worth {1}', 'Okusasula {0} kukyasindikibwa, kwa {1}', 'Malipo {0} bado yanatumwa, yenye thamani ya {1}', '{0} versement(s) encore en cours d\'envoi, pour {1}', 'Kwishyura {0} biracyoherezwa, bifite agaciro ka {1}', 'Okushashura {0} nikutumwa, kwa {1}'],
 ];
 
 // ==== SHARED I18N TABLE: REPLACED BY build-admin.js - BEGIN ====

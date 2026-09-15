@@ -5643,3 +5643,113 @@ that buys speed by shortening the give-up budget, which is the tempting wrong fi
 6. Decide which of PesaJet's `netAmount` / `totalCost` the 15% cash-out fee reconciles
    against once real figures exist. Chipz currently sends `wit.net` as the amount, so the
    member receives the net and PesaJet's fee is the platform's cost.
+
+## Round 170 — "The balance of JetPay", when PesaJet publish no balance
+
+> "l also want to see the balance of jetpay just like we were doing on marz"
+
+**PesaJet have no balance endpoint, and one was not invented.** Both official SDKs —
+`@pesajet/sdk` on npm and `pesajet` on PyPI, the latter checked with `pip download`
+specifically for this — expose exactly three calls: create a payment, read a payment,
+preview a fee. No float, wallet or balance call in either, and none in their REST
+examples. MarzPay's card exists because MarzPay's SDK really does call `GET /balance`;
+guessing a path against a money provider would be API surface made up out of nothing,
+and the first time it 404'd in production it would read as "the gateway is down".
+
+So the card answers the question a balance is actually asked for — *how much has gone in
+and out through this gateway* — from **Chipz's own records**, which are exact for what we
+sent and received. `GET /admin/pesajet/summary` scans `pendingDeposits` where
+`provider == 'pesajet'` and `withdrawals` where `pesajetRef > ''`, and returns per
+country: `collected`, `paidOut`, `net`, `pendingIn`, `pendingOut` with their counts.
+
+**What it deliberately does NOT claim.** It cannot see PesaJet's fees, their settlements
+to a bank, or anything moved outside Chipz. The panel says that in its own copy and the
+**reply carries the same caveat in a `note` field**, so an operator reading the raw JSON
+is not misled either. The word "balance" appears on the card exactly once, in the
+sentence explaining why this is not one. The moment PesaJet give us a balance path this
+becomes a real reading and the card keeps its place — that is open question 4 in
+`docs/pesajet-api.md`.
+
+### The rules it follows, each one a way the figure could lie
+- **`depositFullyCredited(row)`, not `status === 'success'`.** Claim-before-credit can
+  leave a row `matched` with the wallet write unfinished; counting that as collected
+  overstates money received. It is the same test the rest of the file uses.
+- **A payout counts `net`** — what the member actually received — and only once
+  `processed`. A `processing` or `sending` row is its own figure, because the one thing
+  this screen must never say wrongly is that a payout has landed.
+- **Per country, never summed across currencies.** Round 159's lesson: adding UGX to KES
+  produces a number that is wrong in both.
+- **`truncated` is judged on the RAW reads, before the country filter.** A page cut short
+  is still cut short whichever country is on screen. The ceiling is
+  `PESAJET_SUMMARY_SCAN = 200000` — a high ceiling rather than none, for the reason
+  `/admin/stats` records: this pulls whole collections into Node memory on a shared Atlas
+  tier and the dashboard re-polls every 30 seconds.
+- **The card ships `hidden`** and is revealed only when PesaJet is actually selected as a
+  gateway or has history. An operator on MarzPay alone never meets a card of zeroes. A
+  *failed* read still shows it when the gateway is in use, because silence would read as
+  "nothing has gone through" rather than "we could not read it".
+
+### Translated, like everything else in the panel
+`admin-rows-7.py` carries 11 rows and 2 patterns. Two decisions worth keeping:
+- **The description is two `<p>` elements, not one with a `<b>` in it.** The translator
+  matches a WHOLE text node, so inline markup would have split it into fragments no row
+  can ever apply to — and one 200-character sentence would be over the engine's own
+  160-character cap. Split that way, both halves translate.
+- **The pending lines are patterns**, so the count and the money are copied across
+  untouched. A figure must never be rewritten by a translation.
+
+The sweep confirms the card end to end: **0 findings in all five languages** (358 strings
+accounted for per language, up from 348).
+
+### The fixture that could not have found this, and the one that did
+`find_admin_fixtures.py` had no `/admin/pesajet/summary` entry, so the card would have
+rendered nothing and the sweep would have reported the whole thing clean **having never
+seen it** — the same false green the Deposits and Withdrawals tabs produced last round.
+The fixture now switches the gateway on, gives it history, and sets `truncated` and an
+unset API key so both notes render too. Fifth instance of *a fixture that cannot reach a
+state cannot test it*.
+
+Two branches one fixture cannot reach alongside the rest (an empty summary, a failed
+read) are covered from the other direction instead: `test-pesajet.js` requires every
+English key in `admin-rows-7.py` to occur **verbatim in the panel**. A row whose key has
+drifted from the string it is meant to match is silently no translation at all, and
+nothing at runtime says so.
+
+**That check was vacuous on its first run, and the reason is worth remembering:**
+`build-admin-rows.py` writes every English key into `ADMIN_LANG_ROWS` **in the same
+file**, so "the key appears in `admin-src`" was satisfied by the row rather than by the
+card, and a key matching nothing on screen still passed. The table is cut out of the text
+before looking now, and an assertion pins that the cut really happened.
+
+### Tests
+`test-pesajet.js` **runs the real route handler** against a stub database — a text match
+cannot tell "collected" from "created", and getting that wrong overstates money received.
+The fixture carries a credited deposit, a credited Kenyan one, one in flight, a failed
+one, a `matched` one whose credit never finished, a processed payout, one still sending
+and a rejected one, so every bucket is reached and each figure traces to exactly one row.
+`PESAJET_SUMMARY_SCAN` is a named module constant precisely so the test can shrink it to
+2 and actually reach the truncated case, then check it stays true when the view is
+narrowed to a country holding fewer rows than the cap.
+
+`verify-pesajet-discriminates.py` is now **63 mutations, all caught** (the deliberate
+no-op control correctly reported MISSED). The 13 new ones: a made-up `/balance` call, an
+uncredited deposit counted as collected, an in-flight recharge counted as collected, a
+payout still sending counted as paid, the gross counted instead of the net, every country
+folded into one bucket, the country switch ignored, net the wrong way round, a cut-short
+page reported as complete, `selected` pinned true, the reply's caveat removed, the card
+presenting itself as PesaJet's own float, the card shipped visible, and a label drifting
+from the row that translates it.
+
+**One anchor aborted the run on its first attempt**: `const want = adminRegionFilter(req);`
+occurs **eleven** times in `server.js`. Anchored with the line after it. *Check the anchor
+count, not just the result* — fourth time in this project.
+
+**And one assertion had to be re-aimed for the same old reason.** "The card ships hidden"
+first matched `/hidden/` in the 200 characters before the div — where the comment
+explaining that the card is hidden lives — so deleting the class would have passed. It
+matches the exact `<div class="panel-card hidden" id="pesajetCard">` now. Sixth instance
+of *a check defeated by the text of a comment*.
+
+### Owner still has to
+Nothing new. This card needs no configuration — it appears on the Dashboard as soon as
+PesaJet is picked in Settings, or as soon as anything has gone through it.
