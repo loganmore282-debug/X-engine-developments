@@ -700,7 +700,7 @@ const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/reg
 // order simply expires unmatched with no recovery. Same "money already
 // moved externally, must never be blocked" reasoning as the 4 payment
 // webhooks, just missed when this route was originally added.
-const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/deposit/lipapay/callback', '/withdraw/lipapay/callback', '/deposit/manual/sms-forwarder']);
+const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/deposit/lipapay/callback', '/withdraw/lipapay/callback', '/deposit/pesajet/callback', '/withdraw/pesajet/callback', '/deposit/manual/sms-forwarder']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
 // spelling it out, so renaming the app is one field and not a code change.
@@ -1094,7 +1094,7 @@ async function getSettings(regionKey) {
 // the historical default -- rather than silently landing on 'manual',
 // which would divert real money to admin-managed numbers nobody expects.
 function normalizeProviderValue(v) {
-  if (v === 'lipapay' || v === 'manual') return v;
+  if (v === 'lipapay' || v === 'pesajet' || v === 'manual') return v;
   return 'marzpay';
 }
 // The single place that decides which real payment path a DEPOSIT uses.
@@ -1112,7 +1112,8 @@ function depositProvider(sett) {
 // through here as an "automatic" gateway -- it falls back to MarzPay, the
 // historical default, same as every other unrecognized value.
 function depositAutomaticProvider(sett) {
-  return depositProvider(sett) === 'lipapay' ? 'lipapay' : 'marzpay';
+  const p = depositProvider(sett);
+  return (p === 'lipapay' || p === 'pesajet') ? p : 'marzpay';
 }
 // The single place that decides which real payment path a WITHDRAWAL
 // (payout) uses. 'follow' defers to depositProvider() -- everything else
@@ -2652,6 +2653,213 @@ function lipaChannel(network) {
   if (network === 'MTN Mobile Money') return 1;
   if (network === 'Airtel Money') return 2;
   return 0;
+}
+
+// ── PESAJET (mobile money collect/disburse -- a 3rd automatic gateway for
+// Uganda, alongside MarzPay and LipaPay) ──
+// Owner: "l would like also to introduce in a new gateway for Uganda
+// https://pay.pesajet.com/docs".
+//
+// THE CONTRACT IS RECORDED IN docs/pesajet-api.md. It was taken from
+// PesaJet's own published SDK (@pesajet/sdk@1.0.2 on npm) because
+// pay.pesajet.com is refused by this environment's egress proxy -- that is
+// the same contract the SDK speaks, so endpoints, headers, field names and
+// status values are authoritative. Anything the SDK does not exercise is
+// listed there as an open question instead of being guessed at here.
+//
+// Three shape differences from the other two gateways, each of which changes
+// how this is wired:
+//   * ONE endpoint for both directions -- POST /payments with
+//     type:'COLLECTION' or type:'DISBURSEMENT'. There is no separate
+//     send-money path to mirror.
+//   * NO per-request callback URL. MarzPay and LipaPay both take one in the
+//     body; PesaJet's webhook URL is set once in their dashboard, so
+//     PUBLIC_URL plays no part below and the OWNER HAS TO SET IT THERE or
+//     resolution falls back entirely to the member's own status poll and the
+//     reconciler. Both of those already work, so a missing webhook is slow
+//     rather than broken -- which is why this is not treated as fatal.
+//   * THREE terminal statuses, not two: COMPLETED, FAILED and EXPIRED.
+//     EXPIRED means the member never approved the prompt, the commonest real
+//     outcome on mobile money. It resolves as a failure -- FAILED_STATUSES
+//     already contains 'expired' -- but it earns its own wording, because
+//     "you did not approve it in time" and "the payment failed" send a member
+//     to two different places.
+const PESAJET_BASE = (process.env.PESAJET_BASE_URL || 'https://payments.pesajet.com/api/v1').replace(/\/+$/, '');
+const PESAJET_KEY = (process.env.PESAJET_API_KEY || '').trim();
+const PESAJET_WEBHOOK_SECRET = process.env.PESAJET_WEBHOOK_SECRET || '';
+const PESAJET_TIMEOUT = 30000;          // the SDK's own default
+function pesajetConfigured() { return !!PESAJET_KEY; }
+// E.164 with a leading '+', which is what PesaJet wants and what cleanPhone()
+// already produces. Kept anyway, and shaped exactly like the SDK's own
+// formatPhoneNumber, so a legacy document holding a bare local number cannot
+// quietly send a malformed msisdn to a live gateway.
+function pesajetPhone(raw) {
+  let s = String(raw || '').replace(/[\s-]/g, '');
+  if (!s) return '';
+  if (s.startsWith('0')) return '+256' + s.slice(1);
+  if (s.startsWith('256')) return '+' + s;
+  if (!s.startsWith('+')) return '+' + s;
+  return s;
+}
+// PesaJet's `provider` is OPTIONAL, and that is load-bearing here: its own
+// SDK says 073 spans both networks and returns null rather than guessing, so
+// sending a wrong operator is worse than sending none. Chipz stores the
+// network as NETWORK_NAMES ('MTN Mobile Money' / 'Airtel Money') when the
+// member picked one; when it did not, this returns null and the field is
+// omitted from the payload so PesaJet resolves it itself.
+//
+// NOTE the prefix lists differ: PesaJet's SDK maps 77/78/76/79/39 -> mtn and
+// 70/75/74 -> airtel, while Chipz's own UGANDA_MOBILE_PREFIXES does not carry
+// 39. Deliberately NOT reconciled by widening Chipz's list -- that list
+// governs which numbers this platform accepts at all, and quietly admitting a
+// new prefix because a payment provider happens to recognise it is a
+// different decision from this one. The stored network wins where there is
+// one; only the fallback consults prefixes.
+function pesajetProviderFor(network, phone) {
+  if (network === 'MTN Mobile Money') return 'mtn';
+  if (network === 'Airtel Money') return 'airtel';
+  const local = String(phone || '').replace(/^\+?256/, '').replace(/^0/, '');
+  if (/^(77|78|76|79|39)\d{7}$/.test(local)) return 'mtn';
+  if (/^(70|75|74)\d{7}$/.test(local)) return 'airtel';
+  return null;
+}
+// Every call in one place. Returns a plain object rather than throwing, the
+// same shape _marzParse() settles on, so the callers below read the same way
+// as the MarzPay ones: { ok, data, httpStatus, providerDown }.
+//
+// `providerDown` is the distinction that matters on a money path: "PesaJet
+// said no" and "we could not reach PesaJet" must never be collapsed, because
+// the first is safe to report as a failure and the second is ambiguous and
+// must leave the row alone for the reconciler.
+async function _pesajetRequest(path, { method = 'GET', body, idempotencyKey } = {}) {
+  const headers = { 'X-API-Key': PESAJET_KEY };
+  if (body) headers['Content-Type'] = 'application/json';
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  let resp;
+  try {
+    resp = await fetch(`${PESAJET_BASE}${path}`, {
+      method, headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(PESAJET_TIMEOUT),
+    });
+  } catch (e) {
+    return { ok: false, providerDown: true, httpStatus: 0, data: { message: e.message } };
+  }
+  const text = await resp.text().catch(() => '');
+  let data;
+  try { data = text ? JSON.parse(text) : {}; }
+  catch (_) { data = { message: text }; }
+  // A 5xx or a 408/429 is the gateway struggling, not a verdict on this
+  // payment -- same treatment as a thrown network error.
+  const down = resp.status >= 500 || resp.status === 408 || resp.status === 429;
+  return { ok: resp.ok, providerDown: !resp.ok && down, httpStatus: resp.status, data };
+}
+async function pesajetCreate({ type, amount, phone, network, reference, description, idempotencyKey }) {
+  const payload = {
+    type: type === 'DISBURSEMENT' ? 'DISBURSEMENT' : 'COLLECTION',
+    amount: Number(amount),
+    currency: 'UGX',
+    phoneNumber: pesajetPhone(phone),
+    reference: String(reference || ''),
+    description: description || 'Mobile Money',
+  };
+  const provider = pesajetProviderFor(network, phone);
+  if (provider) payload.provider = provider;
+  return _pesajetRequest('/payments', { method: 'POST', body: payload, idempotencyKey });
+}
+async function pesajetCollect(opts)  { return pesajetCreate({ ...opts, type: 'COLLECTION' }); }
+async function pesajetDisburse(opts) { return pesajetCreate({ ...opts, type: 'DISBURSEMENT' }); }
+// The independent re-read every credit decision here is made from. Two
+// attempts with a short backoff, the same shape _marzFetchTxStatus() uses,
+// because a single transient failure must not read as "not paid".
+async function pesajetGetTx(transactionId) {
+  let last = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const r = await _pesajetRequest(`/payments/${encodeURIComponent(transactionId)}`);
+    if (r.ok) {
+      const t = r.data?.data || r.data || {};
+      return {
+        status: String(t.status || '').toLowerCase(),
+        reference: t.reference || null,
+        transactionId: t.transactionId || transactionId,
+        failureReason: t.failureReason || null,
+        providerDown: false,
+      };
+    }
+    // A 404 is an answer, not an outage: this id is unknown to PesaJet.
+    if (!r.providerDown) {
+      console.error(`pesajetGetTx(${transactionId}): HTTP ${r.httpStatus}`, JSON.stringify(r.data).slice(0, 300));
+      return { status: '', reference: null, transactionId, failureReason: null, providerDown: false, notFound: r.httpStatus === 404 };
+    }
+    last = r;
+    console.error(`pesajetGetTx(${transactionId}) attempt ${attempt}: gateway unavailable (HTTP ${r.httpStatus})`);
+    if (attempt < 2) await new Promise(r2 => setTimeout(r2, 350));
+  }
+  return { status: '', reference: null, transactionId, failureReason: null, providerDown: true, httpStatus: last && last.httpStatus };
+}
+// PesaJet's status -> the three words the rest of this file already speaks,
+// matching lipaStatusLabel()'s vocabulary exactly so the deposit and
+// withdrawal branches below read identically whichever gateway is in use.
+// PENDING and PROCESSING are both still in flight; EXPIRED is terminal and
+// counts as a failure.
+function pesajetStatusLabel(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'completed') return 'success';
+  if (s === 'failed' || s === 'expired') return 'failed';
+  if (s === 'pending' || s === 'processing') return 'processing';
+  return '';
+}
+// Only EXPIRED gets its own sentence. A member whose prompt timed out has not
+// had a payment go wrong -- they have not answered it yet -- and telling them
+// it failed sends them looking for a fault that is not there.
+function pesajetFailureMsg(status) {
+  return String(status || '').toLowerCase() === 'expired'
+    ? 'The payment request timed out before it was approved on the phone. Nothing was taken. Start a new recharge to try again.'
+    : DEPOSIT_FAILED_MSG;
+}
+function pesajetUserMsg(r, fallback) {
+  if (r && r.providerDown) return PROVIDER_BUSY_MSG;
+  const raw = r && r.data && (r.data.message || r.data.error);
+  if (/internal|server error|unavailable|timeout|timed out|try again|temporarily|gateway/i.test(String(raw || '')))
+    return PROVIDER_BUSY_MSG;
+  return raw || fallback || PROVIDER_BUSY_MSG;
+}
+// HMAC-SHA256, hex, over the payload with its own `signature` field removed,
+// exactly as PesaJet's SDK computes it. The signature may arrive in the
+// x-webhook-signature header or inside the body; both are accepted, the
+// header first.
+//
+// TWO THINGS TO KNOW, and they are why this is a filter and never the
+// authority:
+//   * the digest is over a RE-SERIALISED object, not over the raw request
+//     body, so it depends on JSON key order surviving parse -> stringify.
+//     Node preserves insertion order for string keys so it normally matches,
+//     but a proxy that reorders or re-encodes would break it through no
+//     fault of ours.
+//   * with no secret configured there is nothing to verify against.
+// In both cases the callback still does its job, because the callback never
+// credits anything on the webhook's word -- it re-reads
+// GET /payments/{transactionId} and acts on THAT. A failed or impossible
+// verification downgrades the webhook to a hint; it does not invent one.
+function pesajetVerifyWebhook(body, headerSig) {
+  if (!PESAJET_WEBHOOK_SECRET) return { verified: false, reason: 'no-secret' };
+  const obj = (body && typeof body === 'object') ? body : {};
+  const sig = String(headerSig || obj.signature || '');
+  if (!sig) return { verified: false, reason: 'no-signature' };
+  const { signature: _omit, ...clean } = obj;
+  const expected = crypto.createHmac('sha256', PESAJET_WEBHOOK_SECRET)
+    .update(JSON.stringify(clean)).digest('hex');
+  const a = Buffer.from(expected, 'utf8'), b = Buffer.from(sig, 'utf8');
+  // A signature that was present and did not verify is a 'mismatch' WHATEVER
+  // the reason -- a wrong length and a wrong digest are the same event to
+  // whoever has to act on it. The first version of this reported a wrong
+  // digest as 'checked', which the routes treat as "could not verify, carry
+  // on as a hint" rather than as the forgery it is. Caught by
+  // test-pesajet.js: no money could have moved wrongly (the re-read still
+  // governs every credit), but a forged call would have been answered 200
+  // instead of 401 and nothing would have flagged it.
+  const verified = a.length === b.length && crypto.timingSafeEqual(a, b);
+  return verified ? { verified: true, reason: 'ok' } : { verified: false, reason: 'mismatch' };
 }
 
 // ── DAILY CASHBACK (settle-on-read + a 1s background sweep) ──
@@ -4590,6 +4798,53 @@ app.post('/deposit/marzpay', async (req, res) => {
     // own round-trip. The status screen's own polling picks up the resolution.
     res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
 
+    if (provider === 'pesajet') {
+      // PesaJet branch -- same "claim as pending, let the webhook / the
+      // member's own poll / the reconciler resolve it" shape as the two
+      // below. The IDEMPOTENCY ANCHOR is the deposit's own doc id: a genuine
+      // retry of this same deposit sends the identical Idempotency-Key, so
+      // PesaJet's own de-duplication is what prevents a second prompt, not a
+      // loop in here. `reference` is our human-readable ref, which is what
+      // comes back on the webhook and lets a row be found without trusting
+      // any id the caller supplied.
+      let pj;
+      try {
+        pj = await pesajetCollect({
+          amount: amt, phone, network, reference: ref, description: 'Mobile Money',
+          idempotencyKey: depRef.id,
+        });
+      } catch (netErr) {
+        // Unreachable in practice (_pesajetRequest never throws), kept so a
+        // future change to it cannot turn an exception into an unhandled
+        // rejection on a money path.
+        console.error('PesaJet collect network error (dep ' + depRef.id + '):', netErr.message);
+        return;
+      }
+      if (!pj.ok) {
+        console.error('PesaJet collect rejected:', pj.httpStatus, JSON.stringify(pj.data).slice(0, 300));
+        // A gateway that is merely BUSY has not refused this payment. Failing
+        // the deposit here would tell a member their recharge failed when
+        // PesaJet may never have seen it -- leave it pending for the
+        // reconciler, exactly as the network-error path above does.
+        if (!pj.providerDown) await markDepositFailed(depRef, userId, pesajetUserMsg(pj, 'Could not start the payment'));
+        return;
+      }
+      const tx = pj.data?.data || pj.data || {};
+      const pesajetTxId = tx.transactionId || null;
+      // Same claim-race protection as the other two branches: a webhook that
+      // raced ahead and already credited this exact deposit must never be
+      // reverted to 'pending' by this later write.
+      await withLock('dep:' + depRef.id, async () => {
+        const fresh = await depRef.get();
+        if (fresh.exists && fresh.data().status === 'initiating') {
+          await depRef.update({ status: 'pending', pesajetTxId });
+        } else {
+          await depRef.update({ pesajetTxId }).catch(() => {});
+        }
+      });
+      return;
+    }
+
     if (provider === 'lipapay') {
       // LipaPay branch -- same "claim as pending, wait for the webhook/
       // reconciler to resolve it" shape as MarzPay just below, via
@@ -4859,6 +5114,25 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     // member's poll should too, so a slow/lost webhook self-heals the
     // moment the member reopens the status screen, same as it already does
     // for MarzPay). Mirrors the marzTxUuid branch below exactly.
+    // PesaJet: the same self-healing re-check as the two branches below, so a
+    // slow or lost webhook resolves the moment the member looks at the status
+    // screen. Its webhook URL is dashboard-configured rather than sent per
+    // request (see the module note), so this poll is doing more of the work
+    // here than it does for the other two gateways -- not less.
+    if (dep.provider === 'pesajet') {
+      if (!dep.pesajetTxId) return res.json({ status: 'success', state: 'pending' });
+      const t = await pesajetGetTx(dep.pesajetTxId);
+      if (t.providerDown) return res.json({ status: 'success', state: 'pending' });
+      const realStatus = pesajetStatusLabel(t.status);
+      if (realStatus === 'success') { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
+      if (realStatus === 'failed') {
+        const msg = pesajetFailureMsg(t.status);
+        const reallyFailed = await markDepositFailed(depSnap.ref, userId, msg);
+        if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
+        return res.json({ status: 'success', state: 'failed', message: msg });
+      }
+      return res.json({ status: 'success', state: 'pending' });
+    }
     if (dep.provider === 'lipapay') {
       if (!dep.lipaTransactionId) return res.json({ status: 'success', state: 'pending' });
       const q = await lipaOrderQuery(depSnap.id);
@@ -4971,6 +5245,58 @@ app.post('/deposit/lipapay/callback', async (req, res) => {
   } catch (e) {
     console.error('LipaPay deposit callback error:', e.message);
     res.status(200).send('SUCCESS'); // still ack -- the reconciler covers whatever this failed to do
+  }
+});
+
+// PesaJet deposit webhook. Same discipline as the other two: the payload is a
+// HINT, never the authority. The signature is verified and a bad one is
+// refused outright; a payload that cannot be verified at all (no secret
+// configured, or the re-serialisation mismatch the module note explains) is
+// downgraded to a hint rather than trusted -- and either way the credit
+// decision comes from re-reading GET /payments/{transactionId}.
+//
+// Looked up by OUR OWN `reference`, not by any id in the body: the id is the
+// caller's to claim, the reference is ours to have issued.
+app.post('/deposit/pesajet/callback', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const sig = req.get('x-webhook-signature');
+    const check = pesajetVerifyWebhook(body, sig);
+    // A signature that is present and WRONG is the one case worth refusing
+    // loudly -- it is either a forgery or a misconfigured secret, and both
+    // want an operator's attention.
+    if (!check.verified && check.reason === 'mismatch') {
+      console.error('PesaJet deposit webhook: signature mismatch, refused.');
+      return res.status(401).json({ status: 'error', message: 'Invalid signature' });
+    }
+    // A delivery test. Answer it and touch nothing.
+    if (body.event === 'ping') return res.status(200).json({ received: true });
+    const reference = String(body.reference || '');
+    const txId = String(body.transactionId || '');
+    if (!reference && !txId) return res.status(200).json({ received: true });
+    let doc = null;
+    if (reference) {
+      const q = await db.collection('pendingDeposits').where('ref', '==', reference).limit(1).get();
+      if (!q.empty) doc = q.docs[0];
+    }
+    if (!doc) return res.status(200).json({ received: true });
+    const dep = doc.data();
+    if (dep.provider !== 'pesajet') return res.status(200).json({ received: true });
+    if (dep.status !== 'pending' && dep.status !== 'initiating') return res.status(200).json({ received: true });
+    // Only ever re-read the id WE recorded when the payment was created. A
+    // transactionId taken from the body would let a caller point this at
+    // somebody else's completed transaction.
+    if (!dep.pesajetTxId) return res.status(200).json({ received: true });
+    const t = await pesajetGetTx(dep.pesajetTxId);
+    if (t.providerDown) return res.status(200).json({ received: true }); // unverifiable -- the reconciler and the member's poll both retry
+    const realStatus = pesajetStatusLabel(t.status);
+    if (realStatus === 'success') await creditDeposit(doc);
+    else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(t.status));
+    // 'processing' -- genuinely not finished yet, nothing to do
+    res.status(200).json({ received: true });
+  } catch (e) {
+    console.error('PesaJet deposit callback error:', e.message);
+    res.status(200).json({ received: true }); // ack regardless; the reconciler covers what this missed
   }
 });
 
@@ -6614,6 +6940,57 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       };
     }
 
+    if (withdrawProvider(settNow) === 'pesajet') {
+      // PesaJet payout. Mirrors the LipaPay branch below rule for rule, and
+      // the three that matter are:
+      //   * the outbound identifier is written BEFORE the provider is ever
+      //     called, so a later write failure can never leave a real payout
+      //     unrecorded;
+      //   * a network exception is AMBIGUOUS -- never revert to 'pending',
+      //     which would invite a retry that double-pays;
+      //   * acceptance is not completion. PesaJet answers PENDING and
+      //     resolves asynchronously, so this lands on 'processing'.
+      // The withdrawal's own doc id is the Idempotency-Key, so a genuine
+      // retry of the same withdrawal is de-duplicated by PesaJet rather than
+      // by anything in here.
+      const sendingMarker = withdrawalId;
+      await witRef.update({ status: 'sending', sendingReference: sendingMarker, pesajetRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+      const pj = await pesajetDisburse({
+        amount: wit.net, phone: wit.phone, network: wit.network,
+        reference: sendingMarker, description: 'Withdrawal',
+        idempotencyKey: withdrawalId,
+      });
+      if (pj.providerDown) {
+        console.error('PesaJet disbursement unreachable (ambiguous, NOT reverting to pending):', pj.httpStatus, JSON.stringify(pj.data).slice(0, 200));
+        return { code: 500, body: { status: 'error', message: 'Lost contact with PesaJet mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
+      }
+      if (!pj.ok) {
+        // A clean refusal -- PesaJet answered and said no, so nothing was
+        // sent and the row is safe to hand back to Pending.
+        await witRef.update({ status: 'pending', sendingReference: null, pesajetRef: null, pesajetTxId: null, sendingBy: null, sendingAt: null }).catch(() => {});
+        return { code: 400, body: { status: 'error', message: pesajetUserMsg(pj, 'PesaJet could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
+      }
+      const tx = pj.data?.data || pj.data || {};
+      const pesajetTxId = tx.transactionId || null;
+      await withLock('bal:' + wit.userId, async () => {
+        await witRef.update({ status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), pesajetRef: sendingMarker, pesajetTxId });
+        try {
+          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
+        } catch (twErr) {
+          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent via PesaJet — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
+        }
+      });
+      try {
+        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing' });
+      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+      return {
+        code: 200,
+        body: { status: 'success', sandbox: false, message: `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
+        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
+      };
+    }
+
     if (withdrawProvider(settNow) === 'lipapay') {
       // LipaPay branch (Round 102) -- mirrors the MarzPay send-money branch
       // below function-for-function: write the outbound identifier BEFORE
@@ -6780,6 +7157,31 @@ app.post('/admin/withdraw/verify', async (req, res) => {
         status: 'success', ourStatus: w.status, marzStatus: 'manual',
         message: `This payout was sent by hand, not through MarzPay, so there is nothing to verify here${w.processedBy ? ' (recorded by ' + w.processedBy + ')' : ''}. Check the mobile-money record on the admin phone that sent it. Do NOT reject it unless you have confirmed there that no money went out.`,
       });
+    }
+    // A PesaJet-routed payout likewise has neither marzReference nor
+    // marzTxUuid, so without this branch Verify would report "no gateway
+    // reference, nothing was sent" about a payout that may well have gone
+    // out -- the single most dangerous wrong answer this screen can give,
+    // because it invites a reject that refunds the member on top of real
+    // money. Mirrors the LipaPay branch just below.
+    if (w.pesajetRef) {
+      if (!w.pesajetTxId) {
+        return res.json({
+          status: 'success', ourStatus: w.status, marzStatus: 'unverifiable',
+          message: `A send attempt WAS made via PesaJet (reference: ${w.pesajetRef}) but we never recorded a PesaJet transaction id to check against -- this does NOT mean nothing was sent. Check PesaJet's own dashboard for that reference before rejecting; rejecting a payout that already went out will refund the member on top of it.`,
+        });
+      }
+      const t = await pesajetGetTx(w.pesajetTxId);
+      if (t.providerDown) {
+        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via PesaJet (transaction ${w.pesajetTxId}) but PesaJet did not respond just now. Try Verify again in a moment -- this does NOT mean nothing was sent.` });
+      }
+      const realStatus = pesajetStatusLabel(t.status);
+      let pjMessage;
+      if (realStatus === 'success') pjMessage = `PesaJet confirms this payout was SENT (status: ${t.status}).`;
+      else if (realStatus === 'failed') pjMessage = `PesaJet says this payout ${t.status === 'expired' ? 'EXPIRED before it was collected' : 'FAILED'} (status: ${t.status})${t.failureReason ? ' — ' + t.failureReason : ''}.`;
+      else if (realStatus === 'processing') pjMessage = `PesaJet still has this payout in flight (status: ${t.status}). Not finished, not failed.`;
+      else pjMessage = `PesaJet reports status: ${t.status || 'unknown'}.`;
+      return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.status || 'unknown', message: pjMessage });
     }
     // Round 102: a LipaPay-routed withdrawal has neither marzReference nor
     // marzTxUuid at all -- without this branch it would fall straight into
@@ -6997,6 +7399,51 @@ app.post('/withdraw/callback', async (req, res) => {
 // are the SAME provider-agnostic functions the MarzPay callback already
 // uses, so there is zero new crediting/refunding logic here, only new
 // matching/verification logic around unchanged money functions.
+// PesaJet payout webhook. Same rules as the LipaPay one below, including the
+// one that matters most: a 'sending' row is genuinely ambiguous (a network
+// error mid-send), so a SUCCESS may be recognised from it -- a genuine
+// success is always safe -- but a FAILURE may never be auto-declined and
+// refunded from this unauthenticated automated path. Only a human, via
+// /admin/withdraw/reject after checking PesaJet's own dashboard, resolves a
+// 'sending' row as failed. Refunding a payout that actually went out pays
+// the member twice.
+app.post('/withdraw/pesajet/callback', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const check = pesajetVerifyWebhook(body, req.get('x-webhook-signature'));
+    if (!check.verified && check.reason === 'mismatch') {
+      console.error('PesaJet withdraw webhook: signature mismatch, refused.');
+      return res.status(401).json({ status: 'error', message: 'Invalid signature' });
+    }
+    if (body.event === 'ping') return res.status(200).json({ received: true });
+    const reference = String(body.reference || '');
+    if (!reference) return res.status(200).json({ received: true });
+    // The reference IS the withdrawal's own doc id (see the payout branch), so
+    // this is a direct read rather than a query -- and it cannot be pointed
+    // at a row we did not issue.
+    const doc = await db.collection('withdrawals').doc(reference).get();
+    if (!doc.exists) return res.status(200).json({ received: true });
+    const wit = doc.data();
+    if (wit.pesajetRef !== reference) return res.status(200).json({ received: true }); // not a PesaJet-routed payout
+    if (wit.status !== 'processing' && wit.status !== 'sending') return res.status(200).json({ received: true });
+    if (!wit.pesajetTxId) return res.status(200).json({ received: true });
+    const t = await pesajetGetTx(wit.pesajetTxId);
+    if (t.providerDown) return res.status(200).json({ received: true });
+    const realStatus = pesajetStatusLabel(t.status);
+    if (realStatus === 'success') {
+      if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+    } else if (realStatus === 'failed') {
+      if (wit.status === 'sending') return res.status(200).json({ received: true }); // ambiguous -- admin-only resolution, see the comment above
+      const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
+      if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+    }
+    // 'processing' -- genuinely not done yet, nothing to do
+    res.status(200).json({ received: true });
+  } catch (e) {
+    console.error('PesaJet withdraw callback error:', e.message);
+    res.status(200).json({ received: true });
+  }
+});
 app.post('/withdraw/lipapay/callback', async (req, res) => {
   try {
     const outTradeNo = String(req.body?.OutTradeNo || '');
@@ -7796,10 +8243,10 @@ app.post('/admin/settings/update', async (req, res) => {
     // legacy 'manual' value is still read correctly (see getSettings()'s
     // own migration + depositAutomaticProvider()'s own fallback) -- it
     // just can never be WRITTEN again going forward.
-    if ('depositMethod' in updates && !['marzpay', 'lipapay'].includes(updates.depositMethod))
+    if ('depositMethod' in updates && !['marzpay', 'lipapay', 'pesajet'].includes(updates.depositMethod))
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'lipapay'` });
-    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'lipapay', 'manual'].includes(updates.withdrawMethod))
-      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'lipapay' or 'manual'` });
+    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'lipapay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
+      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'lipapay', 'pesajet' or 'manual'` });
     if (isRegionOverlay) {
       const docId = settingsDocId(targetRegion.key);
       const ref = db.collection('settings').doc(docId);
@@ -10614,6 +11061,27 @@ async function reconcilePendingDeposits() {
       if (realStatus === 'success') { await creditDeposit(doc); settled++; }
       else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
+    // PesaJet's own pending/initiating deposits. This sweep matters MORE for
+    // this gateway than for the other two: PesaJet's webhook URL is
+    // configured in their dashboard rather than sent per request, so until
+    // the owner sets it there this loop and the member's own status poll are
+    // the ONLY things that resolve a deposit. Same posture regardless --
+    // never trust anything but our own live re-check.
+    //
+    // Excluded by `pesajetTxId > ''` for the same starvation reason spelled
+    // out for the two loops above: a row whose create call never returned a
+    // transaction id can never be checked, and without the exclusion 50 of
+    // those would reselect themselves every tick forever and starve genuinely
+    // pending newer ones.
+    const pjSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').where('pesajetTxId', '>', '').orderBy('createdAt', 'asc').limit(50).get();
+    for (const doc of pjSnap.docs) {
+      const dep = doc.data();
+      const t = await pesajetGetTx(dep.pesajetTxId);
+      if (t.providerDown) continue;
+      const realStatus = pesajetStatusLabel(t.status);
+      if (realStatus === 'success') { await creditDeposit(doc); settled++; }
+      else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(t.status));
+    }
     // Deposits stuck 'matched' with needsManualCredit:true (the wallet write
     // itself failed after status already claimed the credit) never show up
     // in the 'pending' scan above -- retry them here every tick regardless
@@ -10661,6 +11129,30 @@ async function reconcilePendingWithdrawals() {
       const q = await lipaOrderQuery(wit.lipaOutTradeNo);
       if (q.providerDown || !q.Data) continue;
       const realStatus = lipaStatusLabel(q.Data.PayStatus);
+      if (realStatus === 'success') {
+        if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+        settled++;
+      } else if (realStatus === 'failed') {
+        const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
+        if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+        settled++;
+      }
+    }
+    // PesaJet's own outstanding disbursements -- same starvation-avoiding
+    // `.where(field,'>','')` shape and the same independent re-check the
+    // webhook route uses. Deliberately scans 'processing' ONLY, not
+    // 'sending': a 'sending' row is ambiguous (we never learned whether the
+    // send landed) and resolving one as failed from an automated path would
+    // refund a member on top of money that may already have gone out. That
+    // stays a human decision in /admin/withdraw/reject, exactly as it is for
+    // the other two gateways.
+    const pjSnap = await db.collection('withdrawals').where('status', '==', 'processing').where('pesajetTxId', '>', '').orderBy('createdAt', 'asc').limit(50).get();
+    for (const doc of pjSnap.docs) {
+      const wit = doc.data();
+      if (!wit.pesajetTxId) continue;
+      const t = await pesajetGetTx(wit.pesajetTxId);
+      if (t.providerDown) continue;
+      const realStatus = pesajetStatusLabel(t.status);
       if (realStatus === 'success') {
         if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
         settled++;

@@ -5411,3 +5411,140 @@ it has to look at the function that actually calls for it.
 `test-spin-sources.js` also gained a `serverConst()` helper so `SPIN_SLICES` is read out
 of `server.js` rather than restated — the same lesson as the four hand-written `20`s that
 raising `MAX_SPINS_PER_PURCHASE` left behind.
+
+## Round 169 — PesaJet, a third automatic gateway for Uganda
+
+> "l would like also to introduce in a new gateway for Uganda
+> https://pay.pesajet.com/docs" ... "can't you get it as of now?"
+
+### The docs could not be read, and did not need to be
+`pay.pesajet.com` (and `pesajet.com`, and `docs.pesajet.com`) are refused by this
+environment's egress proxy — 403 at the CONNECT, logged, and `google.com` is refused
+too, so it is a narrow allowlist rather than anything about PesaJet. The proxy README is
+explicit that a policy denial is to be reported rather than routed around.
+
+**`registry.npmjs.org` is in the proxy's `noProxy` list, so npm IS reachable.** PesaJet's
+landing page names its own SDK, so `npm pack @pesajet/sdk` (v1.0.2) and its `dist/`
+yielded the whole contract — the same one the SDK speaks, therefore authoritative for
+endpoints, headers, field names and status values. Recorded in **`docs/pesajet-api.md`**,
+with provenance and with **seven things the SDK does not answer written down as questions
+rather than guessed at** (sandbox URL, amount units, min/max, whether payouts draw on a
+pre-funded float, `reference` uniqueness, webhook retry policy, IP allowlist).
+
+**When a vendor's docs are unreachable, their published SDK is usually the better source
+anyway** — it is executable, versioned, and cannot describe an endpoint it does not call.
+
+### What PesaJet is, and the three ways it differs from the other two
+| | |
+|---|---|
+| base | `https://payments.pesajet.com/api/v1` (`PESAJET_BASE_URL` overrides) |
+| auth | `X-API-Key` |
+| create | `POST /payments` — **both directions**, `type: 'COLLECTION' \| 'DISBURSEMENT'` |
+| read | `GET /payments/{transactionId}` |
+| status | `PENDING \| PROCESSING \| COMPLETED \| FAILED \| EXPIRED` |
+| phone | E.164 with a `+`, which `cleanPhone()` already produces |
+| provider | lowercase `mtn` \| `airtel`, and **optional** |
+| webhook | HMAC-SHA256 hex in `x-webhook-signature` |
+
+1. **One endpoint for both directions**, so there is no send-money path to mirror — only
+   a `type`. Sending a payout as a COLLECTION would move money the wrong way and nothing
+   downstream would notice, so it has its own mutation.
+2. **No per-request callback URL.** MarzPay and LipaPay both take one in the body;
+   PesaJet's is configured in their dashboard. `PUBLIC_URL` plays no part here, **the
+   owner has to set it there**, and until he does, resolution rests entirely on the
+   member's status poll and the reconciler — both of which already work, so a missing
+   webhook is slow rather than broken. That is also why this gateway's reconciler loop
+   matters more than the other two's, not less.
+3. **Three terminal statuses, not two.** `EXPIRED` means the member never approved the
+   prompt — the commonest real outcome on mobile money. It resolves as a failure
+   (`FAILED_STATUSES` already contained `'expired'`) but gets **its own sentence**,
+   because "you did not approve it in time" and "the payment failed" send a member to two
+   different places. That sentence is in `LANG_ROWS`, so it translates.
+
+`provider` being optional is load-bearing: PesaJet's own SDK **refuses to guess on 073**
+(it spans both networks) and returns null. So the stored network wins, a prefix fallback
+covers the rest, and when neither resolves the field is **omitted** rather than guessed —
+a wrong operator is worse than none. Note PesaJet's list carries `39` and Chipz's
+`UGANDA_MOBILE_PREFIXES` does not; deliberately **not** reconciled by widening Chipz's
+list, because that list governs which numbers the platform accepts at all and quietly
+admitting a prefix because a payment provider recognises it is a different decision.
+
+### Every money-safety rule this codebase already had, applied
+- **A webhook is a hint, never the authority.** Both callbacks verify the signature,
+  **401 a forgery**, and then re-read `GET /payments/{transactionId}` — and the credit
+  decision comes from that re-read. The id re-read is **the one we stored**, never one
+  from the body; otherwise anyone reaching the URL could point it at somebody else's
+  completed transaction. A `ping` is answered without touching money.
+- **`providerDown` is a distinct outcome from a refusal.** A 5xx, a 408/429 or a dropped
+  connection leaves a deposit **pending** for the reconciler and never fails it, and
+  never reverts a payout from `'sending'` to `'pending'` — that would invite a retry that
+  pays twice. Only a clean 4xx hands a row back.
+- **Acceptance is not completion.** PesaJet answers `PENDING` and resolves
+  asynchronously, so a payout lands on `'processing'`.
+- **The outbound reference is written before the provider is ever called**, so a later
+  write failure cannot leave a real payout unrecorded — the bug `marzReference` already
+  documents once.
+- **A `'sending'` row is ambiguous and stays a human's decision.** A success may be
+  recognised from it; a failure may never be auto-declined and refunded from an
+  automated path, and the payout sweep reads `'processing'` only.
+- **Idempotency** is the row's own doc id, sent as `Idempotency-Key`, so a retry is
+  de-duplicated by PesaJet rather than by a loop here.
+- **Unique indexes** on `pesajetTxId` in both collections, each with
+  `partialFilterExpression: {$type:'string'}` — without it every document *missing* the
+  field collides on one null and manual deposits break outright.
+- `/admin/withdraw/verify` learned the gateway, because the one answer that screen must
+  never give wrongly is "nothing was sent" about a payout that went.
+
+### A real bug the test found in the new code
+`pesajetVerifyWebhook` returned `reason: 'mismatch'` only when the signature **lengths**
+differed; a same-length forgery came back `reason: 'checked'`, which the routes treat as
+"could not verify, carry on as a hint". No money could have moved wrongly — the re-read
+still governs every credit — but a forged call would have been answered **200 instead of
+401** and nothing would have flagged it. A signature that was present and did not verify
+is now a mismatch whatever the reason.
+
+### Tests
+`test-pesajet.js` lifts the module and **runs it against a stub fetch**: the exact
+endpoint, method, auth header and body the SDK documents; whole shillings not minor
+units; DISBURSEMENT vs COLLECTION; `provider` omitted when unresolvable; all five statuses
+including the two that mean "still in flight" and the rule that **an unrecognised status
+resolves to nothing, never to success**; busy-vs-refused in three shapes; the status
+re-read's retry; and six signature cases. Then it checks the wiring **inside each route
+body** rather than file-wide, because the other two gateways carry the same lines and a
+file-wide match passes with the re-read deleted.
+
+`verify-pesajet-discriminates.py` — **35 real mutations plus a control, all caught.**
+
+**Four of its own findings were harness faults, not code faults, and each is a lesson:**
+1. **`fnSource` broke on destructured parameters.** The "first `{` after the name"
+   extractor every other harness here uses closes at the end of `function f({ a, b })`'s
+   signature and returns a truncated function. Half this module's functions take an
+   options object. It steps over the parameter list now.
+2. **A slice ended on a COMMENT banner that `strip()` had already removed**, so
+   `indexOf` returned −1, the slice ran to the end of the file, and the ping assertion
+   passed on the *other* gateway's copy of the same line. End markers must be code.
+3. **`if (false && w.pesajetRef)` satisfied every assertion** about Verify — the field
+   was still mentioned, the call still present in the dead branch. Pinned on the guard's
+   exact live form instead.
+4. **A slice started at the field name, but the status comparison sat earlier on the same
+   line**, so widening the payout sweep to `'sending'` went unnoticed. Slice from the
+   start of the query.
+
+And one in the mutation harness itself: **`node --check` on `admin-src/index.html` always
+fails**, so three admin mutations reported CAUGHT having measured nothing. The parse check
+is scoped to `.js` now.
+
+### Owner still has to
+1. Set **`PESAJET_API_KEY`** and **`PESAJET_WEBHOOK_SECRET`** in Render (never in this
+   repo). `PESAJET_BASE_URL` only if PesaJet give a sandbox host.
+2. **Set the webhook URLs in PesaJet's own dashboard** — there is no per-request callback
+   field: `https://chipz-server.onrender.com/deposit/pesajet/callback` and
+   `.../withdraw/pesajet/callback`.
+3. Pick it in **Admin → Settings → Manual payments**: PAY A's gateway, and/or
+   "Always automatic (PesaJet sends payouts)".
+4. Ask PesaJet the seven open questions in `docs/pesajet-api.md` — in particular whether
+   payouts need a pre-funded float, since **there is no balance endpoint in their SDK**,
+   so the dashboard's "available balance" card has no PesaJet equivalent.
+5. Decide which of PesaJet's `netAmount` / `totalCost` the 15% cash-out fee reconciles
+   against once real figures exist. Chipz currently sends `wit.net` as the amount, so the
+   member receives the net and PesaJet's fee is the platform's cost.

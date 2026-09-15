@@ -221,6 +221,14 @@ async function ensureIndexes() {
       partialFilterExpression: { marzReference: { $type: 'string' } } }],
     ['withdrawals', { lipaOutTradeNo: 1 }, { unique: true, name: 'lipaOutTradeNo_unique',
       partialFilterExpression: { lipaOutTradeNo: { $type: 'string' } } }],
+    // PesaJet's own transaction id, on both sides. The partial filter is not
+    // optional: without it a unique index treats every document MISSING the
+    // field as sharing one null and rejects the second, which would block
+    // manual deposits and MarzPay/LipaPay payouts outright.
+    ['pendingDeposits', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',
+      partialFilterExpression: { pesajetTxId: { $type: 'string' } } }],
+    ['withdrawals', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',
+      partialFilterExpression: { pesajetTxId: { $type: 'string' } } }],
   ];
   // Built in small parallel batches, not strictly one at a time -- was
   // sequential because a shared M0 cluster had very little real
