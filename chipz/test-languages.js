@@ -230,10 +230,16 @@ function buildI18n(startLang) {
     ${constSource(client, 'LANG_STORE_KEY')}
     ${constSource(client, 'LANG_ROWS')}
     ${constSource(client, 'DICT')}
+    // The pattern layer -- t() falls through to it for any sentence with a
+    // figure spliced in ("Fee: 15%"), which a whole-string table can never
+    // match. Lifted, not stubbed: a stub would let a broken matcher pass.
+    ${constSource(client, 'LANG_PATTERNS')}
+    ${constSource(client, 'LANG_PATTERN_RE')}
     ${constSource(client, 'I18N_ATTRS')}
     var _i18nText = new WeakMap();
     var _i18nAttr = new WeakMap();
     ${fnSource(client, 'langMeta')}
+    ${fnSource(client, 'tPattern')}
     ${fnSource(client, 't')}
     ${fnSource(client, 'i18nTextNode')}
     ${fnSource(client, 'i18nElementAttrs')}
@@ -251,8 +257,8 @@ function buildI18n(startLang) {
       t: s => t(s),
       lang: () => LANG,
       allowed: () => LANG_ALLOWED,
-      setLang, translateTree, applyRegionLanguages, resolveLang,
-      dict: DICT, rows: LANG_ROWS, langs: LANGS,
+      setLang, translateTree, applyRegionLanguages, resolveLang, i18nElementAttrs,
+      dict: DICT, rows: LANG_ROWS, langs: LANGS, patterns: LANG_PATTERNS,
     };
   `)(el, treeWalkerFor, startLang);
   return { el, i18n: sandbox };
@@ -279,6 +285,113 @@ ck(new Set(keys).size === keys.length, 'no English string appears twice in the t
 for (const l of i18n.langs.slice(1)) {
   ck(Object.keys(i18n.dict[l.code] || {}).length >= 15,
     `${l.name} has a real dictionary, not an empty column`);
+}
+
+// ── sentences with a figure spliced into them ──
+// A whole-string table CANNOT match "Fee: 15%" -- the figure is put there at
+// render time, so the string differs every time and no row can ever equal it.
+// find-untranslated.py found a dozen of these reading English on screen while
+// every static check said the table was 98% full. These run the real matcher.
+// ── the sweep's own length cap ──
+// i18nTextNode() skips any text node longer than a fixed cap, so that the
+// translator cannot be dragged through a wall of member content. A row longer
+// than the cap is therefore a row that can NEVER apply -- and nothing at
+// runtime would say so; the sentence would simply stay English forever. The
+// cap is read out of the source rather than restated, for the reason four
+// hand-copied 20s taught this project last round.
+console.log('\n— no row is longer than the sweep will look at —');
+{
+  const cap = Number((/key\.length > (\d+)\) return;/.exec(client) || [])[1]);
+  ck(Number.isFinite(cap) && cap > 40, `the length cap was found in the source (${cap})`);
+  const over = i18n.rows.filter(r => r[0].length > cap);
+  ck(over.length === 0,
+    `no table row exceeds it (${over.length} do: ${over.map(r => r[0].slice(0, 40)).join(' | ')})`);
+  const overP = (i18n.patterns || []).filter(r => r[0].length > cap);
+  ck(overP.length === 0, `and no pattern template does either (${overP.length})`);
+}
+
+console.log('\n— a sentence with a figure in it —');
+{
+  const sw = buildI18n('sw').i18n;
+  sw.setRegion({ languages: ['en', 'sw'], defaultLang: 'en' });
+  sw.setLang('sw');
+  for (const [input, want, label] of [
+    ['Fee: 15%', 'Ada: 15%', 'the words translate and the figure is untouched'],
+    ['Fee: 7.5%', 'Ada: 7.5%', 'any figure, not just the one in the fixture'],
+    ['Fee: 15%.', 'Ada: 15%.', 'and the trailing stop is its own template'],
+    ['LV1 = 27%', 'Ngazi 1 = 27%', 'two placeholders, both carried across'],
+    ['New Balance: UGX13,293.23', 'Salio Jipya: UGX13,293.23',
+     'an AMOUNT is copied verbatim -- never reformatted by a translation'],
+    ['ID: 00042', 'Kitambulisho: 00042', 'an account id is copied verbatim'],
+    ['2 Members', 'Wanachama 2', 'a placeholder may MOVE -- Swahili puts it last'],
+    ['0 spins available', 'Mizungusho 0 inapatikana', 'the turntable count'],
+    ['Joined 01/09/2026 10:00', 'Alijiunga 01/09/2026 10:00', 'a date is copied verbatim'],
+  ]) ck(sw.t(input) === want, `${label}: ${JSON.stringify(sw.t(input))}`);
+  // The negative half, and it is the one that matters on a money screen: a
+  // pattern must never fire on a string it does not own end to end.
+  for (const input of ['UGX 15,000', 'Fee', '15%', 'Product-1',
+                       'Membership rules', 'Paid in full: 15% of nothing']) {
+    ck(sw.t(input) === input || !/\{|\}/.test(sw.t(input)),
+      `no half-match on ${JSON.stringify(input)} -> ${JSON.stringify(sw.t(input))}`);
+  }
+  ck(sw.t('Total: 15%') === 'Total: 15%',
+    'a sentence no template owns comes back untouched');
+  // A template in English is a template nobody chose -- same rule as a row.
+  for (const row of sw.patterns) {
+    for (let i = 1; i < 6; i++) {
+      if (!row[i]) continue;
+      ck(row[i] !== row[0], `pattern ${JSON.stringify(row[0])} col ${i} is not a copy of the English`);
+      // Every placeholder the English uses must survive into the translation,
+      // or the figure it carries is silently DROPPED off a money screen.
+      const want = (row[0].match(/\{\d+\}/g) || []).sort().join(',');
+      const got = (row[i].match(/\{\d+\}/g) || []).sort().join(',');
+      ck(want === got,
+        `pattern ${JSON.stringify(row[0])} col ${i} keeps every placeholder (${want} vs ${got})`);
+    }
+  }
+  // English must not pay for any of this.
+  const en = buildI18n().i18n;
+  ck(en.t('Fee: 15%') === 'Fee: 15%', 'and in English a template is a no-op');
+}
+
+// ── an attribute REPLACED after the screen was swept ──
+// updateReferralFieldHint() swaps #regReferral's placeholder between
+// "Referral code" and "Referral code (optional)", and it does so AFTER the
+// auth screen has already been translated. Two separate faults live here and
+// only one is visible from a screenshot:
+//   * if nothing re-translates the field, it stays English (caught by the
+//     coverage sweep, which looks for English);
+//   * if it re-translates the ORIGINAL it first saw, it writes the translation
+//     of "Referral code" over the optional wording -- the WRONG sentence, in
+//     the right language. No sweep looking for English can ever see that, so
+//     it is asserted here.
+console.log('\n— an attribute replaced after the sweep —');
+{
+  const { el, i18n } = buildI18n('sw');
+  i18n.setRegion({ languages: ['en', 'sw'], defaultLang: 'en' });
+  const body = el('div');
+  const input = el('input', { attrs: { placeholder: 'Referral code' } });
+  body.add(input);
+  i18n.setBody(body);
+  i18n.setLang('sw');
+  const required = i18n.t('Referral code');
+  ck(input.attrs.placeholder === required,
+    `the field is translated on the first sweep: ${JSON.stringify(input.attrs.placeholder)}`);
+  // Now app code replaces it with DIFFERENT English, exactly as the hint does.
+  input.attrs.placeholder = 'Referral code (optional)';
+  i18n.i18nElementAttrs(input);
+  const optional = i18n.t('Referral code (optional)');
+  ck(optional !== 'Referral code (optional)',
+    'the optional wording has a Swahili row at all (otherwise this proves nothing)');
+  ck(input.attrs.placeholder === optional,
+    `and the NEW sentence is what gets translated, not the old one: ${JSON.stringify(input.attrs.placeholder)}`);
+  ck(input.attrs.placeholder !== required,
+    'so the required wording is not written back over the optional one');
+  // Idempotent: handed its own output it must leave it alone, which is what
+  // stops the attribute observer feeding itself forever.
+  for (let i = 0; i < 3; i++) i18n.i18nElementAttrs(input);
+  ck(input.attrs.placeholder === optional,
+    'and running it again over its own output changes nothing');
 }
 
 console.log('\n— what it will and will not rewrite —');

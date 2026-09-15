@@ -1,0 +1,3027 @@
+{
+ "language": "nyn",
+ "rows_in_table": 255,
+ "translated_for_language": 255,
+ "screens_walked": [
+  "about",
+  "account",
+  "announcement",
+  "balance-record",
+  "balance-record/deposit",
+  "balance-record/turntable",
+  "balance-record/withdraw",
+  "buy-confirm",
+  "checkin",
+  "chest",
+  "chest-win",
+  "confirm",
+  "deposit",
+  "deposit/pay-b",
+  "download-app",
+  "help",
+  "home",
+  "lang-picker",
+  "login",
+  "login-password",
+  "message-detail",
+  "messages",
+  "my-products",
+  "my-products/all",
+  "my-products/matured",
+  "notify",
+  "pay-redirect",
+  "products",
+  "referral",
+  "register",
+  "register-optional-code",
+  "spin-win",
+  "team",
+  "team/level-2",
+  "trade-password",
+  "transaction-detail",
+  "turntable",
+  "wallet",
+  "wallet/edit",
+  "withdraw"
+ ],
+ "missing_rows": [],
+ "missing_cells": [],
+ "not_swept": [],
+ "ignored_as_data": [
+  {
+   "text": "****",
+   "at": "#sheetBody .reveal-in .wallet-summary .masked",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "+256",
+   "at": ".auth-card #loginPane .auth-field #loginDial",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b",
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "+256 742 730 382",
+   "at": ".acct-profile .p-top div .p-phone",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "+UGX40,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX50,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX6,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX7,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX700.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX8,100.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "-UGX20,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "-UGX25,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "0.00",
+   "at": "#sheetBody .reveal-in .wit-amt #witAmount",
+   "kind": "placeholder",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "01/09/2026 08:00",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "02/09/2026 11:20",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "075****0296",
+   "at": ".team-member .top div .phone",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "077****0399",
+   "at": ".team-member .top div .phone",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "12/09/2026 14:02",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "13/09/2026 09:41",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "13/09/2026 10:02",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "13/09/2026 11:30",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "13/09/2026 12:00",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "14/09/2026 00:05",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "14/09/2026 07:15",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "2%",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommPct",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "27%",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommPct",
+   "kind": "text",
+   "screens": [
+    "team"
+   ]
+  },
+  {
+   "text": "270,000",
+   "at": "#sheetBody .reveal-in #depChips .dep-chip",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "3",
+   "at": ".reveal-in .team-gcard .row1 #teamTotalCount",
+   "kind": "text",
+   "screens": [
+    "checkin",
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "30,000",
+   "at": "#sheetBody .reveal-in #depChips .dep-chip",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "30000",
+   "at": "#sheetBody .reveal-in .dep-amt #depAmount",
+   "kind": "placeholder",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "90,000",
+   "at": "#sheetBody .reveal-in #depChips .dep-chip",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Abantu 1",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommMembers",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Abantu 2",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommMembers",
+   "kind": "text",
+   "screens": [
+    "team"
+   ]
+  },
+  {
+   "text": "Ahabwa Chipz",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "about"
+   ]
+  },
+  {
+   "text": "Akaunti",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "BIIKA EKISUMURUZO KY'OKUSHUUBURA",
+   "at": "#sheetBg #sheetBody .reveal-in #tpSaveBtn",
+   "kind": "text",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "BIIKA EKISUMURUZO KY'OKUTAAHA",
+   "at": "#sheetBg #sheetBody .reveal-in #lpSaveBtn",
+   "kind": "text",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Byona",
+   "at": "#app #pageHost .mp-filters .mp-f",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Byona Ebi Ogwire",
+   "at": "#teamMembersBox .reveal-in .team-member .foot",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Byona Ebi Oteiremu",
+   "at": ".mp-band .mp-band-row div span",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Byona Ebi Otungire",
+   "at": ".mp-band .mp-band-row div span",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "C",
+   "at": "#msgBody .reveal-in .msg-row .av",
+   "kind": "text",
+   "screens": [
+    "login-password",
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "CHIP",
+   "at": ".wrap #authHero .mark-row .auth-wordmark",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "login",
+    "notify",
+    "products",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "CHIPZ",
+   "at": ".team-member .top .avatar span",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Chipz nikikureetera okuteeramu sente omu byamaguzi bya miringo mingi n’esente za buri izooba n’enteekateeka y’okweta ey’emirengo 3.",
+   "at": "#aboutArticle .scroll-reveal p .reveal-word",
+   "kind": "text",
+   "screens": [
+    "about"
+   ]
+  },
+  {
+   "text": "D",
+   "at": "#balBody .reveal-in .rec .av",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "EKIZENGURUTSI",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "ENTEEKATEEKA",
+   "at": ".reveal-in div .sec-head h2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "ESANDUUKU Y'OBUGAIGA",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Ebi osiingwire nibigyenda butunu omu nsaho yaawe.",
+   "at": ".reveal-in .tt-rules ul li",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Ebihandiiko bya Sente",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ebiragiro by'Okuta Sente",
+   "at": ".reveal-in .dep-instr .ih span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Ebiragiro by'Okwihamu Sente",
+   "at": "#sheetBody .reveal-in .wit-instr h3",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ebisigaire Okutunga",
+   "at": "#app #pageHost .mp-band .mp-band-k",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Ebyafaayo bya sente",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ebyamaguzi",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ebyangye",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ekibiina",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ekibiina Kyona",
+   "at": ".reveal-in .team-gcard .row1 .lbl",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Ekicweka ky'Obuhwezi",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "help"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo Ekikuru ky'Okushuubura",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo Ekikuru ky'Okutaaha",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo Ekisya ky'Okushuubura",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo Ekisya ky'Okutaaha",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo ky'Okushuubura",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo ky'Okushuubura (enamba 6)",
+   "at": ".auth-card #registerPane .auth-field #regPin",
+   "kind": "placeholder",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo ky'Okutaaha",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo ky'Okutaaha (obukiri bubonero 6)",
+   "at": ".auth-card #registerPane .auth-field #regPassword",
+   "kind": "placeholder",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo kyaawe ky'okushuubura n'enamba 6 ezi orikukozesa okuhamya okwihamu sente n'ebindi ebikuru.",
+   "at": "#sheetBg #sheetBody .reveal-in .pw-note",
+   "kind": "text",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Ekisumuruzo kyaawe ky'okutaaha nikikozesibwa kutaaha omu akaunti yaawe ya Chipz.",
+   "at": "#sheetBg #sheetBody .reveal-in .pw-note",
+   "kind": "text",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Ekitundu",
+   "at": ".reveal-in .home-actions .home-action .lbl",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Ekizengurutsi",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Empeera y'Okweta",
+   "at": "#pageHost .reveal-in .app-card h3",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Enamba ya esimu ishemereire kutandika na 0 kandi kuba ya namba 10",
+   "at": "#sheetBg #sheetBody .reveal-in .dep-hint",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Enamba yaawe y’okushashura (7XXXXXXXX)",
+   "at": "#sheetBody .reveal-in .dep-phone #depPhone",
+   "kind": "placeholder",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Enamba: 00042",
+   "at": ".acct-profile .p-top div .p-id",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Enetiweki eine ekizibu. Ogarukyemu.",
+   "at": "body #notifyBg .notify-card #notifyMsg",
+   "kind": "text",
+   "screens": [
+    "notify"
+   ]
+  },
+  {
+   "text": "Ensaho",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ensaho Yaawe",
+   "at": "#sheetBg #sheetBody .reveal-in .plain-h2",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Ensaho y'Okwihamu",
+   "at": "#sheetBody .reveal-in .dep-sec span",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Esimu y'Okushashura",
+   "at": "#sheetBody .reveal-in .dep-sec span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Gabana Orunyiriri",
+   "at": "#pageHost .reveal-in .app-card div",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Gabana orunyiriri rwaawe, okore obugaiga bwaawe, otebeekanise amagara gaawe.",
+   "at": "#pageHost .reveal-in .app-card p",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Garuka",
+   "at": "body #sheetBg .sheet-head .back",
+   "kind": "aria-label",
+   "screens": [
+    "about",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "checkin",
+    "chest",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "login-password",
+    "message-detail",
+    "messages",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Garuka ohandiike PIN ensya y'enamba 6",
+   "at": "#sheetBody .reveal-in .pw-field #tpNew2",
+   "kind": "placeholder",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Garuka ohandiike ekisumuruzo ekisya",
+   "at": "#sheetBody .reveal-in .pw-field #lpNew2",
+   "kind": "placeholder",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Genda ozengurutse",
+   "at": "#pageHost .reveal-in .spin-banner .spin-cta",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Giteere aha simu yaawe obaase kugihikaho juba, kandi ogyigure butunu kuruga aha karatasi kaawe ak'okubanza.",
+   "at": ".dl-screen .dl-body .dl-top .dl-sub",
+   "kind": "text",
+   "screens": [
+    "download-app"
+   ]
+  },
+  {
+   "text": "Hamya",
+   "at": "body #confirmBg #confirmSheet h3",
+   "kind": "text",
+   "screens": [
+    "confirm"
+   ]
+  },
+  {
+   "text": "Hamya Ekisumuruzo Ekisya",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "login-password",
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Hamya Ekisumuruzo ky'Okutaaha",
+   "at": ".auth-card #registerPane .auth-field #regPassword2",
+   "kind": "placeholder",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Hamya Okuta Sente",
+   "at": "#sheetBg #sheetBody .reveal-in #depSubmitBtn",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Hamya Okwihamu",
+   "at": "#sheetBg #sheetBody .reveal-in #witSubmitBtn",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Handiika PIN enkuru y'enamba 6",
+   "at": "#sheetBody .reveal-in .pw-field #tpOld",
+   "kind": "placeholder",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Handiika PIN ensya y'enamba 6",
+   "at": "#sheetBody .reveal-in .pw-field #tpNew",
+   "kind": "placeholder",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Handiika ekishumuruzo ky'esanduuku",
+   "at": ".reveal-in div .key-field #chestKey",
+   "kind": "placeholder",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Handiika ekishumuruzo kyaawe oshumuurure empeera",
+   "at": "#sheetBg #sheetBody .reveal-in .sub",
+   "kind": "text",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Handiika ekisumuruzo",
+   "at": ".auth-card #loginPane .auth-field #loginPassword",
+   "kind": "placeholder",
+   "screens": [
+    "login"
+   ]
+  },
+  {
+   "text": "Handiika ekisumuruzo ekikuru",
+   "at": "#sheetBody .reveal-in .pw-field #lpOld",
+   "kind": "placeholder",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Handiika ekisumuruzo ekisya",
+   "at": "#sheetBody .reveal-in .pw-field #lpNew",
+   "kind": "placeholder",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Handiika ekisumuruzo ky'okushuubura",
+   "at": "#sheetBody .reveal-in .wit-pw #witPin",
+   "kind": "placeholder",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Handiika enamba ya esimu",
+   "at": ".auth-card #loginPane .auth-field #loginPhone",
+   "kind": "placeholder",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Handiika omuhendo ogurikwecwera.",
+   "at": "body #confirmBg #confirmSheet .confirm-sub",
+   "kind": "text",
+   "screens": [
+    "confirm"
+   ]
+  },
+  {
+   "text": "Hikirira abahwezi ahabw'akaunti yaawe.",
+   "at": "#sheetBg #sheetBody .reveal-in p",
+   "kind": "text",
+   "screens": [
+    "help"
+   ]
+  },
+  {
+   "text": "Hindura Ensaho",
+   "at": "#sheetBg #sheetBody .reveal-in .btn-bind",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Hindura ekisumuruzo ky'okushuubura / okwihamu",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Hindura ekisumuruzo ky'okutaaha",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "IGURA ESANDUUKU",
+   "at": "#sheetBody .reveal-in div #chestOpenBtn",
+   "kind": "text",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Igura esanduuku y'obugaiga",
+   "at": "#app #pageHost .reveal-in .chest-float",
+   "kind": "aria-label",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Ihamu Sente",
+   "at": ".reveal-in .home-actions .home-action .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "notify",
+    "pay-redirect",
+    "products",
+    "spin-win",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Jwara ensaho yaawe y'okwihamu sente",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Kale",
+   "at": "body #notifyBg .notify-card .notify-ok",
+   "kind": "text",
+   "screens": [
+    "notify"
+   ]
+  },
+  {
+   "text": "Kihikire",
+   "at": "#app #pageHost .mp-filters .mp-f",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Kinga",
+   "at": "body #announceBg .announce-wrap .announce-close",
+   "kind": "aria-label",
+   "screens": [
+    "home",
+    "login-password",
+    "message-detail"
+   ]
+  },
+  {
+   "text": "Kishashwirwe",
+   "at": ".reveal-in .rec .txt .rec-pill",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Koodi y'Okweta",
+   "at": ".auth-card #registerPane .auth-field #regReferral",
+   "kind": "placeholder",
+   "screens": [
+    "register"
+   ]
+  },
+  {
+   "text": "Koodi y'okweta (tikyetengyesa)",
+   "at": ".auth-card #registerPane .auth-field #regReferral",
+   "kind": "placeholder",
+   "screens": [
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Koodi y'okweta neeyetengyesa",
+   "at": ".wrap .auth-card #registerPane #regReferralHint",
+   "kind": "text",
+   "screens": [
+    "register"
+   ]
+  },
+  {
+   "text": "Koppa Orunyiriri rw'Okweta",
+   "at": "#pageHost .reveal-in .app-card .primary-button",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Koppa orunyiriri",
+   "at": ".reveal-in .app-card .url-row .copy-ic",
+   "kind": "aria-label",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Ku kutaribaho kintu, porogaraamu yaateirweho — gyigyure aha ndabiro yaawe. Aha iPhone, kozesa Share reero “Add to Home Screen”.",
+   "at": "#sheetBody .dl-screen .dl-body #dlNote",
+   "kind": "text",
+   "screens": [
+    "download-app"
+   ]
+  },
+  {
+   "text": "Kyaremeire",
+   "at": ".reveal-in .rec .txt .rec-pill",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Mukaaze gye",
+   "at": "body #announceBg .announce-wrap #announceTitle",
+   "kind": "text",
+   "screens": [
+    "home",
+    "login-password",
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "Nikikora",
+   "at": "#app #pageHost .mp-filters .mp-f",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Nikitegyereza",
+   "at": ".reveal-in .rec .txt .rec-pill",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Nituleeta ebisya…",
+   "at": ".reveal-in .act-card .act-track-wrap #activityTickerTrack",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Nituukutwara aha kushashura…",
+   "at": "body #depRedirect .dep-redirect-inner .dep-redirect-text",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Nobaasa kuta sente eshaaha 24, ebiro 7.",
+   "at": ".reveal-in .dep-instr ol li",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Nyiini Akaunti",
+   "at": "#sheetBody .reveal-in .wallet-card .holder-lbl",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Obugaiga Obw'ekyama",
+   "at": "#sheetBg #sheetBody .reveal-in h2",
+   "kind": "text",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Obuhwezi",
+   "at": ".reveal-in .home-actions .home-action .lbl",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Obutumwa",
+   "at": "#pageHost .reveal-in .home-topbar .icon-btn",
+   "kind": "aria-label",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "notify",
+    "pay-redirect",
+    "products",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Obutumwa n'ebirango",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Obwire bw’okwihamu sente: 6:00 AM kuhika 5:00 PM.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Oine akaunti?",
+   "at": ".wrap .auth-card #registerPane .auth-switch",
+   "kind": "text",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Oku kirikukora",
+   "at": "#sheetBody .reveal-in .tt-rules h3",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Okugura",
+   "at": "#pageHost .reveal-in .team-gcard .cap",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Okugura ebyamaguzi nikikuha okuzengurutsa okundi.",
+   "at": ".reveal-in .tt-rules ul #ttRuleProduct",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Okuhingura sente",
+   "at": ".reveal-in .rec .txt .t1",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Okuzengurutsa 0 kuriho",
+   "at": "#sheetBg #sheetBody .reveal-in #ttSpinCount",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Okuzengurutsa buri izooba n'ebirabo",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Okuzengurutsa rumwe okw'obusa buri izooba, nikugarukamu aha kiro.",
+   "at": ".reveal-in .tt-rules ul #ttRuleDaily",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Okweta",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Okwihamu rumwe — ku kushashwirwe nobaasa kushaba okundi. Kuhika aha 1 aha izooba.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Okwoleka Buri Izooba",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "Okwoleka · UGX 500",
+   "at": "#sheetBody .reveal-in .app-card #checkinBtn",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "Omuhendo gushemereire kuba gwa 5,000 — nk’oku 5,000, 10,000, 25,000, 30,000.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Omuhendo gwa Kamisoni",
+   "at": "#app #pageHost .reveal-in .plain-head",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Omuka",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Omukozesa",
+   "at": ".team-member .top div .name",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Omurengo 1",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommLevelLabel",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Omurengo 1 = 27%",
+   "at": "#pageHost .reveal-in .app-card .lv-line",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Omurengo 2",
+   "at": "#pageHost .reveal-in .lv-switcher .lv",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Omurengo 2 = 2%",
+   "at": "#pageHost .reveal-in .app-card .lv-line",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Omurengo 3",
+   "at": "#pageHost .reveal-in .lv-switcher .lv",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Omurengo 3 = 1%",
+   "at": "#pageHost .reveal-in .app-card .lv-line",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Omuringo ogurikukira obumanzi muri Uganda kukuza sente zaawe",
+   "at": "#pageHost .reveal-in .home-banner .hb-cap",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Onyijuke",
+   "at": ".auth-card #loginPane .row-check span",
+   "kind": "text",
+   "screens": [
+    "login"
+   ]
+  },
+  {
+   "text": "Orukurato hati",
+   "at": "#sheetBody .reveal-in .app-card div",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "Orurimi",
+   "at": ".setting-list #langRow .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Osingwire",
+   "at": "body #chestWinBg .chest-win-card .sub",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "chest-win",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "spin-win",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Otakozesa akaunti ya ira okuta sente.",
+   "at": ".reveal-in .dep-instr ol li",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Payout update",
+   "at": ".msg-row .txt .top .t1",
+   "kind": "text",
+   "screens": [
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "Payouts run daily.",
+   "at": ".reveal-in .msg-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "SHASHURA B",
+   "at": "#sheetBody .reveal-in #depPayRowB span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "SHASHURA-A",
+   "at": "#sheetBody .reveal-in #depPayRowA span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Sazamu",
+   "at": "body #confirmBg #confirmSheet .secondary-button",
+   "kind": "text",
+   "screens": [
+    "confirm"
+   ]
+  },
+  {
+   "text": "Sente Ensya: UGX0.00",
+   "at": "body #chestWinBg .chest-win-card #chestWinBalance",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Sente Ensya: UGX12,630.57",
+   "at": "body #chestWinBg .chest-win-card #chestWinBalance",
+   "kind": "text",
+   "screens": [
+    "spin-win"
+   ]
+  },
+  {
+   "text": "Sente Ensya: UGX13,185.97",
+   "at": "body #chestWinBg .chest-win-card #chestWinBalance",
+   "kind": "text",
+   "screens": [
+    "chest-win"
+   ]
+  },
+  {
+   "text": "Sente Eziriho",
+   "at": "#sheetBody .reveal-in .wit-bal .lbl",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Sente Eziriho Hati",
+   "at": "#sheetBg #sheetBody .bal-band .lbl",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Sente ezirikukira obukye okuta: UGX 30,000",
+   "at": ".reveal-in .dep-instr ol li",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Sente ku zitarikuhika, otukirire obuhwezi aha TG.",
+   "at": ".reveal-in .dep-instr ol li",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Sente omu Nsaho",
+   "at": ".reveal-in div .acct-profile .bal-label",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Sente z'obuheereza: 15%",
+   "at": "#sheetBg #sheetBody .reveal-in .wit-fee",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Sente z'obuheereza: 15%.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Sente z’okwihamu zishemereire kuba hagati ya 20,000 na 1,000,000.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Shohoka",
+   "at": "#pageHost .reveal-in div .dark-button",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "T",
+   "at": "#balBody .reveal-in .rec .av",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "TAAHA",
+   "at": ".wrap .auth-card #loginPane h1",
+   "kind": "text",
+   "screens": [
+    "login"
+   ]
+  },
+  {
+   "text": "TIHARIHO NSAHO ETEIREHO",
+   "at": "#sheetBody .reveal-in .wallet-card .holder-name",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "TWARA",
+   "at": "body #chestWinBg .chest-win-card .dark-button",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "chest-win",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "spin-win",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Ta Sente",
+   "at": ".reveal-in .home-actions .home-action .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "notify",
+    "pay-redirect",
+    "products",
+    "spin-win",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Taaha",
+   "at": ".wrap .auth-card #loginPane #loginBtn",
+   "kind": "text",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Thanks for joining.",
+   "at": ".reveal-in .msg-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "login-password",
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "Tihakwetengyesa koodi hati — oine omu b'okubanza kwegaitaho.",
+   "at": ".wrap .auth-card #registerPane #regReferralHint",
+   "kind": "text",
+   "screens": [
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Tihariho bindi",
+   "at": "#sheetBody #balBody .reveal-in .list-end",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Tihariho kuzengurutsa kusigaire. Okuzengurutsa kwaawe kw'obusa nikwija aha kiro.",
+   "at": "#sheetBg #sheetBody .reveal-in #ttSub",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Tihariho nteekateeka erikukora hati",
+   "at": "#app #pageHost .mp-band .mp-band-sub",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Tihariho nteekateeka erikukora. Kanda Kihikire kureeba ezo ezahwire.",
+   "at": "#app #pageHost .mp-list .list-empty",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Tikka",
+   "at": "#sheetBody .dl-screen .dl-body #dlInstallBtn",
+   "kind": "text",
+   "screens": [
+    "download-app"
+   ]
+  },
+  {
+   "text": "Tikka APP",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Toorana Omuhendo",
+   "at": "#sheetBody .reveal-in .dep-sec span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Toorana Omuringo gw'Okushashura",
+   "at": "#sheetBody .reveal-in .dep-sec span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Tukushemereirwe!",
+   "at": "body #chestWinBg .chest-win-card h1",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "chest-win",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "spin-win",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Tunga porogaraamu ya Chipz",
+   "at": ".dl-screen .dl-body .dl-top .dl-title",
+   "kind": "text",
+   "screens": [
+    "download-app"
+   ]
+  },
+  {
+   "text": "Tunga porogaraamu ya esimu",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Tunga sente buri izooba oyeta abantu kuteeramu sente.",
+   "at": "#pageHost .reveal-in .app-card p",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "UGX",
+   "at": "#sheetBody .reveal-in .wit-amt span",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "UGX 0.00",
+   "at": "#app #pageHost .mp-band .mp-band-v",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "UGX 120,000.00",
+   "at": "#pageHost .reveal-in .team-gcard #teamDepositsAmt",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "UGX 128,500.00",
+   "at": ".reveal-in div .acct-profile #acctWallet",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "UGX 2,700,000.00",
+   "at": ".mp-band .mp-band-row div b",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "UGX 4,200.00",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommissionAmt",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "UGX 90,000.00",
+   "at": ".mp-band .mp-band-row div b",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "UGX119,236.98",
+   "at": "#sheetBg #sheetBody .bal-band #balBandValue",
+   "kind": "text",
+   "screens": [
+    "balance-record"
+   ]
+  },
+  {
+   "text": "UGX128,500.00",
+   "at": "#sheetBody .reveal-in .wit-bal .val",
+   "kind": "text",
+   "screens": [
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "UGX5,000.00",
+   "at": "body #chestWinBg .chest-win-card #chestWinAmount",
+   "kind": "text",
+   "screens": [
+    "chest-win"
+   ]
+  },
+  {
+   "text": "UGX700.00",
+   "at": "body #chestWinBg .chest-win-card #chestWinAmount",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "spin-win",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "W",
+   "at": "#balBody .reveal-in .rec .av",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Welcome Bonus",
+   "at": ".reveal-in .rec .txt .t1",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Welcome to the app.",
+   "at": "#announceBg .announce-wrap .announce-scroll #announceBody",
+   "kind": "text",
+   "screens": [
+    "home"
+   ]
+  },
+  {
+   "text": "XXXXXXXXXX",
+   "at": "#sheetBody .reveal-in .wallet-card .num",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "YEEWANDIISE",
+   "at": ".wrap .auth-card #registerPane h1",
+   "kind": "text",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Yaayegaitaho 01/09/2026 10:00",
+   "at": "#teamMembersBox .reveal-in .team-member .joined",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Yaayegaitaho 13/09/2026 08:30",
+   "at": "#teamMembersBox .reveal-in .team-member .joined",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Yeewandiise",
+   "at": ".auth-card #loginPane .auth-switch a",
+   "kind": "text",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Yeta abanywani baawe. Notunga sente ku barikugura ekyamaguzi kyabo eky'okubanza.",
+   "at": "#pageHost .reveal-in .ref-banner .hb-cap",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Yoleka omurundi gumwe buri izooba (nikugarukamu aha kiro) kurindira orukurato rwaawe kandi otunge UGX 500 buri murundi.",
+   "at": "#sheetBody .reveal-in .app-card div",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "Yoreka ekisumuruzo",
+   "at": ".auth-card #loginPane .auth-field .eye",
+   "kind": "aria-label",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Z",
+   "at": "#authHero .mark-row .auth-wordmark b",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "login",
+    "notify",
+    "products",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "ZENGURUTSA",
+   "at": ".reveal-in .tt-wheel-wrap #ttWheel .hub",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "ebiro",
+   "at": ".reveal-in .app-card .mono span",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "http://127.0.0.1:8899/?ref=UG7Q4X",
+   "at": ".reveal-in .app-card .url-row span",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "⚠️",
+   "at": "body #notifyBg .notify-card .notify-icon",
+   "kind": "text",
+   "screens": [
+    "notify"
+   ]
+  },
+  {
+   "text": "🎁",
+   "at": ".auth-card #registerPane .auth-field .emoji",
+   "kind": "text",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "🔒",
+   "at": ".auth-card #loginPane .auth-field .emoji",
+   "kind": "text",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "🗝",
+   "at": ".auth-card #registerPane .auth-field .emoji",
+   "kind": "text",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  }
+ ],
+ "page_errors": [],
+ "step_errors": []
+}

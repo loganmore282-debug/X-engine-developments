@@ -1,0 +1,3034 @@
+{
+ "language": "fr",
+ "rows_in_table": 255,
+ "translated_for_language": 249,
+ "screens_walked": [
+  "about",
+  "account",
+  "announcement",
+  "balance-record",
+  "balance-record/deposit",
+  "balance-record/turntable",
+  "balance-record/withdraw",
+  "buy-confirm",
+  "checkin",
+  "chest",
+  "chest-win",
+  "confirm",
+  "deposit",
+  "deposit/pay-b",
+  "download-app",
+  "help",
+  "home",
+  "lang-picker",
+  "login",
+  "login-password",
+  "message-detail",
+  "messages",
+  "my-products",
+  "my-products/all",
+  "my-products/matured",
+  "notify",
+  "pay-redirect",
+  "products",
+  "referral",
+  "register",
+  "register-optional-code",
+  "spin-win",
+  "team",
+  "team/level-2",
+  "trade-password",
+  "transaction-detail",
+  "turntable",
+  "wallet",
+  "wallet/edit",
+  "withdraw"
+ ],
+ "missing_rows": [],
+ "missing_cells": [],
+ "not_swept": [],
+ "ignored_as_data": [
+  {
+   "text": "****",
+   "at": "#sheetBody .reveal-in .wallet-summary .masked",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "+256",
+   "at": ".auth-card #loginPane .auth-field #loginDial",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b",
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "+256 742 730 382",
+   "at": ".acct-profile .p-top div .p-phone",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "+UGX40,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX50,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX6,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX7,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX700.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "+UGX8,100.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "-UGX20,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "-UGX25,000.00",
+   "at": ".reveal-in .rec .right .amt",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "0 tours disponibles",
+   "at": "#sheetBg #sheetBody .reveal-in #ttSpinCount",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "0.00",
+   "at": "#sheetBody .reveal-in .wit-amt #witAmount",
+   "kind": "placeholder",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "01/09/2026 08:00",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "02/09/2026 11:20",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "075****0296",
+   "at": ".team-member .top div .phone",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "077****0399",
+   "at": ".team-member .top div .phone",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "1 membres",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommMembers",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "12/09/2026 14:02",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "13/09/2026 09:41",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "13/09/2026 10:02",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "13/09/2026 11:30",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "13/09/2026 12:00",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "14/09/2026 00:05",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "14/09/2026 07:15",
+   "at": ".reveal-in .rec .txt .t2",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "2 membres",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommMembers",
+   "kind": "text",
+   "screens": [
+    "team"
+   ]
+  },
+  {
+   "text": "2%",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommPct",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "27%",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommPct",
+   "kind": "text",
+   "screens": [
+    "team"
+   ]
+  },
+  {
+   "text": "270,000",
+   "at": "#sheetBody .reveal-in #depChips .dep-chip",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "3",
+   "at": ".reveal-in .team-gcard .row1 #teamTotalCount",
+   "kind": "text",
+   "screens": [
+    "checkin",
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "30,000",
+   "at": "#sheetBody .reveal-in #depChips .dep-chip",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "30000",
+   "at": "#sheetBody .reveal-in .dep-amt #depAmount",
+   "kind": "placeholder",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "90,000",
+   "at": "#sheetBody .reveal-in #depChips .dep-chip",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "AUCUN PORTEFEUILLE ASSOCIÉ",
+   "at": "#sheetBody .reveal-in .wallet-card .holder-name",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Accueil",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Achat",
+   "at": "#pageHost .reveal-in .team-gcard .cap",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Achat total",
+   "at": "#teamMembersBox .reveal-in .team-member .foot",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Acheter des produits vous donne des tours supplémentaires.",
+   "at": ".reveal-in .tt-rules ul #ttRuleProduct",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Afficher le mot de passe",
+   "at": ".auth-card #loginPane .auth-field .eye",
+   "kind": "aria-label",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Aller tourner",
+   "at": "#pageHost .reveal-in .spin-banner .spin-cta",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Ancien mot de passe de connexion",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Ancien mot de passe de transaction",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Annuler",
+   "at": "body #confirmBg #confirmSheet .secondary-button",
+   "kind": "text",
+   "screens": [
+    "confirm"
+   ]
+  },
+  {
+   "text": "Aucun code n'est encore nécessaire — vous êtes parmi les premiers à nous rejoindre.",
+   "at": ".wrap .auth-card #registerPane #regReferralHint",
+   "kind": "text",
+   "screens": [
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Aucun plan actif pour le moment",
+   "at": "#app #pageHost .mp-band .mp-band-sub",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Aucun plan actif. Ouvrez Terminé pour voir ceux qui sont arrivés à terme.",
+   "at": "#app #pageHost .mp-list .list-empty",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Bienvenue",
+   "at": "body #announceBg .announce-wrap #announceTitle",
+   "kind": "text",
+   "screens": [
+    "home",
+    "login-password",
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "C",
+   "at": "#msgBody .reveal-in .msg-row .av",
+   "kind": "text",
+   "screens": [
+    "login-password",
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "CHIP",
+   "at": ".wrap #authHero .mark-row .auth-wordmark",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "login",
+    "notify",
+    "products",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "CHIPZ",
+   "at": ".team-member .top .avatar span",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "COFFRE AU TRÉSOR",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "CONNEXION",
+   "at": ".wrap .auth-card #loginPane h1",
+   "kind": "text",
+   "screens": [
+    "login"
+   ]
+  },
+  {
+   "text": "Canal",
+   "at": ".reveal-in .home-actions .home-action .lbl",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Centre d'aide",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "help"
+   ]
+  },
+  {
+   "text": "Changer de portefeuille",
+   "at": "#sheetBg #sheetBody .reveal-in .btn-bind",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Changer le mot de passe de connexion",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Changer le mot de passe de transaction / retrait",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Chargement de l'activité…",
+   "at": ".reveal-in .act-card .act-track-wrap #activityTickerTrack",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Chipz vous permet d’investir dans une gamme de produits avec un revenu quotidien et un programme de parrainage à 3 niveaux.",
+   "at": "#aboutArticle .scroll-reveal p .reveal-word",
+   "kind": "text",
+   "screens": [
+    "about"
+   ]
+  },
+  {
+   "text": "Choisissez le mode de paiement",
+   "at": "#sheetBody .reveal-in .dep-sec span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Choisissez le montant",
+   "at": "#sheetBody .reveal-in .dep-sec span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Code de parrainage",
+   "at": ".auth-card #registerPane .auth-field #regReferral",
+   "kind": "placeholder",
+   "screens": [
+    "register"
+   ]
+  },
+  {
+   "text": "Code de parrainage (facultatif)",
+   "at": ".auth-card #registerPane .auth-field #regReferral",
+   "kind": "placeholder",
+   "screens": [
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Comment ça marche",
+   "at": "#sheetBody .reveal-in .tt-rules h3",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Compte",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Confirmer",
+   "at": "body #confirmBg #confirmSheet h3",
+   "kind": "text",
+   "screens": [
+    "confirm"
+   ]
+  },
+  {
+   "text": "Confirmer le dépôt",
+   "at": "#sheetBg #sheetBody .reveal-in #depSubmitBtn",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Confirmer le retrait",
+   "at": "#sheetBg #sheetBody .reveal-in #witSubmitBtn",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Confirmez le mot de passe de connexion",
+   "at": ".auth-card #registerPane .auth-field #regPassword2",
+   "kind": "placeholder",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Confirmez le nouveau mot de passe",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "login-password",
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Connexion",
+   "at": ".wrap .auth-card #loginPane #loginBtn",
+   "kind": "text",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Contactez l'assistance pour toute question sur votre compte.",
+   "at": "#sheetBg #sheetBody .reveal-in p",
+   "kind": "text",
+   "screens": [
+    "help"
+   ]
+  },
+  {
+   "text": "Copier le lien",
+   "at": ".reveal-in .app-card .url-row .copy-ic",
+   "kind": "aria-label",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Copier le lien d'invitation",
+   "at": "#pageHost .reveal-in .app-card .primary-button",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "D",
+   "at": "#balBody .reveal-in .rec .av",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Déconnexion",
+   "at": "#pageHost .reveal-in div .dark-button",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Dépôt",
+   "at": ".reveal-in .home-actions .home-action .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "notify",
+    "pay-redirect",
+    "products",
+    "spin-win",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "ENREGISTRER LE MOT DE PASSE",
+   "at": "#sheetBg #sheetBody .reveal-in #lpSaveBtn",
+   "kind": "text",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "ENREGISTRER LE MOT DE PASSE DE TRANSACTION",
+   "at": "#sheetBg #sheetBody .reveal-in #tpSaveBtn",
+   "kind": "text",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "En attente",
+   "at": ".reveal-in .rec .txt .rec-pill",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "En cours",
+   "at": "#app #pageHost .mp-filters .mp-f",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Entrez l'ancien code à 6 chiffres",
+   "at": "#sheetBody .reveal-in .pw-field #tpOld",
+   "kind": "placeholder",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Entrez l'ancien mot de passe",
+   "at": "#sheetBody .reveal-in .pw-field #lpOld",
+   "kind": "placeholder",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Entrez la clé du coffre au trésor",
+   "at": ".reveal-in div .key-field #chestKey",
+   "kind": "placeholder",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Entrez le mot de passe",
+   "at": ".auth-card #loginPane .auth-field #loginPassword",
+   "kind": "placeholder",
+   "screens": [
+    "login"
+   ]
+  },
+  {
+   "text": "Entrez le mot de passe de transaction",
+   "at": "#sheetBody .reveal-in .wit-pw #witPin",
+   "kind": "placeholder",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Entrez le nouveau code à 6 chiffres",
+   "at": "#sheetBody .reveal-in .pw-field #tpNew",
+   "kind": "placeholder",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Entrez le nouveau mot de passe",
+   "at": "#sheetBody .reveal-in .pw-field #lpNew",
+   "kind": "placeholder",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Entrez le numéro de téléphone",
+   "at": ".auth-card #loginPane .auth-field #loginPhone",
+   "kind": "placeholder",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Entrez un montant valide.",
+   "at": "body #confirmBg #confirmSheet .confirm-sub",
+   "kind": "text",
+   "screens": [
+    "confirm"
+   ]
+  },
+  {
+   "text": "Entrez votre clé pour débloquer la récompense",
+   "at": "#sheetBg #sheetBody .reveal-in .sub",
+   "kind": "text",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Erreur de réseau. Réessayez.",
+   "at": "body #notifyBg .notify-card #notifyMsg",
+   "kind": "text",
+   "screens": [
+    "notify"
+   ]
+  },
+  {
+   "text": "Fermer",
+   "at": "body #announceBg .announce-wrap .announce-close",
+   "kind": "aria-label",
+   "screens": [
+    "home",
+    "login-password",
+    "message-detail"
+   ]
+  },
+  {
+   "text": "Frais : 15 %",
+   "at": "#sheetBg #sheetBody .reveal-in .wit-fee",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Frais : 15 %.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Félicitations !",
+   "at": "body #chestWinBg .chest-win-card h1",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "chest-win",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "spin-win",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Gagnez chaque jour en invitant des membres à investir.",
+   "at": "#pageHost .reveal-in .app-card p",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Gérez votre portefeuille de retrait",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Heures de retrait : de 6:00 AM à 5:00 PM.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Historique des transactions",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Historique du solde",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Identifiant : 00042",
+   "at": ".acct-profile .p-top div .p-id",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Inscrit le 01/09/2026 10:00",
+   "at": "#teamMembersBox .reveal-in .team-member .joined",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Inscrit le 13/09/2026 08:30",
+   "at": "#teamMembersBox .reveal-in .team-member .joined",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Installez-la sur votre téléphone pour un accès plus rapide, et ouvrez-la directement depuis votre écran d'accueil.",
+   "at": ".dl-screen .dl-body .dl-top .dl-sub",
+   "kind": "text",
+   "screens": [
+    "download-app"
+   ]
+  },
+  {
+   "text": "Instructions de dépôt",
+   "at": ".reveal-in .dep-instr .ih span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Instructions de retrait",
+   "at": "#sheetBody .reveal-in .wit-instr h3",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Invitez vos amis. Gagnez lorsqu'ils achètent leur premier produit.",
+   "at": "#pageHost .reveal-in .ref-banner .hb-cap",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "LA ROUE",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "La Roue",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "La façon la plus audacieuse d'Ouganda de faire fructifier votre argent",
+   "at": "#pageHost .reveal-in .home-banner .hb-cap",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Langue",
+   "at": ".setting-list #langRow .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Le code de parrainage est obligatoire",
+   "at": ".wrap .auth-card #registerPane #regReferralHint",
+   "kind": "text",
+   "screens": [
+    "register"
+   ]
+  },
+  {
+   "text": "Le numéro de téléphone doit commencer par 0 et compter 10 chiffres",
+   "at": "#sheetBg #sheetBody .reveal-in .dep-hint",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Les gains vont directement dans votre portefeuille.",
+   "at": ".reveal-in .tt-rules ul li",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Les montants de retrait doivent être compris entre 20,000 et 1,000,000.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Les montants doivent être un multiple de 5,000 — par exemple 5,000, 10,000, 25,000, 30,000.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Mes Produits",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Messages",
+   "at": "#pageHost .reveal-in .home-topbar .icon-btn",
+   "kind": "aria-label",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "notify",
+    "pay-redirect",
+    "products",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Modifier le portefeuille",
+   "at": "#sheetBg #sheetBody .reveal-in .dark-button",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Montant minimum de recharge : UGX 30,000",
+   "at": ".reveal-in .dep-instr ol li",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Mot de passe de connexion",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Mot de passe de connexion (6 caractères minimum)",
+   "at": ".auth-card #registerPane .auth-field #regPassword",
+   "kind": "placeholder",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Mot de passe de transaction",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Mot de passe de transaction (6 chiffres)",
+   "at": ".auth-card #registerPane .auth-field #regPin",
+   "kind": "placeholder",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "N'utilisez pas un ancien compte pour la recharge.",
+   "at": ".reveal-in .dep-instr ol li",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Niveau 1",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommLevelLabel",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Niveau 1 = 27 %",
+   "at": "#pageHost .reveal-in .app-card .lv-line",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Niveau 2",
+   "at": "#pageHost .reveal-in .lv-switcher .lv",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Niveau 2 = 2 %",
+   "at": "#pageHost .reveal-in .app-card .lv-line",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Niveau 3",
+   "at": "#pageHost .reveal-in .lv-switcher .lv",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Niveau 3 = 1 %",
+   "at": "#pageHost .reveal-in .app-card .lv-line",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Notifications et messages",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Nouveau mot de passe de connexion",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Nouveau mot de passe de transaction",
+   "at": "#sheetBody .reveal-in .pw-head span",
+   "kind": "text",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Nouveau solde : UGX0.00",
+   "at": "body #chestWinBg .chest-win-card #chestWinBalance",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Nouveau solde : UGX11,436.50",
+   "at": "body #chestWinBg .chest-win-card #chestWinBalance",
+   "kind": "text",
+   "screens": [
+    "spin-win"
+   ]
+  },
+  {
+   "text": "Nouveau solde : UGX12,952.03",
+   "at": "body #chestWinBg .chest-win-card #chestWinBalance",
+   "kind": "text",
+   "screens": [
+    "chest-win"
+   ]
+  },
+  {
+   "text": "OK",
+   "at": "body #notifyBg .notify-card .notify-ok",
+   "kind": "text",
+   "screens": [
+    "notify"
+   ]
+  },
+  {
+   "text": "OUVRIR LE COFFRE",
+   "at": "#sheetBody .reveal-in div #chestOpenBtn",
+   "kind": "text",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Obtenez l'application Chipz",
+   "at": ".dl-screen .dl-body .dl-top .dl-title",
+   "kind": "text",
+   "screens": [
+    "download-app"
+   ]
+  },
+  {
+   "text": "Obtenez l'application mobile",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Ouvrir le coffre au trésor",
+   "at": "#app #pageHost .reveal-in .chest-float",
+   "kind": "aria-label",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "PARAMÈTRES",
+   "at": ".reveal-in div .sec-head h2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "PAYER B",
+   "at": "#sheetBody .reveal-in #depPayRowB span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "PAYER-A",
+   "at": "#sheetBody .reveal-in #depPayRowA span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Parrainage",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Partager le lien",
+   "at": "#pageHost .reveal-in .app-card div",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Partagez votre lien, bâtissez votre richesse, améliorez votre vie.",
+   "at": "#pageHost .reveal-in .app-card p",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "Payout update",
+   "at": ".msg-row .txt .top .t1",
+   "kind": "text",
+   "screens": [
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "Payouts run daily.",
+   "at": ".reveal-in .msg-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "Payé",
+   "at": ".reveal-in .rec .txt .rec-pill",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Plus de données",
+   "at": "#sheetBody #balBody .reveal-in .list-end",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Plus de tours disponibles. Votre prochain tour gratuit s'ouvre à minuit.",
+   "at": "#sheetBg #sheetBody .reveal-in #ttSub",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Pointage quotidien",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "Pointage · UGX 500",
+   "at": "#sheetBody .reveal-in .app-card #checkinBtn",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "Pointez une fois par jour (réinitialisé à minuit) pour conserver votre série et gagner UGX 500 à chaque fois.",
+   "at": "#sheetBody .reveal-in .app-card div",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "Portefeuille",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Portefeuille de retrait",
+   "at": "#sheetBody .reveal-in .dep-sec span",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Produits",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Recharge disponible 24 h/24, 7 j/7.",
+   "at": ".reveal-in .dep-instr ol li",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Redirection vers le paiement…",
+   "at": "body #depRedirect .dep-redirect-inner .dep-redirect-text",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Reste à gagner",
+   "at": "#app #pageHost .mp-band .mp-band-k",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Retour",
+   "at": "body #sheetBg .sheet-head .back",
+   "kind": "aria-label",
+   "screens": [
+    "about",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "checkin",
+    "chest",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "login-password",
+    "message-detail",
+    "messages",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Retrait",
+   "at": ".reveal-in .home-actions .home-action .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "notify",
+    "pay-redirect",
+    "products",
+    "spin-win",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "RÉCUPÉRER",
+   "at": "body #chestWinBg .chest-win-card .dark-button",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "chest-win",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "spin-win",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Récompense de parrainage",
+   "at": "#pageHost .reveal-in .app-card h3",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "S'INSCRIRE",
+   "at": ".wrap .auth-card #registerPane h1",
+   "kind": "text",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "S'inscrire",
+   "at": ".auth-card #loginPane .auth-switch a",
+   "kind": "text",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Saisissez à nouveau le nouveau code à 6 chiffres",
+   "at": "#sheetBody .reveal-in .pw-field #tpNew2",
+   "kind": "placeholder",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Saisissez à nouveau le nouveau mot de passe",
+   "at": "#sheetBody .reveal-in .pw-field #lpNew2",
+   "kind": "placeholder",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Se souvenir de moi",
+   "at": ".auth-card #loginPane .row-check span",
+   "kind": "text",
+   "screens": [
+    "login"
+   ]
+  },
+  {
+   "text": "Service",
+   "at": ".reveal-in .home-actions .home-action .lbl",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "notify",
+    "products"
+   ]
+  },
+  {
+   "text": "Si le dépôt n'est pas reçu, contactez le service client sur TG.",
+   "at": ".reveal-in .dep-instr ol li",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Si rien ne se passe, l'application est déjà installée — ouvrez-la depuis votre écran d'accueil. Sur iPhone, utilisez Partager puis « Sur l'écran d'accueil ».",
+   "at": "#sheetBody .dl-screen .dl-body #dlNote",
+   "kind": "text",
+   "screens": [
+    "download-app"
+   ]
+  },
+  {
+   "text": "Solde actuel",
+   "at": "#sheetBg #sheetBody .bal-band .lbl",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Solde disponible",
+   "at": "#sheetBody .reveal-in .wit-bal .lbl",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Solde du portefeuille",
+   "at": ".reveal-in div .acct-profile .bal-label",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Série en cours",
+   "at": "#sheetBody .reveal-in .app-card div",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "T",
+   "at": "#balBody .reveal-in .rec .av",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "TOURNER",
+   "at": ".reveal-in .tt-wheel-wrap #ttWheel .hub",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Taux de commission",
+   "at": "#app #pageHost .reveal-in .plain-head",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Terminé",
+   "at": "#app #pageHost .mp-filters .mp-f",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Thanks for joining.",
+   "at": ".reveal-in .msg-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "login-password",
+    "message-detail",
+    "messages"
+   ]
+  },
+  {
+   "text": "Titulaire du compte",
+   "at": "#sheetBody .reveal-in .wallet-card .holder-lbl",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Total gagné",
+   "at": ".mp-band .mp-band-row div span",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Total investi",
+   "at": ".mp-band .mp-band-row div span",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "Tour quotidien et gains bonus",
+   "at": ".setting-list .setting-row .txt .t2",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Tout",
+   "at": "#app #pageHost .mp-filters .mp-f",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Transaction",
+   "at": ".reveal-in .rec .txt .t1",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Trésor mystère",
+   "at": "#sheetBg #sheetBody .reveal-in h2",
+   "kind": "text",
+   "screens": [
+    "chest"
+   ]
+  },
+  {
+   "text": "Télécharger",
+   "at": "#sheetBody .dl-screen .dl-body #dlInstallBtn",
+   "kind": "text",
+   "screens": [
+    "download-app"
+   ]
+  },
+  {
+   "text": "Télécharger l'application",
+   "at": ".setting-list .setting-row .txt .t1",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Téléphone de paiement",
+   "at": "#sheetBody .reveal-in .dep-sec span",
+   "kind": "text",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "UGX",
+   "at": "#sheetBody .reveal-in .wit-amt span",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "UGX 0.00",
+   "at": "#app #pageHost .mp-band .mp-band-v",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "UGX 120,000.00",
+   "at": "#pageHost .reveal-in .team-gcard #teamDepositsAmt",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "UGX 128,500.00",
+   "at": ".reveal-in div .acct-profile #acctWallet",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "balance-record",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "deposit",
+    "download-app",
+    "help",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "pay-redirect",
+    "spin-win",
+    "trade-password",
+    "turntable",
+    "wallet",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "UGX 2,700,000.00",
+   "at": ".mp-band .mp-band-row div b",
+   "kind": "text",
+   "screens": [
+    "my-products",
+    "my-products/all",
+    "my-products/matured"
+   ]
+  },
+  {
+   "text": "UGX 4,200.00",
+   "at": "#pageHost .reveal-in .team-gcard #teamCommissionAmt",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "UGX 90,000.00",
+   "at": ".mp-band .mp-band-row div b",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "UGX120,015.36",
+   "at": "#sheetBg #sheetBody .bal-band #balBandValue",
+   "kind": "text",
+   "screens": [
+    "balance-record"
+   ]
+  },
+  {
+   "text": "UGX128,500.00",
+   "at": "#sheetBody .reveal-in .wit-bal .val",
+   "kind": "text",
+   "screens": [
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "UGX5,000.00",
+   "at": "body #chestWinBg .chest-win-card #chestWinAmount",
+   "kind": "text",
+   "screens": [
+    "chest-win"
+   ]
+  },
+  {
+   "text": "UGX700.00",
+   "at": "body #chestWinBg .chest-win-card #chestWinAmount",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "spin-win",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Un retrait à la fois — une fois payé, vous pouvez demander le suivant. Jusqu’à 1 par jour.",
+   "at": ".reveal-in .wit-instr ol li",
+   "kind": "text",
+   "screens": [
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Un tour gratuit chaque jour, réinitialisé à minuit.",
+   "at": ".reveal-in .tt-rules ul #ttRuleDaily",
+   "kind": "text",
+   "screens": [
+    "turntable"
+   ]
+  },
+  {
+   "text": "Utilisateur",
+   "at": ".team-member .top div .name",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Votre mot de passe de connexion sert à vous connecter à votre compte Chipz.",
+   "at": "#sheetBg #sheetBody .reveal-in .pw-note",
+   "kind": "text",
+   "screens": [
+    "login-password"
+   ]
+  },
+  {
+   "text": "Votre mot de passe de transaction est le code à 6 chiffres qui confirme vos retraits et autres opérations sensibles.",
+   "at": "#sheetBg #sheetBody .reveal-in .pw-note",
+   "kind": "text",
+   "screens": [
+    "trade-password"
+   ]
+  },
+  {
+   "text": "Votre numéro de paiement (7XXXXXXXX)",
+   "at": "#sheetBody .reveal-in .dep-phone #depPhone",
+   "kind": "placeholder",
+   "screens": [
+    "deposit",
+    "deposit/pay-b"
+   ]
+  },
+  {
+   "text": "Votre portefeuille",
+   "at": "#sheetBg #sheetBody .reveal-in .plain-h2",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "Vous avez déjà un compte ?",
+   "at": ".wrap .auth-card #registerPane .auth-switch",
+   "kind": "text",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "Vous avez gagné",
+   "at": "body #chestWinBg .chest-win-card .sub",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "chest-win",
+    "confirm",
+    "deposit/pay-b",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "spin-win",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "W",
+   "at": "#balBody .reveal-in .rec .av",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Welcome Bonus",
+   "at": ".reveal-in .rec .txt .t1",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Welcome to the app.",
+   "at": "#announceBg .announce-wrap .announce-scroll #announceBody",
+   "kind": "text",
+   "screens": [
+    "home"
+   ]
+  },
+  {
+   "text": "XXXXXXXXXX",
+   "at": "#sheetBody .reveal-in .wallet-card .num",
+   "kind": "text",
+   "screens": [
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Z",
+   "at": "#authHero .mark-row .auth-wordmark b",
+   "kind": "text",
+   "screens": [
+    "announcement",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "confirm",
+    "home",
+    "login",
+    "notify",
+    "products",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "http://127.0.0.1:8899/?ref=UG7Q4X",
+   "at": ".reveal-in .app-card .url-row span",
+   "kind": "text",
+   "screens": [
+    "referral"
+   ]
+  },
+  {
+   "text": "jours",
+   "at": ".reveal-in .app-card .mono span",
+   "kind": "text",
+   "screens": [
+    "checkin"
+   ]
+  },
+  {
+   "text": "À propos de Chipz",
+   "at": "body #sheetBg .sheet-head #sheetTitle",
+   "kind": "text",
+   "screens": [
+    "about"
+   ]
+  },
+  {
+   "text": "Échoué",
+   "at": ".reveal-in .rec .txt .rec-pill",
+   "kind": "text",
+   "screens": [
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "transaction-detail"
+   ]
+  },
+  {
+   "text": "Équipe",
+   "at": "#app .bottom-nav .navitem .lbl",
+   "kind": "text",
+   "screens": [
+    "about",
+    "account",
+    "announcement",
+    "balance-record",
+    "balance-record/deposit",
+    "balance-record/turntable",
+    "balance-record/withdraw",
+    "buy-confirm",
+    "checkin",
+    "chest",
+    "chest-win",
+    "confirm",
+    "deposit",
+    "deposit/pay-b",
+    "download-app",
+    "help",
+    "home",
+    "lang-picker",
+    "login-password",
+    "message-detail",
+    "messages",
+    "my-products",
+    "my-products/all",
+    "my-products/matured",
+    "notify",
+    "pay-redirect",
+    "products",
+    "referral",
+    "spin-win",
+    "team",
+    "team/level-2",
+    "trade-password",
+    "transaction-detail",
+    "turntable",
+    "wallet",
+    "wallet/edit",
+    "withdraw"
+   ]
+  },
+  {
+   "text": "Équipe totale",
+   "at": ".reveal-in .team-gcard .row1 .lbl",
+   "kind": "text",
+   "screens": [
+    "deposit/pay-b",
+    "team",
+    "team/level-2",
+    "transaction-detail",
+    "wallet/edit"
+   ]
+  },
+  {
+   "text": "⚠️",
+   "at": "body #notifyBg .notify-card .notify-icon",
+   "kind": "text",
+   "screens": [
+    "notify"
+   ]
+  },
+  {
+   "text": "🎁",
+   "at": ".auth-card #registerPane .auth-field .emoji",
+   "kind": "text",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "🔒",
+   "at": ".auth-card #loginPane .auth-field .emoji",
+   "kind": "text",
+   "screens": [
+    "login",
+    "register",
+    "register-optional-code"
+   ]
+  },
+  {
+   "text": "🗝",
+   "at": ".auth-card #registerPane .auth-field .emoji",
+   "kind": "text",
+   "screens": [
+    "register",
+    "register-optional-code"
+   ]
+  }
+ ],
+ "page_errors": [],
+ "step_errors": []
+}

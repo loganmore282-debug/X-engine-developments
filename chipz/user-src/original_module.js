@@ -199,12 +199,12 @@ var LANG_ROWS = [
   ['Logging in\u2026', 'Oyingira\u2026', 'Inaingia\u2026', 'Connexion en cours\u2026', 'Urimo kwinjira\u2026', 'Nootaaha\u2026'],
   ['Creating your account\u2026', 'Tukolawo akawunti yo\u2026', 'Inatengeneza akaunti yako\u2026', 'Cr\u00e9ation de votre compte\u2026', 'Turimo gushyiraho konti yawe\u2026', 'Nitukora akaunti yaawe\u2026'],
   ['Wallet', 'Ensawo', 'Pochi', 'Portefeuille', 'Umufuka', 'Ensaho'],
-  ['Messages', 'Obubaka', 'Ujumbe', '', 'Ubutumwa', 'Obutumwa'],
+  ['Messages', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa'],
   ['Balance Record', 'Ebiwandiiko bya Ssente', 'Rekodi ya Salio', 'Historique du solde', 'Amateka y\'amafaranga', 'Ebihandiiko bya Sente'],
   ['Login Password', 'Ekisumuluzo ky\'Okuyingira', 'Nenosiri la Kuingia', 'Mot de passe de connexion', 'Ijambobanga ryo kwinjira', 'Ekisumuruzo ky\'Okutaaha'],
   ['Trade Password', 'Ekisumuluzo ky\'Okusuubula', 'Nenosiri la Malipo', 'Mot de passe de transaction', 'Ijambobanga ry\'ubucuruzi', 'Ekisumuruzo ky\'Okushuubura'],
   ['Download APP', 'Tikka APP', 'Pakua APP', 'T\u00e9l\u00e9charger l\'application', 'Kuramo APP', 'Tikka APP'],
-  ['Turntable', 'Enkyukakyuka', 'Gurudumu', 'La Roue', 'Uruziga', ''],
+  ['Turntable', 'Enkyukakyuka', 'Gurudumu', 'La Roue', 'Uruziga', 'Ekizengurutsi'],
   ['Language', 'Olulimi', 'Lugha', 'Langue', 'Ururimi', 'Orurimi'],
   ['SETTINGS', 'ENTEEKATEEKA', 'MIPANGILIO', 'PARAM\u00c8TRES', 'IGENAMITERERE', 'ENTEEKATEEKA'],
   ['Cancel', 'Sazaamu', 'Ghairi', 'Annuler', 'Hagarika', 'Sazamu'],
@@ -238,7 +238,7 @@ var LANG_ROWS = [
   ['Click', 'Nyiga', 'Bonyeza', 'Cliquez', 'Kanda', 'Kanda'],
   ['Close', 'Ggalawo', 'Funga', 'Fermer', 'Funga', 'Kinga'],
   ['COLLECT', 'TWALA', 'CHUKUA', 'R\u00c9CUP\u00c9RER', 'FATA', 'TWARA'],
-  ['Congratulations!', '', 'Hongera!', 'F\u00e9licitations !', 'Turagushimira!', ''],
+  ['Congratulations!', 'Tukusanyukidde!', 'Hongera!', 'F\u00e9licitations !', 'Turagushimira!', 'Tukushemereirwe!'],
   ['Daily', 'Buli lunaku', 'Kila siku', 'Quotidien', 'Buri munsi', 'Buri izooba'],
   ['Days', 'Ennaku', 'Siku', 'Jours', 'Iminsi', 'Ebiro'],
   ['Download', 'Tikka', 'Pakua', 'T\u00e9l\u00e9charger', 'Kuramo', 'Tikka'],
@@ -247,12 +247,12 @@ var LANG_ROWS = [
   ['Loading...', 'Kitegekebwa...', 'Inapakia...', 'Chargement...', 'Birimo gupakirwa...', 'Nikitegyekwa...'],
   ['Loading\u2026', 'Kitegekebwa\u2026', 'Inapakia\u2026', 'Chargement\u2026', 'Birimo gupakirwa\u2026', 'Nikitegyekwa\u2026'],
   ['Price', 'Omuwendo', 'Bei', 'Prix', 'Igiciro', 'Omuhendo'],
-  ['Recharge', 'Teeka Ssente', 'Weka Pesa', '', 'Kubitsa', 'Ta Sente'],
+  ['Recharge', 'Teeka Ssente', 'Weka Pesa', '=', 'Kubitsa', 'Ta Sente'],
   ['Refresh', 'Ddamu ogezeeko', 'Onyesha upya', 'Actualiser', 'Vugurura', 'Garukamu'],
-  ['Service', 'Obuyambi', 'Huduma', '', 'Serivisi', 'Obuhwezi'],
+  ['Service', 'Obuyambi', 'Huduma', '=', 'Serivisi', 'Obuhwezi'],
   ['SPIN', 'ZUNGUSA', 'ZUNGUSHA', 'TOURNER', 'ZUNGUZA', 'ZENGURUTSA'],
-  ['Total', 'Omugatte', 'Jumla', '', 'Igiteranyo', 'Byona hamwe'],
-  ['TURNTABLE', 'ENKYUKAKYUKA', 'GURUDUMU', 'LA ROUE', 'URUZIGA', ''],
+  ['Total', 'Omugatte', 'Jumla', '=', 'Igiteranyo', 'Byona hamwe'],
+  ['TURNTABLE', 'ENKYUKAKYUKA', 'GURUDUMU', 'LA ROUE', 'URUZIGA', 'EKIZENGURUTSI'],
   ['User', 'Omukozesa', 'Mtumiaji', 'Utilisateur', 'Ukoresha', 'Omukozesa'],
   ['Verify', 'Kakasa', 'Hakiki', 'V\u00e9rifier', 'Genzura', 'Hamya'],
   ['Welcome', 'Tukwaniriza', 'Karibu', 'Bienvenue', 'Murakaza neza', 'Mukaaze gye'],
@@ -267,7 +267,7 @@ var LANG_ROWS = [
   ['Copy link', 'Koppa lyanka', 'Nakili kiungo', 'Copier le lien', 'Koporora umurongo', 'Koppa orunyiriri'],
   ['Copy this', 'Koppa kino', 'Nakili hii', 'Copier ceci', 'Koporora ibi', 'Koppa eki'],
   ['Current Balance', 'Ssente Eziriwo Kati', 'Salio la Sasa', 'Solde actuel', 'Amafaranga ariho ubu', 'Sente Eziriho Hati'],
-  ['Current streak', 'Ennaku z\'obutasalako', 'Mfululizo wa sasa', 'S\u00e9rie en cours', 'Umubare w\'iminsi ikurikiranye', ''],
+  ['Current streak', 'Ennaku z\'obutasalako', 'Mfululizo wa sasa', 'S\u00e9rie en cours', 'Umubare w\'iminsi ikurikiranye', 'Orukurato hati'],
   ['Customer Service', 'Obuyambi eri Abaguzi', 'Huduma kwa Wateja', 'Service client', 'Serivisi z\'abakiriya', 'Obuhwezi bw\'Abaguzi'],
   ['Daily Check-in', 'Okukyalira Buli Lunaku', 'Kuhudhuria Kila Siku', 'Pointage quotidien', 'Kwiyandikisha buri munsi', 'Okwoleka Buri Izooba'],
   ['Deposit Instructions', 'Ebiragiro by\'Okuteeka Ssente', 'Maelekezo ya Kuweka Pesa', 'Instructions de d\u00e9p\u00f4t', 'Amabwiriza yo kubitsa', 'Ebiragiro by\'Okuta Sente'],
@@ -303,7 +303,6 @@ var LANG_ROWS = [
   ['You won', 'Owanguddemu', 'Umeshinda', 'Vous avez gagn\u00e9', 'Watsinze', 'Osingwire'],
   ['You\'ll receive:', 'Ojja kufuna:', 'Utapokea:', 'Vous recevrez :', 'Uzabona:', 'Noija kutunga:'],
   ['Your Wallet', 'Ensawo Yo', 'Pochi Yako', 'Votre portefeuille', 'Umufuka wawe', 'Ensaho Yaawe'],
-  ['07XX XXX XXX', '', '', '', '', ''],
   ['Account Holder Name', 'Erinnya lya Nnannyini Akawunti', 'Jina la Mwenye Akaunti', 'Nom du titulaire du compte', 'Izina rya nyir\'ikonti', 'Eiziina rya Nyiini Akaunti'],
   ['Confirm Login Password', 'Kakasa Ekisumuluzo ky\'Okuyingira', 'Thibitisha Nenosiri la Kuingia', 'Confirmez le mot de passe de connexion', 'Emeza ijambobanga ryo kwinjira', 'Hamya Ekisumuruzo ky\'Okutaaha'],
   ['Confirm New Password', 'Kakasa Ekisumuluzo Ekiggya', 'Thibitisha Nenosiri Jipya', 'Confirmez le nouveau mot de passe', 'Emeza ijambobanga rishya', 'Hamya Ekisumuruzo Ekisya'],
@@ -401,6 +400,54 @@ var LANG_ROWS = [
   ['Please fill in your payment account accurately, incorrect filling may result in the loss of the transferred funds.', 'Wandiika akawunti yo ey\'okusasula obulungi; bw\'ogiwandiika obubi osobola okufiirwa ssente z\'oweerezza.', 'Tafadhali jaza akaunti yako ya malipo kwa usahihi; ukikosea unaweza kupoteza pesa ulizotuma.', 'Veuillez saisir votre compte de paiement avec exactitude ; une erreur peut entra\u00eener la perte des fonds transf\u00e9r\u00e9s.', 'Nyamuneka andika konti yawe yo kwishyura neza; ukosheje ushobora gutakaza amafaranga wohereje.', 'Handiika akaunti yaawe y\'okushashura gye; ku orikuhandiika kubi noobaasa kufeerwa sente ezi ohereize.'],
   ['Please fill in your payment method and the actual payment account you will use to make the payment.', 'Wandiika engeri y\'okusasula n\'akawunti ey\'amazima gy\'onookozesa okusasula.', 'Tafadhali jaza njia ya malipo na akaunti halisi utakayotumia kulipa.', 'Veuillez indiquer votre mode de paiement et le compte que vous utiliserez r\u00e9ellement pour payer.', 'Nyamuneka andika uburyo bwo kwishyura na konti nyayo uzakoresha wishyura.', 'Handiika omuringo gw\'okushashura n\'akaunti ey\'amazima ei orikwija kukozesa okushashura.'],
   ['Paste the whole confirmation message your phone received after you sent the money. Our team checks it and credits your balance.', 'Teeka obubaka bwonna obwakakasa obwatuuse ku ssimu yo nga omaze okusindika ssente. Ekibiina kyaffe kibukebera ne bakuteekera ssente.', 'Bandika ujumbe wote wa uthibitisho uliopokelewa kwenye simu yako baada ya kutuma pesa. Timu yetu itauangalia na kuongeza salio lako.', 'Collez l\'int\u00e9gralit\u00e9 du message de confirmation re\u00e7u sur votre t\u00e9l\u00e9phone apr\u00e8s l\'envoi de l\'argent. Notre \u00e9quipe le v\u00e9rifie et cr\u00e9dite votre solde.', 'Shyiramo ubutumwa bwose bwo kwemeza telefone yawe yakiriye nyuma yo kohereza amafaranga. Ikipe yacu irabusuzuma maze ikongera amafaranga yawe.', 'Ota obutumwa bwona obw\'okuhamya obu esimu yaawe eyakiire bwanyima y\'okutuma sente. Ekibiina kyaitu nikibureeba kandi bakakwongyeza sente.'],
+  // ── Added by add-i18n-coverage.py after measuring the real screens ──
+  // Everything below was found by find-untranslated.py driving the built
+  // app in Swahili and reading back every visible text node -- not by a
+  // regex over the sources, which is how they were missed in the first
+  // place. 'Failed' and 'Paid' are the two the owner named himself.
+  ['Paid', 'Kisasuddwa', 'Imelipwa', 'Payé', 'Byishyuwe', 'Kishashwirwe'],
+  ['Failed', 'Kigaanye', 'Imeshindwa', 'Échoué', 'Byanze', 'Kyaremeire'],
+  ['Pending', 'Kilindirira', 'Inasubiri', 'En attente', 'Birategerejwe', 'Nikitegyereza'],
+  ['Active', 'Kikola', 'Inaendelea', 'En cours', 'Birakomeza', 'Nikikora'],
+  ['Completed', 'Kiwedde', 'Imekamilika', 'Terminé', 'Byarangiye', 'Kihikire'],
+  ['No active plans right now', 'Tewali nteekateeka ekola kati', 'Hakuna mipango inayoendelea sasa', 'Aucun plan actif pour le moment', 'Nta gahunda irakora ubu', 'Tihariho nteekateeka erikukora hati'],
+  ['No active plans. Check Completed to see the ones that finished.', 'Tewali nteekateeka ekola. Nyiga Kiwedde okulaba ezo ezaggwa.', 'Hakuna mipango inayoendelea. Gusa Imekamilika kuona iliyokwisha.', 'Aucun plan actif. Ouvrez Terminé pour voir ceux qui sont arrivés à terme.', 'Nta gahunda irakora. Kanda Byarangiye urebe izarangiye.', 'Tihariho nteekateeka erikukora. Kanda Kihikire kureeba ezo ezahwire.'],
+  ['Transaction', 'Okukyusa ssente', 'Muamala', '=', 'Igikorwa', 'Okuhingura sente'],
+  ['OK', 'Kale', 'Sawa', '=', 'Yego', 'Kale'],
+  ['days', 'ennaku', 'siku', 'jours', 'iminsi', 'ebiro'],
+  ['Bind Wallet', 'Teeka Ensawo', 'Sajili Pochi', 'Associer le portefeuille', 'Andika umufuka', 'Teeka Ensaho'],
+  ['Change Wallet', 'Kyusa Ensawo', 'Badilisha Pochi', 'Changer de portefeuille', 'Hindura umufuka', 'Hindura Ensaho'],
+  ['NO WALLET BOUND', 'TEWALI NSAWO ETEEKEDDWA', 'HAKUNA POCHI ILIYOSAJILIWA', 'AUCUN PORTEFEUILLE ASSOCIÉ', 'NTA MUFUKA WANDITSWE', 'TIHARIHO NSAHO ETEIREHO'],
+  ['Get the mobile app', 'Funa pulogulaamu ya ssimu', 'Pata programu ya simu', 'Obtenez l\'application mobile', 'Kura porogaramu ya telefone', 'Tunga porogaraamu ya esimu'],
+  ['Manage your withdrawal wallet', 'Ddukanya ensawo yo ey\'okuggyamu ssente', 'Dhibiti pochi yako ya kutoa pesa', 'Gérez votre portefeuille de retrait', 'Genzura umufuka wawe wo kubikuza', 'Jwara ensaho yaawe y\'okwihamu sente'],
+  ['Transaction history', 'Ebyafaayo by\'ensimbi', 'Historia ya miamala', 'Historique des transactions', 'Amateka y\'ibikorwa', 'Ebyafaayo bya sente'],
+  ['Notifications & mail', 'Obubaka n\'ebirango', 'Arifa na barua', 'Notifications et messages', 'Amatangazo n\'ubutumwa', 'Obutumwa n\'ebirango'],
+  ['Change login password', 'Kyusa ekisumuluzo ky\'okuyingira', 'Badilisha nenosiri la kuingia', 'Changer le mot de passe de connexion', 'Hindura ijambobanga ryo kwinjira', 'Hindura ekisumuruzo ky\'okutaaha'],
+  ['Change trade / withdrawal password', 'Kyusa ekisumuluzo ky\'okusuubula / okuggyamu', 'Badilisha nenosiri la malipo / kutoa pesa', 'Changer le mot de passe de transaction / retrait', 'Hindura ijambobanga ry\'ubucuruzi / ryo kubikuza', 'Hindura ekisumuruzo ky\'okushuubura / okwihamu'],
+  ['Enter old password', 'Wandiika ekisumuluzo ekikadde', 'Weka nenosiri la zamani', 'Entrez l\'ancien mot de passe', 'Andika ijambobanga rya kera', 'Handiika ekisumuruzo ekikuru'],
+  ['Enter new password', 'Wandiika ekisumuluzo ekiggya', 'Weka nenosiri jipya', 'Entrez le nouveau mot de passe', 'Andika ijambobanga rishya', 'Handiika ekisumuruzo ekisya'],
+  ['Re-enter new password', 'Ddamu owandiike ekisumuluzo ekiggya', 'Weka tena nenosiri jipya', 'Saisissez à nouveau le nouveau mot de passe', 'Ongera wandike ijambobanga rishya', 'Garuka ohandiike ekisumuruzo ekisya'],
+  ['Enter old 6-digit PIN', 'Wandiika PIN enkadde ey\'ennamba 6', 'Weka PIN ya zamani ya tarakimu 6', 'Entrez l\'ancien code à 6 chiffres', 'Andika PIN ya kera y\'imibare 6', 'Handiika PIN enkuru y\'enamba 6'],
+  ['Enter new 6-digit PIN', 'Wandiika PIN empya ey\'ennamba 6', 'Weka PIN mpya ya tarakimu 6', 'Entrez le nouveau code à 6 chiffres', 'Andika PIN nshya y\'imibare 6', 'Handiika PIN ensya y\'enamba 6'],
+  ['Re-enter new 6-digit PIN', 'Ddamu owandiike PIN empya ey\'ennamba 6', 'Weka tena PIN mpya ya tarakimu 6', 'Saisissez à nouveau le nouveau code à 6 chiffres', 'Ongera wandike PIN nshya y\'imibare 6', 'Garuka ohandiike PIN ensya y\'enamba 6'],
+  ['No spins left. Your next free spin unlocks at midnight.', 'Tewali kuzungusa kusigadde. Okuzungusa okw\'obwereere okuddako kujja mu ttumbi.', 'Hakuna mizungusho iliyobaki. Mzungusho wako wa bure unaofuata unafunguka usiku wa manane.', 'Plus de tours disponibles. Votre prochain tour gratuit s\'ouvre à minuit.', 'Nta kuzunguza gusigaye. Ukuzunguza kwawe k\'ubuntu gukurikira gutangira saa sita z\'ijoro.', 'Tihariho kuzengurutsa kusigaire. Okuzengurutsa kwaawe kw\'obusa nikwija aha kiro.'],
+  ['1 spin available', 'Okuzungusa 1 kuliwo', 'Mzungusho 1 unapatikana', '1 tour disponible', 'Kuzunguza 1 gurahari', 'Okuzengurutsa 1 kuriho'],
+  ['Contact support for help with your account.', 'Tuukirira abayambi ku bikwata ku akawunti yo.', 'Wasiliana na msaada kwa usaidizi wa akaunti yako.', 'Contactez l\'assistance pour toute question sur votre compte.', 'Vugana na serivisi y\'abakiriya ku bibazo bya konti yawe.', 'Hikirira abahwezi ahabw\'akaunti yaawe.'],
+  ['Uganda\'s boldest way to grow your money', 'Engeri esinga obuvumu mu Uganda okukuza ssente zo', 'Njia jasiri zaidi Uganda ya kukuza pesa zako', 'La façon la plus audacieuse d\'Ouganda de faire fructifier votre argent', 'Inzira ishize amanga cyane mu Uganda yo kwungura amafaranga yawe', 'Omuringo ogurikukira obumanzi muri Uganda kukuza sente zaawe'],
+  ['If nothing happens, the app is already installed — open it from your home screen. On iPhone, use Share then "Add to Home Screen".', 'Bwe watabaawo kantu, pulogulaamu eteekeddwawo dda — gigguleko ku ssemasomero lyo. Ku iPhone, kozesa Share olyoke oyongere "Add to Home Screen".', 'Kama hakuna kinachotokea, programu imesakinishwa tayari — ifungue kutoka skrini yako ya kwanza. Kwenye iPhone, tumia Share kisha "Add to Home Screen".', "Si rien ne se passe, l'application est déjà installée — ouvrez-la depuis votre écran d'accueil. Sur iPhone, utilisez Partager puis « Sur l'écran d'accueil ».", 'Niba nta kibaye, porogaramu yamaze gushyirwaho — ifungure ku rupapuro rwawe rw’ibanze. Kuri iPhone, koresha Share hanyuma "Add to Home Screen".', 'Ku kutaribaho kintu, porogaraamu yaateirweho — gyigyure aha ndabiro yaawe. Aha iPhone, kozesa Share reero “Add to Home Screen”.'],
+  // The LETTER is what identifies a payment method, and it is deliberately
+  // kept: the admin panel where he configures these still says PAY-A / PAY B,
+  // so a member naming one is still unambiguous whichever language he reads.
+  // Only the English word around it is translated.
+  ['PAY-A', 'SASULA-A', 'LIPA-A', 'PAYER-A', 'ISHYURA-A', 'SHASHURA-A'],
+  ['PAY B', 'SASULA B', 'LIPA B', 'PAYER B', 'ISHYURA B', 'SHASHURA B'],
+  // The founder-account wording: what the very FIRST member of a new country
+  // sees on Sign Up, when there is no referral code for them to type yet.
+  // Found only after the coverage sweep was made to render that state -- the
+  // fixture had always sent referralRequired:true, so this pair of sentences
+  // had never once been on screen while anything was measuring.
+  ['Referral code (optional)', "Koodi y'okuyita (teetaagisa)", 'Msimbo wa mwaliko (si lazima)', 'Code de parrainage (facultatif)', 'Kode yo gutumira (ntikenewe)', "Koodi y'okweta (tikyetengyesa)"],
+  ['No code needed yet — you are among the first to join.', 'Tewetaagisa koodi kati — oli mu babereberye okwegatta.', 'Hakuna msimbo unaohitajika bado — wewe ni kati ya wa kwanza kujiunga.', "Aucun code n'est encore nécessaire — vous êtes parmi les premiers à nous rejoindre.", 'Nta kode ikenewe ubu — uri mu bambere binjira.', "Tihakwetengyesa koodi hati — oine omu b'okubanza kwegaitaho."],
 ];
 // code -> { english: translated }. Built once; an empty cell is simply not
 // stored, so a lookup miss and "deliberately English" are the same thing.
@@ -411,6 +458,13 @@ var DICT = (function(){
     const en = row[0];
     for (let i = 1; i < LANG_CODES.length; i++) {
       const v = row[i];
+      // '=' means "the right word in this language IS the English word", set
+      // deliberately (French for "Messages" is "Messages"). It stores NO
+      // entry, exactly like a blank, so t() returns the English either way --
+      // the difference is only that find-untranslated.py can tell a chosen
+      // match apart from a cell nobody has filled in yet, instead of
+      // reporting the same four French words as gaps on every single run.
+      if (v === '=') continue;
       if (typeof v === 'string' && v && v !== en) out[LANG_CODES[i]][en] = v;
     }
   }
@@ -423,7 +477,79 @@ function t(s){
   const d = DICT[LANG];
   if (!d) return s;
   const hit = d[s];
-  return (typeof hit === 'string' && hit) ? hit : s;
+  if (typeof hit === 'string' && hit) return hit;
+  // Not a whole-string row. Try the templates -- see LANG_PATTERNS.
+  return tPattern(s);
+}
+
+// ── SENTENCES WITH A FIGURE SPLICED INTO THEM ──
+// The table above matches a WHOLE string, which by construction can never
+// match a sentence built at render time: "Fee: 15%" is a different string for
+// every fee, so it would need a row per value. This is the second lookup --
+// each row is a TEMPLATE with {0}/{1} where the figure goes, matched against
+// the rendered text, and the captured figures are dropped into the
+// translation untouched.
+//
+// Two rules make this safe on a money screen:
+//   * only the LITERAL words are translated. Whatever {0} captured is copied
+//     across verbatim, so an amount, a date, a percentage or an account id
+//     can never be rewritten, reordered or re-formatted by a translation.
+//   * a template is only tried when the whole string matches end to end, so
+//     a pattern cannot rewrite part of a sentence it does not own.
+// Placeholders are NUMBERED, not positional, because a translation is allowed
+// to put them in a different order than English does.
+var LANG_PATTERNS = [
+  // [english template, lg, sw, fr, rw, nyn]
+  ['About {0}', 'Ku {0}', 'Kuhusu {0}', 'À propos de {0}', 'Ibyerekeye {0}', 'Ahabwa {0}'],
+  ['Get the {0} app', 'Funa pulogulaamu ya {0}', 'Pata programu ya {0}', "Obtenez l'application {0}", 'Kura porogaramu ya {0}', 'Tunga porogaraamu ya {0}'],
+  ['Your login password is used to sign in to your {0} account.', "Ekisumuluzo kyo eky'okuyingira kikozesebwa okuyingira mu akawunti yo ya {0}.", 'Nenosiri lako la kuingia hutumika kuingia katika akaunti yako ya {0}.', 'Votre mot de passe de connexion sert à vous connecter à votre compte {0}.', 'Ijambobanga ryawe ryo kwinjira rikoreshwa kwinjira mu konti yawe ya {0}.', "Ekisumuruzo kyaawe ky'okutaaha nikikozesibwa kutaaha omu akaunti yaawe ya {0}."],
+  ['{0} lets you invest in a range of products with daily income and a 3-level referral program.', '{0} kikusobozesa okuteeka ssente mu byamaguzi bya ngeri nnyingi n’ssente za buli lunaku n’enteekateeka y’okuyita ey’emitendera 3.', '{0} inakuwezesha kuwekeza katika bidhaa mbalimbali na mapato ya kila siku na mpango wa mialiko wa ngazi 3.', '{0} vous permet d’investir dans une gamme de produits avec un revenu quotidien et un programme de parrainage à 3 niveaux.', '{0} ituma ushobora gushora mu bicuruzwa bitandukanye ufite inyungu za buri munsi na gahunda yo gutumira y’inzego 3.', '{0} nikikureetera okuteeramu sente omu byamaguzi bya miringo mingi n’esente za buri izooba n’enteekateeka y’okweta ey’emirengo 3.'],
+  ['Fee: {0}%.', "Ssente z'obuweereza: {0}%.", 'Ada: {0}%.', 'Frais : {0} %.', 'Amafaranga ya serivisi: {0}%.', "Sente z'obuheereza: {0}%."],
+  ['Fee: {0}%', "Ssente z'obuweereza: {0}%", 'Ada: {0}%', 'Frais : {0} %', 'Amafaranga ya serivisi: {0}%', "Sente z'obuheereza: {0}%"],
+  ['LV{0} = {1}%', 'Omutendera {0} = {1}%', 'Ngazi {0} = {1}%', 'Niveau {0} = {1} %', 'Urwego {0} = {1}%', 'Omurengo {0} = {1}%'],
+  ['{0} Members', 'Abantu {0}', 'Wanachama {0}', '{0} membres', 'Abanyamuryango {0}', 'Abantu {0}'],
+  ['Joined {0}', 'Yeegatta {0}', 'Alijiunga {0}', 'Inscrit le {0}', 'Yinjiye {0}', 'Yaayegaitaho {0}'],
+  ['New Balance: {0}', 'Ssente Empya: {0}', 'Salio Jipya: {0}', 'Nouveau solde : {0}', 'Amafaranga mashya: {0}', 'Sente Ensya: {0}'],
+  ['ID: {0}', 'Nnamba: {0}', 'Kitambulisho: {0}', 'Identifiant : {0}', 'Nimero: {0}', 'Enamba: {0}'],
+  ['Minimum deposit amount: {0}', 'Ssente ezisembayo obutono okuteeka: {0}', 'Kiasi cha chini cha kuweka: {0}', 'Montant minimum de recharge : {0}', 'Ingano ntoya yo kubitsa: {0}', 'Sente ezirikukira obukye okuta: {0}'],
+  ['Check In · {0}', 'Okukyalira · {0}', 'Kuhudhuria · {0}', 'Pointage · {0}', 'Kwiyandikisha · {0}', 'Okwoleka · {0}'],
+  ['Check in once every day (resets at midnight) to keep your streak and earn {0} each time.', 'Kyalira omulundi gumu buli lunaku (kuddamu ku ttumbi) okukuuma olukalala lwo n’ofune {0} buli mulundi.', 'Hudhuria mara moja kila siku (inarudia usiku wa manane) ili kuendeleza mfululizo wako na kupata {0} kila mara.', 'Pointez une fois par jour (réinitialisé à minuit) pour conserver votre série et gagner {0} à chaque fois.', 'Iyandikishe rimwe ku munsi (bisubirana saa sita z’ijoro) kugira ngo ukomeze urukurikirane rwawe kandi wunguke {0} igihe cyose.', 'Yoleka omurundi gumwe buri izooba (nikugarukamu aha kiro) kurindira orukurato rwaawe kandi otunge {0} buri murundi.'],
+  ['Cash-out time: {0} to {1}.', 'Ebiseera by’okuggyamu ssente: {0} okutuuka {1}.', 'Muda wa kutoa pesa: {0} hadi {1}.', 'Heures de retrait : de {0} à {1}.', 'Igihe cyo kubikuza: {0} kugeza {1}.', 'Obwire bw’okwihamu sente: {0} kuhika {1}.'],
+  ['Amounts must be a multiple of {0} — for example {1}.', 'Omuwendo gulina kuba gwa {0} — okugeza {1}.', 'Kiasi kinapaswa kuwa kizidishi cha {0} — kwa mfano {1}.', 'Les montants doivent être un multiple de {0} — par exemple {1}.', 'Ingano igomba kuba umubare ushobora kugabanywa na {0} — urugero {1}.', 'Omuhendo gushemereire kuba gwa {0} — nk’oku {1}.'],
+  ['Withdrawal amounts should be between {0} and {1}.', 'Ssente z’okuggyamu zirina kuba wakati wa {0} ne {1}.', 'Kiasi cha kutoa kinapaswa kuwa kati ya {0} na {1}.', 'Les montants de retrait doivent être compris entre {0} et {1}.', 'Ingano yo kubikuza igomba kuba iri hagati ya {0} na {1}.', 'Sente z’okwihamu zishemereire kuba hagati ya {0} na {1}.'],
+  ['One cash-out at a time — once it is paid you can request the next. Up to {0} per day.', 'Okuggyamu kumu kkumu — nga kusasuddwa osobola okusaba okuddako. Okutuuka ku {0} olunaku.', 'Kutoa pesa moja kwa wakati — baada ya kulipwa unaweza kuomba kingine. Hadi {0} kwa siku.', 'Un retrait à la fois — une fois payé, vous pouvez demander le suivant. Jusqu’à {0} par jour.', 'Kubikuza rimwe gusa — iyo bimaze kwishyurwa ushobora gusaba ibikurikira. Kugeza kuri {0} ku munsi.', 'Okwihamu rumwe — ku kushashwirwe nobaasa kushaba okundi. Kuhika aha {0} aha izooba.'],
+  ['{0} spins available', 'Okuzungusa {0} kuliwo', 'Mizungusho {0} inapatikana', '{0} tours disponibles', 'Kuzunguza {0} gurahari', 'Okuzengurutsa {0} kuriho'],
+  ['Phone number must start with 0 and be {0} digits', 'Ennamba ya ssimu erina kutandika ne 0 n’eba ya nnamba {0}', 'Namba ya simu inapaswa kuanza na 0 na kuwa tarakimu {0}', 'Le numéro de téléphone doit commencer par 0 et compter {0} chiffres', 'Nimero ya telefone igomba gutangira na 0 kandi ibe imibare {0}', 'Enamba ya esimu ishemereire kutandika na 0 kandi kuba ya namba {0}'],
+  ['Your payment number ({0})', 'Ennamba yo ey’okusasula ({0})', 'Namba yako ya malipo ({0})', 'Votre numéro de paiement ({0})', 'Nimero yawe yo kwishyura ({0})', 'Enamba yaawe y’okushashura ({0})'],
+  ['Support hours: {0}', 'Ebiseera by’obuyambi: {0}', 'Saa za msaada: {0}', "Heures d'assistance : {0}", 'Amasaha ya serivisi: {0}', 'Obwire bw’obuhwezi: {0}'],
+];
+// Compiled once. Sorted by how much LITERAL text a template carries, longest
+// first, so a specific pattern always wins over a loose one no matter what
+// order the table is written in -- ordering a table by hand is exactly the
+// kind of thing that rots.
+var LANG_PATTERN_RE = LANG_PATTERNS.map(row => {
+  const parts = String(row[0]).split(/\{(\d+)\}/);
+  let src = '^', order = [], literal = 0;
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2) { order.push(Number(parts[i])); src += '([\\s\\S]+?)'; }
+    else { literal += parts[i].length; src += parts[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  }
+  return { re: new RegExp(src + '$'), order, row, literal };
+}).sort((a, b) => b.literal - a.literal);
+function tPattern(s){
+  const idx = LANG_CODES.indexOf(LANG);
+  if (idx < 1) return s;
+  for (const p of LANG_PATTERN_RE) {
+    const tpl = p.row[idx];
+    if (typeof tpl !== 'string' || !tpl || tpl === p.row[0]) continue;
+    const m = p.re.exec(s);
+    if (!m) continue;
+    return tpl.replace(/\{(\d+)\}/g, (_, n) => {
+      const at = p.order.indexOf(Number(n));
+      return at >= 0 ? m[at + 1] : '';
+    });
+  }
+  return s;
 }
 // ── TRANSLATING WHAT IS ALREADY ON SCREEN ──
 // This app draws nearly every screen by assigning a template literal to
@@ -455,21 +581,37 @@ function i18nTextNode(node){
   const want = hit === key ? src : String(src).replace(key, hit);
   if (node.nodeValue !== want) node.nodeValue = want;
 }
+// Per element+attr this remembers BOTH the English it was given and the exact
+// string it last wrote. Two things depend on keeping the second:
+//
+//   * the observer below watches attributes, so this function's own writes
+//     come straight back to it. Recognising its own output is what stops that
+//     being an infinite loop -- a plain flag cannot do it, because observer
+//     records are delivered a microtask later, by which time the flag is
+//     already clear.
+//   * app code is allowed to REPLACE a placeholder with different English
+//     (updateReferralFieldHint swaps "Referral code" for "Referral code
+//     (optional)"). Remembering only the first English ever seen would
+//     translate the OLD sentence back over the new one, which is worse than
+//     not translating at all. A value that is not our own output is taken as
+//     a new original.
 function i18nElementAttrs(el){
   let store = _i18nAttr.get(el);
   for (const a of I18N_ATTRS) {
-    let src;
-    if (store && a in store) src = store[a];
-    else {
-      if (!el.hasAttribute(a)) continue;
-      src = el.getAttribute(a);
+    if (!el.hasAttribute(a)) continue;
+    const cur = el.getAttribute(a);
+    let rec = store && store[a];
+    if (!rec || (cur !== rec.out && cur !== rec.en)) {
+      rec = { en: cur, out: null };
       if (!store) { store = {}; _i18nAttr.set(el, store); }
-      store[a] = src;
+      store[a] = rec;
     }
-    const key = String(src == null ? '' : src).trim();
+    const key = String(rec.en == null ? '' : rec.en).trim();
     if (!key) continue;
     const hit = t(key);
-    if (el.getAttribute(a) !== hit) el.setAttribute(a, hit);
+    const want = hit === key ? rec.en : String(rec.en).replace(key, hit);
+    rec.out = want;
+    if (cur !== want) el.setAttribute(a, want);
   }
 }
 function translateTree(root){
@@ -496,9 +638,22 @@ function translateTree(root){
     for (const el of els) { if (!el.closest('[data-no-i18n]')) i18nElementAttrs(el); }
   } catch(_){}
 }
-// Newly rendered HTML is translated as it lands. childList only, on purpose:
-// this function's own writes are characterData and attribute changes, so
-// observing those instead would feed it its own output forever.
+// Newly rendered HTML is translated as it lands.
+//
+// childList for new nodes, plus attributeFilter for exactly the three
+// attributes that carry words. characterData is still deliberately NOT
+// observed -- that IS this function's own text output, and there is no way to
+// tell it apart from app code writing the same string, so observing it would
+// feed the translator its own result forever. Attributes are different only
+// because i18nElementAttrs remembers what it wrote and skips it (see above).
+//
+// The attribute half was missing, and it was a real gap rather than a
+// theoretical one: updateReferralFieldHint() sets #regReferral's placeholder
+// AFTER the auth screen has been swept, so the Sign Up form's referral field
+// stayed in English in every language. Found by find-untranslated.py reading
+// the rendered placeholders -- no static check could see it, because the
+// string is in the table and the sweep does handle placeholders; what was
+// wrong was only WHEN.
 var _i18nObserving = false;
 function startI18nObserver(){
   if (_i18nObserving || typeof MutationObserver === 'undefined' || !document.body) return;
@@ -506,8 +661,18 @@ function startI18nObserver(){
   try {
     new MutationObserver(muts => {
       if (LANG === 'en') return; // the overwhelmingly common case, one branch
-      for (const m of muts) for (const node of m.addedNodes) translateTree(node);
-    }).observe(document.body, { childList: true, subtree: true });
+      for (const m of muts) {
+        if (m.type === 'attributes') {
+          if (m.target && m.target.nodeType === 1 && !m.target.closest('[data-no-i18n]'))
+            i18nElementAttrs(m.target);
+          continue;
+        }
+        for (const node of m.addedNodes) translateTree(node);
+      }
+    }).observe(document.body, {
+      childList: true, subtree: true,
+      attributes: true, attributeFilter: I18N_ATTRS,
+    });
   } catch(_){ _i18nObserving = false; }
 }
 // A full pass over the document. Run when the language changes -- including
@@ -4834,25 +4999,24 @@ window.openHelpSheet = async function(){
     wrap.innerHTML = `<img src="${esc(r.image)}" style="width:100%;display:block;border-radius:0;" alt="">`;
   }
 };
-// Splits already-HTML-escaped text into one <span class="reveal-word"> per
-// word, each carrying its own staggered animation-delay, so a text block's
-// CSS reveal (.scroll-reveal.in-view .reveal-word, see index.html) plays
-// word-by-word instead of the whole paragraph fading in as one flat unit
-// (owner: "live animation of words appearing as one scrolls down"). Splits
-// on runs of whitespace and passes whitespace tokens through unwrapped --
-// this preserves the surrounding <p>'s white-space:pre-line line breaks
-// exactly as before, and keeps the (already-escaped) HTML entities intact
-// since none of them contain whitespace internally. The per-word delay is
-// capped at 40 words so a long paragraph's tail doesn't end up waiting
-// several seconds to appear.
+// Wraps an already-HTML-escaped block of About text in ONE
+// <span class="reveal-word">.
+//
+// It used to be one span PER WORD, each with its own animation-delay, for a
+// staggered word-by-word reveal. That animation was removed on request and
+// .reveal-word is now opacity:1;transform:none -- so the split had stopped
+// doing anything at all except breaking translation: the i18n sweep matches a
+// WHOLE text node against the table, and a sentence chopped into fourteen
+// one-word nodes matches nothing. That is exactly why find-untranslated.py
+// reported "and", "of", "in", "you", "products", "daily" and "invest" as
+// untranslated words on this screen.
+//
+// The class is KEPT, and deliberately: a stale `.reveal-word{opacity:0}` rule
+// is what blanked this page once before, and test-visible-text.py's guard
+// (exactly one rule, never opacity:0) only means something while something on
+// the page still carries the class.
 function revealWordsHtml(escapedText){
-  let wordIndex = 0;
-  return String(escapedText).split(/(\s+)/).map(tok => {
-    if (!tok || /^\s+$/.test(tok)) return tok;
-    const delay = Math.min(wordIndex, 40) * 30;
-    wordIndex++;
-    return `<span class="reveal-word" style="animation-delay:${delay}ms">${tok}</span>`;
-  }).join('');
+  return `<span class="reveal-word">${escapedText}</span>`;
 }
 // About page: an admin-authored ordered list of text/image blocks (see
 // /public/about-content), rendered as an article and revealed block-by-

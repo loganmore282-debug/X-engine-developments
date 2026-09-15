@@ -4819,3 +4819,188 @@ he has used. If any of them is in the way, it is one number:
 
 Every settings refusal already names its field and its range
 (`${key} must be a number between ${min} and ${max}`), so a limit met there says which.
+
+## Round 165 — Every language, on every screen: measured from the screen, not the source
+
+> "make sure every language is fixed on anything, please checkout such that none
+> remaining, words such as failed, paid ... all words on login, register, dashboard,
+> deposit, wallet, download app, every thing they are very very many, they should change
+> uniformly in language not missing English and any language, whether redirecting to
+> payment page, should change to that language, whether words in my products all terms
+> there should change ... price, total, coming soon, all everything"
+
+Round 163 shipped the language layer and measured its table as **98% full**. That figure
+was true and useless: it measures the table against **itself**. What the owner was looking
+at was the app, and the app was full of English.
+
+### The method, and why the old one could not work
+`extract-ui-strings.py` reads the sources with regexes and found **213** strings. A regex
+has to model how each string is *built*, and this app builds nearly every screen out of
+template literals, helper calls, ternaries inside attributes and strings assembled from
+two halves — so anything the patterns did not model simply was not in the list, silently.
+
+**`find-untranslated.py` asks the screen instead.** It drives the BUILT, obfuscated app
+with the language forced, walks **40** screens/sheets/dialogs/sub-tabs, and reads back
+every visible text node *and* every `placeholder`/`aria-label`/`title`. Anything it cannot
+account for against the real `LANG_ROWS`/`LANG_PATTERNS` (parsed out of the app's own
+source) is a finding. It cannot miss a string because of how that string is written.
+
+First run, in Swahili: **78 findings**. They fell into three causes, not one.
+
+### Cause 1 — a whole-string table can never match a sentence with a figure in it
+`Fee: 15%`, `LV1 = 27%`, `New Balance: UGX13,293.23`, `Minimum deposit amount: UGX 30,000`,
+`ID: 00042`, `2 Members`, `Joined 01/09/2026 10:00`, `0 spins available`,
+`Withdrawal amounts should be between 20,000 and 1,000,000.` — the figure is spliced in at
+render time, so the string differs every time and **no row can ever equal it**. Adding
+rows cannot fix this class; it needs a second lookup.
+
+**`LANG_PATTERNS`** is that lookup: 22 templates with `{0}`/`{1}` where the figure goes.
+`t()` falls through to `tPattern()` when the whole-string lookup misses.
+
+- **Only the literal words are translated.** Whatever `{0}` captured is copied across
+  verbatim, so an amount, a date, a percentage or an account id can never be rewritten,
+  reformatted or reordered by a translation. On a money screen that is the whole point.
+- **Placeholders are NUMBERED, not positional**, because a translation is allowed to move
+  them — Swahili renders `2 Members` as `Wanachama 2`.
+- **Anchored end to end**, so a template can never rewrite part of a sentence it does not
+  own. `Paid in full: 15% of nothing` comes back untouched.
+- **Compiled once and sorted by how much literal text each template carries**, longest
+  first, so a specific template always beats a loose one *regardless of the order the
+  table is written in*. Hand-ordering a table is exactly the kind of thing that rots.
+- `test-languages.js` asserts every translation keeps **every placeholder the English
+  uses** — a template that drops its `{0}` silently drops a figure off a money screen, and
+  that is invisible from a screenshot (it renders as the translation, just missing a
+  number), which is why it is pinned by comparing templates rather than by looking.
+
+### Cause 2 — the About page was chopped into one span per WORD
+`revealWordsHtml()` wrapped every word in its own `<span class="reveal-word">` with its own
+`animation-delay`, for a staggered reveal that was **removed on request** — `.reveal-word`
+is `opacity:1;transform:none` and nothing animates. So the split had stopped doing anything
+at all except **making the page untranslatable**: the sweep matches a WHOLE text node, and
+a sentence in fourteen one-word nodes matches nothing. That is exactly why the report
+listed `and`, `of`, `in`, `you`, `products`, `daily`, `invest` as findings.
+
+It is one span per BLOCK now. **The class is kept deliberately**: a stale
+`.reveal-word{opacity:0}` rule is what blanked this page once before, and
+`test-visible-text.py`'s guard only means something while something still carries it.
+
+### Cause 3 — an attribute written AFTER the sweep was never translated
+The observer was `childList` only. `updateReferralFieldHint()` sets `#regReferral`'s
+placeholder *after* the auth screen has been swept, so **the Sign Up referral field stayed
+in English in every language** — the one field on the one screen every new member meets.
+
+It observes `attributeFilter: I18N_ATTRS` now. `characterData` is still deliberately NOT
+observed: that IS the translator's own text output and there is no way to tell it apart
+from app code writing the same string, so observing it would feed the translator its own
+result forever.
+
+**Attributes are only safe to observe because `i18nElementAttrs` now remembers what it
+WROTE, not just the English it was given.** Two things depend on that second field, and
+the second one is a bug the coverage sweep structurally cannot see:
+
+- an observer record arrives a microtask later, so a "we are writing now" flag cannot
+  work; recognising its own output is the only thing that stops the loop;
+- app code is allowed to **replace** a placeholder with *different* English. Remembering
+  only the first English ever seen translates the OLD sentence back over the new one —
+  the **wrong sentence, in the right language**. No sweep looking for English can ever
+  see that, so it is asserted in `test-languages.js` by replacing the attribute and
+  reading what comes out.
+
+### What is deliberately still English, and why
+- **Anything the owner types in the admin panel** — message titles and bodies, the
+  announcement text, About blocks, the brand tagline once he sets one. Nothing in this
+  repo can translate a sentence written at runtime. Listed explicitly in the tool
+  (`ADMIN_AUTHORED`) rather than guessed at, so a real string can never be waved away as
+  "probably admin copy".
+- **Amounts, dates, times, currency labels, dialling codes, account ids, product names.**
+  Translating any of these would be a bug.
+- **`07XX XXX XXX`** was a table ROW and should never have been: it is a number *mask*,
+  identical in every language, so it could only ever be an empty cell reported as a gap
+  forever. Row deleted, added to the tool's data patterns.
+- **`PAY-A` / `PAY B` ARE translated** (`LIPA-A` / `LIPA B` in Swahili) — but the **letter
+  is kept**, because the admin panel where he configures them still says PAY-A / PAY B, so
+  a member naming one is still unambiguous.
+
+### `'='` — a chosen match is not a missing translation
+French for *Messages* is *Messages*; the same is true of *OK*, *Service* and
+*Transaction*. Those cells were **blank**, which is byte-identical to "nobody has
+translated this yet" — so the tool reported the same four French words as gaps on every
+run, forever. A cell may now hold **`'='`**, meaning *the right word in this language IS
+the English word*. `DICT` stores no entry for it (so `t()` returns the English, exactly as
+a blank does); the only difference is that the coverage tool can tell the two apart.
+
+### The sweep's own length cap was a silent trap
+`i18nTextNode()` skips any text node longer than **160** characters, so the translator
+cannot be dragged through a wall of member content. A row longer than that is therefore a
+row that **can never apply**, with nothing at runtime saying so. No row exceeds it today
+(longest is 127) and `test-languages.js` now reads the cap **out of the source** and fails
+if any row or template does.
+
+### Result
+| | before | after |
+|---|---|---|
+| table rows | 222 | **255** |
+| pattern templates | 0 | **22** |
+| filled cells | 1096/1110, 14 blank | **1269/1275, 0 blank** |
+| cells deliberately identical to English | 0 (indistinguishable from blank) | **6, marked `'='`** |
+| Swahili findings over 40 screens | **78** | **0** |
+| Luganda / French / Kinyarwanda / Runyankole | not measured | **0 each** |
+
+The last three blanks were worth chasing rather than declaring acceptable, and they split
+the way the rest did: French for **Recharge** is *Recharge* and for **Total** is *Total*
+(both now `'='`, a choice rather than a hole), while **TURNTABLE** was simply the
+uppercase twin of a row filled earlier in this round and had been missed.
+
+`test-i18n-coverage.py` is the standing assertion — it runs the sweep **once per
+language**, because every column is a separate claim: Swahili came back clean while French
+still showed five English sentences and Runyankole three. "Uniformly, not missing any
+language" is only testable by rendering each one. It fails on a page error or a step that
+would not open, too: *"no findings" from a screen that never rendered is the most dangerous
+kind of green.*
+
+### Five lessons, and four of them cost a missed mutation
+`verify-i18n-coverage-discriminates.py` breaks the work eleven ways; **five were MISSED on
+the first run**, and every one was a hole in my own harness rather than in the app:
+
+1. **"Failed" and "Paid" — the two words the owner named — could be deleted from the table
+   undetected.** The ledger pill's three words come from `balRowStatus()`, which reads the
+   transaction's **description** (`Withdrawal: Paid`) and classifies it, not its `status`
+   field. Every fixture row had a `desc` key the app never reads, so the pill always fell
+   through to `Pending` and the other two states had **never once been on screen while
+   anything was measuring.** A fixture that cannot reach a state cannot test it.
+2. **The founder-account Sign Up wording had never rendered either** — the fixture always
+   sent `referralRequired: true`. Rendering the other state immediately found **two more
+   real gaps** (`Referral code (optional)` and `No code needed yet — you are among the
+   first to join.`), which is what the very first member of a new country reads.
+3. **`referralRequired` sits INSIDE `settings`**, not beside it. Put in the wrong place it
+   was ignored, the optional state silently never rendered, and the run still said "0
+   findings" — a fixture wired to the wrong key is indistinguishable from a passing test.
+4. **A pattern that drops its `{0}` is invisible from the screen** (it renders as the
+   translation, minus a figure). It is caught by comparing placeholder sets in
+   `test-languages.js`, so the mutation harness has to run **both** harnesses and take the
+   worst exit code.
+5. **The tool's first classifier reported 108 correct Swahili translations as findings**,
+   because its only test for "is this English" was "does it contain a latin letter" —
+   which Swahili does too. A finding has to be *a string the table cannot account for*,
+   not *a string that looks foreign*: it now compares against every value the table can
+   PRODUCE, patterns included.
+
+And one measurement bug worth keeping: the sweep normalises whitespace runs to a single
+space, and JS `\s` matches **U+00A0** — so `Frais : 15 %` came back with a plain space
+where the French template has a non-breaking one, and **five correct French translations
+were reported as untranslated English.** Normalise both sides, or the tool invents work.
+
+### Still open, honestly
+- **The three Bantu columns want a native speaker's eye.** They are complete and
+  consistent, and every correction is one cell in `LANG_ROWS` with nothing else moving.
+- **Server-sent sentences are English** unless the exact sentence is in the table (the
+  common ones are). A sentence the server composes with a figure in it is covered only if
+  its shape is in `LANG_PATTERNS`.
+- `openSimpleConfirm()` has **no call sites** — it is dead code (the saved-account
+  deletion it was written for is gone in Chipz, which binds one wallet). The coverage
+  sweep opens it anyway to exercise its chrome, and passes table strings as its arguments
+  on purpose: a literal of the test's own invention would be reported as untranslated app
+  copy, which it is not.
+
+### Ports
+`find-untranslated.py` binds **8899**. The running list is in Round 157's note.
