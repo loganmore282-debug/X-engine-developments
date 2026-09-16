@@ -6330,3 +6330,46 @@ run is judged on exit code rather than FAIL-line counts.
 Also pinned in the harness: the **false-positive direction** (a real service account
 must still be accepted). A validator that refuses everything would satisfy every
 "is it refused?" assertion on its own.
+
+### Round 174d — the backend moved, and `set-backend-url.js` was missing three files
+
+Backend is live on Railway at `https://x-engine-developments-production.up.railway.app`
+(`MongoDB connected (chipz)`, indexes **69/69** — so no duplicate referral codes or
+account ids existed in the data, which is what a unique-index build proves). One log
+line worth not misreading: `npm error signal SIGTERM` under `Stopping Container` is the
+PREVIOUS deployment being torn down, not a failure.
+
+`node set-backend-url.js https://…` rewrote the five files it knew about and reported
+success. **It was wrong, and `test-brand-assets.js` is what said so** — three more files
+named the Render host and nothing rewrote them:
+
+| file | reference | how it fails |
+|---|---|---|
+| `user/sw.js` | `API_ORIGIN` | the branded-manifest rewrite fetches `/public/settings` from a dead host, falls back to the shipped manifest, and **the installed app name silently never updates again** |
+| `admin/sw.js` | `BRAND_ICON` | the icon on a background push notification |
+| `static-server.js` | the `CHIPZ_API_ORIGIN` fallback | if that env var is ever unset the CSP header names a dead backend and the browser blocks **every** API call with nothing showing server-side |
+
+All three are now in `SITES` (13 references across 9 files, and the header says so).
+Neither `sw.js` is generated from a source file — they are edited in place, which is
+part of why they were overlooked.
+
+**The structural fix matters more than the three entries.** The script's existing
+verification pass loops over `SITES`, so it can only ever vouch for files it already
+knows about — *a list cannot warn you about what is not on it*, and that is exactly the
+blind spot that let these three through while the script printed "backend is now …".
+There is now a second pass that sweeps `user/`, `admin/`, `user-src/`, `admin-src/` and
+the project root for the *shape* of a backend reference and **fails naming the file**.
+Proven by planting a stray in an unlisted file: caught, exit 1. Comments are stripped
+first (line comments before block comments, per this project's standing rule) because
+several files legitimately name a former host while explaining history.
+
+#### A seventh harness caught defending a value instead of a property
+`test-brand-assets.js` hardcoded `https://chipz-server.onrender.com` in **six** places
+and failed a correct build — the same shape as `test-withdraw-rules.js` pinning
+`'6:00 PM'` and the three harnesses that pinned `/refCode=`. Its own header already said
+to pull real values out of `server.js` "so this can never drift into testing a copy".
+
+It now **derives** the origin from `API_BASE` and asserts every manifest icon, `og:image`
+and `<link rel="icon">` **agrees with it**. That is the property that was always wanted:
+a manifest icon on a different host than the API is the bug, whatever the host is called.
+It also survives the next move for free.

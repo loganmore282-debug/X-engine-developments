@@ -41,7 +41,7 @@
      frame-ancestors is NOT here: a meta policy cannot express it (the browser
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://x-engine-developments-production.up.railway.app https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#ef6c00">
 <link rel="manifest" href="/manifest.json">
 <!-- Same server-hosted brand asset the user app installs with, NOT a local
@@ -50,8 +50,8 @@
      that shipped in the repo, so the icon "never changed" here no matter how
      many times it was replaced. One source of truth now: whatever
      /admin/app-icon/set last wrote. -->
-<link rel="icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
-<link rel="apple-touch-icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
+<link rel="icon" href="https://x-engine-developments-production.up.railway.app/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="https://x-engine-developments-production.up.railway.app/public/app-icon-192.png">
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
 window._adminInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window._adminInstallPrompt = e;
@@ -362,7 +362,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <script>
 // Chipz Admin panel.
-const SERVER = 'https://chipz-server.onrender.com';
+const SERVER = 'https://x-engine-developments-production.up.railway.app';
 
 let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
 try {

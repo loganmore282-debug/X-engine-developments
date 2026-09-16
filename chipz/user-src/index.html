@@ -41,7 +41,7 @@
      frame-ancestors is NOT here: a meta policy cannot express it (the browser
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://chipz-server.onrender.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://x-engine-developments-production.up.railway.app https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!-- Owner: "why app still have red upper title color? it takes space even."
      That red band above the app is Android painting the status bar with
      theme-color, and at #e21b2a it reads as a separate red title bar sitting
@@ -63,8 +63,8 @@
      It falls back to the bundled icon-192/512.png, so these never 404.
      THESE URLS ARE PERMANENT. Changing a path here breaks the installed
      icon and every previously-shared link at the same time. -->
-<link rel="icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
-<link rel="apple-touch-icon" href="https://chipz-server.onrender.com/public/app-icon-192.png">
+<link rel="icon" href="https://x-engine-developments-production.up.railway.app/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="https://x-engine-developments-production.up.railway.app/public/app-icon-192.png">
 <meta name="description" content="Chipz — invest, earn daily income, and grow your team.">
 <!-- ── og:image IS THE BACKEND ROUTE, SO THE UPLOADED CARD IS WHAT SHOWS ──
      Owner: "l wanted the uploaded link preview to be shown not the
@@ -113,7 +113,7 @@
 <meta property="og:site_name" content="Chipz">
 <meta property="og:title" content="Chipz">
 <meta property="og:description" content="Invest, earn daily income, and grow your team.">
-<meta property="og:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">
+<meta property="og:image" content="https://x-engine-developments-production.up.railway.app/public/link-preview.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -121,7 +121,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Chipz">
 <meta name="twitter:description" content="Invest, earn daily income, and grow your team.">
-<meta name="twitter:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">
+<meta name="twitter:image" content="https://x-engine-developments-production.up.railway.app/public/link-preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in

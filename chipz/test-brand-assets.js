@@ -39,6 +39,23 @@ const readBrandUpload = eval('(function(){' +
 let bad = 0;
 const ck = (o, l) => { if (!o) bad++; console.log((o ? 'PASS  ' : 'FAIL  ') + l); };
 
+// The backend origin is DERIVED, never written down here. It has moved twice
+// (Render -> Railway), and both times a hardcoded copy in this file failed a
+// perfectly correct build -- the seventh harness in this project caught
+// defending a value rather than a property. `set-backend-url.js` rewrites all
+// ten references at once and refuses to finish if any disagree, so API_BASE is
+// the source of truth and what matters here is that every icon and og: URL
+// AGREES with it. That is the real property: a manifest icon on a different
+// host than the API is the bug, whatever the host happens to be called.
+const BACKEND = (() => {
+  const m = /var API_BASE = '([^']+)'/.exec(
+    fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'));
+  if (!m) throw new Error('could not read API_BASE out of user-src/original_module.js');
+  return m[1].replace(/\/+$/, '');
+})();
+const onBackend = u => typeof u === 'string' && u.startsWith(BACKEND + '/');
+ck(/^https:\/\//.test(BACKEND), `API_BASE is an https origin (${BACKEND})`);
+
 // ── the size reader ───────────────────────────────────────────────────────
 // A wrong-sized icon is not an error anyone would ever be shown; it is just a
 // permanently blurry home screen. This is the only thing that catches it.
@@ -134,8 +151,8 @@ const icons = mfst.icons || [];
 ck(icons.length >= 2, 'the manifest declares at least the 192 and the 512');
 for (const ic of icons) {
   const path = ic.src.replace(/^https?:\/\/[^/]+/, '');
-  ck(/^https:\/\/chipz-server\.onrender\.com\//.test(ic.src),
-     `manifest icon ${ic.sizes} is served by chipz-server (so it follows an upload)`);
+  ck(onBackend(ic.src),
+     `manifest icon ${ic.sizes} is served by the backend (so it follows an upload)`);
   ck(routes[path] != null, `manifest icon ${ic.sizes} → ${path} is a real route`);
   const spec = BRAND_ASSET_SLOTS[routes[path]] || {};
   ck(ic.sizes === `${spec.w}x${spec.h}`,
@@ -172,7 +189,7 @@ ck(/^https:\/\//.test(ogImage || ''),
 const ogPath = (ogImage || '').replace(/^https?:\/\/[^/]+/, '');
 ck(!!routes[ogPath],
    'og:image resolves to a real backend route, so an admin upload is what crawlers fetch');
-ck(/^https:\/\/chipz-server\.onrender\.com\//.test(ogImage || ''),
+ck(onBackend(ogImage || ''),
    'it names the backend, on the same host the manifest icons are served from');
 const lp = BRAND_ASSET_SLOTS['link-preview'];
 // The FALLBACK file has to actually be on disk beside server.js, or the
@@ -221,9 +238,9 @@ ck(meta('twitter:card') === 'summary_large_image',
 // wrong one makes the card link somewhere else entirely.
 ck(!/property="og:url"/.test(page),
    'no hard-coded og:url — the crawler uses whatever domain it fetched');
-ck(/<link rel="icon" href="https:\/\/chipz-server\.onrender\.com\/public\/app-icon-192\.png">/.test(page),
+ck(page.includes(`<link rel="icon" href="${BACKEND}/public/app-icon-192.png">`),
    'the browser-tab icon follows the upload too');
-ck(/<link rel="apple-touch-icon" href="https:\/\/chipz-server\.onrender\.com\/public\/app-icon-192\.png">/.test(page),
+ck(page.includes(`<link rel="apple-touch-icon" href="${BACKEND}/public/app-icon-192.png">`),
    'and so does the iPhone home-screen icon');
 
 console.log('\n— the CORP trap that already cost a round on the banner video —');
@@ -415,8 +432,8 @@ ck(/app\.get\('\/admin\/brand-assets'[\s\S]{0,120}verifyAdmin\(req\)/.test(src),
   // that as the upload not working. Serving the bytes correctly is only half
   // the feature; these check the other half, in every file that names an icon.
   console.log('\n— every surface points at the uploaded icon —');
-  const ICON192 = 'https://chipz-server.onrender.com/public/app-icon-192.png';
-  const ICON512 = 'https://chipz-server.onrender.com/public/app-icon-512.png';
+  const ICON192 = `${BACKEND}/public/app-icon-192.png`;
+  const ICON512 = `${BACKEND}/public/app-icon-512.png`;
   const read = (p) => fs.readFileSync(__dirname + '/' + p, 'utf8');
   for (const [file, want] of [
     ['user/manifest.json', [ICON192, ICON512]],

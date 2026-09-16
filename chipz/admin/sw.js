@@ -1,12 +1,12 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'chipz-admin-shell-v21';
+const CACHE = 'chipz-admin-shell-v22';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 // The uploaded icon, served by chipz-server. manifest.json and index.html's
 // <link rel="icon"> point here too; the local /icon-*.png above stay only as
 // the offline shell copy. Before this, the admin panel read the PNG that
 // shipped in the repo, so replacing the icon in Admin -> Brand changed the
 // members' app and left the admin's own icon untouched forever.
-const BRAND_ICON = 'https://chipz-server.onrender.com/public/app-icon-192.png';
+const BRAND_ICON = 'https://x-engine-developments-production.up.railway.app/public/app-icon-192.png';
 
 // Firebase Messaging background handler -- shows a notification for pushes
 // that arrive while the admin panel tab isn't open/focused. Foreground
