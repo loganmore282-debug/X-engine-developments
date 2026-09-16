@@ -6121,3 +6121,105 @@ happening again; it cannot repair a value already stored.
 locale**, so the boxes can read "6:00 AM" while the help text beside them says 24-hour.
 The stored value is `06:00`/`17:00` either way. Not changed yet; forcing 24-hour display
 needs `lang="en-GB"` on those two inputs.
+
+## Round 174 — Render suspended the account, so: Railway
+
+> "account suspended by mistake, and requested review, so it may take time,
+> let's be using railway, so send all configurations"
+
+Render suspended the account for "suspicious activity" with a review pending, which
+takes the whole platform — backend and both front-ends — offline at once. Everything
+below stands on its own; none of it needs Render back.
+
+**`render.yaml` is deliberately kept.** It is the record of what the headers and routes
+were, and it is what to use if the review restores the account.
+
+### The structural difference: Railway has no static site type
+Render served `chipz/user` and `chipz/admin` as static sites and applied their security
+headers from `render.yaml`. On Railway a service is a process, so **host configuration
+became code**: `static-server.js`, zero dependencies, serving a folder given as `argv[2]`.
+
+It reproduces `render.yaml`'s header set line for line, plus:
+- **The `/refCode=` rewrite.** New invite links are `?ref=` and need no rule (Round 158),
+  but the old path form is already out in the world and cannot be recalled. Scoped to
+  that exact prefix — a blanket `/* → index.html` in front of `sw.js` and the manifest
+  is the hazard that reads as this project's stale-cache problems.
+- **Traversal refused on resolved paths**, not by looking for `..` in the URL. `server.js`
+  and `db.js` sit one level above `user/`. The test sends the raw forms a normalising
+  client would rewrite (`/..%2fserver.js`, `/....//server.js`, `/..\server.js`) — curl
+  turns several of those into something harmless before they ever reach the socket, so a
+  guard tested through curl alone is not tested.
+- **`no-cache` on `index.html`, `sw.js` and `manifest.json`** — revalidate, not "never
+  store", so an unchanged build still answers 304. The admin panel revalidates entirely:
+  it is one file and it moves money.
+- **Zero dependencies on purpose.** These two services hand over one HTML file each; an
+  npm tree is install time, a lockfile and a supply chain in exchange for nothing.
+
+### `CHIPZ_API_ORIGIN`, and the meta tag that catches people out
+The static server builds `connect-src` from `CHIPZ_API_ORIGIN`, so the backend can move
+without a rebuild — but **the pages carry their own `<meta http-equiv="Content-Security-Policy">`,
+and a document must satisfy BOTH**. They intersect; they do not override. So a meta tag
+left on the old origin blocks every API call **in the browser, with nothing at all
+showing server-side**, and the app displays its own "Network error" over a healthy
+backend.
+
+`set-backend-url.js` is the answer to that: one command rewrites all **ten** places the
+origin appears across six files — `API_BASE`, the panel's `SERVER`, both meta CSPs, the
+icon links, `og:image`/`twitter:image`, and both manifests — then **verifies no other
+origin survives** and exits non-zero if one does. `--check` prints where things point and
+fails if the files disagree with each other. It refuses a non-https URL, because a page
+served over https cannot call http.
+
+Each of those ten fails differently and quietly: a stale icon link is a blurry home
+screen, a stale `og:image` is a share card with no picture, a stale manifest breaks the
+installed icon. Only `API_BASE` and the CSP are loud.
+
+### Two server changes
+- **`CORS_ALLOWED_SUFFIXES` += `.up.railway.app`, `.railway.app`.** A platform host
+  missing from that list is refused by CORS, which the browser reports to the app as
+  nothing at all — this file already records that outage twice (Snow's custom domain,
+  then `.edgeone.dev`). Both forms are listed because a suffix that stops matching after
+  a platform rename looks exactly like a dead server. `isInfraHost()` derives from the
+  same list, so `strictRegionHosts` cannot lock the owner out of a Railway-hosted panel.
+- **`PUBLIC_URL` falls back to `RAILWAY_PUBLIC_DOMAIN`.** It read `RENDER_EXTERNAL_URL`,
+  which Railway does not set, so it would have been empty — and an empty `PUBLIC_URL`
+  means `callbackUrl`/`notifyUrl` are simply **omitted** from every payment request. The
+  deposit is still created and the prompt still reaches the phone, so the only symptom is
+  money taking minutes (the reconciler's next sweep) instead of seconds. Railway gives a
+  bare hostname, so `https://` is added.
+
+### The four things outside the platform, which are where a migration actually dies
+Named in `docs/railway-deploy.md` because none of them is in this repo:
+1. **Firebase → Authorised domains.** Firebase refuses sign-in from a domain not listed,
+   so without this nobody can log in, the owner included.
+2. **Atlas → Network Access.** Railway's egress addresses are not Render's.
+3. **PesaJet's single Webhook Destination URL**, which still points at Render.
+4. **MarzPay / LipaPay** callback and IP-allowlist entries naming the old host.
+
+### Kept in mind, not changed
+Both `onrender.com` and `up.railway.app` are on the **Public Suffix List**, so the app and
+the backend are separate *sites* either way — the banner-video route's
+`Cross-Origin-Resource-Policy: cross-origin` is still required, and anything else ever
+loaded straight from the backend as an `<img>`, `<video>`, font or script needs the same.
+
+The SMS-forwarder app's `DEFAULT_URL` still names Render. Its settings screen can be
+re-pointed on the phone without rebuilding the APK, so that only matters for a fresh
+install.
+
+### Tests
+`test-static-server.js` spawns the real server on a real socket and drives it: the CSP
+following `CHIPZ_API_ORIGIN` and carrying no leftover origin, every header Render used to
+set, eight traversal shapes with an assertion that **no source leaked** in the body, the
+old invite link still resolving while an unknown path stays a plain 404 and `sw.js` is
+never rewritten to HTML, the revalidate/ETag/304 behaviour, and a POST refused.
+`test-cors-origins.js` gained the Railway hosts plus three lookalikes
+(`up.railway.app.evil.test`, `railway.app.evil.test`, `notrailway.app`) that must NOT
+match.
+
+### Owner has to
+1. Create the three services (root directory `chipz` for all three), generate a domain
+   for each.
+2. Set the env vars from `docs/railway-deploy.md` — `MONGODB_URI` **must** end `/chipz`.
+3. `node set-backend-url.js https://<new backend>` then rebuild both bundles and push.
+4. Set `CHIPZ_API_ORIGIN` on both front-end services.
+5. The four external things above.

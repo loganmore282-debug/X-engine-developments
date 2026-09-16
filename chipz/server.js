@@ -155,7 +155,17 @@ const CORS_ALLOWED_ORIGINS = new Set([
 // that was up and healthy -- the misleading failure this block's own comment
 // above warns about, hit for real a second time. If a Chipz screen ever
 // reports a network error while the server is fine, check this list FIRST.
-const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.edgeone.dev', '.onrender.com', '.pages.dev'];
+// Platform hostnames the frontends can legitimately be served from. Railway
+// is in this list for the same reason Render is: the panels live on
+// <service>.up.railway.app, and a host missing from here is refused by CORS,
+// which the browser reports to the app as nothing at all -- this file's own
+// notes record that shape of outage twice, once for Snow's custom domain and
+// once for *.edgeone.dev.
+//
+// '.railway.app' as well as '.up.railway.app' because Railway has served
+// generated domains under both, and a suffix that stops matching after a
+// platform rename looks exactly like a dead server.
+const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.edgeone.dev', '.onrender.com', '.pages.dev', '.up.railway.app', '.railway.app'];
 // Extra hostnames the owner adds from the admin panel (settings.allowedOrigins),
 // for custom domains that no built-in suffix covers. Kept as a plain
 // synchronous snapshot, refreshed by getSettings() whenever its own 60s cache
@@ -304,8 +314,21 @@ const { connectMongo, db, FieldValue, pingDb } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
+// This server's own public address, which is what MarzPay and LipaPay are
+// told to call back on. An explicit PUBLIC_URL always wins; otherwise it is
+// taken from whichever host we are running on.
+//
+// RAILWAY_PUBLIC_DOMAIN is in this list because Render suspended the account
+// and the platform had to move. Railway does not set RENDER_EXTERNAL_URL, so
+// without it PUBLIC_URL would be empty and `callbackUrl`/`notifyUrl` would
+// simply be OMITTED from every payment request -- the deposit would still be
+// created, the prompt would still reach the phone, and nothing would ever
+// call back. The reconciler and the member's own poll would cover for it, so
+// the only symptom is money taking minutes instead of seconds to appear.
+// Railway gives a bare hostname, hence the https:// added below.
 const PUBLIC_URL  = (() => {
-  let u = (process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
+  let u = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL ||
+           process.env.RAILWAY_PUBLIC_DOMAIN || '').trim().replace(/\/$/, '');
   if (u && !u.startsWith('http')) u = 'https://' + u;
   return u;
 })();

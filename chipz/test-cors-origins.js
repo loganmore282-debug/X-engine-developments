@@ -23,6 +23,16 @@ const cases = [
   ['https://edgeone.dev.evil.com',         false, 'suffix-spoofing attacker on .edgeone.dev'],
   ['https://anything.pages.dev',           true,  'Cloudflare Pages'],
   ['https://chipz-server.onrender.com',    true,  'Render'],
+  // Railway, after Render suspended the account. A platform host missing from
+  // the suffix list is refused by CORS, and the browser reports that to the
+  // app as nothing at all -- this project has already lost time to exactly
+  // that twice (Snow's custom domain, and .edgeone.dev).
+  ['https://chipz-app-production.up.railway.app',   true,  'Railway user panel'],
+  ['https://chipz-admin-production.up.railway.app', true,  'Railway admin panel'],
+  ['https://chipz.railway.app',                     true,  'Railway on the bare domain'],
+  ['https://up.railway.app.evil.test',              false, 'suffix-spoofing attacker on .up.railway.app'],
+  ['https://railway.app.evil.test',                 false, 'suffix-spoofing attacker on .railway.app'],
+  ['https://notrailway.app',                        false, 'a lookalike domain is not Railway'],
   ['http://localhost:3000',                true,  'local dev'],
   ['https://chipz-platform.com',           true,  'future custom domain'],
   [undefined,                              true,  'same-origin / no Origin header'],
