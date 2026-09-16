@@ -19,6 +19,24 @@ is the only structural difference from the Render setup.
 
 ---
 
+## 0. If Railway is on a different GitHub account than the repo
+
+This is the setup as of Round 174: the repo stays at
+`loganmore282-debug/x-engine-developments`, and a second GitHub account
+(`temubrazil599-rgb`) deploys it.
+
+1. On the repo: **Settings → Collaborators → Add people**, invite the account
+   Railway will sign in with. Accept the invite from that account.
+2. In Railway, signed in as that account: install the **Railway GitHub app**
+   and, when it asks which repositories it may see, grant it this one. A
+   repository shared with an account does not appear in Railway until the app
+   is given access to it specifically.
+
+**The repo is deliberately NOT mirrored into a second one.** One codebase with
+two people on it stays one codebase; two copies drift, and only one of them
+ever gets the next fix. The 130 MB of history across seven projects is a second
+reason not to duplicate it.
+
 ## 1. Create the three services
 
 For each one: **New → GitHub Repository → this repo**, then in the service's
