@@ -21,21 +21,36 @@ is the only structural difference from the Render setup.
 
 ## 0. If Railway is on a different GitHub account than the repo
 
-This is the setup as of Round 174: the repo stays at
-`loganmore282-debug/x-engine-developments`, and a second GitHub account
-(`temubrazil599-rgb`) deploys it.
+Railway's trial had expired on the account that owns the repo, so a second
+GitHub account (`temubrazil599-rgb`) deploys it. **That account needs a FORK.**
 
-1. On the repo: **Settings → Collaborators → Add people**, invite the account
-   Railway will sign in with. Accept the invite from that account.
-2. In Railway, signed in as that account: install the **Railway GitHub app**
-   and, when it asks which repositories it may see, grant it this one. A
-   repository shared with an account does not appear in Railway until the app
-   is given access to it specifically.
+**Adding it as a collaborator does NOT work, and this was tried first.** The
+Railway GitHub App is installed on an *account*, and an App can only be granted
+access to repositories that account **owns**. Collaborator access is a
+permission on the person, not on the App, so the shared repo never appears in
+Railway's repository list at all — the symptom is "No repositories found" with
+the invite already accepted, which looks like a Railway bug and is not one.
 
-**The repo is deliberately NOT mirrored into a second one.** One codebase with
-two people on it stays one codebase; two copies drift, and only one of them
-ever gets the next fix. The 130 MB of history across seven projects is a second
-reason not to duplicate it.
+So:
+
+1. On `loganmore282-debug/X-engine-developments`, signed in as the deploying
+   account: **Fork**, and **untick "Copy the default branch only."** The default
+   branch is `claude/voltra-session-continue-mk95gw` (a sibling project) and
+   Chipz lives on `claude/chipz-platform-build` — with that box left ticked the
+   fork arrives without a single line of Chipz in it. Check the fork's branch
+   selector afterwards and confirm `claude/chipz-platform-build` is listed.
+2. In Railway, signed in as that account: **Configure GitHub App** → grant it the
+   fork → **Refresh**. A repository the App has not been given access to
+   specifically does not appear, even when the account owns it.
+
+**The fork is a deploy mirror, not a second codebase.** Development stays on
+`loganmore282-debug`; the fork's **Sync fork** button pulls each push across, and
+Railway deploys from it. Nothing is ever committed to the fork directly — two
+codebases drift, and only one of them gets the next fix.
+
+If the deploying account ever becomes the one doing the work, the honest move is
+to start a session sourced from the fork so pushes land there directly, rather
+than syncing by hand every round.
 
 ## 1. Create the three services
 

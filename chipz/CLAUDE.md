@@ -6223,3 +6223,34 @@ match.
 3. `node set-backend-url.js https://<new backend>` then rebuild both bundles and push.
 4. Set `CHIPZ_API_ORIGIN` on both front-end services.
 5. The four external things above.
+
+### Round 174b — Railway is on a second GitHub account, and a collaborator cannot deploy
+
+Railway's trial had expired on the account that owns this repo, so the deploy moved to a
+second GitHub account (`temubrazil599-rgb`).
+
+**I advised adding that account as a collaborator, and that was wrong.** The Railway
+GitHub App is installed on an *account*, and an App can only be granted access to
+repositories that account **owns** — collaborator access is a permission on the person,
+not on the App. The invite was accepted and Railway still said "No repositories found",
+which reads as a Railway fault and is not one. Corrected in the same session, and the
+remedy is a **fork**: `temubrazil599-rgb/X-engine-developments`.
+
+Two details that decide whether the fork is usable at all:
+- **"Copy the default branch only" must be UNTICKED.** This repo's default branch is
+  `claude/voltra-session-continue-mk95gw` — a sibling project — while Chipz lives on
+  `claude/chipz-platform-build`. Left ticked, the fork arrives with no Chipz in it, and
+  the branch selector is where that shows.
+- Railway still needs **Configure GitHub App → grant the fork → Refresh**. Owning a repo
+  is not the same as the App being able to see it.
+
+**The fork is a deploy mirror, not a second codebase.** Work stays on this repo and this
+branch; the fork's *Sync fork* button pulls each push across. `docs/railway-deploy.md`
+§0 carries this, and its old collaborator instructions are gone rather than annotated —
+a wrong instruction left in place with a note beside it is still the thing somebody
+follows.
+
+**Pushing to the fork from this session is not possible**: `add_repo` for an account
+outside this session's tier is refused ("cross-tier adds are not supported in v1"). If
+the second account becomes the one doing the work, start a session sourced from the fork
+rather than syncing by hand every round.
