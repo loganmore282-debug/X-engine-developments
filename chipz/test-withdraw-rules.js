@@ -41,17 +41,20 @@ const grab = (a, b) => {
 };
 
 // ── the window, as a pure function ───────────────────────────────────────
-const winApi = new Function(`
+// The offset is a parameter here, not a constant, because a WRONG offset is
+// the way this feature actually broke in production: a country saved with its
+// clock-offset box left empty stored 0, and 0 is a legal UTC offset that no
+// validator can tell from a deliberate one. Uganda then ran three hours
+// behind itself and a member was refused at 07:00 on a 06:00-17:00 window.
+const winFor = off => new Function(`
   const tsMillis = t => Number(t) || 0;
-  // The clock offset is a property of the REGION now (server.js tzOffMs()).
-  // These cases are all written in Kampala time, so pin it to Uganda's +180
-  // rather than lifting the region machinery into this harness.
-  const tzOffMs = () => 180 * 60000;
+  const tzOffMs = () => (${off}) * 60000;
   ${fnSource('hhmmToMin')}
   ${fnSource('hhmmLabel')}
   ${fnSource('withdrawWindowState')}
   return { hhmmToMin, hhmmLabel, withdrawWindowState };
 `)();
+const winApi = winFor(180);
 
 // An EAT wall-clock time as an epoch, so "is 3pm inside the window" is asked
 // in the zone the server judges in and not in whatever the test box is set to.
@@ -101,6 +104,32 @@ for (const [h, want] of [[18, true], [21, true], [0, true], [3, true], [12, true
 const wl = winApi.withdrawWindowState(wrap, eatAt(20));
 ck(wl.from === '18:00' && wl.to === '17:00',
    `and the member is told "${wl.from} to ${wl.to}" -- the same figures the owner typed`);
+
+// ── the offset is what decides "is it 7am" ───────────────────────────────
+console.log('\n— the country\'s clock offset decides whether 07:00 is 07:00 —');
+{
+  const win = { withdrawWindowEnabled: true, withdrawOpenFrom: '06:00', withdrawOpenTo: '17:00' };
+  // 07:00 in Kampala. eatAt() already subtracts Uganda's three hours, so this
+  // is the same instant however the offset is then read.
+  const sevenAm = eatAt(7);
+  ck(winFor(180).withdrawWindowState(win, sevenAm).open === true,
+     'on Uganda\'s +180, 07:00 is inside a 06:00-17:00 window');
+  // The reported bug, reproduced: the same instant, the same window, a
+  // country whose offset was saved as 0.
+  ck(winFor(0).withdrawWindowState(win, sevenAm).open === false,
+     'and on a clock offset of 0 the SAME instant reads 04:00 and is refused ' +
+     '-- which is the production bug, not a rule anybody chose');
+  // Somebody typing hours instead of minutes lands in the same place.
+  ck(winFor(3).withdrawWindowState(win, sevenAm).open === false,
+     'as does 3, i.e. hours typed where minutes were asked for');
+  // The hours SHOWN are the admin's own figures either way, which is what
+  // made this so hard to see: the dialog said 06:00 to 17:00 in every case.
+  for (const off of [180, 0, 3]) {
+    const st = winFor(off).withdrawWindowState(win, sevenAm);
+    ck(st.from === '06:00' && st.to === '17:00',
+       `  offset ${off} still SHOWS "06:00 to 17:00" -- the message cannot reveal a wrong clock`);
+  }
+}
 
 console.log('\n— off, or set to nonsense, means always open —');
 ck(winApi.withdrawWindowState({ withdrawWindowEnabled: false, withdrawOpenFrom: '18:00', withdrawOpenTo: '17:00' }, eatAt(17)).open,

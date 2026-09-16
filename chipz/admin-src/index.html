@@ -2770,7 +2770,10 @@ async function renderRegions(){
       <td>${esc(r.currency)}</td>
       <td>+${esc(r.dialCode)}</td>
       <td>${esc(String(r.localLength))} digits${(r.prefixes || []).length ? '<div class="muted">starts ' + esc((r.prefixes || []).join(', ')) + '</div>' : ''}</td>
-      <td>${esc(offsetLabel(r.utcOffsetMin))}</td>
+      <!-- The offset AND the clock it produces. "+0:00" on a Ugandan country
+           looks like a setting; "03:41" beside a wall clock reading 06:41 is
+           a mistake you can see. -->
+      <td>${esc(offsetLabel(r.utcOffsetMin))}<div class="muted" data-no-i18n>${esc(regionClockNow(r.utcOffsetMin))}</div></td>
       <td>${(r.resolvedHosts || r.hosts || []).length
         ? (r.resolvedHosts || r.hosts).map(h => `<code>${esc(h)}</code>`).join('<br>')
         : '<span class="muted">none yet</span>'}</td>
@@ -2916,6 +2919,15 @@ async function checkHost(){
     <div class="muted" style="margin-top:8px">A member signing in here uses the login address <code>${esc(d.loginExample)}</code>. If that is not the shape your existing members were created with, their correct passwords will be refused.</div>
   </div>`;
 }
+// The wall-clock time a country is on right now, from its stored offset.
+// data-no-i18n wherever it is printed: it is a clock reading, not copy.
+function regionClockNow(min){
+  const m = Number(min == null ? 180 : min);
+  if (!Number.isFinite(m)) return '';
+  const d = new Date(Date.now() + m * 60000);
+  return String(d.getUTCHours()).padStart(2, '0') + ':' +
+         String(d.getUTCMinutes()).padStart(2, '0') + ' now';
+}
 // "+3:00" / "-5:30", from the stored minutes.
 function offsetLabel(min){
   const m = Number(min == null ? 180 : min);
@@ -2942,6 +2954,12 @@ function regionForm(r){
     </div>
     <label>Clock offset, minutes from UTC <span class="muted" style="font-weight:400">— 180 is Uganda and Kenya, 120 is Nigeria +1</span></label>
     <input id="rgOff" type="number" min="-720" max="840" value="${esc(String(cur.utcOffsetMin == null ? 180 : cur.utcOffsetMin))}">
+    <!-- The clock this country is actually on, live, as you type. A wrong
+         offset is otherwise invisible until it silently shifts every daily
+         reset and the cash-out window -- which is exactly how a member was
+         refused at 07:00 on a 06:00-17:00 window: a blank box had been saved
+         as 0, and UTC is three hours behind Uganda. -->
+    <div class="muted" id="rgOffNow" style="margin-top:6px"></div>
     <div class="switch-row" style="margin-top:10px"><span><b>Open for business</b> <span class="muted">(off hides it from its own web address)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="rgActive" ${cur.active === false ? '' : 'checked'} style="width:auto"${cur.isDefault ? ' disabled' : ''}></label></div>
     <label style="margin-top:12px">Languages this country offers</label>
@@ -2962,7 +2980,31 @@ function regionForm(r){
       <button class="btn ghost" onclick="closeModal()">Cancel</button>
       <button class="btn" id="rgSave">Save country</button>
     </div>`);
+  // Live: what time is it in this country right now, on the offset typed?
+  const paintOffNow = () => {
+    const box = $('rgOffNow'); if (!box) return;
+    const raw = $('rgOff').value.trim();
+    if (raw === '') { box.innerHTML = '<b>Enter the offset</b> — leaving this empty is not the same as 0.'; return; }
+    const m = Number(raw);
+    if (!Number.isFinite(m)) { box.textContent = ''; return; }
+    const d = new Date(Date.now() + m * 60000);
+    const hh = String(d.getUTCHours()).padStart(2, '0'), mm = String(d.getUTCMinutes()).padStart(2, '0');
+    box.textContent = 'It is ' + hh + ':' + mm + ' in this country right now (' + offsetLabel(m) + ').';
+  };
+  $('rgOff').addEventListener('input', paintOffNow);
+  paintOffNow();
   $('rgSave').addEventListener('click', async () => {
+    // A BLANK NUMBER BOX MUST NOT BECOME A SETTING. Number('') is 0, and 0 is
+    // a perfectly legal UTC offset, so neither the server nor its validator
+    // can tell an empty box from somebody deliberately choosing UTC. Saving a
+    // country with this box cleared silently moved its whole clock three
+    // hours -- the daily reset, the product windows and the cash-out hours --
+    // and the first anyone knew was a member refused at 07:00 on a
+    // 06:00-17:00 window. Same for the number length beside it.
+    for (const [id, what] of [['rgOff', 'Clock offset'], ['rgLen', 'Local number length']]) {
+      if ($(id).value.trim() === '') return toast(what + ' cannot be left empty', 'err');
+      if (!Number.isFinite(Number($(id).value))) return toast(what + ' must be a number', 'err');
+    }
     const btn = $('rgSave'); btn.disabled = true; btn.textContent = 'Saving…';
     const d = await api('/admin/regions/save', { region: {
       key: (isNew ? $('rgKey').value : cur.key).trim().toLowerCase(),
@@ -2971,7 +3013,7 @@ function regionForm(r){
       dialCode: $('rgDial').value.trim(),
       localLength: Number($('rgLen').value),
       prefixes: $('rgPfx').value.split(/[\s,]+/).filter(Boolean),
-      utcOffsetMin: Number($('rgOff').value),
+      utcOffsetMin: Number($('rgOff').value),   // guarded above: never blank
       labels: $('rgLabels').value.split(/[\s,\n]+/).filter(Boolean),
       hosts: $('rgHosts').value.split(/[\s,\n]+/).filter(Boolean),
       active: $('rgActive').checked,

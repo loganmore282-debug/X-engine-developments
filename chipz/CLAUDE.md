@@ -6064,3 +6064,60 @@ Four tools parsed the table by passing it as a command-line argument, and the mo
 instruction paragraphs went in that died with `OSError: [Errno 7] Argument list too
 long`. They write a temp file and run `node <file>` now. An exec limit is not something
 to discover twice.
+
+## Round 173 — Refused at 07:00 on a 06:00–17:00 window: a blank box that meant UTC
+
+> "what is wrong with time, l made withdrawal l 7am but pushed me out why" — with a
+> screenshot reading *"Cash-out is open from 06:00 to 17:00. Please come back then."*
+
+**The hours were right and the clock was wrong.** `withdrawWindowState()` asks
+`tzOffMs()` what time it is in this country, and that reads `region.utcOffsetMin`. Run at
+the same instant, the real function gives:
+
+| `utcOffsetMin` | 07:00 in Kampala reads as | verdict |
+|---|---|---|
+| **180** (correct) | 07:00 | open |
+| **0** | 04:00 | **refused** |
+| **3** (hours typed where minutes were asked) | 04:03 | **refused** |
+
+### How a country's clock became UTC
+The panel sent `utcOffsetMin: Number($('rgOff').value)`, and **`Number('')` is `0`**. So
+saving a country with that box empty stored 0 — and **0 is a perfectly legal offset**, so
+neither `normalizeRegion()` (which takes any finite number) nor `/admin/regions/save`'s
+range check (`-720..840`) could tell an empty box from somebody deliberately choosing
+UTC. The whole country then ran three hours behind itself: the cash-out window, the daily
+check-in reset, and every product opening schedule.
+
+**A blank numeric field is not a value, and coercing it to one is how a money rule
+silently changes.** `localLength` had the same shape (blank → 0 digits).
+
+### Why nothing on screen could reveal it
+The dialog prints the admin's own figures — `from` and `to` come straight from the
+settings — so **all three offsets above still say "06:00 to 17:00"**. The message could
+never have exposed the fault, which is why it read as the hours being broken. The test
+pins exactly that: same window, same instant, three offsets, one verdict differing and
+the displayed sentence identical in all three.
+
+### What changed
+- **The panel refuses a blank Clock offset or Local number length**, by name, instead of
+  sending a coerced 0.
+- **The edit form shows the country's live time as you type** — *"It is 06:41 in this
+  country right now (+3:00)"* — and says outright that leaving it empty is not the same
+  as 0.
+- **The Countries list shows each country's current clock** under its offset.
+  `+0:00` looks like a setting; `03:41 now` beside a wall clock reading 06:41 does not.
+  Both readouts are `data-no-i18n`: a clock reading is data, not copy.
+
+The offset itself is left as a hand-entered number rather than an IANA zone name — that
+would be a migration of the region model, and it is not what broke. What broke is that a
+wrong value was invisible.
+
+### Owner has to
+**Set Uganda's Clock offset back to 180** in Admin → Countries. The code fix stops it
+happening again; it cannot repair a value already stored.
+
+### Note on the admin time pickers
+`<input type="time">` renders 12-hour or 24-hour according to the **browser's own
+locale**, so the boxes can read "6:00 AM" while the help text beside them says 24-hour.
+The stored value is `06:00`/`17:00` either way. Not changed yet; forcing 24-hour display
+needs `lang="en-GB"` on those two inputs.
