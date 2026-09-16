@@ -125,7 +125,7 @@ set it.
 | variable | what it is |
 |---|---|
 | `MONGODB_URI` | Atlas connection string. **Must end in `/chipz`** — `db.js` refuses to boot without that path segment, because the cluster is shared with other apps. |
-| `FIREBASE_SERVICE_ACCOUNT` | the whole service-account JSON, as one line |
+| `FIREBASE_SERVICE_ACCOUNT` | the whole service-account JSON, as **one line**, with **no surrounding quotes**. See below — the server now tells you exactly which way it is wrong. |
 | `ADMIN_KEY` | the master admin password |
 
 **Payments — set the ones you use:**
@@ -157,6 +157,29 @@ still created and the prompt still reaches the phone, so the only symptom is
 money taking minutes (the reconciler's next sweep) instead of seconds.
 
 ---
+
+### If the backend starts and immediately exits
+
+It refuses to boot when it cannot verify a member's ID token, which is correct —
+a server that cannot check a token must not answer requests. Since Round 174c
+the log line says **which** state it is in, and they are different problems:
+
+| log line | what to do |
+|---|---|
+| `FIREBASE_SERVICE_ACCOUNT is not set` | you have not pasted it yet. This is the usual one on a fresh host. |
+| `… is not valid JSON … starts with a quote` | paste the JSON itself, not a quoted string |
+| `… is not valid JSON … contains line breaks` | paste it as ONE line |
+| `… is not valid JSON … looks truncated` | only part of it was copied |
+| `… was pasted as a quoted string` | valid JSON, but wrapped in quotes so it reads as one long value |
+| `… is missing project_id, client_email, …` | not the whole file; download a fresh private key from Firebase |
+| `… private_key does not look like a PEM key` | it was edited by hand; paste the file as downloaded |
+| `Firebase rejected the service account: …` | every field is present and one is wrong, usually the key's line breaks |
+
+The message used to be `FIREBASE_SERVICE_ACCOUNT invalid: Missing project_id`
+for **all** of these, including the not-set case — `JSON.parse(x || '{}')`
+parses to an empty object that has no `project_id`. On a fresh host that is the
+most likely state, and it sent us to re-copy a credential that had never been
+pasted. `MONGODB_URI` is separate and says its own piece.
 
 ## 3. Front-end environment variables
 

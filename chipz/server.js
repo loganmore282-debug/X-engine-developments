@@ -299,15 +299,22 @@ function stripMongoOperators(obj, depth = 0) {
 app.use((req, _res, next) => { try { stripMongoOperators(req.body); } catch (_) {} next(); });
 
 // ── FIREBASE AUTH (auth only — data lives in MongoDB) ──
-let serviceAccount;
+// The validation lives in ./service-account so a test can require it; see that
+// file for why each failure state gets its own sentence. Refusing to boot is
+// right for every one of them: a server with no way to verify a member's ID
+// token must not serve requests.
+const { loadServiceAccount } = require('./service-account');
+const { sa: serviceAccount, fatal: serviceAccountFatal } =
+  loadServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
+if (serviceAccountFatal) { console.error(serviceAccountFatal); process.exit(1); }
 try {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  if (!serviceAccount.project_id) throw new Error('Missing project_id');
+  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 } catch (e) {
-  console.error('FIREBASE_SERVICE_ACCOUNT invalid:', e.message);
+  // Reached when every field is present and one of them is wrong -- most often
+  // a private_key whose line breaks did not survive the paste.
+  console.error('Firebase rejected the service account: ' + e.message);
   process.exit(1);
 }
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 // ── MONGODB ──
 const { connectMongo, db, FieldValue, pingDb } = require('./db');

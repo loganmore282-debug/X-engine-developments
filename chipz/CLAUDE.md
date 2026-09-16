@@ -6254,3 +6254,79 @@ follows.
 outside this session's tier is refused ("cross-tier adds are not supported in v1"). If
 the second account becomes the one doing the work, start a session sourced from the fork
 rather than syncing by hand every round.
+
+### Round 174c — three settings that all default to something wrong, and one message for eight states
+
+The Railway build failed twice before reaching a line of Chipz, and each failure was a
+setting whose default is plausible and wrong. **Recorded because none of them is in this
+repo and all three will be faced again on the next host.**
+
+1. **Root directory defaulted to the repo root**, whose `package.json` has no `start`
+   script — so `Railpack failed to prepare the build` in 8 seconds. The root
+   `package.json` is deliberately left without one: a service pointed at the wrong
+   directory failing loudly at build time beats one booting a sibling project's server
+   against Chipz's database.
+2. **Branch defaulted to the repo default**, `claude/voltra-session-continue-mk95gw` —
+   a sibling project containing no Chipz. The tell is the commit named on the failed
+   deployment. That dropdown is also the fork test: if `claude/chipz-platform-build` is
+   not in it, the fork was made with "Copy the default branch only" ticked.
+3. **Config-as-code is dead for new services.** Railway's own Settings page:
+   *"starting 2026-08-28, services that have never used Config as Code cannot opt in."*
+   So `railway.json`, `railway.app.json` and `railway.admin.json` **cannot be loaded**
+   by anything created for this migration. They are kept as the written record, exactly
+   as `render.yaml` is; the values get typed into the dashboard. One upside: with no
+   config file in play, the two front-ends cannot silently inherit the backend's
+   `npm start`.
+
+#### The real defect: `JSON.parse(x || '{}')` made "not set" indistinguishable from "malformed"
+
+Once it built, the server exited on `FIREBASE_SERVICE_ACCOUNT invalid: Missing
+project_id`. The check was:
+
+```js
+serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
+if (!serviceAccount.project_id) throw new Error('Missing project_id');
+```
+
+**`'{}'` parses cleanly and has no `project_id`**, so an UNSET variable produced the
+identical sentence as a corrupted one — and on a fresh host "unset" is overwhelmingly
+the likely state. The message sent us to re-copy a credential that had never been
+pasted. Same family as the blank clock-offset box that silently meant UTC (Round 173)
+and the one sentence for fifteen product refusals (Round 164): **the diagnosis was the
+defect, not the validation.**
+
+Eight states now say which they are — not set, quote-wrapped-and-unparseable,
+quote-wrapped-but-valid (it parses to a *string*, so it never reaches the catch and
+needed its own branch), line breaks, truncated, not an object, missing fields, and a
+`private_key` that is not a PEM key. Every missing field is named **in one message**:
+reporting them one per deploy is one restart each to discover the next is also absent.
+Boot refusal is unchanged and correct for all of them — a server that cannot verify an
+ID token must not answer requests — and `cert()` is now wrapped too, so a key whose line
+breaks did not survive the paste exits with a sentence instead of an unhandled throw.
+
+#### It is a MODULE because server.js cannot be required, and a brace counter cannot slice it
+`service-account.js` exists so `test-service-account.js` can `require` it: importing
+`server.js` connects to Mongo and starts listening. The alternative — slicing the
+function out with the `fnSource` brace counter used elsewhere here — **genuinely cannot
+work on this function**, and both attempts are worth knowing:
+- the naive counter counts the `}` inside the message *"does not end with `}`"* and hands
+  `new Function` a body cut off mid-string. The SyntaxError points at server.js's prose,
+  so it reads as a bug in the code under test;
+- a string-aware counter then trips on the **regex literals** (`/^['"]/`), whose quote
+  characters it reads as opening a string.
+
+A pure function in its own file needs no slicing at all. Where a helper is this
+self-contained, that is the cheaper answer than a better scanner.
+
+#### The mutation harness found the one assertion that measured nothing
+`verify-service-account-discriminates.py` — **11 mutations, all caught**, control
+correctly MISSED. One was MISSED first time: *"a cert() rejection becomes an unhandled
+throw"*, because the assertion searched `src.slice(initAt)` — the whole rest of the file
+— and matched an unrelated `catch (e)` **682,867 characters later**, beside the
+`MONGODB_URI` exit. Bounded to the block and it is caught. That is at least the fourth
+instance here of **check inside the block, not across the file**, and the reason the
+run is judged on exit code rather than FAIL-line counts.
+
+Also pinned in the harness: the **false-positive direction** (a real service account
+must still be accepted). A validator that refuses everything would satisfy every
+"is it refused?" assertion on its own.
