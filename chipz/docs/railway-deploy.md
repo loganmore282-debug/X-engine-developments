@@ -62,20 +62,39 @@ settings:
 - **Branch:** `claude/chipz-platform-build`. Also not optional: the repo's
   DEFAULT branch belongs to a sibling project and contains no Chipz at all.
   Railway offers the default branch until you change it.
-- **Config file path** — blank for `chipz-server` (it picks up `railway.json`
-  from its root directory automatically), and **`railway.app.json` /
-  `railway.admin.json` set EXPLICITLY** on the app and the admin panel. This
-  one is a trap: with it blank, all three services read the same
-  `railway.json`, so both front-ends run `npm start` — the backend — and crash
-  on a missing `MONGODB_URI`. Three services, one config file, two of them
-  quietly being the wrong app.
+- **Deploy → Custom Start Command** and **Healthcheck Path**, per service:
+
+  | service | start command | healthcheck |
+  |---|---|---|
+  | `chipz-server` | `npm start` | `/health` |
+  | `chipz-app` | `node static-server.js user` | `/index.html` |
+  | `chipz-admin` | `node static-server.js admin` | `/index.html` |
+
+- **Leave Build alone.** Railpack detects Node from `chipz/package.json` and
+  installs on its own. The two front-ends need no dependencies (that is why
+  `static-server.js` has none), but letting the install run costs only build
+  time and keeps the three services identical.
+- **Serverless: OFF on `chipz-server`.** A sleeping backend answers a payment
+  webhook and a link-preview crawler too late to matter, and this project has
+  already paid for that lesson once on Render's free tier.
 - **Generate a domain** for each (Settings → Networking). Note all three.
 
-The config files carry the build command, start command, health-check path and
-restart policy, so there is nothing else to set. If you would rather use the
-dashboard, the start commands are in the table above; build command is
-`npm install` for the backend and nothing at all for the two front-ends, which
-have no dependencies by design.
+### The three `railway*.json` files no longer work — use the dashboard
+
+`railway.json`, `railway.app.json` and `railway.admin.json` are in the repo and
+**Railway will not read them on a service created now.** Its own Settings page
+says Config-as-Code is deprecated: existing config files keep working until
+2026-12-01, but **"starting 2026-08-28, services that have never used Config as
+Code cannot opt in"** — which is every service created for this migration.
+
+They are kept in the repo as the written record of each service's build command,
+start command, health-check path and restart policy, exactly as `render.yaml` is
+kept. Read them, type what they say into the dashboard. Do not delete them and
+do not spend time trying to make Railway load them.
+
+One upside: with no config file in play, there is no way for the two front-ends
+to accidentally inherit the backend's `npm start` and crash on a missing
+`MONGODB_URI`. Each service's start command is now visibly its own.
 
 ### If the build fails before it reaches any Chipz code
 
