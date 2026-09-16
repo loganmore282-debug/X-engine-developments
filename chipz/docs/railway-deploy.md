@@ -57,18 +57,42 @@ than syncing by hand every round.
 For each one: **New → GitHub Repository → this repo**, then in the service's
 settings:
 
-- **Root directory:** `chipz`
-- **Branch:** `claude/chipz-platform-build`
-- **Config file path** (optional, if you want the settings in code rather than
-  the dashboard): `railway.json` for the backend, `railway.app.json` for the
-  app, `railway.admin.json` for the admin panel. They carry the build/start
-  command, the health-check path and a restart policy.
+- **Root directory:** `chipz`. Not optional — see the note below on what
+  happens when it is left at the repo root.
+- **Branch:** `claude/chipz-platform-build`. Also not optional: the repo's
+  DEFAULT branch belongs to a sibling project and contains no Chipz at all.
+  Railway offers the default branch until you change it.
+- **Config file path** — blank for `chipz-server` (it picks up `railway.json`
+  from its root directory automatically), and **`railway.app.json` /
+  `railway.admin.json` set EXPLICITLY** on the app and the admin panel. This
+  one is a trap: with it blank, all three services read the same
+  `railway.json`, so both front-ends run `npm start` — the backend — and crash
+  on a missing `MONGODB_URI`. Three services, one config file, two of them
+  quietly being the wrong app.
 - **Generate a domain** for each (Settings → Networking). Note all three.
 
-Set the start command per the table above if you are not using the config
-files. Build command for all three is `npm install` (the two static services
-need no dependencies, but `npm install` is harmless and keeps the three
-identical).
+The config files carry the build command, start command, health-check path and
+restart policy, so there is nothing else to set. If you would rather use the
+dashboard, the start commands are in the table above; build command is
+`npm install` for the backend and nothing at all for the two front-ends, which
+have no dependencies by design.
+
+### If the build fails before it reaches any Chipz code
+
+**"Railpack failed to prepare the build"**, failing in 8 seconds, means Railway
+looked at the directory it was given and found nothing it recognises as an app.
+It is almost always the root directory: the REPO root holds seven unrelated
+projects and a `package.json` with **no `start` script**, so there is genuinely
+nothing there to run.
+
+Check which commit the failed deployment names. If it is not one of yours, the
+branch is wrong as well — both settings tend to be wrong together, because both
+default to something.
+
+The root `package.json` is deliberately left without a `start` script. A
+service pointed at the wrong directory failing loudly at build time is far
+better than one that boots a sibling project's server against Chipz's
+database.
 
 ---
 
