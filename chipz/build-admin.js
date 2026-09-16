@@ -64,6 +64,19 @@ while ((m = scriptRe.exec(html))) {
 if (!best) { console.error('No plain inline <script> block found in admin-src/index.html'); process.exit(1); }
 const fullMatch = best[0], matchIndex = best.index;
 let code = best[2];
+
+// The Web Push VAPID public key used by Firebase Messaging in the admin app.
+// Kept here as a build-time override so EdgeOne always ships the current key
+// even if an older readable admin-src/index.html is still present in a clone.
+// This is a PUBLIC browser key, not a Firebase service-account secret.
+const ADMIN_VAPID_KEY = 'BDV893y71a1DLBZk6zsWxGTuU8alaTrVOUmFVroU3qy49FEud4XIkkpvyZVZLaO7QOXMJS_TlluZ9o9b0ql9y3g';
+const vapidLineRe = /const VAPID_KEY\s*=\s*['"][^'"]*['"]\s*;/;
+if (!vapidLineRe.test(code)) {
+  console.error('Cannot update admin VAPID key -- const VAPID_KEY was not found in the main script.');
+  process.exit(1);
+}
+code = code.replace(vapidLineRe, `const VAPID_KEY = '${ADMIN_VAPID_KEY}';`);
+
 log('main script source:', code.length, 'bytes');
 
 // ── 1b. Lift the i18n engine + table out of the member app ────────────────
