@@ -6373,3 +6373,47 @@ It now **derives** the origin from `API_BASE` and asserts every manifest icon, `
 and `<link rel="icon">` **agrees with it**. That is the property that was always wanted:
 a manifest icon on a different host than the API is the bug, whatever the host is called.
 It also survives the next move for free.
+
+
+## Round 175 — September 17 audit repairs (review branch)
+
+Five audit findings reproduced against cc6fce5 and fixed on
+`codex/chipz-audit-fixes`; no production branch push or data migration.
+
+- Ambiguous MarzPay/LipaPay payout responses now retain `sending` and the
+  outbound identifier. Invalid bodies, HTTP 5xx/408/409/429 and unknown
+  success envelopes must not become clean refusals inviting another send.
+- Submission responses use a conditional `sending` transition before
+  incrementing totalWithdrawn. A verified callback that already completed
+  the payout wins; a later response cannot reopen it or double-count it.
+  Transaction history also refuses to downgrade a terminal status.
+- `walletLedgerAmount` excludes unconfirmed deposits from integrity, wallet
+  repair and total-deposit recalculation, while retaining pending withdrawal
+  debits and deposit reversals. Pending deposit rows describe intent, not
+  spendable money.
+- An uncached account-region lookup failure now stops the request with 503
+  instead of applying hostname prices. Cached verified regions remain safe;
+  confirmed missing profiles can still register. Background financial work
+  defers if the account region is unresolved.
+- Automatic approval filters country, age and amount cap before taking its
+  50-row batch. Legacy Uganda rows with absent/null/empty regionKey remain
+  eligible. Other countries and over-cap rows cannot permanently block it.
+
+`test-audit-money-regressions.js` executes extracted production handlers with
+controlled database/provider failures. Tests cover each reported scenario,
+normal accepted/refused payments, ambiguous replies, legacy country rows,
+limits, and pending withdrawal accounting. Reintroducing each of the five
+original defects individually produces an assertion failure.
+
+Validation: both frontend builds completed (no frontend source changes;
+randomized generated output was restored to avoid unrelated bundle churn).
+All 31 Node suites pass; five targeted fault mutations are caught.
+The old region wrapper check pinned the former function layout; it now
+checks the scoped function body, backed by runtime tests for payout owner
+region selection and a 503 without sending on lookup failure.
+The dependency audit request also timed out without a result.
+Browser smoke was attempted but cannot launch because
+`/opt/pw-browsers/chromium` is absent; installing Chromium timed out at the
+browser CDN. Browser/Python checks therefore remain an explicit pre-merge
+validation limitation, not a green result. No historical balances have been
+automatically changed; existing affected records require separate review.
