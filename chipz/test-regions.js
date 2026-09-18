@@ -893,7 +893,7 @@ ck(/String\(d\.data\(\)\.regionKey \|\| DEFAULT_REGION_KEY\) === regionKey/.test
   // Background money jobs have no request, so they must adopt the member's
   // own region -- or a Kenyan's maturity payout would be described in UGX.
   for (const fn of ['settleInvestmentIfDue', 'creditReferralCommission', 'creditDeposit', 'processWithdrawalCore'])
-    ck(new RegExp('function ' + fn + '\\([^)]*\\) \\{\\s*(let ownerId[\\s\\S]{0,320})?return withUserRegion').test(bare),
+    ck(/return\s+(?:await\s+)?withUserRegion\(/.test(fnSource(bare, fn)),
       `${fn}() runs in the memberʼs own region`);
 }
 
