@@ -1160,12 +1160,67 @@ function depositAutomaticProvider(sett) {
 // (payout) uses. 'follow' defers to depositProvider() -- everything else
 // ('marzpay'/'lipapay'/'manual', or the legacy 'automatic' alias) pins the
 // payout side independently of the deposit side.
-function withdrawProvider(sett) {
-  const w = (sett && sett.withdrawMethod) || 'follow';
-  if (w === 'follow') return depositProvider(sett);
-  return normalizeProviderValue(w);
+// ── WHICH COUNTRIES A GATEWAY CAN ACTUALLY SERVE ──
+// Every automatic gateway wired into Chipz is Uganda-only. That is a fact
+// about the providers, not a limitation of this code:
+//
+//   MarzPay  its own SDK (marzpay-js, published by MarzPay's own maintainer)
+//            pins `currency: 'UGX'` in every limits/fee function INDEPENDENTLY
+//            of its `country` field, states its amount bounds in UGX, and
+//            validates phone numbers against /^256[0-9]{9}$/ and nothing else
+//            -- isValidPhoneNumber() rejects any other country outright. Its
+//            `country` parameter defaults to 'UG' and no other value appears
+//            anywhere in the package. Its own service-lookup helper carries
+//            the comment that the API does not support country filtering.
+//   LipaPay  Uganda collections and payouts only.
+//   PesaJet  Uganda mobile money (MTN / Airtel) only, per its own docs.
+//
+// Keyed on the DIALLING CODE rather than the region key: a second Ugandan
+// region would carry its own arbitrary key ('ug2') and still dial 256, and
+// what decides whether a gateway can reach a member's phone is the number,
+// not what the country was named.
+//
+// WHY THIS EXISTS. A new region inherits settings/main -- which is Uganda's,
+// carrying depositMethod:'marzpay' AND depositPayAEnabled:true. So on the day
+// a Kenya region is created, every Kenyan deposit is handed to a Uganda-only
+// gateway with a +254 number, and so is every payout, and NOTHING said so:
+// the member sees a provider failure and the admin sees a working config.
+// Adding a country here is one line, once a provider genuinely serves it.
+const GATEWAY_DIAL_CODES = Object.freeze({
+  marzpay: ['256'],
+  lipapay: ['256'],
+  pesajet: ['256'],
+});
+function gatewayServesDial(gateway, dial) {
+  const allowed = GATEWAY_DIAL_CODES[gateway];
+  // 'manual' -- and anything not listed -- is admin-run, so it works anywhere.
+  if (!allowed) return true;
+  return allowed.includes(String(dial == null ? '' : dial).replace(/\D/g, ''));
 }
-function payoutIsManual(sett) { return withdrawProvider(sett) === 'manual'; }
+function gatewayServesRegion(gateway, region) {
+  const r = region || currentRegion();
+  return gatewayServesDial(gateway, r && r.dialCode);
+}
+// Is PAY A (automatic recharge) genuinely usable here? The admin's own flag
+// AND a gateway that can reach this country. Served to the app as the
+// RESOLVED answer, the same way payoutManual and referralRequired already are,
+// so the member never meets a payment method that cannot work.
+function payAAvailable(sett, region) {
+  if (!sett || sett.depositPayAEnabled === false) return false;
+  return gatewayServesRegion(depositAutomaticProvider(sett), region);
+}
+function withdrawProvider(sett, region) {
+  const w = (sett && sett.withdrawMethod) || 'follow';
+  const chosen = w === 'follow' ? depositProvider(sett) : normalizeProviderValue(w);
+  // A gateway that cannot reach this country's numbers must never be handed a
+  // payout. Falling back to manual leaves the money with a human, which is the
+  // only correct answer until a gateway for that country exists -- the
+  // alternative is a real payout attempted against a provider that either
+  // refuses it or, worse, accepts a number it should not.
+  if (chosen !== 'manual' && !gatewayServesRegion(chosen, region)) return 'manual';
+  return chosen;
+}
+function payoutIsManual(sett, region) { return withdrawProvider(sett, region) === 'manual'; }
 
 let _productsCache = null, _productsCacheTs = 0;
 // The fields a region may set its own value for. The owner's ask was
@@ -3481,6 +3536,13 @@ app.get('/public/settings', async (req, res) => {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
       payoutManual: payoutIsManual(s),
+      // RESOLVED, not the raw flag: PAY A is only real if a gateway can
+      // actually reach this country's phone numbers. Sending the raw setting
+      // would show a Kenyan member an automatic recharge option that fails at
+      // the provider every time -- the app reads this field directly
+      // (`s.depositPayAEnabled !== false`), so resolving it here is what hides
+      // the method rather than asking the app to know about gateways.
+      depositPayAEnabled: payAAvailable(s),
       referralRequired: await referralRequiredNow(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
@@ -4918,6 +4980,20 @@ app.post('/deposit/marzpay', async (req, res) => {
     // /deposit/manual/init's own symmetric guard below.
     if (!sett.depositPayAEnabled) return res.status(400).json({ status: 'error', message: 'Automatic recharges are not enabled right now.' });
     const provider = depositAutomaticProvider(sett);
+    // The gateway has to be able to reach THIS country's phone numbers. Every
+    // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
+    // new region inherits Uganda's settings, so without this a Kenyan deposit
+    // is created and handed to MarzPay with a +254 number. Refused BEFORE any
+    // pendingDeposit is written and before the debounce and abuse counters, so
+    // a misconfiguration cannot leave rows behind or ban anybody. The message
+    // names the country, because the person who has to fix this is the admin.
+    if (!gatewayServesRegion(provider, currentRegion())) {
+      return res.status(400).json({
+        status: 'error', code: 'GATEWAY_REGION',
+        message: 'Automatic recharge is not available in ' + (currentRegion().name || 'this country') +
+                 ' yet. Please use the other payment method.',
+      });
+    }
 
     // Validate BEFORE touching the debounce/abuse-attempt counters below --
     // a below-minimum amount or a missing phone number must never consume a
@@ -8441,9 +8517,25 @@ app.post('/admin/settings/update', async (req, res) => {
     // own migration + depositAutomaticProvider()'s own fallback) -- it
     // just can never be WRITTEN again going forward.
     if ('depositMethod' in updates && !['marzpay', 'lipapay', 'pesajet'].includes(updates.depositMethod))
-      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'lipapay'` });
+      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'lipapay' or 'pesajet'` });
     if ('withdrawMethod' in updates && !['follow', 'marzpay', 'lipapay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
       return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'lipapay', 'pesajet' or 'manual'` });
+    // A gateway that cannot reach the picked country's phone numbers is not a
+    // configuration worth storing: it would read as set up and fail on every
+    // real payment. Refused with the reason rather than accepted and quietly
+    // overridden at run time, so the admin finds out here and not from a
+    // member. 'follow' and 'manual' are always fine -- one defers to the
+    // deposit side (checked on its own line) and the other is admin-run.
+    for (const [field, value] of [['depositMethod', updates.depositMethod],
+                                  ['withdrawMethod', updates.withdrawMethod]]) {
+      if (!(field in updates) || value === 'follow' || value === 'manual') continue;
+      if (gatewayServesRegion(value, targetRegion)) continue;
+      const serves = (GATEWAY_DIAL_CODES[value] || []).map(d => '+' + d).join(', ');
+      return res.status(400).json({ status: 'error', field, message:
+        `${value} cannot be used for ${targetRegion.name || targetRegion.key}: it only serves ` +
+        `${serves || 'other countries'}, and this country dials +${targetRegion.dialCode}. ` +
+        `Use manual payments here until a gateway covers it.` });
+    }
     if (isRegionOverlay) {
       const docId = settingsDocId(targetRegion.key);
       const ref = db.collection('settings').doc(docId);

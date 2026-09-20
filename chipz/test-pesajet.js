@@ -336,12 +336,35 @@ async function finish() {
   ck(autoProv({ depositMethod: 'manual' }) === 'marzpay',
      'and a legacy manual value still cannot leak through as an automatic gateway');
 
-  const witProv = new Function(strip(fnSource('depositProvider')) +
+  // withdrawProvider now also refuses a gateway that cannot reach the
+  // member's country, so its lift needs the country rule and a region to
+  // judge against. Uganda is handed in explicitly because that is what these
+  // PesaJet assertions are about -- see test-gateway-regions.js for the
+  // countries no gateway serves.
+  const UG = { key: 'ug', name: 'Uganda', dialCode: '256' };
+  // constSource() matches a single line and this const spans several, so it
+  // is sliced to its own closing brace.
+  const dialMap = (() => {
+    const a = src.indexOf('const GATEWAY_DIAL_CODES');
+    const b = src.indexOf('});', a);
+    if (a === -1 || b === -1) throw new Error('could not slice GATEWAY_DIAL_CODES');
+    return src.slice(a, b + 3);
+  })();
+  const witProv = new Function('UG', 'function currentRegion(){ return UG; }' +
+    dialMap +
+    strip(fnSource('gatewayServesDial')) +
+    strip(fnSource('gatewayServesRegion')) +
+    strip(fnSource('depositProvider')) +
     strip(fnSource('normalizeProviderValue')) +
-    strip(fnSource('withdrawProvider')) + '\nreturn withdrawProvider;')();
-  ck(witProv({ withdrawMethod: 'pesajet' }) === 'pesajet', 'payouts can be pinned to PesaJet');
-  ck(witProv({ withdrawMethod: 'follow', depositMethod: 'pesajet' }) === 'pesajet',
+    strip(fnSource('withdrawProvider')) + '\nreturn withdrawProvider;')(UG);
+  ck(witProv({ withdrawMethod: 'pesajet' }, UG) === 'pesajet', 'payouts can be pinned to PesaJet');
+  ck(witProv({ withdrawMethod: 'follow', depositMethod: 'pesajet' }, UG) === 'pesajet',
      "and 'follow' follows it");
+  // PesaJet is Uganda-only, so a payout for a member in any other country
+  // must not be handed to it. Pinned here as well as in
+  // test-gateway-regions.js because this is the file that owns PesaJet.
+  ck(witProv({ withdrawMethod: 'pesajet' }, { key: 'ke', name: 'Kenya', dialCode: '254' }) === 'manual',
+     'but a Kenyan payout falls back to manual rather than reaching PesaJet');
 
   // The enums, or the admin can never save the choice.
   ck(/'depositMethod' in updates && !\['marzpay', 'lipapay', 'pesajet'\]/.test(S),

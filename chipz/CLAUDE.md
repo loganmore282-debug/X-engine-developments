@@ -6373,3 +6373,100 @@ It now **derives** the origin from `API_BASE` and asserts every manifest icon, `
 and `<link rel="icon">` **agrees with it**. That is the property that was always wanted:
 a manifest icon on a different host than the API is the bug, whatever the host is called.
 It also survives the next move for free.
+
+## Round 175 — MarzPay has no other countries, and a new region silently used it anyway
+
+> "we need to put all endpoints of other countries of MarzPay and everything
+> https://wallet.wearemarz.com/documentation"
+
+**There are no other-country endpoints, and none were invented.** Same call as refusing
+to invent PesaJet's balance path in Round 170.
+
+`wallet.wearemarz.com` is refused by this environment's egress proxy, so the docs could
+not be read. The answer came from **`marzpay-js` v1.0.5 on npm, published by MarzPay's
+own maintainer** (`katznicho`) — npm is reachable, which is how PesaJet was settled too.
+The evidence is not ambiguous:
+
+- `currency: 'UGX'` is pinned in every limits/fee function **independently of the
+  `country` field** — so `country` does not drive currency;
+- `formatPhoneNumber()` only ever produces `+256…`, and `isValidPhoneNumber()` tests
+  `/^\+256[0-9]{9}$/` and **rejects every other country**;
+- amount bounds are stated in UGX (collect 500–10,000,000; send 1,000–500,000);
+- `country` is a parameter defaulting to `'UG'` and **no other value appears anywhere in
+  the package**;
+- its own service-lookup helper carries the comment *"This would require the API to
+  support country filtering"* — i.e. the API does not;
+- the README says "for Uganda", "businesses in Uganda", "all major mobile money services
+  in Uganda", "verify Uganda mobile numbers".
+
+**The complete endpoint list** (10, from the SDK): `/collect-money`, `/send-money`,
+`/balance`, `/account`, `/collect-money/services`, `/send-money/services`, `/webhooks`,
+`/phone-verification/{verify,service-info,subscription-status}`. Chipz already uses the
+three that matter. Two unused ones are worth a later look: the two `…/services`
+endpoints report which networks are live *right now* (so a deposit need not be attempted
+into a dead MTN collection channel), and `/phone-verification/verify` could confirm a
+payout destination belongs to the member — though it is a paid subscription.
+
+### The real bug the question surfaced: a new country inherited a gateway that cannot reach it
+
+`settings/region-<key>` is layered **on top of `settings/main`**, which is Uganda's — so
+a newly created region inherits `depositMethod: 'marzpay'` **and**
+`depositPayAEnabled: true`. From the moment a Kenya region existed, every Kenyan deposit
+was handed to a Uganda-only gateway with a `+254` number, and every payout with it.
+**Nothing said so**: the member saw a provider failure, the admin saw a working
+configuration. `normalizeProviderValue()` falling back to `'marzpay'` for anything
+unrecognised made it the destination of last resort as well.
+
+`GATEWAY_DIAL_CODES` is the fix — `{ marzpay: ['256'], lipapay: ['256'], pesajet: ['256'] }`
+— with three decisions flowing from it:
+
+| where | what changed |
+|---|---|
+| `/public/settings` | serves `depositPayAEnabled: payAAvailable(s)` — the **resolved** answer, like `payoutManual` and `referralRequired` already do. The app reads that field directly, so resolving it server-side is what hides the method; the app needs to know nothing about gateways. |
+| `/deposit/marzpay` | refuses with `code: 'GATEWAY_REGION'` **before** any `pendingDeposits` row, and before the debounce and abuse counters — a misconfiguration must not leave rows behind or ban anybody. |
+| `withdrawProvider()` | an automatic gateway that cannot reach the country resolves to **`'manual'`**, so the payout waits for a human instead of being attempted against a provider that would refuse it. Changed at the single decision point the file already documents as such, so `payoutIsManual()` and every other reader follow for free. |
+| `/admin/settings/update` | refuses the save, naming the country, its dial code and what the gateway serves. Better than accepting it and overriding at run time: the admin finds out, not a member. |
+
+**Keyed on the DIALLING CODE, not the region key.** A second Ugandan region would have
+its own arbitrary key (`ug2`) and still dial 256, and what decides whether a gateway can
+reach a member's phone is the number. Keying on the key would have broken that region
+while looking like "the gateway is down in that country" — there is a test and a mutation
+for exactly it.
+
+**Adding a country is now one line**, once a provider genuinely serves it.
+
+**The region default is safe because of a wrapper two functions away.**
+`withdrawProvider(settNow)` is called with no explicit region in the payout path and
+falls back to `currentRegion()` — correct *only* because `processWithdrawalCore()` wraps
+the work in `withUserRegion(ownerId, …)`. Without it, an admin approving a Kenyan payout
+from a Ugandan panel host would have it judged against Uganda. That wrapper is now
+pinned by its own assertion, because nothing near the fallback hints that it is what
+makes the fallback correct.
+
+### Tests
+`test-gateway-regions.js` **runs** the real resolvers, and asserts **both directions** —
+over half of it is Uganda assertions whose only job is to prove a fix for Kenya did not
+change the country that already works, including the historical "no `depositMethod`
+stored at all" shape every deployed database holds. It also mines the accepted values out
+of `normalizeProviderValue` itself rather than restating them, so a fourth gateway added
+there with no country list fails here.
+
+`verify-gateway-regions-discriminates.py` — **15 mutations, all caught**, running BOTH
+this harness and `test-regions.js` and taking the worst exit code.
+
+**Two of its own faults, both found by the harness rather than by reading:**
+1. **The control was not a no-op and was correctly reported CAUGHT.** It read
+   `Object.freeze({}) || Object.freeze({…})` — an empty frozen object is **truthy**, so
+   `||` short-circuits and the map really did come back empty. That is exactly what a
+   control is for, and it is the reason to have one.
+2. *"the admin save judges the request host instead of the region being saved"* went
+   **MISSED**, because the assertion only checked that `targetRegion` appeared somewhere
+   in that route — it appears many times there for unrelated reasons. Re-anchored on the
+   call itself, `gatewayServesRegion(value, targetRegion)`. Another instance of *check
+   the call, not the file*.
+
+**And `test-pesajet.js` broke on the lift**, which is the standing hazard when a lifted
+function gains a dependency: `withdrawProvider` now calls `gatewayServesRegion`, which
+was not in that sandbox. It also needed `GATEWAY_DIAL_CODES` sliced by hand, because
+`constSource()` matches a single line and that const spans several. While fixing it, the
+Kenya case was pinned there too — PesaJet is Uganda-only and that file owns PesaJet.
