@@ -358,7 +358,13 @@ ck(/app\.get\('\/admin\/brand-assets'[\s\S]{0,120}verifyAdmin\(req\)/.test(src),
   const db = { collection: () => ({ doc: () => ({
     get: async () => ({ exists: !!stored, data: () => stored })
   }) }) };
+  // serveBrandAsset reads getSettings() now, to honour the "show a picture on
+  // shared links" switch -- so the sandbox has to supply one or the route
+  // throws and every assertion below reads as a 404. Returns {}, i.e. the
+  // switch unset, which is the shipped default and the state this block is
+  // about. The OFF state is covered by test-link-preview-and-delete.js.
   const rt = eval('(function(){' +
+    'async function getSettings(){ return {}; }' +
     grab('const BRAND_ASSET_SLOTS', 'function imageSize') +
     grab('function serveBrandAsset', "app.get('/public/app-icon-512.png'") +
     'return { serveBrandAsset, _cache: _brandAssetCache };})()');

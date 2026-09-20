@@ -890,7 +890,7 @@ const REGION_SINGLE_TABS = ['settings', 'products'];
 // the payload here instead -- the picker's own caption says these apply to
 // every country and are edited on the founding one. The server still refuses
 // them, which is what stops a direct POST.
-const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];
+const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];
 function regionByKeyAdmin(key){ return ADMIN_REGIONS.find(r => r.key === (key || ADMIN_REGION)) || ADMIN_REGIONS[0]; }
 function curOf(key){ const r = regionByKeyAdmin(key); return (r && r.currency) || 'UGX'; }
 function adminCur(){ return curOf(ADMIN_REGION); }
@@ -909,7 +909,22 @@ async function api(path, body, method){
       if (REGION_SCOPED_READS.includes(path)) path += '?region=' + encodeURIComponent(one);
       else if (REGION_SCOPED_WRITES.includes(path)) body = Object.assign({ region: one }, body || {});
     }
-    if (REGION_SCOPED_WRITES.includes(path) && body && body.settings && typeof body.settings === 'object') {
+    // The EFFECTIVE target country. A caller may name the founding region
+    // explicitly even while another is picked -- the link-preview switch does,
+    // because it is backend-wide and has to save from whichever country
+    // happens to be on screen. body.region wins in the Object.assign above,
+    // so it has to win here too.
+    const target = (body && body.region) || one;
+    // Stripped ONLY for a region overlay. This used to run unconditionally,
+    // which meant every backend-wide control -- maintenance mode, the
+    // maintenance message, allowed origins, the base domain, block-root,
+    // parked hosts, strict hosts, the opening countdown, the app name -- was
+    // deleted from its own save and could not be changed from the panel AT
+    // ALL, silently, with a "Rates saved" toast on top. The server only
+    // refuses these for a region overlay (settings/main IS the global
+    // document), so stripping them on the founding country threw away a save
+    // the server would have accepted.
+    if (target !== 'ug' && REGION_SCOPED_WRITES.includes(path) && body && body.settings && typeof body.settings === 'object') {
       body.settings = Object.assign({}, body.settings);
       for (const k of ADMIN_GLOBAL_ONLY) delete body.settings[k];
     }
@@ -3606,6 +3621,8 @@ async function renderSettings(){
 
     <h2 class="sec">Link preview</h2>
     <div class="panel-card">
+      <label style="width:auto;display:flex;align-items:center;gap:8px;margin:0 0 10px;"><input type="checkbox" id="linkPrevOn" ${s.linkPreviewEnabled !== false ? 'checked' : ''} style="width:auto"> Show a picture on shared links</label>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">Turn this off and a pasted link shows just the title and address, with no picture at all &mdash; neither your upload nor the built-in card. It applies to every country and every address, because the share tags live in one file that all of them are served from.</p>
       <p class="muted" style="margin-top:0">The picture that appears when the app's link is pasted into WhatsApp, Telegram or Facebook.
         Upload <b>1200&nbsp;&times;&nbsp;630</b> (landscape, just under 2:1). Any size is accepted and centre-cropped to fit, but anything far off that shape loses its edges.
         Put the logo and any words in the middle &mdash; WhatsApp crops the sides on some phones.</p>
@@ -3941,6 +3958,27 @@ async function renderSettings(){
   // ── Link preview ── 1200x630 is the size WhatsApp, Telegram and Facebook
   // all read; cover-fit, because a share card is artwork that should fill
   // the frame rather than sit letterboxed inside it.
+  //
+  // The switch saves on change rather than behind a button: it is one boolean,
+  // and a switch that needs a separate Save is a switch people flip and walk
+  // away from. `region: 'ug'` is named EXPLICITLY because the setting is
+  // backend-wide -- without it the field would be stripped from the save
+  // whenever another country is picked, and the toast would still say saved.
+  const linkPrevOn = $('linkPrevOn');
+  if (linkPrevOn) linkPrevOn.addEventListener('change', async()=>{
+    const on = linkPrevOn.checked;
+    linkPrevOn.disabled = true;
+    const d = await api('/admin/settings/update', { region: 'ug', settings: { linkPreviewEnabled: on } });
+    linkPrevOn.disabled = false;
+    if (d.status !== 'success') {
+      linkPrevOn.checked = !on;   // put the switch back where the server left it
+      return toast(d.message || 'Could not change that', 'err');
+    }
+    // Says what actually happens next, including the delay, because "saved"
+    // on a share card that still shows the old picture reads as a failure.
+    toast(on ? 'Shared links will show a picture — allow up to five minutes'
+             : 'Shared links will show no picture — allow up to five minutes', 'ok');
+  });
   const linkPreviewFile = $('linkPreviewFile');
   if (linkPreviewFile) linkPreviewFile.addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
@@ -4400,6 +4438,10 @@ const ADMIN_LANG_ROWS = [
   ['Manual payments', 'Okusasula n\'engalo', 'Malipo ya mkono', 'Paiements manuels', 'Kwishyura n\'intoki', 'Okushashura n\'engaro'],
   ['The platform\'s name. Changing it renames it everywhere inside the app — the Home wordmark, the profile badge, the loading and sign-in screens, About, Get the app, the browser tab, and the wording on admin credits from now on. Members see it the next time they open the app. Two places keep the old name until the frontend is re-uploaded: the name Android shows under the installed icon, and the title on a shared link — both are read out of files the phone downloads once, not from these settings. Up to 24 characters.', 'Erinnya ly\'ekitongole. Okulikyusa kukyusa erinnya buli wantu mu app — akabonero ka Home, akapapula k\'omuntu, olupapula olw\'okutegeka n\'olw\'okuyingira, Ebikwata Ku Ffe, Funa app, ttabu lya bbulawuza, n\'ebigambo ku ssente ezongerwa bakulembeze okuva kati. Abantu baliraba omulundi oguddako lwe bajja okuggula app. Ebifo bibiri bisigala n\'erinnya ery\'edda okutuusa ng\'ebweru bwa app bizzeemu okuteekebwa: erinnya Android ly\'eraga wansi w\'akafaananyi, n\'omutwe ku kkubo erigabanibwa — byombi bisomebwa okuva mu fayiro essimu z\'ekkakkanya omulundi gumu, si okuva mu biteeso bino. Okutuuka ku nnukuta 24.', 'Jina la jukwaa. Kulibadilisha hulibadilisha kila mahali ndani ya programu — nembo ya Nyumbani, beji ya wasifu, skrini za kupakia na kuingia, Kutuhusu, Pata programu, kichupo cha kivinjari, na maneno kwenye salio zinazoongezwa na msimamizi kuanzia sasa. Wanachama huliona wakati mwingine watakapofungua programu. Sehemu mbili hubaki na jina la zamani hadi sehemu ya mbele itakapopakiwa upya: jina Android inaloonyesha chini ya aikoni iliyosakinishwa, na kichwa kwenye kiungo kilichoshirikiwa — vyote husomwa kutoka faili ambazo simu hupakua mara moja, si kutoka mipangilio hii. Hadi herufi 24.', 'Le nom de la plateforme. Le changer le renomme partout dans l\'application — le logotype de l\'Accueil, le badge du profil, les écrans de chargement et de connexion, À propos, Obtenir l\'application, l\'onglet du navigateur, et le libellé des crédits administrateur à partir de maintenant. Les membres le voient à la prochaine ouverture de l\'application. Deux endroits gardent l\'ancien nom jusqu\'au prochain téléversement du frontend : le nom qu\'Android affiche sous l\'icône installée, et le titre d\'un lien partagé — les deux sont lus dans des fichiers que le téléphone télécharge une fois, pas depuis ces réglages. Jusqu\'à 24 caractères.', 'Izina ry\'urubuga. Kurihindura birihindura hose imbere muri porogaramu — ikirango cya Ahabanza, akarango k\'umwirondoro, amapaji yo gupakira no kwinjira, Ibyerekeye, Kubona porogaramu, igice cy\'umushakisha, n\'amagambo ku mafaranga ubuyobozi bwongera kuva ubu. Abanyamuryango barirebera ubutaha bafunguye porogaramu. Ahantu habiri hagumana izina rya kera kugeza igice cy\'imbere cyongeye gushyirwaho: izina Android yerekana munsi y\'agashushondanga kashyizweho, n\'umutwe ku murongo wasangiwe — byombi bisomwa muri dosiye telefoni imanura rimwe, atari muri aya magenamiterere. Kugeza ku nyuguti 24.', 'Eiziina ry\'ekitongore. Okurihindura nikihindura eiziina hoona omunda ya puroguramu — akamanyiso ka Home, akapapura k\'omuntu, orupapura rw\'okutebeka n\'orw\'okutaaha, Ebirikutukwataho, Tunga puroguramu, akacweka ka buraawuza, n\'ebigambo aha sente ezirikwongyerwa abebembezi kuruga hati. Abantu nibaza kurireeba omurundi ogurikwija ku barikwigura puroguramu. Ebifo bibiri nibisigara n\'eiziina rya ira okuhitsya obu aha rubaju rw\'omu maisho harigaruka kutaho: eiziina Android eri kworeka ahansi y\'akashushani akatairweho, n\'omutwe aha muhanda ogurikugabanwa — byombi nibishomwa kuruga omu mafaira agu esimu erikwihura omurundi gumwe, ti kuruga omu ntebeka ezi. Okuhitsya aha buhandiiko 24.'],
   ['Times are 24-hour, in the selected country\'s own local time. The window may run past midnight — set 18:00 to 17:00 and cash-out is open all day except between 17:00 and 18:00. Members always see exactly these hours, and the server refuses a request outside them, not just the app.', 'Ebiseera bya ssaawa 24, mu budde bw\'eggwanga eriroNdeddwa. Ekiseera kiyinza okuyita mu ttumbi — teeka 18:00 okutuuka 17:00 n\'okuggyamu ssente kuggulwa olunaku lwonna okuggyako wakati wa 17:00 ne 18:00. Abantu bulijjo balaba essaawa zino nga bwe ziri, era sseva egaana okusaba okuli ebweru waazo, si app yokka.', 'Nyakati ni za saa 24, kwa saa za nchi iliyochaguliwa. Dirisha linaweza kupita usiku wa manane — weka 18:00 hadi 17:00 na utoaji hufunguka siku nzima isipokuwa kati ya 17:00 na 18:00. Wanachama huona daima saa hizi hasa, na seva hukataa ombi lililo nje yake, si programu tu.', 'Les heures sont au format 24 heures, dans l\'heure locale du pays sélectionné. La fenêtre peut passer minuit — réglez 18:00 à 17:00 et le retrait est ouvert toute la journée sauf entre 17:00 et 18:00. Les membres voient toujours exactement ces heures, et le serveur refuse une demande en dehors, pas seulement l\'application.', 'Amasaha ni ay\'amasaha 24, mu gihe cy\'igihugu cyatoranyijwe. Idirishya rishobora kurenga saa sita z\'ijoro — shyira 18:00 kugeza 17:00 maze kubikuza bigafungurwa umunsi wose usibye hagati ya 17:00 na 18:00. Abanyamuryango bahora babona neza aya masaha, kandi seriveri yanga ubusabe buri hanze yayo, atari porogaramu gusa.', 'Obwire n\'obw\'eshaaha 24, omu bwire bw\'eihanga eryacwiirwemu. Obwire nibubaasa kuraba omu kiro — ta 18:00 okuhika 17:00 reero okwihamu sente kwigurwe eizooba ryoona kureka ahagati ya 17:00 na 18:00. Abantu obutoosha nibareeba eshaaha ezi nk\'oku ziri, kandi seeva neeyanga okushaba okuri aheeru yaazo, ti puroguramu yonka.'],
+  ['Show a picture on shared links', 'Laga ekifaananyi ku nnyiriri ezigabanyizibwa', 'Onyesha picha kwenye viungo vinavyoshirikiwa', 'Afficher une image sur les liens partagés', 'Erekana ifoto ku mirongo isangiwe', 'Yoreka ekishushani aha mihanda egabanwa'],
+  ['Turn this off and a pasted link shows just the title and address, with no picture at all — neither your upload nor the built-in card. It applies to every country and every address, because the share tags live in one file that all of them are served from.', 'Bw\'okizikiza, olunyiriri lwe luteekamu lulaga erinnya n\'endagiriro zokka, awatali kifaananyi n\'akatono — si kya kwewaanika kwo wadde ekipapula ekiri mu app. Kikola ku nsi zonna ne ku ndagiriro zonna, kubanga obubonero bw\'okugabana buli mu fayiro emu gye zonna ziweerezebwa okuva.', 'Izima hii na kiungo kilichonakiliwa huonyesha kichwa na anwani pekee, bila picha yoyote — si upakiaji wako wala kadi iliyojengwa ndani. Inahusu kila nchi na kila anwani, kwa sababu vitambulisho vya kushiriki vipo katika faili moja ambayo zote huhudumiwa kutoka humo.', 'Désactivez ceci et un lien collé n\'affiche que le titre et l\'adresse, sans aucune image — ni votre téléversement ni la carte intégrée. Cela s\'applique à chaque pays et à chaque adresse, car les balises de partage se trouvent dans un seul fichier depuis lequel elles sont toutes servies.', 'Bihagarike maze umurongo washyizweho werekana umutwe n\'aderesi gusa, nta foto na mba — nta yo washyizeho cyangwa ikarita iri muri porogaramu. Bireba igihugu cyose n\'aderesi yose, kuko ibimenyetso byo gusangira biri muri dosiye imwe zose zitangwa ziyivuyemo.', 'Kizikize reero omuhanda ogutairwemu nigwooreka omutwe n\'aderesi yonka, hatariho kishushani na kimwe — ti eki watairemu nari ekipapura ekiri omu puroguramu. Nikikora aha mahanga goona n\'aha aderesi zoona, ahakuba obumanyiso bw\'okugabana buri omu faira emwe ei zoona zirikuhereerezibwa kuruga.'],
+  ['Only an owner account can delete a country.', 'Akawunti y\'omuntu w\'ekitongole yokka esobola okusazaamu ensi.', 'Akaunti ya mmiliki pekee inaweza kufuta nchi.', 'Seul un compte propriétaire peut supprimer un pays.', 'Konti y\'umutunzi gusa ishobora gusiba igihugu.', 'Akaunti y\'omukama yonka nikibaasa kwihamu eihanga.'],
+  ['Switch the country off instead of deleting it, so those members keep their own money and plans.', 'Zikiza ensi mu kifo ky\'okugisazaamu, abantu abo basigale n\'ensimbi zaabwe n\'enteekateeka zaabwe.', 'Zima nchi badala ya kuifuta, ili wanachama hao wabaki na fedha zao na mipango yao.', 'Désactivez le pays au lieu de le supprimer, afin que ces membres conservent leur argent et leurs plans.', 'Hagarika igihugu aho kugisiba, kugira ngo abo banyamuryango bagumane amafaranga yabo n\'imigambi yabo.', 'Zikiza eihanga omu mwanya w\'okurihoramu, abantu abo bagume n\'esente zaabo n\'entebeekanisa zaabo.'],
   ['Ban', 'Gaana', 'Zuia', 'Bloquer', 'Kubuza', 'Zibira'],
   ['Credit', 'Muwe ssente', 'Ongeza pesa', 'Créditer', 'Kongeraho amafaranga', 'Mumuhe sente'],
   ['Debit', 'Muggyeko ssente', 'Toa pesa', 'Débiter', 'Gukuraho amafaranga', 'Mwihyeho sente'],

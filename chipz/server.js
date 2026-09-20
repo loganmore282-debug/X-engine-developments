@@ -942,6 +942,9 @@ const DEFAULT_SETTINGS = {
   // banners: a base64 image doesn't belong bloating the /public/settings
   // payload every client fetches on every boot.
   annEnabled: false, annTitle: '', annBody: '',
+  // Owner: "make sure that l can enable link preview or no". Whether a shared
+  // link shows a picture at all. ON by default, which is what shipped.
+  linkPreviewEnabled: true,
   // Owner: "make when l can change figure/digit fonts in admin panel" --
   // the `.mono` class every UGX figure/numeric stat in the user app already
   // uses (Round 24 picked Bodoni Moda as the original fixed default) is now
@@ -1058,7 +1061,11 @@ const DEFAULT_PRODUCTS = [
 // payment providers, the cash-out window, the turntable bands -- is
 // per-region, which is what the owner asked for ("all settings as these of
 // ugx").
-const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];
+// linkPreviewEnabled is in here because the og:/twitter: tags live in the
+// STATIC page head -- one copy, shared by every country and every host -- so
+// a per-country share card is not a thing that can exist. Same reasoning as
+// brandName, which manifest.json has the same problem with.
+const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];
 // Which settings document belongs to which region. The founding region
 // keeps 'main' -- the document every deployment already has, so nothing
 // migrates -- and every other region gets its own, holding only what it has
@@ -3961,6 +3968,27 @@ app.get('/public/banner-video', async (req, res) => {
 function serveBrandAsset(slot) {
   return async (req, res) => {
     try {
+      // Owner: "make sure that l can enable link preview or no".
+      //
+      // The og:/twitter: tags are in the STATIC page head, so they cannot be
+      // removed per-request -- a crawler reads the file and runs no script.
+      // Answering 404 for the image is therefore how "off" is expressed: a
+      // crawler that cannot fetch the picture shows the link with no picture,
+      // which is exactly the wanted outcome.
+      //
+      // Scoped to this ONE slot on purpose. The same helper serves the two app
+      // icons, and gating those would break the installed home-screen icon --
+      // a far worse thing to switch off by accident than a share card.
+      if (slot === 'link-preview') {
+        const sett = await getSettings();
+        if (sett && sett.linkPreviewEnabled === false) {
+          // no-store, unlike the 300s below: this is an operator switch, and
+          // turning it back ON has to take effect immediately rather than
+          // after a cached refusal expires.
+          res.set('Cache-Control', 'no-store');
+          return res.status(404).end();
+        }
+      }
       const a = await getBrandAsset(slot);
       if (!a || !a.buf) return res.status(404).end();
       const etag = '"ba-' + slot + '-' + a.version + '"';
@@ -8476,7 +8504,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts'];
+const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -8894,19 +8922,49 @@ app.post('/admin/regions/add-label', async (req, res) => {
     res.json({ status: 'success', label: made[0], labels: made, host: hostOf(made[0]), hosts: made.map(hostOf), region: next });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not generate an address' }); }
 });
+// Owner: "why can't l delete a country?"
+//
+// Three separate refusals live here and they used to be hard to tell apart --
+// the first said only "Unauthorized", which names no cause at all. Each one
+// now says which it is and what to do instead, because "it just will not
+// delete" sends you looking at the button rather than at the reason.
 app.post('/admin/regions/delete', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  // Deleting a country is owner-only, and a staff admin hitting this got a
+  // bare 401 that reads as a broken panel. Separated from the admin check
+  // above so the message can say WHICH of the two failed.
+  if (!verifyOwner(req))
+    return res.status(403).json({ status: 'error', code: 'OWNER_ONLY', message:
+      'Only an owner account can delete a country. You are signed in as ' +
+      `${(req.adminUser && req.adminUser.role) || 'a staff admin'}` +
+      ' -- sign in with the master admin key, or have an owner do it.' });
   const key = String(req.body.key || '').trim().toLowerCase();
   if (!key) return res.status(400).json({ status: 'error', message: 'key required' });
   if (key === DEFAULT_REGION_KEY)
-    return res.status(400).json({ status: 'error', message: 'The founding region cannot be deleted -- it is where every unknown domain and every account without a region lands.' });
+    return res.status(400).json({ status: 'error', code: 'FOUNDING_REGION', message: 'The founding region cannot be deleted -- it is where every unknown domain and every account without a region lands. Switch it off instead if you need it out of the way.' });
   try {
+    const known = await getRegions();
+    if (!known.some(r => r.key === key))
+      return res.status(404).json({ status: 'error', code: 'NO_SUCH_REGION', message:
+        `There is no country with the id "${key}". It may already have been deleted -- reload the Countries tab.` });
     // Refused while anyone is signed up there. Deleting the region would
     // silently move those members onto Uganda's prices and currency, which
     // is a repricing of live accounts, not a tidy-up.
-    const members = await db.collection('users').where('regionKey', '==', key).limit(1).get();
-    if (!members.empty)
-      return res.status(400).json({ status: 'error', message: 'There are members signed up in this region. Switch it off instead of deleting it, so their accounts keep their own currency and prices.' });
+    //
+    // The COUNT is reported, not just the fact: "there are members here" on a
+    // country you believe is empty reads as a bug, whereas "1 member" sends
+    // you to look at that one account. Capped so a large region costs one
+    // bounded read rather than a full scan.
+    const members = await db.collection('users').where('regionKey', '==', key).limit(51).get();
+    if (!members.empty) {
+      const n = members.docs.length;
+      const howMany = n > 50 ? 'more than 50 members' : `${n} member${n === 1 ? '' : 's'}`;
+      return res.status(400).json({ status: 'error', code: 'REGION_HAS_MEMBERS', members: n, message:
+        `${howMany} ${n === 1 ? 'is' : 'are'} signed up in this country, so it cannot be deleted -- ` +
+        'that would move those accounts onto the founding country\'s currency and prices. ' +
+        'Switch the country OFF instead: its addresses stop working and nobody new can join, ' +
+        'while those members keep their own money and plans.' });
+    }
     await db.collection('regions').doc(key).delete();
     // Its settings and its product prices go with it. Left behind, they
     // would silently come back into force the day somebody recreated a

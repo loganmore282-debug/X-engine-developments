@@ -65,7 +65,15 @@ def load(name):
                                                   os.path.join(HERE, name))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return getattr(mod, 'ROWS', []), getattr(mod, 'PATTERNS', [])
+    rows, pats = getattr(mod, 'ROWS', None), getattr(mod, 'PATTERNS', None)
+    # A batch file with NEITHER is a silent no-op: getattr's default returned
+    # an empty list, the merge printed its usual success line, and the rows
+    # were simply not there. admin-rows-13.py was written with the variable
+    # named ADMIN_ROWS_13 and merged to exactly nothing, twice, before this.
+    if rows is None and pats is None:
+        raise SystemExit(f'ABORT: {name} defines neither ROWS nor PATTERNS '
+                         '-- the table must be named ROWS (or PATTERNS), or it merges to nothing.')
+    return rows or [], pats or []
 
 
 def app_keys():

@@ -6418,6 +6418,90 @@ Browser smoke was attempted but cannot launch because
 browser CDN. Browser/Python checks therefore remain an explicit pre-merge
 validation limitation, not a green result. No historical balances have been
 automatically changed; existing affected records require separate review.
+## Round 178 — Why a country would not delete, and a switch for the link preview
+
+> "Why can't l delete a country?, make sure that l can enable link preview or no"
+
+### The delete had FOUR refusals and one of them said nothing
+`/admin/regions/delete` refuses when: you are not an owner, it is the founding
+region, or members are signed up there. The second and third already explained
+themselves. The first answered a bare **`401 Unauthorized`**, which names no cause at
+all — so "it just will not delete" sends you to look at the button rather than at the
+reason. That is almost certainly what happened here.
+
+`verifyOwner()` passes for the master `ADMIN_KEY` (`req.adminUser` undefined) but
+requires `role === 'owner'` for a per-admin account, so **a staff admin got a blank
+401.** Each refusal now carries its own `code` and says what to do instead:
+
+| code | means |
+|---|---|
+| `OWNER_ONLY` (403) | names the role you are signed in as, and says to use the master key. A 403, not a 401 — the session is fine, the role is not. |
+| `FOUNDING_REGION` | unchanged, plus "switch it off instead" |
+| `NO_SUCH_REGION` (404) | it is already gone; reload the tab. Answered **before** the member query, so an already-deleted country cannot read as one of the others. |
+| `REGION_HAS_MEMBERS` | now reports **how many** |
+
+**The count matters more than it looks.** "There are members signed up here" on a
+country you believe is empty reads as a bug; "**1 member** is signed up" sends you to
+that one account. Read with `limit(51)` so a large region costs one bounded read, and
+reported honestly as "more than 50" past the cap rather than claiming a number it did
+not count.
+
+### "Enable link preview or no"
+The `og:`/`twitter:` tags are in the **static page head** — a crawler reads the file and
+runs no script — so they cannot be removed per request. Answering **404 for the image**
+is therefore the only way "off" can be expressed: a crawler that cannot fetch the
+picture shows the link with no picture.
+
+`linkPreviewEnabled` (default **true**, i.e. what shipped) gates
+`/public/link-preview.jpg`. Three details each exist for a reason:
+- **Scoped to that ONE slot.** The same `serveBrandAsset` helper serves both app icons,
+  and gating those would take the installed home-screen icon down with the share card.
+  There is a mutation for exactly that, and an assertion per icon.
+- **The 404 is `no-store`**, unlike the 300s the image carries. This is an operator
+  switch, so turning it back ON has to bite immediately rather than after a cached
+  refusal expires.
+- **Unset reads as ON.** Every deployed database predates this field, and a share card
+  vanishing on deploy would be a surprise nobody asked for.
+
+It is in `GLOBAL_ONLY_SETTINGS` by necessity: one static file serves every country and
+every host, so a per-country share card is not a thing that can exist.
+
+### A pre-existing bug this uncovered: NO backend-wide setting could be saved
+The panel's `api()` helper stripped every `ADMIN_GLOBAL_ONLY` field from a settings
+save — **unconditionally**. The server only refuses those for a region *overlay*
+(`settings/main` IS the global document), so stripping them while the founding country
+was picked threw away a save the server would have accepted.
+
+So **maintenance mode, the maintenance message, allowed origins, the base domain,
+block-root, parked hosts, strict hosts, the opening countdown and the app name could not
+be changed from the panel at all** — silently, with a "Rates saved" toast on top. Round
+152 added that strip for the right reason and put it one block too high.
+
+Now conditional on the **effective** target (`body.region || one`), which also lets the
+link-preview switch name `region: 'ug'` explicitly and work from any country — without
+that it would be stripped whenever another country was picked and still toast success.
+
+### Tests
+`test-link-preview-and-delete.js` **runs the real `serveBrandAsset`** for on, off, both
+icons and the unset case — whether a 404 comes back for one slot and not another is not
+a question a text match can answer. `verify-link-preview-discriminates.py` is **14
+mutations, all caught**, control correctly MISSED.
+
+**Three process notes, all repeats of standing lessons:**
+1. **A fourth lift broke.** `test-brand-assets.js` runs the real route and its sandbox
+   had no `getSettings`, so every assertion read as a 404. Fourth time this session that
+   a lifted function gained a dependency and the failure surfaced somewhere misleading.
+2. **`admin-rows-13.py` merged to nothing, twice.** The loader reads `ROWS`, the file
+   declared `ADMIN_ROWS_13`, and `getattr(mod, 'ROWS', [])` returned an empty list — so
+   `build-admin-rows.py` printed its usual success line having added no rows. The row
+   count was the only tell. It now **aborts** when a batch defines neither `ROWS` nor
+   `PATTERNS`.
+3. **One of my own assertions matched the wrong line.** "The refusal reports how many"
+   matched the `howMany` *definition*, which the mutation that dropped the count from the
+   sentence left intact. Re-anchored on the message itself. And a `{0,200}` window
+   between the admin and owner checks failed a correct route once the explaining comment
+   went in — asserted as ORDER now, not as a character distance.
+
 ## Round 177 — MarzPay has TWELVE markets. Round 176's conclusion was wrong.
 
 > "Check, countries are there" — with MarzPay's own documentation and integration guide.
