@@ -208,8 +208,15 @@ const HOST_RE = new RegExp(
 // serves; deriving it from API_BASE would make the test agree with itself and
 // stop proving anything. The name is deliberately not a real backend.
 const ORIGIN_CARVE_OUT = ['test-static-server.js'];
-const scanForOrigin = testFiles
-  .concat(fs.readdirSync(HERE).filter(f => /^(find|dump|tune)-.*\.py$/.test(f)))
+// EVERY .py and harness .js beside this file, not a hyphen-prefixed glob.
+// The first version scanned `test-*`, `find-*`, `dump-*`, `tune-*` -- and
+// missed find_admin_fixtures.py, whose name uses an UNDERSCORE. That one file
+// is a SHARED fixture module two admin harnesses import their stub origin
+// from, so it kept them stubbing a host the panel no longer called and both
+// failed while the guard reported no offenders. The rule was right; the glob
+// was wrong, which is exactly how the thing being guarded against got in.
+const scanForOrigin = fs.readdirSync(HERE)
+  .filter(f => /\.py$/.test(f) || /^(test-.*|smoke-test)\.js$/.test(f))
   .filter(f => !ORIGIN_CARVE_OUT.includes(f));
 const wroteOrigin = scanForOrigin.filter(f => {
   const body = stripComments(fs.readFileSync(path.join(HERE, f), 'utf8'));

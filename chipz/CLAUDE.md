@@ -6574,6 +6574,41 @@ origin.
 written down, run the BROWSER suite, not just the Node one.** The Node suite is fast and
 was green through all of this.
 
+#### The glob was wrong, and it cost the same bug twice
+The browser sweep came back **51 passed, 2 failed** — `test-admin-i18n.py` and
+`test-admin-i18n-coverage.py`. A worktree at Codex's merge commit showed the same 4
+failures, and **I briefly concluded it was Codex's change. That was wrong.** Both
+harnesses import their stub origin from **`find_admin_fixtures.py`**, whose name uses an
+**underscore** — so the `find-*.py` glob that migrated every other harness never matched
+it, and the panel went on being stubbed at a host it no longer called. The failures were
+mine, from the same Railway move; the merge commit shows them only because the move
+preceded it.
+
+**The rule was right and the glob was wrong** — and the guard written to prevent exactly
+this had the *same* blind spot, scanning `test-*`, `find-*`, `dump-*`, `tune-*`. It now
+scans **every `.py`** beside it. A carve-out list is honest; a naming convention silently
+standing in for one is not.
+
+Two further anchors in `verify-regions-discriminates.py` were dead and would have
+**aborted all 224 mutations**:
+- the `og:image`/`twitter:image` anchors named the old backend, so they matched nothing
+  after the move. They now build the anchor from the derived origin, with the mutation's
+  *target* left as an obvious non-host (`chipz-app.example`) so it is still a real break.
+- *"the translator rewrites any string that CONTAINS a translated word"* had been dead
+  since **Round 172** rewrote `i18nTextNode` for whitespace normalisation — applied to
+  nothing for four rounds, and only surfaced because the anchors were finally checked.
+
+**Validating anchors without running the suite is cheap and worth doing routinely:**
+`importlib` the harness (its work is behind `__main__`), then count each `old` in its
+target file. 224 anchors checked in under a second, versus hours to run them. Both
+re-anchored mutations were then confirmed **CAUGHT** individually — a re-anchored
+mutation that no longer breaks anything is worthless.
+
+`test-banner-preload.py`'s two stale-video fixtures were renamed to
+`old-backend.example` as well. They were harmless (one is literally labelled `v=OLD`),
+but a fixture wearing the name of the real former backend invites exactly the misreading
+above.
+
 ### Round 176c — reviewing the audit merge, and a VAPID key in two places
 
 Codex merged PR #3 (`codex/chipz-audit-fixes`) mid-round. Reviewed per the discipline

@@ -224,7 +224,7 @@ async def main():
             status=200, content_type="application/json", body=json.dumps({"status": "success"}))))
         await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
         stored = await page.evaluate("""() => {
-            const url = 'https://chipz-server.onrender.com/public/banner-video?v=v111';
+            const url = 'https://old-backend.example/public/banner-video?v=v111';
             localStorage.setItem('snow_state_cache', JSON.stringify({
               uid: 'u1', account: {walletBalance: 1}, investments: [], teamStats: {},
               bankAccounts: [], transactions: [], mission: {}, products: [], settings: {},
@@ -264,7 +264,7 @@ async def main():
         await page.evaluate("""() => localStorage.setItem('snow_state_cache', JSON.stringify({
             uid:'u1', account:{walletBalance:1}, investments:[], teamStats:{}, bankAccounts:[],
             transactions:[], mission:{}, products:[], settings:{},
-            homeBannerVideo:'https://chipz-server.onrender.com/public/banner-video?v=OLD' }))""")
+            homeBannerVideo:'https://old-backend.example/public/banner-video?v=OLD' }))""")
         await page.reload(wait_until="load")
         await page.wait_for_timeout(3500)
         final = await page.evaluate("""() => { const v = document.getElementById('homeBannerVideo');

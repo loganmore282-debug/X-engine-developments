@@ -14,6 +14,7 @@ Every file is restored after every mutation, and the suite refuses to run at
 all unless the test passes on the untouched tree first.
 """
 import subprocess, sys, os
+from chipz_test_api import API  # anchors must name the CURRENT backend
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SERVER = os.path.join(ROOT, 'server.js')
@@ -747,9 +748,11 @@ MUTATIONS = [
      "      .some(snap => snap.docs.length >= STATS_SCAN_LIMIT);",
      "      .some(() => false);"),
 
+    # Anchored with the NEXT line too: a second route now ends with the same
+    # `truncated,` field, so the bare line matched twice and aborted the run.
     ('the reply stops carrying the truncation flag', SERVER,
-     "      status: 'success', regionKey: want || 'all', truncated,",
-     "      status: 'success', regionKey: want || 'all',"),
+     "      status: 'success', regionKey: want || 'all', truncated,\n      moneyByRegion:",
+     "      status: 'success', regionKey: want || 'all',\n      moneyByRegion:"),
 
     ('the panel hides the incomplete-totals warning', ADMIN,
      "  const truncWarn = s.truncated ? `<div style=",
@@ -809,11 +812,11 @@ MUTATIONS = [
      "'link-preview': { mime: 'image/jpeg', w: 1200, h: 630, max: 900 * 1024, file: 'link-preview.jpg' }",
      "'link-preview': { mime: 'image/jpeg', w: 1200, h: 630, max: 900 * 1024, file: null }"),
     ('the share card is a static file again, so an upload changes nothing', USERBUILT,
-     '<meta property="og:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">',
-     '<meta property="og:image" content="https://chipz-app.onrender.com/link-preview.jpg">'),
+     f'<meta property="og:image" content="{API}/public/link-preview.jpg">',
+     '<meta property="og:image" content="https://chipz-app.example/link-preview.jpg">'),
     ('twitter keeps pointing at the old static file', USERBUILT,
-     '<meta name="twitter:image" content="https://chipz-server.onrender.com/public/link-preview.jpg">',
-     '<meta name="twitter:image" content="https://chipz-app.onrender.com/link-preview.jpg">'),
+     f'<meta name="twitter:image" content="{API}/public/link-preview.jpg">',
+     '<meta name="twitter:image" content="https://chipz-app.example/link-preview.jpg">'),
     ('a gift code stops being stamped with a country', SERVER,
      "    const regionKey = adminRegionFilter(req) || 'all';\n    const doc = {",
      "    const regionKey = 'all';\n    const doc = {"),
@@ -982,9 +985,12 @@ MUTATIONS = [
     ('applyRegion drops the language list, the same whitelist slip that once broke the login address', CLIENT,
      "'usesBareLocal','languages','defaultLang']",
      "'usesBareLocal']"),
+    # Re-anchored: Round 172's whitespace normalisation rewrote this function,
+    # so the old anchor had been dead since then -- applied to nothing, and
+    # aborting the run the moment the anchors were actually checked.
     ('the translator rewrites any string that CONTAINS a translated word', CLIENT,
-     "  const hit = t(key);\n  const want = hit === key ? src : String(src).replace(key, hit);",
-     "  let want = src;\n  for (const k of Object.keys(DICT[LANG] || {})) want = String(want).split(k).join(DICT[LANG][k]);\n  const hit = want;"),
+     "  const want = hit === key\n    ? raw\n    : raw.slice(0, raw.length - raw.replace(/^\\s+/, '').length) + hit +\n      raw.slice(raw.replace(/\\s+$/, '').length);",
+     "  let want = raw;\n  for (const k of Object.keys(DICT[LANG] || {})) want = String(want).split(k).join(DICT[LANG][k]);"),
     ('the translator reads what is on screen instead of the stored English, so a second switch never lands', CLIENT,
      "  let src;\n  if (_i18nText.has(node)) src = _i18nText.get(node);\n  else { src = node.nodeValue; _i18nText.set(node, src); }",
      "  let src = node.nodeValue;"),
