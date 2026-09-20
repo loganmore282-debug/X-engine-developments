@@ -32,7 +32,7 @@ OUT  = sys.argv[1] if len(sys.argv) > 1 else '/tmp/button-glow'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8857
-API  = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 PRODUCTS = [{"key": f"product-{i}", "name": f"Product-{i}", "price": p, "cycle": 150,
              "expectedReturn": p * 30, "image": "", "spinCount": 0, "spinMin": 200, "spinMax": 1000}

@@ -33,7 +33,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/announce-backdrop'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8879
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 ANN_BODY = ("Welcome to the platform. Your daily returns are credited "
             "automatically and your team commission lands the moment a member "

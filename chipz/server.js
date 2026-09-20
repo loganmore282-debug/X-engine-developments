@@ -661,7 +661,10 @@ async function userRegionKey(uid) {
   try {
     const snap = await db.collection('users').doc(uid).get();
     if (snap.exists) key = String(snap.data().regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY;
-  } catch (_) { return hit ? hit.key : null; } // a read failure keeps the last known answer
+  } catch (e) {
+    if (hit) return hit.key; // a verified cached region remains safe
+    throw new Error('Could not resolve account region; retry when the database recovers.');
+  }
   if (key) _userRegionCache.set(uid, { key, ts: Date.now() });
   return key;
 }
@@ -671,9 +674,9 @@ function forgetUserRegion(uid) { if (uid) _userRegionCache.delete(uid); }
 // descriptions carry money amounts, and an amount labelled in the wrong
 // currency is a support ticket at best.
 async function withUserRegion(userId, fn) {
-  let key = null;
-  try { key = await userRegionKey(userId); } catch (_) {}
-  return runInRegion(key || DEFAULT_REGION_KEY, fn);
+  const key = await userRegionKey(userId);
+  if (!key) throw new Error('Cannot run financial work without a verified account region.');
+  return runInRegion(key, fn);
 }
 app.use(async (req, res, next) => {
   let region = defaultRegion();
@@ -695,7 +698,9 @@ app.use(async (req, res, next) => {
       if (key) region = regionByKey(key);
     }
     parked = hostIsParked(host);
-  } catch (_) {}
+  } catch (_) {
+    return res.status(503).json({ status: 'error', code: 'REGION_UNAVAILABLE', message: 'Could not confirm your account country. Please try again shortly.' });
+  }
   _regionCtx.run({ region, parked }, next);
 });
 // ── THE ROOT DOMAIN DOES NOT SERVE THE APP ──
@@ -2402,6 +2407,10 @@ async function _marzParse(resp) {
   let data;
   try { data = await resp.json(); }
   catch (_) { return { status: 'error', providerDown: true, message: 'Invalid response from payment gateway' }; }
+  if (!data || typeof data !== 'object' || Array.isArray(data))
+    return { status: 'error', providerDown: true, message: 'Invalid response from payment gateway' };
+  if (resp.status >= 500 || [408, 409, 429].includes(resp.status)) data.providerDown = true;
+  if (resp.ok && typeof data.status !== 'string') data.providerDown = true;
   if (!resp.ok && !data.status) data.status = 'error';
   return data;
 }
@@ -2644,6 +2653,10 @@ async function _lipaParse(resp) {
   let data;
   try { data = await resp.json(); }
   catch (_) { return { StatusCode: 0, Succeeded: false, Errors: 'Invalid response from payment gateway', Data: null, providerDown: true }; }
+  if (!data || typeof data !== 'object' || Array.isArray(data))
+    return { Succeeded: false, providerDown: true, Errors: 'Invalid response from payment gateway' };
+  if (resp.status >= 500 || [408, 409, 429].includes(resp.status)) data.providerDown = true;
+  if (resp.ok && typeof data.Succeeded !== 'boolean') data.providerDown = true;
   if (!resp.ok && data.StatusCode == null) data.StatusCode = resp.status;
   return data;
 }
@@ -7116,12 +7129,14 @@ async function markWithdrawalProcessed(witRef, userId) {
 // belongs to the MEMBER. The region is switched to theirs as soon as the
 // withdrawal document names them.
 async function processWithdrawalCore(withdrawalId, processedBy) {
-  let ownerId = null;
   try {
     const pre = await db.collection('withdrawals').doc(withdrawalId).get();
-    if (pre.exists) ownerId = pre.data().userId || null;
-  } catch (_) {}
-  return withUserRegion(ownerId, () => _processWithdrawalNow(withdrawalId, processedBy));
+    if (!pre.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
+    return await withUserRegion(pre.data().userId, () => _processWithdrawalNow(withdrawalId, processedBy));
+  } catch (e) {
+    console.error('Withdrawal region lookup failed:', e.message);
+    return { code: 503, body: { status: 'error', message: 'Could not confirm the payout account country. Please retry shortly.' } };
+  }
 }
 async function _processWithdrawalNow(withdrawalId, processedBy) {
   if (_withdrawInFlight.has(withdrawalId))
@@ -7210,7 +7225,9 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       const tx = pj.data?.data || pj.data || {};
       const pesajetTxId = tx.transactionId || null;
       await withLock('bal:' + wit.userId, async () => {
-        await witRef.update({ status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), pesajetRef: sendingMarker, pesajetTxId });
+        await witRef.update({ pesajetRef: sendingMarker, pesajetTxId });
+        const claimed = await witRef.updateIf({ status: 'sending' }, { status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp() });
+        if (!claimed) return;
         try {
           await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
         } catch (twErr) {
@@ -7219,7 +7236,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       });
       try {
         const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing' });
+        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
       } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
       return {
         code: 200,
@@ -7259,7 +7276,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
         ambiguousLipa = true;
         lpData = { Succeeded: false, providerDown: true, Errors: netErr.message };
       }
-      if (ambiguousLipa) {
+      if (ambiguousLipa || lpData.providerDown) {
         return { code: 500, body: { status: 'error', message: 'Lost contact with LipaPay mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: outTradeNo } };
       }
       if (!lpData.Succeeded) {
@@ -7268,7 +7285,9 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       }
       const lipaTransactionId = lpData.Data?.TransactionId || null;
       await withLock('bal:' + wit.userId, async () => {
-        await witRef.update({ status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), lipaOutTradeNo: outTradeNo, lipaTransactionId });
+        await witRef.update({ lipaOutTradeNo: outTradeNo, lipaTransactionId });
+        const claimed = await witRef.updateIf({ status: 'sending' }, { status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp() });
+        if (!claimed) return;
         try {
           await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
         } catch (twErr) {
@@ -7277,7 +7296,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       });
       try {
         const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing' });
+        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
       } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
       return {
         code: 200,
@@ -7317,7 +7336,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       ambiguous = true;
       mpData = { status: 'error', providerDown: true, message: netErr.message };
     }
-    if (ambiguous) {
+    if (ambiguous || mpData.providerDown) {
       return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
@@ -7339,7 +7358,9 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     // autoApproveWithdrawalsTick, the only two callers, holds bal:<userId>
     // before this point), so this can't deadlock.
     await withLock('bal:' + wit.userId, async () => {
-      await witRef.update(updateFields);
+      await witRef.update({ marzReference: sendingMarker, ...(updateFields.marzTxUuid ? { marzTxUuid: updateFields.marzTxUuid } : {}) });
+      const claimed = await witRef.updateIf({ status: 'sending' }, updateFields);
+      if (!claimed) return;
       try {
         await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
       } catch (twErr) {
@@ -7350,7 +7371,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     else {
       try {
         const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing' });
+        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
       } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
     }
     return {
@@ -9856,6 +9877,12 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
 // safe half of that gap: topping a wallet UP to match a ledger that says it
 // should already be higher. The other direction (stored > real) still
 // refuses and asks for a human to diagnose by hand, unchanged.
+// A pending deposit records an intent, not money credited to the wallet.
+// Pending withdrawals, in contrast, have already debited their gross amount.
+function walletLedgerAmount(t) {
+  if (t.type === 'deposit' && t.status !== 'success') return 0;
+  return finiteMoney(t.amount);
+}
 app.post('/admin/user/repair-wallet', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
@@ -9875,7 +9902,7 @@ app.post('/admin/user/repair-wallet', async (req, res) => {
       // pattern every other money-repair tool in this file already uses.
       const txSnap = await db.collection('transactions').where('userId', '==', userId).limit(200000).get();
       let real = 0;
-      txSnap.forEach(d => { real += Number(d.data().amount) || 0; });
+      txSnap.forEach(d => { real += walletLedgerAmount(d.data()); });
       const diff = Math.round(real) - Math.round(stored);
       if (diff === 0) return { ok: true, message: 'Already correct -- nothing to repair.', diff: 0 };
       if (diff < 0) {
@@ -11124,7 +11151,7 @@ app.get('/admin/integrity', async (req, res) => {
     txSnap.forEach(d => {
       const t = d.data();
       if (!t.userId) return;
-      ledgerByUser[t.userId] = (ledgerByUser[t.userId] || 0) + (Number(t.amount) || 0);
+      ledgerByUser[t.userId] = (ledgerByUser[t.userId] || 0) + walletLedgerAmount(t);
       if (t.ref && t.type === 'deposit') {
         const key = t.userId + '::' + t.ref;
         refSeen[key] = (refSeen[key] || 0) + 1;
@@ -11201,7 +11228,7 @@ async function computeUserRealTotals(userId) {
     // deposit_reversal carries a negative amount (see applyDepositReversal())
     // and must be included here or a later "Recalculate totals" run would
     // silently wipe the correction back out.
-    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') deposited += finiteMoney(t.amount);
+    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') deposited += walletLedgerAmount(t);
     else if (EARNING_TX_TYPES.includes(t.type)) earned += finiteMoney(t.amount);
   });
   let invested = 0;
@@ -11235,7 +11262,7 @@ async function computeRealTotals() {
     const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
     // deposit_reversal carries a negative amount (see applyDepositReversal())
     // and must be included here for the same reason as computeUserRealTotals().
-    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') row.deposited += finiteMoney(t.amount);
+    if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') row.deposited += walletLedgerAmount(t);
     // Every income source that credits totalEarned live must be summed
     // here too, or a "Recalculate totals" run silently wipes it back to
     // zero — cashback/commission/team_reward (Task Center)/promocode
@@ -11693,7 +11720,15 @@ async function _autoApproveTickForRegion(regionKey) {
     // while manual mode is on, rather than being silently rewritten.
     if (payoutIsManual(sett)) return;
     const cutoff = new Date(Date.now() - (Number(sett.autoApproveIntervalSec) || 10) * 1000);
-    const snap = await db.collection('withdrawals').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(50).get();
+    // Filter before limiting: manual-region and over-cap rows must not
+    // occupy every slot forever. Mongo's $in:null includes missing legacy
+    // regionKey fields, which belong to Uganda.
+    let eligible = db.collection('withdrawals').where('status', '==', 'pending')
+      .where('regionKey', 'in', regionKey === DEFAULT_REGION_KEY ? [regionKey, null, ''] : [regionKey])
+      .where('createdAt', '<=', cutoff);
+    const cap = Number(sett.autoApproveMaxAmount) || 0;
+    if (cap > 0) eligible = eligible.where('amount', '<=', cap);
+    const snap = await eligible.orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {
       const wit = doc.data();
       if (String(wit.regionKey || DEFAULT_REGION_KEY) !== regionKey) continue; // another region's rules apply

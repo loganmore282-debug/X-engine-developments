@@ -19,7 +19,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/admin-brand'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'admin')
 PORT = 8871
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 fails, errs = [], []
 def ck(ok, l):

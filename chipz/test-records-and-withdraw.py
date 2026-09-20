@@ -33,7 +33,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/records-withdraw'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8881
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 BAL = 50000
 TAKE = 20000

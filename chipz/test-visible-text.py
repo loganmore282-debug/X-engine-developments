@@ -29,7 +29,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/visible-text'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8867
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 ACCOUNT = {"phone": "0742730382", "walletBalance": 5207.82, "totalDeposited": 58000,
            "totalEarned": 9840, "totalWithdrawn": 0, "totalInvested": 28000,

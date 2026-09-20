@@ -36,7 +36,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/team-measure'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8769
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 S = 973 / 354.0          # device px per CSS px on his phone
 MOCK = {'card1_h': 453, 'card2_h': 489, 'num_cap': 93, 'pct_cap': 95,
         'arc_r_in': 114, 'arc_r_out': 169, 'arc_inset': 54}

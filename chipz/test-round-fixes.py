@@ -20,7 +20,7 @@ OUT  = sys.argv[1] if len(sys.argv) > 1 else '/tmp/round-fixes'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8873
-API  = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 # A 2x3 portrait PNG, enough to prove the <img> is placed and covers.
 DL_BG = ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAYAAAC56t6BAAAAFklEQVR4nGP8"

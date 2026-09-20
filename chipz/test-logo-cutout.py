@@ -28,7 +28,7 @@ os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'admin')
 FIX = os.path.join(HERE, 'test-fixtures')
 PORT = 8812
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 fails = []
 

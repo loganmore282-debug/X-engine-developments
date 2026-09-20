@@ -6374,7 +6374,51 @@ and `<link rel="icon">` **agrees with it**. That is the property that was always
 a manifest icon on a different host than the API is the bug, whatever the host is called.
 It also survives the next move for free.
 
-## Round 175 — MarzPay has no other countries, and a new region silently used it anyway
+
+
+## Round 175 — September 17 audit repairs (review branch)
+
+Five audit findings reproduced against cc6fce5 and fixed on
+`codex/chipz-audit-fixes`; no production branch push or data migration.
+
+- Ambiguous MarzPay/LipaPay payout responses now retain `sending` and the
+  outbound identifier. Invalid bodies, HTTP 5xx/408/409/429 and unknown
+  success envelopes must not become clean refusals inviting another send.
+- Submission responses use a conditional `sending` transition before
+  incrementing totalWithdrawn. A verified callback that already completed
+  the payout wins; a later response cannot reopen it or double-count it.
+  Transaction history also refuses to downgrade a terminal status.
+- `walletLedgerAmount` excludes unconfirmed deposits from integrity, wallet
+  repair and total-deposit recalculation, while retaining pending withdrawal
+  debits and deposit reversals. Pending deposit rows describe intent, not
+  spendable money.
+- An uncached account-region lookup failure now stops the request with 503
+  instead of applying hostname prices. Cached verified regions remain safe;
+  confirmed missing profiles can still register. Background financial work
+  defers if the account region is unresolved.
+- Automatic approval filters country, age and amount cap before taking its
+  50-row batch. Legacy Uganda rows with absent/null/empty regionKey remain
+  eligible. Other countries and over-cap rows cannot permanently block it.
+
+`test-audit-money-regressions.js` executes extracted production handlers with
+controlled database/provider failures. Tests cover each reported scenario,
+normal accepted/refused payments, ambiguous replies, legacy country rows,
+limits, and pending withdrawal accounting. Reintroducing each of the five
+original defects individually produces an assertion failure.
+
+Validation: both frontend builds completed (no frontend source changes;
+randomized generated output was restored to avoid unrelated bundle churn).
+All 31 Node suites pass; five targeted fault mutations are caught.
+The old region wrapper check pinned the former function layout; it now
+checks the scoped function body, backed by runtime tests for payout owner
+region selection and a 503 without sending on lookup failure.
+The dependency audit request also timed out without a result.
+Browser smoke was attempted but cannot launch because
+`/opt/pw-browsers/chromium` is absent; installing Chromium timed out at the
+browser CDN. Browser/Python checks therefore remain an explicit pre-merge
+validation limitation, not a green result. No historical balances have been
+automatically changed; existing affected records require separate review.
+## Round 176 — MarzPay has no other countries, and a new region silently used it anyway
 
 > "we need to put all endpoints of other countries of MarzPay and everything
 > https://wallet.wearemarz.com/documentation"
@@ -6470,3 +6514,103 @@ function gains a dependency: `withdrawProvider` now calls `gatewayServesRegion`,
 was not in that sandbox. It also needed `GATEWAY_DIAL_CODES` sliced by hand, because
 `constSource()` matches a single line and that const spans several. While fixing it, the
 Kenya case was pinned there too — PesaJet is Uganda-only and that file owns PesaJet.
+
+### Round 176b — moving the backend silently broke 48 browser harnesses
+
+**I did this in Round 174d and did not notice, because I only ran the Node suite.**
+Every Playwright harness held its own copy of
+
+```python
+API = 'https://chipz-server.onrender.com'
+```
+
+and stubbed it with `page.route(f"{API}/**", api)`. The moment `set-backend-url.js`
+pointed the app at Railway, **not one of those patterns matched anything**: the app
+called the new origin, the stubs never fired, every API call went out unstubbed, and
+each screen rendered with no data in it.
+
+**The symptom pointed nowhere near the cause.** Geometry assertions read `0.0` —
+elements present in the DOM, laid out at zero size — and `bounding_box()` returned
+`None`, so the traceback was a `TypeError` on `box["x"]`, a subscript inside the test,
+three steps from anything real. Forty-eight harnesses failed at once, which this file
+already says to read as an environment or fixture fault rather than 48 regressions.
+
+**`smoke-test.py` kept passing throughout, and that is the part worth remembering.**
+Its stub was equally dead, but its assertions are "no page errors" and "API_BASE points
+somewhere real" — neither of which needs the stubbed data. So the one harness I *did*
+run after the move passed **vacuously on exactly the axis that had broken**. A green
+smoke test is not evidence the API layer works.
+
+**How it was attributed rather than guessed at:** `git worktree add` at the session's
+starting commit (0 failures) and at my Railway commit (6) bracketed it to my own change
+in about a minute. That is the cheap, honest way to answer "did I break this?" — and it
+is worth doing *before* reading a single line of the failing test.
+
+**The fix is the same one as `test-brand-assets.js` last round, applied properly:**
+`chipz_test_api.py` derives `API` from `API_BASE` in `user-src/original_module.js` — the
+value `set-backend-url.js` already treats as the single source of truth — and all 48
+harnesses now `from chipz_test_api import API`. Two extra faults surfaced while doing it:
+- **`find-untranslated.py` had a second break** nothing would have caught: it recovered
+  the request path with `url.split('onrender.com', 1)[-1]`, which on any other host
+  returns the *whole URL*, so every stub-table lookup missed. Now `urlsplit(...).path`.
+- **`smoke-test.py` was not in the migration's glob** (`test-*.py` does not match it), so
+  it had to be fixed by name — the same shape of miss as the three files
+  `set-backend-url.js` itself was missing last round.
+
+**And a guard in `test-security-hardening.js`, beside the absolute-path one it belongs
+with:** no harness may write down a backend origin in live code. Its host pattern is
+**assembled from parts** rather than spelled out, because a scanner whose own text
+contains what it scans for is the trap this project has now hit six times and
+`stripComments` cannot save it here — this is live code, not a comment.
+
+One carve-out, `test-static-server.js`, and it is not an exception to the rule so much as
+a file the rule does not cover: it *feeds* its host in as `CHIPZ_API_ORIGIN` and asserts
+the server echoes that value into the CSP, so deriving it from `API_BASE` would make the
+test agree with itself. The carve-out is asserted to still be **earned**, so it gets
+deleted rather than left looking protective if that file ever stops supplying its own
+origin.
+
+**Standing rule, now stated plainly: after changing any value a harness might have
+written down, run the BROWSER suite, not just the Node one.** The Node suite is fast and
+was green through all of this.
+
+### Round 176c — reviewing the audit merge, and a VAPID key in two places
+
+Codex merged PR #3 (`codex/chipz-audit-fixes`) mid-round. Reviewed per the discipline
+Round 159 set out — previous fixes still present, money invariants preserved rather than
+"improved", built bundles matching sources, and the harnesses the other agent did not
+run. **No `runTransaction` was introduced**; the in-process-lock design is intact.
+
+Its five repairs are real and were kept: `withUserRegion` now **throws** instead of
+silently falling back to Uganda when it cannot resolve a member's region (which
+strengthens exactly the guarantee this round's gateway rule leans on); conditional
+`updateIf` claims replace blind `update` on the `sending`→`processing` transitions;
+`providerDown` on an unparseable provider reply is treated as ambiguous rather than
+refused; `walletLedgerAmount()` stops counting a *pending* deposit as credited in the
+reconciliation totals; and the auto-approve sweep filters before limiting, so
+manual-region and over-cap rows can no longer occupy all 50 slots forever.
+
+**One thing was changed back, and one collision resolved.**
+
+`build-admin.js` had grown a build-time step that held its **own copy** of the Firebase
+Web Push key and rewrote `const VAPID_KEY` in the source. The two copies had already
+drifted: `admin-src/index.html` said `BOpdZbEx…` while the build forced `BDV893y7…`. So
+reading the source gave the wrong key, and *editing* it there changed nothing. Same class
+as the four hand-copied `20`s and every other constant restated in a second place. The
+key now lives only in `admin-src/index.html`, and the build **validates** it instead —
+anchor present, and shaped like a VAPID P-256 public key (87–88 base64url chars starting
+`B`) — which is what the guard was actually for: fail the build rather than ship a bundle
+whose notifications cannot work. Proven by feeding it a short key: build refuses.
+
+The collision: my new assertion matched `withUserRegion(\s*ownerId\s*,` inside
+`processWithdrawalCore`, and Codex renamed that local to `pre.data().userId`. Rather than
+chase the spelling — or add an `||` that excuses whatever it finds, which Round 159
+records as "not a test; a comment" — it is now stated as the **invariant**: every call of
+`_processWithdrawalNow` must sit inside a `withUserRegion(...)` wrapper. Robust to
+renaming, and verified to discriminate by deleting the wrapper.
+
+Codex's own note recorded that it could not run the browser suite at all
+(`/opt/pw-browsers/chromium` absent for it, Chromium install timed out) and called that
+an explicit pre-merge limitation rather than a green result. That gap is closed here —
+and closing it is what turned up the 48 broken harnesses above.
+

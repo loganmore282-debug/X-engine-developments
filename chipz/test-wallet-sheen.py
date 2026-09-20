@@ -22,7 +22,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/wallet-sheen'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8814
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 ACCOUNT = {"userId": "u1", "phone": "0742730382", "publicId": "00001",
            "referralCode": "TCL80", "walletBalance": 45000, "registrationDone": True}

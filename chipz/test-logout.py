@@ -28,7 +28,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/logout'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8771
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 ROUTES = {
   "/public/settings": {"status": "success", "settings": {"brandName": "Chipz", "annEnabled": False}},

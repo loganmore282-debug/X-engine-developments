@@ -35,7 +35,7 @@ os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 # 8905: the running list of every harness's port is in CLAUDE.md, Round 157.
 PORT = 8905
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 fails, errs = [], []
 

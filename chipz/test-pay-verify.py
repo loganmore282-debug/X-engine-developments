@@ -25,7 +25,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/pay-verify'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8796
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 # The exact four steps the owner wrote, minus the amount/number that are
 # interpolated. Checked as substrings so punctuation drift is caught.

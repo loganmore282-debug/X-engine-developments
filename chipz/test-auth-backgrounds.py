@@ -28,7 +28,7 @@ OUT  = sys.argv[1] if len(sys.argv) > 1 else '/tmp/auth-bg'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8891
-API  = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 def solid(rgb, w=40, h=40):
     b = io.BytesIO(); Image.new('RGB', (w, h), rgb).save(b, 'PNG')

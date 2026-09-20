@@ -27,7 +27,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/home-gif-shots'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8853
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 _sib = open(os.path.join(HERE, 'test-profile-gif-render.py'), encoding='utf-8').read()
 _m = re.search(r"'(data:image/gif;base64,[A-Za-z0-9+/=]+)'", _sib)

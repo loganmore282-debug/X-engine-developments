@@ -61,7 +61,7 @@ APP_PORT = 8893
 API_PORT = 8895
 APP_ORIGIN = f'http://127.0.0.1:{APP_PORT}'
 API_ORIGIN = f'http://localhost:{API_PORT}'
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 failed = 0
 

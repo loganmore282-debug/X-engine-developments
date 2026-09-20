@@ -29,7 +29,7 @@ ROOT = os.path.join(HERE, 'user')
 # die with "Address already in use" in whichever starts second, which reads
 # like a real failure and is not.
 PORT = 8897
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 
 def region(langs, default_lang):

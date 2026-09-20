@@ -47,7 +47,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/mockup-proportions'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8871
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 ACCOUNT = {"phone": "0742730382", "walletBalance": 18170.24, "totalDeposited": 58000,
            "totalEarned": 9840, "totalWithdrawn": 0, "totalInvested": 28000,

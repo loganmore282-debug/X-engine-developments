@@ -27,7 +27,7 @@ OUT  = sys.argv[1] if len(sys.argv) > 1 else '/tmp/banner-autoplay'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8847
-API  = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 ACCOUNT = {"phone":"0742730382","walletBalance":2000,"totalDeposited":0,"totalEarned":0,
  "totalWithdrawn":0,"totalInvested":0,"checkinStreak":0,"lastCheckinAt":None,

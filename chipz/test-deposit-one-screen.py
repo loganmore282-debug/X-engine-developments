@@ -27,7 +27,7 @@ ROOT = os.path.join(HERE, 'user')
 ADMIN_ROOT = os.path.join(HERE, 'admin')
 PORT = 8798
 ADMIN_PORT = 8799
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 # A 1x1 red PNG, used as the "uploaded" brand logo.
 LOGO = ('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA'

@@ -191,11 +191,21 @@ console.log('\n— the guards are wired into the routes that move money —');
   // panel host would have it judged against Uganda, and MarzPay would be
   // handed a +254 number. Pinned because the wrapper is what makes the
   // default safe, and it is two functions away from where it matters.
-  const coreAt = src.indexOf('async function processWithdrawalCore');
-  const coreEnd = src.indexOf('async function _processWithdrawalNow');
-  ck(coreAt > -1 && coreEnd > coreAt, 'processWithdrawalCore was located');
-  ck(/withUserRegion\(\s*ownerId\s*,/.test(src.slice(coreAt, coreEnd)),
-     'the payout path runs inside the MEMBER\'s region, not the admin\'s');
+  // Stated as the INVARIANT rather than as the shape of one call: every call
+  // of _processWithdrawalNow must sit inside a withUserRegion() wrapper. An
+  // earlier version matched `withUserRegion(ownerId,` and would have failed
+  // the moment that local was renamed -- which it was, to pre.data().userId,
+  // in the audit merge -- while the property it cared about was untouched.
+  // Pinning a variable name defends a spelling; this defends the rule.
+  const calls = [...src.matchAll(/_processWithdrawalNow\(/g)]
+    .map(m => m.index)
+    .filter(i => !/async function \w*$/.test(src.slice(Math.max(0, i - 40), i)));
+  ck(calls.length > 0, 'there is at least one call of _processWithdrawalNow to check');
+  for (const i of calls) {
+    const before = src.slice(Math.max(0, i - 160), i);
+    ck(/withUserRegion\([^;]*$/.test(before),
+       'every payout runs inside the MEMBER\'s region, never the admin\'s');
+  }
 
   const pubAt = src.indexOf("app.get('/public/settings'");
   const pubEnd = src.indexOf('\napp.', pubAt + 10);

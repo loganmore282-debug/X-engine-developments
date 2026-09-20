@@ -41,7 +41,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/team-avatar'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8813
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 # An 8x8 solid GREEN PNG as the "uploaded" Brand logo: nothing like the disc's
 # own warm gradient, so a sampled pixel says which of the two is on screen.

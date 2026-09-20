@@ -28,7 +28,7 @@ ROOT = os.path.join(HERE, 'user')
 # reads like a real failure and is not. Every harness in this suite picks
 # its own port; keep it that way.
 PORT = 8869
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 # Exactly the shape publicRegionView() sends, usesBareLocal included --
 # which country's accounts use the bare local digits as their login address

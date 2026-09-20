@@ -27,7 +27,7 @@ import asyncio, json, os, sys, threading, http.server, socketserver, functools
 
 PORT = int(os.environ.get('CSP_PORT', '8794'))
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'user')
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 ACCOUNT = {"phone": "0742730382", "walletBalance": 2000, "totalDeposited": 58000,
            "totalEarned": 9840, "totalWithdrawn": 32164, "totalInvested": 28000,

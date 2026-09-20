@@ -182,5 +182,58 @@ const baked = testFiles.filter(f => {
 check(baked.length === 0,
   `no test file hardcodes an absolute checkout path (offenders: ${baked.join(', ') || 'none'})`);
 
+// ── AND no harness writes down the BACKEND ORIGIN ──
+// Same family as the check above, and it has already cost more. Forty-eight
+// browser harnesses each held `API = '<the old host>'` and stubbed it with
+// page.route(f"{API}/**"). When the backend moved to Railway every one of
+// those patterns stopped matching: the app called the new origin, the stubs
+// never fired, each API call went out unstubbed, and the screens rendered
+// with no data. The reported symptom was a geometry assertion reading 0.0 and
+// a bounding_box() of None -- a subscript error three steps from the cause --
+// and smoke-test.py kept passing throughout, because it asserts on API_BASE
+// instead of stubbing it.
+//
+// The origin belongs in ONE place, API_BASE, which set-backend-url.js rewrites
+// along with its twelve siblings. Harnesses read it via chipz_test_api.py.
+//
+// The host pattern is ASSEMBLED rather than spelled out: a scanner whose own
+// text contains what it scans for is the trap this project has hit six times,
+// and stripComments alone would not save it here because this is live code.
+const HOST_RE = new RegExp(
+  "['\"]https?://[a-z0-9-]+\\." + ['onrender', 'railway', 'edgeone'].join('|[a-z0-9-]+\\.') + "\\.",
+  'i');
+// ONE carve-out, and it is not an exception to the rule -- it is a file the
+// rule does not apply to. test-static-server.js FEEDS its host in as
+// CHIPZ_API_ORIGIN and asserts the server echoes that value into the CSP it
+// serves; deriving it from API_BASE would make the test agree with itself and
+// stop proving anything. The name is deliberately not a real backend.
+const ORIGIN_CARVE_OUT = ['test-static-server.js'];
+const scanForOrigin = testFiles
+  .concat(fs.readdirSync(HERE).filter(f => /^(find|dump|tune)-.*\.py$/.test(f)))
+  .filter(f => !ORIGIN_CARVE_OUT.includes(f));
+const wroteOrigin = scanForOrigin.filter(f => {
+  const body = stripComments(fs.readFileSync(path.join(HERE, f), 'utf8'));
+  // A harness may legitimately name a LOOKALIKE host to prove it is refused
+  // (test-cors-origins.js does), so only an assignment or a route pattern
+  // counts -- that is what actually goes stale.
+  return body.split('\n').some(l =>
+    HOST_RE.test(l) && /(^|\s)(API|SERVER|BASE)\s*=|page\.route\(/.test(l));
+});
+check(wroteOrigin.length === 0,
+  `no harness hardcodes the backend origin -- read it from chipz_test_api.py ` +
+  `(offenders: ${wroteOrigin.join(', ') || 'none'})`);
+// The carve-out is asserted to still be NEEDED, so it gets deleted rather than
+// left looking protective if that file ever stops feeding its own host in.
+// Same discipline as test-no-snow-branding.js's three allowed internal names.
+for (const f of ORIGIN_CARVE_OUT) {
+  const body = fs.readFileSync(path.join(HERE, f), 'utf8');
+  check(/CHIPZ_API_ORIGIN/.test(body),
+    `${f}'s carve-out is still earned (it supplies its own CHIPZ_API_ORIGIN)`);
+}
+// And the helper every other harness now reads is really there, or 48 files
+// import something that does not exist.
+check(fs.existsSync(path.join(HERE, 'chipz_test_api.py')),
+  'chipz_test_api.py exists for them to read it from');
+
 console.log(failed ? `\n${failed} FAILED` : '\nsecurity hardening: all cases pass');
 process.exit(failed ? 1 : 0);

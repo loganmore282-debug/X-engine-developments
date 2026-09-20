@@ -27,7 +27,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/msg-blur'
 os.makedirs(OUT, exist_ok=True)
 ROOT = '/home/user/X-engine-developments/chipz/user'
 PORT = 8767
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 TARGET = {'lum': 190.9, 'std': 10.9, 'edge': 8}
 
 GRID = [(b, t) for b in (3, 5, 6, 8, 10, 14, 20) for t in (0.10, 0.16, 0.22, 0.26)]

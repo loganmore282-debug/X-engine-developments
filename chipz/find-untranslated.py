@@ -37,6 +37,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from playwright.async_api import async_playwright
+from urllib.parse import urlsplit
+from chipz_test_api import API
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/untranslated'
 os.makedirs(OUT, exist_ok=True)
@@ -597,14 +599,17 @@ async def main():
                 table = routes(reg)
 
                 async def api(route):
-                    path = route.request.url.split('onrender.com', 1)[-1].split('?')[0]
+                    # urlsplit, not a split on the host's own domain name: that
+                    # form returned the WHOLE url once the backend moved, so every
+                    # table lookup missed and each screen rendered empty.
+                    path = urlsplit(route.request.url).path
                     body = table.get(path, {"status": "success"})
                     await route.fulfill(status=200, content_type='application/json',
                                         body=json.dumps(body))
                 # Catch-all FIRST -- Playwright gives precedence to the route
                 # registered LAST, so a specific route added before it never
                 # fires. This has bitten this suite twice.
-                await page.route('https://chipz-server.onrender.com/**',
+                await page.route(f"{API}/**",
                                  lambda r: asyncio.ensure_future(api(r)))
 
             # ── signed out: login + register ──

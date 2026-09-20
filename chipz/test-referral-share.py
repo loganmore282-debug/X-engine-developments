@@ -28,7 +28,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/ref-measure'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8763
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 # Measured off 045f54dd (before) / bd9e3c89 (after), content width 1068.
 MOCK = {

@@ -31,7 +31,7 @@ ROOT = os.path.join(HERE, 'user')
 ADMIN_ROOT = os.path.join(HERE, 'admin')
 PORT = 8804
 ADMIN_PORT = 8805
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 # A 2x2 deep-blue PNG standing in for the uploaded banner: strongly coloured
 # and nothing like the page, so anything left of it after the fade shows up.

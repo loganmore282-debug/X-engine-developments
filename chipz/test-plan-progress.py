@@ -47,7 +47,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/plan-progress'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8875
-API = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 CYCLE = 30          # the products in this fixture are 30-day plans on purpose:
                     # a 150-day fixture cannot tell a correct denominator from
                     # the old hardcoded 150.

@@ -34,7 +34,7 @@ from playwright.async_api import async_playwright
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/product-key-corruption'
 os.makedirs(OUT, exist_ok=True)
 ADMIN_ROOT = os.path.join(HERE, 'admin')
-SERVER = 'https://chipz-server.onrender.com'
+from chipz_test_api import API as SERVER
 PORT = 8891
 
 DEFAULT_PRODUCTS = [

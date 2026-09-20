@@ -30,7 +30,7 @@ OUT  = sys.argv[1] if len(sys.argv) > 1 else '/tmp/balance-style'
 os.makedirs(OUT, exist_ok=True)
 ROOT = os.path.join(HERE, 'user')
 PORT = 8867
-API  = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 # The brand orange, straight out of the stylesheet's own token.
 BRAND_ORANGE_RGB = (255, 138, 31)   # #ff8a1f

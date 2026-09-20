@@ -21,7 +21,7 @@ from playwright.async_api import async_playwright
 
 ROOT = os.path.join(HERE, 'user')
 PORT = 8841
-API  = 'https://chipz-server.onrender.com'
+from chipz_test_api import API
 
 FB_APP  = "export const initializeApp=()=>({});export const getApps=()=>[];"
 FB_AUTH = """
