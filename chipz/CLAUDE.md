@@ -6418,7 +6418,129 @@ Browser smoke was attempted but cannot launch because
 browser CDN. Browser/Python checks therefore remain an explicit pre-merge
 validation limitation, not a green result. No historical balances have been
 automatically changed; existing affected records require separate review.
+## Round 177 — MarzPay has TWELVE markets. Round 176's conclusion was wrong.
+
+> "Check, countries are there" — with MarzPay's own documentation and integration guide.
+
+**Round 176 below concluded MarzPay was Uganda-only. That was wrong, and the way it was
+wrong is the part worth keeping.**
+
+The evidence was `marzpay-js` v1.0.5 — MarzPay's own SDK, published by their own
+maintainer — which pins `currency: 'UGX'` in every limits/fee function independently of
+its `country` field, states its bounds in UGX, and whose `isValidPhoneNumber()` tests
+`/^\+256[0-9]{9}$/` and rejects everything else. All of that is true **of the SDK**,
+which is about a year behind the platform. I wrote "the evidence is not ambiguous" — it
+was unambiguous about the SDK and silent about the API.
+
+This project already had the rule, from PesaJet: *"when a vendor's docs are unreachable
+their SDK is a good source but not a sufficient one."* It was applied backwards. **A
+published SDK that contradicts a live product is the WEAKER source, not the settling
+one** — an SDK can only lag, and a payments company ships markets faster than it ships
+client libraries. The honest answer when the docs host is blocked is "the SDK says
+Uganda-only, which may be stale — confirm from the dashboard or docs", not a finding.
+
+### The twelve markets
+From the integration guide's §5.3 field table, which lists them as the accepted
+`country` values:
+
+| dial | code | currency | mobile money |
+|---|---|---|---|
+| +256 | UG | UGX | MTN, Airtel |
+| +254 | KE | KES | M-Pesa |
+| +250 | RW | RWF | MTN, Airtel |
+| +243 | CD | **CDF & USD** | Vodacom, Airtel, Orange |
+| +260 | ZM | ZMW | MTN, Airtel, Zamtel |
+| +237 | CM | XAF | MTN, Orange |
+| +229 | BJ | XOF | MTN, Moov |
+| +225 | CI | XOF | MTN, Orange |
+| +241 | GA | XAF | Airtel |
+| +242 | CG | XAF | MTN, Airtel |
+| +221 | SN | XOF | Orange, Free |
+| +232 | SL | SLE | Orange |
+
+Same two endpoints for all of them (`POST /collect-money`, `POST /send-money`), same
+webhook envelope, provider auto-detected from the phone number.
+
+### What actually had to change in the code
+Less than expected, because the region layer was already right. `MARZPAY_MARKETS` is
+keyed on the **dialling code** (what the region model stores) and carries the `code` that
+goes in the body. `GATEWAY_DIAL_CODES.marzpay` is now `Object.keys(MARZPAY_MARKETS)`, so
+the market table is the single source and the capability rule follows it.
+
+- **`country` was hardcoded `'UG'`** in both request builders — correct while Uganda was
+  the only market, and precisely the one line that had to change. It is a **required**
+  field (§5.3), and it is what selects the wallet.
+- **`marzMoneyBody()` refuses rather than defaults** when the region is not a market. A
+  body with no `country` would be rejected anyway; a body with the WRONG country moves
+  real money in the wrong market, which is far worse than a refusal.
+- **`currency` is sent for DRC only**, which is the one market with two wallets and the
+  only one the docs ask for it on. Sending it everywhere would be inventing parameter
+  values — the Round 176 mistake in miniature.
+- **`marzGetBalance(region)` names the country**, because balances are per country
+  wallet. Unqualified, it returns whichever wallet the API defaults to: a figure for the
+  wrong country under this one's heading, on the screen used to decide whether there is
+  money to pay withdrawals. `/admin/marzpay/balance` reads the **country switch's**
+  region (not the panel's host) and the reply names the region it read.
+- **`reference` needed nothing** — `crypto.randomUUID()` was already the UUID v4 the
+  field requires.
+- **JSON stays.** The guide's curl examples use `--form`, but §"Send JSON bodies with
+  `Content-Type: application/json`" is explicit and `multipart/form-data` is the
+  alternative, so the existing implementation was already right.
+
+### Two traps the docs name, both encoded and both mutation-tested
+- **Congo-Brazzaville is CG/+242; DRC is CD/+243.** Adjacent codes, different countries,
+  different currencies. Mapping one onto the other is a mutation.
+- **XOF covers BJ/CI/SN and XAF covers CM/GA/CG**, so *"country code selects the wallet,
+  not currency alone"* — which is exactly why `country` must always be sent and why
+  currency can never identify a market.
+
+### And a new guard: the country's currency must match the market's
+A region on +254 configured with `UGX` would have MarzPay collect and pay **KES** while
+every screen, ledger row and notification said UGX. Nothing downstream could detect it —
+the figures are right and the unit is a lie. `/admin/settings/update` now refuses
+selecting MarzPay for such a region, naming both currencies.
+
+### Tests
+`test-gateway-regions.js` grew the market table, the request body and the balance query,
+and **three of its assertions had to be rewritten** because they encoded the wrong
+premise (`marzpay does not serve Kenya`, and the two that followed from it). They were
+correct tests of a false premise — and the premise was never worth pinning: *"every
+automatic gateway is Uganda-only"* was a coincidence of which providers happened to be
+wired in, not a property. It asserts **per gateway** now, with Kenya as the country one
+gateway reaches and Tanzania/Nigeria as the countries none do.
+
+`verify-gateway-regions-discriminates.py` is **23 mutations, all caught**, control
+correctly MISSED.
+
+**Two lifts broke again, and one of them is the second time this session.**
+`test-pesajet.js` needed `MARZPAY_MARKETS` because `GATEWAY_DIAL_CODES` is built from it,
+and Codex's `test-audit-money-regressions.js` needed a `currentRegion()` and a
+`marzMarket()` in its sandbox — without them `marzSendMoney` returned "no market" before
+fetching, and its "exactly one outbound call was made" assertion read `0`, which looks
+like a resend bug rather than a missing fixture. **Whenever a lifted function gains a
+dependency, every sandbox that lifts it needs it too** — and the failure always surfaces
+somewhere misleading.
+
+### Owner still has to, for each new country
+1. **Ask MarzPay to enable that country's wallet** for the business (a superadmin action
+   on their side) — and **subscribe to that market's collection and disbursement
+   services** in their marketplace. Neither is something this code can do, and without
+   them the API refuses.
+2. Create the region in **Admin → Countries** with the right dialling code and the
+   market's currency (the save now refuses a mismatch).
+3. Per-market **minimums differ** (RWF 100, ZMW 5 collect / 10 payout, XAF 100, and
+   "confirm your business limits"). Those are Chipz's own per-region min deposit and
+   withdrawal settings — deliberately **not** hardcoded here, because inventing a
+   provider's limits is how Round 176 went wrong.
+4. Note the balance endpoint **requires an IP allowlist** on MarzPay's side; a 401/403
+   there while the money paths work is that, not a bad key.
+
 ## Round 176 — MarzPay has no other countries, and a new region silently used it anyway
+
+**SUPERSEDED — see Round 177 above. The Uganda-only conclusion in this section is wrong;
+MarzPay documents twelve markets. The region-capability machinery it describes is sound
+and still in place, but every statement here about which countries MarzPay serves is
+not. Kept because the reasoning error is worth reading.**
 
 > "we need to put all endpoints of other countries of MarzPay and everything
 > https://wallet.wearemarz.com/documentation"

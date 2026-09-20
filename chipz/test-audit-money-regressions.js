@@ -87,6 +87,19 @@ function context(db, extra={}) {
     withdrawProvider:() => 'marzpay', fmtMoney:n => 'UGX ' + n,
     PUBLIC_URL:'https://invalid.example', MARZPAY_BASE:'https://invalid.example',
     MARZPAY_KEY:'test-only', MARZ_TIMEOUT:1000,
+    // MarzPay is multi-market now, so its request body carries the region's
+    // `country` and marzSendMoney refuses rather than guess when it cannot
+    // tell which market a payout belongs to. In production that context comes
+    // from processWithdrawalCore's withUserRegion(ownerId, ...) wrapper; these
+    // fixtures are a Ugandan payout (+256 / MTN), so the sandbox says so.
+    // Without this the outbound call is never made and the assertion that one
+    // WAS made reads as a resend bug rather than a missing fixture.
+    currentRegion:() => ({ key:'ug', name:'Uganda', dialCode:'256', currency:'UGX' }),
+    MARZPAY_MARKETS:{ '256':{ code:'UG', currency:'UGX' }, '254':{ code:'KE', currency:'KES' } },
+    // marzMarket() is declared far from the lifted section, so it is supplied
+    // rather than sliced -- same rule the real one follows.
+    marzMarket:(r) => ({ '256':{ code:'UG', currency:'UGX' }, '254':{ code:'KE', currency:'KES' } })[
+      String((r && r.dialCode) || '256').replace(/\D/g,'')] || null,
     marzUserMsg:(d,f) => d.message || f, lipaUserMsg:(d,f) => d.Errors || f,
     lipaTraderId:p => p, lipaChannel:n => n,
     finalizeWithdrawalTransactionRecord:async(id,outcome) => {

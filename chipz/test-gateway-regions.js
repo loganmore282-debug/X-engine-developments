@@ -2,27 +2,35 @@
 /**
  * A gateway may only be used in a country it can actually reach.
  *
- * WHY THIS EXISTS. Every automatic gateway wired into Chipz -- MarzPay,
- * LipaPay, PesaJet -- is Uganda-only. MarzPay's own SDK settles it: currency
- * is pinned to 'UGX' independently of its `country` field, the amount bounds
- * are stated in UGX, and isValidPhoneNumber() tests /^\+256[0-9]{9}$/ and
- * rejects everything else.
- *
- * Meanwhile a new region INHERITS settings/main -- Uganda's document --
+ * WHY THIS EXISTS. A new region INHERITS settings/main -- Uganda's document --
  * carrying depositMethod:'marzpay' and depositPayAEnabled:true. So the day a
- * Kenya region was created, every Kenyan deposit went to a Uganda-only gateway
- * with a +254 number and every payout with it, and nothing anywhere said so:
- * the member saw a provider failure, the admin saw a working configuration.
+ * region was created for a country its gateway cannot reach, every deposit
+ * there went to that gateway with a foreign number and every payout with it,
+ * and nothing anywhere said so: the member saw a provider failure and the
+ * admin saw a working configuration.
  *
- * What is pinned here is therefore BOTH directions, and the first matters as
- * much as the second:
- *   1. Uganda is completely unaffected. Every assertion about Uganda exists so
- *      a fix for Kenya cannot quietly change the country that already works.
- *   2. A country no gateway serves resolves to manual, everywhere it is
+ * WHICH COUNTRIES EACH GATEWAY REACHES IS PER GATEWAY, and the first version
+ * of this file got that wrong. It asserted "no gateway serves Kenya", from
+ * MarzPay's own SDK -- which pins currency to UGX independently of `country`
+ * and rejects any non-+256 number. All true of the SDK, which is a year behind
+ * the platform: MarzPay documents TWELVE markets. A correct test of a wrong
+ * premise, and the premise was never worth pinning -- "every automatic gateway
+ * is Uganda-only" was a coincidence of which providers happened to be wired
+ * in, not a property. The per-gateway shape is what is pinned now.
+ *
+ * Three directions, and the first matters as much as the others:
+ *   1. Uganda is completely unaffected. Every Uganda assertion exists so a fix
+ *      for another country cannot quietly change the one that already works --
+ *      including the "no depositMethod stored at all" shape every deployed
+ *      database holds.
+ *   2. A country only SOME gateways reach gets exactly those (Kenya: MarzPay
+ *      yes, LipaPay and PesaJet no).
+ *   3. A country NO gateway reaches resolves to manual everywhere it is
  *      decided -- PAY A off, payouts left to a human, the admin save refused.
  *
- * These are RUN, not read. Whether a resolver returns 'manual' for +254 is not
- * something a text match on the source can answer.
+ * These are RUN, not read. Whether a resolver returns 'manual' for +255, or
+ * which country code ends up in a request body, is not something a text match
+ * on the source can answer.
  */
 'use strict';
 
@@ -51,7 +59,15 @@ const REGIONS = {
   ug:  { key: 'ug',  name: 'Uganda',  dialCode: '256', currency: 'UGX' },
   ug2: { key: 'ug2', name: 'Uganda 2', dialCode: '256', currency: 'UGX' },
   ke:  { key: 'ke',  name: 'Kenya',   dialCode: '254', currency: 'KES' },
+  // Tanzania and Nigeria are in NO provider's market list, which is what makes
+  // them the honest fixtures for "nothing automatic can work here". Kenya used
+  // to serve that role and no longer can -- MarzPay reaches it.
   tz:  { key: 'tz',  name: 'Tanzania', dialCode: '255', currency: 'TZS' },
+  ng:  { key: 'ng',  name: 'Nigeria', dialCode: '234', currency: 'NGN' },
+  // Adjacent dialling codes, different countries, different currencies. The
+  // MarzPay docs call this trap out by name.
+  cd:  { key: 'cd',  name: 'DR Congo', dialCode: '243', currency: 'CDF' },
+  cg:  { key: 'cg',  name: 'Congo-Brazzaville', dialCode: '242', currency: 'XAF' },
 };
 
 const api = new Function('CURRENT', `
@@ -64,6 +80,21 @@ const api = new Function('CURRENT', `
 const inRegion = r => api(r);
 
 const AUTOMATIC = ['marzpay', 'lipapay', 'pesajet'];
+
+// The market table and the body builder, lifted separately -- they sit in a
+// different part of server.js from the resolvers above.
+const marketBlock = (() => {
+  const a = src.indexOf('const MARZPAY_MARKETS');
+  const b = src.indexOf('\n}', src.indexOf('function marzMarket'));
+  if (a === -1 || b === -1) throw new Error('could not slice the MarzPay market table');
+  return src.slice(a, b + 2);
+})();
+const bodySrc = (() => {
+  const a = src.indexOf('function marzMoneyBody');
+  const b = src.indexOf('\n}', src.indexOf('function marzNoMarket'));
+  if (a === -1 || b === -1) throw new Error('could not slice marzMoneyBody/marzNoMarket');
+  return src.slice(a, b + 2);
+})();
 
 console.log('— Uganda is untouched, which is half the point —');
 {
@@ -85,13 +116,38 @@ console.log('— Uganda is untouched, which is half the point —');
      "and 'follow' in Uganda is NOT manual");
 }
 
-console.log('\n— a country no gateway reaches —');
-for (const r of [REGIONS.ke, REGIONS.tz]) {
+console.log('\n— a country ONE gateway reaches but the others do not —');
+// Kenya is MarzPay's second market. These assertions used to read "no gateway
+// serves Kenya", which was a correct test of a WRONG premise: it came from
+// MarzPay's SDK, which is a year behind its platform. The per-gateway shape is
+// what should have been asserted all along -- "every automatic gateway is
+// Uganda-only" was never a property worth pinning, it was a coincidence of
+// which providers were wired in.
+{
+  const r = REGIONS.ke;
+  const it = inRegion(r);
+  ck(it.gatewayServesRegion('marzpay', r), 'marzpay DOES serve Kenya (+254)');
+  ck(!it.gatewayServesRegion('lipapay', r), 'lipapay does not');
+  ck(!it.gatewayServesRegion('pesajet', r), 'and neither does pesajet');
+  ck(it.payAAvailable({ depositPayAEnabled: true, depositMethod: 'marzpay' }, r) === true,
+     'so PAY A on marzpay is available in Kenya');
+  ck(it.payAAvailable({ depositPayAEnabled: true, depositMethod: 'pesajet' }, r) === false,
+     '  but PAY A on pesajet is not');
+  ck(it.withdrawProvider({ withdrawMethod: 'marzpay' }, r) === 'marzpay',
+     'a marzpay payout in Kenya goes to marzpay');
+  ck(it.withdrawProvider({ withdrawMethod: 'lipapay' }, r) === 'manual',
+     '  while a lipapay one falls back to manual');
+}
+
+console.log('\n— a country NO gateway reaches —');
+// Tanzania is in none of the three providers' markets, so it is the honest
+// fixture for "nothing automatic can work here". THE bug this file was written
+// for: a brand-new region inherits exactly this settings shape from Uganda's.
+for (const r of [REGIONS.tz, REGIONS.ng]) {
   const it = inRegion(r);
   for (const g of AUTOMATIC) {
     ck(!it.gatewayServesRegion(g, r), `${g} does not serve ${r.name} (+${r.dialCode})`);
   }
-  // THE bug. A brand-new region inherits exactly this settings shape.
   ck(it.payAAvailable({ depositPayAEnabled: true, depositMethod: 'marzpay' }, r) === false,
      `PAY A resolves OFF in ${r.name} even though the inherited flag says on`);
   ck(it.withdrawProvider({ withdrawMethod: 'marzpay' }, r) === 'manual',
@@ -100,6 +156,80 @@ for (const r of [REGIONS.ke, REGIONS.tz]) {
      `  and so does 'follow' onto an unsupported gateway`);
   ck(it.payoutIsManual({ withdrawMethod: 'lipapay' }, r) === true,
      `  so ${r.name} payouts wait for a human instead of a doomed provider call`);
+}
+
+console.log("\n— MarzPay's market table, and the two traps its docs name —");
+{
+  const mk = new Function(marketBlock + '\nreturn { MARZPAY_MARKETS, marzMarket };')();
+  // The twelve accepted `country` values, from the integration guide's §5.3
+  // field table. Asserted as a SET so a market added to one place and not the
+  // other cannot pass.
+  const codes = Object.values(mk.MARZPAY_MARKETS).map(m => m.code).sort();
+  ck(codes.length === 12, `twelve markets are declared (${codes.length})`);
+  ck(codes.join(',') === 'BJ,CD,CG,CI,CM,GA,KE,RW,SL,SN,UG,ZM',
+     `and they are exactly the documented set (${codes.join(',')})`);
+  // Every gateway dial code must resolve to a market, or gatewayServesRegion
+  // would admit a country marzMoneyBody() then refuses -- a deposit created
+  // and immediately failed.
+  const dials = Object.keys(mk.MARZPAY_MARKETS);
+  for (const d of dials) ck(!!mk.MARZPAY_MARKETS[d].code, `+${d} maps to a country code`);
+  ck(new Set(codes).size === 12, 'no country code is repeated');
+  ck(new Set(dials).size === dials.length, 'and no dialling code is');
+
+  // TRAP 1: Congo-Brazzaville (CG/+242) is not DRC (CD/+243).
+  ck(mk.marzMarket(REGIONS.cd).code === 'CD', 'DRC (+243) resolves to CD');
+  ck(mk.marzMarket(REGIONS.cg).code === 'CG', 'Congo-Brazzaville (+242) resolves to CG');
+  ck(mk.marzMarket(REGIONS.cd).code !== mk.marzMarket(REGIONS.cg).code,
+     '  and the two are never the same wallet');
+  ck(mk.marzMarket(REGIONS.cd).currency === 'CDF' && mk.marzMarket(REGIONS.cg).currency === 'XAF',
+     '  with their own currencies');
+
+  // TRAP 2: XOF covers BJ/CI/SN and XAF covers CM/GA/CG, so currency alone
+  // cannot identify a market -- which is why `country` must always be sent.
+  const byCur = {};
+  for (const m of Object.values(mk.MARZPAY_MARKETS)) (byCur[m.currency] ||= []).push(m.code);
+  ck(byCur.XOF && byCur.XOF.length === 3, `XOF is shared by three markets (${byCur.XOF})`);
+  ck(byCur.XAF && byCur.XAF.length === 3, `XAF is shared by three markets (${byCur.XAF})`);
+
+  // DRC is the only dual-wallet market, and the only one told to send currency.
+  const dual = Object.values(mk.MARZPAY_MARKETS).filter(m => m.currencies);
+  ck(dual.length === 1 && dual[0].code === 'CD',
+     'DRC is the only market carrying more than one wallet currency');
+
+  ck(mk.marzMarket(REGIONS.tz) === null, 'a country MarzPay does not serve resolves to null');
+  ck(mk.marzMarket({ name: 'No dial' }) === null, 'and so does a region with no dialCode');
+}
+
+console.log('\n— the request body names the market, and refuses to guess —');
+{
+  const bodyFns = new Function(
+    marketBlock +
+    "function currentRegion(){ return " + JSON.stringify(REGIONS.ug) + "; }" +
+    bodySrc + '\nreturn { marzMoneyBody, marzNoMarket };')();
+  const base = { amount: 5000, phone: '+254712345678', reference: 'uuid-v4-here',
+                 description: 'Mobile Money' };
+
+  const ug = bodyFns.marzMoneyBody({ ...base, phone: '+256712345678', region: REGIONS.ug });
+  ck(ug.country === 'UG', 'a Ugandan request still says UG (nothing changed for Uganda)');
+  ck(ug.currency === undefined,
+     '  and sends no currency, because UG has one wallet and the docs ask for it only on DRC');
+
+  const ke = bodyFns.marzMoneyBody({ ...base, region: REGIONS.ke });
+  ck(ke.country === 'KE', 'a Kenyan request says KE');
+  ck(ke.phone_number === '+254712345678' && ke.amount === 5000 && ke.reference === base.reference,
+     '  carrying the phone, amount and UUID reference through untouched');
+
+  const cd = bodyFns.marzMoneyBody({ ...base, region: REGIONS.cd });
+  ck(cd.country === 'CD' && cd.currency === 'CDF',
+     'a DRC request names the wallet currency, which is the one market that needs it');
+
+  // The belt to gatewayServesRegion's braces. A body with the WRONG country
+  // would move real money in the wrong market, so refusing beats defaulting.
+  ck(bodyFns.marzMoneyBody({ ...base, region: REGIONS.tz }) === null,
+     'and an unserved country yields NO body rather than defaulting to UG');
+  const no = bodyFns.marzNoMarket(REGIONS.tz);
+  ck(no.status === 'error' && /Tanzania/.test(no.message),
+     '  with an error naming the country');
 }
 
 console.log('\n— manual is admin-run, so it works anywhere —');
@@ -183,6 +313,12 @@ console.log('\n— the guards are wired into the routes that move money —');
   // have the panel open on.
   ck(/gatewayServesRegion\(\s*value\s*,\s*targetRegion\s*\)/.test(setBody),
      '  judged against the region being SAVED, not the request host');
+  // A gateway that CAN reach the country but settles in a different currency
+  // than the country is configured for is money labelled in the wrong unit on
+  // every screen -- figures right, unit a lie, and nothing downstream could
+  // detect it.
+  ck(/marzMarket\(targetRegion\)/.test(setBody) && /market\.currency/.test(setBody),
+     'and the save refuses a country whose currency disagrees with the market');
 
   // withdrawProvider() is called without an explicit region in the payout
   // path, so it falls back to currentRegion() -- and that is only correct
@@ -214,5 +350,64 @@ console.log('\n— the guards are wired into the routes that move money —');
      'and the app is served the RESOLVED PAY A flag, so it cannot offer a dead method');
 }
 
-console.log(bad ? `\n${bad} FAILED` : '\ngateway regions: all cases pass');
-process.exit(bad ? 1 : 0);
+// LAST, because marzGetBalance is async and everything above is synchronous.
+// The summary moves inside it so the exit code still covers these.
+(async () => {
+  console.log('\n— the balance is read PER COUNTRY WALLET —');
+  // Balances are per country wallet, so an unqualified GET /balance returns
+  // whichever wallet the API defaults to: a figure for the wrong country under
+  // this one's heading, on the screen used to decide whether there is enough
+  // money to pay withdrawals.
+  const balSrc = (() => {
+    const a = src.indexOf('async function marzGetBalance');
+    const b = src.indexOf('\n}', a);
+    if (a === -1 || b === -1) throw new Error('could not slice marzGetBalance');
+    return src.slice(a, b + 2);
+  })();
+  const calls = [];
+  const markets = new Function(marketBlock + '\nreturn MARZPAY_MARKETS;')();
+  const marzGetBalance = new Function('CALLS', 'MARKETS', `
+    const MARZPAY_BASE = 'https://marz.test/api/v1', MARZPAY_KEY = 'k', MARZ_TIMEOUT = 1;
+    const MARZPAY_MARKETS = MARKETS;
+    function marzMarket(r){ return MARKETS[String((r && r.dialCode) || '').replace(/\\D/g,'')] || null; }
+    function marzNoMarket(r){ return { status: 'error', message: 'no market for ' + ((r && r.name) || '?') }; }
+    async function _marzParse(){ return { status: 'success' }; }
+    function _marzExtractBalance(){ return { amount: 1, formatted: '1' }; }
+    const AbortSignal = { timeout: () => null };
+    const fetch = (url) => { CALLS.push(url); return Promise.resolve({}); };
+    ${balSrc}
+    return marzGetBalance;
+  `)(calls, markets);
+
+  await marzGetBalance(REGIONS.ug);
+  ck(/[?&]country=UG(&|$)/.test(calls[0]),
+     `the Ugandan balance names its own country wallet (${calls[0]})`);
+  ck(!/currency=/.test(calls[0]), '  and sends no currency, since UG has one wallet');
+
+  await marzGetBalance(REGIONS.ke);
+  ck(/[?&]country=KE(&|$)/.test(calls[1]), 'the Kenyan balance names KE');
+
+  await marzGetBalance(REGIONS.cd);
+  ck(/country=CD/.test(calls[2]) && /currency=CDF/.test(calls[2]),
+     `DRC names both its country and its wallet currency (${calls[2]})`);
+
+  const none = await marzGetBalance(REGIONS.tz);
+  ck(none && none.status === 'error',
+     'a country MarzPay does not serve is an error, not somebody else\'s wallet');
+  ck(calls.length === 3, '  and no request is made for it');
+
+  // The admin route must read the COUNTRY SWITCH's region, not the host the
+  // panel happens to be open on, or one country's float appears under
+  // another's name.
+  const at = src.indexOf("app.get('/admin/marzpay/balance'");
+  const end = src.indexOf('\napp.', at + 10);
+  ck(at > -1 && end > at, 'the admin balance route was located');
+  const body = src.slice(at, end);
+  ck(/adminRegionFilter\(req\)/.test(body), 'it reads the picked country, not the request host');
+  ck(/marzGetBalance\(region\)/.test(body), '  and passes that region through');
+  ck(/regionKey: region\.key/.test(body),
+     '  and the reply names the region it read, so the card cannot be mislabelled');
+
+  console.log(bad ? `\n${bad} FAILED` : '\ngateway regions: all cases pass');
+  process.exit(bad ? 1 : 0);
+})();

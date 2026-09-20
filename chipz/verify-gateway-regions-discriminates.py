@@ -38,11 +38,45 @@ MUTATIONS = [
      "  const allowed = GATEWAY_DIAL_CODES[gateway];\n  if (true) return true;",
      True),
 
-    ('MarzPay claims to serve every country',
-     "  marzpay: ['256'],", "  marzpay: ['256', '254', '255'],", True),
+    # MarzPay's twelve markets are its documented `country` values, so a market
+    # invented here would send real money at a wallet that does not exist.
+    # Tanzania is in none of the three providers' lists.
+    ('MarzPay claims a market it does not have',
+     "  '232': { code: 'SL', currency: 'SLE' },",
+     "  '232': { code: 'SL', currency: 'SLE' },\n  '255': { code: 'TZ', currency: 'TZS' },",
+     True),
+
+    ('Congo-Brazzaville is mapped onto DRC -- adjacent codes, different money',
+     "  '242': { code: 'CG', currency: 'XAF' },",
+     "  '242': { code: 'CD', currency: 'CDF' },",
+     True),
 
     ('a gateway with no declared countries is silently allowed anywhere',
      "  pesajet: ['256'],", "", True),
+
+    ('the request body goes back to a hardcoded UG',
+     "    country: market.code,", "    country: 'UG',", True),
+
+    ('an unserved country gets a body anyway, defaulting the market',
+     "  const market = marzMarket(region);\n  if (!market) return null;",
+     "  const market = marzMarket(region) || MARZPAY_MARKETS['256'];",
+     True),
+
+    ('DRC stops naming its wallet currency',
+     "  if (market.currencies) body.currency = market.currency;", "", True),
+
+    ('every market sends a currency, not just the dual-wallet one',
+     "  if (market.currencies) body.currency = market.currency;",
+     "  body.currency = market.currency;",
+     True),
+
+    ("LipaPay inherits MarzPay's markets although it serves only Uganda",
+     "  lipapay: ['256'],", "  lipapay: Object.keys(MARZPAY_MARKETS),", True),
+
+    ('the balance card reads whichever wallet the API defaults to',
+     "  const q = new URLSearchParams({ country: market.code });",
+     "  const q = new URLSearchParams();",
+     True),
 
     ('PAY A ignores whether a gateway can reach the country',
      '  return gatewayServesRegion(depositAutomaticProvider(sett), region);',
@@ -88,13 +122,18 @@ MUTATIONS = [
      '      depositPayAEnabled: payAAvailable(s),', '', True),
 
     ('the admin save accepts a gateway the country cannot use',
-     '      if (gatewayServesRegion(value, targetRegion)) continue;',
-     '      continue;',
+     '      if (!gatewayServesRegion(value, targetRegion)) {',
+     '      if (false) {',
      True),
 
     ('the admin save judges the request host instead of the region being saved',
-     '      if (gatewayServesRegion(value, targetRegion)) continue;',
-     '      if (gatewayServesRegion(value, currentRegion())) continue;',
+     '      if (!gatewayServesRegion(value, targetRegion)) {',
+     '      if (!gatewayServesRegion(value, currentRegion())) {',
+     True),
+
+    ('a country whose currency disagrees with the market is accepted',
+     "      const market = value === 'marzpay' ? marzMarket(targetRegion) : null;",
+     "      const market = null;",
      True),
 ]
 

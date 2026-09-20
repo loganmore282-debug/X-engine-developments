@@ -1165,21 +1165,54 @@ function depositAutomaticProvider(sett) {
 // (payout) uses. 'follow' defers to depositProvider() -- everything else
 // ('marzpay'/'lipapay'/'manual', or the legacy 'automatic' alias) pins the
 // payout side independently of the deposit side.
+// ── MARZPAY'S MARKETS ──
+// Twelve, from MarzPay's own documentation (the integration guide's §5.3 field
+// table lists exactly these as the accepted `country` values).
+//
+// A CORRECTION WORTH KEEPING. An earlier round concluded MarzPay was
+// Uganda-only, from its official SDK: marzpay-js v1.0.5 pins `currency: 'UGX'`
+// in every limits/fee function independently of `country`, and its
+// isValidPhoneNumber() tests /^\+256[0-9]{9}$/ and rejects everything else.
+// All of that is true OF THE SDK -- which is a year behind the platform. The
+// lesson this project already had from PesaJet ("when a vendor's docs are
+// unreachable their SDK is a good source but not a sufficient one") was
+// applied backwards: a published SDK that contradicts a live product is the
+// WEAKER source, not the settling one.
+//
+// Keyed on the DIALLING CODE because that is what our region model stores and
+// what decides which market a member's phone belongs to. `code` is what goes
+// in the request body.
+//
+// TWO TRAPS THE DOCS CALL OUT EXPLICITLY, both encoded here:
+//   * Congo-Brazzaville is CG / +242. DRC is CD / +243. Different countries,
+//     adjacent dialling codes, different currencies.
+//   * XOF is shared by Benin, Cote d'Ivoire and Senegal; XAF by Cameroon,
+//     Gabon and Congo-Brazzaville. "Country code selects the wallet, not
+//     currency alone" -- so `country` must always be sent, and currency alone
+//     can never identify the market.
+const MARZPAY_MARKETS = Object.freeze({
+  '256': { code: 'UG', currency: 'UGX' },
+  '254': { code: 'KE', currency: 'KES' },
+  '250': { code: 'RW', currency: 'RWF' },
+  // The only dual-currency market, and the only one where `currency` must be
+  // sent explicitly on every money-movement request.
+  '243': { code: 'CD', currency: 'CDF', currencies: ['CDF', 'USD'] },
+  '260': { code: 'ZM', currency: 'ZMW' },
+  '237': { code: 'CM', currency: 'XAF' },
+  '229': { code: 'BJ', currency: 'XOF' },
+  '225': { code: 'CI', currency: 'XOF' },
+  '241': { code: 'GA', currency: 'XAF' },
+  '242': { code: 'CG', currency: 'XAF' },
+  '221': { code: 'SN', currency: 'XOF' },
+  '232': { code: 'SL', currency: 'SLE' },
+});
+// The market a region belongs to, or null if MarzPay does not serve it.
+function marzMarket(region) {
+  const r = region || currentRegion();
+  return MARZPAY_MARKETS[String((r && r.dialCode) || '').replace(/\D/g, '')] || null;
+}
+
 // ── WHICH COUNTRIES A GATEWAY CAN ACTUALLY SERVE ──
-// Every automatic gateway wired into Chipz is Uganda-only. That is a fact
-// about the providers, not a limitation of this code:
-//
-//   MarzPay  its own SDK (marzpay-js, published by MarzPay's own maintainer)
-//            pins `currency: 'UGX'` in every limits/fee function INDEPENDENTLY
-//            of its `country` field, states its amount bounds in UGX, and
-//            validates phone numbers against /^256[0-9]{9}$/ and nothing else
-//            -- isValidPhoneNumber() rejects any other country outright. Its
-//            `country` parameter defaults to 'UG' and no other value appears
-//            anywhere in the package. Its own service-lookup helper carries
-//            the comment that the API does not support country filtering.
-//   LipaPay  Uganda collections and payouts only.
-//   PesaJet  Uganda mobile money (MTN / Airtel) only, per its own docs.
-//
 // Keyed on the DIALLING CODE rather than the region key: a second Ugandan
 // region would carry its own arbitrary key ('ug2') and still dial 256, and
 // what decides whether a gateway can reach a member's phone is the number,
@@ -1187,12 +1220,15 @@ function depositAutomaticProvider(sett) {
 //
 // WHY THIS EXISTS. A new region inherits settings/main -- which is Uganda's,
 // carrying depositMethod:'marzpay' AND depositPayAEnabled:true. So on the day
-// a Kenya region is created, every Kenyan deposit is handed to a Uganda-only
-// gateway with a +254 number, and so is every payout, and NOTHING said so:
-// the member sees a provider failure and the admin sees a working config.
-// Adding a country here is one line, once a provider genuinely serves it.
+// a region is created for a country its gateway cannot reach, every deposit
+// there is handed to that gateway with a foreign number, and so is every
+// payout, and NOTHING said so: the member sees a provider failure and the
+// admin sees a working config.
+//
+// LipaPay and PesaJet really are Uganda-only (LipaPay's collections and
+// payouts, PesaJet's MTN/Airtel mobile money, per its own docs).
 const GATEWAY_DIAL_CODES = Object.freeze({
-  marzpay: ['256'],
+  marzpay: Object.keys(MARZPAY_MARKETS),
   lipapay: ['256'],
   pesajet: ['256'],
 });
@@ -2414,9 +2450,44 @@ async function _marzParse(resp) {
   if (!resp.ok && !data.status) data.status = 'error';
   return data;
 }
-async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
-  const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
-    description: description || 'Mobile Money' };
+// The body both money-movement calls share. `country` was hardcoded 'UG' here
+// -- correct while Uganda was the only market, and the one line that had to
+// change for any other. It is REQUIRED by the API (guide §5.3), and it is what
+// selects the wallet: currency alone cannot, since XOF and XAF each cover three
+// markets.
+//
+// `reference` is already a crypto.randomUUID() at both call sites, which is
+// the UUID v4 the field requires.
+//
+// Refuses rather than guesses when the region is not a MarzPay market. A body
+// with no `country` would be rejected by the API anyway; a body with the WRONG
+// country would move real money in the wrong market, which is worse than a
+// refusal. gatewayServesRegion() stops this being reachable in the first
+// place, so this is the belt to that braces.
+function marzMoneyBody({ amount, phone, reference, description, region }) {
+  const market = marzMarket(region);
+  if (!market) return null;
+  const body = {
+    amount: Number(amount),
+    phone_number: phone,
+    country: market.code,
+    reference,
+    description: description || 'Mobile Money',
+  };
+  // Only where the market genuinely has more than one wallet -- the docs ask
+  // for it on DRC and nowhere else, and sending a currency for a
+  // single-wallet market would be inventing a parameter value.
+  if (market.currencies) body.currency = market.currency;
+  return body;
+}
+function marzNoMarket(region) {
+  const r = region || currentRegion();
+  return { status: 'error', message:
+    `MarzPay does not serve ${(r && r.name) || 'this country'} (+${(r && r.dialCode) || '?'})` };
+}
+async function marzCollect({ amount, phone, reference, description, callbackUrl, region }) {
+  const payload = marzMoneyBody({ amount, phone, reference, description, region });
+  if (!payload) return marzNoMarket(region);
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
     method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
@@ -2425,9 +2496,9 @@ async function marzCollect({ amount, phone, reference, description, callbackUrl 
   });
   return _marzParse(resp);
 }
-async function marzSendMoney({ amount, phone, reference, description, callbackUrl }) {
-  const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
-    description: description || 'Mobile Money' };
+async function marzSendMoney({ amount, phone, reference, description, callbackUrl, region }) {
+  const payload = marzMoneyBody({ amount, phone, reference, description, region });
+  if (!payload) return marzNoMarket(region);
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/send-money`, {
     method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
@@ -2459,13 +2530,23 @@ function _marzExtractBalance(d) {
   const accountStatus = acct.status?.account_status || acct.account_status || null;
   return { amount: finiteMoney(raw), formatted: formatted || null, currency, accountStatus };
 }
-async function marzGetBalance() {
-  const resp = await fetch(`${MARZPAY_BASE}/balance`, {
+// Balances are PER COUNTRY WALLET, so the country has to be named or this
+// reads whichever wallet the API defaults to -- which on a multi-market
+// account is a figure for the wrong country presented as this one's. For DRC
+// the currency picks between its CDF and USD wallets.
+// Note the guide states this endpoint "requires IP whitelist"; a 401/403 here
+// with the money paths working is that, not a bad key.
+async function marzGetBalance(region) {
+  const market = marzMarket(region);
+  if (!market) return marzNoMarket(region);
+  const q = new URLSearchParams({ country: market.code });
+  if (market.currencies) q.set('currency', market.currency);
+  const resp = await fetch(`${MARZPAY_BASE}/balance?${q}`, {
     signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
   });
   const d = await _marzParse(resp);
   if (d.status === 'error') return d;
-  return { status: 'success', ..._marzExtractBalance(d) };
+  return { status: 'success', currency: market.currency, ..._marzExtractBalance(d) };
 }
 // ── MARZSMS (a SEPARATE MarzPay product, sms.wearemarz.com -- alerts
 // staff by text, never moves money) ──
@@ -8550,12 +8631,25 @@ app.post('/admin/settings/update', async (req, res) => {
     for (const [field, value] of [['depositMethod', updates.depositMethod],
                                   ['withdrawMethod', updates.withdrawMethod]]) {
       if (!(field in updates) || value === 'follow' || value === 'manual') continue;
-      if (gatewayServesRegion(value, targetRegion)) continue;
-      const serves = (GATEWAY_DIAL_CODES[value] || []).map(d => '+' + d).join(', ');
-      return res.status(400).json({ status: 'error', field, message:
-        `${value} cannot be used for ${targetRegion.name || targetRegion.key}: it only serves ` +
-        `${serves || 'other countries'}, and this country dials +${targetRegion.dialCode}. ` +
-        `Use manual payments here until a gateway covers it.` });
+      if (!gatewayServesRegion(value, targetRegion)) {
+        const serves = (GATEWAY_DIAL_CODES[value] || []).map(d => '+' + d).join(', ');
+        return res.status(400).json({ status: 'error', field, message:
+          `${value} cannot be used for ${targetRegion.name || targetRegion.key}: it only serves ` +
+          `${serves || 'other countries'}, and this country dials +${targetRegion.dialCode}. ` +
+          `Use manual payments here until a gateway covers it.` });
+      }
+      // The gateway can reach the country, but the country's CURRENCY has to
+      // agree with the market's or the money is labelled wrong end to end: a
+      // region on +254 set to UGX would have MarzPay collect and pay KES while
+      // every screen, ledger row and notification says UGX. Nothing downstream
+      // could detect that -- the figures are right and the unit is a lie.
+      const market = value === 'marzpay' ? marzMarket(targetRegion) : null;
+      if (market && String(targetRegion.currency || '').toUpperCase() !== market.currency) {
+        return res.status(400).json({ status: 'error', field, message:
+          `${targetRegion.name || targetRegion.key} is set to ${targetRegion.currency || '(none)'}, ` +
+          `but MarzPay settles ${market.code} in ${market.currency}. Fix the country's currency ` +
+          `in Countries first, or this country's money would be shown in the wrong unit.` });
+      }
     }
     if (isRegionOverlay) {
       const docId = settingsDocId(targetRegion.key);
@@ -10577,9 +10671,24 @@ app.get('/admin/marzpay/balance', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   if (!MARZPAY_KEY) return res.status(400).json({ status: 'error', message: 'MarzPay is not configured on this server (no MARZPAY_KEY set).' });
   try {
-    const d = await marzGetBalance();
+    // The COUNTRY SWITCH's region, not the admin's own. Balances are per
+    // country wallet now, and currentRegion() here resolves from the host the
+    // panel happens to be open on -- which would put one country's float under
+    // another country's heading on the very screen used to decide whether
+    // there is enough money to pay withdrawals.
+    // adminRegionFilter() answers null for "All countries", which is not a
+    // question a single wallet balance can answer -- so it falls back to the
+    // founding region, exactly as the panel's own adminOneRegion() does, and
+    // the reply names the region it actually read so the card cannot be
+    // labelled with a country it did not come from.
+    const region = regionByKey(adminRegionFilter(req) || DEFAULT_REGION_KEY);
+    if (!marzMarket(region)) {
+      return res.status(400).json({ status: 'error', code: 'GATEWAY_REGION', message:
+        `MarzPay does not serve ${region.name || region.key} (+${region.dialCode}), so it holds no wallet for it.` });
+    }
+    const d = await marzGetBalance(region);
     if (d.status !== 'success') return res.status(502).json({ status: 'error', message: marzUserMsg(d, 'Could not reach MarzPay') });
-    res.json({ status: 'success', amount: d.amount, formatted: d.formatted, currency: d.currency, accountStatus: d.accountStatus });
+    res.json({ status: 'success', regionKey: region.key, amount: d.amount, formatted: d.formatted, currency: d.currency, accountStatus: d.accountStatus });
   } catch (e) {
     console.error('MarzPay balance check failed:', e.message);
     res.status(502).json({ status: 'error', message: PROVIDER_BUSY_MSG });

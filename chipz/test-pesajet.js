@@ -350,7 +350,18 @@ async function finish() {
     if (a === -1 || b === -1) throw new Error('could not slice GATEWAY_DIAL_CODES');
     return src.slice(a, b + 3);
   })();
+  // GATEWAY_DIAL_CODES is built from MARZPAY_MARKETS now, so the market table
+  // has to come with it. SECOND time this session a lift here broke because
+  // the lifted function gained a dependency -- the standing hazard whenever
+  // anything is pulled out of server.js by text.
+  const marketMap = (() => {
+    const a = src.indexOf('const MARZPAY_MARKETS');
+    const b = src.indexOf('});', a);
+    if (a === -1 || b === -1) throw new Error('could not slice MARZPAY_MARKETS');
+    return src.slice(a, b + 3);
+  })();
   const witProv = new Function('UG', 'function currentRegion(){ return UG; }' +
+    marketMap +
     dialMap +
     strip(fnSource('gatewayServesDial')) +
     strip(fnSource('gatewayServesRegion')) +
