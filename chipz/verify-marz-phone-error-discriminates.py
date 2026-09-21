@@ -80,6 +80,11 @@ MUTATIONS = [
      '  if (marzIsPhoneFormatError(mp, region)) return marzPhoneFormatMsg(region);',
      True),
 
+    ('a confirmed PERMANENT MarzPay refusal (DEPOSITS_NOT_ALLOWED) is told to the member as "try again in a moment"', SERVER,
+     "  if (mp && MARZ_PERMANENT_ERROR_CODES.has(String(mp.error_code || ''))) return false;\n  const raw = String((mp && (mp.message || mp.data?.message || mp.error || mp.data?.error)) || '');",
+     "  const raw = String((mp && (mp.message || mp.data?.message || mp.error || mp.data?.error)) || '');",
+     True),
+
     # ── the wiring, and the region it is decided against ──
     ('the deposit route records the raw admin/diagnostic text as the failure reason', SERVER,
      "      await markDepositFailed(depRef, userId,\n        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion),\n        JSON.stringify(mpData));",

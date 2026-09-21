@@ -75,6 +75,7 @@ const api = new Function('CURRENT', `
   ${fnSource('badPhoneMessage')}
   const PROVIDER_BUSY_MSG = 'The payment provider is busy right now. Please try again in a moment.';
   const DEPOSIT_FAILED_MSG = 'Payment was not completed. Please try again.';
+  ${constSource('MARZ_PERMANENT_ERROR_CODES')}
   ${fnSource('marzIsBusy')}
   ${fnSource('marzUserMsg')}
   ${constSource('MARZ_PHONE_ERROR_CODES')}
@@ -144,6 +145,31 @@ console.log('\n— a member is never shown raw provider prose, even unforeseen p
      'and a transport failure is still the busy sentence, not a phone complaint');
   ck(it.marzMemberMsg({ status: 'error' }, 'Could not start the payment', UG) === 'Could not start the payment',
      'a refusal with no message at all uses the caller\'s own fallback');
+}
+
+// Confirmed LIVE via the admin panel's own "Why this failed" raw-response
+// diagnostic -- a Cameroon Orange Money deposit. MarzPay answered this
+// PERMANENT business refusal (the network is not live on their platform yet
+// for this country) with an HTTP status _marzParse() treats identically to
+// a real outage, so it spliced providerDown:true onto a response that would
+// have refused every retry, not just this one -- and the member was shown
+// "The payment provider is busy right now. Please try again in a moment.",
+// actively wrong advice for something retrying can never fix.
+console.log('\n— a confirmed PERMANENT refusal is not mistaken for a transient one —');
+{
+  const it = api(CM);
+  const permanent = { status: 'error', error_code: 'DEPOSITS_NOT_ALLOWED', providerDown: true,
+    message: 'Orange Money Cameroon collections are not available yet. Please try another network or contact support.' };
+  ck(it.marzIsBusy(permanent) === false,
+     'DEPOSITS_NOT_ALLOWED overrides the HTTP-status-derived providerDown flag');
+  ck(it.marzMemberMsg(permanent, 'Could not start the payment', CM) === 'Could not start the payment',
+     'the member is told the recharge did not start, not falsely invited to retry');
+  ck(it.marzUserMsg(permanent, 'Could not start the payment') === permanent.message,
+     'the ADMIN diagnostic still shows the raw reason, unaffected by the member-facing fix');
+  // A genuine transport failure -- the exact shape marzIsBusy must still
+  // catch -- is unaffected by adding this one specific code.
+  ck(it.marzIsBusy({ status: 'error', providerDown: true, message: 'boom' }) === true,
+     'an ordinary transport failure with no permanent error_code is still busy');
 }
 
 console.log('— recognising the documented error family —');

@@ -2596,11 +2596,28 @@ async function markDepositFailed(depRef, userId, reason, adminDetail) {
 // ── MARZPAY (mobile money collect/send) ──
 const PROVIDER_BUSY_MSG = 'The payment provider is busy right now. Please try again in a moment.';
 const DEPOSIT_FAILED_MSG = 'Payment was not completed. Please try again.';
+// Confirmed live (a Cameroon Orange Money deposit, seen via the admin
+// panel's own "Why this failed" raw-response diagnostic):
+// {"status":"error","message":"Orange Money Cameroon collections are not
+// available yet. Please try another network or contact support.",
+// "error_code":"DEPOSITS_NOT_ALLOWED"} -- MarzPay answered a PERMANENT
+// business refusal (this network is not live on their platform yet, for
+// this country) with an HTTP status _marzParse() treats identically to a
+// real outage (5xx/408/409/429), so it spliced providerDown:true onto a
+// response that will refuse every single retry, not just this one. Kept as
+// its own named set rather than folded into marzIsBusy()'s regex: these are
+// specific, provider-confirmed codes, not a wording guess, and the list
+// grows only from evidence the same way MARZ_PHONE_ERROR_CODES did.
+const MARZ_PERMANENT_ERROR_CODES = new Set(['DEPOSITS_NOT_ALLOWED']);
 // "This is a transport/capacity problem, not a decision about this payment."
 // One definition, used by both the admin-facing and member-facing wrappers
 // below -- restating it in the second one would be a second source of truth
 // for what counts as busy.
 function marzIsBusy(mp) {
+  // A known PERMANENT refusal wins over the HTTP-status-derived
+  // providerDown flag -- "try again in a moment" is actively wrong advice
+  // for a network that is simply not supported yet.
+  if (mp && MARZ_PERMANENT_ERROR_CODES.has(String(mp.error_code || ''))) return false;
   const raw = String((mp && (mp.message || mp.data?.message || mp.error || mp.data?.error)) || '');
   return !!(mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
     /database error|internal server|server error|unexpected error|try again|temporarily|timeout|timed out|gateway|unavailable|bad gateway/i.test(raw);

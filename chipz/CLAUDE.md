@@ -7500,3 +7500,73 @@ logos — starting with MTN Mobile Money / Airtel Money for Uganda and Orange Mo
 Cameroon/Cote d'Ivoire, since those are the countries already live. Any network with no
 logo yet shows a plain letter tile, which is correct-but-plain, not broken.
 
+## Round 181 — The admin diagnostic worked, and immediately found a real bug
+
+The Round 179d "Why this failed" admin diagnostic reached production and was used for
+the first time on a real failed deposit: a Cameroon member on Orange Money. Its raw
+response, read straight off the panel:
+
+```json
+{"status":"error","message":"Orange Money Cameroon collections are not available yet.
+Please try another network or contact support.","error_code":"DEPOSITS_NOT_ALLOWED",
+"providerDown":true}
+```
+
+**Good news first, since it answers a standing question.** Cameroon's own country-level
+gateway access (Round 177's "no collection services available for country CM") is
+resolved -- MarzPay now recognises the country. What remains is narrower: Orange Money
+specifically is not live for Cameroon collections on MarzPay's side yet, even though MTN
+Mobile Money there works. Nothing here needed fixing; it needed telling the owner to
+ask MarzPay to turn Orange Money on, same as any other still-disabled network/country
+pair.
+
+**But `providerDown:true` on that response is a real bug, and a member-facing one.**
+`_marzParse()` splices `providerDown:true` onto ANY MarzPay reply whose HTTP status is
+5xx or 408/409/429 -- pure transport-layer reasoning, blind to what the body actually
+says. MarzPay evidently answers this PERMANENT business refusal (a network simply not
+supported yet, for this country) with one of those status codes, so it landed in the
+same bucket as a genuine outage. `marzIsBusy()` then short-circuited on that flag before
+ever reading `error_code`, and the member saw *"The payment provider is busy right now.
+Please try again in a moment."* -- actively wrong advice, since retrying with the same
+network can never succeed until MarzPay enables it.
+
+**Fixed with the same discipline `MARZ_PHONE_ERROR_CODES` was built on: a named set of
+CONFIRMED codes, grown from evidence, not guessed.** `MARZ_PERMANENT_ERROR_CODES =
+new Set(['DEPOSITS_NOT_ALLOWED'])` -- the one code actually seen live. `marzIsBusy()`
+now checks it FIRST, overriding the HTTP-status-derived `providerDown` flag before
+anything else runs. With it not busy, `marzMemberMsg()` falls through its existing
+chain (not a phone/country mismatch, not one of the safe-to-show families) to the
+caller's own fallback, `'Could not start the payment'` -- true, not misleading, and
+already translated. **Deliberately NOT extended to pass MarzPay's raw sentence through**
+("try another network or contact support") -- that is exactly the untranslated-provider-
+prose problem Round 178c's whole `marzMemberMsg()` rewrite exists to prevent, and this
+network-availability class of message is provider/config information, not a member-
+actionable financial state like the existing safe list (insufficient balance, frozen,
+limits). The admin's own raw-response diagnostic is where an operator sees the real
+reason and acts on it (ask MarzPay to enable the network, or drop it from that country's
+`networks` list in Countries until they do) -- not the member's job to be handed
+MarzPay's internal wording.
+
+**`marzUserMsg()` (the admin-facing wrapper) is unaffected on purpose** -- it already
+shows the raw sentence regardless of busy/not-busy, which is correct: an admin reading
+the diagnostic needs MarzPay's own words, not a paraphrase.
+
+### Tests
+`test-marz-phone-error.js` runs the real `marzIsBusy()`/`marzMemberMsg()`/`marzUserMsg()`
+against the exact live payload above: confirms `DEPOSITS_NOT_ALLOWED` is no longer
+classified busy, the member gets the honest fallback instead of the busy sentence, the
+admin wrapper still shows the raw reason unchanged, and — the case this fix must not
+break — an ordinary transport failure with no permanent code is still correctly reported
+as busy. `verify-marz-phone-error-discriminates.py` gained one matching mutation (removing
+the permanent-code override) — **22 mutations total, all caught**, control correctly
+MISSED.
+
+Server-only change; no frontend/admin bundle to rebuild, no sw.js bump needed.
+
+### Owner still has to
+Ask MarzPay to enable Orange Money for Cameroon collections (same ask as Round 177's
+per-country enablement, just per-network now) — or, until they do, remove Orange Money
+from Cameroon's network list under Countries so members are never offered a network that
+cannot currently collect. Same applies to any other country/network pair MarzPay has not
+turned on yet; the admin diagnostic is now the tool to find out which.
+
