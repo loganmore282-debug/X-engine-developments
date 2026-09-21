@@ -373,34 +373,65 @@ in-app links) in favor of the deep red.
   `authHeroBlur`/`authCardOpacity`/`authCardBlur` settings already control
   how strongly each blends behind the glass panel.
 
-**What's NOT built yet (real next steps, not done silently in one giant
-pass — shipping in reviewable pieces on purpose):**
-- **Home screen's actual layout** doesn't match the mockup yet — only its
-  colors do. The current `paintHome()` (user-src/original_module.js) shows a
-  4-action row (Deposit/Withdraw/Channel/Service — same concept as the
-  mockup's Deposit/Withdraw/Invite/Support, just old labels/icons) plus an
-  activity ticker, spin banner and treasure chest — but NO wallet-balance
-  card, NO cumulative-earnings/deposits/withdrawals stat row, NO inline
-  Daily Check-in card, and NO inline Latest Announcement row on Home itself
-  (those currently live elsewhere — Account screen, a Check-in sheet, an
-  announcement dialog). Rebuilding this to match the mockup is the next
-  concrete piece of work.
-- **The old Chipz raster icon art is still live** — `/act-deposit.png` etc.
-  (bottom-nav icons, action icons, the gift/treasure-chest art) are the
-  owner's own uploaded artwork **for Chipz**, already flagged as needing
-  replacement before this fork looked like a distinct product (see
-  "Everything inherited from Chipz, unchanged" below) — now sharpened by the
-  owner's explicit "the exact gift box, svgs" ask. Needs real SVG icons
-  matching the mockup (gift box, bell, headset, deposit/withdraw/invite
-  glyphs), not another raster PNG swap.
-- **The banner is a single image/video today**, not the multi-slide carousel
-  with dot indicators the mockup shows. `CHIPZ_IMAGE_SLOTS`'s pattern
-  extends cleanly to 2-3 more slots for this; not done yet.
+**Home screen layout — built this round, matches the mockup:**
+`paintHome()` (user-src/original_module.js) now renders: a red top bar with
+the admin-uploadable logo + `brandTagline` heading ("Energy for a Better
+Tomorrow" by default) + "Reliable · Sustainable · Together" + Notifications
+bell + Support headset; a **banner carousel** with dot indicators (slide 1 is
+the pre-existing Home banner/video slot, slides 2/3 are new `banner2`/
+`banner3` admin uploads — carousel only activates with 2+ image slides and no
+video, which keeps the original single-banner/video behavior completely
+untouched in every other case); the 4-action row relabeled Deposit/Withdraw/
+**Invite**/**Support** (was Channel/Service — same underlying handlers, just
+the mockup's own words) with real inline SVG icons (`ICONS.cardPlus`/
+`arrowDownTray`/`peoplePlus`/`headset`) replacing the old Chipz raster PNGs
+in these four tiles specifically; a **Total Wallet Balance** card with an
+eye toggle (`toggleBalanceVisibility()`, a per-device localStorage
+preference, not account data) and a "View Details" button to Account; a
+**3-stat row** (Cumulative Earnings / Total Deposits / Total Withdrawals,
+real `totalEarned`/`totalDeposited`/`totalWithdrawn` figures); an inline
+**Daily Check-in** card (a gift-box teaser that opens the existing, fully
+working check-in sheet — the streak/cooldown/countdown logic itself was not
+duplicated, just given a launcher on Home); and an inline **Latest
+Announcement** row (only rendered when `annEnabled && annBody`, tapping
+"More" reopens the existing announcement dialog via the new
+`window.openAnnounceDialog()` — a plain function needed a `window.` wrapper
+to be callable from an inline `onclick`, same requirement as every other
+inline handler in this file). A new `annUpdatedAt` field (stamped by
+`/admin/settings/update` whenever `annTitle`/`annBody` are saved) backs the
+row's date so it's real, not invented. The existing activity ticker, spin
+banner, profile-GIF strip and treasure chest button are kept, below the new
+content — the mockup doesn't show them but nothing asked to remove them.
+An optional `homefooter` image (new admin upload) renders at the very
+bottom of Home, matching the mockup's "Clean Energy Stronger Communities"
+band — hidden entirely when unset.
+
+**Still the old Chipz raster PNGs**: the bottom-nav icons, the activity
+ticker's bell (`/act-bell.png`) and the treasure chest/gift-code art are
+still the owner's own uploaded artwork **for Chipz**, not swapped — only the
+4 action-tile icons and the new Daily Check-in gift box got real SVG this
+round (the ones the mockup actually specified). Same "owner's Chipz artwork,
+needs replacing" flag as before for the rest, see "Everything inherited from
+Chipz, unchanged" below.
+
+**Not built yet:**
 - **Assets / Network / Account screens** — owner said mockups for these are
-  coming; nothing to build against yet, per "do not invent unprompted."
+  coming; nothing to build against yet, per "do not invent unprompted." The
+  bottom nav is still Chipz's original 6 tabs (Home/Products/My Products/
+  Referral/Team/Account) — the owner's own message names 4
+  (Home/Assets/Network/Account), implying Products+My Products consolidate
+  into "Assets" and Referral+Team into "Network", but that's an inference,
+  not confirmed — **do not restructure the nav until the owner's own
+  Assets/Network mockups make the consolidation explicit.**
 - **Admin panel** got the same color-token retheme (so it visually matches
-  the app now) but not a layout rebuild — the owner only asked for its
-  *theme* to change, not its structure.
+  the app now) plus the 3 new banner-slot upload rows, but not a layout
+  rebuild — the owner only asked for its *theme* to change, not its
+  structure.
+- `window.switchHomeProductTab`/`_homeProductTab` (a Hot Products/New
+  Arrivals segmented control) were already dead code in the pre-mockup
+  `paintHome()` — computed but never actually rendered into the returned
+  HTML, confirmed by reading the function before touching it. Left alone
+  (still callable, just inert), not cleaned up as part of this round.
 
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 

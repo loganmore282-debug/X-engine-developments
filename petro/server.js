@@ -901,6 +901,12 @@ const DEFAULT_SETTINGS = {
   // banners: a base64 image doesn't belong bloating the /public/settings
   // payload every client fetches on every boot.
   annEnabled: false, annTitle: '', annBody: '',
+  // When annTitle/annBody last actually changed -- stamped by
+  // /admin/settings/update below, never set directly by an admin. Backs the
+  // Home screen's inline "Latest Announcement" row (its own preview of this
+  // same announcement, distinct from the full announceBg dialog), which
+  // shows a real date rather than inventing one.
+  annUpdatedAt: null,
   // Owner: "make sure that l can enable link preview or no". Whether a shared
   // link shows a picture at all. ON by default, which is what shipped.
   linkPreviewEnabled: true,
@@ -1418,7 +1424,14 @@ async function getHelpBanner() {
 // screens share the same hero band and the same white card, so per-tab
 // images would make the background jump as a member switches between
 // Log In and Sign Up.
-const CHIPZ_IMAGE_SLOTS = ['referral', 'logo', 'spin', 'profilegif', 'downloadbg', 'authhero', 'authcard'];
+// banner2/banner3 back the Home screen's multi-slide carousel (owner:
+// "those slide images will be uploaded from admin panel") -- slide 1 is the
+// already-existing 'home' banner (banners/home doc, /admin/banner/set,
+// which also accepts video), not duplicated here. homefooter is the static
+// "Clean Energy Stronger Communities"-style image at the bottom of Home.
+// Both reuse this exact already-built upload mechanism rather than adding a
+// new one; see CLAUDE.md's "Design system" section.
+const CHIPZ_IMAGE_SLOTS = ['referral', 'logo', 'spin', 'profilegif', 'downloadbg', 'authhero', 'authcard', 'banner2', 'banner3', 'homefooter'];
 const _chipzImageCache = {};
 async function getChipzImage(slot) {
   if (!CHIPZ_IMAGE_SLOTS.includes(slot)) return null;
@@ -3889,11 +3902,15 @@ app.get('/public/announcement-image', async (req, res) => {
 // in boot()'s own Promise.all alongside the Home banner so neither pops in.
 app.get('/public/chipz-images', async (req, res) => {
   try {
-    const [referral, logo, spin, profilegif, downloadbg, authhero, authcard] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg'), getChipzImage('authhero'), getChipzImage('authcard')]);
-    // The heaviest reply in the app -- seven base64 slots. Measured at
-    // 900 KB with the owner's own artwork, and it used to be re-sent on
-    // every single launch.
-    publicJson(req, res, { status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard }, IMAGE_CACHE);
+    const [referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter] = await Promise.all([
+      getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'),
+      getChipzImage('downloadbg'), getChipzImage('authhero'), getChipzImage('authcard'),
+      getChipzImage('banner2'), getChipzImage('banner3'), getChipzImage('homefooter'),
+    ]);
+    // The heaviest reply in the app -- now ten base64 slots. Measured at
+    // 900 KB with the owner's own artwork for the original seven, and it
+    // used to be re-sent on every single launch.
+    publicJson(req, res, { status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Both slots in one call (not two round trips) -- fetched unconditionally
@@ -7885,6 +7902,13 @@ app.post('/admin/settings/update', async (req, res) => {
           `in Countries first, or this country's money would be shown in the wrong unit.` });
       }
     }
+    // Stamped whenever the admin saves either announcement field, so the
+    // Home screen's inline "Latest Announcement" row can show a real date
+    // instead of inventing one. Not conditioned on the text actually being
+    // different from what's stored -- "the admin just touched this" is a
+    // fine enough definition of "updated" here, and checking for a real
+    // diff would cost an extra read for a purely cosmetic date.
+    if ('annTitle' in updates || 'annBody' in updates) updates.annUpdatedAt = FieldValue.serverTimestamp();
     if (isRegionOverlay) {
       const docId = settingsDocId(targetRegion.key);
       const ref = db.collection('settings').doc(docId);
@@ -8202,8 +8226,12 @@ app.post('/admin/regions/delete', async (req, res) => {
 app.get('/admin/chipz-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [referral, logo, spin, profilegif, downloadbg, authhero, authcard] = await Promise.all([getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'), getChipzImage('downloadbg'), getChipzImage('authhero'), getChipzImage('authcard')]);
-    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard });
+    const [referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter] = await Promise.all([
+      getChipzImage('referral'), getChipzImage('logo'), getChipzImage('spin'), getChipzImage('profilegif'),
+      getChipzImage('downloadbg'), getChipzImage('authhero'), getChipzImage('authcard'),
+      getChipzImage('banner2'), getChipzImage('banner3'), getChipzImage('homefooter'),
+    ]);
+    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/chipz-image/set', async (req, res) => {

@@ -1070,6 +1070,26 @@ var ICONS = {
   grid: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
   megaphone: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1Z"/><path d="M14.5 8.5a4.5 4.5 0 0 1 0 7"/><path d="M17.5 5.5a8.5 8.5 0 0 1 0 13"/></svg>',
   envelope: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 6l8 7 8-7"/></svg>',
+  // ── Petro re-theme additions: the Home mockup's own icon set (Deposit/
+  // Withdraw/Invite/Support tiles, the notification bell, the gift-box
+  // Daily Check-in card, the wallet-balance eye toggle, the 3 stat-card
+  // glyphs) -- replacing the old Chipz raster PNGs (/act-deposit.png etc.,
+  // the owner's own uploaded artwork for Chipz, never Petro's) with real
+  // SVG, same 24x24/currentColor/1.8-1.9 stroke convention as every icon
+  // above. White-on-red circle badges are painted by .home-action .badge's
+  // own CSS (background var(--chipz-grad)), not baked into these paths.
+  bell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5Z"/><path d="M9.5 18.5a2.5 2.5 0 0 0 5 0"/></svg>',
+  headset: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="13" width="4" height="6" rx="1.6"/><rect x="17" y="13" width="4" height="6" rx="1.6"/><path d="M20 19a4 4 0 0 1-4 3h-2.5"/></svg>',
+  cardPlus: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.4"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/><path d="M17.2 3.6v5.2M14.6 6.2h5.2"/></svg>',
+  arrowDownTray: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19.5h16"/></svg>',
+  peoplePlus: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg>',
+  giftBox: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9.5" width="18" height="10.5" rx="1.6"/><path d="M3 13.5h18"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.6 0-4-.7-4-3 0-1.5 1.2-2.5 2.5-2.5C12.2 4 12 7 12 9.5Z"/><path d="M12 9.5c1.6 0 4-.7 4-3 0-1.5-1.2-2.5-2.5-2.5C11.8 4 12 7 12 9.5Z"/></svg>',
+  coinsStack: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v5c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 11v5c0 1.66 3.13 3 7 3s7-1.34 7-3v-5"/></svg>',
+  arrowDownCircle: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v7"/><path d="M8.7 11.2 12 14.5l3.3-3.3"/></svg>',
+  arrowUpCircle: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-7"/><path d="M8.7 12.8 12 9.5l3.3 3.3"/></svg>',
+  eyeOpen: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7c2.3 0 4.3.6 6 1.5M23 12s-1.4 2.5-4 4.5M14.1 14.1a3 3 0 0 1-4.2-4.2"/><path d="M3 3l18 18"/></svg>',
+  chevronRight: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
   lock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
   keyIcon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l2 2M14 9l2 2"/></svg>',
   telegram: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 3.5 2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5Z"/></svg>',
@@ -1970,6 +1990,18 @@ function applyBootArtwork(ai, mpi, ci){
   // than when the screen opens: it is a full-bleed image, and loading it on
   // open would show an empty dark panel for the moment it takes to arrive.
   STATE.downloadBg = (ci.status === 'success' && ci.downloadbg) ? ci.downloadbg : null;
+  // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner /
+  // STATE.homeBannerVideo, fetched separately above -- it predates the
+  // carousel and is the only slide that can be a video). Filtered to
+  // whichever are actually set, so 1 or 2 slides render fine too, not only 3.
+  STATE.homeSlides2n3 = [
+    (ci.status === 'success' && ci.banner2) ? ci.banner2 : null,
+    (ci.status === 'success' && ci.banner3) ? ci.banner3 : null,
+  ].filter(Boolean);
+  // Static image at the very bottom of Home (the mockup's "Clean Energy
+  // Stronger Communities" band). Optional -- Home just renders nothing here
+  // when it's unset.
+  STATE.homeFooterBanner = (ci.status === 'success' && ci.homefooter) ? ci.homefooter : null;
   // The two Login / Sign Up backdrops.
   STATE.authHeroImage = (ci.status === 'success' && ci.authhero) ? ci.authhero : null;
   STATE.authCardImage = (ci.status === 'success' && ci.authcard) ? ci.authcard : null;
@@ -2893,6 +2925,13 @@ window.showPage = async function(name){
 // is entered (matching the one established precedent for this exact
 // feature, from the sibling Space8 project) -- same hook point showPage()
 // already uses for every other per-page action, no separate timer/listener.
+// Exposed on window (this plain function isn't, same convention as every
+// other inline onclick target in this file) -- Home's own "Latest
+// Announcement" row's "More" tap calls this, reopening the identical
+// dialog maybeShowAnnouncement() already fires automatically on entering
+// Home. Safe to call again: it's a plain render + .show toggle, no state
+// to double-apply.
+window.openAnnounceDialog = function(){ maybeShowAnnouncement(); };
 function maybeShowAnnouncement(){
   const s = STATE.settings;
   if (!s || !s.annEnabled || !s.annBody) return;
@@ -2970,7 +3009,47 @@ function homeBannerInnerHtml(st){
         onerror="this.parentNode&&this.parentNode.classList.add('hb-video-failed')"></video>`;
   }
   if (STATE.homeBanner) return `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">`;
-  return `<div class="hb-stripes"></div><div class="hb-cap">${esc(st.brandTagline || "Uganda's boldest way to grow your money")}</div>`;
+  return `<div class="hb-stripes"></div><div class="hb-cap">${esc(st.brandTagline || 'Energy for a Better Tomorrow')}</div>`;
+}
+// ── HOME BANNER CAROUSEL (owner: "those slide images will be uploaded
+// from admin panel") ──
+// Only kicks in when there is no video AND more than one image to actually
+// rotate between -- a video keeps its existing single-banner behavior
+// completely untouched (autoplay/preload/live-refresh, all unchanged), and
+// a single image renders exactly as it always has (no dots, nothing to
+// cycle). Slide 1 is STATE.homeBanner (the original, pre-carousel slot);
+// slides 2/3 are the new banner2/banner3 admin uploads.
+function homeCarouselSlides(){
+  if (STATE.homeBannerVideo) return null;
+  const slides = [STATE.homeBanner].concat(STATE.homeSlides2n3 || []).filter(Boolean);
+  return slides.length > 1 ? slides : null;
+}
+function homeBannerBlockHtml(st){
+  const slides = homeCarouselSlides();
+  if (!slides) return `<div class="home-banner">${homeBannerInnerHtml(st)}</div>`;
+  const dots = slides.map((_, i) => `<span class="hb-dot${i === 0 ? ' on' : ''}"></span>`).join('');
+  return `<div class="home-banner" id="homeCarouselTrack"><img src="${esc(slides[0])}" alt="" onerror="this.style.display='none'"></div>
+<div class="hb-dots" id="homeCarouselDots">${dots}</div>`;
+}
+var _homeCarouselTimer = null;
+var _homeCarouselIdx = 0;
+// Self-terminating on the next tick once Home's own DOM nodes are gone --
+// same idiom this file already uses for the check-in countdown and the
+// turntable spin timer, so navigating away never leaves this ticking
+// against a detached node.
+function startHomeCarousel(){
+  if (_homeCarouselTimer) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; }
+  const slides = homeCarouselSlides();
+  if (!slides) return;
+  _homeCarouselIdx = 0;
+  _homeCarouselTimer = setInterval(() => {
+    const track = document.getElementById('homeCarouselTrack'), dots = document.getElementById('homeCarouselDots');
+    if (!track || !dots) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return; }
+    _homeCarouselIdx = (_homeCarouselIdx + 1) % slides.length;
+    const img = track.querySelector('img');
+    if (img) img.src = slides[_homeCarouselIdx];
+    dots.querySelectorAll('.hb-dot').forEach((d, i) => d.classList.toggle('on', i === _homeCarouselIdx));
+  }, 4500);
 }
 // Puts the element that was preloaded during the loading screen INTO the
 // banner, in place of the fresh <video> paintHome() just wrote.
@@ -3110,41 +3189,104 @@ function tryAutoplayHomeBanner(){
   ['touchend', 'click'].forEach(ev =>
     document.addEventListener(ev, kick, { passive: true }));
 }
+// Whether the wallet balance figure is masked -- a per-device convenience
+// (the eye icon in the mockup's Total Wallet Balance card), not account
+// data, so it lives in localStorage the same way "Remember me" and the
+// saved region do, not in STATE.account.
+var _balanceHidden = (function(){ try { return localStorage.getItem('petroBalHidden') === '1'; } catch (_) { return false; } })();
+function maskedBalanceText(){ return 'UGX ••••••'; }
+window.toggleBalanceVisibility = function(){
+  _balanceHidden = !_balanceHidden;
+  try { localStorage.setItem('petroBalHidden', _balanceHidden ? '1' : '0'); } catch (_) {}
+  // Direct DOM update, not a full paintHome() repaint -- a repaint would
+  // also restart the banner carousel's timer and any in-flight animation
+  // for what is otherwise a one-line text/icon swap.
+  const amt = document.getElementById('homeWalletBalance');
+  if (amt) amt.textContent = _balanceHidden ? maskedBalanceText() : fmtUGX(Number((STATE.account || {}).walletBalance) || 0);
+  const eye = document.getElementById('homeBalEyeBtn');
+  if (eye) eye.innerHTML = _balanceHidden ? ICONS.eyeOff : ICONS.eyeOpen;
+};
 function paintHome(){
   const a = STATE.account || {};
   const st = STATE.settings || {};
-  const products = STATE.products || [];
   const unread = (STATE.messages || []).filter(m => !m.read).length;
-  // Home follows the approved Home.dc.html mockup: a top bar (messages +
-  // wordmark), the admin-uploadable banner, a 4-action row, the activity
-  // ticker, a Hot Products / New Arrivals segmented control, and the
-  // bouncing treasure chest anchored bottom-right. The wallet balance is
-  // deliberately NOT repeated here -- it lives on Account, per the mockups.
-  const tab = _homeProductTab;
-  const shown = tab === 'new' ? products.slice(3) : products.slice(0, 3);
+  const bal = Number(a.walletBalance) || 0;
+  const balText = _balanceHidden ? maskedBalanceText() : fmtUGX(bal);
+  const hasAnnouncement = !!(st.annEnabled && st.annBody);
+  // Owner's mockup: logo + tagline header, a 3-stat/wallet block, an inline
+  // Daily Check-in card and an inline Latest Announcement row all live on
+  // Home now (previously the balance lived on Account only, and Daily
+  // Check-in/the announcement were sheet/dialog-only -- see this file's own
+  // "not yet built" note in CLAUDE.md's "Design system" section, now built).
+  // The activity ticker, spin banner, profile GIF strip and treasure chest
+  // are existing features the mockup doesn't show but nothing asked to
+  // remove -- kept, below the new content, not replaced by it.
   let html = `
-<div class="home-topbar">
-  <button class="icon-btn" onclick="openMessagesSheet()" aria-label="Messages">
-    ${ICONS.envelope}${unread ? '<span class="dot"></span>' : ''}
-  </button>
-  <div class="top-wordmark">${brandWordmarkHtml()}</div>
-  <div style="width:38px;height:38px;flex-shrink:0;"></div>
+<div class="home-topbar-v2">
+  <div class="htb-brand">
+    <span class="htb-logo">${STATE.brandLogo ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.parentNode.innerHTML=brandTextMark(30)">` : brandTextMark(30)}</span>
+    <div class="htb-text">
+      <div class="htb-title">${esc(st.brandTagline || 'Energy for a Better Tomorrow')}</div>
+      <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
+    </div>
+  </div>
+  <div class="htb-icons">
+    <button class="htb-icon-btn" onclick="openMessagesSheet()" aria-label="Notifications">
+      <span class="htb-ic">${ICONS.bell}${unread ? '<span class="dot"></span>' : ''}</span><span class="htb-ic-lbl">Notifications</span>
+    </button>
+    <button class="htb-icon-btn" onclick="openCustomerService()" aria-label="Support">
+      <span class="htb-ic">${ICONS.headset}</span><span class="htb-ic-lbl">Support</span>
+    </button>
+  </div>
 </div>
-<div class="home-banner">${homeBannerInnerHtml(st)}</div>
+${homeBannerBlockHtml(st)}
 <div class="home-actions">
   <button class="home-action" onclick="openDepositSheet()">
-    <span class="badge"><img src="/act-deposit.png" alt=""></span><span class="lbl">Deposit</span>
+    <span class="badge">${ICONS.cardPlus}</span><span class="lbl">Deposit</span>
   </button>
   <button class="home-action" onclick="openWithdrawSheet()">
-    <span class="badge"><img src="/act-withdraw.png" alt=""></span><span class="lbl">Withdraw</span>
+    <span class="badge">${ICONS.arrowDownTray}</span><span class="lbl">Withdraw</span>
   </button>
   <button class="home-action" onclick="openChannelLink()">
-    <span class="badge"><img src="/act-channel.png" alt=""></span><span class="lbl">Channel</span>
+    <span class="badge">${ICONS.peoplePlus}</span><span class="lbl">Invite</span>
   </button>
   <button class="home-action" onclick="openCustomerService()">
-    <span class="badge"><img src="/act-service.png" alt=""></span><span class="lbl">Service</span>
+    <span class="badge">${ICONS.headset}</span><span class="lbl">Support</span>
   </button>
 </div>
+<div class="wallet-bal-card">
+  <div class="wbc-row1">
+    <span class="wbc-lbl">Total Wallet Balance</span>
+    <button class="wbc-eye" id="homeBalEyeBtn" onclick="toggleBalanceVisibility()" aria-label="Show or hide balance">${_balanceHidden ? ICONS.eyeOff : ICONS.eyeOpen}</button>
+  </div>
+  <div class="wbc-row2">
+    <span class="mono wbc-amt" id="homeWalletBalance">${esc(balText)}</span>
+    <button class="wbc-details" onclick="showPage('account')">View Details ${ICONS.chevronRight}</button>
+  </div>
+</div>
+<div class="home-stat-row">
+  <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.coinsStack}</span><div class="hs-lbl">Cumulative Earnings</div><div class="mono hs-val hs-gold-txt">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val hs-red-txt">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Withdrawals</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
+</div>
+<div class="checkin-card">
+  <span class="cic-gift">${ICONS.giftBox}</span>
+  <div class="cic-text">
+    <div class="cic-title">Daily Check-in</div>
+    <div class="cic-sub">Check in daily to receive rewards and grow your earnings!</div>
+  </div>
+  <button class="cic-btn" onclick="openCheckinSheet()">Check In</button>
+</div>
+${hasAnnouncement ? `
+<div class="ann-row" onclick="openAnnounceDialog()">
+  <span class="ann-ic">${ICONS.megaphone}</span>
+  <div class="ann-text">
+    <div class="ann-title">Latest Announcement</div>
+    <div class="ann-body">&bull; ${esc(String(st.annBody || '').split('\n')[0].slice(0, 90))}</div>
+    <div class="ann-date">${esc(fmtDay(st.annUpdatedAt))}</div>
+  </div>
+  <span class="ann-more">More ${ICONS.chevronRight}</span>
+</div>` : ''}
 <div class="act-card">
   <span class="act-bell"><img src="/act-bell.png" alt=""></span>
   <div class="act-track-wrap">
@@ -3153,6 +3295,7 @@ function paintHome(){
 </div>
 ${spinBannerHtml()}
 ${homeGifHtml()}
+${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.homeFooterBanner)}" alt="" onerror="this.remove()">` : ''}
 <button aria-label="Open treasure chest" onclick="openChestSheet()" class="chest-float">
   <img src="/treasure-chest.png" alt="">
 </button>
@@ -3163,6 +3306,7 @@ ${homeGifHtml()}
   // preloaded one rather than the blank node this paint just created.
   adoptPreloadedBannerVideo();
   tryAutoplayHomeBanner();
+  startHomeCarousel();
 }
 // The animated brand mark, centred in the strip Home has left over between
 // the spin banner and the bottom nav. Home's content stops short of the nav

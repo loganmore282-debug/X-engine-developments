@@ -3325,6 +3325,9 @@ async function renderSettings(){
   const authHeroImage = cir.authhero||'';
   const authCardImage = cir.authcard||'';
   const profileGifImage = cir.profilegif||'';
+  const homeSlide2Image = cir.banner2||'';
+  const homeSlide3Image = cir.banner3||'';
+  const homeFooterImage = cir.homefooter||'';
   const manualSelectorImage = mpir.selector||'';
   const manualHeroImage = mpir.hero||'';
   // The app icon and the share card always HAVE an image live (the icon falls
@@ -3520,9 +3523,9 @@ async function renderSettings(){
       <button class="btn block" id="saveAutoApprove" style="margin-top:10px">Save auto-approve settings</button>
     </div>
 
-    <h2 class="sec">Home banner</h2>
+    <h2 class="sec">Home banner carousel &middot; slide 1</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Shown at the top of the Home tab in the app. An empty slot uses the built-in default artwork.</p>
+      <p class="muted" style="margin-top:0">The Home tab's top banner is now a <b>3-slide carousel</b> with dots, matching the mockup. This first slide is the original Home banner slot (the only one of the three that also accepts a video) &mdash; slides 2 and 3 are below. An empty slot uses the built-in default artwork; a slide left empty just doesn't appear (1 or 2 slides work fine, not only 3).</p>
       <div class="banner-row">
         ${bannerImage?`<img class="img-thumb" src="${esc(bannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${bannerImage?'Custom image':'<span class="muted">Default artwork</span>'}</div>
@@ -3547,6 +3550,34 @@ async function renderSettings(){
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn" id="homeBannerVideoSave" style="flex:1">Save video link</button>
       </div>
+    </div>
+
+    <h2 class="sec">Home banner carousel &middot; slides 2 &amp; 3</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Static images only (no video, unlike slide 1). Same size as the Home banner above.</p>
+      <div class="banner-row">
+        ${homeSlide2Image?`<img class="img-thumb" src="${esc(homeSlide2Image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeSlide2Image?'Custom image':'<span class="muted">Not set &mdash; slide skipped</span>'}</div>
+        ${homeSlide2Image?`<button class="btn danger sm" id="homeSlide2Clear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload slide 2 image<input type="file" id="homeSlide2File" accept="image/*" hidden></label>
+      <div class="banner-row" style="margin-top:16px">
+        ${homeSlide3Image?`<img class="img-thumb" src="${esc(homeSlide3Image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeSlide3Image?'Custom image':'<span class="muted">Not set &mdash; slide skipped</span>'}</div>
+        ${homeSlide3Image?`<button class="btn danger sm" id="homeSlide3Clear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload slide 3 image<input type="file" id="homeSlide3File" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Home footer banner</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">A static image at the very bottom of Home, below the announcement row (the mockup's "Clean Energy Stronger Communities" band). Optional &mdash; hidden entirely when not set.</p>
+      <div class="banner-row">
+        ${homeFooterImage?`<img class="img-thumb" src="${esc(homeFooterImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeFooterImage?'Custom image':'<span class="muted">Not set &mdash; hidden</span>'}</div>
+        ${homeFooterImage?`<button class="btn danger sm" id="homeFooterClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeFooterFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Home announcement dialog</h2>
@@ -3740,7 +3771,7 @@ async function renderSettings(){
 
     <h2 class="sec">About page</h2>
     <div class="panel-card">
-      <label>App tagline (shown under the logo)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Uganda&#39;s boldest way to grow your money.">
+      <label>App tagline (shown under the logo, and on the Home header)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Energy for a Better Tomorrow">
       <button class="btn block" id="saveTagline" style="margin-top:6px">Save tagline</button>
     </div>
     <div class="panel-card">
@@ -4016,6 +4047,9 @@ async function renderSettings(){
   wireChipzImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download screen background saved, live for every user', 'Download screen background removed');
   wireChipzImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Top-band image saved, live on Log In and Sign Up', 'Top-band image removed');
   wireChipzImageSlot('authcard', 'authCardFile', 'authCardClear', 'Form-card image saved, live on Log In and Sign Up', 'Form-card image removed');
+  wireChipzImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
+  wireChipzImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
+  wireChipzImageSlot('homefooter', 'homeFooterFile', 'homeFooterClear', 'Footer banner saved, live on Home', 'Footer banner removed');
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{
     const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value,
