@@ -246,6 +246,82 @@ removed LipaPay/forwarder code paths are now failing — expected, and covered
 by this file's existing "work through the inherited test suite file by
 file" item below; do not bulk-fix them.
 
+## OTP verification (MarzSms) — registration, forgot-password, add-wallet
+
+Owner-specified, built this session. Uses **MarzSms** (sms.wearemarz.com), a
+SEPARATE MarzPay product from the wallet API (`MARZSMS_KEY`, its own
+dashboard/API key — **not the same secret as `MARZPAY_KEY`**). Real SMS costs
+30 UGX each, so every send is rate-limited per phone number, resetting daily.
+
+**Flows (all client-side in `user-src/original_module.js`, backed by three
+new `server.js` routes):**
+- **Registration**: phone → OTP → password → confirm password (the PIN/
+  referral-code fields that already existed stay on the same final step,
+  unchanged — the owner's spec named phone/OTP/password/confirm, not a
+  reason to drop what was already there). `#registerPane` is now three field
+  groups (`regStepPhone`/`regStepOtp`/`regStepPassword`) toggled by
+  `showRegStep()` with plain `style.display` — never re-rendered, so nothing
+  typed on an earlier step is lost moving to the next one.
+- **Login** is unchanged (phone/password), with a new **"Forgot password?"**
+  link that opens `#forgotPane` — its own three-step phone → OTP → new
+  password flow, reached with NO Firebase session (that's the whole point:
+  the member cannot sign in). Identity is proven by the OTP ticket alone;
+  the password itself is changed via `admin.auth().updateUser()` — the same
+  Admin SDK call `/admin/user/reset-password` already used for an
+  owner-driven reset, just self-served here once a ticket backs it.
+- **Adding/changing the payout wallet** (`openWalletSheet`'s Edit Wallet
+  panel) also requires OTP. The code is sent to the **member's own phone on
+  file** (resolved server-side from their account, never from the request
+  body), not to the new payout number being entered — proving it's really
+  the account holder adding this destination, not verifying the destination
+  itself (which could legitimately belong to someone else, e.g. a family
+  member's mobile money). `submitWallet()` now sends the OTP and swaps
+  `#walFormGroup`/`#walOtpGroup` via `style.display` (not a re-render, so the
+  typed provider/phone/holder aren't lost); `confirmWalletOtp()` verifies and
+  only then calls `/bank/save` with the ticket.
+
+**Backend (`server.js`):**
+- `POST /auth/otp/send` — `{purpose: 'register'|'reset'|'bank', phone?}`.
+  'register'/'reset' take `phone` in the body and need no session (a phone
+  verifying itself before an account exists, or while its owner can't sign
+  in, is exactly what OTP is for). 'bank' requires a session and ignores any
+  phone in the body — it resolves the phone from `req`'s own account, so a
+  logged-in member can't use this to spam an arbitrary number. Refuses with
+  503 if `MARZSMS_KEY` is unset.
+- `POST /auth/otp/verify` — `{otpId, code}` → `{ticket}` on success. The code
+  itself (hashed with the same `scryptHash`/`scryptVerify` a PIN or admin
+  password uses) is never touched again after this; the ticket is what the
+  next step actually spends.
+- `POST /auth/reset/confirm` — `{phone, ticket, newPassword}`, no session.
+- `consumeOtpTicket(ticket, phone, purpose)` — the shared one-time-use check,
+  via `updateIf()`'s atomic conditional match (same idempotency pattern as
+  `creditedDepositIds`/`refundedWithdrawalIds`), wired into `/register`
+  (skipped on a retry of an ALREADY-completed registration — the ticket from
+  the original successful call is already spent, and re-demanding one would
+  fail a registration that in fact already succeeded) and `/bank/save`.
+- Rate limits: `otpDailyLimitRegister` (2), `otpDailyLimitReset` (3),
+  `otpDailyLimitBank` (2, no explicit number from the owner — admin-editable
+  like the other two, adjust if it's ever measured wrong) — all in
+  `DEFAULT_SETTINGS`/`SETTINGS_CRITICAL_RANGES`, editable from the admin
+  panel's Settings tab (Rates & limits card). **0 means "send none", not
+  "unlimited"** — unlike most numeric settings in this file, these gate a
+  paid SMS send and must fail closed. Counted per phone+purpose+day
+  (`otpSendLog`, doc id `phone:purpose:day`) via the same `withLock` +
+  atomic-increment pattern every other counter here uses.
+- New Mongo collection `otpCodes` (phone, purpose, codeHash, attempts,
+  ticket, ticketExpiresAt, consumedAt, expiresAt), indexed on `{ticket:1}`
+  and `{phone:1,purpose:1}` in `db.js`. Codes expire in 10 minutes, tickets
+  in 15, max 5 wrong-code attempts before a fresh code is required.
+
+**What's still needed before this actually works**: the owner has the
+`MARZSMS_KEY` value and hasn't pasted it yet — until it's set as an env var
+(same place as every other secret, `deploy/secrets.local.js` on the VPS,
+never committed), every `/auth/otp/send` call returns a clean 503 rather than
+silently pretending to send. **The withdrawal-request admin SMS alert was
+removed** in the same round (owner: "remove sms sending on withdrawals") —
+`sendAdminPush` (a separate Firebase push, unrelated) still fires on a new
+withdrawal; `marzSmsSend()` itself was kept, now used only by OTP.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting
@@ -410,21 +486,40 @@ project and the real Mongo Atlas `petro` database, `/health` returns
 `{"status":"ok","db":true}`. Both frontend bundles carry the real Firebase
 web config and the real VAPID key (rebuilt and pushed this session).
 
-**What's NOT done, and is the actual next step:** nginx has no Petro site
-config yet, there's no domain pointed at the VPS, no TLS, and
-`set-backend-url.js` hasn't run — so the shipped `user/`/`admin/` bundles
-don't yet know to call this backend. See the numbered list under "Hosting:
-Hostinger VPS (KVM1)" above; getting a domain is the actual blocker, not
-more VPS work.
+**Both bundles now point at the live VPS backend** — `set-backend-url.js` has
+run, against `http://179.198.197.114:3000` (a deliberate, throwaway
+bare-IP/plain-HTTP config since there's still no domain — see "Not done yet"
+above). `set-backend-url.js --check` confirms one consistent origin across
+all ~13 places it lives. nginx serves the member app on port 8080 and the
+admin panel on 8081 (port 80 hit mobile-carrier interference on the owner's
+phone, not a server problem — see the port-8080 fix noted in the numbered
+list above), backend itself directly reachable on 3000. **Still the real
+next step:** buy `petrol-chn.com`, point it at the VPS, then replace this
+bare-IP config with the real `nginx-petro.conf.template` + certbot TLS and
+re-run `set-backend-url.js` against the real HTTPS origin.
 
 **LipaPay, QuotaGuard, and the SMS-forwarder app are fully removed** (owner
 decision, not inherited default) — see "Removed from Petro" above for the
 full list of what came out and what was deliberately kept (manual deposits
-via member-pasted SMS still work). Both bundles rebuild clean and both
-carry the changes; the VPS is still running the *previous* bundle/server.js
-as of this note — **the code in this commit needs `git pull` + rebuild
-+ `pm2 reload` on the VPS to actually take effect there**, same as any other
-code change per the "Hosting" section's redeploy step.
+via member-pasted SMS still work).
+
+**OTP verification (registration / forgot-password / add-wallet) is built**
+— see "OTP verification (MarzSms)" above for the full design. Both bundles
+rebuild clean (round-trip OK) and carry the new three-step Sign Up/forgot-
+password panes and the wallet OTP step. **Not live yet**: `MARZSMS_KEY` is
+still unset (owner has it, hasn't pasted it in) — every `/auth/otp/send`
+call returns a clean 503 until it's added to `deploy/secrets.local.js` on
+the VPS, same as every other secret.
+
+**The VPS is still running the code from BEFORE this session's changes** —
+none of the LipaPay/QuotaGuard/forwarder removal, the bare-IP backend
+pointing, or the new OTP feature has reached it yet. **The code in this
+branch needs `git pull` + `npm install --omit=dev` (package.json changed,
+LipaPay's `undici` dependency came out) + rebuild + `pm2 reload petro-server`
+on the VPS to actually take effect there** — same redeploy step as any other
+code change, per the "Hosting" section above. OTP additionally needs
+`MARZSMS_KEY` added to `secrets.local.js` before it will do anything but
+refuse with 503.
 
 Everything else — design, product catalog, which countries/languages/gateways
 actually apply, the test suite's own correctness — is real, undone work for
@@ -433,7 +528,12 @@ the next session, laid out below in the order it probably needs doing:
 1. ~~Confirm/adjust the fork's mechanical renames~~ — done (the CORS miss,
    the VAPID key, the lockfile name).
 2. ~~Stand up the VPS, wire up real Firebase + Mongo~~ — done this session,
-   see "Hosting" above. Remaining: a domain, nginx, TLS, `set-backend-url.js`.
+   see "Hosting" above. Remaining: a domain, nginx, TLS, the real (non-bare-IP)
+   `set-backend-url.js` run.
+2a. ~~Build OTP verification (registration/forgot-password/add-wallet)~~ —
+   built this session, see "OTP verification (MarzSms)" above. Remaining:
+   paste in `MARZSMS_KEY`, then `git pull` + redeploy on the VPS so any of
+   this session's changes (OTP included) actually take effect there.
 3. Decide the actual oil/gas visual identity — palette, typography, iconography
    — with the owner, the same deliberate way Chipz's own `CLAUDE.md` records
    getting its own red/orange identity right (see "Design language / decisions

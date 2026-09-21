@@ -143,6 +143,12 @@ async function ensureIndexes() {
     ['promoRedemptions',{ userId: 1 }],
     ['securityEvents',  { userId: 1 }],
     ['securityEvents',  { createdAt: -1 }],
+    // OTP verification (registration / password reset / bank-account
+    // linking) -- consumeOtpTicket()'s lookup, and otpSendLog's daily
+    // rate-limit counter is already keyed by its own deterministic doc id
+    // (`${phone}:${purpose}:${day}`) so it needs no separate index.
+    ['otpCodes',        { ticket: 1 }],
+    ['otpCodes',        { phone: 1, purpose: 1 }],
     ['users',           { publicId: 1 }],
     ['transactions',    { type: 1 }],
     // Manual deposits (admin-managed MTN/Airtel numbers, SMS-matched) --

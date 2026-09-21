@@ -83,7 +83,7 @@ function applyRegion(r){
 function paintRegionChrome(){
   try {
     const d = dialPlus();
-    for (const id of ['loginDial', 'regDial']) { const el = $(id); if (el) el.textContent = d; }
+    for (const id of ['loginDial', 'regDial', 'forgotDial']) { const el = $(id); if (el) el.textContent = d; }
     // The country and currency are NOT printed on the sign-in screen. They
     // were, briefly, as a way to make a wrongly-mapped address visible --
     // owner: "why showing the country and currency, that should not be
@@ -1473,7 +1473,45 @@ function isValidUgandaMobileNumber(raw){
 function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
+  $('forgotPane').style.display = tab === 'forgot' ? '' : 'none';
   $('loginError').innerHTML = ''; $('regError').innerHTML = '';
+  const fe = $('forgotError'); if (fe) fe.innerHTML = '';
+  // Land back on step one of whichever multi-step pane is being switched
+  // INTO -- a member who backs out of Sign Up halfway through OTP and later
+  // taps it again should not land back on a stale OTP/password step holding
+  // another attempt's ticket.
+  if (tab === 'register') showRegStep('phone');
+  if (tab === 'forgot') showForgotStep('phone');
+}
+// ── OTP RESEND COOLDOWN ──
+// Shared by every OTP step (registration, forgot-password, add-wallet) so
+// "Resend code" cannot be mashed into a second/third paid SMS the instant
+// the first one goes out. Purely a client-side courtesy -- the real limit is
+// the server's per-day cap (see otpDailyLimit() in server.js); this just
+// keeps an impatient double-tap from wasting one of that limited daily count
+// on nothing.
+var _otpCooldownActive = {};
+function startOtpResendCooldown(linkId, seconds){
+  const el = $(linkId);
+  if (!el) return;
+  _otpCooldownActive[linkId] = true;
+  el.style.pointerEvents = 'none';
+  el.style.opacity = '.55';
+  let remaining = seconds;
+  const tick = () => {
+    if (!el.isConnected) { delete _otpCooldownActive[linkId]; return; } // sheet/pane torn down mid-countdown
+    if (remaining <= 0) {
+      _otpCooldownActive[linkId] = false;
+      el.textContent = 'Resend code';
+      el.style.pointerEvents = '';
+      el.style.opacity = '';
+      return;
+    }
+    el.textContent = `Resend code (${remaining}s)`;
+    remaining--;
+    setTimeout(tick, 1000);
+  };
+  tick();
 }
 // Owner: "on login it should not say please wait, it should say logging
 // in... so everywhere saying please wait... it should be removed."
@@ -1574,6 +1612,43 @@ window.doLogin = async function(){
     setBtnLoading('loginBtn', false, 'Log In');
   }
 };
+// ── SIGN UP: phone -> OTP -> password -> confirm password ──
+// Owner's spec. regStepPhone/regStepOtp/regStepPassword are three field
+// groups inside the same #registerPane (see user-src/index.html) --
+// switched with plain style.display, never re-rendered, so nothing typed on
+// an earlier step is ever lost moving to the next one.
+window._regOtp = { otpId: null, ticket: null };
+function showRegStep(step){
+  $('regStepPhone').style.display = step === 'phone' ? '' : 'none';
+  $('regStepOtp').style.display = step === 'otp' ? '' : 'none';
+  $('regStepPassword').style.display = step === 'password' ? '' : 'none';
+  $('regError').innerHTML = '';
+}
+window.doRegSendOtp = async function(){
+  const phone = cleanPhone($('regPhone').value);
+  if (!phone) return $('regError').innerHTML = '<div class="auth-error">Enter a valid ' + esc(regionName()) + ' mobile number.</div>';
+  $('regError').innerHTML = '';
+  setBtnLoading('regSendOtpBtn', true, 'Send Code', 'Sending code…');
+  const d = await post('/auth/otp/send', { purpose: 'register', phone });
+  setBtnLoading('regSendOtpBtn', false, 'Send Code');
+  if (d.status !== 'success') return $('regError').innerHTML = `<div class="auth-error">${esc(d.message || 'Could not send the code')}</div>`;
+  window._regOtp = { otpId: d.otpId, ticket: null };
+  const otpInput = $('regOtp'); if (otpInput) otpInput.value = '';
+  const label = $('regOtpPhoneLabel'); if (label) label.textContent = $('regDial').textContent + ' ' + $('regPhone').value.trim();
+  showRegStep('otp');
+  startOtpResendCooldown('regResendBtn', 30);
+};
+window.doRegVerifyOtp = async function(){
+  const code = ($('regOtp').value || '').trim();
+  if (!/^\d{6}$/.test(code)) return $('regError').innerHTML = '<div class="auth-error">Enter the 6-digit code sent to your phone.</div>';
+  $('regError').innerHTML = '';
+  setBtnLoading('regVerifyBtn', true, 'Verify', 'Verifying…');
+  const d = await post('/auth/otp/verify', { otpId: window._regOtp.otpId, code });
+  setBtnLoading('regVerifyBtn', false, 'Verify');
+  if (d.status !== 'success') return $('regError').innerHTML = `<div class="auth-error">${esc(d.message || 'Incorrect code')}</div>`;
+  window._regOtp.ticket = d.ticket;
+  showRegStep('password');
+};
 window.doRegister = async function(){
   const phone = cleanPhone($('regPhone').value);
   const pass = $('regPassword').value;
@@ -1585,6 +1660,7 @@ window.doRegister = async function(){
   // Chipz makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
   if (!phone) return $('regError').innerHTML = '<div class="auth-error">Enter a valid ' + esc(regionName()) + ' mobile number.</div>';
+  if (!window._regOtp.ticket) { showRegStep('phone'); return $('regError').innerHTML = '<div class="auth-error">Please verify your phone number first.</div>'; }
   if (!pass || pass.length < 6) return $('regError').innerHTML = '<div class="auth-error">Password must be at least 6 characters.</div>';
   if (pass !== pass2) return $('regError').innerHTML = '<div class="auth-error">The two login passwords do not match.</div>';
   if (!/^\d{6}$/.test(pin)) return $('regError').innerHTML = '<div class="auth-error">Trade Password must be exactly 6 digits.</div>';
@@ -1600,6 +1676,7 @@ window.doRegister = async function(){
   STATE.refCode = referral;
   window._pendingRegPin = pin;
   window._pendingRegPhone = phone;
+  window._pendingRegOtpTicket = window._regOtp.ticket;
   try {
     const email = phoneToEmail(phone);
     await window.fbCreateUser(email, pass);
@@ -1641,6 +1718,62 @@ window.doRegister = async function(){
     $('regError').innerHTML = `<div class="auth-error">${esc(fbErrMsg(e))}</div>`;
     setBtnLoading('regBtn', false, 'Sign Up');
   }
+};
+// ── FORGOT PASSWORD: phone -> OTP -> new password ──
+// Reached from the Log In screen. No Firebase session exists yet (the
+// member cannot sign in, that's the whole point) -- identity is proven by
+// the OTP ticket alone, and the password itself is changed server-side via
+// /auth/reset/confirm (Admin SDK, no active session needed). Structurally
+// the same three-step pattern as Sign Up above, its own pane/ids so neither
+// flow's state can bleed into the other.
+window._forgotOtp = { otpId: null, ticket: null, phone: '' };
+function showForgotStep(step){
+  $('forgotStepPhone').style.display = step === 'phone' ? '' : 'none';
+  $('forgotStepOtp').style.display = step === 'otp' ? '' : 'none';
+  $('forgotStepPassword').style.display = step === 'password' ? '' : 'none';
+  const fe = $('forgotError'); if (fe) fe.innerHTML = '';
+}
+window.doForgotSendOtp = async function(){
+  const phone = cleanPhone($('forgotPhone').value);
+  if (!phone) return $('forgotError').innerHTML = '<div class="auth-error">Enter a valid ' + esc(regionName()) + ' mobile number.</div>';
+  $('forgotError').innerHTML = '';
+  setBtnLoading('forgotSendOtpBtn', true, 'Send Code', 'Sending code…');
+  const d = await post('/auth/otp/send', { purpose: 'reset', phone });
+  setBtnLoading('forgotSendOtpBtn', false, 'Send Code');
+  if (d.status !== 'success') return $('forgotError').innerHTML = `<div class="auth-error">${esc(d.message || 'Could not send the code')}</div>`;
+  window._forgotOtp = { otpId: d.otpId, ticket: null, phone };
+  const otpInput = $('forgotOtp'); if (otpInput) otpInput.value = '';
+  const label = $('forgotOtpPhoneLabel'); if (label) label.textContent = $('forgotDial').textContent + ' ' + $('forgotPhone').value.trim();
+  showForgotStep('otp');
+  startOtpResendCooldown('forgotResendBtn', 30);
+};
+window.doForgotVerifyOtp = async function(){
+  const code = ($('forgotOtp').value || '').trim();
+  if (!/^\d{6}$/.test(code)) return $('forgotError').innerHTML = '<div class="auth-error">Enter the 6-digit code sent to your phone.</div>';
+  $('forgotError').innerHTML = '';
+  setBtnLoading('forgotVerifyBtn', true, 'Verify', 'Verifying…');
+  const d = await post('/auth/otp/verify', { otpId: window._forgotOtp.otpId, code });
+  setBtnLoading('forgotVerifyBtn', false, 'Verify');
+  if (d.status !== 'success') return $('forgotError').innerHTML = `<div class="auth-error">${esc(d.message || 'Incorrect code')}</div>`;
+  window._forgotOtp.ticket = d.ticket;
+  showForgotStep('password');
+};
+window.doForgotSubmit = async function(){
+  const pass = $('forgotPassword').value;
+  const pass2 = $('forgotPassword2').value;
+  if (!window._forgotOtp.ticket) { showForgotStep('phone'); return $('forgotError').innerHTML = '<div class="auth-error">Please verify your phone number first.</div>'; }
+  if (!pass || pass.length < 6) return $('forgotError').innerHTML = '<div class="auth-error">Password must be at least 6 characters.</div>';
+  if (pass !== pass2) return $('forgotError').innerHTML = '<div class="auth-error">The two passwords do not match.</div>';
+  $('forgotError').innerHTML = '';
+  setBtnLoading('forgotSubmitBtn', true, 'Reset Password', 'Resetting password…');
+  const d = await post('/auth/reset/confirm', { phone: window._forgotOtp.phone, ticket: window._forgotOtp.ticket, newPassword: pass });
+  setBtnLoading('forgotSubmitBtn', false, 'Reset Password');
+  if (d.status !== 'success') return $('forgotError').innerHTML = `<div class="auth-error">${esc(d.message || 'Could not reset your password')}</div>`;
+  notify('Password reset. Please log in.');
+  window._forgotOtp = { otpId: null, ticket: null, phone: '' };
+  $('loginPhone').value = $('forgotPhone').value;
+  $('loginPassword').value = '';
+  showAuthTab('login');
 };
 window.doLogout = async function(){
   stopLiveRefresh();
@@ -2204,8 +2337,8 @@ async function enterApp(){
 // ghost-account trap Round-something-earlier already fixed once). Retry
 // once with the referral dropped instead; everything else (PIN, welcome
 // bonus) still goes through.
-async function registerCurrentUser(pin, phone){
-  let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '' });
+async function registerCurrentUser(pin, phone, otpTicket){
+  let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '', otpTicket: otpTicket || '' });
   // Dropping the code and carrying on is only valid while a code is
   // OPTIONAL. Once it is required (the normal state, as soon as the platform
   // has members) retrying with an empty code just earns a REFERRAL_REQUIRED
@@ -2217,7 +2350,7 @@ async function registerCurrentUser(pin, phone){
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
     notify(reg.message || 'That referral code is invalid -- continuing without it.');
     STATE.refCode = '';
-    reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
+    reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '', otpTicket: otpTicket || '' });
   }
   return reg;
 }
@@ -2237,9 +2370,9 @@ async function bootFromNetwork(uid){
   // a later re-login in the same tab session (no page reload) never
   // wrongly takes this shortcut again.
   if (window._pendingRegPin) {
-    const pin = window._pendingRegPin, phone = window._pendingRegPhone;
-    window._pendingRegPin = ''; window._pendingRegPhone = '';
-    const reg = await registerCurrentUser(pin, phone);
+    const pin = window._pendingRegPin, phone = window._pendingRegPhone, otpTicket = window._pendingRegOtpTicket;
+    window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
+    const reg = await registerCurrentUser(pin, phone, otpTicket);
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       $('loadingScreen').style.display = 'none';
       notify(reg.message || 'Could not complete registration');
@@ -2253,7 +2386,7 @@ async function bootFromNetwork(uid){
       // Ghost account (Firebase user exists, our profile never finished in
       // an earlier session -- e.g. a crash/reload between account creation
       // and /register finishing) -- self-heal the same way.
-      const reg = await registerCurrentUser(window._pendingRegPin || '', window._pendingRegPhone || '');
+      const reg = await registerCurrentUser(window._pendingRegPin || '', window._pendingRegPhone || '', window._pendingRegOtpTicket || '');
       if (reg.status !== 'success' && reg.status !== 'already_done') {
         $('loadingScreen').style.display = 'none';
         notify(reg.message || 'Could not complete registration');
@@ -4337,28 +4470,43 @@ function renderWalletSheet(){
   const editPanel = !_walletEditing ? '' : `
   <div class="wallet-panel">
     <div class="sec-head" style="margin:0 0 16px;"><span class="bar"></span><h2 style="font-size:17px;font-weight:700;">Edit Wallet</h2></div>
-    <div class="lbl">Wallet Provider</div>
-    <!-- Not a <select>. A native select hands the whole thing to Android's own
-         grey system picker, which is what the owner objected to. This is a
-         read-only field that drops a plain list underneath it, exactly as the
-         mockup shows. Read-only, not a free-text box, because the value has to
-         be one of the providers the backend accepts. -->
-    <div class="prov-pick" id="walProviderPick">
-      <div class="field prov-input" onclick="toggleProviderList()">
-        <input id="walProvider" type="text" readonly placeholder="Select wallet provider" value="${w && w.network ? esc(w.network) : ''}">
-        <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    <div id="walFormGroup">
+      <div class="lbl">Wallet Provider</div>
+      <!-- Not a <select>. A native select hands the whole thing to Android's own
+           grey system picker, which is what the owner objected to. This is a
+           read-only field that drops a plain list underneath it, exactly as the
+           mockup shows. Read-only, not a free-text box, because the value has to
+           be one of the providers the backend accepts. -->
+      <div class="prov-pick" id="walProviderPick">
+        <div class="field prov-input" onclick="toggleProviderList()">
+          <input id="walProvider" type="text" readonly placeholder="Select wallet provider" value="${w && w.network ? esc(w.network) : ''}">
+          <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="prov-list" id="walProviderList">
+          ${providers.map(p => `<button type="button" class="prov-opt${w && w.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
+        </div>
       </div>
-      <div class="prov-list" id="walProviderList">
-        ${providers.map(p => `<button type="button" class="prov-opt${w && w.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
+      <div class="lbl">Wallet Account</div>
+      <div class="field"><input id="walPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${w ? esc(w.phone || '') : ''}" oninput="sanitizePhoneInput(this)"></div>
+      <div class="lbl">Account Holder Name</div>
+      <div class="field"><input id="walHolder" type="text" placeholder="Full name" value="${w ? esc(w.holder || '') : ''}"></div>
+      <div class="btnrow">
+        <button class="cancel" onclick="toggleWalletEdit(false)">Cancel</button>
+        <button class="primary-button" id="walSaveBtn" onclick="submitWallet()">Submit</button>
       </div>
     </div>
-    <div class="lbl">Wallet Account</div>
-    <div class="field"><input id="walPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${w ? esc(w.phone || '') : ''}" oninput="sanitizePhoneInput(this)"></div>
-    <div class="lbl">Account Holder Name</div>
-    <div class="field"><input id="walHolder" type="text" placeholder="Full name" value="${w ? esc(w.holder || '') : ''}"></div>
-    <div class="btnrow">
-      <button class="cancel" onclick="toggleWalletEdit(false)">Cancel</button>
-      <button class="primary-button" id="walSaveBtn" onclick="submitWallet()">Submit</button>
+    <!-- Shown only once /auth/otp/send has actually gone out (see
+         submitWallet() above) -- proves it's the account holder adding this
+         payout destination, texted to THEIR OWN phone on file, never to the
+         wallet number just entered above. -->
+    <div id="walOtpGroup" style="display:none;">
+      <div class="lbl">Enter the 6-digit code sent to your phone</div>
+      <div class="field"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"></div>
+      <div class="btnrow">
+        <button class="cancel" onclick="cancelWalletOtp()">Back</button>
+        <button class="primary-button" id="walConfirmBtn" onclick="confirmWalletOtp()">Confirm</button>
+      </div>
+      <p class="auth-switch" style="margin-top:10px;"><a href="#" id="walResendBtn" onclick="submitWallet();return false;">Resend code</a></p>
     </div>
   </div>`;
   const summary = w ? `
@@ -4375,7 +4523,7 @@ function renderWalletSheet(){
     ${summary}
   </div>`;
 }
-window.toggleWalletEdit = function(on){ _walletEditing = !!on; renderWalletSheet(); };
+window.toggleWalletEdit = function(on){ _walletEditing = !!on; _walletPending = null; _walletOtpId = null; renderWalletSheet(); };
 // The provider list from the mockup: tap the field, a plain list drops under
 // it, tap a row, it closes. Deliberately small and self-contained -- the
 // alternative was a native <select>, which on Android replaces the screen
@@ -4400,6 +4548,14 @@ document.addEventListener('click', function(e){
   const box = document.getElementById('walProviderPick');
   if (box && box.classList.contains('open') && !box.contains(e.target)) box.classList.remove('open');
 });
+// Adding/changing the payout wallet requires an OTP first (owner decision --
+// same reasoning as registration/reset: prove it's really the account
+// holder, sent to THEIR OWN phone on file, never to the wallet number being
+// entered above). Two phases, kept in these two closure vars rather than
+// re-rendering the sheet between them -- a re-render would wipe whatever the
+// member just typed into walProvider/walPhone/walHolder.
+var _walletPending = null;
+var _walletOtpId = null;
 window.submitWallet = async function(){
   const network = $('walProvider').value;
   const phone = $('walPhone').value;
@@ -4408,10 +4564,37 @@ window.submitWallet = async function(){
   if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
   if (!holder) return notify('Enter the account holder name.');
   const btn = $('walSaveBtn');
-  btn.disabled = true; btn.textContent = 'Saving wallet…';
-  const r = await post('/bank/save', { holder, network, phone });
+  btn.disabled = true; btn.textContent = 'Sending code…';
+  const d = await post('/auth/otp/send', { purpose: 'bank' });
   btn.disabled = false; btn.textContent = 'Submit';
+  if (d.status !== 'success') return notify(d.message || 'Could not send a verification code.');
+  _walletPending = { holder, network, phone };
+  _walletOtpId = d.otpId;
+  const otpInput = $('walOtp'); if (otpInput) otpInput.value = '';
+  const formGroup = $('walFormGroup'), otpGroup = $('walOtpGroup');
+  if (formGroup) formGroup.style.display = 'none';
+  if (otpGroup) otpGroup.style.display = '';
+  startOtpResendCooldown('walResendBtn', 30);
+};
+window.cancelWalletOtp = function(){
+  _walletPending = null; _walletOtpId = null;
+  const formGroup = $('walFormGroup'), otpGroup = $('walOtpGroup');
+  if (otpGroup) otpGroup.style.display = 'none';
+  if (formGroup) formGroup.style.display = '';
+};
+window.confirmWalletOtp = async function(){
+  if (!_walletPending || !_walletOtpId) return cancelWalletOtp();
+  const code = ($('walOtp').value || '').trim();
+  if (!/^\d{6}$/.test(code)) return notify('Enter the 6-digit code sent to your phone.');
+  const btn = $('walConfirmBtn');
+  btn.disabled = true; btn.textContent = 'Verifying…';
+  const v = await post('/auth/otp/verify', { otpId: _walletOtpId, code });
+  if (v.status !== 'success') { btn.disabled = false; btn.textContent = 'Confirm'; return notify(v.message || 'Incorrect code.'); }
+  btn.textContent = 'Saving…';
+  const r = await post('/bank/save', Object.assign({}, _walletPending, { otpTicket: v.ticket }));
+  btn.disabled = false; btn.textContent = 'Confirm';
   if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
+  _walletPending = null; _walletOtpId = null;
   // Chipz binds exactly ONE wallet -- drop any older rows so the card, the
   // summary row and the Withdraw screen can never disagree about which
   // account a payout goes to.

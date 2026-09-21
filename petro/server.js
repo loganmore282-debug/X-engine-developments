@@ -344,9 +344,12 @@ const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64-encoded credentials
 const MARZ_TIMEOUT = 20000;
 // MarzSms -- a SEPARATE MarzPay product (its own dashboard/API keys at
-// sms.wearemarz.com, distinct from the wallet product MARZPAY_KEY above)
-// used only to alert admins by text when a withdrawal needs processing.
-// Same "base64(api_key:api_secret)" Basic-auth convention as the wallet API.
+// sms.wearemarz.com, distinct from the wallet product MARZPAY_KEY above).
+// Used for the OTP verification codes sent on registration, password reset,
+// and adding a withdrawal bank/mobile-money account -- see the "OTP" section
+// below. Same "base64(api_key:api_secret)" Basic-auth convention as the
+// wallet API. MARZSMS_KEY is unset until the owner supplies it (Railway/VPS
+// secret, never committed); every OTP send refuses cleanly until then.
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
@@ -965,6 +968,13 @@ const DEFAULT_SETTINGS = {
   // whatever every already-deployed database is already running (zero
   // behavior change until the admin actually touches this field).
   activityTickerSpeed: 160,
+  // ── OTP (SMS one-time codes via MarzSms) ──
+  // Owner-specified: registration 2/day, password reset 3/day, per phone
+  // number, resetting daily. Bank/withdrawal-account linking wasn't given an
+  // explicit number -- defaults conservatively (same cost, 30 UGX/SMS) and
+  // is admin-editable like the other two. See otpDailyLimit() in the OTP
+  // section above: 0 here means "send none", not "unlimited".
+  otpDailyLimitRegister: 2, otpDailyLimitReset: 3, otpDailyLimitBank: 2,
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
 // user-src/original_module.js (the client-side fallback-stack lookup) and
@@ -2507,6 +2517,70 @@ async function marzSmsSend(recipients, message) {
   // signal here, not any particular body field.
   if (!resp.ok) throw new Error(data.message || data.error || `MarzSms HTTP ${resp.status}`);
   return data;
+}
+// ── OTP (SMS one-time codes, via MarzSms above) ──
+// Owner: registration goes phone -> OTP -> password -> confirm password;
+// login stays phone/password with a "forgot password" link that also uses
+// OTP; adding a withdrawal bank/mobile-money account requires OTP too (a
+// member's own phone re-verifying it's really them, not the new payout
+// number -- see /bank/save below, which resolves the phone from the
+// account on file, not from the request body).
+//
+// Three purposes, one shared table. A code is generated, hashed (never
+// stored in the clear -- same reasoning as a PIN or password), texted out,
+// and checked by /auth/otp/verify, which on success issues a short-lived
+// one-time `ticket`. The ticket -- not the raw code -- is what the
+// following step (register / reset / bank-save) actually consumes, so the
+// code itself is never seen again after the member types it once.
+const OTP_CODE_LENGTH = 6;
+const OTP_EXPIRES_MS = 10 * 60 * 1000;
+const OTP_TICKET_EXPIRES_MS = 15 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_PURPOSES = new Set(['register', 'reset', 'bank']);
+const OTP_SETTINGS_FIELD = { register: 'otpDailyLimitRegister', reset: 'otpDailyLimitReset', bank: 'otpDailyLimitBank' };
+function generateOtpCode() {
+  return String(crypto.randomInt(0, 10 ** OTP_CODE_LENGTH)).padStart(OTP_CODE_LENGTH, '0');
+}
+// SMS costs real money (30 UGX each, per the owner) -- unlike most numeric
+// settings in this file, 0 here means "send none", not "no limit". A stray
+// 0 must fail closed.
+async function otpDailyLimit(purpose, sett) {
+  const s = sett || await getSettings();
+  return Math.max(0, Number(s[OTP_SETTINGS_FIELD[purpose]]) || 0);
+}
+// Atomic per phone+purpose+day counter. withLock is enough (not a Mongo
+// transaction) because ecosystem.config.js pins this process to a single
+// instance -- the same money-safety assumption every other counter in this
+// file already relies on (see withLock's own header comment).
+async function otpCheckAndBumpDailyLimit(phone, purpose) {
+  const day = eatDayKey(new Date());
+  const limit = await otpDailyLimit(purpose);
+  return withLock('otp-limit:' + phone + ':' + purpose, async () => {
+    if (limit <= 0) return false;
+    const ref = db.collection('otpSendLog').doc(`${phone}:${purpose}:${day}`);
+    const snap = await ref.get();
+    const count = snap.exists ? (Number(snap.data().count) || 0) : 0;
+    if (count >= limit) return false;
+    await ref.set({ phone, purpose, day, count: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return true;
+  });
+}
+// Looks the code up by its ticket (not by the otpCodes doc id, which the
+// caller of /auth/otp/verify never learns), and only ever consumes it once:
+// updateIf's conditional match is a single atomic Mongo call, so two
+// requests racing on the same ticket cannot both succeed (see updateIf's
+// own comment in db.js -- the identical pattern this file already uses for
+// creditedDepositIds/refundedWithdrawalIds).
+async function consumeOtpTicket(ticket, phone, purpose) {
+  if (!ticket) return false;
+  const snap = await db.collection('otpCodes').where('ticket', '==', ticket).limit(1).get();
+  if (snap.empty) return false;
+  const doc = snap.docs[0];
+  const o = doc.data();
+  if (o.phone !== phone || o.purpose !== purpose) return false;
+  if (o.consumedAt) return false;
+  if (Date.now() > tsMillis(o.ticketExpiresAt)) return false;
+  return doc.ref.updateIf({ consumedAt: null }, { consumedAt: FieldValue.serverTimestamp() });
 }
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
@@ -4063,12 +4137,134 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     return { code: 200, body: { status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode, publicId: myPublicId } };
   });
 }
+// ── OTP endpoints ──
+// /auth/otp/send is deliberately reachable WITHOUT a Firebase session for
+// 'register' and 'reset' -- a phone verifying itself before an account
+// exists (register) or while its owner cannot sign in (reset) is exactly
+// what OTP is for. 'bank' is the one purpose that DOES require a session:
+// the phone texted is resolved from the caller's own account on file, never
+// from the request body, so a logged-in member cannot use this to spam an
+// arbitrary number.
+app.post('/auth/otp/send', async (req, res) => {
+  try {
+    const purpose = String(req.body.purpose || '');
+    if (!OTP_PURPOSES.has(purpose)) return res.status(400).json({ status: 'error', message: 'Invalid verification purpose' });
+    let phone;
+    if (purpose === 'bank') {
+      const userId = await verifyAuth(req);
+      if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      const uSnap = await db.collection('users').doc(userId).get();
+      if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+      if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+      phone = cleanPhone(uSnap.data().phone || '');
+      if (!phone) return res.status(400).json({ status: 'error', message: 'Your account has no valid phone number on file. Contact support.' });
+    } else {
+      phone = cleanPhone(req.body.phone || '');
+      if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
+      const existing = await db.collection('users').where('phone', '==', phone).limit(1).get();
+      // 'register' checks registrationDone specifically, not just any row --
+      // a Mongo profile can exist with registrationDone:false from an earlier
+      // attempt that crashed between Firebase account creation and finishing
+      // /register (the same "ghost account" doRegister()'s own comment
+      // already handles). Blocking THAT here would wrongly refuse a member
+      // simply retrying their own incomplete signup.
+      if (purpose === 'register' && existing.docs.some(d => d.data().registrationDone))
+        return res.status(400).json({ status: 'error', message: 'An account with this phone number already exists.' });
+      if (purpose === 'reset' && existing.empty)
+        return res.status(400).json({ status: 'error', message: 'No account found with this phone number.' });
+    }
+    if (!MARZSMS_KEY) return res.status(503).json({ status: 'error', message: 'SMS verification is not available right now. Try again later.' });
+    const allowed = await otpCheckAndBumpDailyLimit(phone, purpose);
+    if (!allowed) return res.status(429).json({ status: 'error', message: 'Too many verification codes requested for this number today. Try again tomorrow.' });
+    const code = generateOtpCode();
+    const otpRef = db.collection('otpCodes').doc();
+    await otpRef.set({
+      phone, purpose, codeHash: scryptHash(code), attempts: 0, verified: false,
+      ticket: null, ticketExpiresAt: null, consumedAt: null,
+      expiresAt: new Date(Date.now() + OTP_EXPIRES_MS), createdAt: FieldValue.serverTimestamp(),
+    });
+    try {
+      await marzSmsSend(phone, `Your Petro verification code is ${code}. It expires in 10 minutes. Do not share this code with anyone.`);
+    } catch (e) {
+      await otpRef.delete().catch(() => {});
+      throw e;
+    }
+    res.json({ status: 'success', otpId: otpRef.id, expiresInSec: OTP_EXPIRES_MS / 1000 });
+  } catch (e) {
+    console.error('OTP send error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not send a verification code right now' });
+  }
+});
+app.post('/auth/otp/verify', async (req, res) => {
+  try {
+    const otpId = String(req.body.otpId || '');
+    const code = String(req.body.code || '').trim();
+    if (!otpId || !code) return res.status(400).json({ status: 'error', message: 'Missing verification code' });
+    const ref = db.collection('otpCodes').doc(otpId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(400).json({ status: 'error', message: 'Invalid or expired code. Request a new one.' });
+    const o = snap.data();
+    if (o.consumedAt) return res.status(400).json({ status: 'error', message: 'This code has already been used.' });
+    if (Date.now() > tsMillis(o.expiresAt)) return res.status(400).json({ status: 'error', message: 'This code has expired. Request a new one.' });
+    if ((o.attempts || 0) >= OTP_MAX_ATTEMPTS) return res.status(429).json({ status: 'error', message: 'Too many incorrect attempts. Request a new code.' });
+    if (!scryptVerify(code, o.codeHash)) {
+      await ref.update({ attempts: FieldValue.increment(1) });
+      return res.status(400).json({ status: 'error', message: 'Incorrect code.' });
+    }
+    // Re-verifying an already-verified code (a double-tap, a resent
+    // response) just re-issues a fresh ticket rather than erroring -- the
+    // code itself was already proven correct once, refusing here would only
+    // punish a harmless retry.
+    const ticket = crypto.randomUUID();
+    await ref.update({ verified: true, ticket, ticketExpiresAt: new Date(Date.now() + OTP_TICKET_EXPIRES_MS) });
+    res.json({ status: 'success', ticket, expiresInSec: OTP_TICKET_EXPIRES_MS / 1000 });
+  } catch (e) {
+    console.error('OTP verify error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not verify the code right now' });
+  }
+});
+// Forgot-password. No Firebase session -- the whole point is the member
+// cannot sign in. Identity is proven by the OTP ticket alone; the password
+// itself is changed via the Admin SDK, the same call
+// /admin/user/reset-password already uses, just self-served here once a
+// ticket backs it instead of an owner's say-so.
+app.post('/auth/reset/confirm', async (req, res) => {
+  try {
+    const phone = cleanPhone(req.body.phone || '');
+    if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
+    const newPassword = String(req.body.newPassword || '');
+    if (newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters.' });
+    const ticketOk = await consumeOtpTicket(String(req.body.ticket || ''), phone, 'reset');
+    if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
+    const uSnap = await db.collection('users').where('phone', '==', phone).limit(1).get();
+    if (uSnap.empty) return res.status(404).json({ status: 'error', message: 'No account found with this phone number.' });
+    const userId = uSnap.docs[0].id;
+    await admin.auth().updateUser(userId, { password: newPassword });
+    logSecurityEvent(userId, 'password_reset_self_service', null);
+    res.json({ status: 'success', message: 'Password reset. You can now sign in.' });
+  } catch (e) {
+    console.error('Reset confirm error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not reset your password right now' });
+  }
+});
 app.post('/register', async (req, res) => {
   const auth = await verifyAuthWithEmail(req);
   if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = auth.uid;
   try {
     const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
+    if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
+    // Skip the ticket check on a retry of an ALREADY-completed registration
+    // (network drop after success, client resubmits) -- completeRegistrationCore
+    // is idempotent for that case on its own (registrationDone short-circuit
+    // below), and the ticket from the original successful call is already
+    // consumed, so requiring it again would fail a registration that in fact
+    // already succeeded.
+    const already = await db.collection('users').doc(userId).get();
+    if (!already.exists || !already.data().registrationDone) {
+      const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), phone, 'register');
+      if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
+    }
     const result = await completeRegistrationCore(userId, req.body.referralCode, req.body.pin, phone);
     const { referrerId, ...memberBody } = result.body;
     res.status(result.code).json(memberBody);
@@ -6809,6 +7005,14 @@ app.post('/bank/save', async (req, res) => {
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    // OTP proves it's really the account holder adding this payout
+    // destination -- sent to THEIR OWN phone on file (resolved by
+    // /auth/otp/send's 'bank' purpose), not to `phone` above, which is the
+    // new account being added and could belong to someone else entirely
+    // (a family member's mobile money, for instance).
+    const ownPhone = cleanPhone((uSnap.exists && uSnap.data().phone) || '');
+    const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), ownPhone, 'bank');
+    if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify with the code sent to your phone first.' });
     // Owner: the transaction PIN belongs to the actual Withdraw money flow
     // only, not to managing which accounts CAN receive a future withdrawal
     // -- saving/removing a payout destination here doesn't move any money by
@@ -7417,6 +7621,7 @@ const SETTINGS_CRITICAL_RANGES = {
   withdrawMultiple: [0, MAX_MONEY_AMOUNT],
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
+  otpDailyLimitRegister: [0, 50], otpDailyLimitReset: [0, 50], otpDailyLimitBank: [0, 50],
 };
 const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight

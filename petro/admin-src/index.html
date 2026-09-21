@@ -3365,6 +3365,14 @@ async function renderSettings(){
         <div><label>Cycle (days)</label><input id="sCycle" type="number" value="${v('cycleDays',150)}"></div>
         <div><label>Max withdrawals per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
       </div>
+      <!-- OTP verification codes cost real money per SMS (MarzSms, ~30 UGX
+           each) -- capped per phone number, resetting daily. 0 means send
+           none, not unlimited; see otpDailyLimit()'s own comment in server.js. -->
+      <div class="row" style="margin-top:6px">
+        <div><label>OTP codes/day &middot; registration</label><input id="sOtpReg" type="number" min="0" value="${v('otpDailyLimitRegister',2)}"></div>
+        <div><label>OTP codes/day &middot; password reset</label><input id="sOtpReset" type="number" min="0" value="${v('otpDailyLimitReset',3)}"></div>
+        <div><label>OTP codes/day &middot; add bank account</label><input id="sOtpBank" type="number" min="0" value="${v('otpDailyLimitBank',2)}"></div>
+      </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
@@ -3777,6 +3785,7 @@ async function renderSettings(){
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
+      otpDailyLimitRegister:+$('sOtpReg').value, otpDailyLimitReset:+$('sOtpReset').value, otpDailyLimitBank:+$('sOtpBank').value,
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
       withdrawWindowEnabled:$('sWitWindow').checked,
       withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,

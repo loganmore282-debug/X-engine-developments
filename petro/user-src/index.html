@@ -2431,44 +2431,109 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
         </div>
         <label class="row-check"><input type="checkbox" id="rememberMe"><span>Remember me</span></label>
         <button class="primary-button" id="loginBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doLogin()">Log In</button>
-        <p class="auth-switch"><a href="#" onclick="showAuthTab('register');return false;">Sign Up</a></p>
+        <p class="auth-switch"><a href="#" onclick="showAuthTab('forgot');return false;">Forgot password?</a></p>
+        <p class="auth-switch">Don't have an account? <a href="#" onclick="showAuthTab('register');return false;">Sign Up</a></p>
       </div>
 
+      <!-- Sign Up: phone -> OTP -> password -> confirm password (owner's
+           spec). Three field groups, one #registerPane, switched by
+           showRegStep() with plain style.display -- never re-rendered, so
+           nothing typed on an earlier step is lost moving to the next one. -->
       <div id="registerPane" style="display:none;">
         <h1>SIGN UP</h1>
         <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
         <div id="regError"></div>
-        <div class="auth-field">
-          <span class="prefix" id="regDial">+256</span>
-          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+
+        <div id="regStepPhone">
+          <div class="auth-field">
+            <span class="prefix" id="regDial">+256</span>
+            <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          </div>
+          <!-- Which country this web address serves. Shown only when the
+               platform actually runs in more than one, so a single-country
+               app gains no clutter -- and so a short address quietly
+               pointing at the wrong country is visible instead of showing
+               up later as "Incorrect phone number or password". Filled by
+               paintRegionChrome(). -->
+          <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#8c7f76;text-align:center;"></div>
+          <button class="primary-button" id="regSendOtpBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doRegSendOtp()">Send Code</button>
+          <p class="auth-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
         </div>
-        <!-- Which country this web address serves. Shown only when the
-             platform actually runs in more than one, so a single-country
-             app gains no clutter -- and so a short address quietly
-             pointing at the wrong country is visible instead of showing
-             up later as "Incorrect phone number or password". Filled by
-             paintRegionChrome(). -->
-        <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#8c7f76;text-align:center;"></div>
-        <div class="auth-field">
-          <span class="emoji">&#128274;</span>
-          <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
-          <button class="eye" onclick="togglePw('regPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+
+        <div id="regStepOtp" style="display:none;">
+          <div class="auth-hint" style="margin:0 0 14px;">Enter the 6-digit code sent to <span id="regOtpPhoneLabel"></span></div>
+          <div class="auth-field">
+            <span class="emoji">&#128274;</span>
+            <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code">
+          </div>
+          <button class="primary-button" id="regVerifyBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doRegVerifyOtp()">Verify</button>
+          <p class="auth-switch"><a href="#" id="regResendBtn" onclick="doRegSendOtp();return false;">Resend code</a> &middot; <a href="#" onclick="showRegStep('phone');return false;">Change number</a></p>
         </div>
-        <div class="auth-field">
-          <span class="emoji">&#128274;</span>
-          <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
+
+        <div id="regStepPassword" style="display:none;">
+          <div class="auth-field">
+            <span class="emoji">&#128274;</span>
+            <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
+            <button class="eye" onclick="togglePw('regPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <div class="auth-field">
+            <span class="emoji">&#128274;</span>
+            <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
+          </div>
+          <div class="auth-field">
+            <span class="emoji">&#128477;</span>
+            <input id="regPin" type="password" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="one-time-code">
+          </div>
+          <div class="auth-field referral">
+            <span class="emoji">&#127873;</span>
+            <input id="regReferral" type="text" placeholder="Referral code" autocomplete="off" maxlength="12">
+          </div>
+          <div class="auth-hint" id="regReferralHint">Referral code is required</div>
+          <button class="primary-button" id="regBtn" style="width:100%;padding:15px 0;font-size:17px;margin-top:6px;" onclick="doRegister()">Sign Up</button>
         </div>
-        <div class="auth-field">
-          <span class="emoji">&#128477;</span>
-          <input id="regPin" type="password" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="one-time-code">
+      </div>
+
+      <!-- Forgot password, reached from Log In above: phone -> OTP -> new
+           password. No Firebase session exists at this point -- identity is
+           proven by the OTP ticket alone (see /auth/reset/confirm in
+           server.js). Same three-step pattern as Sign Up, its own ids so
+           neither flow's state can bleed into the other. -->
+      <div id="forgotPane" style="display:none;">
+        <h1>RESET PASSWORD</h1>
+        <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
+        <div id="forgotError"></div>
+
+        <div id="forgotStepPhone">
+          <div class="auth-field">
+            <span class="prefix" id="forgotDial">+256</span>
+            <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          </div>
+          <button class="primary-button" id="forgotSendOtpBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doForgotSendOtp()">Send Code</button>
+          <p class="auth-switch"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
         </div>
-        <div class="auth-field referral">
-          <span class="emoji">&#127873;</span>
-          <input id="regReferral" type="text" placeholder="Referral code" autocomplete="off" maxlength="12">
+
+        <div id="forgotStepOtp" style="display:none;">
+          <div class="auth-hint" style="margin:0 0 14px;">Enter the 6-digit code sent to <span id="forgotOtpPhoneLabel"></span></div>
+          <div class="auth-field">
+            <span class="emoji">&#128274;</span>
+            <input id="forgotOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code">
+          </div>
+          <button class="primary-button" id="forgotVerifyBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doForgotVerifyOtp()">Verify</button>
+          <p class="auth-switch"><a href="#" id="forgotResendBtn" onclick="doForgotSendOtp();return false;">Resend code</a> &middot; <a href="#" onclick="showForgotStep('phone');return false;">Change number</a></p>
         </div>
-        <div class="auth-hint" id="regReferralHint">Referral code is required</div>
-        <button class="primary-button" id="regBtn" style="width:100%;padding:15px 0;font-size:17px;margin-top:6px;" onclick="doRegister()">Sign Up</button>
-        <p class="auth-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
+
+        <div id="forgotStepPassword" style="display:none;">
+          <div class="auth-field">
+            <span class="emoji">&#128274;</span>
+            <input id="forgotPassword" type="password" placeholder="New Password (at least 6 characters)" autocomplete="new-password">
+            <button class="eye" onclick="togglePw('forgotPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <div class="auth-field">
+            <span class="emoji">&#128274;</span>
+            <input id="forgotPassword2" type="password" placeholder="Confirm New Password" autocomplete="new-password">
+          </div>
+          <button class="primary-button" id="forgotSubmitBtn" style="width:100%;padding:15px 0;font-size:17px;margin-top:6px;" onclick="doForgotSubmit()">Reset Password</button>
+        </div>
       </div>
     </div>
   </div>
