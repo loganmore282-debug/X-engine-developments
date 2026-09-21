@@ -8,3 +8,10 @@ admin-untranslated-*.json
 # dump-admin-blocks.py's own output -- regenerated whenever the panel's copy
 # changes, and only ever read while writing rows.
 admin-block-keys.json
+
+# deploy/secrets.local.js holds the live MONGODB_URI/FIREBASE_SERVICE_ACCOUNT/
+# ADMIN_KEY on the VPS (ecosystem.config.js requires it if present, see its
+# own comment). It exists only there, created directly on the server, never
+# via a commit -- this line is a backstop against an accidental `git add -A`
+# picking it up on that machine.
+deploy/secrets.local.js

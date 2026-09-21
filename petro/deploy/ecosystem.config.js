@@ -11,6 +11,16 @@
 // Run from petro/deploy/ on the VPS: `pm2 start ecosystem.config.js`.
 // The working directory is set explicitly so pm2 can be started from any
 // cwd (a cron entry, a fresh SSH session) and still find server.js.
+// Secrets live in secrets.local.js, next to this file, on the VPS ONLY --
+// it is never committed (not tracked by the sparse git checkout this repo
+// deploys with, since nothing ever runs `git add` on it there). A fresh
+// clone has no such file, so this require is wrapped in try/catch rather
+// than assumed to exist -- pm2 still starts (server.js's own env validation,
+// e.g. service-account.js's loadServiceAccount, is what reports a missing
+// secret loudly, not a crash here).
+let secrets = {};
+try { secrets = require('./secrets.local.js'); } catch (e) { secrets = {}; }
+
 module.exports = {
   apps: [
     {
@@ -29,11 +39,7 @@ module.exports = {
       // Redis lock) first.
       env: {
         NODE_ENV: 'production',
-        // PORT, MONGODB_URI, FIREBASE_SERVICE_ACCOUNT, ADMIN_KEY, and the
-        // payment-gateway keys are NOT set here. They live in a .env file
-        // pm2 loads separately (see deploy.sh / petro/CLAUDE.md) or in the
-        // shell environment pm2 itself was started from -- never committed
-        // to this repo.
+        ...secrets,
       },
       max_restarts: 10,
       min_uptime: '15s',
