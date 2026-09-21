@@ -233,90 +233,81 @@ product name or number unprompted):
    Playwright suite are inherited and **not yet re-verified against Petro's
    identity** — see "Not done" above.
 
-## Hosting: Hostinger VPS (KVM1)
+## Hosting: Hostinger VPS (KVM1) — LIVE
 
-**Not Railway, not Render** — unlike Chipz (see `chipz/docs/railway-deploy.md`,
-which does not apply here), Petro deploys to a Hostinger KVM1 VPS: a real
-server under direct SSH control, not a PaaS. That changes the shape of the
-deploy pipeline itself, not just where the bytes end up:
+**The VPS exists and the backend is running on it.** IP `179.198.197.114`,
+hostname `srv1994126.hstgr.cloud`, Ubuntu 24.04 LTS, Germany–Düsseldorf,
+KVM1 (1 vCPU / 4GB RAM / 50GB disk). Provisioned and brought up in-session,
+by hand, via Hostinger's browser web console at first (unreliable — it
+silently dropped mid-paste more than once) and then Termux (SSH client on
+the owner's own Android phone) once that was installed, which is now the
+reliable way in.
 
-- **Process manager: pm2**, not systemd. Chosen because this pipeline deploys
-  by SSH + rsync rather than a package manager, and pm2's `reload` gives a
-  zero-downtime restart plus built-in log handling without hand-writing a
-  unit file. A systemd unit is a reasonable alternative if the owner prefers
-  it later; nothing else here depends on pm2 specifically.
-- **Reverse proxy/TLS: nginx + certbot.** nginx also serves `user/` and
-  `admin/` as static files directly — on Railway those were their own
-  services running `static-server.js` (a zero-dependency Node static host,
-  because Railway has no static-site type); on a VPS nginx does that job
-  natively, so `static-server.js` is **not used in the VPS pipeline** but is
-  left in the repo (dead-but-harmless, same status `render.yaml` had before
-  removal below).
-- **Three subdomains**, mirroring Chipz's three-service split rather than
-  collapsing everything onto one origin: `api.<domain>` (backend, proxied to
-  the pm2-managed `server.js` on `127.0.0.1:3000`), `app.<domain>` (member
-  app, static), `admin.<domain>` (admin panel, static). Kept separate on
-  purpose — `server.js`'s `CORS_ALLOWED_ORIGINS` and the meta-tag CSP in both
-  `-src/index.html` files already assume the API is a different origin from
-  the pages calling it; collapsing to one origin would silently change that
-  security assumption while "just" wiring up a host.
-- **Deploy is scripted, not git-triggered** — there is no autoDeploy on a
-  bare VPS. `petro/deploy/deploy.sh` is the replacement: rsyncs
-  `server.js`/`db.js`/`service-account.js`/package files plus the built
-  `user/`/`admin/` bundles, runs `npm install --omit=dev` remotely, then
-  `pm2 reload` (falling back to `pm2 start` on first deploy) and an
-  `nginx -t && systemctl reload nginx`.
+**Important correction to the plan below: a Claude Code session in this
+environment cannot SSH out.** Its outbound network is HTTPS-through-a-proxy
+only; raw TCP on port 22 is not reachable, confirmed against the proxy's own
+diagnostics rather than assumed from a timeout. So `deploy.sh`'s original
+design (rsync FROM the assistant's sandbox TO the VPS) **cannot run from a
+Claude session** — it's left in the repo as a reference/for a human running
+it from their own machine, but the pipeline that's actually in use is
+different, and is what's live right now:
 
-**What's built, in `petro/deploy/`:**
-- `ecosystem.config.js` — the pm2 app definition. **`instances` must stay `1`**
-  — see the comment inside it: the in-process locking that makes money
-  crediting safe (per "Money-safety invariants" below) only works within a
-  single Node process, and pm2 cluster mode would silently reopen the exact
-  race those locks close.
-- `nginx-petro.conf.template` — all three server blocks, security headers and
-  CSP ported line-for-line from `static-server.js`/the old `render.yaml`
-  (same threat model regardless of host), the `/refCode=` referral-link
-  rewrite, and the `no-cache` revalidation rules for `index.html`/`sw.js`/
-  `manifest.json`. Every `PETRO_DOMAIN` placeholder needs the real domain
-  substituted in before use (`sed 's/PETRO_DOMAIN/.../g'`).
-- `deploy.sh` — the repeatable half of a deploy. Reads `PETRO_VPS_HOST`
-  (and optional `PETRO_VPS_PATH`, default `/srv/petro`) from the environment,
-  never hardcodes them (this file is committed).
+- **Process manager: pm2**, running as a systemd service. `pm2 startup
+  systemd -u root --hp /root` registered `pm2-root.service` (enabled), and
+  `pm2 save` froze the process list — the backend survives a reboot.
+- **Code delivery: the VPS pulls from GitHub itself**, not pushed via rsync.
+  The repo (`loganmore282-debug/X-engine-developments`) is **public**, so no
+  deploy key was even needed — plain HTTPS clone. Set up as a sparse
+  checkout of `petro/*` only, at `/srv/petro-src/petro`:
+  ```
+  cd /srv/petro-src && git pull origin claude/petro-platform-build
+  ```
+  is the entire redeploy step for code changes (run on the VPS, via
+  Termux/SSH — a Claude session can push commits to GitHub but cannot run
+  this `git pull` itself, for the same reason it cannot rsync). Follow with
+  `cd petro && npm install --omit=dev` if `package.json` changed, then
+  `pm2 reload petro-server` (or `pm2 restart` — `reload`'s zero-downtime
+  handoff needs the app already running).
+- **Secrets: `petro/deploy/secrets.local.js`**, created directly on the VPS
+  (gitignored — see `.gitignore`'s comment on that line), never committed.
+  `ecosystem.config.js` try-requires it and spreads its keys into the pm2
+  process env; the process boots fine with an empty object if the file is
+  ever missing (verified both ways). Currently holds the real `MONGODB_URI`
+  (Atlas `cluster0.wblvntm.mongodb.net`, user `chnpetrol`, database `petro`),
+  `ADMIN_KEY`, and `FIREBASE_SERVICE_ACCOUNT` (project `chnpetrol`).
+- **Confirmed live**: `pm2 logs` shows `MongoDB connected (petro)`, `Chipz
+  backend listening on :3000` (inherited log string, cosmetic, left alone),
+  `MongoDB indexes ensured (69/69)`; `curl http://127.0.0.1:3000/health`
+  returns `{"status":"ok","db":true}`.
+- **`ecosystem.config.js`'s `instances` must stay `1`** — the in-process
+  locking that makes money crediting safe (see "Money-safety invariants"
+  below) only works within a single Node process; pm2 cluster mode would
+  silently reopen the exact race those locks close.
 
-**What's still real, undone work** — the once-per-server setup `deploy.sh`
-deliberately does *not* attempt, because it needs the owner's actual
-credentials/decisions, not something to script blind:
-1. Provision the VPS: create a deploy user, install Node ≥18, nginx, certbot,
-   pm2 (`npm i -g pm2`).
-2. Pick the real domain(s), point DNS at the VPS, drop
-   `nginx-petro.conf.template` into `/etc/nginx/sites-available/` with the
-   domain substituted, then `certbot --nginx -d api.<domain> -d app.<domain>
-   -d admin.<domain>`.
-3. Write the backend's env (`.env` next to `server.js`, or exported in the
-   shell pm2 starts from — never committed): `MONGODB_URI`,
-   `FIREBASE_SERVICE_ACCOUNT`, `ADMIN_KEY`, and payment-gateway keys once
-   those are decided.
-4. `node set-backend-url.js https://api.<domain>` then rebuild both bundles,
-   so the frontends actually call the new API origin (see "Build & deploy
-   pipeline" above — this step didn't change, it's host-independent).
-5. First deploy: run `petro/deploy/deploy.sh`, then `pm2 startup` +
-   `pm2 save` on the VPS so the backend survives a reboot.
-
-None of steps 1–3 can happen without the owner's actual VPS access, domain,
-and payment/DB decisions — they are not simulated or invented here.
-
-Also still needed regardless of host (unchanged from before this pipeline
-was built):
-1. A **new MongoDB Atlas database** (own cluster, or a new database on
-   Chipz's shared cluster under its own name ending in `/petro` per
-   `db.js`'s requirement) — **undecided with the owner**, see "Fixed
-   decisions" above.
-2. A **new Firebase project** — the current web config in both
-   `-src/index.html` files is a deliberately broken placeholder; nothing can
-   sign in until this is real and verified in the rebuilt bundles.
-3. A new `ADMIN_KEY`, and payment-provider credentials once a gateway is
-   chosen — not inherited from Chipz just because the code (MarzPay/LipaPay/
-   PesaJet) is already wired.
+**Not done yet — this is the real next step, not a detail:**
+1. **nginx is installed but has no site config for Petro yet** — the backend
+   is only reachable on `127.0.0.1:3000` (or `179.198.197.114:3000` if the
+   firewall's tested for it — `ufw` currently allows OpenSSH + Nginx Full
+   only, port 3000 isn't opened). `petro/deploy/nginx-petro.conf.template`
+   is written and ready (three server blocks, security headers/CSP ported
+   from `static-server.js`/the old `render.yaml`) but every `PETRO_DOMAIN`
+   in it needs a real domain substituted in, and it hasn't been dropped into
+   `/etc/nginx/sites-available/` yet.
+2. **No domain pointed at the VPS yet** — without one, certbot cannot issue
+   a TLS cert (Let's Encrypt does not certify bare IPs), and nginx's
+   `server_name` in the template has nothing real to bind to. This is
+   server config, not app config — it cannot come from the admin panel's
+   `baseDomain`/`allowedOrigins` settings the way the app-level domain can;
+   see "Fixed decisions" above.
+3. **`set-backend-url.js` has not been run** — the shipped `user/`/`admin/`
+   bundles still point at whatever backend origin they inherited from the
+   fork, not this VPS. The frontends will not work end-to-end until this
+   runs and both bundles are rebuilt, which needs a real origin (the
+   domain from step 2, or `http://179.198.197.114:3000` as a temporary
+   stand-in for local testing only — never a real deploy target, since it's
+   unencrypted).
+4. Payment-provider credentials, once a gateway is chosen (still open, see
+   "Everything inherited from Chipz" below) — nothing blocks on this yet.
 
 **Removed from this fork** (were Railway/Render artifacts, actively
 misleading once hosting moved to a VPS): `railway.json`, `railway.app.json`,
@@ -324,20 +315,23 @@ misleading once hosting moved to a VPS): `railway.json`, `railway.app.json`,
 set) isn't lost — it's carried into `nginx-petro.conf.template` and this
 section.
 
-**Also fixed while building this** (a real bug, not a design choice — see
+**Bugs fixed while building this** (real bugs, not design choices — see
 "Fixed decisions" above on the bar for touching inherited logic):
-`CORS_ALLOWED_ORIGINS` in `server.js` still hardcoded
-`https://chipz-platform.com`/`https://www.chipz-platform.com`, even though
-`_baseDomain`'s default was already renamed to `petro-platform.com` in the
-mechanical fork — a miss, the same category as the other load-bearing renames
-that commit made. Left as `chipz-platform.com` it would have silently
-rejected Petro's own real frontend origin once deployed (CORS failures are
-invisible server-side and look identical to a dead backend — the exact
-failure mode `server.js`'s own comments above that line warn about twice
-already, for Snow's custom domain and `.edgeone.dev`). Now reads
-`petro-platform.com`/`www.petro-platform.com`; update again if the real
-domain ends up different. `CORS_ALLOWED_SUFFIXES` (EdgeOne/Railway/Render
-suffixes) was left alone — unused on a VPS but harmless, not broken.
+- `CORS_ALLOWED_ORIGINS` in `server.js` still hardcoded
+  `https://chipz-platform.com`/`https://www.chipz-platform.com`, even though
+  `_baseDomain`'s default was already renamed to `petro-platform.com` in the
+  mechanical fork. Now reads `petro-platform.com`/`www.petro-platform.com`;
+  update again once the real domain is chosen. `CORS_ALLOWED_SUFFIXES`
+  (EdgeOne/Railway/Render suffixes) was left alone — unused on a VPS but
+  harmless, not broken.
+- `admin-src/index.html`'s `VAPID_KEY` constant (admin push-notification
+  registration for deposit/withdrawal alerts) was still **Chipz's real, live
+  key**, not a placeholder — missed by the mechanical fork's Firebase-config
+  pass. Left alone it would have silently failed `getToken()` once pointed
+  at Petro's own Firebase project (VAPID keys are project-scoped). Replaced
+  with the real Petro key the owner supplied alongside the Firebase config.
+- `package-lock.json`'s `name` field was still `"chipz-server"` (the
+  `package.json` rename didn't touch the lockfile). Fixed to `petro-server`.
 
 ## Status
 
@@ -346,32 +340,37 @@ brand-name default) and cannot accidentally authenticate against or write into
 Chipz's live Firebase/Mongo (verified, not assumed). The CORS origin miss
 (`chipz-platform.com` left in `CORS_ALLOWED_ORIGINS`) is fixed.
 
-**VPS deploy pipeline built, not yet stood up.** `petro/deploy/` has the pm2
-config, the nginx template (all headers/CSP/rewrites ported from the old
-Railway/Render setup), and the rsync+ssh deploy script — see "Hosting:
-Hostinger VPS (KVM1)" above. Nothing has actually been deployed: there is no
-VPS provisioned, no domain pointed at one, no TLS cert, no Firebase project,
-no Mongo database/cluster decision, and no payment-gateway credentials. Both
-bundles rebuild clean (`node build-core.js`/`node build-admin.js`, round-trip
-OK) as of this session.
+**VPS is live and the backend is running real traffic-ready infrastructure.**
+IP `179.198.197.114`, code pulled via git (not rsync — a Claude session
+cannot SSH out, see "Hosting" above for the corrected pipeline), backend
+under pm2 as a systemd service, connected to the real `chnpetrol` Firebase
+project and the real Mongo Atlas `petro` database, `/health` returns
+`{"status":"ok","db":true}`. Both frontend bundles carry the real Firebase
+web config and the real VAPID key (rebuilt and pushed this session).
+
+**What's NOT done, and is the actual next step:** nginx has no Petro site
+config yet, there's no domain pointed at the VPS, no TLS, and
+`set-backend-url.js` hasn't run — so the shipped `user/`/`admin/` bundles
+don't yet know to call this backend. See the numbered list under "Hosting:
+Hostinger VPS (KVM1)" above; getting a domain is the actual blocker, not
+more VPS work.
 
 Everything else — design, product catalog, which countries/languages/gateways
 actually apply, the test suite's own correctness — is real, undone work for
 the next session, laid out below in the order it probably needs doing:
 
-1. ~~Confirm/adjust the fork's mechanical renames~~ — done this session (the
-   CORS miss above); nothing else here needs redoing.
-2. Decide the actual oil/gas visual identity — palette, typography, iconography
+1. ~~Confirm/adjust the fork's mechanical renames~~ — done (the CORS miss,
+   the VAPID key, the lockfile name).
+2. ~~Stand up the VPS, wire up real Firebase + Mongo~~ — done this session,
+   see "Hosting" above. Remaining: a domain, nginx, TLS, `set-backend-url.js`.
+3. Decide the actual oil/gas visual identity — palette, typography, iconography
    — with the owner, the same deliberate way Chipz's own `CLAUDE.md` records
    getting its own red/orange identity right (see "Design language / decisions
    already made" in `chipz/CLAUDE.md` for the *process*, not the *values* —
    the values are Chipz's). **Waiting on the owner's direction, per "Fixed
    decisions" above — do not invent this unprompted.**
-3. Decide the product catalog: real names, prices, cycle lengths.
-4. Decide which countries/currencies/languages/payment gateways actually apply
+4. Decide the product catalog: real names, prices, cycle lengths.
+5. Decide which countries/currencies/languages/payment gateways actually apply
    to Petro — do not assume Uganda/UGX/MarzPay just because the code defaults
    to it.
-5. Work through the inherited test suite file by file, per the warning above.
-6. Provision the actual VPS, domain, Firebase project and Mongo
-   database/cluster (see the numbered checklist under "Hosting: Hostinger VPS
-   (KVM1)"), then run `petro/deploy/deploy.sh` for the first real deploy.
+6. Work through the inherited test suite file by file, per the warning above.
