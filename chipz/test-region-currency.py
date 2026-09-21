@@ -161,10 +161,17 @@ async def snapshot(page, label):
     prices = await page.evaluate(SCAN)
     await page.evaluate("showPage('home')")
     await page.wait_for_timeout(700)
+    # The dialling-code prefix chip moved off the first Deposit sheet onto
+    # the shared network-selector screen (both PAY A and PAY B collect phone
+    # there now, see the network-logos round) -- reached the same way a
+    # member does: amount, Confirm, land on the overlay.
     await page.evaluate("openDepositSheet()")
     await page.wait_for_timeout(1200)
-    dep = await page.evaluate("()=>({prefix:((document.querySelector('.dep-phone .prefix')||{}).textContent||'').trim(),hint:((document.querySelector('.dep-hint')||{}).textContent||'').trim()})")
-    await page.evaluate("closeSheet()")
+    await page.evaluate("document.getElementById('depAmount').value='30000'")
+    await page.evaluate("submitDepositChoice()")
+    await page.wait_for_timeout(1200)
+    dep = await page.evaluate("()=>({prefix:((document.querySelector('.mp-prefix')||{}).textContent||'').trim(),hint:''})")
+    await page.evaluate("closeManualPayOverlay && closeManualPayOverlay({fromAction:true})")
     await page.wait_for_timeout(500)
     await page.evaluate("openWithdrawSheet()")
     await page.wait_for_timeout(1200)
