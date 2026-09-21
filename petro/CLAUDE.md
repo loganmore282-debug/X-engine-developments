@@ -174,15 +174,77 @@ product name or number unprompted):
 - **The whole backend architecture**: multi-country regions, the i18n engine
   and its six languages (en/lg/sw/fr/rw/nyn — Petro almost certainly doesn't
   want Uganda's Bantu languages as defaults; this needs a decision), the
-  MarzPay/LipaPay/PesaJet gateway integrations (all of which are wired to
-  **Uganda-area currencies and, per the most recent Chipz round, MarzPay's
-  twelve real markets** — irrelevant unless Petro also launches in one of
-  those markets), the turntable/spin mechanic, referral commissions, the
-  whole admin panel. All real, all functional, all still speaking Chipz's
-  product in its comments and defaults.
-- **`sms-forwarder-app/`** package/tag/URL are fixed (see above) but its
-  **UI copy, icon, and any Chipz-specific settings-screen text** are not
-  audited yet.
+  MarzPay/PesaJet gateway integrations (both still wired to **Uganda-area
+  currencies and, per the most recent Chipz round, MarzPay's twelve real
+  markets** — irrelevant unless Petro also launches in one of those markets),
+  the turntable/spin mechanic, referral commissions, the whole admin panel.
+  All real, all functional, all still speaking Chipz's product in its
+  comments and defaults.
+
+## Removed from Petro: LipaPay, QuotaGuard, the SMS-forwarder app (owner decision)
+
+The owner explicitly asked for these three OUT, not carried over — a real
+exception to "everything inherited, unchanged" above, not an invented
+cleanup. Removed from `server.js`, `db.js`, `admin-src/index.html`,
+`user-src/original_module.js`, `package.json`, and `sms-forwarder-app/`
+deleted outright:
+
+- **LipaPay** (the 2nd automatic payment gateway) — every route
+  (`/deposit/lipapay/callback`, `/withdraw/lipapay/callback`), every helper
+  (`lipaCollect`/`lipaDisburse`/`lipaOrderQuery`/`lipaSign`/etc.), every
+  branch in `depositProvider()`/`withdrawProvider()`/`GATEWAY_DIAL_CODES`,
+  the reconciler sweeps, the `LIPAPAY_MCHID`/`LIPAPAY_PRIVATE_KEY`/
+  `LIPAPAY_SANDBOX` env vars, the Settings radio buttons, and its two unique
+  Mongo indexes (`lipaOutTradeNo`). **MarzPay and PesaJet are untouched** —
+  Petro now has two automatic gateways, not three. If MarzPay/PesaJet also
+  turn out to be wrong for Petro's actual markets, that's still open (see
+  above) — LipaPay was removed because the owner said so directly, not
+  because of that.
+- **QuotaGuard** (the outbound static-IP proxy, `proxyFetch()`/
+  `QUOTAGUARDSTATIC_URL`) — its *only* caller anywhere in the codebase was
+  LipaPay's own HTTP client (`_lipaPost()`); confirmed by grep before
+  deleting, not assumed. Gone with LipaPay. The `undici` dependency (only
+  needed for `ProxyAgent`) came out of `package.json`/`package-lock.json`
+  too, confirmed unused elsewhere first.
+- **The SMS-forwarder Android app** (`sms-forwarder-app/`, deleted) and its
+  server-side surface: `/deposit/manual/sms-forwarder` (the phone's webhook),
+  `/deposit/manual/forwarder-unlock` (screen-lock check), `/deposit/manual/
+  forwarder-heartbeat`, `/deposit/manual/verify-number`, the
+  `MANUAL_SMS_SECRET`/`FORWARDER_PASSWORD` shared secrets, the MTN
+  reversal-fraud detector (`parseReversalSms`/`applyDepositReversal` — its
+  only caller was the forwarder route), and the two admin endpoints that
+  existed solely to review forwarder-sourced `manualSmsLog` rows
+  (`/admin/manual-sms-log/resolve`, `/admin/manual-reversals/list`).
+  **What stayed, deliberately**: manual deposits themselves are not gone —
+  `/deposit/manual/init`, `/deposit/manual/status`, and
+  `/deposit/manual/paste-sms` (the member pastes their own confirmation SMS,
+  an admin reviews and approves/rejects in Needs Review) are the owner's
+  own already-established replacement flow (see the "no use of forwarder
+  sms app, only the sent message ... should appear to admin panel" quote
+  already in the code) and were carefully kept intact — same for
+  `parseMoMoSms()`/`parseSentMoMoSms()` (the SMS-parsing engine, shared by
+  paste-sms) and `trackManual()`/number-activity stats (still fed by
+  'assigned'/'expired' events from the kept manual-deposit flow).
+  `manualNumberHealth()` and the admin's per-number "Payment number
+  activity" analytics panel (Analytics tab) were **left in place but not
+  actively cleaned up** — they degrade gracefully to permanently
+  "Never checked in"/zero counts now that nothing calls the heartbeat
+  endpoint, which is honest and non-breaking, just cosmetically stale; a
+  real follow-up if it bothers the owner, not urgent.
+
+**Known follow-up, not done (low-risk, cosmetic, deliberately not touched this
+round):** a handful of **admin-panel i18n translation strings** (the
+lg/sw/fr/rw/nyn tooltip text, e.g. "automatic (MarzPay or LipaPay)" in the
+deposits-tab help text) still mention LipaPay/the forwarder. Left alone on
+purpose rather than hand-edited: these are matched positionally across 6
+languages in one array, and editing the English source without also
+correctly re-translating the other 5 risks desyncing the lookup for every
+non-English admin — a worse outcome than a stale tooltip. Needs a session
+with real translation review, not a guess. Also: `test-manual-review.js`,
+`test-manualpay-matches-snow.js`, and any other test file asserting the
+removed LipaPay/forwarder code paths are now failing — expected, and covered
+by this file's existing "work through the inherited test suite file by
+file" item below; do not bulk-fix them.
 
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
@@ -354,6 +416,15 @@ config yet, there's no domain pointed at the VPS, no TLS, and
 don't yet know to call this backend. See the numbered list under "Hosting:
 Hostinger VPS (KVM1)" above; getting a domain is the actual blocker, not
 more VPS work.
+
+**LipaPay, QuotaGuard, and the SMS-forwarder app are fully removed** (owner
+decision, not inherited default) — see "Removed from Petro" above for the
+full list of what came out and what was deliberately kept (manual deposits
+via member-pasted SMS still work). Both bundles rebuild clean and both
+carry the changes; the VPS is still running the *previous* bundle/server.js
+as of this note — **the code in this commit needs `git pull` + rebuild
++ `pm2 reload` on the VPS to actually take effect there**, same as any other
+code change per the "Hosting" section's redeploy step.
 
 Everything else — design, product catalog, which countries/languages/gateways
 actually apply, the test suite's own correctness — is real, undone work for

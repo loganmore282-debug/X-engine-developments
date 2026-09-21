@@ -383,11 +383,9 @@ const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 // Owner: "l am trying to saved them in admin panel but they change to
 // +2567..." -- cleanPhone() server-side always normalizes a saved payment
-// number to canonical +256XXXXXXXXX before storing (must stay that way --
-// the SMS-forwarder matching pipeline does an exact-string comparison
-// against this same stored value). This is DISPLAY-ONLY, applied wherever
-// the admin panel shows a saved number back, so a number typed as
-// "07XXXXXXXX" doesn't visibly "change" after saving.
+// number to canonical +256XXXXXXXXX before storing. This is DISPLAY-ONLY,
+// applied wherever the admin panel shows a saved number back, so a number
+// typed as "07XXXXXXXX" doesn't visibly "change" after saving.
 // The stored number is always canonical "+<dial><local>"; this is a
 // display-only conversion to the local "07..." shape. The dialling code
 // comes from whichever country is being edited, so a Kenyan collection
@@ -421,12 +419,12 @@ function ugx(n, regionKey){
   const hasCents = Math.round(v*100)%100 !== 0;
   return curOf(regionKey) + ' ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
 }
-// Mirrors server.js's own normalizeProviderValue() -- 'automatic' is the
-// pre-LipaPay literal a value could still be if this database predates
-// Round 102; treated as a permanent alias for 'marzpay' everywhere a
+// Mirrors server.js's own normalizeProviderValue() -- 'automatic' is a
+// legacy literal a value could still be if this database predates the
+// PAY A/PAY B split; treated as a permanent alias for 'marzpay' everywhere a
 // depositMethod/payoutMode string is compared or labelled in this panel.
-function normalizeProv(v){ return (v==='lipapay'||v==='pesajet'||v==='manual') ? v : 'marzpay'; }
-const PROVIDER_LABEL = { marzpay:'MarzPay', lipapay:'LipaPay', pesajet:'PesaJet', manual:'by hand' };
+function normalizeProv(v){ return (v==='pesajet'||v==='manual') ? v : 'marzpay'; }
+const PROVIDER_LABEL = { marzpay:'MarzPay', pesajet:'PesaJet', manual:'by hand' };
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
 // Round-trips openingCountdownAt (a plain epoch-ms number, same shape as
 // every other timestamp this file reads) into/out of a <input
@@ -1976,12 +1974,12 @@ async function openUser(uid){
         // the deposits they made and to which number and from which
         // number at what time" -- "Paid to" only has real meaning for a
         // manual order (one of the admin's own numbers, assignedNumber);
-        // an automatic (MarzPay/LipaPay) deposit never has a specific
+        // an automatic (MarzPay/PesaJet) deposit never has a specific
         // admin-side number of its own -- it's collected straight off the
         // member's own phone into the payment gateway -- so that's
         // labelled honestly instead of showing a blank or a made-up value.
         const paidTo = d.method==='manual' ? esc(d.assignedNumber||'Not set')
-          : `Automatic (${d.provider==='lipapay'?'LipaPay':'MarzPay'})`;
+          : `Automatic (${d.provider==='pesajet'?'PesaJet':'MarzPay'})`;
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
         return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
       }).join('')}
@@ -2195,7 +2193,7 @@ function drawDeps(){
       // provider is only set on deposits created since Round 102 -- an
       // older row with none falls back to the same plain "Automatic" label
       // it always had (it can only ever have gone through MarzPay).
-      : (d.provider==='lipapay'?'LipaPay':d.provider==='marzpay'?'MarzPay':'Automatic');
+      : (d.provider==='pesajet'?'PesaJet':d.provider==='marzpay'?'MarzPay':'Automatic');
     const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
     // Owner: "only the sent message from after refresh on manual payment page
     // should appear to admin panel in its full details so as admin verifies
@@ -2319,11 +2317,11 @@ async function renderWithdrawals(){
   drawWits();
 }
 // True while Settings has payments on Manual: payouts do not go through
-// MarzPay or LipaPay at all, an admin sends the money from their own phone
+// MarzPay or PesaJet at all, an admin sends the money from their own phone
 // and then records it here. Turns the approve button from an action the
 // system performs into a record of one a person already performed.
 var _witManualPayouts = false;
-// Raw payoutMode from the server -- 'marzpay' | 'lipapay' | 'manual'.
+// Raw payoutMode from the server -- 'marzpay' | 'pesajet' | 'manual'.
 var _witProvider = 'marzpay';
 function witStatusPill(w){
   if(w.status==='pending') return `<span class="pill-tag t-warn">Awaiting approval</span>`;
@@ -2376,7 +2374,7 @@ function drawWits(){
   document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm(_witManualPayouts?'Only do this AFTER you have actually sent the money from an admin phone to the number on this row.\n\nThis records the payout as paid and closes it. It does not send anything.':`Send this payout through ${PROVIDER_LABEL[normalizeProv(_witProvider)]} now?`))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation();
     // subagent-audit-caught: the same generic funds-refunded prompt fired for
-    // a 'sending' row (MarzPay/LipaPay network-errored mid-payout, genuinely
+    // a 'sending' row (MarzPay/PesaJet network-errored mid-payout, genuinely
     // ambiguous whether the money actually went out) as for an ordinary
     // pending/processing one -- an admin who rejects a 'sending' row without
     // first checking the provider's own dashboard could refund a member on
@@ -3434,11 +3432,10 @@ async function renderSettings(){
 
     <h2 class="sec">Manual payments</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Members now see up to 2 payment options on the Recharge screen, labelled neutrally "PAY A" and "PAY B" (no "manual"/"automatic" wording is ever shown to them) -- enable either one alone, or both at once so the member picks. <b>PAY A</b> is the automatic gateway (MarzPay, LipaPay or PesaJet, chosen below) -- instant, no admin numbers needed, and no network to select either: the gateway detects it from the phone number. <b>PAY B</b> is manual -- assigns the member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
+      <p class="muted" style="margin-top:0">Members now see up to 2 payment options on the Recharge screen, labelled neutrally "PAY A" and "PAY B" (no "manual"/"automatic" wording is ever shown to them) -- enable either one alone, or both at once so the member picks. <b>PAY A</b> is the automatic gateway (MarzPay or PesaJet, chosen below) -- instant, no admin numbers needed, and no network to select either: the gateway detects it from the phone number. <b>PAY B</b> is manual -- assigns the member one of the numbers below to send money to by hand, matched to their order once the member pastes their own confirmation text.</p>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:6px;"><input type="checkbox" id="depPayAOn" ${v('depositPayAEnabled',true)?'checked':''} style="width:auto"> <b>Enable PAY A</b> (automatic)</label>
       <div id="depPayAGateway" style="margin:0 0 12px 26px">
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> MarzPay</label>
-        <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayLipa" value="lipapay" ${normalizeProv(v('depositMethod','marzpay'))==='lipapay'?'checked':''} style="width:auto"> LipaPay</label>
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depGateway" id="depGatewayPesa" value="pesajet" ${normalizeProv(v('depositMethod','marzpay'))==='pesajet'?'checked':''} style="width:auto"> PesaJet</label>
       </div>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="checkbox" id="depPayBOn" ${v('depositPayBEnabled',false)?'checked':''} style="width:auto"> <b>Enable PAY B</b> (manual, admin numbers below)</label>
@@ -3447,7 +3444,6 @@ async function renderSettings(){
       <p class="muted" style="margin:0 0 8px">By default payouts follow PAY A's own automatic gateway above. Pin them here if you want the two directions to differ, for example manual recharges with PesaJet payouts, or the reverse.</p>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the payment method above</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodLipa" value="lipapay" ${v('withdrawMethod','follow')==='lipapay'?'checked':''} style="width:auto"> Always automatic (LipaPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>

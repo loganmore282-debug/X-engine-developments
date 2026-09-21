@@ -110,30 +110,26 @@ async function ensureIndexes() {
     ['withdrawals',     { status: 1 }],
     ['withdrawals',     { marzReference: 1 }],
     ['withdrawals',     { marzTxUuid: 1 }],
-    ['withdrawals',     { lipaOutTradeNo: 1 }], // Round 102 -- LipaPay's own OutTradeNo lookup, mirrors marzTxUuid/marzReference above
     ['withdrawals',     { ref: 1 }],
     ['withdrawals',     { userId: 1, createdAt: -1 }],
     ['withdrawals',     { status: 1, createdAt: 1 }],
     // Round 106 -- reconcilePendingWithdrawals()'s real query shape (status
-    // + marzTxUuid/lipaOutTradeNo + createdAt), mirroring the exact compound
-    // indexes pendingDeposits already got in Round 104 for the identical
+    // + marzTxUuid + createdAt), mirroring the exact compound indexes
+    // pendingDeposits already got in Round 104 for the identical
     // starvation-avoidance fix on the deposit side.
     ['withdrawals',     { status: 1, marzTxUuid: 1, createdAt: 1 }],
-    ['withdrawals',     { status: 1, lipaOutTradeNo: 1, createdAt: 1 }],
     ['pendingDeposits', { userId: 1 }],
     ['pendingDeposits', { marzReference: 1 }],
     ['pendingDeposits', { status: 1 }],
-    ['pendingDeposits', { provider: 1, status: 1, createdAt: 1 }], // Round 102 -- reconcilePendingDeposits()'s LipaPay sweep
+    ['pendingDeposits', { provider: 1, status: 1, createdAt: 1 }], // reconcilePendingDeposits()'s PesaJet sweep
     ['pendingDeposits', { ref: 1 }],
     ['pendingDeposits', { userId: 1, createdAt: -1 }],
     ['pendingDeposits', { status: 1, createdAt: 1 }],
     ['pendingDeposits', { needsManualCredit: 1 }],
     // Round 104 -- reconcilePendingDeposits()'s actual MarzPay query shape
-    // (status in [...], marzTxUuid>'', orderBy createdAt) and its LipaPay
-    // sibling (status in [...], provider=='lipapay', lipaTransactionId>'',
-    // orderBy createdAt) -- neither was fully covered by the specs above.
+    // (status in [...], marzTxUuid>'', orderBy createdAt), not fully covered
+    // by the specs above.
     ['pendingDeposits', { status: 1, marzTxUuid: 1, createdAt: 1 }],
-    ['pendingDeposits', { provider: 1, status: 1, lipaTransactionId: 1, createdAt: 1 }],
     ['withdrawals',     { refundPending: 1 }],
     ['products',        { key: 1 }],
     ['bankAccounts',    { userId: 1 }],
@@ -219,12 +215,10 @@ async function ensureIndexes() {
       partialFilterExpression: { marzReference: { $type: 'string' } } }],
     ['withdrawals', { marzReference: 1 }, { unique: true, name: 'marzReference_unique',
       partialFilterExpression: { marzReference: { $type: 'string' } } }],
-    ['withdrawals', { lipaOutTradeNo: 1 }, { unique: true, name: 'lipaOutTradeNo_unique',
-      partialFilterExpression: { lipaOutTradeNo: { $type: 'string' } } }],
     // PesaJet's own transaction id, on both sides. The partial filter is not
     // optional: without it a unique index treats every document MISSING the
     // field as sharing one null and rejects the second, which would block
-    // manual deposits and MarzPay/LipaPay payouts outright.
+    // manual deposits and MarzPay payouts outright.
     ['pendingDeposits', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',
       partialFilterExpression: { pesajetTxId: { $type: 'string' } } }],
     ['withdrawals', { pesajetTxId: 1 }, { unique: true, name: 'pesajetTxId_unique',

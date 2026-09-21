@@ -1046,11 +1046,10 @@ function linkifyText(text){
   return esc(text).replace(URL_PATTERN, url => `<a href="${url}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;font-weight:700;">${url}</a>`);
 }
 // Owner: "let payment number on payment page be 07.....,no country code
-// putting" -- the merchant/admin payment number stored server-side (and
-// used for exact-string SMS-forwarder matching) always stays canonical
-// +256XXXXXXXXX; this is a DISPLAY-ONLY conversion applied at render time,
-// never touching what's stored/compared. See CLAUDE.md's own note on why
-// the stored format must never change.
+// putting" -- the merchant/admin payment number stored server-side always
+// stays canonical +256XXXXXXXXX; this is a DISPLAY-ONLY conversion applied
+// at render time, never touching what's stored/compared. See CLAUDE.md's
+// own note on why the stored format must never change.
 function toLocalPhoneDisplay(num){
   const s = String(num || '').trim();
   const p = dialPlus();
@@ -6134,8 +6133,9 @@ async function handleManualDepositStatusResult(r){
 }
 // Polls for up to the full 15-minute payment window (matching
 // MANUAL_DEPOSIT_WINDOW_MS server-side) rather than automatic deposits'
-// short 60s window -- a manual match depends on a phone's SMS forwarder,
-// not an instant gateway callback, so it can genuinely take longer.
+// short 60s window -- a manual match depends on the member pasting their own
+// confirmation SMS and an admin reviewing it, not an instant gateway
+// callback, so it can genuinely take longer.
 // Self-terminates the moment the member navigates away from this overlay.
 //
 // Real, reproduced bug fixed here: manualPayOverlayOpen() only checks

@@ -321,9 +321,10 @@ const { connectMongo, db, FieldValue, pingDb } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
-// This server's own public address, which is what MarzPay and LipaPay are
-// told to call back on. An explicit PUBLIC_URL always wins; otherwise it is
-// taken from whichever host we are running on.
+// This server's own public address, which is what MarzPay is told to call
+// back on (PesaJet's webhook URL is dashboard-configured instead -- see the
+// PESAJET section below). An explicit PUBLIC_URL always wins; otherwise it
+// is taken from whichever host we are running on.
 //
 // RAILWAY_PUBLIC_DOMAIN is in this list because Render suspended the account
 // and the platform had to move. Railway does not set RENDER_EXTERNAL_URL, so
@@ -348,41 +349,6 @@ const MARZ_TIMEOUT = 20000;
 // Same "base64(api_key:api_secret)" Basic-auth convention as the wallet API.
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
-
-// ── OUTBOUND STATIC-IP PROXY (QuotaGuard) ──
-// Some payment providers (LipaPay is the reason this exists) whitelist a
-// fixed IP rather than authenticating every request -- Render's own egress
-// IPs are dynamic, so a request straight from this dyno can land from any
-// address and get rejected. QuotaGuard Static gives 2 fixed IPs and a proxy
-// URL; routing a specific outbound call through it makes that call appear
-// to come from one of those 2 IPs instead. This is opt-in PER CALL via
-// proxyFetch() below, not global -- MarzPay has no IP-whitelist requirement
-// today, so its own calls stay direct and unaffected by this being unset,
-// misconfigured, or the proxy itself being briefly down.
-const { ProxyAgent } = require('undici');
-const QUOTAGUARD_URL = (process.env.QUOTAGUARDSTATIC_URL || '').trim();
-let quotaGuardAgent = null;
-if (QUOTAGUARD_URL) {
-  // new ProxyAgent() THROWS synchronously on a malformed/unparseable URL --
-  // confirmed by hand before shipping this. Left uncaught, a single typo'd
-  // env var (this is optional plumbing for a not-yet-built LipaPay
-  // integration) would crash the ENTIRE server at boot, taking down every
-  // money path with it. A misconfigured proxy must only break the ONE
-  // feature that needs it, never the whole app.
-  try { quotaGuardAgent = new ProxyAgent(QUOTAGUARD_URL); }
-  catch (e) { console.error('QUOTAGUARDSTATIC_URL is set but could not be parsed as a proxy URL -- proxied calls will fall through to a DIRECT request, which a static-IP-only provider will reject. Error:', e.message); }
-}
-// Drop-in replacement for fetch() that routes through the QuotaGuard static
-// IP when QUOTAGUARDSTATIC_URL is configured, and behaves exactly like a
-// plain fetch() otherwise (so this is safe to use even before the env var
-// is ever set, e.g. in local dev). Never throws on its own for a missing
-// proxy config -- an unconfigured proxy is a deploy-config problem for the
-// provider's own request to surface (a 403 from THEM), not something this
-// helper should silently swallow or crash the server over.
-function proxyFetch(url, opts) {
-  if (!quotaGuardAgent) return fetch(url, opts);
-  return fetch(url, { ...opts, dispatcher: quotaGuardAgent });
-}
 
 // ── REGIONS (one subdomain = one country) ──
 //
@@ -735,18 +701,7 @@ app.use((req, res, next) => {
 
 // ── MAINTENANCE GATE ──
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team'];
-// Subagent-audit-caught real gap (Round 104): '/deposit/manual/sms-forwarder'
-// starts with '/deposit', so MAINTENANCE_BLOCK's prefix match already swept
-// it up -- unlike the 4 gateway webhooks above, it was never exempted. That
-// webhook reports money that has ALREADY LEFT a payer's account onto an
-// admin's phone; blocking it doesn't stop the deposit from happening, it
-// just stops the SERVER from ever finding out, and the Android forwarder
-// (Poster.java) makes exactly one attempt with no retry/queue -- a 503
-// during maintenance is logged on the phone and dropped forever, so the
-// order simply expires unmatched with no recovery. Same "money already
-// moved externally, must never be blocked" reasoning as the 4 payment
-// webhooks, just missed when this route was originally added.
-const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/deposit/lipapay/callback', '/withdraw/lipapay/callback', '/pesajet/webhook', '/deposit/manual/sms-forwarder']);
+const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
 // spelling it out, so renaming the app is one field and not a code change.
@@ -962,21 +917,18 @@ const DEFAULT_SETTINGS = {
   // one method is ever live at a time -- MarzPay's own code is completely
   // untouched, just gated behind this flag alongside the new manual-deposit
   // path (see the "MANUAL DEPOSITS" section below). Values are
-  // 'marzpay' | 'lipapay' | 'manual' (Round 102 widened this from a plain
-  // 'automatic'/'manual' 2-way toggle once LipaPay became a real 2nd
-  // automatic provider -- 'automatic' is still recognized as a legacy
-  // alias for 'marzpay' by depositProvider()/withdrawProvider() below, so
-  // an already-deployed database with the old value keeps working exactly
-  // as before with zero migration). Never read this field raw -- always go
-  // through depositProvider()/payoutIsManual().
+  // 'marzpay' | 'pesajet' | 'manual' ('automatic' is still recognized as a
+  // legacy alias for 'marzpay' by depositProvider()/withdrawProvider()
+  // below, so an already-deployed database with the old value keeps working
+  // exactly as before with zero migration). Never read this field raw --
+  // always go through depositProvider()/payoutIsManual().
   depositMethod: 'marzpay',
   // Owner, after the first version tied payouts to depositMethod: "yeah it
   // can also work and vice versa" -- so the two directions are separable.
   // 'follow' keeps the original behaviour (payouts do whatever deposits do,
   // which is what most setups want and what everyone is already on);
-  // 'marzpay'/'lipapay'/'manual' pin the payout side independently,
-  // allowing e.g. manual deposits with LipaPay payouts. Resolved by
-  // withdrawProvider()/payoutIsManual() -- never read this field raw.
+  // 'marzpay'/'pesajet'/'manual' pin the payout side independently. Resolved
+  // by withdrawProvider()/payoutIsManual() -- never read this field raw.
   withdrawMethod: 'follow',
   // Owner: "let us establish Payment reminder, so as it is also editable in
   // admin panel for mtn and airtel" -- free-text, network-specific transfer
@@ -996,7 +948,7 @@ const DEFAULT_SETTINGS = {
   // the member AT THE SAME TIME (previously depositMethod was a single
   // exclusive choice: automatic OR manual, never both). PAY A is always
   // the automatic gateway (whichever depositMethod itself resolves to via
-  // depositAutomaticProvider() below -- MarzPay or LipaPay); PAY B is
+  // depositAutomaticProvider() below -- MarzPay or PesaJet); PAY B is
   // always the admin-managed manual flow. Neither name ("manual"/
   // "automatic") is ever shown to a member -- the app only ever renders
   // the neutral "PAY A"/"PAY B" labels. See getSettings()'s own migration
@@ -1004,18 +956,6 @@ const DEFAULT_SETTINGS = {
   // single depositMethod field) gets sane values for these two the first
   // time it's read after this round ships.
   depositPayAEnabled: true, depositPayBEnabled: false,
-  // Owner: "this time no use of forwarder sms app, only the sent message
-  // from after refresh on manual payment page should appear to admin panel
-  // in its full details so as admin verifies manually or rejects."
-  //
-  // Manual deposits are human-verified now. This defaults to FALSE, so the
-  // SMS-forwarder route can no longer credit a wallet by itself even if the
-  // app is still installed on a phone somewhere and still forwarding -- a
-  // match is queued for review instead. Deleting the route would have been
-  // the cruder way to get here and would throw away the matching work; a
-  // default-off switch turns it back on from the panel if that is ever
-  // wanted again, and cannot silently move money in the meantime.
-  manualSmsAutoCredit: false,
   // Owner: "make when l can configure what speed the activity checker be
   // on home screen." The Home activity ticker's own scroll speed (px/sec)
   // was hand-tuned across several earlier rounds by direct owner request
@@ -1140,14 +1080,14 @@ async function getSettings(regionKey) {
   }
 }
 // Normalizes a raw stored depositMethod/withdrawMethod value to one of
-// 'marzpay' | 'lipapay' | 'manual'. 'automatic' is the pre-LipaPay literal
-// (still possibly sitting in an already-deployed database) and is treated
+// 'marzpay' | 'pesajet' | 'manual'. 'automatic' is a legacy literal (still
+// possibly sitting in an already-deployed database) and is treated
 // as a permanent alias for 'marzpay', so nothing needs to migrate. Anything
 // unrecognized (a stale/corrupted value) also falls back to 'marzpay' --
 // the historical default -- rather than silently landing on 'manual',
 // which would divert real money to admin-managed numbers nobody expects.
 function normalizeProviderValue(v) {
-  if (v === 'lipapay' || v === 'pesajet' || v === 'manual') return v;
+  if (v === 'pesajet' || v === 'manual') return v;
   return 'marzpay';
 }
 // The single place that decides which real payment path a DEPOSIT uses.
@@ -1155,7 +1095,7 @@ function normalizeProviderValue(v) {
 function depositProvider(sett) {
   return normalizeProviderValue(sett && sett.depositMethod);
 }
-// Resolves the automatic GATEWAY (marzpay vs lipapay) "PAY A" should use,
+// Resolves the automatic GATEWAY (marzpay vs pesajet) "PAY A" should use,
 // once the /deposit/marzpay route has already confirmed PAY A is actually
 // enabled (depositPayAEnabled) -- deliberately distinct from
 // depositProvider() above, which withdrawals' own 'follow' mode still
@@ -1166,11 +1106,11 @@ function depositProvider(sett) {
 // historical default, same as every other unrecognized value.
 function depositAutomaticProvider(sett) {
   const p = depositProvider(sett);
-  return (p === 'lipapay' || p === 'pesajet') ? p : 'marzpay';
+  return (p === 'pesajet') ? p : 'marzpay';
 }
 // The single place that decides which real payment path a WITHDRAWAL
 // (payout) uses. 'follow' defers to depositProvider() -- everything else
-// ('marzpay'/'lipapay'/'manual', or the legacy 'automatic' alias) pins the
+// ('marzpay'/'pesajet'/'manual', or the legacy 'automatic' alias) pins the
 // payout side independently of the deposit side.
 // ── MARZPAY'S MARKETS ──
 // Twelve, from MarzPay's own documentation (the integration guide's §5.3 field
@@ -1232,11 +1172,9 @@ function marzMarket(region) {
 // payout, and NOTHING said so: the member sees a provider failure and the
 // admin sees a working config.
 //
-// LipaPay and PesaJet really are Uganda-only (LipaPay's collections and
-// payouts, PesaJet's MTN/Airtel mobile money, per its own docs).
+// PesaJet really is Uganda-only (its MTN/Airtel mobile money, per its own docs).
 const GATEWAY_DIAL_CODES = Object.freeze({
   marzpay: Object.keys(MARZPAY_MARKETS),
-  lipapay: ['256'],
   pesajet: ['256'],
 });
 function gatewayServesDial(gateway, dial) {
@@ -2645,230 +2583,8 @@ function marzEventTypeFallback(eventType) {
   return '';
 }
 
-// ── LIPAPAY (mobile money collect/disburse -- a 2nd, independent automatic
-// payout provider alongside MarzPay; see CLAUDE.md Round 102) ──
-// CLIENT ONLY as of this commit -- nothing in server.js calls any of these
-// functions yet. depositMethod/withdrawMethod, /deposit, /withdraw, the
-// admin payment-method UI, and a LipaPay webhook receiver are all a
-// deliberately separate follow-up round once this module itself is settled
-// and, ideally, exercised against LipaPay's real dev sandbox at least once
-// (this sandbox's own network policy blocks reaching dev.pay.lipapayug.com,
-// so this has only been verified against a local mock server standing in
-// for LipaPay -- see the money-unit note on ugxToLipaCents() below).
-const LIPA_SANDBOX = String(process.env.LIPAPAY_SANDBOX || '').trim().toLowerCase() === 'true';
-const LIPA_BASE = LIPA_SANDBOX ? 'http://dev.pay.lipapayug.com' : 'https://pay.lipapayug.com';
-const LIPA_MCHID = (process.env.LIPAPAY_MCHID || '').trim();
-const LIPA_PRIVATE_KEY = process.env.LIPAPAY_PRIVATE_KEY || '';
-const LIPA_TIMEOUT = 20000;
-function lipaConfigured() { return !!(LIPA_MCHID && LIPA_PRIVATE_KEY); }
-
-// LipaPay's own API reference (Version 3.0) §5.1's Request table documents
-// Amount as "Transaction amount in UGX cents (1 UGX = 100 cents)". Every
-// OTHER Amount-shaped field in every RESPONSE across every endpoint in the
-// same document is labelled "(UGX)" with no cents mention -- confirmed by
-// hand-checking the Order Query response example's own arithmetic
-// (Amount=10000, PayerCharge=101, ActualPaymentAmount=10101 -- only exact
-// if these are plain UGX, not cents: 10000+101=10101). One example (5.4
-// Prepaid Bill Enquiry) echoes the raw request cents value unconverted in
-// its own response example, which reads as a documentation copy-paste
-// artifact given its own ServiceCharge (15 at a stated 3% rate) only makes
-// sense against 500 UGX, not 50000 -- but this has NOT been confirmed
-// against a live response, only inferred from the document's internal
-// consistency. Money-unit conversion is deliberately centralized in this
-// ONE function for exactly this reason: if a live sandbox test ever proves
-// this wrong, there is exactly one place to fix, not several scattered
-// multiplications.
-function ugxToLipaCents(amountUgx) { return Math.round(Number(amountUgx) * 100); }
-
-// Per §3 of the doc: sign over the given fields IN THE DOCUMENTED TABLE
-// ORDER for that endpoint (never alphabetical, and never JSON key order,
-// which is not guaranteed to match it), Key=Value joined with '&', any
-// field that is null/undefined/'' OMITTED entirely, values NOT
-// URL-encoded (confirmed against the doc's own worked example -- a literal
-// space in "Sand Box" appears unescaped in their signature string, verified
-// byte-for-byte against their example hash before this shipped), then
-// '&privateKey=<key>' appended, MD5 hex lowercase. Reused both to SIGN an
-// outgoing request and to independently recompute a received Data object's
-// own Sign for a first-pass sanity check.
-function lipaSign(fields, order, privateKey) {
-  const parts = [];
-  for (const key of order) {
-    const v = fields[key];
-    if (v === null || v === undefined || v === '') continue;
-    parts.push(`${key}=${v}`);
-  }
-  parts.push(`privateKey=${privateKey}`);
-  return crypto.createHash('md5').update(parts.join('&'), 'utf8').digest('hex');
-}
-// Signature field order per endpoint, exactly as each table in the doc
-// lists it (Sign itself is never included; PayMessage is explicitly called
-// out by the doc as "excluded from signature" everywhere it appears).
-const LIPA_FIELDS = {
-  unifiedOrderReq:     ['Version', 'MchID', 'TimeStamp', 'Channel', 'OutTradeNo', 'Amount', 'TransactionType', 'TraderID', 'TraderFullName', 'Description', 'NotifyUrl'],
-  unifiedOrderRespData:['OutTradeNo', 'TransactionId', 'ActualPaymentAmount', 'ActualCollectAmount', 'PayerCharge', 'PayeeCharge', 'ChannelCharge'],
-  orderQueryReq:       ['Version', 'MchID', 'TimeStamp', 'OutTradeNo'],
-  orderQueryRespData:  ['PayStatus', 'PayTime', 'OutTradeNo', 'TransactionId', 'Amount', 'ActualPaymentAmount', 'ActualCollectAmount', 'PayerCharge', 'PayeeCharge'],
-  callbackBody:        ['PayStatus', 'PayTime', 'OutTradeNo', 'TransactionId', 'Amount', 'ActualPaymentAmount', 'ActualCollectAmount', 'PayerCharge', 'PayeeCharge'],
-  billReq:             ['Version', 'MchID', 'TimeStamp', 'Channel', 'TransactionType', 'TraderID', 'Amount'],
-  billRespData:        ['TraderID', 'GivenName', 'FamilyName', 'FullName', 'Amount', 'ServiceCharge', 'ServiceChargeRate'],
-  balanceReq:          ['Version', 'MchID', 'TimeStamp'],
-  balanceRespData:      ['Balance'],
-  statementReq:        ['Version', 'MchID', 'TimeStamp', 'StartTime', 'EndTime'],
-};
-// Best-effort, ADVISORY sanity check only -- never the trust boundary for
-// crediting money. Exact decimal-string formatting of a value we RECEIVE
-// (e.g. is a fee genuinely "15" or "15.00" in LipaPay's own signing input)
-// is unverified against a real server from this sandbox, so a false
-// negative here is expected and must never block a legitimate credit or
-// stand in for real verification. The actual trust boundary for any money
-// decision is always an independent lipaOrderQuery() call against LipaPay's
-// own API using our own credentials -- mirrors exactly how Round 81
-// hardened the MarzPay webhook to never trust an unauthenticated body
-// alone. Returns null ("couldn't check"), never a false "failed", when
-// there's nothing to check against.
-function lipaVerifyDataSign(data, order) {
-  if (!data || !data.Sign || !LIPA_PRIVATE_KEY) return null;
-  return lipaSign(data, order, LIPA_PRIVATE_KEY) === data.Sign;
-}
-const LIPA_PAY_STATUS = { 0: 'processing', 1: 'success', 2: 'failed' };
-function lipaStatusLabel(payStatus) { return LIPA_PAY_STATUS[payStatus] || ''; }
-function lipaUserMsg(resp, fallback) {
-  if (!resp) return fallback || PROVIDER_BUSY_MSG;
-  if (Array.isArray(resp.Errors)) return resp.Errors.join('; ') || fallback || PROVIDER_BUSY_MSG;
-  return resp.Errors || fallback || PROVIDER_BUSY_MSG;
-}
-async function _lipaParse(resp) {
-  let data;
-  try { data = await resp.json(); }
-  catch (_) { return { StatusCode: 0, Succeeded: false, Errors: 'Invalid response from payment gateway', Data: null, providerDown: true }; }
-  if (!data || typeof data !== 'object' || Array.isArray(data))
-    return { Succeeded: false, providerDown: true, Errors: 'Invalid response from payment gateway' };
-  if (resp.status >= 500 || [408, 409, 429].includes(resp.status)) data.providerDown = true;
-  if (resp.ok && typeof data.Succeeded !== 'boolean') data.providerDown = true;
-  if (!resp.ok && data.StatusCode == null) data.StatusCode = resp.status;
-  return data;
-}
-async function _lipaPost(path, body) {
-  const resp = await proxyFetch(`${LIPA_BASE}${path}`, {
-    method: 'POST', signal: AbortSignal.timeout(LIPA_TIMEOUT),
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  return _lipaParse(resp);
-}
-function _lipaNotConfigured() {
-  return { StatusCode: 0, Succeeded: false, Errors: 'LipaPay is not configured', Data: null, providerDown: true };
-}
-// TransactionType 1 = Collection (deposit), 2 = Disbursement (withdrawal) --
-// LipaPay uses ONE endpoint for both, unlike MarzPay's separate
-// collect-money/send-money routes. outTradeNo, notifyUrl and channel are
-// all caller-supplied (matching marzCollect()/marzSendMoney()'s own
-// caller-supplies-the-reference shape) -- this module deliberately does not
-// generate order numbers itself; the calling deposit/withdrawal code is
-// what owns that idempotency guarantee.
-async function lipaUnifiedOrder({ transactionType, amountUgx, channel, traderId, traderFullName, description, outTradeNo, notifyUrl }) {
-  if (!lipaConfigured()) return _lipaNotConfigured();
-  const fields = {
-    Version: 'v1.0',
-    MchID: Number(LIPA_MCHID),
-    TimeStamp: Math.floor(Date.now() / 1000),
-    Channel: channel != null ? Number(channel) : 0,
-    OutTradeNo: outTradeNo,
-    Amount: ugxToLipaCents(amountUgx),
-    TransactionType: Number(transactionType),
-    TraderID: traderId,
-    TraderFullName: traderFullName || 'NONEEDMATCHNAMES',
-    Description: description || 'Mobile Money',
-    NotifyUrl: notifyUrl,
-  };
-  const Sign = lipaSign(fields, LIPA_FIELDS.unifiedOrderReq, LIPA_PRIVATE_KEY);
-  return _lipaPost('/api/pay/unifiedorder', { ...fields, Sign });
-}
-async function lipaCollect(opts)  { return lipaUnifiedOrder({ ...opts, transactionType: 1 }); }
-async function lipaDisburse(opts) { return lipaUnifiedOrder({ ...opts, transactionType: 2 }); }
-// The one LipaPay call worth an internal retry -- this IS the "find out
-// what really happened" fallback, mirroring _marzFetchTxStatus()'s own
-// 2-attempt-plus-backoff shape exactly. lipaCollect()/lipaDisburse() stay
-// single-attempt like marzCollect()/marzSendMoney() -- retry safety there
-// comes from the caller reusing the same outTradeNo (LipaPay's own 403
-// duplicate-order-number rejection is the dedup guard), not an internal loop.
-async function lipaOrderQuery(outTradeNo) {
-  if (!lipaConfigured()) return _lipaNotConfigured();
-  const fields = { Version: 'v1.0', MchID: Number(LIPA_MCHID), TimeStamp: Math.floor(Date.now() / 1000), OutTradeNo: outTradeNo };
-  const Sign = lipaSign(fields, LIPA_FIELDS.orderQueryReq, LIPA_PRIVATE_KEY);
-  let lastErr = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const resp = await _lipaPost('/api/pay/orderquery', { ...fields, Sign });
-      if (resp && !resp.providerDown) return resp;
-      lastErr = new Error(resp && resp.Errors ? String(resp.Errors) : 'providerDown');
-    } catch (e) { lastErr = e; console.error(`lipaOrderQuery(${outTradeNo}) attempt ${attempt} failed:`, e.message); }
-    if (attempt < 2) await new Promise(r => setTimeout(r, 350));
-  }
-  console.error(`lipaOrderQuery(${outTradeNo}): gave up after 2 attempts, last error:`, lastErr && lastErr.message);
-  return { StatusCode: 0, Succeeded: false, Errors: lastErr ? lastErr.message : 'unreachable', Data: null, providerDown: true };
-}
-// Fee preview + optional name-match verification before placing a real
-// order. TraderFullName is intentionally not a parameter here the way it
-// is on lipaUnifiedOrder() -- the doc doesn't list it as a Bill Enquiry
-// request field at all (only Unified Order accepts the
-// "NONEEDMATCHNAMES"-skips-verification value); a Bill Enquiry only ever
-// echoes back whatever name LipaPay itself already has on file for TraderID.
-async function lipaBillEnquiry({ amountUgx, channel, transactionType, traderId }) {
-  if (!lipaConfigured()) return _lipaNotConfigured();
-  const fields = {
-    Version: 'v1.0',
-    MchID: Number(LIPA_MCHID),
-    TimeStamp: Math.floor(Date.now() / 1000),
-    Channel: channel != null ? Number(channel) : 0,
-    TransactionType: Number(transactionType),
-    TraderID: traderId,
-    Amount: ugxToLipaCents(amountUgx),
-  };
-  const Sign = lipaSign(fields, LIPA_FIELDS.billReq, LIPA_PRIVATE_KEY);
-  return _lipaPost('/api/pay/bill', { ...fields, Sign });
-}
-async function lipaGetBalance() {
-  if (!lipaConfigured()) return _lipaNotConfigured();
-  const fields = { Version: 'v1.0', MchID: Number(LIPA_MCHID), TimeStamp: Math.floor(Date.now() / 1000) };
-  const Sign = lipaSign(fields, LIPA_FIELDS.balanceReq, LIPA_PRIVATE_KEY);
-  return _lipaPost('/api/pay/balance', { ...fields, Sign });
-}
-// startDate/endDate: 'yyyyMMdd' strings, both optional (defaults to "today"
-// per the doc). The doc caps the query window at 3 calendar days -- not
-// enforced client-side, left for LipaPay's own 400 to surface if violated,
-// matching this codebase's general "the provider is the source of truth for
-// validity" posture already used for MarzPay's own error messages.
-async function lipaGetStatement(startDate, endDate) {
-  if (!lipaConfigured()) return _lipaNotConfigured();
-  const fields = { Version: 'v1.0', MchID: Number(LIPA_MCHID), TimeStamp: Math.floor(Date.now() / 1000), StartTime: startDate || null, EndTime: endDate || null };
-  const Sign = lipaSign(fields, LIPA_FIELDS.statementReq, LIPA_PRIVATE_KEY);
-  return _lipaPost('/api/pay/statement', { ...fields, Sign });
-}
-// Snow always stores a phone as cleanPhone()'s own canonical
-// "+256XXXXXXXXX" form. LipaPay's own doc (Appendix A) wants the LOCAL
-// 10-digit form with a leading 0 instead ("0750000000") -- straightforward
-// since the input is already validated/canonical, not re-parsing raw user
-// input a second time.
-function lipaTraderId(canonicalPhone) {
-  const digits = String(canonicalPhone || '').replace(/\D/g, '');
-  const local = localDigits(digits);
-  if (local) return '0' + local;
-  return digits; // already local, or an unexpected shape -- let LipaPay's own validation catch it
-}
-// Snow's own NETWORK_NAMES ('MTN Mobile Money'/'Airtel Money', already
-// stored on both deposits and withdrawals) mapped to LipaPay's Channel enum.
-// Anything else (not yet chosen, or a network LipaPay doesn't carry) falls
-// through to 0/Auto, which the doc documents as "auto-detect by TraderID
-// prefix" -- always a safe default, never a hard failure.
-function lipaChannel(network) {
-  if (network === 'MTN Mobile Money') return 1;
-  if (network === 'Airtel Money') return 2;
-  return 0;
-}
-
-// ── PESAJET (mobile money collect/disburse -- a 3rd automatic gateway for
-// Uganda, alongside MarzPay and LipaPay) ──
+// ── PESAJET (mobile money collect/disburse -- a 2nd automatic gateway
+// alongside MarzPay) ──
 // Owner: "l would like also to introduce in a new gateway for Uganda
 // https://pay.pesajet.com/docs".
 //
@@ -2879,12 +2595,12 @@ function lipaChannel(network) {
 // status values are authoritative. Anything the SDK does not exercise is
 // listed there as an open question instead of being guessed at here.
 //
-// Three shape differences from the other two gateways, each of which changes
-// how this is wired:
+// Three shape differences from MarzPay, each of which changes how this is
+// wired:
 //   * ONE endpoint for both directions -- POST /payments with
 //     type:'COLLECTION' or type:'DISBURSEMENT'. There is no separate
 //     send-money path to mirror.
-//   * NO per-request callback URL. MarzPay and LipaPay both take one in the
+//   * NO per-request callback URL. MarzPay takes one in the
 //     body; PesaJet's webhook URL is set once in their dashboard, so
 //     PUBLIC_URL plays no part below and the OWNER HAS TO SET IT THERE or
 //     resolution falls back entirely to the member's own status poll and the
@@ -2902,7 +2618,7 @@ const PESAJET_WEBHOOK_SECRET = process.env.PESAJET_WEBHOOK_SECRET || '';
 // TWO timeouts, because the two call shapes have opposite needs.
 //
 // Creating a payment is a one-off that raises a prompt on a phone; 20s is what
-// MarzPay and LipaPay already allow and is worth waiting for.
+// MarzPay already allows and is worth waiting for.
 //
 // READING a status is polled every couple of seconds while a member watches
 // the screen, and the SDK's blanket 30s default is actively harmful there: one
@@ -3127,11 +2843,11 @@ async function pesajetGetTx(transactionId, { attempts = 2 } = {}) {
   }
   return { status: '', reference: null, transactionId, failureReason: null, providerDown: true, httpStatus: last && last.httpStatus };
 }
-// PesaJet's status -> the three words the rest of this file already speaks,
-// matching lipaStatusLabel()'s vocabulary exactly so the deposit and
-// withdrawal branches below read identically whichever gateway is in use.
-// PENDING and PROCESSING are both still in flight; EXPIRED is terminal and
-// counts as a failure.
+// PesaJet's status -> the three words the rest of this file already speaks
+// ('success'/'failed'/'processing'), so the deposit and withdrawal branches
+// below read identically whichever gateway is in use. PENDING and
+// PROCESSING are both still in flight; EXPIRED is terminal and counts as a
+// failure.
 function pesajetStatusLabel(status) {
   const s = String(status || '').toLowerCase();
   if (s === 'completed') return 'success';
@@ -5254,47 +4970,6 @@ app.post('/deposit/marzpay', async (req, res) => {
       return;
     }
 
-    if (provider === 'lipapay') {
-      // LipaPay branch -- same "claim as pending, wait for the webhook/
-      // reconciler to resolve it" shape as MarzPay just below, via
-      // lipaCollect() instead of marzCollect(). OutTradeNo is the deposit's
-      // OWN doc id (a crypto.randomUUID(), already exactly LipaPay's
-      // required 6-36-char allowed-charset shape) rather than a freshly
-      // generated value, so a genuine retry of this same deposit reuses the
-      // identical OutTradeNo and LipaPay's own duplicate-order rejection
-      // (StatusCode 403) is what guards against a double submission, not an
-      // internal retry loop.
-      let lpData;
-      try {
-        lpData = await lipaCollect({
-          amountUgx: amt, traderId: lipaTraderId(phone), channel: lipaChannel(network),
-          description: 'Mobile Money', outTradeNo: depRef.id,
-          notifyUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/lipapay/callback' : undefined,
-        });
-      } catch (netErr) {
-        console.error('LipaPay unified-order network error (dep ' + depRef.id + '):', netErr.message);
-        return;
-      }
-      if (!lpData.Succeeded) {
-        console.error('LipaPay unified-order rejected:', JSON.stringify(lpData));
-        await markDepositFailed(depRef, userId, lipaUserMsg(lpData, 'Could not start the payment'));
-        return;
-      }
-      const lipaTransactionId = lpData.Data?.TransactionId || null;
-      // Same claim-race protection as the MarzPay branch below -- a webhook
-      // racing ahead and already crediting this exact deposit must never be
-      // silently reverted back to 'pending' by this later write.
-      await withLock('dep:' + depRef.id, async () => {
-        const fresh = await depRef.get();
-        if (fresh.exists && fresh.data().status === 'initiating') {
-          await depRef.update({ status: 'pending', lipaTransactionId });
-        } else {
-          await depRef.update({ lipaTransactionId }).catch(() => {});
-        }
-      });
-      return;
-    }
-
     let mpData;
     try {
       mpData = await marzCollect({
@@ -5514,16 +5189,8 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: 'matched' });
     }
     if (dep.status === 'failed')  return res.json({ status: 'success', state: 'failed', message: dep.failureReason });
-    // Subagent-audit-caught real gap (Round 104): this route only ever
-    // checked marzTxUuid -- a LipaPay deposit never sets that field (it sets
-    // lipaTransactionId instead), so the member's own status poll silently
-    // fell through to a bare "still pending" for every LipaPay deposit,
-    // contradicting this codebase's own stated design (the webhook and
-    // reconciler both independently re-check via lipaOrderQuery(); the
-    // member's poll should too, so a slow/lost webhook self-heals the
-    // moment the member reopens the status screen, same as it already does
-    // for MarzPay). Mirrors the marzTxUuid branch below exactly.
-    // PesaJet: the same self-healing re-check as the two branches below, so a
+    // PesaJet: the same self-healing re-check MarzPay's own branch below does,
+    // so a
     // slow or lost webhook resolves the moment the member looks at the status
     // screen. Its webhook URL is dashboard-configured rather than sent per
     // request (see the module note), so this poll is doing more of the work
@@ -5541,19 +5208,6 @@ app.post('/deposit/marzpay/status', async (req, res) => {
         const reallyFailed = await markDepositFailed(depSnap.ref, userId, msg);
         if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
         return res.json({ status: 'success', state: 'failed', message: msg });
-      }
-      return res.json({ status: 'success', state: 'pending' });
-    }
-    if (dep.provider === 'lipapay') {
-      if (!dep.lipaTransactionId) return res.json({ status: 'success', state: 'pending' });
-      const q = await lipaOrderQuery(depSnap.id);
-      if (q.providerDown || !q.Data) return res.json({ status: 'success', state: 'pending' });
-      const realStatus = lipaStatusLabel(q.Data.PayStatus);
-      if (realStatus === 'success') { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
-      if (realStatus === 'failed') {
-        const reallyFailed = await markDepositFailed(depSnap.ref, userId, DEPOSIT_FAILED_MSG);
-        if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
-        return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
       }
       return res.json({ status: 'success', state: 'pending' });
     }
@@ -5619,46 +5273,6 @@ app.post('/deposit/callback', async (req, res) => {
     }
   } catch (e) { console.error('Deposit callback error:', e.message); }
 });
-// LipaPay's NotifyUrl target. Per §5.3 of their API reference, the ONLY
-// correct acknowledgement is the literal plain-text body "SUCCESS" with a
-// 200 -- anything else (including a JSON body) is treated as a failed
-// delivery and retried for up to 24h at 1s/30s/30s/30s intervals. This
-// route always acks SUCCESS once it has looked the order up (whether or not
-// it could act on it yet), because acting is never gated on THIS webhook
-// specifically -- the periodic reconciler and the member's own status poll
-// both independently re-check via lipaOrderQuery() regardless, so there is
-// no reason to make LipaPay's own retry timer our source of truth.
-//
-// Money-safety posture matches /deposit/callback above exactly, and Round
-// 81's own hardening of it: the webhook BODY's own PayStatus/Amount are
-// NEVER trusted directly. OutTradeNo (== this deposit's own doc id, chosen
-// at creation specifically so no separate lookup field is needed) is used
-// only to find WHICH deposit this claims to be about; the actual decision
-// to credit or fail always comes from an independent lipaOrderQuery() call
-// using our own credentials, exactly mirroring how the MarzPay webhook
-// above never credits off an unauthenticated body's own claimed status.
-app.post('/deposit/lipapay/callback', async (req, res) => {
-  try {
-    const outTradeNo = String(req.body?.OutTradeNo || '');
-    if (!outTradeNo) return res.status(200).send('SUCCESS');
-    const doc = await db.collection('pendingDeposits').doc(outTradeNo).get();
-    if (!doc.exists) return res.status(200).send('SUCCESS');
-    const dep = doc.data();
-    if (dep.provider !== 'lipapay') return res.status(200).send('SUCCESS'); // not ours -- ignore, ack anyway so LipaPay stops retrying
-    if (dep.status !== 'pending' && dep.status !== 'initiating') return res.status(200).send('SUCCESS');
-    const q = await lipaOrderQuery(outTradeNo);
-    if (q.providerDown || !q.Data) return res.status(200).send('SUCCESS'); // couldn't independently confirm -- leave for the reconciler/next retry, ack regardless
-    const realStatus = lipaStatusLabel(q.Data.PayStatus);
-    if (realStatus === 'success') await creditDeposit(doc);
-    else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
-    // realStatus === 'processing' -- genuinely not done yet, nothing to do
-    res.status(200).send('SUCCESS');
-  } catch (e) {
-    console.error('LipaPay deposit callback error:', e.message);
-    res.status(200).send('SUCCESS'); // still ack -- the reconciler covers whatever this failed to do
-  }
-});
-
 // ═══════════════════════════════════════════
 // MANUAL DEPOSITS (admin-managed MTN/Airtel numbers, SMS-matched)
 // Owner: "let us also add manual payments, so payment numbers and names
@@ -5675,17 +5289,12 @@ app.post('/deposit/lipapay/callback', async (req, res) => {
 // manual deposit's credit path is exactly as safe as an automatic one with
 // zero new crediting logic. What differs between the two methods is only
 // HOW a pendingDeposits doc gets from 'pending' to 'matched': MarzPay polls
-// its own API; manual deposits wait for a phone's SMS forwarder (or a
-// member-pasted SMS) to trigger a match. A manual doc carries
-// `method:'manual'` plus network/assignedNumber/holderName/senderPhone/
-// expiresAt fields the MarzPay path doesn't use.
+// its own API; manual deposits wait for the member to paste the confirmation
+// SMS their own phone received. A manual doc carries `method:'manual'` plus
+// network/assignedNumber/holderName/senderPhone/expiresAt fields the MarzPay
+// path doesn't use.
 // ═══════════════════════════════════════════
 const MANUAL_DEPOSIT_WINDOW_MS = 15 * 60 * 1000; // owner: "deposit payment timer should read 15minutes"
-// Each SMS-forwarder phone authenticates with this one shared secret (same
-// shape as the proven Nexus /sms/incoming design this is adapted from) --
-// per-device signed requests/replay protection is real, worthwhile
-// hardening but deliberately deferred to a later round, not blocking a
-// correct, safe V1.
 // ── Per-number activity tracking ──────────────────────────────────────
 // Owner: "make sure l can track number activity in analytics ie success
 // rates, whether their Forwarder sends/forwards messages, success rates,
@@ -5761,23 +5370,6 @@ function trackManual(number, event, opts) {
     console.warn('Manual number stats (non-critical):', e.message));
 }
 
-const MANUAL_SMS_SECRET = process.env.MANUAL_SMS_SECRET || '';
-function manualSmsConfigured() { return MANUAL_SMS_SECRET.length >= 16; }
-
-// Screen-lock password for the forwarder app on the admin phones. Held here
-// rather than in the APK so it can be changed centrally without rebuilding
-// and reinstalling on every phone, and so it is not sitting in a file
-// anyone holding the APK can read.
-//
-// Be clear about what this defends: someone PICKING UP an unattended admin
-// phone and changing a receiving number to their own, or stopping
-// forwarding. It is not anti-tamper -- an APK can always be patched and
-// resigned. What actually stops a modified app is MANUAL_SMS_SECRET, which
-// the server checks on every forwarded message.
-//
-// Leave unset to disable the lock entirely; the app asks the server whether
-// a password is required at all.
-const FORWARDER_PASSWORD = process.env.FORWARDER_PASSWORD || '';
 
 // Parse an MTN / Airtel Uganda "you have received" SMS. Ported from the
 // proven Nexus implementation (root server.js) -- same regex, same
@@ -5880,101 +5472,6 @@ function parseSentMoMoSms(text) {
   const amount = _smsAmount(t);
   if (!amount || isNaN(amount)) return null;
   return { amount, txId: _smsTxId(t), recipient: _smsCounterparty(t, 'to'), raw: t };
-}
-
-// MTN deposit-reversal fraud: a member deposits manually (the SMS-forwarder
-// path below), gets credited, then exploits MTN's own reversal/dispute
-// mechanism to claw the real money back from the admin's phone -- the admin
-// loses the real cash while the member keeps the platform credit. Real,
-// confirmed format (3 captured screenshots, MTN Uganda -- owner: "l got for
-// mtn but l didn't get airtel"):
-//   "<FIRSTNAME>, <PHONE> has initiated a reversal of <AMOUNT> wrongly sent
-//   to you. Please approve the reversal by dialling *165*8*3# and enter your
-//   PIN or call 100/ WhatsApp <NUM> if you object to the reversal. Thank
-//   you."
-// Critically, unlike a normal deposit SMS this carries NO transaction id
-// referencing the original deposit -- so matching is by (receivingNumber,
-// payer phone) against already-CREDITED manual deposits, never guessed by
-// amount alone (the owner confirmed a reversal can be PARTIAL, less than the
-// original deposit). Airtel's own reversal wording has never been captured
-// -- per this project's standing "never guess an SMS format" rule, this
-// parser only recognizes the one confirmed MTN shape; anything else
-// (Airtel's real format, once captured, or an unrelated message) simply
-// doesn't match RE_REVERSAL_MTN and falls straight through to the ordinary
-// parseMoMoSms() path below, which already safely rejects it as "not a
-// deposit" -- nothing here can crash or misfire on a message it doesn't
-// recognize.
-const RE_REVERSAL_MTN = /has initiated a reversal of/i;
-function parseReversalSms(text) {
-  if (!text) return null;
-  const t = String(text).replace(/\s+/g, ' ').trim();
-  if (!RE_REVERSAL_MTN.test(t)) return null;
-  // Amount sits right after "reversal of", with or without a currency word
-  // -- real captured samples showed a plain UGX prefix, but this stays
-  // tolerant of either shape rather than assuming one.
-  const amtMatch = t.match(/reversal of\s*(?:ugx|ush|shs?)?\s*([\d,]+(?:\.\d+)?)/i);
-  const amount = amtMatch ? parseFloat(amtMatch[1].replace(/,/g, '')) : NaN;
-  if (!amount || isNaN(amount)) return null;
-  // The payer's phone sits before "has initiated a reversal", right after
-  // their name (see the confirmed format above) -- scanned rather than
-  // assumed positionally, same discipline as _smsCounterparty(), preferring
-  // a Ugandan-mobile-shaped candidate.
-  const before = t.slice(0, t.search(/has initiated a reversal/i));
-  const candidates = before.match(/(?<!\d)\+?\d{9,13}(?!\d)/g) || [];
-  let payerPhone = '';
-  for (const c of candidates) {
-    const cleaned = cleanPhone(c);
-    if (looksLikeRegionMobile(cleaned)) { payerPhone = c.replace(/[\s\-]/g, ''); break; }
-  }
-  return { amount, payerPhone, raw: t };
-}
-
-// Auto-applied the instant a reversal SMS is matched to EXACTLY one member
-// (see the webhook handler below) -- debits the wallet by EXACTLY the
-// reversed amount (a reversal can be partial, never the assumed-full
-// original deposit) and bans the account immediately, since the real money
-// has already left the admin's phone by the time this SMS exists.
-// Deliberately allows walletBalance to go NEGATIVE here, unlike every other
-// debit path in this file (e.g. /admin/debit, which refuses to overdraw) --
-// this is a punitive correction for confirmed fraud, not a routine balance
-// adjustment, and a negative balance correctly reflects that the member now
-// owes the platform rather than silently capping the correction at whatever
-// happened to still be sitting in the wallet.
-//
-// Recorded as its own ledger row (type 'deposit_reversal', negative amount)
-// rather than shrinking the original deposit's own ledger row in place --
-// keeps the original deposit's history intact (it genuinely happened) while
-// still making the correction visible and auditable in Records/the admin
-// panel. 'deposit_reversal' is added alongside 'deposit'/'admin_credit' in
-// computeUserRealTotals()/computeRealTotals()'s own totalDeposited sum (its
-// negative amount subtracts correctly), so a later "Recalculate totals" run
-// can never silently wipe this correction back out.
-async function applyDepositReversal(userId, amount, raw, receivingNumber, payerPhone) {
-  return withUserRegion(userId, () => _applyDepositReversalNow(userId, amount, raw, receivingNumber, payerPhone));
-}
-async function _applyDepositReversalNow(userId, amount, raw, receivingNumber, payerPhone) {
-  const amt = Math.round(amount);
-  const uRef = db.collection('users').doc(userId);
-  await withLock('bal:' + userId, async () => {
-    const uSnap = await uRef.get();
-    if (!uSnap.exists) throw new Error('User not found for reversal');
-    const { date, time } = nowStr();
-    await uRef.update({
-      walletBalance: FieldValue.increment(-amt),
-      totalDeposited: FieldValue.increment(-amt),
-      status: 'banned',
-      banReason: `Automatic: MTN deposit reversal detected (${fmtMoney(amt)} reversed by network)`,
-      bannedAt: FieldValue.serverTimestamp(),
-    });
-    await db.collection('transactions').add({
-      userId, type: 'deposit_reversal',
-      description: `Deposit reversed by network. ${fmtMoney(amt)} debited, account banned.`,
-      amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
-    });
-  });
-  logSecurityEvent(userId, 'deposit_reversal_ban', {
-    amount: amt, receivingNumber, payerPhone: payerPhone || null, raw: String(raw || '').slice(0, 500),
-  });
 }
 
 // Picks a number from this network's pool at RANDOM (owner: "remove
@@ -6163,282 +5660,11 @@ app.post('/deposit/manual/status', async (req, res) => {
   }
 });
 
-// The phone SMS-forwarder POSTs every incoming SMS here (shared-secret
-// auth, same header convention as Nexus's own proven /sms/incoming).
-// Nothing here credits a wallet directly -- it only ever calls the SAME
-// creditDeposit() the MarzPay flow uses, and only after: (1) dedup by the
-// operator's own transaction id (or a hash fallback) so a retried/
-// redelivered/duplicate-device SMS can never be processed twice, and
-// (2) finding EXACTLY one live candidate order for this receiving number +
-// amount. Zero or more-than-one candidates never guess -- see the "never
-// silently credit on ambiguity" comment below.
-// Unlock check for the forwarder app's own screen lock. Sits behind the SAME
-// shared secret as the webhook, so it is not a password oracle anyone on the
-// internet can hammer -- a caller must already hold MANUAL_SMS_SECRET to get
-// so much as a yes/no. Deliberately returns no detail beyond that.
-//
-// The app caches a hash after a successful unlock so a phone with no
-// connectivity can still be opened by whoever knows the password; this
-// endpoint is what establishes it in the first place and what picks up a
-// password change made on Render.
-const _forwarderUnlockAttempts = new Map();   // ip -> { n, first }
-app.post('/deposit/manual/forwarder-unlock', async (req, res) => {
-  if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
-  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
-  const expected = MANUAL_SMS_SECRET;
-  const secretOk = provided.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
-  if (!secretOk) return res.status(403).json({ status: 'error', message: 'Forbidden' });
-
-  // No password configured on the server: the lock is off, say so plainly
-  // so a fresh install does not sit at a screen nobody can get past.
-  if (!FORWARDER_PASSWORD) return res.json({ status: 'success', required: false });
-
-  // Even behind the shared secret, throttle guessing.
-  const ip = String(req.ip || 'unknown');
-  const now = Date.now();
-  const rec = _forwarderUnlockAttempts.get(ip);
-  if (rec && now - rec.first < 60000 && rec.n >= 10)
-    return res.status(429).json({ status: 'error', required: true, message: 'Too many attempts. Wait a minute.' });
-
-  const pw = String((req.body && req.body.password) || '');
-  const ok = pw.length === FORWARDER_PASSWORD.length &&
-    crypto.timingSafeEqual(Buffer.from(pw), Buffer.from(FORWARDER_PASSWORD));
-  if (!ok) {
-    if (!rec || now - rec.first >= 60000) _forwarderUnlockAttempts.set(ip, { n: 1, first: now });
-    else rec.n++;
-    return res.status(401).json({ status: 'error', required: true, message: 'Wrong password' });
-  }
-  _forwarderUnlockAttempts.delete(ip);
-  res.json({ status: 'success', required: true });
-});
-
-app.post('/deposit/manual/sms-forwarder', async (req, res) => {
-  if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
-  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
-  const expected = MANUAL_SMS_SECRET;
-  const ok = provided.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
-  if (!ok) return res.status(403).json({ status: 'error', message: 'Forbidden' });
-
-  const text = String((req.body && (req.body.message || req.body.text)) || '');
-  const receivingNumberRaw = String((req.body && req.body.receivingNumber) || '').trim();
-  const receivingNumber = cleanPhone(receivingNumberRaw) || receivingNumberRaw;
-  // How long the phone took between the SMS landing and this POST going out,
-  // measured by the phone against its own clock so it can't be poisoned by
-  // clock skew. Older app builds don't send it; that just means no sample.
-  const deliveryMs = Number((req.body && req.body.forwardDelayMs));
-  const device = String((req.body && req.body.device) || '').slice(0, 60);
-  const appVersion = String((req.body && req.body.appVersion) || '').slice(0, 20);
-  if (receivingNumber) trackManual(receivingNumber, 'forwarded', { deliveryMs, device, appVersion });
-
-  // Checked BEFORE the ordinary deposit parser -- a reversal SMS never
-  // matches parseMoMoSms() anyway (see that function's own RE_INCOMING),
-  // but branching explicitly here keeps the fraud-detection logic separate
-  // and readable rather than relying on that as an implicit side effect.
-  const reversal = parseReversalSms(text);
-  if (reversal) {
-    try {
-      // No transaction id exists in this message (see parseReversalSms()'s
-      // own comment) -- dedup by hashing the raw text + receiving number,
-      // same fallback shape the ordinary deposit path already uses. Prefixed
-      // so a reversal's dedup key can never collide with a deposit SMS's own
-      // hash-fallback id for the same collection.
-      const revTid = 'rev:' + crypto.createHash('sha256').update(text + '|' + receivingNumber).digest('hex').slice(0, 24);
-      const revRef = db.collection('manualSmsLog').doc(revTid);
-      if ((await revRef.get()).exists) return res.json({ status: 'duplicate-reversal' });
-      await revRef.set({
-        reversal: true, amount: reversal.amount, payerPhone: reversal.payerPhone || '',
-        receivingNumber, raw: reversal.raw, device, appVersion, createdAt: FieldValue.serverTimestamp(),
-      });
-      // Find already-CREDITED manual deposits on this same admin number --
-      // amount is deliberately NOT part of the match key (a reversal can be
-      // partial, per the owner's own confirmation), only (receivingNumber,
-      // payer phone), so the reversal is attached to the right MEMBER, not
-      // guessed against a specific deposit amount.
-      let depQuery = db.collection('pendingDeposits')
-        .where('method', '==', 'manual').where('status', '==', 'matched')
-        .where('assignedNumber', '==', receivingNumber);
-      if (reversal.payerPhone) {
-        const cleanedPayer = cleanPhone(reversal.payerPhone) || reversal.payerPhone;
-        depQuery = depQuery.where('senderPhone', '==', cleanedPayer);
-      }
-      const depSnap = await depQuery.orderBy('createdAt', 'desc').limit(50).get();
-      const candidateUserIds = [...new Set(depSnap.docs.map(d => d.data().userId).filter(Boolean))];
-      if (!candidateUserIds.length) {
-        await revRef.update({ matchedUserId: null, reviewReason: 'No credited deposit found for this receiving number/payer' }).catch(() => {});
-        console.warn(`MANUAL_REVERSAL_UNMATCHED: ${fmtMoney(reversal.amount)} reversal reported on ${receivingNumber} from ${reversal.payerPhone || 'unknown payer'} -- no matching credited deposit found. Needs a human.`);
-        trackManual(receivingNumber, 'reversalUnmatched', { amount: reversal.amount });
-        return res.json({ status: 'reversal-unmatched', amount: reversal.amount });
-      }
-      if (candidateUserIds.length > 1) {
-        // Never guess with money -- more than one distinct member's own
-        // credited deposits match this (receivingNumber, payer) pair, so
-        // nobody is auto-debited/banned. Flagged for a human instead.
-        await revRef.update({ ambiguous: true, candidateUserIds }).catch(() => {});
-        console.warn(`MANUAL_REVERSAL_AMBIGUOUS: ${fmtMoney(reversal.amount)} reversal on ${receivingNumber} matches ${candidateUserIds.length} different members -- flagged for review, nobody auto-debited/banned.`);
-        trackManual(receivingNumber, 'reversalAmbiguous', { amount: reversal.amount });
-        return res.json({ status: 'reversal-ambiguous', amount: reversal.amount });
-      }
-      const targetUserId = candidateUserIds[0];
-      await applyDepositReversal(targetUserId, reversal.amount, reversal.raw, receivingNumber, reversal.payerPhone);
-      await revRef.update({ matchedUserId: targetUserId, applied: true }).catch(() => {});
-      trackManual(receivingNumber, 'reversalApplied', { amount: reversal.amount });
-      return res.json({ status: 'reversal-applied', amount: reversal.amount, userId: targetUserId });
-    } catch (e) {
-      console.error('Manual deposit reversal error:', e.message);
-      return res.status(500).json({ status: 'error', message: e.message });
-    }
-  }
-
-  const info = parseMoMoSms(text);
-  if (!info) {
-    // Operators reword these templates without notice. If a message LOOKS
-    // like money (mentions a currency and carries a phone-length number) but
-    // no parser claimed it, that is the signature of a template change --
-    // and the failure mode is silent: deposits simply stop auto-crediting
-    // and nobody knows why until members complain. So record it, loudly.
-    // Grep Render logs for MANUAL_SMS_UNPARSED to find them.
-    try {
-      const looksLikeMoney = /(ugx|ush|shs?)\s*[\d,]/i.test(text) && /(?<!\d)\d{9,13}(?!\d)/.test(text);
-      if (looksLikeMoney) {
-        console.warn('MANUAL_SMS_UNPARSED (possible operator template change):', text.slice(0, 300));
-        await db.collection('manualSmsLog').add({
-          unparsed: true, raw: String(text).slice(0, 2000), receivingNumber,
-          device, appVersion, deliveryMs: Number.isFinite(deliveryMs) ? deliveryMs : null,
-          createdAt: FieldValue.serverTimestamp()
-        });
-        trackManual(receivingNumber, 'unparsed');
-      }
-    } catch (_) { /* diagnostics must never break the webhook */ }
-    trackManual(receivingNumber, 'ignored');
-    return res.json({ status: 'ignored', reason: 'not an incoming-money SMS' });
-  }
-  if (!receivingNumber) return res.json({ status: 'ignored', reason: 'no receivingNumber configured on this device' });
-
-  try {
-    // A phone can only be right about which number it is if that number is
-    // actually one of ours. If it is not -- a typo during setup, or a number
-    // deleted from the panel afterwards -- then no order was ever assigned
-    // to it and nothing here could ever match, no matter how many real
-    // payments arrive. Left alone this is completely silent: the phone looks
-    // healthy, the member's money is gone, and the deposit just never lands.
-    // So say so, loudly, instead of letting it fall through to "unmatched".
-    const knownSnap = await db.collection('manualPaymentNumbers').where('number', '==', receivingNumber).limit(1).get();
-    if (knownSnap.empty) {
-      console.error(`MANUAL_SMS_UNKNOWN_NUMBER: a forwarder reported receivingNumber ${receivingNumber}, which is not saved in the admin panel. Deposits on this phone can NEVER match. Check the number configured on device "${device || 'unknown'}".`);
-      trackManual(receivingNumber, 'unknownNumber', { amount: info.amount, device, appVersion });
-      await db.collection('manualSmsLog').add({
-        unknownNumber: true, receivingNumber, amount: info.amount,
-        raw: String(info.raw).slice(0, 2000), device, appVersion,
-        createdAt: FieldValue.serverTimestamp(),
-      }).catch(() => {});
-      return res.json({
-        status: 'unknown-number', receivingNumber,
-        message: 'This number is not saved in the admin panel, so nothing can match it.',
-      });
-    }
-
-    // Idempotency: MoMo transaction id, or a hash of (raw text + receiving
-    // number) as a fallback for a message with no extractable TID.
-    const tid = info.txId || crypto.createHash('sha256').update(info.raw + '|' + receivingNumber).digest('hex').slice(0, 24);
-    const seenRef = db.collection('manualSmsLog').doc(tid);
-    if ((await seenRef.get()).exists) {
-      trackManual(receivingNumber, 'duplicate');
-      return res.json({ status: 'duplicate' });
-    }
-    await seenRef.set({
-      amount: info.amount, sender: info.sender || '', receivingNumber, raw: info.raw,
-      device, appVersion, deliveryMs: Number.isFinite(deliveryMs) ? deliveryMs : null,
-      createdAt: FieldValue.serverTimestamp()
-    });
-
-    const now = Date.now();
-    const snap = await db.collection('pendingDeposits')
-      .where('method', '==', 'manual').where('status', '==', 'pending')
-      .where('assignedNumber', '==', receivingNumber).where('amount', '==', info.amount)
-      .limit(10).get();
-    const candidates = snap.docs.filter(d => (d.data().expiresAt || 0) > now);
-    if (!candidates.length) {
-      await seenRef.update({ matched: false }).catch(() => {});
-      console.warn(`Manual deposit SMS unmatched: ${fmtMoney(info.amount)} to ${receivingNumber}`);
-      trackManual(receivingNumber, 'unmatched', { amount: info.amount });
-      return res.json({ status: 'unmatched', amount: info.amount });
-    }
-    if (candidates.length > 1) {
-      // Never guess with money -- a genuine same-number-same-amount
-      // collision (should already be rare given assignManualNumber()'s own
-      // skip logic, but never trust that alone) flags every candidate for
-      // a human, credits none automatically.
-      await Promise.all(candidates.map(d => d.ref.update({ status: 'review', reviewReason: 'Multiple pending orders matched this SMS (same number + amount)' }).catch(() => {})));
-      await seenRef.update({ matched: false, ambiguous: true }).catch(() => {});
-      console.warn(`Manual deposit SMS AMBIGUOUS: ${fmtMoney(info.amount)} to ${receivingNumber} -- ${candidates.length} candidates flagged for review`);
-      trackManual(receivingNumber, 'ambiguous', { amount: info.amount });
-      return res.json({ status: 'ambiguous', amount: info.amount });
-    }
-    const match = candidates[0];
-    const md = match.data();
-    // Defense in depth: sender-phone extraction from the SMS is
-    // best-effort (not every operator format includes it cleanly), so it's
-    // never a HARD requirement -- but if it IS present and it clearly
-    // disagrees with the number the member typed when starting this order,
-    // that's a real reason to stop and let a human look, not silently
-    // credit anyway just because the number+amount happened to line up.
-    const smsSenderClean = info.sender ? (cleanPhone(info.sender) || info.sender) : null;
-    const orderSenderClean = md.senderPhone ? (cleanPhone(md.senderPhone) || md.senderPhone) : null;
-    if (smsSenderClean && orderSenderClean && smsSenderClean !== orderSenderClean) {
-      await match.ref.update({ status: 'review', reviewReason: `Sender number mismatch: SMS said ${info.sender}, order was placed with ${md.senderPhone}` }).catch(() => {});
-      await seenRef.update({ matched: false, mismatch: true }).catch(() => {});
-      trackManual(receivingNumber, 'mismatch', { amount: info.amount });
-      return res.json({ status: 'mismatch', amount: info.amount });
-    }
-    await match.ref.update({ matchedSmsId: tid, smsTxId: info.txId || '', smsSender: info.sender || '' }).catch(() => {});
-    // Manual deposits are human-verified (settings.manualSmsAutoCredit,
-    // default false). A confident automatic match is still a match -- it is
-    // recorded above and the evidence is attached below -- it just no longer
-    // moves money on its own. The admin sees it in Needs Review with the
-    // forwarded SMS in full, exactly like a member-pasted one, and approves
-    // or rejects it.
-    const smsSett = await getSettings();
-    if (!smsSett.manualSmsAutoCredit) {
-      await match.ref.update({
-        status: 'review',
-        reviewReason: `Forwarded SMS matched this order automatically (${fmtMoney(info.amount)}${info.txId ? ', id ' + info.txId : ''}) -- automatic crediting is off, so it needs your approval`,
-        // The forwarded message as it arrived, not the parser's
-        // whitespace-collapsed working copy -- same reasoning as the
-        // member-paste route below.
-        pastedSms: String(text || info.raw).slice(0, 2000),
-        pastedSmsParsed: true,
-        pastedSmsAmount: info.amount,
-        pastedSmsTxId: info.txId || '',
-        pastedSmsCounterparty: info.sender || '',
-        pastedSmsDirection: 'received',
-        pastedSmsAmountMatches: Number(info.amount) === Number(md.amount),
-        pastedSmsNumberMatches: null,
-        pastedSmsSource: 'forwarder',
-        pastedAt: FieldValue.serverTimestamp()
-      }).catch(() => {});
-      await seenRef.update({ matched: true, matchedOrderId: match.id, heldForReview: true }).catch(() => {});
-      trackManual(receivingNumber, 'review', { amount: info.amount });
-      return res.json({ status: 'review', depositId: match.id });
-    }
-    await creditDeposit(match);
-    await seenRef.update({ matched: true, matchedOrderId: match.id }).catch(() => {});
-    trackManual(receivingNumber, 'credited', { amount: info.amount });
-    return res.json({ status: 'credited', depositId: match.id });
-  } catch (e) {
-    console.error('Manual deposit SMS error:', e.message);
-    return res.status(500).json({ status: 'error', message: e.message });
-  }
-});
-
-// Member's own fallback when the forwarder is slow/down: paste the
-// confirmation text THEIR phone received. Scoped so it can only ever touch
-// their own already-existing pending order (never a blind platform-wide
-// match the way the device-forwarder path above has to be), and — per this
-// codebase's own "never trust user input for a balance change" rule —
-// this NEVER credits by itself. It only ever queues the order for a human
-// to confirm, exactly like an ambiguous/mismatched SMS does above.
+// Member pastes the confirmation text their own phone received. Scoped so
+// it can only ever touch their own already-existing pending order, and —
+// per this codebase's own "never trust user input for a balance change"
+// rule — this NEVER credits by itself. It only ever queues the order for a
+// human to confirm.
 app.post('/deposit/manual/paste-sms', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -6536,143 +5762,6 @@ async function reconcileManualDeposits() {
     }
   } catch (e) { console.error('Reconcile manual deposits error:', e.message); }
 }
-
-// Owner-only. Marks any manualSmsLog row reviewed -- used by the "Deposit
-// reversal alerts" card (below) for an ambiguous/unmatched reversal event
-// that needed a human look. Deciding a piece of unaccounted-for money or an
-// unresolved reversal needs no further action is a real judgement call, not
-// a routine dismiss. This never moves money on its own; crediting/debiting
-// the right member still goes through the existing /admin/deposit or
-// /admin/debit tools once the admin has identified who it belongs to.
-//
-// (Owner: "remove area for unmatched sms in admin" -- the general-purpose
-// "Unmatched SMS" review list this route was originally built for is gone;
-// the underlying manualSmsLog writes for unparsed/unknown-number/duplicate-
-// dedup entries are untouched and still serve their original diagnostic and
-// idempotency roles, just with no admin-panel view reading them back.)
-app.post('/admin/manual-sms-log/resolve', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const id = String(req.body.id || '');
-  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
-  try {
-    await db.collection('manualSmsLog').doc(id).update({ resolved: true, resolvedBy: req.adminUser?.username || 'owner', resolvedAt: FieldValue.serverTimestamp() });
-    logAdminAction(req, 'manual_sms_log_resolved', { id });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-
-// Full audit trail of every MTN deposit-reversal SMS this platform has ever
-// seen (see parseReversalSms()/applyDepositReversal() above) -- whether it
-// was auto-applied (a real, matched member, already debited and banned),
-// ambiguous (matched more than one member, nobody touched automatically), or
-// unmatched (no credited deposit found for that number/payer at all). Every
-// row is a real, already-happened event by the time it's read here -- this
-// list is purely visibility, it never itself moves money or changes a ban.
-// The existing /admin/manual-sms-log/resolve route already works on ANY
-// manualSmsLog doc id regardless of type, so an ambiguous/unmatched row here
-// can be marked reviewed with that same endpoint -- no separate resolve
-// route needed.
-app.post('/admin/manual-reversals/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('manualSmsLog').where('reversal', '==', true).orderBy('createdAt', 'desc').limit(200).get();
-    const rows = [];
-    snap.forEach(d => {
-      const v = d.data();
-      rows.push({
-        id: d.id, amount: v.amount != null ? v.amount : null, receivingNumber: v.receivingNumber || '',
-        payerPhone: v.payerPhone || '', raw: v.raw || '', applied: !!v.applied, ambiguous: !!v.ambiguous,
-        matchedUserId: v.matchedUserId || null, resolved: !!v.resolved, createdAt: v.createdAt || null,
-      });
-    });
-    res.json({ status: 'success', rows });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-
-// Checks ONE number a person typed into the forwarder. Owner: "this should
-// be a backend secret, so one has to put the number not to select available
-// in admin panel, so no choosing saved numbers, one has to type, system
-// checks and verifies."
-//
-// So this deliberately never returns the list, or a holder name, or anything
-// else about a number that was not already known to the caller. It answers
-// only: is this exact number one of ours, and is it switched on. Nothing here
-// can be used to discover a number.
-//
-// Why it needs to exist at all: orders are only ever assigned to saved
-// numbers, so a phone configured with any other number can never match a
-// deposit -- yet it forwards happily and looks perfectly healthy while every
-// payment to that SIM is lost. Checking at the moment the number is typed
-// turns a silent, permanent failure into an error on screen.
-const _verifyNumberAttempts = new Map();   // ip -> { n, first }
-app.post('/deposit/manual/verify-number', async (req, res) => {
-  if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
-  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
-  const expected = MANUAL_SMS_SECRET;
-  const ok = provided.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
-  if (!ok) return res.status(403).json({ status: 'error', message: 'Forbidden' });
-
-  // A yes/no oracle is still an oracle. Setting up a phone means a handful of
-  // checks; anything beyond that is somebody walking the number space, so it
-  // gets throttled hard even though the caller already holds the secret.
-  const ip = String(req.ip || 'unknown');
-  const now = Date.now();
-  const rec = _verifyNumberAttempts.get(ip);
-  if (rec && now - rec.first < 60000 && rec.n >= 30)
-    return res.status(429).json({ status: 'error', message: 'Too many checks. Wait a minute.' });
-  if (!rec || now - rec.first >= 60000) _verifyNumberAttempts.set(ip, { n: 1, first: now });
-  else rec.n++;
-
-  try {
-    const raw = String((req.body && req.body.number) || '').trim();
-    const num = cleanPhone(raw) || raw;
-    if (!num) return res.json({ status: 'success', known: false, active: false });
-    const snap = await db.collection('manualPaymentNumbers').where('number', '==', num).limit(1).get();
-    if (snap.empty) return res.json({ status: 'success', known: false, active: false });
-    return res.json({ status: 'success', known: true, active: snap.docs[0].data().active !== false });
-  } catch (e) {
-    res.status(500).json({ status: 'error', message: e.message });
-  }
-});
-
-// Forwarder heartbeat. Without this, a phone that has simply stopped
-// working is indistinguishable from a quiet one -- no SMS arriving looks
-// exactly the same whether the number is idle or the app was killed, the
-// SIM removed, or the phone left on a dead battery. Every install checks in
-// on a timer, so "healthy" is something the panel can actually assert
-// rather than infer from silence.
-app.post('/deposit/manual/forwarder-heartbeat', async (req, res) => {
-  if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
-  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
-  const expected = MANUAL_SMS_SECRET;
-  const ok = provided.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
-  if (!ok) return res.status(403).json({ status: 'error', message: 'Forbidden' });
-  try {
-    const raw = (req.body && req.body.numbers) || [];
-    const numbers = (Array.isArray(raw) ? raw : [raw])
-      .map(n => cleanPhone(String(n || '').trim()) || String(n || '').trim())
-      .filter(Boolean).slice(0, 10);
-    const patch = {
-      lastHeartbeatAt: FieldValue.serverTimestamp(),
-      device: String((req.body && req.body.device) || '').slice(0, 60),
-      appVersion: String((req.body && req.body.appVersion) || '').slice(0, 20),
-      forwardingActive: !!(req.body && req.body.forwarding),
-    };
-    const bat = Number(req.body && req.body.battery);
-    if (Number.isFinite(bat) && bat >= 0 && bat <= 100) patch.battery = Math.round(bat);
-    let updated = 0;
-    for (const num of numbers) {
-      const snap = await db.collection('manualPaymentNumbers').where('number', '==', num).limit(1).get();
-      if (!snap.empty) { await snap.docs[0].ref.set(patch, { merge: true }); updated++; }
-    }
-    res.json({ status: 'success', matched: updated, seen: numbers.length });
-  } catch (e) {
-    console.error('Forwarder heartbeat error:', e.message);
-    res.status(500).json({ status: 'error', message: e.message });
-  }
-});
 
 // A phone is called healthy only while it is actively checking in. The
 // thresholds are generous on purpose: the app heartbeats every 15 minutes,
@@ -7302,8 +6391,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     }
 
     if (withdrawProvider(settNow) === 'pesajet') {
-      // PesaJet payout. Mirrors the LipaPay branch below rule for rule, and
-      // the three that matter are:
+      // PesaJet payout. The three rules that matter are:
       //   * the outbound identifier is written BEFORE the provider is ever
       //     called, so a later write failure can never leave a real payout
       //     unrecorded;
@@ -7341,66 +6429,6 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
           await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
         } catch (twErr) {
           console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent via PesaJet — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
-        }
-      });
-      try {
-        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
-      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-      return {
-        code: 200,
-        body: { status: 'success', sandbox: false, message: `Sending ${fmtMoney(wit.net)} to ${wit.phone}` },
-        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId },
-      };
-    }
-
-    if (withdrawProvider(settNow) === 'lipapay') {
-      // LipaPay branch (Round 102) -- mirrors the MarzPay send-money branch
-      // below function-for-function: write the outbound identifier BEFORE
-      // ever calling the provider (so a later write failure can never leave
-      // it unrecorded, the exact class of bug this file's own comment on
-      // marzReference already documents once), a network exception is
-      // ambiguous (never revert to 'pending' -- that invites a double-pay
-      // retry), and a genuinely successful SUBMISSION only means
-      // 'processing', not done -- LipaPay's own doc says every Unified
-      // Order (collection OR disbursement) resolves asynchronously via the
-      // callback, so this never treats acceptance as completion the way
-      // MarzPay's sandbox shortcut does (LipaPay has no such shortcut).
-      // outTradeNo = this withdrawal's own doc id -- already a
-      // crypto.randomUUID(), exactly LipaPay's required 6-36-char
-      // allowed-charset shape, so a genuine retry of the same withdrawal
-      // reuses the identical OutTradeNo and LipaPay's own duplicate-order
-      // rejection is the dedup guard, not an internal retry loop.
-      const outTradeNo = withdrawalId;
-      await witRef.update({ status: 'sending', sendingReference: outTradeNo, lipaOutTradeNo: outTradeNo, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-      let lpData, ambiguousLipa = false;
-      try {
-        lpData = await lipaDisburse({
-          amountUgx: wit.net, traderId: lipaTraderId(wit.phone), channel: lipaChannel(wit.network),
-          description: 'Withdrawal', outTradeNo,
-          notifyUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/lipapay/callback' : undefined,
-        });
-      } catch (netErr) {
-        console.error('LipaPay unified-order (disbursement) network error (ambiguous, NOT reverting to pending):', netErr.message);
-        ambiguousLipa = true;
-        lpData = { Succeeded: false, providerDown: true, Errors: netErr.message };
-      }
-      if (ambiguousLipa || lpData.providerDown) {
-        return { code: 500, body: { status: 'error', message: 'Lost contact with LipaPay mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: outTradeNo } };
-      }
-      if (!lpData.Succeeded) {
-        await witRef.update({ status: 'pending', sendingReference: null, lipaOutTradeNo: null, sendingBy: null, sendingAt: null }).catch(() => {});
-        return { code: 400, body: { status: 'error', message: lipaUserMsg(lpData, 'LipaPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
-      }
-      const lipaTransactionId = lpData.Data?.TransactionId || null;
-      await withLock('bal:' + wit.userId, async () => {
-        await witRef.update({ lipaOutTradeNo: outTradeNo, lipaTransactionId });
-        const claimed = await witRef.updateIf({ status: 'sending' }, { status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp() });
-        if (!claimed) return;
-        try {
-          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
-        } catch (twErr) {
-          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent via LipaPay — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
         }
       });
       try {
@@ -7530,7 +6558,7 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     // reference, nothing was sent" about a payout that may well have gone
     // out -- the single most dangerous wrong answer this screen can give,
     // because it invites a reject that refunds the member on top of real
-    // money. Mirrors the LipaPay branch just below.
+    // money.
     if (w.pesajetRef) {
       if (!w.pesajetTxId) {
         return res.json({
@@ -7549,26 +6577,6 @@ app.post('/admin/withdraw/verify', async (req, res) => {
       else if (realStatus === 'processing') pjMessage = `PesaJet still has this payout in flight (status: ${t.status}). Not finished, not failed.`;
       else pjMessage = `PesaJet reports status: ${t.status || 'unknown'}.`;
       return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.status || 'unknown', message: pjMessage });
-    }
-    // Round 102: a LipaPay-routed withdrawal has neither marzReference nor
-    // marzTxUuid at all -- without this branch it would fall straight into
-    // the "no gateway reference, nothing was sent" case below, which is
-    // FALSE for a LipaPay payout and would invite rejecting (and refunding)
-    // a withdrawal that genuinely already went out via LipaPay. Mirrors the
-    // MarzPay branch below exactly: an independent live re-check via
-    // lipaOrderQuery(), never trusting our own stored status alone.
-    if (w.lipaOutTradeNo) {
-      const q = await lipaOrderQuery(w.lipaOutTradeNo);
-      if (q.providerDown || !q.Data) {
-        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'unverifiable', message: `A send attempt WAS made via LipaPay (OutTradeNo: ${w.lipaOutTradeNo}) but LipaPay did not respond just now. Try Verify again in a moment -- this does NOT mean nothing was sent.` });
-      }
-      const realStatus = lipaStatusLabel(q.Data.PayStatus);
-      let lpMessage;
-      if (realStatus === 'success' && w.status !== 'processed') lpMessage = `LipaPay says this payout was SENT, but our record is "${w.status}". Check the recipient before doing anything else.`;
-      else if (realStatus === 'success') lpMessage = 'LipaPay confirms the payout was SENT and our record already shows it processed.';
-      else if (realStatus === 'failed') lpMessage = 'LipaPay says this payout FAILED.';
-      else lpMessage = 'LipaPay reports the payout is still processing.';
-      return res.json({ status: 'success', ourStatus: w.status, marzStatus: realStatus || 'unknown', message: lpMessage });
     }
     if (!w.marzTxUuid) {
       // Codex-caught real bug (2nd money-flow audit): this used to claim
@@ -7613,32 +6621,6 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
       return res.status(404).json({ status: 'error', message: 'Cash-out not found' });
     const wit = witSnap.data();
     if (wit.status !== 'processing') return res.json({ status: 'success', state: wit.status });
-    // Subagent-audit-caught real gap (Round 104): same shape as the deposit
-    // status route's own fix above -- this only ever checked marzTxUuid, so
-    // a LipaPay withdrawal's own poll never independently re-verified via
-    // lipaOrderQuery(), unlike its webhook and the reconciler. Note: this
-    // route is not currently called anywhere in user-src/ (a dead
-    // code path today per the frontend audit), but fixed for correctness/
-    // consistency regardless, matching every other LipaPay-aware branch.
-    if (wit.lipaOutTradeNo) {
-      const q = await lipaOrderQuery(wit.lipaOutTradeNo);
-      if (q.providerDown || !q.Data) return res.json({ status: 'success', state: 'processing' });
-      const realStatus = lipaStatusLabel(q.Data.PayStatus);
-      if (realStatus === 'success') {
-        if (await markWithdrawalProcessed(witSnap.ref, userId)) {
-          await finalizeWithdrawalTransactionRecord(witSnap.id, 'processed');
-          return res.json({ status: 'success', state: 'processed' });
-        }
-        const nowSnap = await witSnap.ref.get();
-        return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
-      }
-      if (realStatus === 'failed') {
-        const { declined, refunded } = await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the payment provider', ['processing']);
-        if (declined) await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined', refunded);
-        return res.json({ status: 'success', state: 'declined' });
-      }
-      return res.json({ status: 'success', state: 'processing' });
-    }
     if (!wit.marzTxUuid) return res.json({ status: 'success', state: 'processing' });
     const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
     if (SUCCESS_STATUSES.has(marzStatus)) {
@@ -7758,17 +6740,9 @@ app.post('/withdraw/callback', async (req, res) => {
     }
   } catch (e) { console.error('Withdraw callback error:', e.message); }
 });
-// LipaPay's NotifyUrl target for disbursements. Same "always ack literal
-// SUCCESS text, never trust the webhook body's own PayStatus, always
-// independently re-verify via lipaOrderQuery() first" posture as
-// /deposit/lipapay/callback above -- see that route's own comment for the
-// full reasoning. markWithdrawalProcessed()/declineWithdrawalAndRefund()
-// are the SAME provider-agnostic functions the MarzPay callback already
-// uses, so there is zero new crediting/refunding logic here, only new
-// matching/verification logic around unchanged money functions.
 // ── THE PESAJET WEBHOOK -- ONE ENDPOINT FOR BOTH DIRECTIONS ──
 // PesaJet's dashboard has a SINGLE "Webhook Destination URL" field. Two
-// routes (one per direction, as MarzPay and LipaPay have) cannot both be
+// routes (one per direction, as MarzPay has) cannot both be
 // registered there, so half the notifications would never arrive -- and the
 // half that went missing would be invisible, because the reconciler quietly
 // covers for it. One endpoint, dispatched on which of our own collections
@@ -7847,40 +6821,6 @@ app.post('/pesajet/webhook', async (req, res) => {
     console.error('PesaJet webhook error (already acked):', e.message);
   }
 });
-app.post('/withdraw/lipapay/callback', async (req, res) => {
-  try {
-    const outTradeNo = String(req.body?.OutTradeNo || '');
-    if (!outTradeNo) return res.status(200).send('SUCCESS');
-    const doc = await db.collection('withdrawals').doc(outTradeNo).get();
-    if (!doc.exists) return res.status(200).send('SUCCESS');
-    const wit = doc.data();
-    if (wit.lipaOutTradeNo !== outTradeNo) return res.status(200).send('SUCCESS'); // not a LipaPay-routed withdrawal -- ignore, ack anyway
-    // A 'sending' withdrawal is genuinely ambiguous (network error mid-send,
-    // see processWithdrawalCore's own comment) -- mirrors MarzPay's own
-    // callback exactly: safe to recognize a SUCCESS from 'sending' (a
-    // genuine success is always safe), but never auto-decline/refund one
-    // from this unauthenticated, automated path -- only /admin/withdraw/
-    // reject (a human, after checking LipaPay's own dashboard) may resolve
-    // a 'sending' row as failed.
-    if (wit.status !== 'processing' && wit.status !== 'sending') return res.status(200).send('SUCCESS');
-    const q = await lipaOrderQuery(outTradeNo);
-    if (q.providerDown || !q.Data) return res.status(200).send('SUCCESS');
-    const realStatus = lipaStatusLabel(q.Data.PayStatus);
-    if (realStatus === 'success') {
-      if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
-    } else if (realStatus === 'failed') {
-      if (wit.status === 'sending') return res.status(200).send('SUCCESS'); // ambiguous -- admin-only resolution, see the comment above
-      const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
-      if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
-    }
-    // realStatus === 'processing' -- genuinely not done yet, nothing to do
-    res.status(200).send('SUCCESS');
-  } catch (e) {
-    console.error('LipaPay withdraw callback error:', e.message);
-    res.status(200).send('SUCCESS');
-  }
-});
-
 // ═══════════════════════════════════════════
 // WITHDRAWAL ACCOUNTS (mobile money only)
 // ═══════════════════════════════════════════
@@ -8638,7 +7578,7 @@ app.post('/admin/settings/update', async (req, res) => {
     // 'automatic' is deliberately NOT accepted here anymore (Round 102) --
     // it's still recognized when READING an already-stored legacy value
     // (normalizeProviderValue()), but nothing should ever WRITE it again
-    // now that 'marzpay'/'lipapay' are the real, distinct canonical values.
+    // now that 'marzpay'/'pesajet' are the real, distinct canonical values.
     // 'manual' is likewise no longer accepted as of Round 145 -- this field
     // now only ever picks PAY A's own automatic GATEWAY; whether manual
     // (PAY B) is offered at all is controlled independently by
@@ -8646,10 +7586,10 @@ app.post('/admin/settings/update', async (req, res) => {
     // legacy 'manual' value is still read correctly (see getSettings()'s
     // own migration + depositAutomaticProvider()'s own fallback) -- it
     // just can never be WRITTEN again going forward.
-    if ('depositMethod' in updates && !['marzpay', 'lipapay', 'pesajet'].includes(updates.depositMethod))
-      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay', 'lipapay' or 'pesajet'` });
-    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'lipapay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
-      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'lipapay', 'pesajet' or 'manual'` });
+    if ('depositMethod' in updates && !['marzpay', 'pesajet'].includes(updates.depositMethod))
+      return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'pesajet'` });
+    if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
+      return res.status(400).json({ status: 'error', message: `withdrawMethod must be 'follow', 'marzpay', 'pesajet' or 'manual'` });
     // A gateway that cannot reach the picked country's phone numbers is not a
     // configuration worth storing: it would read as set up and fail on every
     // real payment. Refused with the reason rather than accepted and quietly
@@ -10578,8 +9518,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     // The tab needs to know which real payout path is active -- it changes
     // what the approve button does/says and what it must warn the admin
     // about. Sent with the list so the tab doesn't need a second round trip
-    // just to label a button. 'marzpay' | 'lipapay' | 'manual' (Round 102
-    // widened this from a plain 'automatic'/'manual' 2-way string).
+    // just to label a button. 'marzpay' | 'pesajet' | 'manual'.
     // Subagent-audit-caught: same missing-truncated-flag gap as the deposits
     // list above, fixed the same way.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
@@ -11392,7 +10331,7 @@ async function computeUserRealTotals(userId) {
   let deposited = 0, earned = 0;
   txSnap.forEach(d => {
     const t = d.data();
-    // deposit_reversal carries a negative amount (see applyDepositReversal())
+    // deposit_reversal carries a negative amount (a manual correction row)
     // and must be included here or a later "Recalculate totals" run would
     // silently wipe the correction back out.
     if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') deposited += walletLedgerAmount(t);
@@ -11427,7 +10366,7 @@ async function computeRealTotals() {
     const t = d.data();
     if (!t.userId) return;
     const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
-    // deposit_reversal carries a negative amount (see applyDepositReversal())
+    // deposit_reversal carries a negative amount (a manual correction row)
     // and must be included here for the same reason as computeUserRealTotals().
     if (t.type === 'deposit' || t.type === 'admin_credit' || t.type === 'deposit_reversal') row.deposited += walletLedgerAmount(t);
     // Every income source that credits totalEarned live must be summed
@@ -11602,38 +10541,6 @@ async function reconcilePendingDeposits() {
       if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(doc); settled++; }
       else if (FAILED_STATUSES.has(marzStatus)) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
-    // LipaPay's own pending/initiating deposits (Round 102) -- a lost or
-    // delayed webhook is exactly why this sweep exists; it independently
-    // re-checks via lipaOrderQuery() using the deposit's own doc id as
-    // OutTradeNo, same "never trust anything but our own live re-check"
-    // posture as the MarzPay loop just above.
-    // Subagent-audit-caught real gap (Round 104): if lipaCollect() itself
-    // never succeeded (a network/proxy error creating the order -- see
-    // /deposit/marzpay's LipaPay branch, which logs and returns on that
-    // exception, leaving the row 'initiating' forever), OutTradeNo was never
-    // registered with LipaPay at all -- lipaOrderQuery() then returns
-    // "not found"/providerDown FOREVER for that row, and it can never
-    // transition out (no expiry exists for automatic deposits the way
-    // manual ones have one). Without an exclusion, once >=50 such
-    // permanently-dead rows accumulate (e.g. during a LipaPay/QuotaGuard
-    // outage), this fixed-limit(50) query would reselect the SAME dead rows
-    // every tick forever, starving out genuinely-pending NEWER LipaPay
-    // deposits from ever being reconciled -- the exact starvation bug class
-    // the MarzPay loop's own `marzTxUuid>''` exclusion above already exists
-    // to prevent, just not yet extended to this provider. lipaTransactionId
-    // is only ever set once lipaCollect() has genuinely returned a real
-    // TransactionId, so excluding rows without it removes only rows that
-    // were never actionable here anyway -- nothing lost, matching the exact
-    // same tradeoff already accepted for marzTxUuid-less MarzPay rows.
-    const lpSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'lipapay').where('lipaTransactionId', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    for (const doc of lpSnap.docs) {
-      const dep = doc.data();
-      const q = await lipaOrderQuery(doc.id);
-      if (q.providerDown || !q.Data) continue;
-      const realStatus = lipaStatusLabel(q.Data.PayStatus);
-      if (realStatus === 'success') { await creditDeposit(doc); settled++; }
-      else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
-    }
     // PesaJet's own pending/initiating deposits. This sweep matters MORE for
     // this gateway than for the other two: PesaJet's webhook URL is
     // configured in their dashboard rather than sent per request, so until
@@ -11729,26 +10636,6 @@ async function reconcilePendingWithdrawals() {
         // reconciler tick is exactly the kind of independent live-status
         // check that can race the webhook or a client poll.
         const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
-        if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
-        settled++;
-      }
-    }
-    // LipaPay's own outstanding disbursements (Round 102) -- same
-    // starvation-avoiding `.where(field,'>','')` shape as the MarzPay loop
-    // above, and same independent lipaOrderQuery() re-check the webhook
-    // route uses, so a lost/delayed webhook still resolves on its own.
-    const lpSnap = await db.collection('withdrawals').where('status', '==', 'processing').where('lipaOutTradeNo', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    for (const doc of lpSnap.docs) {
-      const wit = doc.data();
-      if (!wit.lipaOutTradeNo) continue;
-      const q = await lipaOrderQuery(wit.lipaOutTradeNo);
-      if (q.providerDown || !q.Data) continue;
-      const realStatus = lipaStatusLabel(q.Data.PayStatus);
-      if (realStatus === 'success') {
-        if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
-        settled++;
-      } else if (realStatus === 'failed') {
-        const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the payment provider', ['processing']);
         if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
         settled++;
       }
@@ -11932,16 +10819,6 @@ function sweepEphemeralState() {
       const locked = f.lockedUntil && f.lockedUntil > now;
       if (!locked && now - (f.ts || 0) > 15 * 60 * 1000) _loginFails.delete(k);
     }
-    // Subagent-audit-caught: these 2 IP-keyed throttle maps were never swept
-    // here, unlike every sibling ephemeral map above -- both are behind a
-    // timingSafeEqual check against MANUAL_SMS_SECRET (so growth is already
-    // bounded by how many distinct IPs hold the shared secret, i.e. admin
-    // phones, not attacker-triggerable by an outsider), but a genuine
-    // inconsistency worth closing for defense-in-depth if the secret is ever
-    // rotated across many more devices. `{n, first}` shape, not a bare
-    // timestamp, so this can't reuse dropStale() directly.
-    for (const [k, f] of _forwarderUnlockAttempts) { if (now - (f.first || 0) > 10 * 60 * 1000) _forwarderUnlockAttempts.delete(k); }
-    for (const [k, f] of _verifyNumberAttempts) { if (now - (f.first || 0) > 10 * 60 * 1000) _verifyNumberAttempts.delete(k); }
   } catch (e) { console.error('State sweep error:', e.message); }
 }
 
