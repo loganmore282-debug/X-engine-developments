@@ -549,6 +549,85 @@ updates while just sitting open the way the old pages did. Low priority
 (both still fetch fresh data every time they're opened), flagged rather
 than silently left for someone to rediscover.
 
+**Auth screens rebuilt single-screen, Trade Password removed app-wide, and
+the un-mockuped Home extras taken off (owner follow-up round):** owner sent
+Register/Log In mockups showing ONE screen each (not the old 3-step wizard)
+with no Trade Password field, then, asked directly about the missing PIN
+field, answered with a sweeping instruction, quoted verbatim because it set
+the scope for the whole round: *"What l am giving you is what you should
+put, so what l didn't mention remove it, so remove trade passwords, your
+treasure chest box, spin, all stuff l never mentioned remove them."*
+Treated as: remove Trade Password/PIN everywhere (not just the auth forms),
+and remove the Home extras the design-system section above had previously
+noted as deliberately kept (paragraph above, now superseded) — the activity
+ticker, spin banner, profile-GIF strip, and the treasure-chest float — since
+none of them are in any mockup sent.
+
+- **`user-src/index.html`**: the whole `#authScreen` markup replaced —
+  dropped the two-part hero-band + white-card split, the wordmark/triangle
+  motifs, the dot-divider headings, the static `+256` dial-code chips
+  (`loginDial`/`regDial`/`forgotDial` — `paintRegionChrome()` already wrote
+  to these through null-safe `$(id)` lookups, so removing the ids is not a
+  crash, just a silently-dropped display feature), and the "Remember me"
+  checkbox (`doLogin()`'s own `if (!remember || remember.checked)` already
+  treated a missing checkbox as always-checked, so this is a real behavior
+  change — credentials are now always saved locally on login, not opt-in —
+  not something new introduced by this edit). New `.auth-screen-v2` is ONE
+  continuous full-bleed photo (still the existing admin-uploadable
+  `authhero` slot / `--auth-hero-img` var — `applyAuthBackgrounds()` needed
+  no changes since `#authHeroBg`/`#authHero` ids were kept on purpose) with
+  flat `.af-v2` glass-pill fields directly on it, real inline SVG icons
+  (person/lock+eye/shield-plus/person-plus), a solid red "Log In"/"Register"
+  button, an "or" divider, and an outlined "Create New Account" button on
+  the Log In pane — matching the two mockups. The separate `authcard`
+  admin-upload slot (`#authCardBg`/`--auth-card-*`) is no longer referenced
+  by any markup; its admin upload row still exists but now has nothing to
+  apply to. New CSS added: `.auth-screen-v2`, `.auth-scroll-v2`, `.af-v2`
+  (+ `.with-btn`), `.af-ic`, `.af-eye`, `.af-inline-btn`, `.af-forgot`,
+  `.af-btn-v2`, `.af-or`, `.af-btn-outline`. The old hero/card CSS
+  (`.auth-hero`/`.auth-card`/`.auth-wordmark`/`.mark-row`/`.auth-tri`/
+  `.dot-divider`/`.auth-field`/`.row-check`/`.auth-switch`) is left in
+  place, unreferenced — same "leave it, nothing else depends on it"
+  precedent as the announcement removal above.
+- **`user-src/original_module.js`**: Sign Up and Forgot Password rewritten
+  from the old 3-step wizard (`showRegStep`/`doRegVerifyOtp`/
+  `showForgotStep`/`doForgotVerifyOtp`) into single-screen flows — Send Code
+  fills an OTP id, the actual `/auth/otp/verify` call now happens inline
+  inside `doRegister()`/`doForgotSubmit()` at submit time. No PIN field is
+  read anywhere in either flow. `showAuthTab()` now resets
+  `window._regOtp`/`window._forgotOtp` directly instead of calling the
+  deleted step functions. `startOtpResendCooldown()` gained an optional
+  3rd `idleLabel` param (default `'Send Code'`) so the one other caller
+  (the wallet-bind OTP step, `'Resend code'`) keeps its own wording.
+- **Trade Password/PIN removed from the withdraw sheet**: `paintWithdrawSheet()`
+  no longer renders the "Trade Password" field, `submitWithdraw()` no longer
+  reads/validates `witPin` or sends `pin` to `/withdraw/request` — matches
+  the server no longer requiring it (see "Money-safety invariants"/server.js
+  changes below).
+- **Security Settings sheet**: `openSecuritySettingsSheet()` now lists only
+  Login Password. `openChangeTradePasswordSheet()` is left defined but
+  unreachable (same dead-code precedent as elsewhere this session).
+- **Home (`paintHome()`)**: removed the activity-ticker card, `spinBannerHtml()`,
+  `homeGifHtml()`, and the floating treasure-chest button. Their functions
+  (`startActivityTicker`, `spinBannerHtml`, `homeGifHtml`, `fitHomeGif`,
+  `openTurntableSheet`) are left defined but unreached — none error, all
+  their `$(id)`/`querySelector` lookups were already null-safe. The Account
+  screen's **"Gift Codes" row is kept** (it's an explicit row in the Account
+  mockup, `openChestSheet()`) — only the Home floating "treasure chest"
+  visual is what the owner meant by "treasure chest box"; gift-code
+  redemption itself is a real, mockup-named feature, not a leftover.
+- **`server.js`**: `completeRegistrationCore()` no longer validates a PIN or
+  writes `transactionPinHash` on signup (the `INVALID_PIN`/`WEAK_PIN` checks
+  are gone, not just skipped). `/withdraw/request` no longer calls
+  `pinCheck()`. `pinCheck()`/`transactionPinHash`/the admin's own
+  set-a-user's-PIN endpoints are left in place, unreachable from the member
+  app — OTP-at-bind-time (the existing wallet-link flow) is now the sole
+  authorization boundary for withdrawals, same as Bind Bank Account already
+  was for adding a payout wallet in the first place.
+- **Verified**: `node -c user-src/original_module.js`, `node --check
+  server.js`, and `node build-core.js` (round-trip OK) all pass clean after
+  every edit in this round.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting

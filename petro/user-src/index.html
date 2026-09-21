@@ -1865,6 +1865,44 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .auth-hint{font-size:12px;color:var(--snow-muted);font-weight:500;margin:-10px 0 16px 4px;}
 .auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--snow-muted);font-weight:500;}
 .auth-switch a{font-weight:600;color:var(--chipz-link);text-decoration:none;}
+/* Everything above (.auth-hero/.auth-card/.auth-wordmark/.mark-row/.auth-tri/
+   .dot-divider/.auth-field/.row-check/.auth-switch) belonged to the old
+   hero-band + white-card layout the auth screen no longer uses -- superseded
+   by .auth-screen-v2 below. Left in place, unreferenced, same as this
+   session's other supersessions (nothing else in the app still uses them). */
+
+/* ── Auth v2: the owner's exact mockup -- ONE continuous full-bleed photo
+   (admin-uploadable, still the "authhero" slot/--auth-hero-img var, applied
+   here via the #authHeroBg/.auth-bg rules above) with dark glass pill fields
+   floating directly on it. No hero/card split, no wordmark, no dial-code
+   chip, no "remember me" -- single screen, exactly the fields shown. */
+.auth-screen-v2{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:var(--chipz-grad);}
+@supports (min-height:100dvh){.auth-screen-v2{min-height:100dvh;}}
+.auth-screen-v2::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(to bottom, rgba(12,7,4,.35) 0%, rgba(12,7,4,.55) 55%, rgba(12,7,4,.8) 100%);}
+.auth-screen-v2 .lang-btn{z-index:4;}
+.auth-scroll-v2{position:relative;z-index:2;flex:1;overflow-y:auto;padding:max(64px,12vh) 22px calc(30px + env(safe-area-inset-bottom));}
+.af-v2{display:flex;align-items:center;gap:10px;background:rgba(20,12,8,.44);border:1.5px solid rgba(255,255,255,.18);
+  border-radius:var(--r-pill);padding:0 16px;height:54px;margin-bottom:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+.af-v2 input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:#fff;}
+.af-v2 input::placeholder{color:rgba(255,255,255,.58);}
+.af-ic{color:rgba(255,255,255,.78);display:flex;flex-shrink:0;}
+.af-eye{background:none;border:none;padding:4px;color:rgba(255,255,255,.68);display:flex;align-items:center;flex-shrink:0;cursor:pointer;}
+.af-v2.with-btn{padding-right:6px;}
+.af-inline-btn{flex-shrink:0;background:var(--chipz-orange);color:#fff;border:0;border-radius:var(--r-pill);
+  padding:0 16px;height:38px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;}
+.af-inline-btn:disabled{opacity:.55;cursor:default;}
+.af-forgot{text-align:right;margin:-4px 0 18px;font-size:13.5px;}
+.af-forgot a{color:rgba(255,255,255,.85);text-decoration:none;font-weight:600;}
+.af-btn-v2{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--chipz-grad);
+  color:#fff;border:0;border-radius:var(--r-pill);height:54px;font:inherit;font-size:16px;font-weight:700;
+  cursor:pointer;letter-spacing:.01em;}
+.af-btn-v2:disabled{opacity:.6;cursor:default;}
+.af-or{display:flex;align-items:center;gap:12px;margin:20px 0;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;}
+.af-or span{flex:1;height:1px;background:rgba(255,255,255,.22);}
+.af-btn-outline{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,.07);
+  color:#fff;border:1.5px solid rgba(255,255,255,.42);border-radius:var(--r-pill);height:54px;font:inherit;font-size:15px;
+  font-weight:700;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .form-field{margin:0 0 14px;}
 .form-field label{display:block;font-size:15px;font-weight:500;color:var(--snow-ink);margin-bottom:8px;}
 .form-field .input-wrap{position:relative;}
@@ -2492,37 +2530,36 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 <!-- ═══════════ AUTH ═══════════ -->
 <div id="authScreen" style="display:none;">
-  <div class="wrap" style="padding-bottom:0;">
-    <div class="auth-hero" id="authHero">
-      <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
-      <span class="auth-tri t1" aria-hidden="true"></span>
-      <span class="auth-tri t2" aria-hidden="true"></span>
-      <!-- Owner: "on login page of every subdomain of any country, at top
-           right there is a button of language". Hidden by paintLangButton()
-           whenever the country allows only one language, so a single-language
-           country gains no furniture. data-no-i18n because the label is
-           already written in its own language and must never be put back
-           through the translation table. -->
-      <button type="button" class="lang-btn" id="langBtn" data-no-i18n style="display:none;" onclick="openLangPicker()" aria-label="Change language">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
-        <span id="langBtnLabel">English</span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <div class="mark-row">
-        <span class="mark-tri" aria-hidden="true"></span>
-        <span class="auth-wordmark" data-brandmark></span>
-      </div>
-      <div id="authTagline" style="position:relative;z-index:2;text-align:center;font-size:14px;color:rgba(255,255,255,.92);font-weight:600;padding:0 40px;display:none;"></div>
-    </div>
-    <div class="auth-card">
-      <span class="auth-bg" id="authCardBg" aria-hidden="true"></span>
+  <!-- Rebuilt to the owner's exact mockup: ONE continuous full-bleed photo
+       background (no separate "hero band" + "card" split Chipz used) with
+       plain dark translucent pill fields floating directly on it. The photo
+       itself is still the existing admin-uploadable 'authhero' slot --
+       owner: "background image will be uploaded to admin panel" -- applied
+       via the same --auth-hero-img/-op/-blur CSS vars applyAuthBackgrounds()
+       already writes, just consumed by #authHero as a single full-screen
+       layer instead of a top band. #authCardBg/--auth-card-* are no longer
+       referenced by this markup (the admin's separate "form card" upload
+       section still exists but has nothing left to apply to -- one photo
+       now, not two). -->
+  <div class="auth-screen-v2" id="authHero">
+    <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
+    <!-- Owner: "on login page of every subdomain of any country, at top
+         right there is a button of language". Hidden by paintLangButton()
+         whenever the country allows only one language, so a single-language
+         country gains no furniture. data-no-i18n because the label is
+         already written in its own language and must never be put back
+         through the translation table. -->
+    <button type="button" class="lang-btn" id="langBtn" data-no-i18n style="display:none;" onclick="openLangPicker()" aria-label="Change language">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
+      <span id="langBtnLabel">English</span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="auth-scroll-v2">
       <div id="loginPane">
-        <h1>LOGIN</h1>
-        <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
         <div id="loginError"></div>
-        <div class="auth-field">
-          <span class="prefix" id="loginDial">+256</span>
-          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg></span>
+          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <!-- Which country this web address serves. Shown only when the
              platform actually runs in more than one, so a single-country
@@ -2530,117 +2567,84 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
              pointing at the wrong country is visible instead of showing
              up later as "Incorrect phone number or password". Filled by
              paintRegionChrome(). -->
-        <div id="loginRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#8c7f76;text-align:center;"></div>
-        <div class="auth-field">
-          <span class="emoji">&#128274;</span>
-          <input id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
-          <button class="eye" onclick="togglePw('loginPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <div id="loginRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <input id="loginPassword" type="password" placeholder="Enter your password" autocomplete="current-password">
+          <button class="af-eye" onclick="togglePw('loginPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
-        <label class="row-check"><input type="checkbox" id="rememberMe"><span>Remember me</span></label>
-        <button class="primary-button" id="loginBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doLogin()">Log In</button>
-        <p class="auth-switch"><a href="#" onclick="showAuthTab('forgot');return false;">Forgot password?</a></p>
-        <p class="auth-switch">Don't have an account? <a href="#" onclick="showAuthTab('register');return false;">Sign Up</a></p>
+        <p class="af-forgot"><a href="#" onclick="showAuthTab('forgot');return false;">Forgot Password?</a></p>
+        <button class="af-btn-v2" id="loginBtn" onclick="doLogin()">Log In <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        <div class="af-or"><span></span>or<span></span></div>
+        <button class="af-btn-outline" onclick="showAuthTab('register');return false;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg> Create New Account</button>
       </div>
 
-      <!-- Sign Up: phone -> OTP -> password -> confirm password (owner's
-           spec). Three field groups, one #registerPane, switched by
-           showRegStep() with plain style.display -- never re-rendered, so
-           nothing typed on an earlier step is lost moving to the next one. -->
+      <!-- Sign Up: ONE screen -- phone, verification code (Send Code inline),
+           password, confirm password, invitation code -- exactly the owner's
+           mockup, not the earlier 3-step wizard. Trade Password/PIN field
+           REMOVED entirely per explicit instruction ("what I am giving you
+           is what you should put... remove trade passwords") -- see
+           server.js's completeRegistrationCore()/withdraw/request for the
+           matching backend removal. -->
       <div id="registerPane" style="display:none;">
-        <h1>SIGN UP</h1>
-        <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
         <div id="regError"></div>
-
-        <div id="regStepPhone">
-          <div class="auth-field">
-            <span class="prefix" id="regDial">+256</span>
-            <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
-          </div>
-          <!-- Which country this web address serves. Shown only when the
-               platform actually runs in more than one, so a single-country
-               app gains no clutter -- and so a short address quietly
-               pointing at the wrong country is visible instead of showing
-               up later as "Incorrect phone number or password". Filled by
-               paintRegionChrome(). -->
-          <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#8c7f76;text-align:center;"></div>
-          <button class="primary-button" id="regSendOtpBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doRegSendOtp()">Send Code</button>
-          <p class="auth-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg></span>
+          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
-
-        <div id="regStepOtp" style="display:none;">
-          <div class="auth-hint" style="margin:0 0 14px;">Enter the 6-digit code sent to <span id="regOtpPhoneLabel"></span></div>
-          <div class="auth-field">
-            <span class="emoji">&#128274;</span>
-            <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code">
-          </div>
-          <button class="primary-button" id="regVerifyBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doRegVerifyOtp()">Verify</button>
-          <p class="auth-switch"><a href="#" id="regResendBtn" onclick="doRegSendOtp();return false;">Resend code</a> &middot; <a href="#" onclick="showRegStep('phone');return false;">Change number</a></p>
+        <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
+        <div class="af-v2 with-btn">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
+          <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code">
+          <button class="af-inline-btn" id="regSendOtpBtn" onclick="doRegSendOtp()">Send Code</button>
         </div>
-
-        <div id="regStepPassword" style="display:none;">
-          <div class="auth-field">
-            <span class="emoji">&#128274;</span>
-            <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
-            <button class="eye" onclick="togglePw('regPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-          <div class="auth-field">
-            <span class="emoji">&#128274;</span>
-            <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
-          </div>
-          <div class="auth-field">
-            <span class="emoji">&#128477;</span>
-            <input id="regPin" type="password" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="one-time-code">
-          </div>
-          <div class="auth-field referral">
-            <span class="emoji">&#127873;</span>
-            <input id="regReferral" type="text" placeholder="Referral code" autocomplete="off" maxlength="12">
-          </div>
-          <div class="auth-hint" id="regReferralHint">Referral code is required</div>
-          <button class="primary-button" id="regBtn" style="width:100%;padding:15px 0;font-size:17px;margin-top:6px;" onclick="doRegister()">Sign Up</button>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <input id="regPassword" type="password" placeholder="Create a password" autocomplete="new-password">
+          <button class="af-eye" onclick="togglePw('regPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <input id="regPassword2" type="password" placeholder="Confirm your password" autocomplete="new-password">
+          <button class="af-eye" onclick="togglePw('regPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg></span>
+          <input id="regReferral" type="text" placeholder="Enter invitation code (optional)" autocomplete="off" maxlength="12">
+        </div>
+        <button class="af-btn-v2" id="regBtn" onclick="doRegister()">Register</button>
       </div>
 
-      <!-- Forgot password, reached from Log In above: phone -> OTP -> new
-           password. No Firebase session exists at this point -- identity is
-           proven by the OTP ticket alone (see /auth/reset/confirm in
-           server.js). Same three-step pattern as Sign Up, its own ids so
-           neither flow's state can bleed into the other. -->
+      <!-- Forgot password, reached from Log In above. No Firebase session
+           exists at this point -- identity is proven by the OTP ticket
+           alone (see /auth/reset/confirm in server.js). Same one-screen
+           pattern as Sign Up (Send Code inline, verify happens on submit),
+           not a 3-step wizard -- the owner didn't send a mockup for this
+           screen specifically, but the same "one screen, exactly the
+           fields needed" treatment applies for consistency. -->
       <div id="forgotPane" style="display:none;">
-        <h1>RESET PASSWORD</h1>
-        <div class="dot-divider"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>
         <div id="forgotError"></div>
-
-        <div id="forgotStepPhone">
-          <div class="auth-field">
-            <span class="prefix" id="forgotDial">+256</span>
-            <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
-          </div>
-          <button class="primary-button" id="forgotSendOtpBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doForgotSendOtp()">Send Code</button>
-          <p class="auth-switch"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg></span>
+          <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
-
-        <div id="forgotStepOtp" style="display:none;">
-          <div class="auth-hint" style="margin:0 0 14px;">Enter the 6-digit code sent to <span id="forgotOtpPhoneLabel"></span></div>
-          <div class="auth-field">
-            <span class="emoji">&#128274;</span>
-            <input id="forgotOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code">
-          </div>
-          <button class="primary-button" id="forgotVerifyBtn" style="width:100%;padding:15px 0;font-size:17px;" onclick="doForgotVerifyOtp()">Verify</button>
-          <p class="auth-switch"><a href="#" id="forgotResendBtn" onclick="doForgotSendOtp();return false;">Resend code</a> &middot; <a href="#" onclick="showForgotStep('phone');return false;">Change number</a></p>
+        <div class="af-v2 with-btn">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
+          <input id="forgotOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code">
+          <button class="af-inline-btn" id="forgotSendOtpBtn" onclick="doForgotSendOtp()">Send Code</button>
         </div>
-
-        <div id="forgotStepPassword" style="display:none;">
-          <div class="auth-field">
-            <span class="emoji">&#128274;</span>
-            <input id="forgotPassword" type="password" placeholder="New Password (at least 6 characters)" autocomplete="new-password">
-            <button class="eye" onclick="togglePw('forgotPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-          <div class="auth-field">
-            <span class="emoji">&#128274;</span>
-            <input id="forgotPassword2" type="password" placeholder="Confirm New Password" autocomplete="new-password">
-          </div>
-          <button class="primary-button" id="forgotSubmitBtn" style="width:100%;padding:15px 0;font-size:17px;margin-top:6px;" onclick="doForgotSubmit()">Reset Password</button>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <input id="forgotPassword" type="password" placeholder="New password" autocomplete="new-password">
+          <button class="af-eye" onclick="togglePw('forgotPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+          <input id="forgotPassword2" type="password" placeholder="Confirm new password" autocomplete="new-password">
+          <button class="af-eye" onclick="togglePw('forgotPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <button class="af-btn-v2" id="forgotSubmitBtn" onclick="doForgotSubmit()">Reset Password</button>
+        <p class="af-forgot"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
       </div>
     </div>
   </div>

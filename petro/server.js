@@ -4150,11 +4150,12 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     if (userSnap.data().registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userSnap.data().referralCode || null } };
 
-    if (!/^\d{6}$/.test(String(pin || '')))
-      return { code: 400, body: { status: 'error', code: 'INVALID_PIN', message: 'Enter a 6-digit Trade Password.' } };
-    if (isWeakPin(pin))
-      return { code: 400, body: { status: 'error', code: 'WEAK_PIN', message: 'That PIN is too easy to guess. Choose 6 digits that are not all the same.' } };
-
+    // Trade Password (PIN) requirement REMOVED (owner: registration is
+    // exactly phone/OTP/password/confirm/referral, nothing else -- see
+    // /withdraw/request's own comment for the full reasoning). `pin` is
+    // still accepted as a parameter -- unused now -- rather than reworking
+    // every call site's argument list for a field that may as well stay
+    // silently ignored if an old client still sends one.
     const code = String(referralCode || '').trim();
     let referrerId = null;
     // The "referral code is a must" rule lives HERE, not only in the app --
@@ -4205,7 +4206,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       }
       const update = {
         registrationDone: true, referralCode: myRefCode, publicId: myPublicId,
-        walletBalance: FieldValue.increment(WELCOME), transactionPinHash: scryptHash(pin),
+        walletBalance: FieldValue.increment(WELCOME),
       };
       if (referrerId) update.referredBy = referrerId;
       // The user's own doc is written FIRST, in one atomic single-document
@@ -6325,9 +6326,15 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(400).json({ status: 'error',
         message: `Cash-out must be a multiple of ${fmtMoney(wMult)}. Try ${fmtMoney(Math.max(low, sett.minWithdraw))} or ${fmtMoney(high)}.` });
     }
-    const check = await pinCheck(userId, req.body.pin);
-    if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
-
+    // Trade Password / withdrawal PIN gate REMOVED here (owner: "what I am
+    // giving you is what you should put... remove trade passwords" -- the
+    // mockups have no PIN field anywhere, registration or withdrawal). The
+    // OTP-verified Bind Bank Account step is what now stands between a
+    // withdrawal and an unbound/unauthenticated caller -- see the
+    // UNBOUND_ACCOUNT check right below, and /bank/save's own OTP
+    // requirement. pinCheck()/transactionPinHash are left in place
+    // (dead code, not deleted) -- see petro/CLAUDE.md's "Design system"
+    // section for the reasoning already established for similar removals.
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)
