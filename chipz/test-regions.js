@@ -57,7 +57,9 @@ const api = new Function('normalizeAllowedHost', `
   const DEFAULT_REGION = Object.freeze({
     key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256',
     localLength: 9, prefixes: ['7'], utcOffsetMin: 180, hosts: [], active: true, isDefault: true,
+    networks: ['MTN Mobile Money', 'Airtel Money'],
   });
+  ${(src.match(/const REGION_DEFAULT_NETWORKS = Object\.freeze\(\{[\s\S]*?\}\);/) || [''])[0]}
   ${(src.match(/const LANGUAGE_CODES = \[[^\]]*\];/) || [''])[0]}
   let _regionsSnapshot = [DEFAULT_REGION];
   let _current = DEFAULT_REGION;

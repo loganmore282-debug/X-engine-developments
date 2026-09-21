@@ -31,7 +31,13 @@ function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:
 // The values below are Uganda's, and they are also what an offline first
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
-var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true };
+var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true, networks: ['MTN Mobile Money', 'Airtel Money'] };
+// Which mobile-money networks THIS account's own country offers, for the
+// withdrawal-wallet screen and the deposit network picker. NOT every
+// country literally has MTN and Airtel (Cameroon/Cote d'Ivoire use Orange,
+// Benin uses Moov) -- falls back to Uganda's pair only if the server never
+// sent one (an old deploy, or before REGION has loaded at all).
+function regionNetworks(){ return (REGION && Array.isArray(REGION.networks) && REGION.networks.length) ? REGION.networks : ['MTN Mobile Money', 'Airtel Money']; }
 function cur(){ return (REGION && REGION.currency) || 'UGX'; }
 function regionName(){ return (REGION && REGION.name) || 'Uganda'; }
 // "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
@@ -61,7 +67,7 @@ function applyRegion(r){
   // usesBareLocal is: a field left out is silently dropped, and these two
   // decide which languages the button offers and which one a first-ever
   // launch opens in.
-  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault','usesBareLocal','languages','defaultLang']) {
+  for (const k of ['key','name','currency','dialCode','localLength','prefixes','utcOffsetMin','isDefault','usesBareLocal','languages','defaultLang','networks']) {
     if (r[k] !== undefined && r[k] !== null && r[k] !== '') out[k] = r[k];
   }
   REGION = Object.assign({}, REGION, out);
@@ -487,6 +493,7 @@ var LANG_ROWS = [
   ['cashed out', 'yaggyamu ssente', 'ametoa pesa', 'a retiré', 'yabikuje', 'yaayihamu sente'],
   ['just deposited', 'yaakateekamu ssente', 'ameweka pesa hivi punde', 'vient de recharger', 'aherutse kubitsa', 'yaahingwire kuteeramu sente'],
   ['just withdrew', 'yaakaggyamu ssente', 'ametoa pesa hivi punde', 'vient de retirer', 'aherutse kubikuza', 'yaahingwire kwihamu sente'],
+  ['Account suspended. Contact customer service.', "Akawunti yo ezibiddwa. Tuukirira obuyambi bw'abakasitoma.", 'Akaunti imesimamishwa. Wasiliana na huduma kwa wateja.', 'Compte suspendu. Contactez le service client.', "Konti yahagaritswe. Vugana na serivisi z'abakiriya.", "Akaunti yaawe ekingiirwe. Hikirira abahwezi b'abakiriya."],
 ];
 // ── SENTENCES WITH A FIGURE SPLICED INTO THEM ──
 // The table above matches a WHOLE string, which by construction can never
@@ -4345,7 +4352,7 @@ function walletCardHtml(w){
 }
 function renderWalletSheet(){
   const w = currentWallet();
-  const providers = ['MTN Mobile Money', 'Airtel Money'];
+  const providers = regionNetworks();
   const editPanel = !_walletEditing ? '' : `
   <div class="wallet-panel">
     <div class="sec-head" style="margin:0 0 16px;"><span class="bar"></span><h2 style="font-size:17px;font-weight:700;">Edit Wallet</h2></div>

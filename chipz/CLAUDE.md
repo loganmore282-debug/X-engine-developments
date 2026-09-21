@@ -6926,3 +6926,107 @@ Codex's own note recorded that it could not run the browser suite at all
 an explicit pre-merge limitation rather than a green result. That gap is closed here —
 and closing it is what turned up the 48 broken harnesses above.
 
+## Round 179 — Why members were silently auto-suspended, and one network list for every country
+
+Owner, holding a screenshot of "Account suspended. Contact customer service." (raw
+English, on a screen that had just shown French elsewhere): *"What is causing these
+fuckin things, moreover still in English, also make sure l can add a withdrawal network
+to any country to be shown when adding withdrawal wallet, so not every country literally
+has mtn and airtel, you can put for me those for other countries ie Cameroon, ivory coast
+/ courtdeviro, and benin."*
+
+**The chain, traced from the screenshot backwards.** `NETWORK_NAMES` was a single global
+`Set(['MTN Mobile Money', 'Airtel Money'])` — every region, everywhere, forever. A member
+in Cameroon, Cote d'Ivoire or Benin has no real MTN/Airtel number to type, so a manual
+deposit for their actual network (Orange, Moov) was refused before
+`assignManualNumberAndCreateDeposit()` ever ran. But `recordDepositAttempt()` runs
+**before** that function, so every one of those structurally-doomed taps still counted
+toward the 5-in-a-minute auto-ban — a confused, legitimate member (of course they keep
+tapping something that keeps refusing) got silently suspended for a configuration gap
+that was never theirs to fix. And the ban message itself was hardcoded English, on top.
+
+### The fix, four parts
+
+1. **Regions carry their own `networks` list.** `DEFAULT_REGION.networks` is
+   `['MTN Mobile Money', 'Airtel Money']` (Uganda, unchanged). `REGION_DEFAULT_NETWORKS`
+   seeds real MarzPay-documented pairs by dialling code — Cameroon (+237) and Cote
+   d'Ivoire (+225) get MTN + Orange, Benin (+229) gets MTN + Moov — consulted **only**
+   when a region has not typed its own list, so a brand-new country is correct on the day
+   it is created rather than whenever an admin happens to notice. `normalizeRegion()`
+   parses a typed list on comma/newline **only**, never bare whitespace (a network's own
+   name is several words — "MTN Mobile Money" would shred into three tokens on a space
+   split), deduped, capped at 8, each capped at 40 characters. `regionNetworkSet(region)`
+   is the one lookup every route now uses in place of the old global `NETWORK_NAMES`:
+   `/deposit/marzpay`'s label, `/deposit/manual/init`'s gate, `/admin/manual-numbers/save`
+   (validated against the region the number is being added for, computed **before** the
+   network check — reordered, since the old code checked the network first and the
+   region second), `/withdraw/request`'s re-validation, and `/bank/save` — the
+   withdrawal-wallet screen the owner explicitly asked about. `publicRegionView()` now
+   publishes `networks` so the client knows its own country's list.
+2. **The ban-counter bug is closed.** `undoDepositAttempt(userId)` pops the just-recorded
+   attempt back off `_depAttempts` when `assignManualNumberAndCreateDeposit()` comes back
+   `{empty: true}` — no active numbers configured for this network+region at all, a dead
+   end that was never going to succeed. It is called from exactly that branch and **not**
+   from the transient "all numbers busy" (`null`) branch, which is real contention among
+   real attempts and must still count.
+3. **"Account suspended. Contact customer service."** got a `LANG_ROWS` row (all five
+   languages). Composed from vocabulary already used elsewhere in the table (Contact ~
+   "Tuukirira"/"Vugana na serivisi"/"Hikirira", from the existing customer-service rows);
+   the three Bantu cells want the same native-speaker pass every other round's Bantu
+   columns are flagged for.
+4. **Admin UI + client wiring.** Countries → *Networks this country offers*, a free-text
+   comma-separated field (deliberately **not** a fixed enum like languages — there is no
+   universal list of African mobile-money network names) mirroring the Languages section
+   next to it. `/admin/regions/save` refuses (by name, not silent truncation) a
+   network over 40 characters, more than 8, or a duplicate — same permissive-normalize /
+   refusing-save split the language and label fields already use.
+   `renderWalletSheet()` in `user-src/original_module.js` reads `regionNetworks()`
+   (falls back to MTN/Airtel if `REGION.networks` is unset or empty) instead of the old
+   hardcoded `const providers = ['MTN Mobile Money', 'Airtel Money']`. `networks` was
+   added to `applyRegion()`'s field whitelist — the same Round 155 hazard recorded
+   there: a published field left out of that whitelist is silently dropped.
+
+**Deliberately out of scope for this round:** the manual-pay (PAY B) two-tile MTN/Airtel
+selector — with its Uganda-specific USSD reminders (`*165#`/`*185#`) and dedicated
+per-operator artwork — was left as-is. The owner's literal ask was the withdrawal-wallet
+screen, which is fixed; making PAY B's tile picker dynamic per country (arbitrary tile
+count, no fixed USSD code) is a larger UI project for a future round if he asks for it.
+
+### Tests
+
+`test-region-networks.js` runs the real functions — `regionNetworkSet()`,
+`normalizeRegion()`'s networks parsing, `publicRegionView()`, `undoDepositAttempt()` /
+`recordDepositAttempt()` (including the exact reported scenario: 4 real attempts, a 5th
+that comes back `{empty:true}` and is undone, so the next real attempt is still only #5)
+— and checks each of the 5 real call sites for the property that matters (region-scoped,
+not the old global set) inside its own route body, per this project's own repeatedly
+relearned rule: check inside the block, not across the file.
+`verify-region-networks-discriminates.py` is 20 mutations (a control plus 19 real ones),
+all caught.
+
+**Fixing this broke four existing harnesses, and each is the same lesson yet again: a
+scanner's anchor is only as good as the text it was written against.** `test-deposit-phone.js`
+and `test-withdraw-rules.js` both used `NETWORK_NAMES` as a slice boundary or a stub
+value; re-anchored on `MAX_MONEY_AMOUNT` and a `regionNetworkSet` stub respectively.
+`test-languages.js` and `test-regions.js` both lift `normalizeRegion()`/`publicRegionView()`
+into a sandbox and now need `REGION_DEFAULT_NETWORKS`/`DEFAULT_REGION.networks` in scope
+too, or the lifted function throws `ReferenceError` the moment it reaches the new code.
+`verify-regions-discriminates.py` had **six** mutations already drifted before this round
+even started — anchored on `GLOBAL_ONLY_SETTINGS`/`ADMIN_GLOBAL_ONLY`'s old ending and
+the region-delete member-count query's old `.limit(1)`, both changed by Round 178's
+link-preview work and never re-anchored. Re-anchored here (to `'linkPreviewEnabled']`
+and `.limit(51)`), plus two more of my own for the `networks` addition to the
+`applyRegion()` whitelist. All 224 mutations in that suite are caught; the tree restores
+cleanly.
+
+**Two other verify harnesses (`verify-pesajet-discriminates.py`,
+`verify-admin-i18n-discriminates.py`) ABORT on one pre-existing drifted anchor each**
+(`'acceptance is treated as completion'` — a payout-status literal the Codex audit
+changed; `'switching language does not repaint what is on screen'` — an admin-panel
+repaint line), both unrelated to anything in this round and not touched by it. Left
+unfixed here as out of scope; flagged for whoever next runs those two files.
+
+Rebuilt both bundles (round-trip OK), bumped `user/sw.js` to `chipz-shell-v111` and
+`admin/sw.js` to `chipz-admin-shell-v27`, and ran the full `test-*.js` suite (34 files,
+all green).
+

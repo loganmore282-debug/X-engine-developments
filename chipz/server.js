@@ -440,6 +440,32 @@ const DEFAULT_REGION = Object.freeze({
   key: DEFAULT_REGION_KEY, name: 'Uganda', currency: 'UGX', dialCode: '256',
   localLength: 9, prefixes: ['7'], utcOffsetMin: 180, hosts: [], active: true, isDefault: true,
   languages: ['en'], defaultLang: 'en',
+  networks: ['MTN Mobile Money', 'Airtel Money'],
+});
+// Owner: "not every country literally has mtn and airtel, you can put for me
+// those for other countries ie Cameroon, Ivory Coast, Benin." Consulted ONLY
+// when a region has not set `networks` itself (see normalizeRegion below) --
+// so it is a DEFAULT, always admin-editable, never a hard rule.
+//
+// WHY THIS EXISTS AND IS NOT JUST "LEAVE IT BLANK UNTIL AN ADMIN FILLS IT
+// IN": before this, every region with no networks set silently inherited
+// Uganda's MTN/Airtel -- correct for nothing else. A member in a country
+// whose real networks are different could still only ever pick MTN or
+// Airtel, which no admin-added manual number would ever match, so every
+// single deposit attempt was structurally guaranteed to fail. Retrying a few
+// times inside a minute -- exactly what a confused, legitimate member does --
+// then tripped the 5-attempts auto-ban below, suspending someone for a
+// config gap that was never theirs to fix. Seeding real values for markets
+// this platform's own gateway (MarzPay) already documents closes that gap
+// the moment a region is created, not whenever an admin happens to notice.
+// Keyed on DIALLING CODE, same reasoning as GATEWAY_DIAL_CODES/MARZPAY_MARKETS
+// above: what decides a member's real network is the country their number
+// belongs to, not what the region document happened to be named.
+const REGION_DEFAULT_NETWORKS = Object.freeze({
+  '256': ['MTN Mobile Money', 'Airtel Money'],  // Uganda
+  '237': ['MTN Mobile Money', 'Orange Money'],  // Cameroon
+  '225': ['MTN Mobile Money', 'Orange Money'],  // Côte d'Ivoire
+  '229': ['MTN Mobile Money', 'Moov Money'],    // Benin
 });
 // Regions as a plain synchronous array, refreshed on the same 60s cadence as
 // settings and products. Synchronous because currentRegion() is called from
@@ -569,6 +595,28 @@ function normalizeRegion(raw, key) {
   const labels = (Array.isArray(raw && raw.labels) ? raw.labels : String((raw && raw.labels) || '').split(/[\s,\n]+/))
     .map(l => String(l == null ? '' : l).trim().toLowerCase().replace(/[^a-z0-9-]/g, ''))
     .filter(l => l && l.length <= 40 && l !== 'www' && !l.startsWith('-') && !l.endsWith('-'));
+  // Owner: "make sure l can add a withdrawal network to any country ... not
+  // every country literally has mtn and airtel." FREE TEXT, deliberately not
+  // restricted to a known list the way languages are -- there is no fixed
+  // enum of mobile-money networks across every African market this platform
+  // might ever reach, so an admin has to be able to type one that is not
+  // pre-empted here. Case preserved as typed: "MTN Mobile Money" is what the
+  // member reads on the wallet screen, and title-casing it automatically
+  // would fight whatever the admin actually typed.
+  // Split on comma/newline ONLY, never on bare whitespace -- unlike labels or
+  // language codes, a network's own name is several words ("MTN Mobile
+  // Money"), so splitting on spaces would shred every value typed as text.
+  const networksIn = (Array.isArray(raw && raw.networks) ? raw.networks : String((raw && raw.networks) || '').split(/[,\n]+/))
+    .map(n => String(n == null ? '' : n).trim().slice(0, 40)).filter(Boolean);
+  const networksTyped = networksIn.filter((n, i) => networksIn.indexOf(n) === i).slice(0, 8);
+  // Nothing typed: fall back to a KNOWN market's real networks by dialling
+  // code if this platform's own gateway integration documents one, and only
+  // then to the founding region's -- never silently to Uganda's for a
+  // country that is plainly not Uganda. This is what makes a brand-new
+  // region correct on the day it is created, not whenever an admin
+  // remembers to fill this field in.
+  const networks = networksTyped.length ? networksTyped
+    : (REGION_DEFAULT_NETWORKS[dialCode] || base.networks || DEFAULT_REGION.networks).slice();
   // Owner: "make when l can select allowed languages of any specific
   // country." Unknown codes are dropped rather than kept, because the app can
   // only render a language it ships a column for -- storing 'de' would put an
@@ -594,6 +642,7 @@ function normalizeRegion(raw, key) {
     utcOffsetMin: Number.isFinite(off) ? Math.round(off) : (base.utcOffsetMin != null ? base.utcOffsetMin : 180),
     hosts: hosts.filter((h, i) => hosts.indexOf(h) === i),
     labels: labels.filter((l, i) => labels.indexOf(l) === i),
+    networks,
     // The founding region can never be switched off -- see DEFAULT_REGION.
     active: isDefault ? true : (raw && raw.active) !== false,
     isDefault,
@@ -1927,7 +1976,17 @@ function depositSenderPhone(body, accountPhone, keys) {
   return fallback ? { phone: fallback }
                   : { error: 'Enter a valid mobile-money phone number.' };
 }
-const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
+// Which mobile-money network names are valid, for a given region. NOT a
+// single global set -- not every country runs on MTN/Airtel (Cameroon and
+// Cote d'Ivoire use Orange, Benin uses Moov; see REGION_DEFAULT_NETWORKS).
+// A member whose country has no networks configured would otherwise
+// silently inherit Uganda's, making every deposit attempt there
+// structurally impossible to ever succeed.
+function regionNetworkSet(region) {
+  const r = region || currentRegion();
+  const list = Array.isArray(r && r.networks) && r.networks.length ? r.networks : DEFAULT_REGION.networks;
+  return new Set(list);
+}
 const MAX_MONEY_AMOUNT = 999_999_999;
 // The most spins one purchase can ever grant. Used in TWO places that must
 // agree: sanitizeProductInput() refuses a bigger number at save time, and
@@ -2338,6 +2397,19 @@ function recordDepositAttempt(userId) {
   arr.push(now);
   _depAttempts.set(userId, arr);
   return arr.length;
+}
+// Pops the just-recorded attempt back off, for the one case that is not
+// abuse: assignManualNumberAndCreateDeposit() came back {empty:true} --
+// no active numbers are configured for this network+region AT ALL, so the
+// attempt was structurally guaranteed to fail before it started. Retrying
+// a genuine dead end is confused, legitimate behaviour, not a burst of
+// abuse, and must not count toward the 5-in-a-minute auto-ban.
+function undoDepositAttempt(userId) {
+  const arr = _depAttempts.get(userId);
+  if (!arr || !arr.length) return;
+  arr.pop();
+  if (arr.length) _depAttempts.set(userId, arr);
+  else _depAttempts.delete(userId);
 }
 function markDepositAttemptSucceeded(userId) { _depAttemptsSucceededAt.set(userId, Date.now()); }
 function depositSucceededRecently(userId) {
@@ -3650,6 +3722,10 @@ function publicRegionView(r) {
     // exactly or a member creates one Firebase account and then signs in
     // looking for another.
     usesBareLocal: regionUsesBareLocal(reg),
+    // Which mobile-money networks this country's withdrawal-wallet screen
+    // (and deposit network picker) should offer -- NOT a hardcoded
+    // MTN/Airtel list. See regionNetworkSet()/REGION_DEFAULT_NETWORKS.
+    networks: (reg.networks && reg.networks.length ? reg.networks : DEFAULT_REGION.networks).slice(),
   };
 }
 app.get('/public/settings', async (req, res) => {
@@ -5195,7 +5271,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     const marzReference = crypto.randomUUID();
     const { date, time } = nowStr();
     const depRef = db.collection('pendingDeposits').doc();
-    const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
+    const network = regionNetworkSet().has(req.body.network) ? req.body.network : null;
     await depRef.set({
       userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider,
       // Which country's money this is, stamped once so the admin lists can
@@ -6113,7 +6189,7 @@ app.post('/deposit/manual/init', async (req, res) => {
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
-  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
+  const network = regionNetworkSet().has(req.body.network) ? req.body.network : null;
   if (!network) return res.status(400).json({ status: 'error', message: 'Select a network' });
   try {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
@@ -6152,6 +6228,8 @@ app.post('/deposit/manual/init', async (req, res) => {
     });
     if (!result) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
     if (result.empty) {
+      // Structurally impossible, not merely busy -- see undoDepositAttempt().
+      undoDepositAttempt(userId);
       console.error(`Manual deposit refused: no active payment numbers configured for ${network}. Add one in Admin -> Deposits -> payment numbers.`);
       return res.status(503).json({ status: 'error', message: `No ${network} payment number is available right now. Please choose the other network, or contact customer service.` });
     }
@@ -6858,12 +6936,13 @@ app.post('/admin/manual-numbers/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const { id, network, number, holderName, active, order } = req.body;
-    if (!NETWORK_NAMES.has(network)) return res.status(400).json({ status: 'error', message: 'Select a valid network' });
-    // The number is validated against the REGION it is being added for, not
-    // against the admin panel's own host: a Kenyan collection line is not a
-    // valid Ugandan number and would otherwise be refused outright.
+    // The network AND the number are both validated against the REGION this
+    // number is being added for, not against the admin panel's own host or
+    // a hardcoded MTN/Airtel set: a Kenyan collection line is not a valid
+    // Ugandan number, and Orange is not a valid network for Uganda.
     await getRegions();
     const numRegion = regionByKey(req.body.region || DEFAULT_REGION_KEY);
+    if (!regionNetworkSet(numRegion).has(network)) return res.status(400).json({ status: 'error', message: 'Select a valid network' });
     const cleanNumber = cleanPhone(number, numRegion);
     if (!cleanNumber) return res.status(400).json({ status: 'error', message: badPhoneMessage(numRegion) });
     const name = String(holderName || '').trim().slice(0, 80);
@@ -6975,7 +7054,7 @@ app.post('/withdraw/request', async (req, res) => {
     if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
     if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
     const rawNetwork = String(req.body.network || '').trim();
-    if (!NETWORK_NAMES.has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
+    if (!regionNetworkSet().has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const destValue = cleanPhone(req.body.phone || '');
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
@@ -7930,7 +8009,7 @@ app.post('/bank/save', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const holder = stripHtml(req.body.holder);
   const rawNetwork = String(req.body.network || '').trim();
-  if (!holder || !NETWORK_NAMES.has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
+  if (!holder || !regionNetworkSet().has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   const phone = cleanPhone(req.body.phone || '');
   if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
   try {
@@ -8860,6 +8939,21 @@ app.post('/admin/regions/save', async (req, res) => {
     return res.status(400).json({ status: 'error', message: `"${badLang}" is not a language this app can display. Choose from: ${LANGUAGE_CODES.join(', ')}.` });
   if (raw.defaultLang && !r.languages.includes(String(raw.defaultLang).trim().toLowerCase()))
     return res.status(400).json({ status: 'error', message: 'The default language has to be one of the languages this country allows.' });
+  // Same split as languages: normalizeRegion stays permissive (it also runs
+  // over what is already stored), and this route refuses by name so an
+  // admin typing a too-long or duplicated network is told, not silently
+  // truncated/deduped. Not a fixed enum -- unlike languages there is no
+  // universal list of African mobile-money network names.
+  const typedNetworks = (Array.isArray(raw.networks) ? raw.networks : String(raw.networks || '').split(/[,\n]+/))
+    .map(n => String(n == null ? '' : n).trim()).filter(Boolean);
+  for (const n of typedNetworks) {
+    if (n.length > 40)
+      return res.status(400).json({ status: 'error', message: `"${n}" is too long for a network name (40 characters maximum).` });
+  }
+  if (typedNetworks.length > 8)
+    return res.status(400).json({ status: 'error', message: 'List at most 8 networks for a country.' });
+  if (typedNetworks.some((n, i) => typedNetworks.indexOf(n) !== i))
+    return res.status(400).json({ status: 'error', message: 'The same network was listed twice.' });
   try {
     _regionsCacheTs = 0;
     const existing = await getRegions();

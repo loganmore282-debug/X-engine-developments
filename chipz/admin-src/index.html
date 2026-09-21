@@ -2952,7 +2952,7 @@ function offsetLabel(min){
 }
 function regionForm(r){
   const isNew = !r;
-  const cur = r || { key:'', name:'', currency:'', dialCode:'', localLength:9, prefixes:[], utcOffsetMin:180, hosts:[], active:true, languages:['en'], defaultLang:'en' };
+  const cur = r || { key:'', name:'', currency:'', dialCode:'', localLength:9, prefixes:[], utcOffsetMin:180, hosts:[], active:true, languages:['en'], defaultLang:'en', networks:[] };
   openModal(`
     <h3>${isNew ? 'New country' : 'Edit ' + esc(cur.name)}</h3>
     <div class="row2">
@@ -2984,6 +2984,9 @@ function regionForm(r){
     <label style="margin-top:8px">Opens in</label>
     <select id="rgDefLang">${ADMIN_LANGS.map(l => `<option value="${esc(l.code)}"${(cur.defaultLang || 'en') === l.code ? ' selected' : ''}>${esc(l.native)}</option>`).join('')}</select>
     <p class="muted" style="margin:6px 0 10px">Members here get a <b>language button at the top right of the sign-in screen</b>, and a Language row in Account. It is <b>hidden entirely when only one language is ticked</b> — one option is not a choice. "Opens in" is what a phone that has never picked one starts in; it must be one of the ticked languages.<br><br>Anything not yet translated shows in <b>English</b> rather than in a placeholder, so ticking a language is always safe. Prices, amounts and currency labels are never translated.</p>
+    <label style="margin-top:12px">Networks this country offers <span class="muted" style="font-weight:400">— separate with commas</span></label>
+    <input id="rgNetworks" value="${esc((cur.networks || []).join(', '))}" placeholder="MTN Mobile Money, Orange Money">
+    <p class="muted" style="margin:6px 0 10px">Shown on the withdrawal-wallet screen and the deposit network picker for members in this country. Not every country literally has MTN and Airtel -- Cameroon and Cote d'Ivoire use Orange, Benin uses Moov. Leave blank for a sensible default based on the dialling code (or MTN/Airtel if none is known). At most 8, and a deposit attempt for a network with no active payment numbers configured is refused rather than silently failing.</p>
     <label>Short addresses <span class="muted" style="font-weight:400">— just the bit in front of ${esc(ADMIN_BASE_DOMAIN)}</span></label>
     <input id="rgLabels" value="${esc((cur.labels || []).join(', '))}" placeholder="g26e, shy">
     <p class="muted" style="margin:6px 0 10px">Each one becomes <code>&lt;name&gt;.${esc(ADMIN_BASE_DOMAIN)}</code>. Separate several with commas. Use <b>+ Address</b> on the list to have one generated for you.</p>
@@ -3034,6 +3037,7 @@ function regionForm(r){
       active: $('rgActive').checked,
       languages: Array.from(document.querySelectorAll('.rg-lang')).filter(c => c.checked).map(c => c.value),
       defaultLang: $('rgDefLang').value,
+      networks: $('rgNetworks').value.split(/[,\n]+/).map(s => s.trim()).filter(Boolean),
     } });
     btn.disabled = false; btn.textContent = 'Save country';
     if (d.status !== 'success') return toast(d.message || 'Could not save this country', 'err');

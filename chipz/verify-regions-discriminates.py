@@ -103,11 +103,11 @@ MUTATIONS = [
       if (offending.length)"""),
 
     ('maintenance mode becomes a per-country setting', SERVER,
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
      "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName'];"),
 
     ("the minimum cash-out stops being a country's own", SERVER,
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
      "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'minWithdraw'];"),
 
     ('every country shares one settings document', SERVER,
@@ -307,8 +307,8 @@ MUTATIONS = [
      '      /* not applied until the cache expires */'),
 
     ('the host rules become per-country settings', SERVER,
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName'];"),
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'linkPreviewEnabled'];"),
 
     ('the two host switches stop being coerced to booleans', SERVER,
      "'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts'];",
@@ -339,7 +339,7 @@ MUTATIONS = [
      "          batch.update(d.ref, { key: d.data().key });"),
 
     ('a country with members signed up in it can be deleted', SERVER,
-     "    const members = await db.collection('users').where('regionKey', '==', key).limit(1).get();",
+     "    const members = await db.collection('users').where('regionKey', '==', key).limit(51).get();",
      "    const members = { empty: true };"),
 
     ('the panel sends a backend-wide setting with a country’s rates, failing the whole save', ADMIN,
@@ -347,7 +347,7 @@ MUTATIONS = [
      "      void ADMIN_GLOBAL_ONLY;"),
 
     ('the panel and the server disagree about which settings are backend-wide', ADMIN,
-     "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts'];",
+     "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
      "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'brandName'];"),
 
     ('the picked country is no longer stamped on admin reads', ADMIN,
@@ -414,8 +414,8 @@ MUTATIONS = [
      """      updates.rotateEntry = ROTATE_ENTRY_MODES.includes(mode) ? mode : 'off';"""),
 
     ('the mode becomes backend-wide, so every country shares one answer', SERVER,
-     "'parkedHosts', 'strictRegionHosts'];",
-     "'parkedHosts', 'strictRegionHosts', 'rotateEntry'];"),
+     "'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
+     "'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled', 'rotateEntry'];"),
 
     ('the mode has no default, so a country never asked is undefined', SERVER,
      "  rotateEntry: 'off',\n",
@@ -655,9 +655,10 @@ MUTATIONS = [
      ""),
 
     ('the app drops the published login-address shape on the floor', CLIENT,
-     # Re-anchored in Round 163: the whitelist gained languages/defaultLang.
-     "'utcOffsetMin','isDefault','usesBareLocal','languages','defaultLang']",
-     "'utcOffsetMin','isDefault','languages','defaultLang']"),
+     # Re-anchored in Round 163 (languages/defaultLang) and again when the
+     # networks field was added -- the whitelist keeps growing.
+     "'utcOffsetMin','isDefault','usesBareLocal','languages','defaultLang','networks']",
+     "'utcOffsetMin','isDefault','languages','defaultLang','networks']"),
 
     # ── every subdomain refused by the backend, so nothing loaded at all ──
     ('a generated subdomain is refused by the backend again', SERVER,
@@ -983,8 +984,8 @@ MUTATIONS = [
      "  const badLang = typedLangs.find(c => !LANGUAGE_CODES.includes(c));",
      "  const badLang = null;"),
     ('applyRegion drops the language list, the same whitelist slip that once broke the login address', CLIENT,
-     "'usesBareLocal','languages','defaultLang']",
-     "'usesBareLocal']"),
+     "'usesBareLocal','languages','defaultLang','networks']",
+     "'usesBareLocal','networks']"),
     # Re-anchored: Round 172's whitespace normalisation rewrote this function,
     # so the old anchor had been dead since then -- applied to nothing, and
     # aborting the run the moment the anchors were actually checked.

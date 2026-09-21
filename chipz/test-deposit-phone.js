@@ -30,7 +30,7 @@ const slice = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
 // is a Ugandan number -- the region layer itself is covered by
 // test-regions.js.
 const currentRegion = () => ({ key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true });
-eval(slice('function localDigits(raw, region)', 'const NETWORK_NAMES'));
+eval(slice('function localDigits(raw, region)', 'const MAX_MONEY_AMOUNT'));
 
 let failed = 0;
 const check = (ok, label) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`); };

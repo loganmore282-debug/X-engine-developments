@@ -88,6 +88,7 @@ console.log('\n— a country\'s allowed languages —');
 const regionApi = new Function('normalizeAllowedHost', `
   const DEFAULT_REGION_KEY = 'ug';
   ${constSource(src, 'DEFAULT_REGION')}
+  ${constSource(src, 'REGION_DEFAULT_NETWORKS')}
   ${constSource(src, 'LANGUAGE_CODES')}
   ${fnSource(src, 'normalizeRegion')}
   return { normalizeRegion, DEFAULT_REGION };
@@ -136,6 +137,8 @@ console.log('\n— published to the app, and read by it —');
 const pubView = new Function('reg', `
   const currentRegion = () => reg;
   const regionUsesBareLocal = () => true;
+  const DEFAULT_REGION_KEY = 'ug';
+  ${constSource(src, 'DEFAULT_REGION')}
   ${fnSource(src, 'publicRegionView')}
   return publicRegionView(reg);
 `);

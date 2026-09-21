@@ -186,7 +186,7 @@ function run(state, body) {
     sendAdminPush: async () => {},
     sendWithdrawalSmsAlert: async () => {},
     logAdminAction: () => {},
-    NETWORK_NAMES: new Set(['MTN Mobile Money', 'Airtel Money']),
+    regionNetworkSet: () => new Set(['MTN Mobile Money', 'Airtel Money']),
     MAX_MONEY_AMOUNT: 100000000,
     _witRequestInFlight: new Set(),
     _userBeingDeleted: new Set(),
@@ -216,7 +216,7 @@ function run(state, body) {
   const fn = new Function('sandbox', `
     const { console, verifyAuth, withLock, getSettings, pinCheck, cleanPhone,
             uniqueRef, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
-            sendWithdrawalSmsAlert, NETWORK_NAMES, MAX_MONEY_AMOUNT,
+            sendWithdrawalSmsAlert, regionNetworkSet, MAX_MONEY_AMOUNT,
             _witRequestInFlight, _userBeingDeleted, FieldValue, db,
             withdrawWindowState, currentRegionKey, DEFAULT_REGION_KEY } = sandbox;
     let handler;
