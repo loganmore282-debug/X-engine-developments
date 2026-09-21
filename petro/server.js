@@ -144,7 +144,7 @@ app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 // Snow's own live domain (chn-snow2beer.com) was deliberately dropped from
 // this copy -- it has no business reaching Chipz's database.
 const CORS_ALLOWED_ORIGINS = new Set([
-  'https://chipz-platform.com', 'https://www.chipz-platform.com',
+  'https://petro-platform.com', 'https://www.petro-platform.com',
 ]);
 // Suffix-matched hosts. EdgeOne hands out *.edgeone.app, *.edgeone.site AND
 // *.edgeone.dev subdomains, and the project can be renamed or redeployed to

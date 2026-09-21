@@ -1,0 +1,149 @@
+# nginx site config for Petro on the Hostinger KVM1 VPS.
+#
+# Three subdomains, mirroring the three separate Railway/Render services
+# Chipz used to deploy (server / app / admin) -- kept as three origins on
+# purpose rather than collapsed onto one, because server.js's own
+# CORS_ALLOWED_ORIGINS + the meta-tag CSP in user-src/index.html and
+# admin-src/index.html already assume the API is a different origin from
+# the pages that call it. Collapsing them onto one origin would work too,
+# but it changes a security-relevant assumption baked into inherited code
+# (see petro/CLAUDE.md, "money-safety invariants" / CORS) -- not something
+# to do silently while wiring up a host.
+#
+# Replace every PETRO_DOMAIN with the real domain before use, e.g.:
+#   sed 's/PETRO_DOMAIN/petro-platform.com/g' nginx-petro.conf.template \
+#     > /etc/nginx/sites-available/petro
+#
+# api.PETRO_DOMAIN   -> proxied to the Node backend (server.js via pm2, :3000)
+# app.PETRO_DOMAIN   -> static files, petro/user/  (member app)
+# admin.PETRO_DOMAIN -> static files, petro/admin/ (admin panel)
+#
+# TLS: run `certbot --nginx -d api.PETRO_DOMAIN -d app.PETRO_DOMAIN -d admin.PETRO_DOMAIN`
+# after this file is in place and nginx has reloaded on port 80 -- certbot
+# rewrites the `listen 443`/`ssl_certificate` lines in place. The bare :80
+# server block below exists so certbot's HTTP-01 challenge (and any plain
+# request before certs exist) has somewhere to land; certbot itself adds
+# the 80->443 redirect once certificates are issued.
+
+# ── shared security headers ────────────────────────────────────────────
+# Ported line-for-line from static-server.js / the old render.yaml (the
+# Render-era static-host headers), NOT reinvented -- these defend the exact
+# same threat model (script injected into a page reading a member's balance
+# or session and POSTing it to an attacker's server; the panel being framed
+# by another site) regardless of which host serves the bytes. connect-src
+# below must keep matching wherever the API actually lives -- if the API
+# subdomain ever changes, update it here AND run set-backend-url.js, they
+# are independent copies of the same fact.
+map $host $csp_header {
+    default "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://api.PETRO_DOMAIN https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name api.PETRO_DOMAIN app.PETRO_DOMAIN admin.PETRO_DOMAIN;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    location / {
+        return 404;
+    }
+}
+
+# ── api.PETRO_DOMAIN -> server.js (pm2, port 3000) ─────────────────────
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name api.PETRO_DOMAIN;
+
+    # ssl_certificate / ssl_certificate_key are filled in by certbot.
+
+    client_max_body_size 8m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # server.js does its own rate limiting off X-Forwarded-For (it trusts
+        # app.set('trust proxy', ...) upstream) -- nginx must not strip or
+        # rewrite this header, only append to it (the default proxy_pass
+        # behaviour above already does that correctly).
+    }
+
+    location = /health {
+        proxy_pass http://127.0.0.1:3000/health;
+        access_log off;
+    }
+}
+
+# ── app.PETRO_DOMAIN -> petro/user/ (member app, one inline bundle) ────
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name app.PETRO_DOMAIN;
+
+    root /srv/petro/user;
+    index index.html;
+
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Content-Security-Policy $csp_header always;
+    add_header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()" always;
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header Cross-Origin-Resource-Policy "same-site" always;
+
+    # Old-style referral links (<origin>/refCode=<code>) are a real URL
+    # path, not a query string -- without this rewrite every invite sent
+    # before Round 158 (new links use /?ref=<code>, which needs no rule)
+    # 404s. Scoped to this exact prefix on purpose: a blanket try_files
+    # fallback to index.html would also swallow sw.js and the manifest.
+    location ^~ /refCode= {
+        rewrite ^ /index.html break;
+    }
+
+    # index.html / sw.js / manifest.json revalidate on every load (a new
+    # build must be picked up immediately -- phones sitting on a stale
+    # cached shell is this project's single most recurring complaint).
+    # Every other asset (product images, icons) is fine to cache normally;
+    # nothing here is versioned in its filename, so this stays conservative
+    # rather than copying an aggressive immutable-cache policy from a
+    # typical static-site config.
+    location = /index.html { add_header Cache-Control "no-cache"; }
+    location = /sw.js       { add_header Cache-Control "no-cache"; }
+    location = /manifest.json { add_header Cache-Control "no-cache"; }
+
+    location / {
+        try_files $uri =404;
+    }
+}
+
+# ── admin.PETRO_DOMAIN -> petro/admin/ (admin panel, moves money) ──────
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name admin.PETRO_DOMAIN;
+
+    root /srv/petro/admin;
+    index index.html;
+
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Content-Security-Policy $csp_header always;
+    add_header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()" always;
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header Cross-Origin-Resource-Policy "same-site" always;
+
+    # The whole panel is one file -- every request revalidates, same
+    # reasoning as index.html above but for all of it, not just three names.
+    add_header Cache-Control "no-cache";
+
+    location / {
+        try_files $uri =404;
+    }
+}
