@@ -1963,10 +1963,9 @@ async function boot(){
 // replies land -- which may be before or after the app becomes visible, so
 // it repaints whatever is currently on screen rather than assuming.
 function applyBootArtwork(ai, mpi, ci){
-  // Fetched with the rest rather than lazily on open, so the announcement
-  // dialog's image is known by the time it opens (maybeShowAnnouncement
-  // waits on _artPromise) instead of being fetched after it is already up.
-  STATE.announceImage = (ai.status === 'success' && ai.image) ? ai.image : null;
+  // `ai` (the removed announcement dialog's own image) is no longer read
+  // here -- kept as a parameter only because its caller's Promise.all still
+  // fetches it; not worth touching that sequence just to drop one entry.
   // Same reasoning again -- a member could reach the manual-deposit flow
   // moments after the app becomes visible, so both optional replacement
   // images (owner: "upload image to replace those snow on payment network
@@ -2879,29 +2878,6 @@ window.showPage = async function(name){
     // paint ordering is unaffected -- only the ANNOUNCEMENT's own timing
     // changes here.
     renderHome();
-    // subagent-audit-caught, corrected again: owner wants this to show with
-    // genuinely ZERO wait after the startup loader, and on every single
-    // return to Home -- not "wait for boot() first." STATE.settings is
-    // already known by the time this runs in every real case: a fresh
-    // network boot (bootFromNetwork()) already awaits _bootPromise as part
-    // of its own spinner-gated Promise.all before ever calling showPage()
-    // the first time, and a cache-hit boot (Round 46) restores
-    // STATE.settings from the cached snapshot before showPage() runs too --
-    // so showing immediately off whatever STATE.settings already holds,
-    // instead of re-awaiting _bootPromise every time, is what actually
-    // delivers "immediately, no wait 0s" AND "even clicking back to home."
-    // The wait below only ever matters for a genuinely first-ever boot with
-    // nothing cached yet and a still-in-flight live settings fetch -- a real
-    // edge case, not the normal path.
-    const showAnnouncementNow = () => { if (STATE.page === 'home' && !isAnyOverlayOpen()) maybeShowAnnouncement(); };
-    // The dialog's own picture is one of the three heavy replies the loader
-    // no longer blocks on, so wait for THAT rather than for boot as a whole:
-    // opening the dialog a moment before its banner arrives would show the
-    // placeholder and never repaint. Capped, and a failure still shows the
-    // dialog -- an announcement with no picture beats no announcement.
-    const afterArt = (fn) => (_artPromise ? withTimeout(_artPromise, 4000).then(fn).catch(fn) : fn());
-    if (STATE.settings) afterArt(showAnnouncementNow);
-    else withTimeout(_bootPromise, 6000).then(() => afterArt(showAnnouncementNow));
   }
   else if (name === 'catalog') await renderCatalog();
   else if (name === 'products') await renderProducts();
@@ -2910,61 +2886,17 @@ window.showPage = async function(name){
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
 };
-// Home announcement dialog -- owner: "put it back, it should open from
-// middle and have background as that of activity checker [the Home
-// activity ticker pill, #activityTicker -- rgba(17,17,17,.82), the exact
-// color the pre-existing chest/gift-code modal already reuses too]... OK
-// button... but okay button should have link inside it, so when one taps
-// ok, it triggers link and joins telegram group, and also X button on top
-// right of it." A real feature that never actually existed end-to-end in
-// this app before now (it was only ever a dead admin-panel section pointing
-// at nothing -- see CLAUDE.md's Round 14 note); built fresh here, not
-// restored from a prior working version. Markup/CSS mirror the existing
-// #chestWinBg centered-modal pattern exactly (static HTML + .show class
-// toggle, tap-outside-to-close), not a new one-off. Fires every time Home
-// is entered (matching the one established precedent for this exact
-// feature, from the sibling Space8 project) -- same hook point showPage()
-// already uses for every other per-page action, no separate timer/listener.
-// Exposed on window (this plain function isn't, same convention as every
-// other inline onclick target in this file) -- Home's own "Latest
-// Announcement" row's "More" tap calls this, reopening the identical
-// dialog maybeShowAnnouncement() already fires automatically on entering
-// Home. Safe to call again: it's a plain render + .show toggle, no state
-// to double-apply.
-window.openAnnounceDialog = function(){ maybeShowAnnouncement(); };
-function maybeShowAnnouncement(){
-  const s = STATE.settings;
-  if (!s || !s.annEnabled || !s.annBody) return;
-  const url = s.telegramGroup || s.telegramChannel || '';
-  // Announcement.dc.html centres a fixed "Welcome" header; an admin-set
-  // title replaces it when one is configured.
-  $('announceTitle').textContent = s.annTitle || 'Welcome';
-  $('announceBody').innerHTML = linkifyText(s.annBody);
-  // The admin-uploadable banner fills the whole banner block; with no image
-  // configured the block keeps its gradient + CHIPZ wordmark, exactly as
-  // the mockup's placeholder shows. STATE.announceImage was prefetched in
-  // boot() alongside the Home banner, so this adds no wait.
-  const banner = $('announceBanner');
-  banner.innerHTML = STATE.announceImage
-    ? `<img src="${esc(STATE.announceImage)}" alt="" onerror="this.remove()">`
-    : `<div class="wm">${brandWordmarkHtml()}</div>`;
-  window._announceUrl = url;
-  // Same "blank field hides its button" convention as Help Centre's own
-  // Telegram links -- no channel configured, no Join Channel button.
-  $('announceTelegramBtn').style.display = url ? 'flex' : 'none';
-  $('announceBg').classList.add('show');
-  // Without this, scrolling the dialog's own message text chains straight
-  // through into the Home page sitting behind it -- same lock openSheet()
-  // already applies for real sheets, just missing here since this isn't one.
-  lockBodyScroll();
-}
-window.closeAnnounce = function(){
-  $('announceBg').classList.remove('show');
-  unlockBodyScroll();
-};
-window.openAnnounceTelegram = function(){
-  if (window._announceUrl) window.open(window._announceUrl, '_blank', 'noopener');
-};
+// Announcement dialog REMOVED entirely (owner: "remove announcement
+// everywhere") -- the pop-up that used to fire on every Home visit, Home's
+// own inline "Latest Announcement" row, and the admin panel's "Home
+// announcement dialog" settings section are all gone; see petro/CLAUDE.md's
+// "Design system" section. maybeShowAnnouncement() stays as a deliberate
+// no-op rather than being deleted outright: maybeAnnounceAfterSheet() below
+// still calls it from several deposit/withdraw sheet-closing paths, and
+// leaving those call sites alone (rather than editing five separate spots
+// in that money-adjacent code) is the lower-risk way to make the feature
+// truly disappear everywhere it used to show.
+function maybeShowAnnouncement(){}
 
 // ── HOME ──
 // Cache-first: a page revisit paints instantly from whatever STATE already
@@ -3212,15 +3144,14 @@ function paintHome(){
   const unread = (STATE.messages || []).filter(m => !m.read).length;
   const bal = Number(a.walletBalance) || 0;
   const balText = _balanceHidden ? maskedBalanceText() : fmtUGX(bal);
-  const hasAnnouncement = !!(st.annEnabled && st.annBody);
-  // Owner's mockup: logo + tagline header, a 3-stat/wallet block, an inline
-  // Daily Check-in card and an inline Latest Announcement row all live on
-  // Home now (previously the balance lived on Account only, and Daily
-  // Check-in/the announcement were sheet/dialog-only -- see this file's own
-  // "not yet built" note in CLAUDE.md's "Design system" section, now built).
-  // The activity ticker, spin banner, profile GIF strip and treasure chest
-  // are existing features the mockup doesn't show but nothing asked to
-  // remove -- kept, below the new content, not replaced by it.
+  // Owner's mockup: logo + tagline header, a 3-stat/wallet block and an
+  // inline Daily Check-in card all live on Home now (previously the balance
+  // lived on Account only, and Daily Check-in was sheet-only). The
+  // announcement dialog/row was built the same round, then removed entirely
+  // per the owner's own later instruction -- see petro/CLAUDE.md. The
+  // activity ticker, spin banner, profile GIF strip and treasure chest are
+  // existing features the mockup doesn't show but nothing asked to remove --
+  // kept, below the new content, not replaced by it.
   let html = `
 <div class="home-topbar-v2">
   <div class="htb-brand">
@@ -3277,16 +3208,6 @@ ${homeBannerBlockHtml(st)}
   </div>
   <button class="cic-btn" onclick="openCheckinSheet()">Check In</button>
 </div>
-${hasAnnouncement ? `
-<div class="ann-row" onclick="openAnnounceDialog()">
-  <span class="ann-ic">${ICONS.megaphone}</span>
-  <div class="ann-text">
-    <div class="ann-title">Latest Announcement</div>
-    <div class="ann-body">&bull; ${esc(String(st.annBody || '').split('\n')[0].slice(0, 90))}</div>
-    <div class="ann-date">${esc(fmtDay(st.annUpdatedAt))}</div>
-  </div>
-  <span class="ann-more">More ${ICONS.chevronRight}</span>
-</div>` : ''}
 <div class="act-card">
   <span class="act-bell"><img src="/act-bell.png" alt=""></span>
   <div class="act-track-wrap">
@@ -4955,12 +4876,19 @@ window.doTurntableSpin = async function(){
 // It is one-shot and cleared on close, so a later plain notify() can never
 // inherit a stale callback.
 var _notifyOnClose = null;
+var _notifyTimer = null;
 window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
   $('notifyBg').classList.add('show');
+  // Auto-dismisses on its own (a toast, not a dialog the member must
+  // acknowledge) -- tapping it early still works via closeNotify() on the
+  // card's own onclick, which clears this same timer first.
+  if (_notifyTimer) clearTimeout(_notifyTimer);
+  _notifyTimer = setTimeout(closeNotify, 3600);
 };
 window.closeNotify = function(){
+  if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
   $('notifyBg').classList.remove('show');
   const fn = _notifyOnClose;
   _notifyOnClose = null;

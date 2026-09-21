@@ -433,6 +433,33 @@ Chipz, unchanged" below.
   HTML, confirmed by reading the function before touching it. Left alone
   (still callable, just inert), not cleaned up as part of this round.
 
+**notify() redesigned, announcement removed entirely (owner follow-up round):**
+- `notify()` (the app-wide toast, called from dozens of places) is now a
+  small dark bottom-sliding toast, auto-dismissing, replacing the old
+  centred white card + dimmed backdrop + amber warning-triangle emoji.
+  Same `notify(message, onClose)`/`closeNotify()` signatures and the same
+  `#notifyBg`/`#notifyMsg` ids as before — **every call site needed zero
+  changes**, only the CSS/markup behind those ids changed.
+- The announcement feature (pop-up dialog firing on every Home visit, the
+  inline Home row built earlier this same round, and the admin panel's
+  whole "Home announcement dialog" settings section) is **removed
+  entirely**, per an explicit later instruction. `maybeShowAnnouncement()`
+  was kept as a deliberate no-op function (not deleted) because
+  `maybeAnnounceAfterSheet()` still calls it from five separate
+  deposit/withdraw sheet-closing code paths — turning it into a no-op was
+  the lower-risk way to make the feature disappear everywhere without
+  editing five spots in money-adjacent code. **Real bug caught and fixed
+  while removing the admin UI**: two of the admin panel's announcement
+  event-wiring lines (`$('saveAnn').addEventListener(...)`,
+  `$('annImageFile').addEventListener(...)`) had no null-check, unlike
+  every sibling handler in that file — deleting only the HTML and leaving
+  those would have thrown on `renderSettings()` and broken every OTHER
+  settings control wired after them in the same function. Backend fields
+  (`annEnabled`/`annTitle`/`annBody`/`annUpdatedAt` in `DEFAULT_SETTINGS`,
+  the `/admin/announcement-image` endpoints) were deliberately left alone —
+  inert, unreachable from any UI, lower risk than restructuring
+  `getSettings()`/a positional `Promise.all` for a purely cosmetic cleanup.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting

@@ -905,15 +905,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .cic-title{font-size:14.5px;font-weight:800;color:var(--snow-ink);}
 .cic-sub{font-size:11.5px;color:var(--snow-muted);font-weight:500;line-height:1.35;margin-top:2px;}
 .cic-btn{flex-shrink:0;background:var(--chipz-grad);color:#fff;border:none;font-family:inherit;font-weight:700;font-size:13px;padding:10px 18px;border-radius:var(--r-pill);}
-/* ── Latest Announcement row ── */
-.ann-row{margin:0 18px 16px;padding:13px 14px;border-radius:var(--r-card);background:var(--snow-surface);border:1px solid var(--line-soft);box-shadow:var(--sh-card);display:flex;align-items:center;gap:11px;}
-.ann-ic{width:30px;height:30px;flex-shrink:0;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;}
-.ann-text{flex:1;min-width:0;}
-.ann-title{font-size:13.5px;font-weight:800;color:var(--snow-ink);}
-.ann-body{font-size:11.5px;color:var(--snow-muted);font-weight:500;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.ann-date{font-size:10px;color:var(--snow-muted);opacity:.75;margin-top:2px;}
-.ann-more{flex-shrink:0;font-size:12px;font-weight:700;color:var(--snow-wine);display:flex;align-items:center;gap:2px;}
-.ann-more svg{width:12px;height:12px;}
 .home-footer-banner{display:block;width:calc(100% - 36px);margin:0 18px 16px;border-radius:var(--r-card);object-fit:cover;}
 .home-tabs{display:flex;gap:10px;padding:0 18px;margin:14px 0;}
 .home-tabs .ht{flex:1;text-align:center;padding:11px 0;border-radius:var(--r-pill);font-weight:700;font-size:14px;letter-spacing:.03em;border:none;font-family:inherit;}
@@ -1393,33 +1384,17 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .tt-rules li{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.7;margin-left:16px;}
 
 /* ── Notify dialog (Notify.dc.html) ── */
-.notify-bg{position:fixed;inset:0;background:rgba(20,10,5,.45);display:none;align-items:center;justify-content:center;padding:36px;z-index:400;}
-.notify-bg.show{display:flex;}
-/* Owner, holding his mockup up against this: "see the dialog message should
-   be like that in that height that size."
-   Every number here is measured off his mockup as a FRACTION OF SCREEN WIDTH,
-   which is the only dpr-independent way to compare a phone screenshot with a
-   CSS rule. His alert card is 532/720 = 74% of the screen wide and 384/720
-   tall, i.e. about half as tall as it is wide. Ours was 330px on a 390px
-   screen -- 85% -- and taller with it. At 390px the mockup works out to a
-   288x208 card, which is what these produce.
-   The triangle is 79/720 = 11% of the width (43px), and it sits 38px below
-   the card's top edge; the message is ~15.5px; the OK is a 76x43 PILL, not
-   the rounded rectangle it was. */
-.notify-card{width:100%;max-width:288px;background:var(--snow-surface);border-radius:var(--r-card);box-shadow:0 30px 60px -20px rgba(0,0,0,.4);overflow:hidden;text-align:center;animation:notifyPop .16s ease-out;}
-@keyframes notifyPop{from{transform:scale(.92);opacity:0;}to{transform:scale(1);opacity:1;}}
-/* line-height:1 (not 0) now that this holds a glyph rather than an <svg>: a
-   zero line box clips an emoji's ascender. 43px keeps the ink the same height
-   the SVG occupied, measured against his reference. */
-.notify-icon{padding:32px 0 14px;line-height:1;font-size:43px;
-  font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;}
-.notify-msg{padding:0 24px 20px;font-size:15.5px;font-weight:700;color:var(--snow-ink);line-height:1.45;}
-/* Owner: "your button is long, it doesn't match words." It was stretched to
-   the card width regardless of its label, so a two-letter "OK" sat in a bar
-   the width of the dialog. It now sizes to its own text with comfortable
-   padding, and is centred -- and it is a pill, matching his mockup. */
-.notify-ok{display:block;width:auto;min-width:76px;margin:0 auto 22px;padding:0 26px;height:43px;border:0;border-radius:var(--r-pill);background:var(--chipz-grad);color:#fff;font-weight:700;font-size:15px;letter-spacing:.03em;font-family:inherit;box-shadow:none;transition:opacity .1s;}
-.notify-ok:active{opacity:.85;}
+/* A dark, small, bottom-sliding toast -- owner: "don't send the same notify
+   design as old Chipz code... make these dark small, not designed, and
+   open/appear from down." No dimmed backdrop and no OK button: the toast
+   itself is the only tappable thing (dismiss early by tapping it), it also
+   auto-dismisses on its own (see notify()'s timer), and it never blocks
+   taps on the rest of the screen -- .notify-bg spans the width but takes no
+   pointer events itself, only .notify-card does. */
+.notify-bg{position:fixed;left:0;right:0;bottom:calc(var(--nav-h) + 14px);display:flex;justify-content:center;padding:0 20px;z-index:400;pointer-events:none;}
+.notify-card{pointer-events:auto;max-width:420px;background:rgba(37,38,43,.96);color:#fff;padding:13px 20px;border-radius:14px;font-size:13.5px;font-weight:600;line-height:1.4;text-align:center;box-shadow:0 14px 30px -12px rgba(0,0,0,.5);transform:translateY(140%);opacity:0;transition:transform .28s cubic-bezier(.34,1.35,.64,1),opacity .22s;}
+.notify-bg.show .notify-card{transform:translateY(0);opacity:1;}
+.notify-msg{white-space:pre-line;}
 
 /* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
 /* The mockup frames the whole block with a hairline above the chest and
@@ -2189,55 +2164,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .chest-modal img{width:96px;height:auto;display:block;margin:0 auto 10px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.28));}
 .chest-modal h3{margin:0 0 6px;font-size:18px;font-weight:700;}
 .chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
-/* Home announcement dialog (Announcement.dc.html) -- a near-fullscreen
-   white sheet inset on a red-to-orange ground, NOT a small centred card. */
-/* Owner: "our dialog is too high."
-   It was `inset:14px` -- a card filling 96% of the viewport height, edge to
-   edge. His mockup's card is 1050/1402 = 75% of the screen tall and centred,
-   with real backdrop showing above and below it. So the backdrop centres
-   instead of being a frame, and the card takes its height from its content up
-   to a 76vh ceiling. max-height, not height: a short announcement should make
-   a short dialog rather than a tall one padded with nothing. */
-/* Owner: "l don't need an announcement dialog to be having yellow background l
-   need it to show dashboard just like my mock ups."
-   The orange-to-red gradient here was Announcement.dc.html's `.screen` rule
-   copied literally -- but that rule is the design CANVAS, the mockup file's
-   stand-in for whatever screen the dialog is sitting on top of. It was never
-   the dialog's own background. Every other .dc.html has the same gradient for
-   the same reason, and this is the only overlay that ever adopted it as paint.
-   The real thing underneath is Home, since maybeShowAnnouncement() only ever
-   fires from showPage('home') -- so a dim scrim, and the dashboard shows
-   through above and below the card exactly as the mockup's framing implies.
-   rgba(20,10,5,.45) is the same scrim .notify-bg uses: one backdrop treatment
-   for every dialog in the app, rather than a second one invented here. */
-.announce-bg{position:fixed;inset:0;background:rgba(20,10,5,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:260;}
-.announce-bg.show{display:flex;}
-/* Owner: "think you can see the exact height and width of the dialog, see
-   clearly rather than guess." Both measured off his screenshot, not estimated:
-   his card spans x=45..1034 of 1079 -- 91.7% of the screen -- and runs
-   y=488..2064 of a ~2072px viewport, 76.1% of its height.
-   WIDTH already matched (16px inset each side of 390 = 91.8%). HEIGHT did not:
-   76vh was only a CEILING, so a short announcement rendered at 51% and looked
-   like a different dialog to his. min-height pins it to his figure, and
-   .announce-scroll (flex:1, overflow-y:auto) absorbs the slack, so a short
-   message sits in a card the same size as a long one -- which is what his is
-   doing. */
-.announce-wrap{position:relative;width:100%;max-width:392px;height:76vh;max-height:76vh;margin:0 auto;background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);display:flex;flex-direction:column;}
-/* Owner: "the X plus circle is different from that in my mockup."
-   Measured off a 3x crop of his: a 77-device-px ring (10.7% of screen width,
-   so 42px here) drawn as a ~1px LIGHT GREY hairline over the card's own
-   white -- not a filled button with a border token -- and an X that spans 41%
-   of the ring's diameter in a thin near-black stroke. Ours was a 38px ring
-   with a 1.8px border and an X spanning only ~20% of it, which is why his
-   reads as an outlined close control and ours read as a small dense glyph. */
-.announce-close{position:absolute;top:16px;right:16px;width:42px;height:42px;border-radius:50%;border:1px solid #b9b2ac;background:transparent;color:#33302e;display:flex;align-items:center;justify-content:center;z-index:2;padding:0;}
-.announce-title{text-align:center;font-size:24px;font-weight:700;margin:26px 0 18px;flex-shrink:0;}
-.announce-banner{margin:0 20px 18px;height:150px;border-radius:var(--r-card);background:var(--chipz-hero);position:relative;overflow:hidden;flex-shrink:0;}
-.announce-banner img{width:100%;height:100%;object-fit:cover;display:block;}
-.announce-banner .wm{position:absolute;bottom:12px;left:16px;color:#fff;font-size:20px;font-weight:500;text-shadow:0 2px 8px rgba(0,0,0,.4);}
-.announce-scroll{padding:0 22px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
-.announce-scroll p{font-size:13.5px;color:var(--snow-muted);font-weight:500;line-height:1.65;margin:0 0 14px;white-space:pre-line;}
-.announce-footer{padding:16px 20px 22px;flex-shrink:0;}
 /* Deposit live-status modal (Recharge) -- reuses .chest-modal-bg/.chest-modal
    for the same dark/centered/thin dialog convention as every other pop-up.
    3 states toggled via #depStatusIcon's class: pending (spinner, reuses the
@@ -2663,42 +2589,21 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   <div class="msg-detail" id="msgDetail"></div>
 </div>
 
-<!-- Announcement (Announcement.dc.html): a near-fullscreen white sheet on a
-     red-to-orange ground, big OUTLINED-CIRCLE X top-right, centred title,
-     admin banner image, body copy, and a Join Channel button. Deliberately
-     not a small centred card -- see chipz/CLAUDE.md. -->
-<div class="announce-bg" id="announceBg">
-  <div class="announce-wrap">
-    <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l14 14M17 3 3 17"/></svg></button>
-    <h1 class="announce-title" id="announceTitle">Welcome</h1>
-    <div class="announce-banner" id="announceBanner"><div class="wm" data-brandmark></div></div>
-    <div class="announce-scroll"><p id="announceBody"></p></div>
-    <div class="announce-footer">
-      <button class="primary-button" id="announceTelegramBtn" style="width:100%;height:52px;padding:0;font-size:16px;display:none;align-items:center;justify-content:center;gap:8px;" onclick="openAnnounceTelegram()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M21.5 3.5L2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5z"></path></svg>
-        Join Channel
-      </button>
-    </div>
-  </div>
-</div>
+<!-- Announcement dialog REMOVED (owner: "remove announcement everywhere") --
+     see petro/CLAUDE.md's "Design system" section. -->
 
-<!-- Generic alert/notify dialog (Notify.dc.html): white rounded card on a
-     dimmed backdrop, amber warning triangle, message, one pill OK button.
-     Used app-wide for validation errors -- see notify() in the core. -->
-<div class="notify-bg" id="notifyBg" onclick="if(event.target===this)closeNotify()">
-  <div class="notify-card">
-    <!-- Owner: "first check how well defined and realistic and quality the
-         warning sign is" -- comparing his reference against ours. His IS the
-         system emoji: Noto Color Emoji's warning sign, with rounded corners, a
-         gold-to-amber gradient and a real drop shadow. Ours was a hand-drawn
-         flat SVG triangle with a hard 1px stroke, which is what looked cheap
-         beside it. This project already uses real emoji glyphs (see the
-         Login/Register fields), so the honest match is the glyph itself --
-         redrawing it in SVG would be an imitation of a picture the phone
-         already has. -->
-    <div class="notify-icon" aria-hidden="true">⚠️</div>
+<!-- Generic alert/toast (notify()) -- owner: "don't send the same notify
+     design as old Chipz code, make these dark small, not designed, and
+     open/appear from down." Replaced the old centred white card + dimmed
+     backdrop + amber warning-triangle emoji with a small dark toast that
+     slides up from the bottom, auto-dismisses, and never blocks the rest of
+     the screen (the backdrop itself takes no taps -- only the toast card
+     does). Same #notifyBg/#notifyMsg ids and the same notify()/closeNotify()
+     signatures as before, so every one of this file's many call sites needed
+     no change at all -- only how this renders changed. -->
+<div class="notify-bg" id="notifyBg">
+  <div class="notify-card" onclick="closeNotify()">
     <div class="notify-msg" id="notifyMsg"></div>
-    <button class="notify-ok" onclick="closeNotify()">OK</button>
   </div>
 </div>
 
