@@ -2458,7 +2458,15 @@ function logSecurityEvent(userId, type, meta) {
   db.collection('securityEvents').add({ userId, type, meta: meta || null, createdAt: FieldValue.serverTimestamp() })
     .catch(e => console.error('logSecurityEvent error:', e.message));
 }
-async function markDepositFailed(depRef, userId, reason) {
+// `adminDetail` (optional) is the PROVIDER'S OWN raw error, never the
+// member-facing `reason` -- stored alongside it, never shown to the member,
+// never translated, so an admin can see exactly what MarzPay/LipaPay/PesaJet
+// actually said instead of only the deliberately generic sentence the member
+// got. Before this, that raw text existed only in a console.error line, so
+// diagnosing "Could not start the payment" -- itself the intended, safe
+// answer for a provider refusal that matches none of our known families --
+// needed Railway log access nobody but the deploy owner has.
+async function markDepositFailed(depRef, userId, reason, adminDetail) {
   // subagent-audit-caught HIGH bug: this used to overwrite status:'failed'
   // unconditionally, with no check that the deposit hadn't already been
   // credited by a DIFFERENT in-flight check (the client poll, the webhook,
@@ -2479,7 +2487,14 @@ async function markDepositFailed(depRef, userId, reason) {
   await withLock('dep:' + depRef.id, async () => {
     const fresh = await depRef.get();
     if (fresh.exists && depositFullyCredited(fresh.data())) { alreadyCredited = true; return; }
-    await depRef.update({ status: 'failed', failureReason: reason }).catch(() => {});
+    const update = { status: 'failed', failureReason: reason };
+    // Only written when the caller actually has one -- most markDepositFailed
+    // call sites (expiry, admin rejection, a reconciler's own FAILED verdict)
+    // have no provider payload to attach, and this must never clobber a
+    // provider detail from an EARLIER call with an absent one from a later,
+    // unrelated failure path (the window-expired sweep, for instance).
+    if (adminDetail) update.providerDetail = String(adminDetail).slice(0, 2000);
+    await depRef.update(update).catch(() => {});
     // Codex-caught real bug (2nd money-flow audit): this ledger-row update
     // used to run AFTER the dep:<id> lock above was released -- a
     // concurrent creditDeposit() call (a LATER poll/webhook/reconciler tick
@@ -5407,7 +5422,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         // the deposit here would tell a member their recharge failed when
         // PesaJet may never have seen it -- leave it pending for the
         // reconciler, exactly as the network-error path above does.
-        if (!pj.providerDown) await markDepositFailed(depRef, userId, pesajetUserMsg(pj, 'Could not start the payment'));
+        if (!pj.providerDown) await markDepositFailed(depRef, userId, pesajetUserMsg(pj, 'Could not start the payment'), JSON.stringify(pj.data).slice(0, 2000));
         return;
       }
       const tx = pj.data?.data || pj.data || {};
@@ -5449,7 +5464,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       }
       if (!lpData.Succeeded) {
         console.error('LipaPay unified-order rejected:', JSON.stringify(lpData));
-        await markDepositFailed(depRef, userId, lipaUserMsg(lpData, 'Could not start the payment'));
+        await markDepositFailed(depRef, userId, lipaUserMsg(lpData, 'Could not start the payment'), JSON.stringify(lpData));
         return;
       }
       const lipaTransactionId = lpData.Data?.TransactionId || null;
@@ -5490,7 +5505,8 @@ app.post('/deposit/marzpay', async (req, res) => {
       // explicitly, never re-derived here). Round 178b did this inline and
       // only caught the one error shape it knew about.
       await markDepositFailed(depRef, userId,
-        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion));
+        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion),
+        JSON.stringify(mpData));
       return;
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;

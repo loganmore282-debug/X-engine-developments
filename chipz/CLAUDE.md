@@ -7266,3 +7266,91 @@ Rebuilt both bundles (round-trip OK), bumped `user/sw.js` to `chipz-shell-v112` 
 green), and spot-checked the admin i18n coverage sweep across all five languages after
 touching a widely-visible translated sentence (0 findings in every one).
 
+## Round 179d — The sync finally reached production, and a new failure needed a raw-response window
+
+Owner, with three screenshots of a Cameroon deposit still showing 179c's raw MarzPay
+English: *"you can now see, where is the problem really? we need to ask codex, so make
+a prompt"*. The unchanged wording, plus 179c's own note that Render is suspended and
+Railway only redeploys after a manual **Sync fork** + Railway redeploy, made a stale
+deployment the leading explanation — this repo's `git log` already showed the fix
+committed, so there was nothing left to fix in code for that report. No live network
+access was available to confirm the backend's running commit directly (this
+environment's egress proxy refuses the Railway host), so the diagnosis rested on
+process evidence rather than a live check.
+
+A second screenshot, of the **admin-settings** refusal listing `maintenanceMode` /
+`maintenanceMsg` / `openingCountdownEnabled` / `openingCountdownAt` as backend-wide,
+looked like a regression of Round 179b — but `server.js`'s `GLOBAL_ONLY_SETTINGS` (and
+the admin panel's mirrored `ADMIN_GLOBAL_ONLY`) already read the corrected, five-field
+list three commits earlier. Same root cause: a screenshot of a deployment that had not
+picked up recent pushes yet.
+
+**The owner then confirmed the fork sync themselves** and sent a fourth screenshot: the
+Cameroon deposit now fails with **"Could not start the payment"** instead of raw
+English. That is 179c's `marzMemberMsg()` wrapper doing exactly its job — MarzPay
+refused the deposit for a reason the detector doesn't recognize as a phone-format
+problem, so the member-safe fallback sentence was shown instead of the provider's raw
+text. Correct behavior, but not a diagnosis: an unrecognized refusal reason is now
+invisible to anyone without direct Railway log access, which the owner does not
+routinely have.
+
+### The diagnostic gap this closed
+`markDepositFailed(depRef, userId, reason, adminDetail)` gained a fourth, optional
+parameter. When present, it is stored as `providerDetail` on the pending-deposit
+document — the raw provider response, verbatim, capped at 2000 characters — alongside
+the existing member-facing `failureReason`. Every automatic-gateway create-failure call
+site (MarzPay, LipaPay, PesaJet) now passes its own raw JSON response as that fourth
+argument, so an admin can see exactly what the provider said without server log access,
+while the member continues to see only the safe, translated sentence.
+
+The admin panel's Deposits tab gained a "Why this failed" detail row, rendered only for
+a failed, non-manual deposit that actually carries one of these two fields — "The
+member saw: <sentence>" plus, when present, the raw provider response in a scrollable
+`<pre>`.
+
+**A label/value flattening bug caught before shipping.** The first version combined
+"The member saw:" and the failure sentence into one `<div>`. The i18n engine's
+block-translate rule (Round 172) treats a block whose only children are inline
+formatting as ONE sentence to translate — and since the value differs on every deposit,
+that combined sentence could never match a stored translation row and would always
+render in English regardless of the admin's chosen language. Caught by running the real
+i18n coverage sweep across all five languages before declaring the feature done, not by
+inspection. Fixed by separating the label (its own div, translatable) from the value
+(its own div, `data-no-i18n`) — the same fix this project has now applied to this exact
+class of bug several times over.
+
+A fixture in `find_admin_fixtures.py` had a `status:'failed'` deposit with neither field
+set, so the new render branch could never have been exercised by the sweep even after
+the flattening fix — the sweep would have reported "clean" having never once rendered
+the new UI. Fixed by giving that fixture both fields.
+
+Three new translated strings (`admin-rows-16.py`, all five languages): "Why this
+failed", "The member saw:", "Raw response from the payment provider".
+
+### Tests
+`test-marz-phone-error.js` gained a section that runs the real `markDepositFailed()`
+against a stub `depRef`/`db` (a fake document reference exposing only `.get()`/
+`.update()`, since the real function receives an already-built reference and only
+touches a separate `transactions` collection through `db`) — confirming the raw
+response is stored as `providerDetail`, that no `providerDetail` field is written at
+all when no admin detail is passed, that the field is capped at 2000 characters rather
+than stored unbounded, and that each of the three automatic gateways' create-failure
+branches actually passes its own raw response through. `verify-marz-phone-error-discriminates.py`
+gained four matching mutations (dropping the storage entirely, storing it unconditionally
+so it appears on every failure, storing it unbounded, and MarzPay's branch reverting to
+the two-argument call) — one pre-existing mutation's anchor had drifted onto the new
+three-argument call shape from this round's own edit and needed re-anchoring first, per
+this project's own "check the anchor count, not just the result" rule. All 21 mutations
+now behave as intended, control correctly MISSED.
+
+Full 35-file Node suite green. Both bundles rebuilt (round-trip OK); `user/sw.js`
+bumped to `chipz-shell-v114`, `admin/sw.js` to `chipz-admin-shell-v30`.
+
+### What the owner still needs to do
+The sync-fork step that surfaced "Could not start the payment" only pulled the code as
+of that push — this round's `providerDetail` diagnostic is a further commit, so it
+needs another **Sync fork** + Railway redeploy before the admin Deposits tab can show
+the actual MarzPay rejection reason for the Cameroon deposit (or any future automatic-
+gateway failure). Once that lands, the "Why this failed" row under the failed deposit
+is where to look.
+

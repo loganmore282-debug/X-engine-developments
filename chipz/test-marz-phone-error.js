@@ -264,5 +264,75 @@ console.log('\n— the message is actually translatable now —');
   }
 }
 
-console.log(bad ? `\n${bad} FAILED` : '\nmarz phone error: all cases pass');
-process.exit(bad ? 1 : 0);
+// ── markDepositFailed() actually WRITES the raw provider detail ──
+// Owner, after the sync finally reached production and a Cameroon deposit
+// still failed: "Could not start the payment" -- itself the CORRECT, safe
+// answer for a MarzPay refusal that matches none of the known families, but
+// unreadable by anyone without Railway log access. This is the fix: the
+// provider's own raw response is stored on the deposit document, admin-only,
+// alongside the member-facing sentence.
+console.log('\n— markDepositFailed() stores the raw provider detail for admins —');
+(async () => {
+  function asyncFnSource(name) {
+    const start = src.indexOf(`async function ${name}(`);
+    if (start === -1) throw new Error(`no such async function: ${name}`);
+    const bodyAt = src.indexOf('{', src.indexOf(')', start));
+    let depth = 0;
+    for (let k = bodyAt; k < src.length; k++) {
+      if (src[k] === '{') depth++;
+      else if (src[k] === '}') { depth--; if (depth === 0) return src.slice(start, k + 1); }
+    }
+    throw new Error(`unbalanced braces in ${name}`);
+  }
+  let writes;
+  // depRef is already a document reference at every real call site (built by
+  // db.collection('pendingDeposits').doc() up in /deposit/marzpay, not
+  // re-derived here) -- this stub matches that shape directly rather than
+  // routing through a fake db.collection().doc().
+  const makeDepRef = id => ({
+    id,
+    get: async () => ({ exists: true, data: () => ({}) }),
+    update: async patch => { writes.push(patch); },
+  });
+  const db = { collection: () => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }) }) };
+  const sandboxFn = new Function('db', 'withLock', 'depositFullyCredited', 'fmtMoney', `
+    ${asyncFnSource('markDepositFailed')}
+    return markDepositFailed;
+  `);
+  const markDepositFailed = sandboxFn(db, (_k, fn) => fn(), () => false, n => 'UGX ' + n);
+
+  writes = [];
+  await markDepositFailed(makeDepRef('d1'), 'u1', 'Could not start the payment',
+    JSON.stringify({ status: 'error', error_code: 'SERVICE_NOT_FOUND', message: 'Service not found.' }));
+  ck(writes.length === 1, 'exactly one update was written');
+  ck(writes[0].failureReason === 'Could not start the payment', 'the member-facing sentence is stored as failureReason');
+  ck(writes[0].providerDetail === '{"status":"error","error_code":"SERVICE_NOT_FOUND","message":"Service not found."}',
+     'and the raw provider response is stored, untranslated, as providerDetail');
+
+  // Every OTHER call site (expiry, admin rejection, a reconciler's own FAILED
+  // verdict) has no provider payload -- adminDetail is simply not passed.
+  // Those must not gain a stray providerDetail field.
+  writes = [];
+  await markDepositFailed(makeDepRef('d2'), 'u1', 'Payment window expired.');
+  ck(!('providerDetail' in writes[0]), 'a call with no adminDetail writes no providerDetail field at all');
+
+  // A pathological provider response (or a bug upstream JSON.stringify-ing
+  // something huge) must not let an unbounded string reach the database.
+  writes = [];
+  await markDepositFailed(makeDepRef('d3'), 'u1', 'x', 'y'.repeat(5000));
+  ck(writes[0].providerDetail.length === 2000, 'providerDetail is capped, not stored unbounded');
+})().then(() => {
+  // Wired at all three call sites in the route that actually failed, each
+  // handing its OWN provider's raw response -- not one hardcoded elsewhere.
+  const checks = [
+    ['MarzPay', /marzMemberMsg\(mpData,\s*'Could not start the payment',\s*paymentRegion\),\s*\n\s*JSON\.stringify\(mpData\)\)/],
+    ['LipaPay', /lipaUserMsg\(lpData,\s*'Could not start the payment'\),\s*JSON\.stringify\(lpData\)\)/],
+    ['PesaJet', /pesajetUserMsg\(pj,\s*'Could not start the payment'\),\s*JSON\.stringify\(pj\.data\)/],
+  ];
+  for (const [label, re] of checks) {
+    ck(re.test(src), `${label}'s create-failure branch passes its own raw response as adminDetail`);
+  }
+
+  console.log(bad ? `\n${bad} FAILED` : '\nmarz phone error: all cases pass');
+  process.exit(bad ? 1 : 0);
+}).catch(e => { console.log('FAIL  markDepositFailed checks threw: ' + (e && e.message)); process.exit(1); });

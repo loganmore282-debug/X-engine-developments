@@ -48,7 +48,9 @@ DEPOSITS = [
      "method": "manual", "network": "airtel", "createdAt": "2026-09-13T10:00:00Z", "regionKey": "ug",
      "pastedSms": "random text that is not a payment message", "pastedSmsParsed": False},
     {"id": "d4", "userId": "u2", "phone": "0771220399", "amount": 20000, "status": "failed",
-     "method": "marzpay", "createdAt": "2026-09-13T11:00:00Z", "regionKey": "ug"},
+     "method": "marzpay", "createdAt": "2026-09-13T11:00:00Z", "regionKey": "ug",
+     "failureReason": "Could not start the payment",
+     "providerDetail": '{"status":"error","error_code":"SERVICE_NOT_FOUND","message":"Service not found."}'},
 ]
 
 WITHDRAWALS = [

@@ -82,13 +82,13 @@ MUTATIONS = [
 
     # ── the wiring, and the region it is decided against ──
     ('the deposit route records the raw admin/diagnostic text as the failure reason', SERVER,
-     "      await markDepositFailed(depRef, userId,\n        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion));",
+     "      await markDepositFailed(depRef, userId,\n        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion),\n        JSON.stringify(mpData));",
      "      await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the payment'));",
      True),
 
     ("the member's own region is no longer handed to the wrapper", SERVER,
-     "marzMemberMsg(mpData, 'Could not start the payment', paymentRegion));",
-     "marzMemberMsg(mpData, 'Could not start the payment'));",
+     "marzMemberMsg(mpData, 'Could not start the payment', paymentRegion),",
+     "marzMemberMsg(mpData, 'Could not start the payment'),",
      True),
 
     ('marzPhoneFormatMsg stops reusing badPhoneMessage and drifts into a second copy', SERVER,
@@ -126,6 +126,29 @@ MUTATIONS = [
     ('the French translation drops the {2} placeholder, silently dropping a phone number', CLIENT,
      "\"Ce n'est pas un numéro mobile money {0} valide. Utilisez le format {1} ou {2}.\",",
      "\"Ce n'est pas un numéro mobile money {0} valide. Utilisez le format {1}.\",",
+     True),
+
+    # ── the admin-only provider diagnostic added after the sync finally
+    #    reached production and "Could not start the payment" was still
+    #    unreadable without Railway log access ──
+    ('the raw provider detail is no longer stored at all', SERVER,
+     "    if (adminDetail) update.providerDetail = String(adminDetail).slice(0, 2000);",
+     '',
+     True),
+
+    ('providerDetail is stored even with no adminDetail, appearing on every failure', SERVER,
+     "    if (adminDetail) update.providerDetail = String(adminDetail).slice(0, 2000);",
+     "    update.providerDetail = String(adminDetail || '').slice(0, 2000);",
+     True),
+
+    ('providerDetail is stored unbounded, so a huge response is written to Mongo', SERVER,
+     "update.providerDetail = String(adminDetail).slice(0, 2000);",
+     "update.providerDetail = String(adminDetail);",
+     True),
+
+    ("MarzPay's create-failure branch stops passing its raw response", SERVER,
+     "      await markDepositFailed(depRef, userId,\n        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion),\n        JSON.stringify(mpData));",
+     "      await markDepositFailed(depRef, userId,\n        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion));",
      True),
 ]
 
