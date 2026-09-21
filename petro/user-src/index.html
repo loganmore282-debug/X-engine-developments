@@ -546,44 +546,23 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    the admin-settable background image is applied over the gradient by
    applyLoadingBackground() when one is configured. */
 #loadingScreen{position:fixed;inset:0;background:linear-gradient(165deg,#0b0b0c 0%,#3a0e12 55%,#7a0e14 100%);background-size:cover;background-position:center;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;}
-/* The pre-launch gate's wordmark. It used to be styled inline on the
-   element, which stopped working the moment the mark became generated
-   markup -- the generated <b> had no way to inherit an inline rule from the
-   node it replaced. */
-#openingGate .og-mark{font-family:'Playfair Display',Georgia,serif;font-size:36px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;}
-#openingGate .og-mark b{color:var(--chipz-gold);font-weight:400;}
-#loadingScreen .ls-wordmark{font-family:'Playfair Display',Georgia,serif;font-size:34px;letter-spacing:.03em;transform:skewX(-6deg);color:#fff;margin-bottom:36px;min-height:42px;}
-#loadingScreen .ls-wordmark b{color:var(--chipz-orange);font-weight:400;}
+/* Was Playfair Display + skewX(-6deg) -- a Chipz-specific typographic
+   treatment (their own bespoke request, see the design-system section of
+   CLAUDE.md), carried over unmodified in the fork. Owner: "please
+   everything or design or term which was chipz don't use it here" --
+   replaced with the app's own body font (Barlow Condensed, already used
+   everywhere else in this app), bold instead of skewed for the same visual
+   weight a wordmark needs. */
+#openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
+#loadingScreen .ls-wordmark{font-weight:800;font-size:32px;letter-spacing:.03em;color:#fff;margin-bottom:32px;min-height:38px;}
 /* Owner: "the letters on 'Loading...' and dots are in like wavy moving
-   animations". It was the whole word bobbing as one block, which reads as a
-   bounce, not a wave. Each letter AND each dot is now its own span running
-   the same keyframe on a staggered delay (set inline in the markup below),
-   so the motion travels along the word left to right like a ripple.
-   inline-block is required: transform does nothing to an inline box. */
-/* Second pass, against a reference screenshot: "the loader animation wave
-   should be slow and words spaced like that and 6 dots". So: letters set
-   wide apart, six dots instead of three, and the ripple slowed right down --
-   a 2s cycle with a 95ms step between letters, where it was 1.15s and 55ms.
-   Then, fourth pass: "even loader animation word is small make it abit big"
-   -- 25px, up from 18px.
-   The reference's own cream-and-purple palette is deliberately NOT copied;
-   the standing rule is to take the shape from a reference and keep Chipz's
-   colours. */
-#loadingScreen .ls-text{font-family:'Playfair Display',Georgia,serif;font-size:25px;letter-spacing:.24em;color:#fff;display:flex;}
-#loadingScreen .ls-text i{display:inline-block;font-style:normal;animation:loadWave 2s ease-in-out infinite;}
-/* letter-spacing adds its gap AFTER every character, including the last one,
-   which would hang a quarter-em of empty space off the right and leave the
-   word visibly off-centre. Dropping it on the final dot re-centres it. */
-#loadingScreen .ls-text i:last-child{letter-spacing:0;}
-/* A space collapses to nothing inside a flex row, so any gap in the word has
-   to hold its own width. "Loading......" has none today, but this keeps the
-   effect intact if the wording ever changes. */
-#loadingScreen .ls-text i.sp{width:.32em;}
-/* The rise grew with the type (9px -> 12px): kept at 9 against 25px letters
-   the same wave reads as a smaller, weaker motion than it did at 18px. */
-@keyframes loadWave{
-  0%,60%,100%{transform:translateY(0);}
-  30%{transform:translateY(-12px);}}
+   animations" -- that per-letter ripple (one <i> per character, staggered
+   animation-delay) was, like the wordmark above, a Chipz-specific
+   choreography, dropped for the same reason. A plain pulse on the whole
+   word keeps the "still moving, not static" feel the owner originally
+   asked for without carrying over Chipz's specific animation design. */
+#loadingScreen .ls-text{font-weight:600;font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.82);animation:lsPulse 1.4s ease-in-out infinite;}
+@keyframes lsPulse{0%,100%{opacity:.5;}50%{opacity:1;}}
 /* ── Download APP screen ──
    Owner: "make when one taps download, it opens and middle there is a button
    download, and in background there is image uploaded from admin panel."
@@ -642,8 +621,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .home-topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 8px;}
 .icon-btn{width:38px;height:38px;border-radius:50%;background:var(--snow-surface);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px -8px rgba(20,10,5,.3);position:relative;flex-shrink:0;color:var(--snow-ink);}
 .icon-btn .dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--snow-wine);border:2px solid var(--snow-surface);}
-.top-wordmark{font-family:'Playfair Display',Georgia,serif;font-size:20px;letter-spacing:.03em;transform:skewX(-6deg);color:var(--snow-ink);}
-.top-wordmark b{color:var(--snow-wine);font-weight:400;}
+.top-wordmark{font-weight:800;font-size:20px;letter-spacing:.03em;color:var(--snow-ink);}
 /* Chipz's own rule here was edge-to-edge, no rounding, no side gutters
    (owner, at the time: "it should complete the margin"). The new mockup
    shows the opposite -- a rounded, inset card with visible white margin
@@ -1120,7 +1098,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .team-member .avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .team-member .avatar img{width:100%;height:100%;object-fit:cover;display:block;}
-.team-member .avatar span{color:#fff;font-family:'Playfair Display',Georgia,serif;letter-spacing:.04em;line-height:1;}
+.team-member .avatar span{color:#fff;font-weight:800;letter-spacing:.04em;line-height:1;}
 /* Text sizes derived from INK HEIGHTS, not guessed. Each of his blocks was
    measured, then converted with this app's own measured cap-to-font ratio for
    that same element (same font family, so the ratio transfers) -- and only
@@ -1166,7 +1144,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .acct-profile .p-top{display:flex;align-items:center;gap:14px;}
 .acct-logo{width:68px;height:68px;border-radius:50%;background:var(--chipz-grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;box-shadow:0 10px 20px -12px rgba(226,27,42,.5);}
 .acct-logo img{width:100%;height:100%;object-fit:cover;}
-.acct-logo span{color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:19px;letter-spacing:.06em;}
+.acct-logo span{color:#fff;font-weight:800;font-size:19px;letter-spacing:.06em;}
 /* When an animated logo is set it becomes the profile mark itself, and the
    circle has to give way: the source is 300x220 landscape, and cropping that
    to a 60px circle would cut roughly a quarter of its width off the sides.
@@ -1881,28 +1859,41 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .auth-screen-v2::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
   background:linear-gradient(to bottom, rgba(12,7,4,.35) 0%, rgba(12,7,4,.55) 55%, rgba(12,7,4,.8) 100%);}
 .auth-screen-v2 .lang-btn{z-index:4;}
-.auth-scroll-v2{position:relative;z-index:2;flex:1;overflow-y:auto;padding:max(64px,12vh) 22px calc(30px + env(safe-area-inset-bottom));}
+/* Owner: "my tabs are boxed and these are round ... login is raised up" --
+   fields/buttons were a full 999px pill; the mockup's are a boxed
+   (rounded-RECTANGLE, --r-ctl) shape, same radius family every other
+   control in this app already uses. And a short pane (Log In, 2 fields)
+   was simply top-padded the same as the long one (Register, 6 fields), so
+   it sat pinned near the top with a dead gap below it -- "raised up" --
+   instead of sitting centred like the mockup. justify-content:center on
+   the scroll container centres whichever single pane is visible; a pane
+   too tall to fit still scrolls (overflow-y:auto), so Register is
+   unaffected. */
+.auth-scroll-v2{position:relative;z-index:2;flex:1;overflow-y:auto;display:flex;flex-direction:column;justify-content:center;
+  padding:24px 22px calc(30px + env(safe-area-inset-bottom));}
 .af-v2{display:flex;align-items:center;gap:10px;background:rgba(20,12,8,.44);border:1.5px solid rgba(255,255,255,.18);
-  border-radius:var(--r-pill);padding:0 16px;height:54px;margin-bottom:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+  border-radius:var(--r-ctl);padding:0 16px;height:54px;margin-bottom:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .af-v2 input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:#fff;}
 .af-v2 input::placeholder{color:rgba(255,255,255,.58);}
 .af-ic{color:rgba(255,255,255,.78);display:flex;flex-shrink:0;}
 .af-eye{background:none;border:none;padding:4px;color:rgba(255,255,255,.68);display:flex;align-items:center;flex-shrink:0;cursor:pointer;}
 .af-v2.with-btn{padding-right:6px;}
-.af-inline-btn{flex-shrink:0;background:var(--chipz-orange);color:#fff;border:0;border-radius:var(--r-pill);
+.af-inline-btn{flex-shrink:0;background:var(--chipz-orange);color:#fff;border:0;border-radius:var(--r-ctl);
   padding:0 16px;height:38px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;}
 .af-inline-btn:disabled{opacity:.55;cursor:default;}
 .af-forgot{text-align:right;margin:-4px 0 18px;font-size:13.5px;}
 .af-forgot a{color:rgba(255,255,255,.85);text-decoration:none;font-weight:600;}
 .af-btn-v2{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--chipz-grad);
-  color:#fff;border:0;border-radius:var(--r-pill);height:54px;font:inherit;font-size:16px;font-weight:700;
+  color:#fff;border:0;border-radius:var(--r-ctl);height:54px;font:inherit;font-size:16px;font-weight:700;
   cursor:pointer;letter-spacing:.01em;}
 .af-btn-v2:disabled{opacity:.6;cursor:default;}
 .af-or{display:flex;align-items:center;gap:12px;margin:20px 0;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;}
 .af-or span{flex:1;height:1px;background:rgba(255,255,255,.22);}
 .af-btn-outline{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,.07);
-  color:#fff;border:1.5px solid rgba(255,255,255,.42);border-radius:var(--r-pill);height:54px;font:inherit;font-size:15px;
+  color:#fff;border:1.5px solid rgba(255,255,255,.42);border-radius:var(--r-ctl);height:54px;font:inherit;font-size:15px;
   font-weight:700;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+.af-switch{text-align:center;margin-top:18px;font-size:13.5px;color:rgba(255,255,255,.72);}
+.af-switch a{color:#fff;text-decoration:none;font-weight:700;}
 .form-field{margin:0 0 14px;}
 .form-field label{display:block;font-size:15px;font-weight:500;color:var(--snow-ink);margin-bottom:8px;}
 .form-field .input-wrap{position:relative;}
@@ -2417,7 +2408,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 <div id="loadingScreen">
   <div class="ls-wordmark" data-brandmark></div>
-  <div class="ls-text" aria-label="Loading"><i style="animation-delay:0ms">L</i><i style="animation-delay:95ms">o</i><i style="animation-delay:190ms">a</i><i style="animation-delay:285ms">d</i><i style="animation-delay:380ms">i</i><i style="animation-delay:475ms">n</i><i style="animation-delay:570ms">g</i><i style="animation-delay:665ms">.</i><i style="animation-delay:760ms">.</i><i style="animation-delay:855ms">.</i><i style="animation-delay:950ms">.</i><i style="animation-delay:1045ms">.</i><i style="animation-delay:1140ms">.</i></div>
+  <div class="ls-text">Loading...</div>
 </div>
 
 <script>
@@ -2460,16 +2451,14 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   if (!name) return;
   document.title = name;
   var up = name.toUpperCase();
+  // Just the name -- the last-letter-in-accent-colour "CHIP+Z" split was a
+  // pun specific to Chipz's own name, meaningless for any other brand, so
+  // it isn't carried over here (matches brandWordmarkHtml() in the module,
+  // which this pre-core paint has to mirror since it runs before the module
+  // exists).
   window.__paintBrandMarks = function(){
     var els = document.querySelectorAll('[data-brandmark]');
-    for (var i = 0; i < els.length; i++) {
-      var el = els[i];
-      el.textContent = '';
-      if (up.length > 1) el.appendChild(document.createTextNode(up.slice(0, -1)));
-      var b = document.createElement('b');
-      b.textContent = up.slice(-1);
-      el.appendChild(b);
-    }
+    for (var i = 0; i < els.length; i++) els[i].textContent = up;
   };
   window.__paintBrandMarks();
   document.addEventListener('DOMContentLoaded', window.__paintBrandMarks);
@@ -2479,40 +2468,24 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
  *
  * Owner: "still more words still in English ie loader 'Loading...'".
  *
- * The word is built here from a STRING rather than shipped as letters,
- * because the wave needs one <i> per character (each carries its own
- * animation-delay) and a per-letter node can never be matched by the
- * translator -- it only ever replaces a whole text node, and a node holding
- * "L" matches nothing. The English letters stay in the markup above as the
- * first-launch fallback, so a device that has never stored a word still shows
- * something and still waves.
- *
  * The word itself is whatever the module last resolved through the real
  * string table; nothing here holds a table of its own, which is what keeps
  * this from drifting away from LANG_ROWS.
  *
- * Six dots, per the owner's own count, appended to whatever the word is.
- * Built with createElement/createTextNode: the value has been through
- * localStorage, and building nodes is injection-proof by construction rather
- * than by remembering to escape.
+ * A single text node -- the earlier build spelled the word out one <i> per
+ * letter so a per-letter wave animation could stagger each one, which was
+ * dropped along with the rest of that Chipz-specific loader treatment (see
+ * .ls-text's CSS: a plain pulse now runs on the whole word). A single node
+ * is also the simpler match for the translator, which only ever replaces a
+ * whole text node -- there was never a per-letter reason to need one before.
  */
 (function(){
   var LKEY = 'chipz_loading_word';
-  var STEP_MS = 95;            // the wave's step, matching the shipped markup
   window.__paintLoadingWord = function(word){
     var w = String(word == null ? '' : word).trim();
     var box = document.querySelector('#loadingScreen .ls-text');
     if (!box || !w) return;
-    box.setAttribute('aria-label', w);
-    while (box.firstChild) box.removeChild(box.firstChild);
-    var chars = (w + '......').split('');
-    for (var i = 0; i < chars.length; i++) {
-      var it = document.createElement('i');
-      it.style.animationDelay = (i * STEP_MS) + 'ms';
-      if (chars[i] === ' ') { it.className = 'sp'; it.appendChild(document.createTextNode(' ')); }
-      else it.appendChild(document.createTextNode(chars[i]));
-      box.appendChild(it);
-    }
+    box.textContent = w + '...';
   };
   var stored = '';
   try { stored = (localStorage.getItem(LKEY) || '').trim(); } catch (e) {}
@@ -2613,6 +2586,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
           <input id="regReferral" type="text" placeholder="Enter invitation code (optional)" autocomplete="off" maxlength="12">
         </div>
         <button class="af-btn-v2" id="regBtn" onclick="doRegister()">Register</button>
+        <p class="af-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
       </div>
 
       <!-- Forgot password, reached from Log In above. No Firebase session

@@ -277,7 +277,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
            the home screen of anyone who installed either app. An uploaded
            Brand logo still replaces it -- see applyAdminBrandLogo(). -->
       <div class="mk" id="brandMarkLogin"><img src="/icon-192.png" alt="" width="40" height="40"></div>
-      <b data-brandadmin>Chipz Admin</b>
+      <b data-brandadmin>Petro Admin</b>
       <!-- The topbar picker lives inside #shell, which nobody has reached yet
            on this screen. An operator who does not read English has to be able
            to change the language BEFORE signing in, or the one screen standing
@@ -298,7 +298,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
     <div class="wrap">
       <div class="topbar-inner">
         <div class="mk" id="brandMarkTop"><img src="/icon-192.png" alt="" width="34" height="34"></div>
-        <b data-brandadmin>Chipz Admin</b>
+        <b data-brandadmin>Petro Admin</b>
         <div class="spacer"></div>
         <!-- ── THE ONE COUNTRY SWITCH ──
              Owner: "l wanted to have a single switch such that it changes all
@@ -3300,7 +3300,7 @@ let _manualNumbers = [];
 // unauthenticated visitor has no business being told anything, the name
 // included.
 function applyAdminBrandName(name){
-  const n = (typeof name === 'string' ? name.trim() : '') || 'Chipz';
+  const n = (typeof name === 'string' ? name.trim() : '') || 'Petro';
   document.querySelectorAll('[data-brandadmin]').forEach(el => { el.textContent = n + ' Admin'; });
   try { document.title = n + ' Admin'; } catch (_) {}
 }

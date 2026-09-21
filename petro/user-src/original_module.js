@@ -1202,21 +1202,28 @@ function brandNameKnown(){
 // For SENTENCES, where a blank would read as a broken string ("Welcome to
 // the  app"). The wordmark deliberately does NOT use this -- see
 // brandWordmarkHtml().
+// Was `|| 'Chipz'` -- a real bug, not a design choice: with no
+// admin-set brandName yet (a fresh Petro deploy, before the owner has
+// opened Admin -> Settings), every sentence-form use of the brand name
+// literally rendered the word "Chipz". Petro is this app's own real name,
+// not an inherited-fork placeholder, so it is the correct fallback here --
+// unlike the wordmark below, which stays blank on purpose.
 function brandName(){
-  return brandNameKnown() || 'Chipz';
+  return brandNameKnown() || 'Petro';
 }
 var BRAND_CACHE_KEY = 'chipz_brand_name';
-// The wordmark: the whole name in caps with the LAST letter in the accent
-// colour -- the CHIP+Z treatment, expressed as a rule instead of two literals
-// so it survives a rename. A one-letter name has no lead, hence the guard.
+// The wordmark: just the name, in caps. Used to split off the LAST letter
+// into an accent colour ("CHIP+Z") -- a pun specific to Chipz's own name
+// that means nothing for any other brand, dropped per the owner's "don't
+// use anything that was Chipz" instruction rather than carried over as a
+// rule that happens to have one letter highlighted for no reason.
 // The wordmark shows the name or NOTHING. It is the one place a guess is
 // worse than a blank: a blank for the half-second before settings land reads
 // as the logo loading, while the wrong name reads as the rename not having
 // worked -- which is precisely the report that started this.
 function brandWordmarkHtml(){
   const n = brandNameKnown().toUpperCase();
-  if (!n) return '';
-  return n.length < 2 ? `<b>${esc(n)}</b>` : esc(n.slice(0, -1)) + '<b>' + esc(n.slice(-1)) + '</b>';
+  return n ? esc(n) : '';
 }
 // Paints the name into the places that are NOT re-rendered from JavaScript:
 // index.html's own static markup (the loading screen, the auth header, the
@@ -1276,7 +1283,7 @@ function chipzMarkHtml(size){
   const px = Number(size) || 44;
   const name = brandName().toUpperCase();
   const fs = Math.max(7, Math.round(px / (0.68 * Math.max(3, name.length))));
-  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--chipz-grad);color:#fff;font-family:'Playfair Display',Georgia,serif;font-size:${fs}px;letter-spacing:.02em;transform:skewX(-6deg);">${esc(name)}</span>`;
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--chipz-grad);color:#fff;font-weight:800;font-size:${fs}px;letter-spacing:.02em;">${esc(name)}</span>`;
 }
 function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
@@ -1409,7 +1416,7 @@ function showHostParked(msg){
   box.id = 'hostParked';
   box.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--snow-canvas,#fbf1e8);');
   box.innerHTML = `<div style="max-width:340px;text-align:center;">
-    <div style="font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:700;margin-bottom:12px;">${esc(brandName())}</div>
+    <div style="font-size:26px;font-weight:800;margin-bottom:12px;">${esc(brandName())}</div>
     <div style="font-size:16px;line-height:1.55;color:var(--snow-ink,#1a1310);">${esc(msg || 'This address does not serve the app.')}</div>
     ${host ? `<div style="font-size:13px;margin-top:14px;color:var(--snow-muted,#8c7f76);">You opened <b>${esc(host)}</b>.</div>` : ''}
   </div>`;

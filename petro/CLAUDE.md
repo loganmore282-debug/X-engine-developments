@@ -628,6 +628,83 @@ none of them are in any mockup sent.
   server.js`, and `node build-core.js` (round-trip OK) all pass clean after
   every edit in this round.
 
+**Auth screen correction round (owner reviewed the live deploy against the
+mockup):** the round above shipped, then the owner compared it to what was
+actually sent and pushed back — quoted because it's a real correction, not
+a vague complaint: *"my tabs are boxed and these are round and login is
+raised up and no navigation back to login after pressing create account...
+please everything or design or term which was chipz don't use it here."*
+
+- **Boxed, not round**: `.af-v2`/`.af-btn-v2`/`.af-btn-outline`/
+  `.af-inline-btn` were built with `--r-pill` (999px, a full capsule) —
+  wrong radius family for this mockup. Switched to `--r-ctl` (12px, the
+  same "boxed" radius every button/input/chip elsewhere in the app already
+  uses) — a mechanical fix, not a guess, once named correctly.
+- **"Login is raised up"**: `.auth-scroll-v2` top-padded every pane by the
+  same fixed amount regardless of how many fields it held, so the 2-field
+  Log In pane sat pinned near the top with a dead gap below it while the
+  6-field Register pane filled the screen — reads as "raised" relative to
+  a design where the form should sit centred. Fixed with
+  `justify-content:center` on the scroll container, which centres whichever
+  single pane is visible; a pane too tall to fit still scrolls normally.
+- **No way back to Log In from Register**: real gap, not a design opinion —
+  the Forgot Password pane had "Back to Log In" but Register never got the
+  equivalent. Added "Already have an account? Log In" under the Register
+  button (new `.af-switch` class).
+- **"Everything which was chipz don't use it here" — real audit, not just
+  the auth screen**: `brandName()` (the sentence-form brand-name getter,
+  used in dozens of places) fell back to the literal string `'Chipz'`
+  whenever `STATE.settings.brandName` wasn't loaded yet — a real bug, not a
+  style choice: on a fresh Petro deploy before the owner opens Admin ->
+  Settings, or on a connection where the settings fetch hasn't landed yet,
+  every one of those call sites would have rendered the word "Chipz" onto
+  the screen. Fixed to fall back to `'Petro'` instead (this app's own real
+  name, matching `server.js`'s own `DEFAULT_SETTINGS.brandName: 'Petro'` —
+  it was only ever the client-side fallback that still said Chipz). Same
+  bug, same fix, in `admin-src/index.html`'s `applyAdminBrandName()` (fell
+  back to `'Chipz Admin'`) and its two static `data-brandadmin` placeholder
+  headings (literally shipped as `Chipz Admin` in the markup, painted over
+  once JS runs but visible for a frame on a slow load) — the admin
+  `<title>` tag itself already said "Petro Admin", so only the two heading
+  spans had drifted.
+- **The wordmark's Playfair-Display-serif + `skewX(-6deg)` treatment, and
+  its "last letter in accent colour" CHIP+Z split**, were Chipz's own
+  bespoke typographic identity (their owner's specific request, name-pun
+  included), carried into the fork unmodified and still live on the
+  loading screen, the pre-launch countdown gate, the compact brand-mark
+  badge (manual-deposit/download screens), and the fallback avatar/profile
+  initials. Replaced everywhere with the app's own body font (Barlow
+  Condensed, `font-weight:800`, no skew) and a plain name with no
+  letter-split. `brandWordmarkHtml()` (module) and the pre-core boot
+  script's own duplicate of the same logic (`index.html`'s inline
+  `<script>`, which has to exist standalone since it paints before the
+  module loads) were both updated to match — they have to stay identical,
+  same as before.
+- **The loading screen's letter-by-letter "wave" animation** (one `<i>` per
+  character of "Loading......", each with its own staggered
+  `animation-delay`) was also part of that same Chipz-specific
+  choreography (a real, deliberate request from Chipz's own owner, per the
+  comment history) — replaced with a single translatable text node and a
+  plain opacity pulse on the whole word. This is a strict simplification of
+  the translation fix already in place (the per-letter split existed only
+  to drive the wave, never for translation — a single node was already the
+  better match for how the translator replaces whole text nodes), so
+  nothing about the "loader showed English on a fresh device" fix
+  regressed.
+- **Not touched this round** (flagged, not silently skipped): the
+  still-Chipz raster PNG artwork (bottom-nav icons before the SVG
+  replacement already done, `/act-bell.png`, `/treasure-chest.png`,
+  `/turntable.png`, `/pay-success.png`, `/pay-failed.png`,
+  `/logout-door.png`, the `/set-*.png` settings-row icons, etc. — see
+  `user/sw.js`'s own `SHELL` precache list for the full inherited set) is
+  still the owner's own uploaded artwork **for Chipz**, not Petro's. It
+  wasn't touched here because it needs new artwork, not a code change —
+  same flag this file has carried since the Home-screen round, not
+  forgotten, just a different kind of work than a design/CSS/copy fix.
+- **Verified**: `node -c user-src/original_module.js`, `node --check
+  server.js`, `node build-core.js`, and `node build-admin.js` (round-trip
+  OK on both) all pass clean after every edit in this round.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting
