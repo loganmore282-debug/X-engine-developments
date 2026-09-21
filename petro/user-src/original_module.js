@@ -1073,7 +1073,7 @@ var ICONS = {
   lock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
   keyIcon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l2 2M14 9l2 2"/></svg>',
   telegram: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 3.5 2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5Z"/></svg>',
-  warnTriangle: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M12 3 2 20h20L12 3Z" fill="#f4b400" stroke="#a66a00" stroke-width="1"/><path d="M12 10v4" stroke="#5a3d00" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="#5a3d00"/></svg>',
+  warnTriangle: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M12 3 2 20h20L12 3Z" fill="#ffb000" stroke="#a66a00" stroke-width="1"/><path d="M12 10v4" stroke="#5a3d00" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="#5a3d00"/></svg>',
   wheel: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg>',
   bell: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
   bell:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>',
@@ -4117,7 +4117,7 @@ function renderTeamMembers(level){
   box.innerHTML = '<div class="reveal-in">' + members.map((m,idx) => `
   <div class="team-member">
     <div class="top">
-      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#f4b400,#e21b2a)' : 'var(--chipz-grad)'};">${avatar}</div>
+      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#ffb000,#e30613)' : 'var(--chipz-grad)'};">${avatar}</div>
       <div style="min-width:0;">
         <div class="name">User</div>
         <div class="phone mono">${esc(maskPhone(m.phone))}</div>

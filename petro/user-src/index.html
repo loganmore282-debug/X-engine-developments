@@ -51,7 +51,7 @@
      status icons for a light theme colour, so the clock stays readable.
      NOTE: manifest.json's theme_color must match, and an ALREADY-INSTALLED
      app keeps the colour it was installed with until it is reinstalled. -->
-<meta name="theme-color" content="#fbf1e8">
+<meta name="theme-color" content="#f7f7f8">
 <link rel="manifest" href="/manifest.json">
 <!-- The app icon and the share card are both admin-uploadable, which is why
      these point at chipz-server rather than at the files sitting next to
@@ -141,19 +141,32 @@
    used semantically (positive amounts, success pills), not as a brand
    accent. */
 :root{
-  --snow-canvas:#fbf1e8;
+  /* ── Re-themed to Petro's own "Premium Industrial Energy" identity ──
+     Owner-specified, not invented: Corporate Red #E30613 (primary --
+     headers, buttons, active nav, cards), Clean White #FFFFFF (dashboard
+     background), Golden Orange #F5A000-#FFB000 (secondary accent, off the
+     logo and refinery/sunset lighting), Charcoal #25262B (auth glass
+     panels, text, secondary UI). Green stays FUNCTIONAL ONLY (success
+     states) -- explicitly not a theme color, so those tokens are the one
+     set below left untouched. Variable NAMES are kept (--snow-*/--chipz-*)
+     with only the VALUES swapped -- the same low-risk convention this file's
+     own admin-src.html already used for its own re-theme (see that file's
+     --gold comment): every one of the hundreds of rules in this file already
+     reads these tokens, so nothing downstream needed touching to pick up
+     the new palette. */
+  --snow-canvas:#f7f7f8;
   --snow-surface:#ffffff;
-  --snow-ink:#1a1310;
-  --snow-muted:#8c7f76;
-  --snow-wine:#e21b2a;
-  --snow-wine-deep:#9e0f1c;
+  --snow-ink:#25262b;
+  --snow-muted:#6b6d76;
+  --snow-wine:#e30613;
+  --snow-wine-deep:#b10510;
   --snow-green:#1a7a3e;
-  --snow-border:#efe0d3;
-  --snow-wave-on-wine:#ffd9a8;
+  --snow-border:#ececee;
+  --snow-wave-on-wine:#ffd9a0;
   --snow-green-deep:#146030;
-  --snow-wine-soft:#ffe3d1;
+  --snow-wine-soft:#fbd9dc;
   --snow-green-soft:#dff2e2;
-  --snow-neutral-soft:#faf4ee;
+  --snow-neutral-soft:#f5f5f6;
   --snow-radius-card:22px;
   --snow-radius-tile:16px;
   --snow-radius-control:16px;
@@ -162,13 +175,26 @@
   /* Bottom nav height. Grew from 68px when the icons did -- owner, twice:
      "the nav icons are small". */
   --nav-h:68px;
-  --chipz-orange:#ff8a1f;
-  --chipz-grad:linear-gradient(135deg,#e21b2a 0%,#ff8a1f 100%);
-  --chipz-hero:linear-gradient(120deg,#1a0d08 0%,#7c0a1c 45%,#ff8a1f 100%);
-  --chipz-gold:#f4b400;
-  --chipz-neg:#7a1030;
-  --chipz-link:#2f6fed;
-  --chipz-shelf:#9e0f1c;
+  --chipz-orange:#f5a000;
+  /* Flat, not a gradient -- the mockup's cards/buttons/header are a solid
+     corporate red, not Chipz's old red-to-orange blend. Still a CSS custom
+     property assignable straight into `background:`, so every one of the
+     ~40 rules that read --chipz-grad needed no change at all. */
+  --chipz-grad:#e30613;
+  /* .auth-hero's fallback ONLY -- shown behind the Login/Sign Up glass
+     panel until the owner uploads the real sunset-refinery photo to the
+     'authhero' image slot (already-built admin upload, see
+     /admin/chipz-image/set + CHIPZ_IMAGE_SLOTS in server.js). Charcoal to
+     deep red to gold, echoing that same warm dusk-over-a-refinery mood as a
+     photo-free placeholder rather than a random gradient. */
+  --chipz-hero:linear-gradient(160deg,#25262b 0%,#7a0e14 55%,#f5a000 100%);
+  --chipz-gold:#ffb000;
+  --chipz-neg:#7a0e14;
+  /* Not blue -- the owner was explicit this should not read as "the typical
+     blue/green fintech look." Deep red carries the same "this is a link"
+     legibility a blue would, without introducing a fifth brand color. */
+  --chipz-link:#b10510;
+  --chipz-shelf:#b10510;
   /* ── Surfaces ──
      Owner, holding a mockup next to the live app: "the mock up has very
      clean CSS, well ultra definition and quality cards and colour ... clean
@@ -480,7 +506,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   68%{transform:scale(1.008);}  /* out */
   100%{transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){.p-card.card-tap{animation:none;}}
-.p-card .p-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#ffd9a8,#ff8a1f);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.p-card .p-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#ffd9a0,#f5a000);display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}
 .p-card .p-img .glyph{width:52px;height:52px;border-radius:var(--r-ctl);background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;}
 /* A scrim, not a solid bar -- the name has to stay readable over whatever
@@ -519,7 +545,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    minimum in middle of screen, it will have background set from admin" --
    the admin-settable background image is applied over the gradient by
    applyLoadingBackground() when one is configured. */
-#loadingScreen{position:fixed;inset:0;background:linear-gradient(165deg,#0b0b0c 0%,#3a0e12 55%,#7c0a1c 100%);background-size:cover;background-position:center;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;}
+#loadingScreen{position:fixed;inset:0;background:linear-gradient(165deg,#0b0b0c 0%,#3a0e12 55%,#7a0e14 100%);background-size:cover;background-position:center;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;}
 /* The pre-launch gate's wordmark. It used to be styled inline on the
    element, which stopped working the moment the mark became generated
    markup -- the generated <b> had no way to inherit an inline rule from the
@@ -1124,7 +1150,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    ONE bound payout account shown as a bank-card tile, an Edit Wallet
    toggle that reveals the provider/account/holder form, and a compact
    "Your Wallet" summary row underneath. */
-.wallet-card{position:relative;border-radius:var(--r-card);padding:22px 22px 20px;color:#fff;overflow:hidden;margin-bottom:18px;box-shadow:0 18px 34px -18px rgba(30,10,5,.55);background:linear-gradient(120deg,#1a0d08 0%,#7c0a1c 42%,#e21b2a 62%,#ff8a1f 100%);}
+.wallet-card{position:relative;border-radius:var(--r-card);padding:22px 22px 20px;color:#fff;overflow:hidden;margin-bottom:18px;box-shadow:0 18px 34px -18px rgba(30,10,5,.55);background:linear-gradient(120deg,#1a1a1d 0%,#7a0e14 42%,#e30613 62%,#f5a000 100%);}
 /* Owner: "on wallet that wallet card having number, it has a glow sweep
    animation too."
 

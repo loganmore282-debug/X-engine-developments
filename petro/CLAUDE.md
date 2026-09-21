@@ -10,13 +10,15 @@ signed off — it is the mechanical fork, not the product.
 
 ## Fixed decisions (owner-stated, do not re-ask, do not re-derive)
 
-- **Design/layout will be genuinely distinct from Chipz** — new colors,
-  typography, screen arrangement, visual identity. NOT a reskin, and
-  explicitly **not assumed to be Chipz's Doritos red/orange either**. The
-  owner will supply the actual direction (palette, fonts, mockups/references,
-  product names and pricing) when that stage starts. Until then: do not
-  invent any of it unprompted. This sharpens (doesn't contradict) the
-  "Everything inherited from Chipz, unchanged" section below.
+- **Design/layout is genuinely distinct from Chipz — now underway, palette
+  decided.** NOT a reskin: new colors, typography, screen arrangement, visual
+  identity, explicitly **not Chipz's Doritos red/orange**. The owner supplied
+  real mockups and an explicit palette this round — see "Design system:
+  Premium Industrial Energy" below for the decision and what's built so far.
+  Anything the owner has NOT shown a mockup for yet (Assets/Network/Account
+  screens, product catalog, etc.) is still undecided — do not invent those
+  unprompted, same rule as before, just narrower now that Home/Login/Sign Up
+  are settled.
 - **Inner functions and logic carry over unchanged.** Money-safety invariants
   (in-process locks, atomic increments, idempotent credits), the
   region/multi-country model, the i18n engine, the admin panel's structure,
@@ -321,6 +323,84 @@ silently pretending to send. **The withdrawal-request admin SMS alert was
 removed** in the same round (owner: "remove sms sending on withdrawals") —
 `sendAdminPush` (a separate Firebase push, unrelated) still fires on a new
 withdrawal; `marzSmsSend()` itself was kept, now used only by OTP.
+
+## Design system: "Premium Industrial Energy" (owner-specified, in progress)
+
+The owner sent real mockups (Home, Sign Up, Log In) and an explicit palette —
+this is the real direction "Fixed decisions" above used to say was still
+pending. Quoted verbatim because it's the spec, not a summary:
+
+- 🔴 **Corporate Red** `#E30613` — primary: headers, main buttons, active nav,
+  important icons/highlights.
+- ⚪ **Clean White** `#FFFFFF` — main dashboard/background.
+- 🟡 **Golden Orange** `#F5A000`–`#FFB000` — secondary accent, off the logo
+  and sunset/industrial lighting.
+- ⚫ **Charcoal** `#25262B` — auth glass panels, text, secondary UI.
+- 🟢 **Green** — functional only (successful transactions, completed
+  status), explicitly NOT a theme color. Left as Chipz's own green tokens,
+  untouched.
+
+Login/Sign Up use the darker half: sunset-refinery photo background +
+charcoal translucent glass panel + red buttons + white text + warm golden
+lighting. The inner dashboard uses the brighter half: white background + red
+cards/buttons + golden-orange accents + dark text + petroleum/industrial
+photography. Explicitly **not** the typical blue/green fintech look —
+confirmed by removing the one remaining blue token (`--chipz-link`, used for
+in-app links) in favor of the deep red.
+
+**What's built (this round):**
+- **Every color token re-themed** in both `user-src/index.html` and
+  `admin-src/index.html` — `--snow-*`/`--chipz-*` in the user app,
+  `--gold`/`--ink`/`--bg`/etc. in the admin panel. This is the highest-leverage
+  change possible here: the whole codebase already reads colors through these
+  tokens (hundreds of rules), so swapping ~15 root values recolors the entire
+  app without touching component code — the exact same low-risk convention
+  admin-src.html's own comments already document from its Chipz→(older
+  admin re-theme). `--chipz-grad` (the old red→orange button/card gradient)
+  is now a **flat** `#E30613` — the mockups show solid red, not a blend.
+  A handful of hardcoded (non-variable) hex literals were also caught and
+  fixed: the scrollbar thumb in both apps, the `<meta theme-color>` and
+  `manifest.json` background/theme colors in both apps, the loading-screen
+  gradient, the product-card placeholder gradient, the account-screen wallet
+  card art, a warning-triangle icon fill, and an alternating team-avatar
+  gradient.
+- **Logo and auth-screen background are admin-uploadable — and already
+  were.** Chipz already had this exact mechanism (`CHIPZ_IMAGE_SLOTS` in
+  server.js: `logo`/`authhero`/`authcard`/etc., `/admin/chipz-image/set`,
+  wired to admin-src's Brand tab as `brandLogoFile`/`authHeroFile`/
+  `authCardFile`) — nothing new had to be built for the owner to upload the
+  real logo and a sunset-refinery photo right now. `authHeroOpacity`/
+  `authHeroBlur`/`authCardOpacity`/`authCardBlur` settings already control
+  how strongly each blends behind the glass panel.
+
+**What's NOT built yet (real next steps, not done silently in one giant
+pass — shipping in reviewable pieces on purpose):**
+- **Home screen's actual layout** doesn't match the mockup yet — only its
+  colors do. The current `paintHome()` (user-src/original_module.js) shows a
+  4-action row (Deposit/Withdraw/Channel/Service — same concept as the
+  mockup's Deposit/Withdraw/Invite/Support, just old labels/icons) plus an
+  activity ticker, spin banner and treasure chest — but NO wallet-balance
+  card, NO cumulative-earnings/deposits/withdrawals stat row, NO inline
+  Daily Check-in card, and NO inline Latest Announcement row on Home itself
+  (those currently live elsewhere — Account screen, a Check-in sheet, an
+  announcement dialog). Rebuilding this to match the mockup is the next
+  concrete piece of work.
+- **The old Chipz raster icon art is still live** — `/act-deposit.png` etc.
+  (bottom-nav icons, action icons, the gift/treasure-chest art) are the
+  owner's own uploaded artwork **for Chipz**, already flagged as needing
+  replacement before this fork looked like a distinct product (see
+  "Everything inherited from Chipz, unchanged" below) — now sharpened by the
+  owner's explicit "the exact gift box, svgs" ask. Needs real SVG icons
+  matching the mockup (gift box, bell, headset, deposit/withdraw/invite
+  glyphs), not another raster PNG swap.
+- **The banner is a single image/video today**, not the multi-slide carousel
+  with dot indicators the mockup shows. `CHIPZ_IMAGE_SLOTS`'s pattern
+  extends cleanly to 2-3 more slots for this; not done yet.
+- **Assets / Network / Account screens** — owner said mockups for these are
+  coming; nothing to build against yet, per "do not invent unprompted."
+- **Admin panel** got the same color-token retheme (so it visually matches
+  the app now) but not a layout rebuild — the owner only asked for its
+  *theme* to change, not its structure.
 
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
