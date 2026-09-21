@@ -219,6 +219,22 @@ console.log('\n— the request body names the market, and refuses to guess —')
   ck(ke.phone_number === '+254712345678' && ke.amount === 5000 && ke.reference === base.reference,
      '  carrying the phone, amount and UUID reference through untouched');
 
+  // Every documented MarzPay market must survive the LAST conversion step
+  // into the provider body. Testing only Kenya would still allow one of the
+  // other 10 non-Uganda mappings to drift or fall back to UG unnoticed.
+  const allMarkets = new Function(marketBlock + '\nreturn MARZPAY_MARKETS;')();
+  for (const [dial, market] of Object.entries(allMarkets)) {
+    const out = bodyFns.marzMoneyBody({
+      ...base,
+      phone: '+' + dial + '700000000',
+      region: { key: market.code.toLowerCase(), name: market.code, dialCode: dial, currency: market.currency }
+    });
+    ck(out && out.country === market.code,
+       `+${dial} is sent to MarzPay as country ${market.code}, never UG-by-default`);
+    if (market.currencies) ck(out.currency === market.currency,
+       `  ${market.code}'s dual-wallet request carries ${market.currency}`);
+  }
+
   const cd = bodyFns.marzMoneyBody({ ...base, region: REGIONS.cd });
   ck(cd.country === 'CD' && cd.currency === 'CDF',
      'a DRC request names the wallet currency, which is the one market that needs it');
@@ -300,6 +316,10 @@ console.log('\n— the guards are wired into the routes that move money —');
      'the deposit route refuses a gateway that cannot reach this country');
   ck(depBody.indexOf('gatewayServesRegion') < depBody.indexOf('pendingDeposits'),
      '  and does so BEFORE any pending deposit row is written');
+  ck(/const paymentRegion = currentRegion\(\)/.test(depBody),
+     'the deposit route snapshots the authenticated member region once');
+  ck(/marzCollect\(\{[\s\S]*?region:\s*paymentRegion[\s\S]*?\}\)/.test(depBody),
+     '  and passes that exact region into MarzPay collect-money');
 
   const setAt = src.indexOf("app.post('/admin/settings/update'");
   const setEnd = src.indexOf('\napp.', setAt + 10);
@@ -342,6 +362,16 @@ console.log('\n— the guards are wired into the routes that move money —');
     ck(/withUserRegion\([^;]*$/.test(before),
        'every payout runs inside the MEMBER\'s region, never the admin\'s');
   }
+  const payoutAt = src.indexOf('async function _processWithdrawalNow');
+  const payoutEnd = src.indexOf('\n}\napp.post', payoutAt);
+  const payoutBody = src.slice(payoutAt, payoutEnd > payoutAt ? payoutEnd : payoutAt + 30000);
+  ck(/const payoutRegion = currentRegion\(\)/.test(payoutBody),
+     'the payout path snapshots the member region once after withUserRegion()');
+  ck(/payoutIsManual\(settNow,\s*payoutRegion\)/.test(payoutBody) &&
+     /withdrawProvider\(settNow,\s*payoutRegion\)/.test(payoutBody),
+     '  provider selection uses that explicit member region');
+  ck(/marzSendMoney\(\{[\s\S]*?region:\s*payoutRegion[\s\S]*?\}\)/.test(payoutBody),
+     '  and MarzPay send-money receives that exact region');
 
   const pubAt = src.indexOf("app.get('/public/settings'");
   const pubEnd = src.indexOf('\napp.', pubAt + 10);
