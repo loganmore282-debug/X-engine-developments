@@ -1,0 +1,24 @@
+{
+  "name": "Petro",
+  "short_name": "Petro",
+  "description": "Petro — invest, earn daily income, and grow your team.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbf1e8",
+  "theme_color": "#fbf1e8",
+  "icons": [
+    {
+      "src": "https://x-engine-developments-production.up.railway.app/public/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://x-engine-developments-production.up.railway.app/public/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

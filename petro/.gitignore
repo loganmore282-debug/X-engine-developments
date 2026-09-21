@@ -1,0 +1,10 @@
+# find-untranslated.py rewrites these on every run, so tracking them means
+# every suite run dirties the tree with output nobody reads from the repo.
+# The report that matters is the printed one, and test-i18n-coverage.py's
+# exit code is what the suite judges.
+untranslated-report-*.json
+# find-admin-untranslated.py's own output, same reasoning.
+admin-untranslated-*.json
+# dump-admin-blocks.py's own output -- regenerated whenever the panel's copy
+# changes, and only ever read while writing rows.
+admin-block-keys.json
