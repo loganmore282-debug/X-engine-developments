@@ -499,10 +499,55 @@ specifically rather than the button itself, matching where `paintHome()`'s
 own markup actually expects it (the CSS that positions `.dot` is scoped to
 `.htb-ic .dot`).
 
-**Still 6 bottom-nav tabs, not the mockup's 4** — Account is reachable as-is
-via the existing nav (no nav change needed for this screen alone), but
-Assets/Network don't exist as real pages yet; building those two and then
-collapsing the nav to Home/Assets/Network/Account is the next piece.
+**Bottom nav collapsed to the mockup's 4 tabs** (Home/Assets/Network/
+Account, down from Chipz's original 6) — real SVG nav icons (`ICONS.navHome`/
+`layers`/`peopleGroup`/`navPerson`) replacing the raster `/nav-*.png` set,
+recolored via plain CSS `color` (muted gray inactive, red active) instead of
+the old `filter:grayscale` hack, which only ever made sense for photographic
+PNGs. `'catalog'/'products'/'referral'/'team'` are still real, dispatchable
+`STATE.page` values (`renderCatalog`/`renderProducts`/`renderReferral`/
+`renderTeam` are untouched) — just no longer linked from the bottom bar,
+absorbed into the two new pages below. Found and fixed one stale link while
+sweeping for others: a successful purchase used to `showPage('products')`,
+which would have dropped a member onto a page with no way back to it from
+the nav; now lands on Assets' My Assets tab instead.
+
+**Network screen built** (`renderNetwork()`/`paintNetwork()`): combines what
+used to be the separate Referral tab (code/link/commission rates) and Team
+tab (stats/level-switcher/member list) into the one screen the mockup shows
+— same underlying data (`STATE.teamStats`, `/team/members`) and helpers
+(`maskPhone()`, `joinedStamp()`), reused rather than duplicated.
+`renderTeam()`/`paintTeam()`/`switchTeamLevel()` are unchanged and still work
+standalone (just unreachable from the nav) — "View Details"/"View All" on
+the new screen opens a sheet built from the exact same level-switcher +
+member-list markup `paintTeam()` used, via a new `openAllReferralsSheet()`.
+"Recent Referrals" fetches all 3 levels once, merges and sorts by join date,
+shows the top 4.
+
+**Assets screen built** (`renderAssets()`/`paintAssets()`): an All Assets /
+My Assets segmented control. **All Assets** is a genuinely new compact row
+layout (`assetRowHtml()`) per the owner's explicit "avoid using the same
+architecture" instruction — built fresh rather than reusing
+`productCardHtml()`'s larger card, though it still calls the same
+`planFigures()`/`productCtaHtml()`/`openInvestConfirm()` for the figures and
+the buy button/open-soon-countdown states, so nothing about how a purchase
+actually works changed. **My Assets reuses `paintProducts()`'s existing
+investment-list rendering unstyled** — refactored its content into
+`myProductsInnerHtml()` (returns the HTML string) so both the old page and
+the new tab can use it without one clobbering the other's container; this
+is a deliberate scope boundary, not an oversight — the owner's mockups only
+ever show "All Assets" selected, so there is no reference for what "My
+Assets" should look like in the new style, and guessing would be exactly the
+unprompted design this project's rules warn against.
+
+**Known gap, not fixed this round**: the "quietly refresh while the app
+sits open" live loop (`startLiveRefresh()`) still only recognizes the OLD
+page names (`'products'`/`'catalog'`/`'team'`/`'referral'`) for its
+background patches — `'assets'`/`'network'` aren't wired into it, so those
+two screens refresh fully on every visit but don't get quiet in-place
+updates while just sitting open the way the old pages did. Low priority
+(both still fetch fresh data every time they're opened), flagged rather
+than silently left for someone to rediscover.
 
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 

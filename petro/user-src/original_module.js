@@ -1105,6 +1105,10 @@ var ICONS = {
   linkIcon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5 14.5 9.5"/><path d="M11 6.5 12.5 5A4 4 0 1 1 18 10.5L16.5 12"/><path d="M13 17.5 11.5 19A4 4 0 1 1 6 13.5L7.5 12"/></svg>',
   trophy: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4.5A2.5 2.5 0 0 0 4 11c.5.8 1.5 1.2 2.5 1"/><path d="M17 6h2.5A2.5 2.5 0 0 1 20 11c-.5.8-1.5 1.2-2.5 1"/><path d="M12 14v3"/><path d="M8.5 20.5h7"/><path d="M9.5 17.5h5v1.5a1.5 1.5 0 0 1-1.5 1.5h-2a1.5 1.5 0 0 1-1.5-1.5v-1.5Z"/></svg>',
   gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.3M12 18.2v2.3M20.5 12h-2.3M5.8 12H3.5M17.7 6.3l-1.6 1.6M7.9 16.1l-1.6 1.6M17.7 17.7l-1.6-1.6M7.9 7.9 6.3 6.3"/></svg>',
+  // ── Bottom nav (4 tabs, owner's mockups: Home/Assets/Network/Account) --
+  // real SVG replacing the old per-tab raster PNGs (/nav-home.png etc). ──
+  navHome: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7"/><path d="M5.5 9v10.5a1 1 0 0 0 1 1H9.5v-6h5v6H17.5a1 1 0 0 0 1-1V9"/></svg>',
+  navPerson: '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg>',
   lock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
   keyIcon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l2 2M14 9l2 2"/></svg>',
   telegram: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 3.5 2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5Z"/></svg>',
@@ -2535,13 +2539,18 @@ async function refreshAppDataInBackground(uid){
 // "Icon assets" note), shipped as PNGs in user/ rather than inline SVG --
 // the inactive state is greyed with a CSS filter, exactly as the mockups do
 // it, so one file covers both states.
-var NAV_ICON_SRC = {
-  home: '/nav-home.png',
-  catalog: '/nav-products.png',
-  products: '/nav-myproducts.png',
-  referral: '/nav-referral.png',
-  team: '/nav-team.png',
-  account: '/nav-account.png',
+// 4 tabs now (owner's mockups), inline SVG (ICONS.*) instead of the raster
+// PNGs the other 5 sibling projects' fork all inherited -- 'assets'/
+// 'network' are the two NEW consolidated tabs (see renderAssets()/
+// renderNetwork()); 'catalog'/'products'/'referral'/'team' stay valid,
+// still-dispatchable STATE.page values (Account's own rows still route to
+// some of them as an interim measure) even though nothing on the bottom
+// bar links to them directly any more.
+var NAV_ICON_SVG = {
+  home: ICONS.navHome,
+  assets: ICONS.layers,
+  network: ICONS.peopleGroup,
+  account: ICONS.navPerson,
 };
 // Owner: "the icon fades in and out when tapped not static and selector
 // doesn't disappear." The selector BOX is pure CSS off .navitem.active and
@@ -2632,10 +2641,10 @@ function updateNavIcons(){
     const key = btn.dataset.nav;
     const active = key === STATE.page;
     const slot = btn.querySelector('.nav-ic');
-    const src = NAV_ICON_SRC[key];
-    // Only rewrite the <img> when it isn't already there -- reassigning the
-    // same src on every navigation makes the icon blink on a cold cache.
-    if (slot && !slot.querySelector('img')) slot.innerHTML = `<img src="${src}" alt="" width="23" height="23">`;
+    // Only written once -- reassigning the same markup on every navigation
+    // would restart the SVG in some engines and, more to the point, is
+    // simply unnecessary work on every single tab switch.
+    if (slot && !slot.querySelector('svg')) slot.innerHTML = NAV_ICON_SVG[key] || '';
     btn.classList.toggle('active', active);
   });
 }
@@ -2898,9 +2907,11 @@ window.showPage = async function(name){
     renderHome();
   }
   else if (name === 'catalog') await renderCatalog();
+  else if (name === 'assets') await renderAssets();
   else if (name === 'products') await renderProducts();
   else if (name === 'referral') await renderReferral();
   else if (name === 'team') await renderTeam();
+  else if (name === 'network') await renderNetwork();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
 };
@@ -3531,6 +3542,96 @@ function paintTeamSkeleton(){
 <div style="margin:0 18px;">${member}${member}${member}</div>
 <div style="height:12px;"></div>`;
 }
+// ── ASSETS (owner's 4th mockup round) ──
+// "All Assets" is the mockup's own compact row layout -- a small thumbnail,
+// name, an inline Price/Duration/Daily Cashback/Total Return strip, and a
+// pill Purchase button -- built fresh rather than reusing productCardHtml()'s
+// larger vertical card (explicitly what the owner asked NOT to reuse). It
+// still shares the underlying data/logic that card uses: planFigures() for
+// the figures and productCtaHtml()/openInvestConfirm() for the buy button
+// and its open/soon/countdown states, so nothing about how a purchase
+// actually works changed, only how the row looks.
+//
+// "My Assets" reuses paintProducts()'s EXISTING investment-list rendering
+// as-is, unstyled to match this round's mockups -- the owner's screenshots
+// only ever show "All Assets" selected, so there is no mockup for what "My
+// Assets" should look like in the new style, and inventing one would be
+// exactly the kind of unprompted design this project's own rules warn
+// against. Revisit once the owner sends that state.
+var _assetsTab = 'all';
+window.switchAssetsTab = function(tab){
+  _assetsTab = tab;
+  paintAssets();
+};
+async function renderAssets(){
+  const hadProducts = (STATE.products || []).length > 0;
+  const hadInvestments = Array.isArray(STATE.investments);
+  if (hadProducts || hadInvestments) paintAssets(); else paintCatalogSkeleton();
+  const [pr, ir] = await Promise.all([api('/public/products'), api('/investments')]);
+  if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
+  if (ir.status === 'success') { STATE.investments = ir.investments; _investmentsLoadFailed = false; }
+  else if (!hadInvestments) { STATE.investments = []; _investmentsLoadFailed = true; }
+  if (STATE.page !== 'assets') return; // navigated away while awaiting
+  paintAssets();
+}
+function assetRowHtml(p){
+  const { expected, cycle, daily } = planFigures(p);
+  const initial = esc(String(p.name || '?').trim()[0] || '?');
+  const img = p.image
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.outerHTML='&lt;div class=&quot;ar-glyph&quot;&gt;${initial}&lt;/div&gt;'">`
+    : `<div class="ar-glyph">${initial}</div>`;
+  return `
+  <div class="asset-row">
+    <div class="asset-thumb">${img}</div>
+    <div class="asset-body">
+      <div class="asset-name">${esc(p.name)}</div>
+      <div class="asset-stats">
+        <span>${ICONS.coinsStack} Price <b class="mono">${fmtUGX(Number(p.price) || 0)}</b></span>
+        <span>${ICONS.arrowDownCircle} Duration <b>${cycle} Days</b></span>
+        <span>${ICONS.trendUp} Daily Cashback <b class="mono">${fmtUGX(daily)}</b></span>
+        <span>${ICONS.trophy} Total Return <b class="mono">${fmtUGX(expected)}</b></span>
+      </div>
+      ${productCtaHtml(p)}
+    </div>
+  </div>`;
+}
+function paintAssets(){
+  const products = STATE.products || [];
+  const html = `
+<div class="home-topbar-v2">
+  <div class="htb-brand">
+    <span class="htb-logo">${STATE.brandLogo ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.parentNode.innerHTML=brandTextMark(30)">` : brandTextMark(30)}</span>
+    <div class="htb-text">
+      <div class="htb-title">${esc((STATE.settings || {}).brandTagline || 'Energy for a Better Tomorrow')}</div>
+      <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
+    </div>
+  </div>
+  <div class="htb-icons">
+    <button class="htb-icon-btn" onclick="openMessagesSheet()" aria-label="Notifications">
+      <span class="htb-ic">${ICONS.bell}${unreadMessageCount() ? '<span class="dot"></span>' : ''}</span><span class="htb-ic-lbl">Notifications</span>
+    </button>
+    <button class="htb-icon-btn" onclick="openCustomerService()" aria-label="Support">
+      <span class="htb-ic">${ICONS.headset}</span><span class="htb-ic-lbl">Support</span>
+    </button>
+  </div>
+</div>
+<div class="net-subhead">
+  <div><div class="net-title">Assets</div><div class="net-sub">Choose the right asset and start earning</div></div>
+</div>
+<div class="assets-tabs">
+  <button class="at ${_assetsTab === 'all' ? 'on' : ''}" onclick="switchAssetsTab('all')">All Assets</button>
+  <button class="at ${_assetsTab === 'mine' ? 'on' : ''}" onclick="switchAssetsTab('mine')">My Assets</button>
+</div>
+<div id="assetsBody" style="padding:0 18px;">
+  ${_assetsTab === 'all'
+    ? (products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">No assets yet.</div>')
+    : '<div id="myAssetsInner"></div>'}
+</div>
+<div style="height:20px;"></div>`;
+  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  if (_assetsTab === 'all') startProductCountdowns();
+  else paintMyAssetsInner();
+}
 async function renderCatalog(){
   if ((STATE.products || []).length) paintCatalog(); else paintCatalogSkeleton();
   const r = await api('/public/products');
@@ -3924,7 +4025,12 @@ function planStats(inv){
     createdMs: new Date(inv.createdAt || Date.now()).getTime(),
   };
 }
-function paintProducts(animate){
+// Extracted so the Assets screen's "My Assets" tab can reuse this exact
+// list -- unstyled, since the owner's mockups never showed that tab
+// selected (see renderAssets()'s own comment) -- without paintProducts()
+// clobbering the whole page the way its own $('pageHost').innerHTML write
+// would.
+function myProductsInnerHtml(){
   const investments = STATE.investments || [];
   const all = investments.filter(i => i.status === 'active' || i.status === 'matured');
   // Number(...) coercion matters here -- subagent-audit-caught: without it,
@@ -4001,7 +4107,17 @@ function paintProducts(animate){
     });
   }
   html += `</div><div style="height:12px;"></div>`;
+  return html;
+}
+function paintProducts(animate){
+  const html = myProductsInnerHtml();
   $('pageHost').innerHTML = animate ? '<div class="reveal-in">' + html + '</div>' : html;
+  startPlanCountdowns();
+}
+function paintMyAssetsInner(){
+  const box = document.getElementById('myAssetsInner');
+  if (!box) return;
+  box.innerHTML = myProductsInnerHtml();
   startPlanCountdowns();
 }
 // Live-ticking "Next cashback in HH:MM:SS" on each active plan card. Cleared
@@ -4217,6 +4333,160 @@ function renderTeamMembers(level){
     <div class="foot">Total Purchase</div>
   </div>`).join('') + '</div>';
 }
+
+// ── NETWORK (owner's 3rd mockup round) ──
+// Combines what used to be two separate tabs (Referral: code/link/rates;
+// Team: stats/level-switcher/member list) into the one screen the mockup
+// shows. renderTeam()/paintTeam()/switchTeamLevel() above are UNCHANGED and
+// still back the old 'team' nav entry (still reachable while the bottom nav
+// is still 6 tabs, not yet the mockup's 4) -- this reuses their same data
+// (STATE.teamStats, STATE.teamMembers, /team/members) rather than
+// duplicating the fetch logic, and reuses maskPhone()/joinedStamp() as-is.
+var _earningsHidden = (function(){ try { return localStorage.getItem('petroEarnHidden') === '1'; } catch (_) { return false; } })();
+window.toggleEarningsVisibility = function(){
+  _earningsHidden = !_earningsHidden;
+  try { localStorage.setItem('petroEarnHidden', _earningsHidden ? '1' : '0'); } catch (_) {}
+  const amt = document.getElementById('netEarnAmt');
+  if (amt) amt.textContent = _earningsHidden ? 'UGX ••••••' : fmtUGX(Number((STATE.teamStats || {}).teamCommission) || 0);
+  const eye = document.getElementById('netEarnEyeBtn');
+  if (eye) eye.innerHTML = _earningsHidden ? ICONS.eyeOff : ICONS.eyeOpen;
+};
+async function renderNetwork(){
+  const hadCache = !!STATE.teamStats;
+  const shareReady = refreshShareHost();
+  if (hadCache) paintNetwork(); else paintTeamSkeleton();
+  const [r] = await Promise.all([api('/team/stats'), shareReady]);
+  if (r.status === 'success') STATE.teamStats = r;
+  else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
+  if (STATE.page !== 'network') return; // navigated away while awaiting
+  paintNetwork();
+  // Recent Referrals preview: the 3 levels' member lists aren't cached
+  // together anywhere (switchTeamLevel() fetches one level at a time, lazily,
+  // for the "View All" sheet below), so this fetches all 3 in parallel just
+  // for the top few rows shown inline -- capped and merged, not a full list.
+  const levels = await Promise.all([1, 2, 3].map(l =>
+    (STATE.teamMembers && STATE.teamMembers[l]) ? Promise.resolve(STATE.teamMembers[l]) :
+    api('/team/members?level=' + l).then(x => x.status === 'success' ? x.members : [])));
+  if (STATE.page !== 'network') return;
+  const merged = [];
+  levels.forEach((members, i) => (members || []).forEach(m => merged.push(Object.assign({ _level: i + 1 }, m))));
+  merged.sort((a, b) => (tsMillisLocal(b.createdAt) - tsMillisLocal(a.createdAt)));
+  STATE.recentReferrals = merged.slice(0, 4);
+  if (STATE.page === 'network') paintRecentReferrals();
+}
+// Client-side mirror of the server's own tsMillis() -- createdAt arrives as
+// an ISO string (see server.js's Date -> JSON serialization), and this file
+// has no existing "parse either shape" helper for it outside joinedStamp(),
+// which returns a formatted STRING, not a sortable number.
+function tsMillisLocal(v){
+  if (!v) return 0;
+  const ms = typeof v === 'object' && v.seconds ? v.seconds * 1000 : new Date(v).getTime();
+  return isNaN(ms) ? 0 : ms;
+}
+function paintNetwork(){
+  const t = STATE.teamStats || { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
+  const rates = t.commRates || {};
+  const a = STATE.account || {};
+  const code = a.referralCode || t.referralCode || '';
+  const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';
+  const earnText = _earningsHidden ? 'UGX ••••••' : fmtUGX(Number(t.teamCommission) || 0);
+  const html = `
+<div class="home-topbar-v2">
+  <div class="htb-brand">
+    <span class="htb-logo">${STATE.brandLogo ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.parentNode.innerHTML=brandTextMark(30)">` : brandTextMark(30)}</span>
+    <div class="htb-text">
+      <div class="htb-title">${esc((STATE.settings || {}).brandTagline || 'Energy for a Better Tomorrow')}</div>
+      <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
+    </div>
+  </div>
+  <div class="htb-icons">
+    <button class="htb-icon-btn" onclick="openMessagesSheet()" aria-label="Notifications">
+      <span class="htb-ic">${ICONS.bell}${unreadMessageCount() ? '<span class="dot"></span>' : ''}</span>
+    </button>
+  </div>
+</div>
+<div class="net-subhead">
+  <div><div class="net-title">Network</div><div class="net-sub">Invite, grow and earn together</div></div>
+  <div class="net-tag">People Drive Progress</div>
+</div>
+<div class="net-hero"${STATE.referralBanner ? ` style="background-image:linear-gradient(100deg,rgba(0,0,0,.15),rgba(0,0,0,.5)),url('${esc(STATE.referralBanner)}')"` : ''}>
+  <div class="net-hero-title">Build Your Network<br>Build a Brighter Future</div>
+  <div class="net-hero-sub">Share your invitation link and earn rewards when others join and invest.</div>
+  <button class="net-hero-btn" data-copy-group="net" onclick="copyText('${esc(link)}')">Invite Now ${ICONS.chevronRight}</button>
+</div>
+<div class="net-code-row">
+  <div class="net-code-box">
+    <span class="nc-ic">${ICONS.qrCode}</span>
+    <div><div class="nc-lbl">My Invitation Code</div><div class="nc-val mono">${esc(code || '—')}</div></div>
+    <button class="nc-copy" data-copy-group="net" onclick="copyText('${esc(code)}')" aria-label="Copy code">${ICONS.copy}</button>
+  </div>
+  <div class="net-code-box">
+    <span class="nc-ic">${ICONS.linkIcon}</span>
+    <div><div class="nc-lbl">My Invitation Link</div><div class="nc-val nc-link">${esc(link || '—')}</div></div>
+    <button class="nc-copy" data-copy-group="net" onclick="copyText('${esc(link)}')" aria-label="Copy link">${ICONS.copy}</button>
+  </div>
+</div>
+<div class="home-stat-row" style="padding:0 18px;margin:14px 0 16px;">
+  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.peopleGroup}</span><div class="hs-lbl">Direct Members (Level 1)</div><div class="mono hs-val">${(t.team && t.team.l1) || 0}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.peopleGroup}</span><div class="hs-lbl">Indirect Members (Level 2)</div><div class="mono hs-val hs-gold-txt">${(t.team && t.team.l2) || 0}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.peopleGroup}</span><div class="hs-lbl">Indirect Members (Level 3)</div><div class="mono hs-val">${(t.team && t.team.l3) || 0}</div></div>
+</div>
+<div class="wallet-bal-card" style="margin:0 18px 16px;">
+  <div class="wbc-row1">
+    <span class="wbc-lbl">Total Referral Earnings</span>
+    <button class="wbc-eye" id="netEarnEyeBtn" onclick="toggleEarningsVisibility()" aria-label="Show or hide earnings">${_earningsHidden ? ICONS.eyeOff : ICONS.eyeOpen}</button>
+  </div>
+  <div class="wbc-row2">
+    <span class="mono wbc-amt" id="netEarnAmt">${esc(earnText)}</span>
+    <button class="wbc-details" onclick="openAllReferralsSheet()">View Details ${ICONS.chevronRight}</button>
+  </div>
+</div>
+<div class="net-comm-row">
+  <div class="net-comm-card nc-red"><div class="ncc-lbl">Level 1 Commission</div><div class="ncc-pct">${rates.l1 != null ? rates.l1 : 27}%</div><div class="ncc-sub">Earn ${rates.l1 != null ? rates.l1 : 27}% from your direct referrals' investments</div></div>
+  <div class="net-comm-card nc-gold"><div class="ncc-lbl">Level 2 Commission</div><div class="ncc-pct">${rates.l2 != null ? rates.l2 : 2}%</div><div class="ncc-sub">Earn ${rates.l2 != null ? rates.l2 : 2}% from your second level referrals</div></div>
+  <div class="net-comm-card nc-dark"><div class="ncc-lbl">Level 3 Commission</div><div class="ncc-pct">${rates.l3 != null ? rates.l3 : 1}%</div><div class="ncc-sub">Earn ${rates.l3 != null ? rates.l3 : 1}% from your third level referrals</div></div>
+</div>
+<div class="net-trophy-card">
+  <span class="ntc-ic">${ICONS.trophy}</span>
+  <div><div class="ntc-title">Let's Grow Together</div><div class="ntc-sub">The bigger your network, the greater your rewards.</div></div>
+</div>
+<div class="net-recent">
+  <div class="net-recent-head"><span class="nrh-ic">${ICONS.peopleGroup}</span><span class="nrh-title">Recent Referrals</span><button class="nrh-more" onclick="openAllReferralsSheet()">View All ${ICONS.chevronRight}</button></div>
+  <div id="netRecentBox">${teamLoadingHtml()}</div>
+</div>
+<div style="height:20px;"></div>`;
+  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  if (STATE.recentReferrals) paintRecentReferrals();
+}
+function paintRecentReferrals(){
+  const box = document.getElementById('netRecentBox');
+  if (!box) return;
+  const rows = STATE.recentReferrals || [];
+  if (!rows.length) { box.innerHTML = '<div class="list-empty">No referrals yet.</div>'; return; }
+  box.innerHTML = rows.map(m => `
+    <div class="net-recent-row">
+      <span class="nrr-avatar">${ICONS.peopleGroup}</span>
+      <div class="nrr-text">
+        <div class="nrr-phone mono">${esc(maskPhone(m.phone))} <span class="nrr-level">Level ${m._level}</span></div>
+        <div class="nrr-date">${esc(joinedStamp(m.createdAt) || '—')}</div>
+      </div>
+      <span class="nrr-status">${Number(m.invested) > 0 ? 'Invested' : 'Registered'}</span>
+    </div>`).join('');
+}
+// "View All" -- the full 3-level switcher + member list, reusing exactly
+// what paintTeam()'s own page rendered, just inside a sheet instead of a
+// full page (the mockup's Network screen has no separate full-page slot for
+// this the way the old 'team' tab did).
+window.openAllReferralsSheet = function(){
+  openSheet('All Referrals', `
+<div class="lv-switcher" style="margin-bottom:14px;">
+  <button class="lv on" data-level="1" onclick="switchTeamLevel(1)">Level 1</button>
+  <button class="lv" data-level="2" onclick="switchTeamLevel(2)">Level 2</button>
+  <button class="lv" data-level="3" onclick="switchTeamLevel(3)">Level 3</button>
+</div>
+<div id="teamMembersBox">${teamLoadingHtml()}</div>`);
+  switchTeamLevel(1);
+};
 async function renderTeam(){
   const hadCache = !!STATE.teamStats;
   if (hadCache) paintTeam(); else paintTeamSkeleton();
@@ -4477,11 +4747,11 @@ async function renderAccount(){
     <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
   </div>
   <div class="acct-row-list">
-    ${acctRowHtml(ICONS.layers, 'ar-red', 'My Assets', 'View your purchased assets and earnings', "showPage('products')")}
+    ${acctRowHtml(ICONS.layers, 'ar-red', 'My Assets', 'View your purchased assets and earnings', "showPage('assets')")}
     ${acctRowHtml(ICONS.arrowDownTray, 'ar-gold', 'Deposit Records', 'View all your deposit history', "openBalanceRecordSheet('deposit')")}
     ${acctRowHtml(ICONS.arrowDownTray, 'ar-red', 'Withdrawal Records', 'View all your withdrawal history', "openBalanceRecordSheet('withdraw')")}
     ${acctRowHtml(ICONS.trendUp, 'ar-gold', 'Earnings Records', 'View daily earnings and rewards', "openBalanceRecordSheet('all')")}
-    ${acctRowHtml(ICONS.peopleGroup, 'ar-dark', 'My Team', 'View your team and referral details', "showPage('team')")}
+    ${acctRowHtml(ICONS.peopleGroup, 'ar-dark', 'My Team', 'View your team and referral details', "showPage('network')")}
     ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
     ${acctRowHtml(ICONS.bankLink, 'ar-gold', 'Bind Bank Account', 'Link your withdrawal payout account', 'openWalletSheet()')}
     ${acctRowHtml(ICONS.shieldCheck, 'ar-gold', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
@@ -7038,8 +7308,13 @@ window.openInvestConfirm = async function(tierKey, btn){
   // dismissing it reveals a finished screen rather than a loading one.
   // The toast is gone: it was the server's "Bought Product-1 for UGX 30,000"
   // sentence in a small transient pill, which is what he is describing.
-  showPage('products');
-  notify(`${p.name} is now running. You will find it under My Products.`);
+  // Was showPage('products') -- the old My Products tab, no longer on the
+  // bottom nav. Lands on the new Assets screen's My Assets tab instead, so
+  // a purchase doesn't drop the member onto a page they can no longer find
+  // their way back to from the nav bar.
+  _assetsTab = 'mine';
+  showPage('assets');
+  notify(`${p.name} is now running. You will find it under My Assets.`);
 };
 // Plain yes/no confirm, no PIN -- used where an action doesn't move money
 // (e.g. removing a saved withdrawal account, see deleteWithdrawalAccount()).

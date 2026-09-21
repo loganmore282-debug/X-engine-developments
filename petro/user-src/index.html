@@ -407,7 +407,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    an icon that dims mid-bounce reads as a loading state, not a press.
    The overshoot to 1.18 is what makes it feel physical; without it this is
    just a scale transition and the "bounce" is gone. */
-.navitem.nav-tap .nav-ic img{animation:navIconBounce .46s cubic-bezier(.34,1.56,.64,1);}
+.navitem.nav-tap .nav-ic svg{animation:navIconBounce .46s cubic-bezier(.34,1.56,.64,1);}
 @keyframes navIconBounce{
   0%{transform:scale(1);}
   28%{transform:scale(.74);}   /* in  */
@@ -417,7 +417,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 @media (prefers-reduced-motion:reduce){
   .navitem::before{transition:none;}
   .navitem.nav-tap.active::before{animation:none;}
-  .navitem.nav-tap .nav-ic img{animation:none;}}
+  .navitem.nav-tap .nav-ic svg{animation:none;}}
 .navitem.active{color:var(--snow-wine);}
 .navitem .lbl{font-size:10px;font-weight:600;white-space:nowrap;}
 .navitem.active .lbl{font-weight:700;}
@@ -437,9 +437,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    two, nearer the smaller end because that is the direction of the last
    complaint. The bar comes down with it (--nav-h 76 -> 68) rather than
    leaving a shrunken glyph floating in the old height. */
-.navitem .nav-ic{display:flex;align-items:center;justify-content:center;height:31px;}
-.navitem .nav-ic img{width:31px;height:31px;object-fit:contain;filter:grayscale(1) opacity(.55);transition:filter .15s;}
-.navitem.active .nav-ic img{filter:none;}
+.navitem .nav-ic{display:flex;align-items:center;justify-content:center;height:31px;color:var(--snow-muted);transition:color .15s;}
+.navitem .nav-ic svg{width:23px;height:23px;}
+.navitem.active .nav-ic{color:var(--snow-wine);}
 
 
 .wordmark{display:flex;align-items:center;gap:9px;}
@@ -931,6 +931,72 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .ar-ic.ar-dark{background:var(--snow-neutral-soft);color:var(--snow-ink);}
 .logout-btn-v2{width:100%;height:52px;border-radius:var(--r-pill);border:none;background:var(--snow-wine-soft);color:var(--snow-wine);font-family:inherit;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .logout-btn-v2 svg{width:18px;height:18px;}
+/* ── Network screen (owner's mockup) ── */
+.net-subhead{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;padding:2px 18px 16px;background:var(--chipz-grad);color:#fff;}
+.net-title{font-size:20px;font-weight:800;line-height:1;}
+.net-sub{font-size:12px;font-weight:600;opacity:.9;margin-top:4px;}
+.net-tag{font-size:11px;font-weight:700;opacity:.85;border-bottom:2px solid rgba(255,255,255,.6);padding-bottom:2px;}
+.net-hero{margin:0 18px 16px;border-radius:var(--r-card);padding:20px;background:var(--snow-surface);background-size:cover;background-position:center;box-shadow:var(--sh-card);}
+.net-hero-title{font-size:19px;font-weight:800;color:var(--snow-ink);line-height:1.25;}
+.net-hero-sub{font-size:12.5px;color:var(--snow-muted);font-weight:500;margin:8px 0 14px;max-width:78%;line-height:1.45;}
+.net-hero-btn{background:var(--chipz-grad);color:#fff;border:none;font-family:inherit;font-weight:700;font-size:13.5px;padding:11px 18px;border-radius:var(--r-pill);display:flex;align-items:center;gap:4px;}
+.net-hero-btn svg{width:15px;height:15px;}
+.net-code-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 18px;margin-bottom:16px;}
+.net-code-box{background:var(--snow-wine-soft);border-radius:var(--r-card);padding:12px;display:flex;align-items:center;gap:9px;min-width:0;}
+.nc-ic{color:var(--snow-wine);flex-shrink:0;display:flex;}
+.nc-ic svg{width:18px;height:18px;}
+.net-code-box > div{min-width:0;flex:1;}
+.nc-lbl{font-size:10.5px;color:var(--snow-muted);font-weight:600;}
+.nc-val{font-size:14px;font-weight:800;color:var(--snow-ink);margin-top:2px;}
+.nc-val.nc-link{font-size:10.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.nc-copy{background:none;border:none;color:var(--snow-wine);flex-shrink:0;display:flex;padding:2px;}
+.nc-copy svg{width:15px;height:15px;}
+.net-comm-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:0 18px;margin-bottom:16px;}
+.net-comm-card{border-radius:var(--r-card);padding:13px 10px;box-shadow:var(--sh-card);}
+.net-comm-card.nc-red{background:var(--snow-wine-soft);}
+.net-comm-card.nc-gold{background:var(--snow-wave-on-wine);}
+.net-comm-card.nc-dark{background:var(--snow-neutral-soft);}
+.ncc-lbl{font-size:10.5px;font-weight:700;color:var(--snow-muted);}
+.ncc-pct{font-size:22px;font-weight:800;margin-top:4px;}
+.nc-red .ncc-pct{color:var(--snow-wine);}
+.nc-gold .ncc-pct{color:var(--chipz-gold);}
+.nc-dark .ncc-pct{color:var(--snow-ink);}
+.ncc-sub{font-size:9.5px;color:var(--snow-muted);font-weight:500;line-height:1.3;margin-top:5px;}
+.net-trophy-card{margin:0 18px 16px;padding:15px 16px;border-radius:var(--r-card);background:linear-gradient(100deg,#fff6e0 0%,#ffe9bd 100%);display:flex;align-items:center;gap:12px;box-shadow:var(--sh-card);}
+.ntc-ic{color:var(--chipz-gold);flex-shrink:0;display:flex;}
+.ntc-title{font-size:14.5px;font-weight:800;color:var(--snow-ink);}
+.ntc-sub{font-size:11px;color:var(--snow-muted);font-weight:500;margin-top:2px;}
+.net-recent{margin:0 18px 20px;background:var(--snow-surface);border-radius:var(--r-card);padding:14px;box-shadow:var(--sh-card);}
+.net-recent-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.nrh-ic{color:var(--snow-wine);display:flex;}
+.nrh-ic svg{width:18px;height:18px;}
+.nrh-title{flex:1;font-size:14.5px;font-weight:800;color:var(--snow-ink);}
+.nrh-more{background:none;border:none;font-family:inherit;font-size:12px;font-weight:700;color:var(--snow-wine);display:flex;align-items:center;gap:2px;}
+.nrh-more svg{width:12px;height:12px;}
+.net-recent-row{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--snow-border);}
+.net-recent-row:first-child{border-top:none;padding-top:0;}
+.nrr-avatar{width:34px;height:34px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.nrr-avatar svg{width:17px;height:17px;}
+.nrr-text{flex:1;min-width:0;}
+.nrr-phone{font-size:12.5px;font-weight:700;color:var(--snow-ink);}
+.nrr-level{font-size:10px;font-weight:600;color:var(--snow-muted);margin-left:4px;}
+.nrr-date{font-size:10.5px;color:var(--snow-muted);margin-top:2px;}
+.nrr-status{flex-shrink:0;font-size:10.5px;font-weight:700;color:var(--snow-green);background:var(--snow-green-soft);padding:5px 10px;border-radius:var(--r-pill);}
+/* ── Assets screen (owner's mockup) ── */
+.assets-tabs{display:flex;gap:8px;padding:0 18px;margin:12px 0 14px;}
+.assets-tabs .at{flex:1;text-align:center;padding:12px 0;border-radius:var(--r-ctl);font-weight:700;font-size:13.5px;border:none;font-family:inherit;background:var(--snow-neutral-soft);color:var(--snow-muted);}
+.assets-tabs .at.on{background:var(--chipz-grad);color:#fff;}
+.asset-row{display:flex;gap:12px;background:var(--snow-surface);border-radius:var(--r-card);padding:14px;margin-bottom:12px;box-shadow:var(--sh-card);}
+.asset-thumb{width:64px;height:64px;border-radius:var(--r-ctl);overflow:hidden;flex-shrink:0;background:var(--snow-neutral-soft);}
+.asset-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.ar-glyph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:var(--snow-muted);}
+.asset-body{flex:1;min-width:0;}
+.asset-name{font-size:14.5px;font-weight:800;color:var(--snow-ink);margin-bottom:6px;}
+.asset-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin-bottom:10px;}
+.asset-stats span{font-size:10.5px;color:var(--snow-muted);font-weight:600;display:flex;align-items:center;gap:4px;}
+.asset-stats span svg{width:12px;height:12px;flex-shrink:0;}
+.asset-stats b{color:var(--snow-ink);font-weight:800;margin-left:2px;}
+.asset-row .p-cta{width:100%;height:38px;padding:0;font-size:13px;margin:0;}
 .home-tabs{display:flex;gap:10px;padding:0 18px;margin:14px 0;}
 .home-tabs .ht{flex:1;text-align:center;padding:11px 0;border-radius:var(--r-pill);font-weight:700;font-size:14px;letter-spacing:.03em;border:none;font-family:inherit;}
 .home-tabs .ht.active{background:var(--chipz-grad);color:#fff;box-shadow:none;}
@@ -2583,15 +2649,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 <!-- ═══════════ APP ═══════════ -->
 <div id="app" style="display:none;">
   <div class="wrap" id="pageHost"></div>
-  <!-- 6 tabs (Chipz has a separate Products catalog tab and a Referral tab,
-       unlike Snow's 4) -- icon/label sizes are reduced in .bottom-nav's own
-       CSS so six fit comfortably on a 360px screen. -->
+  <!-- 4 tabs (owner's mockups: Home/Assets/Network/Account), down from
+       Chipz's original 6 (a separate Products catalog tab and a Referral
+       tab). 'catalog'/'products'/'referral'/'team' are still real,
+       dispatchable STATE.page values -- see showPage() -- just not linked
+       from here any more; 'assets'/'network' are the two new consolidated
+       pages (renderAssets()/renderNetwork()) that absorb them. -->
   <div class="bottom-nav">
     <button class="navitem" data-nav="home" onclick="showPage('home')"><span class="nav-ic"></span><div class="lbl">Home</div></button>
-    <button class="navitem" data-nav="catalog" onclick="showPage('catalog')"><span class="nav-ic"></span><div class="lbl">Products</div></button>
-    <button class="navitem" data-nav="products" onclick="showPage('products')"><span class="nav-ic"></span><div class="lbl">My Products</div></button>
-    <button class="navitem" data-nav="referral" onclick="showPage('referral')"><span class="nav-ic"></span><div class="lbl">Referral</div></button>
-    <button class="navitem" data-nav="team" onclick="showPage('team')"><span class="nav-ic"></span><div class="lbl">Team</div></button>
+    <button class="navitem" data-nav="assets" onclick="showPage('assets')"><span class="nav-ic"></span><div class="lbl">Assets</div></button>
+    <button class="navitem" data-nav="network" onclick="showPage('network')"><span class="nav-ic"></span><div class="lbl">Network</div></button>
     <button class="navitem" data-nav="account" onclick="showPage('account')"><span class="nav-ic"></span><div class="lbl">Account</div></button>
   </div>
 </div>
