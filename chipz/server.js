@@ -462,10 +462,22 @@ const DEFAULT_REGION = Object.freeze({
 // above: what decides a member's real network is the country their number
 // belongs to, not what the region document happened to be named.
 const REGION_DEFAULT_NETWORKS = Object.freeze({
-  '256': ['MTN Mobile Money', 'Airtel Money'],  // Uganda
-  '237': ['MTN Mobile Money', 'Orange Money'],  // Cameroon
-  '225': ['MTN Mobile Money', 'Orange Money'],  // Côte d'Ivoire
-  '229': ['MTN Mobile Money', 'Moov Money'],    // Benin
+  // MarzPay's current documented mobile-money services, keyed by dialling
+  // code for the same reason as MARZPAY_MARKETS below. These are only
+  // defaults for a newly-created/old region with no networks saved; admins
+  // can still edit each country's list.
+  '256': ['MTN Mobile Money', 'Airtel Money'],                    // Uganda
+  '254': ['M-Pesa'],                                              // Kenya
+  '250': ['MTN Mobile Money', 'Airtel Money'],                    // Rwanda
+  '243': ['Vodacom M-Pesa', 'Airtel Money', 'Orange Money'],      // DR Congo
+  '260': ['MTN Mobile Money', 'Airtel Money', 'Zamtel Money'],    // Zambia
+  '237': ['MTN Mobile Money', 'Orange Money'],                    // Cameroon
+  '229': ['MTN Mobile Money', 'Moov Money'],                      // Benin
+  '225': ['MTN Mobile Money', 'Orange Money'],                    // Côte d'Ivoire
+  '241': ['Airtel Money'],                                        // Gabon
+  '242': ['MTN Mobile Money', 'Airtel Money'],                    // Congo-Brazzaville
+  '221': ['Orange Money', 'Free Money'],                          // Senegal
+  '232': ['Orange Money'],                                        // Sierra Leone
 });
 // Regions as a plain synchronous array, refreshed on the same 60s cadence as
 // settings and products. Synchronous because currentRegion() is called from
@@ -5203,17 +5215,19 @@ app.post('/deposit/marzpay', async (req, res) => {
     // /deposit/manual/init's own symmetric guard below.
     if (!sett.depositPayAEnabled) return res.status(400).json({ status: 'error', message: 'Automatic recharges are not enabled right now.' });
     const provider = depositAutomaticProvider(sett);
-    // The gateway has to be able to reach THIS country's phone numbers. Every
-    // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
-    // new region inherits Uganda's settings, so without this a Kenyan deposit
-    // is created and handed to MarzPay with a +254 number. Refused BEFORE any
-    // pendingDeposit is written and before the debounce below, so a
-    // misconfiguration cannot leave rows behind. The message names the
-    // country, because the person who has to fix this is the admin.
-    if (!gatewayServesRegion(provider, currentRegion())) {
+    // Snapshot the authenticated member's region ONCE for this money request.
+    // The middleware already resolves signed-in callers from users/{uid},
+    // not from a caller-supplied country. Carrying the resolved object
+    // explicitly from here into MarzPay prevents any later async/provider
+    // work from silently falling back to the founding (Uganda) region.
+    const paymentRegion = currentRegion();
+    // The gateway has to be able to reach THIS country's phone numbers.
+    // MarzPay serves all markets in MARZPAY_MARKETS; LipaPay/PesaJet are
+    // Uganda-only. Refuse BEFORE any pendingDeposit is written.
+    if (!gatewayServesRegion(provider, paymentRegion)) {
       return res.status(400).json({
         status: 'error', code: 'GATEWAY_REGION',
-        message: 'Automatic recharge is not available in ' + (currentRegion().name || 'this country') +
+        message: 'Automatic recharge is not available in ' + (paymentRegion.name || 'this country') +
                  ' yet. Please use the other payment method.',
       });
     }
@@ -5244,12 +5258,12 @@ app.post('/deposit/marzpay', async (req, res) => {
     const marzReference = crypto.randomUUID();
     const { date, time } = nowStr();
     const depRef = db.collection('pendingDeposits').doc();
-    const network = regionNetworkSet().has(req.body.network) ? req.body.network : null;
+    const network = regionNetworkSet(paymentRegion).has(req.body.network) ? req.body.network : null;
     await depRef.set({
       userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider,
       // Which country's money this is, stamped once so the admin lists can
       // label the figure correctly without a user lookup per row.
-      regionKey: currentRegionKey(),
+      regionKey: paymentRegion.key,
       date, time, createdAt: FieldValue.serverTimestamp()
     });
     // ANSWER FIRST. Owner: "sometimes a prompt may come when the screen is
@@ -5382,7 +5396,8 @@ app.post('/deposit/marzpay', async (req, res) => {
     try {
       mpData = await marzCollect({
         amount: amt, phone, reference: marzReference, description: 'Mobile Money',
-        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
+        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined,
+        region: paymentRegion
       });
     } catch (netErr) {
       console.error('MarzPay collect-money network error (ref ' + ref + '):', netErr.message);
@@ -7342,6 +7357,10 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     if (!witSnap.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
     const wit = witSnap.data();
     if (wit.status !== 'pending') return { code: 400, body: { status: 'error', message: `Cannot send, the status is '${wit.status}'` } };
+    // processWithdrawalCore() enters this function through withUserRegion(),
+    // so this is the withdrawal OWNER's region. Snapshot it once and pass it
+    // explicitly through every provider decision and the MarzPay payload.
+    const payoutRegion = currentRegion();
 
     // Owner: "when/if manual payment is switched also withdrawals are
     // manual, so it is approved manually when manual payment is toggled."
@@ -7357,7 +7376,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     // is already final by the time we hear about it, with no 'processing'
     // stage to wait on and nothing for the reconcilers to poll.
     const settNow = await getSettings();
-    if (payoutIsManual(settNow)) {
+    if (payoutIsManual(settNow, payoutRegion)) {
       // Atomic conditional flip, not read-then-write: this is the one place
       // a repeat call could double-count totalWithdrawn, and the status
       // check above ran outside any lock. updateIf only matches while the
@@ -7386,7 +7405,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       };
     }
 
-    if (withdrawProvider(settNow) === 'pesajet') {
+    if (withdrawProvider(settNow, payoutRegion) === 'pesajet') {
       // PesaJet payout. Mirrors the LipaPay branch below rule for rule, and
       // the three that matter are:
       //   * the outbound identifier is written BEFORE the provider is ever
@@ -7439,7 +7458,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       };
     }
 
-    if (withdrawProvider(settNow) === 'lipapay') {
+    if (withdrawProvider(settNow, payoutRegion) === 'lipapay') {
       // LipaPay branch (Round 102) -- mirrors the MarzPay send-money branch
       // below function-for-function: write the outbound identifier BEFORE
       // ever calling the provider (so a later write failure can never leave
@@ -7519,7 +7538,8 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     try {
       mpData = await marzSendMoney({
         amount: wit.net, phone: wit.phone, reference: sendingMarker, description: 'Withdrawal',
-        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
+        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined,
+        region: payoutRegion
       });
     } catch (netErr) {
       // A network exception here is ambiguous, not a clean rejection — we
