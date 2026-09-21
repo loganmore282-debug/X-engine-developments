@@ -7,6 +7,7 @@ const path        = require('path');
 const helmet      = require('helmet');
 const compression = require('compression');
 const rateLimit   = require('express-rate-limit');
+const { execFile } = require('child_process'); // used by the auto-deploy webhook, see /deploy/webhook below
 if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
 process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:', reason));
@@ -125,7 +126,7 @@ const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/banner/vid
 // Scoped to the one webhook path rather than set on the shared parser: this
 // holds a copy of every body it sees, and there is no reason to do that for
 // every request in the app.
-const RAW_BODY_ROUTES = new Set(['/pesajet/webhook']);
+const RAW_BODY_ROUTES = new Set(['/pesajet/webhook', '/deploy/webhook']);
 const keepRawBody = (req, res, buf) => { if (RAW_BODY_ROUTES.has(req.path)) req.rawBody = buf; };
 const rawJsonParser = express.json({ limit: '64kb', verify: keepRawBody });
 app.use((req, res, next) => (RAW_BODY_ROUTES.has(req.path) ? rawJsonParser : HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
@@ -3358,6 +3359,92 @@ app.post('/team/milestone/claim', async (req, res) => {
 app.get('/health', async (_req, res) => {
   const dbUp = await pingDb();
   res.json({ status: dbUp ? 'ok' : 'degraded', db: dbUp });
+});
+// ── AUTO-DEPLOY (GitHub webhook -> git pull + npm install + pm2 reload) ──
+// Owner: doing this by hand over Termux/SSH every single time is "tiresome"
+// -- this closes that loop. A Claude Code session in this environment cannot
+// SSH out (see petro/CLAUDE.md's "Hosting" section), so the only direction
+// that ever worked here is the VPS pulling; this just makes the VPS do that
+// pull BY ITSELF the moment something lands on the deploy branch, instead of
+// a human running the same three commands over SSH every time.
+//
+// Authenticated the same way GitHub's own docs recommend, and the same
+// pattern PesaJet's webhook above already uses in this file: HMAC-SHA256
+// over the RAW request body (see RAW_BODY_ROUTES / keepRawBody), checked
+// with a constant-time compare. Nothing from the request is ever
+// interpolated into a shell command either -- every command below is a
+// fixed, literal argv array run via execFile (never exec / a shell string),
+// so there is no injection surface even though this route's entire job is
+// running commands. A leaked DEPLOY_WEBHOOK_SECRET lets an attacker trigger
+// a pull+reload on demand, but only of whatever is actually sitting on
+// DEPLOY_BRANCH in this repo -- it cannot run an arbitrary command.
+const DEPLOY_WEBHOOK_SECRET = process.env.DEPLOY_WEBHOOK_SECRET || '';
+const DEPLOY_BRANCH = process.env.DEPLOY_BRANCH || 'claude/petro-platform-build';
+// The sparse checkout root (git lives here) vs. the actual petro/ app
+// directory inside it (npm/pm2 commands run from here) -- see
+// petro/CLAUDE.md's "Hosting" section for why these are two different
+// directories on this VPS.
+const DEPLOY_GIT_DIR = process.env.DEPLOY_GIT_DIR || '/srv/petro-src';
+const DEPLOY_APP_DIR = process.env.DEPLOY_APP_DIR || (DEPLOY_GIT_DIR + '/petro');
+function verifyGithubWebhookSignature(rawBody, headerSig) {
+  if (!DEPLOY_WEBHOOK_SECRET || !rawBody) return false;
+  const sig = String(headerSig || '');
+  if (!sig.startsWith('sha256=')) return false;
+  const expected = 'sha256=' + crypto.createHmac('sha256', DEPLOY_WEBHOOK_SECRET).update(rawBody).digest('hex');
+  const a = Buffer.from(sig), b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function runDeployCmd(cmd, args, cwd) {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { cwd, timeout: 5 * 60 * 1000 }, (err, stdout, stderr) => {
+      if (err) { err.stdout = stdout; err.stderr = stderr; return reject(err); }
+      resolve(stdout);
+    });
+  });
+}
+// Only one at a time -- a second webhook firing mid-deploy (a rapid string
+// of pushes) would otherwise overlap `npm install` with `pm2 reload`
+// against a half-updated node_modules.
+let _autoDeployRunning = false;
+async function runAutoDeploy() {
+  if (_autoDeployRunning) { console.warn('Auto-deploy: already running, this trigger skipped'); return; }
+  _autoDeployRunning = true;
+  try {
+    console.log('Auto-deploy: pulling', DEPLOY_BRANCH);
+    await runDeployCmd('git', ['pull', '--ff-only', 'origin', DEPLOY_BRANCH], DEPLOY_GIT_DIR);
+    await runDeployCmd('npm', ['install', '--omit=dev'], DEPLOY_APP_DIR);
+    // Hands the running process off to a freshly-spawned one running the
+    // code just pulled above. Zero-downtime by pm2's own design -- and safe
+    // to fire from inside the very process being replaced: by the time this
+    // line runs, git pull + npm install have already fully completed, and
+    // the `pm2` CLI call only has to reach the separate pm2 daemon (a
+    // systemd service, not a child of this process) before this process
+    // itself goes away.
+    await runDeployCmd('pm2', ['reload', 'petro-server'], DEPLOY_APP_DIR);
+    console.log('Auto-deploy: pulled + reloaded successfully');
+  } catch (e) {
+    console.error('Auto-deploy failed:', e.message, e.stderr || e.stdout || '');
+  } finally { _autoDeployRunning = false; }
+}
+app.post('/deploy/webhook', (req, res) => {
+  if (!verifyGithubWebhookSignature(req.rawBody, req.get('x-hub-signature-256')))
+    return res.status(401).json({ status: 'error', message: 'Bad signature' });
+  const event = req.get('x-github-event');
+  // GitHub fires this automatically the moment the webhook is created in its
+  // UI -- answering it is what lets the owner see "green" there without
+  // needing an actual push first.
+  if (event === 'ping') return res.json({ status: 'success', message: 'pong' });
+  if (event !== 'push') return res.json({ status: 'ignored', message: `Not handling GitHub event: ${event}` });
+  const ref = (req.body && req.body.ref) || '';
+  if (ref !== `refs/heads/${DEPLOY_BRANCH}`)
+    return res.json({ status: 'ignored', message: `Push was to ${ref || '(unknown)'}, this VPS only redeploys on refs/heads/${DEPLOY_BRANCH}` });
+  // ANSWER FIRST. GitHub retries a webhook delivery that doesn't respond
+  // within 10 seconds, and git pull + npm install can easily run past that
+  // -- respond immediately, run the actual deploy in the background exactly
+  // like every other fire-and-forget side effect in this file
+  // (sendAdminPush, marzSmsSend's own callers).
+  res.json({ status: 'success', message: 'Deploy started' });
+  runAutoDeploy();
 });
 // What the app is told about its region: the currency label it prints in
 // front of every amount, the dialling code it shows beside the phone field,

@@ -406,6 +406,37 @@ different, and is what's live right now:
   `cd petro && npm install --omit=dev` if `package.json` changed, then
   `pm2 reload petro-server` (or `pm2 restart` — `reload`'s zero-downtime
   handoff needs the app already running).
+- **Auto-deploy webhook (`POST /deploy/webhook`), built this session** — the
+  owner called the manual Termux loop above "tiresome" (fair — three
+  commands, every single change), so this closes it: GitHub calls this route
+  on every push to `claude/petro-platform-build`, and the VPS does the exact
+  three commands above **by itself** (git pull → npm install --omit=dev →
+  `pm2 reload petro-server`), all fire-and-forget in the background so
+  GitHub's own 10-second webhook timeout is never at risk. Authenticated by
+  HMAC-SHA256 over the raw request body (`DEPLOY_WEBHOOK_SECRET`, GitHub's
+  own recommended mechanism, same pattern this file already uses for
+  PesaJet's webhook) — nothing from the request body is ever interpolated
+  into a shell command, every command is a fixed literal argv array via
+  `execFile`, so there's no injection surface even though the route's whole
+  job is running commands. Only redeploys on a push to the exact branch
+  above; a `ping` (GitHub sends one automatically when the webhook is first
+  created) is answered without doing anything.
+  **One-time setup, still needs doing** (both sides — until then this route
+  exists in the code but nothing calls it):
+  1. On the VPS: add `DEPLOY_WEBHOOK_SECRET` to `secrets.local.js` (same file
+     as `MONGODB_URI`/`ADMIN_KEY`/etc.), then do ONE LAST manual redeploy
+     (the three commands above) so the running process actually picks up
+     this route and the new secret.
+  2. On GitHub: repo → Settings → Webhooks → Add webhook. Payload URL
+     `http://179.198.197.114:3000/deploy/webhook` (or the real domain once
+     one exists), content type `application/json`, Secret = the same value
+     as step 1, "Just the push event". GitHub's own ping fires immediately
+     on save — a 200 there confirms it's wired up.
+  After that, every future `git push` to this branch reaches the VPS with
+  zero manual steps — this doc's own "the code in this commit needs `git
+  pull` + rebuild + `pm2 reload` on the VPS" notes become unnecessary the
+  moment step 1+2 above are done, though they're left in place below since
+  that hasn't happened yet as of this note.
 - **Secrets: `petro/deploy/secrets.local.js`**, created directly on the VPS
   (gitignored — see `.gitignore`'s comment on that line), never committed.
   `ecosystem.config.js` try-requires it and spreads its keys into the pm2
