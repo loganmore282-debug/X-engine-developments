@@ -6619,6 +6619,77 @@ somewhere misleading.
 4. Note the balance endpoint **requires an IP allowlist** on MarzPay's side; a 401/403
    there while the money paths work is that, not a bad key.
 
+## Round 178b — "Uganda only accepts Ugandan numbers... Kenyan numbers are not allowed"
+
+A member on a French-language screen hit **"Payment not completed"** reading raw English:
+*"Uganda only accepts Ugandan numbers (e.g., +256712345678). Kenyan (+254) numbers are not
+allowed."* Grepped the whole codebase before touching anything — that exact wording is
+nowhere in `server.js` or `original_module.js`, and it doesn't match this app's own style
+(compare `badPhoneMessage()`'s real wording). **It is MarzPay's own raw API validation
+text**, reaching the member word-for-word via `marzUserMsg()`.
+
+Confirmed against MarzPay's own integration guide: *"Provider Detection: the system
+automatically detects the mobile money provider based on the phone number pattern"* — they
+cross-check the phone against the declared `country`, and their documented error family for
+exactly this mismatch is `error_code: 'INVALID_PHONE_FORMAT'` (their own example: *"Invalid
+Airtel phone number format. Must be 9 digits..."*).
+
+**Why this is a structural gap, not a one-off.** Every other member-facing string in this
+app is either a literal the i18n sweep can walk and pin (Round 165 onward), or server-
+composed prose covered by a `LANG_PATTERNS` template (Round 165's `{0}`-splice mechanism).
+A raw provider error is neither — the string does not exist until the HTTP response
+arrives, so it can never have a row and can never be caught by a sweep. It will always
+render in whatever language the *provider* wrote it in, regardless of the member's chosen
+language, until the app stops showing it verbatim.
+
+**The fix, in `server.js`:**
+- `marzIsPhoneFormatError(mp)` — recognises the documented `error_code` reliably, with a
+  text-match fallback only for shapes MarzPay's docs don't enumerate. Deliberately narrow:
+  broadening it would swallow a frozen-account or insufficient-float refusal behind an
+  unrelated "check your phone number" sentence.
+- `marzPhoneFormatMsg(region)` — the replacement, reusing `badPhoneMessage()` (the app's
+  existing, already-correct "wrong country for this account" sentence) rather than writing
+  a second copy of it. Named after the account's **own** region — never whatever country
+  MarzPay's raw text happened to reference, which is the whole point: their generic text
+  has no idea which of this platform's regions is asking.
+- Wired into `/deposit/marzpay`'s create-collection failure branch, the exact path the
+  screenshot came from. Every other MarzPay refusal is untouched.
+
+**And the translation gap this exposed a second time**: `badPhoneMessage()`'s output was
+**already** untranslated everywhere it was used (`/bank/save`, `/admin/manual-numbers/save`)
+— server-composed prose that never had a `LANG_PATTERNS` row because it didn't exist as a
+literal for the sweep to find. Added the row (five languages, three placeholders — country
+name, local format, international format), which fixes this for every existing caller, not
+just the new one.
+
+### Tests
+`test-marz-phone-error.js` **runs** the real functions rather than reading them: the
+documented `error_code` is recognised, five unrelated MarzPay refusals (`DATABASE_ERROR`,
+`DUPLICATE_REFERENCE`, a frozen account, insufficient balance) are proven **not** mistaken
+for a phone problem, the replacement names the correct country for three different regions
+(Uganda/Kenya/Cameroon), the exact reported sentence is reproduced and MarzPay's own
+wording is confirmed gone from it, the route is checked to decide **before** the failure is
+recorded, and the English template is proven to actually match `badPhoneMessage()`'s real
+rendered output — not just that a plausible-looking row exists.
+
+`verify-marz-phone-error-discriminates.py` — **8 mutations, all caught**, control correctly
+MISSED. One mutation was malformed on the first pass and is kept as the record: it only
+swapped the final `markDepositFailed` call and left the now-dead `failMsg` assignment (and
+the literal string the "wired into the route" regex checks for) sitting in the source above
+it, so that check kept passing against code that had genuinely stopped doing anything.
+Rewritten to revert the whole hunk — assignment and call together.
+
+Verified live: the French i18n sweep (`find-untranslated.py <out> fr`) is clean across all
+43 screens with the new row counted (274 → 277), and the built app's own smoke test passes.
+
+### What is still not known, and is not this fix's job to know
+Whether *this specific member* typed a genuinely mismatched number, or their account's
+region should have resolved differently, was never established — the owner supplied
+MarzPay's documentation rather than the account/number specifics that would have settled
+it. That is a separate, unresolved question. What this round fixes is real and
+independent of the answer: whichever it was, the member now sees a clear, translated,
+account-region-correct sentence instead of the provider's raw, wrong-country English text.
+
 ## Round 176 — MarzPay has no other countries, and a new region silently used it anyway
 
 **SUPERSEDED — see Round 177 above. The Uganda-only conclusion in this section is wrong;

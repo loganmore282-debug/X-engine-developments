@@ -2446,6 +2446,40 @@ function marzUserMsg(mp, fallback) {
     return PROVIDER_BUSY_MSG;
   return raw || fallback || PROVIDER_BUSY_MSG;
 }
+// Is this MarzPay refusal a PHONE/COUNTRY validation failure -- i.e. the
+// number does not belong to the country the request declared? Their own
+// docs document `error_code: 'INVALID_PHONE_FORMAT'` for exactly this family
+// ("Invalid Airtel phone number format...") and provider detection is done
+// server-side FROM THE NUMBER ITSELF, cross-checked against `country` -- so
+// a mismatch surfaces as their own validation error, not a transport failure.
+//
+// WHY THIS MATTERS. Their raw `message` is English prose MarzPay wrote, with
+// no row in LANG_PATTERNS and no way to ever get one -- it does not exist
+// until the HTTP response arrives, so the i18n sweep can never have seen it.
+// A French-speaking member (or any non-English one) was shown it verbatim:
+// exactly the class of gap the whole i18n project exists to close, just one
+// this codebase cannot see coming because the string is not ours.
+//
+// The error_code check is the reliable signal; the text fallback exists only
+// for a shape their docs do not enumerate (they do not claim the list of
+// error_codes is exhaustive). Kept narrow on purpose -- broadening this to
+// catch every MarzPay refusal would swallow real, specific messages (a
+// frozen account, an insufficient float) behind a generic phone-format
+// sentence that has nothing to do with the actual problem.
+function marzIsPhoneFormatError(mp) {
+  if (mp && mp.error_code === 'INVALID_PHONE_FORMAT') return true;
+  const raw = String((mp && (mp.message || mp.data?.message)) || '');
+  return /invalid .*phone number format|phone number format/i.test(raw);
+}
+// The member-facing replacement for a MarzPay phone/country mismatch: OUR
+// OWN translated sentence, naming the country the ACCOUNT actually belongs
+// to (never whatever country MarzPay's own message happened to reference --
+// their generic text does not know or care which of our regions is asking).
+// Reuses badPhoneMessage(), which is already the app's one sentence for "the
+// phone does not fit this account's country" everywhere else it is said.
+function marzPhoneFormatMsg(region) {
+  return badPhoneMessage(region || currentRegion());
+}
 async function _marzParse(resp) {
   let data;
   try { data = await resp.json(); }
@@ -5307,7 +5341,14 @@ app.post('/deposit/marzpay', async (req, res) => {
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       console.error('MarzPay collect-money rejected:', JSON.stringify(mpData));
-      await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the payment'));
+      // A phone/country mismatch gets OUR OWN translated sentence, naming
+      // this account's real region -- never MarzPay's raw English text
+      // (which, on top of never being translated, has no idea which of our
+      // regions is asking and can reference the wrong country entirely).
+      const failMsg = marzIsPhoneFormatError(mpData)
+        ? marzPhoneFormatMsg()
+        : marzUserMsg(mpData, 'Could not start the payment');
+      await markDepositFailed(depRef, userId, failMsg);
       return;
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;

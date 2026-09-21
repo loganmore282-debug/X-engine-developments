@@ -506,6 +506,17 @@ var LANG_ROWS = [
 // to put them in a different order than English does.
 var LANG_PATTERNS = [
   // [english template, lg, sw, fr, rw, nyn]
+  // Server-composed, not a client literal -- badPhoneMessage() builds this on
+  // demand with the account's own country/format spliced in, so it never
+  // existed for the i18n sweep to find until this round. {1}/{2} are phone
+  // formats (a local number, an international one) and must never be
+  // reordered or dropped -- they are the actual digits to dial, not words.
+  ['That is not a valid {0} mobile-money number. Use the format {1} or {2}.',
+   "Ogwo si nampasa nnungi eya ssente za simu eya {0}. Kozesa engeri {1} oba {2}.",
+   'Hiyo si nambari sahihi ya pesa za simu ya {0}. Tumia muundo {1} au {2}.',
+   "Ce n'est pas un numéro mobile money {0} valide. Utilisez le format {1} ou {2}.",
+   'Uyo si nimero nyayo ya amafaranga ya telefoni ya {0}. Koresha imiterere {1} cyangwa {2}.',
+   "Eyo tiri namba nkora ye sente z'esimu ya {0}. Koresa engyendererwa {1} nari {2}."],
   ['About {0}', 'Ku {0}', 'Kuhusu {0}', 'À propos de {0}', 'Ibyerekeye {0}', 'Ahabwa {0}'],
   ['Get the {0} app', 'Funa pulogulaamu ya {0}', 'Pata programu ya {0}', "Obtenez l'application {0}", 'Kura porogaramu ya {0}', 'Tunga porogaraamu ya {0}'],
   ['Your login password is used to sign in to your {0} account.', "Ekisumuluzo kyo eky'okuyingira kikozesebwa okuyingira mu akawunti yo ya {0}.", 'Nenosiri lako la kuingia hutumika kuingia katika akaunti yako ya {0}.', 'Votre mot de passe de connexion sert à vous connecter à votre compte {0}.', 'Ijambobanga ryawe ryo kwinjira rikoreshwa kwinjira mu konti yawe ya {0}.', "Ekisumuruzo kyaawe ky'okutaaha nikikozesibwa kutaaha omu akaunti yaawe ya {0}."],
