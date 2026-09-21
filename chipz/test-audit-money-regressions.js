@@ -233,7 +233,7 @@ async function repairPendingDeposit() {
   });
   const {c,routes}=context(db,{
     verifyOwner:()=>true,finiteMoney:n=>Number(n)||0,logAdminAction:()=>{},
-    _creditingDeposits:new Set(),markDepositAttemptSucceeded:()=>{},sendAdminPush:async()=>{},
+    _creditingDeposits:new Set(),sendAdminPush:async()=>{},
     nowStr:()=>({date:'2026-09-17',time:'12:00'})
   });
   vm.runInContext(section("function walletLedgerAmount(", "app.post('/admin/user/complete-registration'"),c);

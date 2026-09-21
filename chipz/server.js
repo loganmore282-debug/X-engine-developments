@@ -1102,19 +1102,30 @@ const DEFAULT_PRODUCTS = [
 ];
 
 // Settings that govern the whole backend rather than one country, and so
-// can never be overridden per region. The app's name is here because there
-// is one brand; the domain allowlist, the maintenance switch and the
-// pre-launch countdown are here because they are operator controls, and a
-// maintenance mode that only some members saw would be worse than none.
-// Everything else -- rates, minimums, the product return multiple, the
-// payment providers, the cash-out window, the turntable bands -- is
-// per-region, which is what the owner asked for ("all settings as these of
-// ugx").
-// linkPreviewEnabled is in here because the og:/twitter: tags live in the
-// STATIC page head -- one copy, shared by every country and every host -- so
-// a per-country share card is not a thing that can exist. Same reasoning as
-// brandName, which manifest.json has the same problem with.
-const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];
+// can never be overridden per region. What is actually here is only what is
+// STRUCTURALLY incapable of varying by country:
+//   - allowedOrigins/baseDomain/blockRootDomain/parkedHosts/strictRegionHosts
+//     decide which HOSTNAMES may reach this backend at all -- that is a
+//     property of the backend's own DNS/CORS wiring, resolved before any
+//     region is even known, not a per-country figure.
+//   - brandName and linkPreviewEnabled are tied to STATIC, single-copy
+//     assets (manifest.json's `name`, the og:/twitter: tags in the page
+//     head) -- one file, shared by every country and every host, so a
+//     per-country version of either is not a thing that can exist.
+//
+// maintenanceMode/maintenanceMsg/openingCountdownEnabled/openingCountdownAt
+// used to be here and are NOT any more. Owner: "some settings affect whole
+// countries why?, see maintenance mode, countdown, please make sure that
+// everything is on its own" -- putting one country into maintenance, or
+// scheduling its opening countdown, was silently taking every OTHER country
+// down with it, because these were the only rate/limit-shaped settings
+// treated as backend-wide rather than per-region. There is nothing
+// structural stopping them varying by country (the maintenance-mode gate in
+// the request middleware already reads getSettings() for the CURRENT
+// region), so they now behave exactly like every other rate and limit in
+// this file -- per-region, layered on top of Uganda's, which is what the
+// owner asked for from the start ("all settings as these of ugx").
+const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];
 // Which settings document belongs to which region. The founding region
 // keeps 'main' -- the document every deployment already has, so nothing
 // migrates -- and every other region gets its own, holding only what it has
@@ -1156,10 +1167,11 @@ async function getSettings(regionKey) {
     if (key !== DEFAULT_REGION_KEY) {
       const rs = await db.collection('settings').doc(settingsDocId(key)).get();
       overlay = rs.exists ? rs.data() : {};
-      // Operator configuration is never per-region: the domain allowlist,
-      // the maintenance switch and the pre-launch countdown govern the whole
-      // backend, and letting one region's document shadow them would mean
-      // "maintenance mode" that only some members see.
+      // Only what is STRUCTURALLY incapable of varying by region is stripped
+      // here -- see GLOBAL_ONLY_SETTINGS's own comment. Maintenance mode and
+      // the opening countdown are NOT in that list any more: they are
+      // ordinary per-region settings now, so a country's own document is
+      // free to set them without touching any other country's.
       for (const k of GLOBAL_ONLY_SETTINGS) delete overlay[k];
     }
     const merged = Object.assign({}, DEFAULT_SETTINGS, stored, overlay);
@@ -2374,54 +2386,33 @@ async function invalidateSessionsFor(username) {
 }
 
 // ── DEPOSIT / WITHDRAWAL ABUSE GUARDS ──
-const _depAttempts = new Map();       // userId -> [timestamps]
-// Codex-caught real bug (2nd money-flow audit): this used to be a bare
-// membership Set, added to once on any success and never re-scoped to a
-// time window -- only cleared by sweepEphemeralState() once _depAttempts
-// for that user goes fully empty (every attempt has aged out of the
-// rolling 60s window). An active depositor who succeeds once and then
-// keeps submitting at least one deposit attempt every <60s (completely
-// normal usage for someone actively investing) never lets _depAttempts
-// empty out, so this stayed set INDEFINITELY -- meaning the 5-rapid-
-// attempts auto-ban was permanently bypassed for them, even for a much
-// later, genuinely suspicious burst of failed attempts unrelated to that
-// one old success. Storing the success TIMESTAMP instead lets the ban
-// check verify the success actually falls within the SAME rolling window
-// being evaluated -- matching this guard's own original intent ("this
-// burst included a real success, don't ban for it") instead of "this
-// user has EVER succeeded, don't ever ban them."
-const _depAttemptsSucceededAt = new Map(); // userId -> last success timestamp
-function recordDepositAttempt(userId) {
-  const now = Date.now();
-  const arr = (_depAttempts.get(userId) || []).filter(t => now - t < 60000);
-  arr.push(now);
-  _depAttempts.set(userId, arr);
-  return arr.length;
-}
-// Pops the just-recorded attempt back off, for the one case that is not
-// abuse: assignManualNumberAndCreateDeposit() came back {empty:true} --
-// no active numbers are configured for this network+region AT ALL, so the
-// attempt was structurally guaranteed to fail before it started. Retrying
-// a genuine dead end is confused, legitimate behaviour, not a burst of
-// abuse, and must not count toward the 5-in-a-minute auto-ban.
-function undoDepositAttempt(userId) {
-  const arr = _depAttempts.get(userId);
-  if (!arr || !arr.length) return;
-  arr.pop();
-  if (arr.length) _depAttempts.set(userId, arr);
-  else _depAttempts.delete(userId);
-}
-function markDepositAttemptSucceeded(userId) { _depAttemptsSucceededAt.set(userId, Date.now()); }
-function depositSucceededRecently(userId) {
-  const at = _depAttemptsSucceededAt.get(userId);
-  return !!at && (Date.now() - at < 60000);
-}
-async function banUserAutomatically(userId, reason) {
-  try {
-    await db.collection('users').doc(userId).update({ status: 'banned', banReason: reason, bannedAt: FieldValue.serverTimestamp() });
-    console.warn(`Auto-banned ${userId}: ${reason}`);
-  } catch (e) { console.error('Auto-ban failed:', e.message); }
-}
+// The "5 deposit attempts in a minute" AUTOMATIC ban is gone (owner: "make
+// sure that everything is on its own and remove auto ban" -- following a
+// round where it was found to auto-suspend a legitimate member simply
+// retrying a manual deposit whose network had no payment numbers configured
+// at all, a structurally-doomed attempt that still counted toward the
+// threshold, and the owner's own earlier report a few lines above this one
+// in the deposit route: "when you try again once more it says account
+// suspended"). Nothing replaces it -- a suspicious burst of deposit
+// attempts is still visible to an admin via `securityEvents`/`logSecurityEvent`
+// and the Suspicious Activity analytics tab, but no longer bans anyone
+// without a human deciding to. `banUserAutomatically()`, `recordDepositAttempt()`,
+// `undoDepositAttempt()`, `markDepositAttemptSucceeded()`, `depositSucceededRecently()`
+// and the `_depAttempts`/`_depAttemptsSucceededAt` maps are deleted along
+// with it, not merely unlinked -- a removed feature whose helpers stay
+// reachable is exactly the kind of thing that gets called again by
+// accident. `_depCreateDebounce` (the "a deposit is already being
+// processed" 7s guard, right below) is UNRELATED and stays: it never bans
+// anyone, it just stops one impatient double-tap from creating two rows for
+// the same recharge.
+//
+// The DIFFERENT automatic ban a few hundred lines down, in
+// applyDepositReversal() -- triggered when MTN's own network reverses a
+// deposit that was already credited (a confirmed clawback, not a heuristic
+// on attempt COUNT) -- is deliberately left in place. That one responds to
+// an external fact (money that was credited has since been taken back by
+// the network), not to a member's own confused retrying, and removing it
+// would reopen a real fraud path.
 // Lightweight, fire-and-forget log of a suspicious/rejected action -- feeds
 // the owner-only "Suspicious activity" analytics (repeated insufficient-
 // funds withdrawal attempts, repeated already-claimed check-ins, gift/promo
@@ -5216,9 +5207,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
     // new region inherits Uganda's settings, so without this a Kenyan deposit
     // is created and handed to MarzPay with a +254 number. Refused BEFORE any
-    // pendingDeposit is written and before the debounce and abuse counters, so
-    // a misconfiguration cannot leave rows behind or ban anybody. The message
-    // names the country, because the person who has to fix this is the admin.
+    // pendingDeposit is written and before the debounce below, so a
+    // misconfiguration cannot leave rows behind. The message names the
+    // country, because the person who has to fix this is the admin.
     if (!gatewayServesRegion(provider, currentRegion())) {
       return res.status(400).json({
         status: 'error', code: 'GATEWAY_REGION',
@@ -5227,44 +5218,26 @@ app.post('/deposit/marzpay', async (req, res) => {
       });
     }
 
-    // Validate BEFORE touching the debounce/abuse-attempt counters below --
-    // a below-minimum amount or a missing phone number must never consume a
-    // debounce slot or count toward the auto-ban threshold. Before this fix
-    // EVERY call reached those counters first regardless of outcome, so a
-    // member who simply typed too little then immediately retried with the
-    // real minimum hit a false "already being processed" (the failed
-    // attempt had already claimed the debounce window on a deposit that was
-    // never actually created), and a couple more retries after that could
-    // rack up enough recorded "attempts" to trip the 5-in-a-minute auto-ban
-    // -- getting suspended for nothing more than fumbling the minimum
-    // amount. Owner: "when you try to deposit with little amount, it says
-    // minimum deposit is 30k, when you try again deposit with that very
-    // minimum amount, it says deposit is already being processed!!, when
-    // you try again once more it says account suspended."
+    // Validate BEFORE touching the debounce below -- a below-minimum amount
+    // or a missing phone number must never consume a debounce slot. Before
+    // this fix EVERY call reached the debounce check first regardless of
+    // outcome, so a member who simply typed too little then immediately
+    // retried with the real minimum hit a false "already being processed"
+    // (the failed attempt had already claimed the debounce window on a
+    // deposit that was never actually created).
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
     const _ph = depositSenderPhone(req.body, uSnap.data().phone, ['phone']);
     if (_ph.error) return res.status(400).json({ status: 'error', message: _ph.error });
     const phone = _ph.phone;
 
-    // subagent-audit-caught: the debounce check must run BEFORE
-    // recordDepositAttempt() too, not just the amount/phone validation
-    // above -- otherwise a request that's rejected ONLY by the 7s debounce
-    // (nothing wrong with it, just too soon after the last one) still
-    // counted as an "attempt" toward the 5-in-a-minute auto-ban, leaving
-    // the exact false-ban chain this function's own comment above claims
-    // to have closed still reachable through the debounce path alone: one
-    // real deposit that's slow to confirm, followed by a few impatient
-    // resubmits that each get bounced by the debounce, could still add up
-    // to 5 recorded "attempts" and trip the ban.
+    // A deposit already being processed is bounced for 7s -- one impatient
+    // double-tap must not create two rows for the same recharge. This no
+    // longer feeds any ban counter (see the "DEPOSIT / WITHDRAWAL ABUSE
+    // GUARDS" comment above where that lived): retrying is simply refused
+    // for a moment, never punished.
     const lastDep = _depCreateDebounce.get(userId) || 0;
     if (Date.now() - lastDep < 7000)
       return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
-
-    const attemptCount = recordDepositAttempt(userId);
-    if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
-      await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    }
     _depCreateDebounce.set(userId, Date.now());
 
     const ref = await uniqueRef('S');
@@ -5605,7 +5578,6 @@ async function _creditDepositNow(depDoc) {
     // Only on a REAL new credit (never an idempotent replay/no-op) -- a
     // retried webhook/poll must never fire a duplicate push for the same money.
     if (justCredited) {
-      markDepositAttemptSucceeded(dep.userId);
       sendAdminPush('Deposit completed', `${fmtMoney(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id }).catch(() => {});
     }
     return credited;
@@ -6197,8 +6169,8 @@ app.post('/deposit/manual/init', async (req, res) => {
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (!sett.depositPayBEnabled) return res.status(400).json({ status: 'error', message: 'Manual deposits are not enabled right now.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
-    // Same validate-before-touching-abuse-counters ordering as
-    // /deposit/marzpay -- see its own comment for why this order matters.
+    // Same validate-before-debounce ordering as /deposit/marzpay -- see its
+    // own comment for why this order matters.
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
     const _sph = depositSenderPhone(req.body, uSnap.data().phone, ['senderPhone', 'phone']);
     if (_sph.error) return res.status(400).json({ status: 'error', message: _sph.error });
@@ -6207,11 +6179,6 @@ app.post('/deposit/manual/init', async (req, res) => {
     const lastDep = _depCreateDebounce.get(userId) || 0;
     if (Date.now() - lastDep < 7000)
       return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
-    const attemptCount = recordDepositAttempt(userId);
-    if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
-      await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    }
     _depCreateDebounce.set(userId, Date.now());
 
     // uniqueRef() is a real DB round trip -- deliberately run BEFORE
@@ -6228,8 +6195,6 @@ app.post('/deposit/manual/init', async (req, res) => {
     });
     if (!result) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
     if (result.empty) {
-      // Structurally impossible, not merely busy -- see undoDepositAttempt().
-      undoDepositAttempt(userId);
       console.error(`Manual deposit refused: no active payment numbers configured for ${network}. Add one in Admin -> Deposits -> payment numbers.`);
       return res.status(503).json({ status: 'error', message: `No ${network} payment number is available right now. Please choose the other network, or contact customer service.` });
     }
@@ -12057,12 +12022,6 @@ function sweepEphemeralState() {
     dropStale(_depCreateDebounce, 5 * 60 * 1000);
     dropStale(_adminCreditDebounce, 5 * 60 * 1000);
     dropStale(_adminDebitDebounce, 5 * 60 * 1000);
-    dropStale(_depAttemptsSucceededAt, 60 * 1000);
-    for (const [uid, times] of _depAttempts) {
-      const live = times.filter(t => now - t < 60000);
-      if (live.length) _depAttempts.set(uid, live);
-      else _depAttempts.delete(uid);
-    }
     for (const [k, f] of _loginFails) {
       const locked = f.lockedUntil && f.lockedUntil > now;
       if (!locked && now - (f.ts || 0) > 15 * 60 * 1000) _loginFails.delete(k);

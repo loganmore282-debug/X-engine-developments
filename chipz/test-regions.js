@@ -857,10 +857,59 @@ ck(/BAD_REFERRAL_REGION/.test(bare) && /refRegion !== myRegion/.test(bare),
 }
 {
   const g = /const GLOBAL_ONLY_SETTINGS = \[([^\]]*)\]/.exec(bare)[1];
-  for (const k of ['allowedOrigins', 'maintenanceMode', 'openingCountdownEnabled'])
+  // Only what is STRUCTURALLY incapable of varying by country -- which
+  // hostnames may reach the backend, and the two single-copy static assets
+  // (manifest name, the og:/twitter: share tags).
+  for (const k of ['allowedOrigins', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'brandName', 'linkPreviewEnabled'])
     ck(g.includes(k), `${k} stays backend-wide`);
-  for (const k of ['minWithdraw', 'commL1', 'returnMultiple', 'withdrawWindowEnabled'])
+  // maintenanceMode/maintenanceMsg/openingCountdownEnabled/openingCountdownAt
+  // moved OUT of GLOBAL_ONLY_SETTINGS in Round 179b (owner: "some settings
+  // affect whole countries why?, see maintenance mode, countdown, please
+  // make sure that everything is on its own") -- putting one country into
+  // maintenance, or scheduling its opening countdown, was silently taking
+  // every OTHER country down with it. They are ordinary per-region settings
+  // now, same as every rate and limit.
+  for (const k of ['minWithdraw', 'commL1', 'returnMultiple', 'withdrawWindowEnabled',
+                    'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt'])
     ck(!g.includes(k), `${k} is per-country`);
+}
+// Defined here, RUN at the bottom (in the same after-everything-else spot
+// rotationChecks/messageRegionChecks already run from) -- see there for why.
+async function maintenanceModeChecks(){
+  console.log('\n— maintenance mode and the opening countdown are RUN per country, not asserted —');
+  // A static array check proves the field survives the strip; it does not
+  // prove getSettings() ever reads that array for the strip rather than a
+  // second, hand-copied list. Lift the real function and run it.
+  ck(/for \(const k of GLOBAL_ONLY_SETTINGS\) delete overlay\[k\]/.test(bare),
+    'getSettings() strips a region overlay using GLOBAL_ONLY_SETTINGS itself, not a second copy of it');
+  const globalOnlyLine = /const GLOBAL_ONLY_SETTINGS = \[[^\]]*\];/.exec(bare)[0];
+  const block = globalOnlyLine + '\n' + fnSource(bare, 'settingsDocId') + '\n' +
+    bare.slice(bare.indexOf('const _settingsByRegion = new Map'), bare.indexOf('async function getSettings') + bare.slice(bare.indexOf('async function getSettings')).indexOf('\n}') + 2);
+  for (const name of ['getSettings', 'GLOBAL_ONLY_SETTINGS', 'function settingsDocId'])
+    if (!block.includes(name)) throw new Error(`getSettings block is missing ${name} -- re-anchor`);
+  const docs = {
+    main: { maintenanceMode: true, maintenanceMsg: 'Uganda is closed', openingCountdownEnabled: false, minWithdraw: 8000 },
+    // Kenya sets its OWN maintenanceMsg too, deliberately, so this proves
+    // message ISOLATION rather than the (correct, separate) inherit-when-
+    // unset layering every other setting already has.
+    'region-ke': { maintenanceMode: false, maintenanceMsg: 'Kenya says something else', minWithdraw: 500 },
+  };
+  const api = new Function('db', 'DEFAULT_SETTINGS', 'DEFAULT_REGION_KEY', 'sanitizeAllowedOrigins', 'refreshHostPolicy', 'currentRegionKey', `
+    ${block}
+    return { getSettings };
+  `)(
+    { collection: () => ({ doc: id => ({ get: async () => ({ exists: id in docs, data: () => docs[id] }) }) }) },
+    { withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000, maintenanceMode: false, maintenanceMsg: '', openingCountdownEnabled: false, openingCountdownAt: 0 },
+    'ug', () => ({ hosts: [] }), () => {}, () => 'ug'
+  );
+  const ug = await api.getSettings('ug');
+  const ke = await api.getSettings('ke');
+  ck(ug.maintenanceMode === true, "Uganda's own maintenance switch is on");
+  ck(ke.maintenanceMode === false, "Kenya is NOT put into maintenance by Uganda's switch -- this is the reported bug");
+  ck(ug.maintenanceMsg === 'Uganda is closed', "and Uganda's own message is Uganda's");
+  ck(ke.maintenanceMsg === 'Kenya says something else', "Kenya's own message is Kenya's, not Uganda's");
+  ck(ke.minWithdraw === 500, 'an ordinary per-region rate still overrides correctly (this fix did not touch that path)');
+  ck(ug.minWithdraw === 8000, "and Uganda's own is unaffected by Kenya's document existing at all");
 }
 ck(/for \(const region of await getRegions\(\)\)/.test(bare) && /String\(wit\.regionKey \|\| DEFAULT_REGION_KEY\) !== regionKey/.test(bare),
   'auto-approval runs once per country and only touches that countryʼs cash-outs');
@@ -1823,7 +1872,7 @@ ck(!/\.slice\(3\)/.test(stripComments(fnSource(client, 'fmtUGXCents'))),
 
 // The rotation checks run the real async route handler, so they finish
 // after everything above; the verdict waits for them.
-rotationChecks().then(messageRegionChecks).then(() => {
+rotationChecks().then(messageRegionChecks).then(maintenanceModeChecks).then(() => {
   console.log(failed ? `\n${failed} FAILED` : '\nregions: all cases pass');
   process.exit(failed ? 1 : 0);
 }).catch(e => { console.log('FAIL  rotation checks threw: ' + (e && e.message)); process.exit(1); });

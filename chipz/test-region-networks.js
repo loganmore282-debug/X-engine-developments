@@ -195,63 +195,60 @@ console.log('\n— every real call site is region-scoped —');
   ck(regionAt > -1 && checkAt > regionAt, 'numRegion is resolved BEFORE the network is validated against it');
 }
 
-// ── the ban-counter fix: undoDepositAttempt() ──
-console.log('\n— undoDepositAttempt() exempts a structurally-impossible attempt —');
+// ── the deposit-attempts auto-ban is REMOVED, not patched ──
+// Owner, a round later: "please make sure that everything is on its own and
+// remove auto ban." Round 179's undoDepositAttempt() fix (tested above, in
+// git history) treated a symptom; this removes the mechanism entirely --
+// nothing bans a member for how many times they tried a deposit, ever.
+console.log('\n— the deposit-attempts auto-ban no longer exists —');
 {
-  const block = src.slice(src.indexOf('const _depAttempts = new Map'), src.indexOf('async function banUserAutomatically'));
-  for (const name of ['recordDepositAttempt', 'undoDepositAttempt', 'markDepositAttemptSucceeded', 'depositSucceededRecently']) {
-    if (!block.includes(name)) throw new Error(`deposit-attempt block is missing ${name} -- re-anchor`);
+  const codeOnly = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+  for (const name of ['banUserAutomatically', 'recordDepositAttempt', 'undoDepositAttempt',
+                       'markDepositAttemptSucceeded', 'depositSucceededRecently', '_depAttempts']) {
+    ck(!new RegExp('\\b' + name + '\\b').test(codeOnly), `${name} no longer exists as live code`);
   }
-  const api = new Function(`
-    ${block}
-    return { recordDepositAttempt, undoDepositAttempt, _depAttempts };
-  `)();
-
-  ck(api.recordDepositAttempt('u1') === 1, 'first attempt: count is 1');
-  ck(api.recordDepositAttempt('u1') === 2, 'second attempt: count is 2');
-  api.undoDepositAttempt('u1');
-  ck(api._depAttempts.get('u1').length === 1, 'undo pops exactly one attempt back off');
-  ck(api.recordDepositAttempt('u1') === 2, 'the counter reflects the undo, not a phantom 3rd attempt');
-
-  // Popping a user with nothing recorded must not throw, and must not
-  // manufacture a negative-length array.
-  api.undoDepositAttempt('never-recorded');
-  ck(true, 'undoDepositAttempt on a user with no recorded attempts does not throw');
-
-  // Popping all the way to zero removes the map entry entirely (matching
-  // the sweep's own "empty means gone" convention), not an empty array.
-  const api2 = new Function(`${block}\nreturn { recordDepositAttempt, undoDepositAttempt, _depAttempts };`)();
-  api2.recordDepositAttempt('u2');
-  api2.undoDepositAttempt('u2');
-  ck(!api2._depAttempts.has('u2'), 'popping the last attempt removes the map entry, not an empty array');
-
-  // The actual scenario: 4 real attempts, then a 5th that comes back
-  // {empty:true} -- undone, so the NEXT real attempt is still only #5, not
-  // #6, and the member is not banned for retrying a genuine dead end.
-  const api3 = new Function(`${block}\nreturn { recordDepositAttempt, undoDepositAttempt };`)();
-  for (let i = 0; i < 4; i++) api3.recordDepositAttempt('u3');
-  const fifthCount = api3.recordDepositAttempt('u3'); // this is the {empty:true} one
-  ck(fifthCount === 5, 'sanity: the 5th attempt would have tripped the >= 5 threshold');
-  api3.undoDepositAttempt('u3');
-  const sixthCount = api3.recordDepositAttempt('u3'); // a later, real retry
-  ck(sixthCount === 5, 'after the undo, the next real attempt is still only #5 -- the structurally-doomed tap never counted');
+  // The DIFFERENT automatic ban -- applyDepositReversal(), triggered by a
+  // confirmed MTN-side clawback of an already-credited deposit -- is
+  // deliberately untouched. That one responds to an external fact (money
+  // that WAS credited has since been taken back by the network), not to a
+  // member's own retry count, and removing it would reopen a real fraud
+  // path. Both directions checked, so a mutation that deletes it is caught
+  // by THIS file even though it isn't this round's own change.
+  ck(/async function applyDepositReversal/.test(codeOnly), 'the MTN-reversal fraud ban is still there');
+  ck(/banReason: `Automatic: MTN deposit reversal detected/.test(codeOnly), '  and still names what it is responding to');
 }
 {
-  // Wired into the actual route: the {empty:true} branch calls
-  // undoDepositAttempt BEFORE answering, and the busy (null) branch does
-  // NOT -- a transient clash is real contention among real attempts and
-  // must still count.
-  const at = src.indexOf("app.post('/deposit/manual/init'");
-  const end = src.indexOf("app.post('/deposit/manual/status'", at);
+  // Both deposit routes still debounce a double-tap (429, "already being
+  // processed") -- that guard never banned anyone and stays. Neither route
+  // still WRITES a ban of its own; the only 'banned' text left in each is
+  // reading an EXISTING status (an admin's own manual ban), never setting one.
+  for (const [label, startAnchor, endAnchor] of [
+    ["/deposit/marzpay", "app.post('/deposit/marzpay'", 'function depositFullyCredited'],
+    ['/deposit/manual/init', "app.post('/deposit/manual/init'", "app.post('/deposit/manual/status'"],
+  ]) {
+    const at = src.indexOf(startAnchor);
+    const end = src.indexOf(endAnchor, at + 10);
+    const body = src.slice(at, end);
+    ck(/A deposit is already being processed/.test(body), `${label}: the debounce (unrelated to banning) is still there`);
+    ck(/status === 'banned'/.test(body), `${label}: still reads an EXISTING ban (an admin's own decision)`);
+    ck(!/status:\s*'banned'/.test(body), `${label}: never WRITES a ban of its own any more`);
+  }
+}
+{
+  // sweepEphemeralState() no longer has anything of the removed feature's
+  // to clean up.
+  const at = src.indexOf('function sweepEphemeralState');
+  const end = src.indexOf('\n}', at) + 2;
   const body = src.slice(at, end);
-  const emptyAt = body.indexOf('if (result.empty)');
-  const emptyBlockEnd = body.indexOf('}', body.indexOf('{', emptyAt));
-  const emptyBlock = body.slice(emptyAt, emptyBlockEnd);
-  ck(/undoDepositAttempt\(userId\)/.test(emptyBlock), 'the {empty:true} branch calls undoDepositAttempt(userId)');
-  const busyAt = body.indexOf('if (!result)');
-  const busyBlockEnd = body.indexOf('}', body.indexOf('{', busyAt));
-  const busyBlock = body.slice(busyAt, busyBlockEnd);
-  ck(!/undoDepositAttempt/.test(busyBlock), 'the transient "all numbers busy" branch does NOT undo -- that IS real contention/abuse-shaped traffic');
+  ck(!/_depAttempts/.test(body), 'the in-memory sweeper no longer references _depAttempts');
+}
+{
+  // The admin's own manual ban/unban route is UNTOUCHED -- removing the
+  // automatic heuristic must not remove an admin's ability to ban someone
+  // on purpose.
+  ck(/status: isBan \? 'banned' : 'active'/.test(src), "the admin's manual ban/unban toggle still exists");
 }
 
 // ── /admin/regions/save: networks validation ──

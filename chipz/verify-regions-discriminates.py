@@ -102,13 +102,18 @@ MUTATIONS = [
      """      const offending = [];
       if (offending.length)"""),
 
-    ('maintenance mode becomes a per-country setting', SERVER,
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName'];"),
+    # Round 179b FLIPPED this mutation's direction. Before: maintenance mode
+    # was backend-wide and "becomes per-country" was the bug to catch. Owner:
+    # "some settings affect whole countries why?, see maintenance mode,
+    # countdown, please make sure that everything is on its own" -- now it
+    # IS per-country, and the bug to catch is the mutation reverting it.
+    ('maintenance mode reverts to being backend-wide again', SERVER,
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];"),
 
     ("the minimum cash-out stops being a country's own", SERVER,
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'minWithdraw'];"),
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled', 'minWithdraw'];"),
 
     ('every country shares one settings document', SERVER,
      "  return String(key || DEFAULT_REGION_KEY) === DEFAULT_REGION_KEY ? 'main' : 'region-' + String(key);",
@@ -307,8 +312,8 @@ MUTATIONS = [
      '      /* not applied until the cache expires */'),
 
     ('the host rules become per-country settings', SERVER,
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
-     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'linkPreviewEnabled'];"),
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
+     "const GLOBAL_ONLY_SETTINGS = ['allowedOrigins', 'brandName', 'linkPreviewEnabled'];"),
 
     ('the two host switches stop being coerced to booleans', SERVER,
      "'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts'];",
@@ -347,7 +352,7 @@ MUTATIONS = [
      "      void ADMIN_GLOBAL_ONLY;"),
 
     ('the panel and the server disagree about which settings are backend-wide', ADMIN,
-     "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'maintenanceMode', 'maintenanceMsg', 'openingCountdownEnabled', 'openingCountdownAt', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
+     "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'brandName', 'baseDomain', 'blockRootDomain', 'parkedHosts', 'strictRegionHosts', 'linkPreviewEnabled'];",
      "const ADMIN_GLOBAL_ONLY = ['allowedOrigins', 'brandName'];"),
 
     ('the picked country is no longer stamped on admin reads', ADMIN,

@@ -7030,3 +7030,125 @@ Rebuilt both bundles (round-trip OK), bumped `user/sw.js` to `chipz-shell-v111` 
 `admin/sw.js` to `chipz-admin-shell-v27`, and ran the full `test-*.js` suite (34 files,
 all green).
 
+## Round 179b — Maintenance mode and the countdown were backend-wide, and the auto-ban is gone
+
+Owner, a round later: *"Some settings affect whole countries why?, see maintenance
+mode, countdown, please make sure that everything is on its own and remove auto ban."*
+
+### Why maintenance mode leaked across countries
+`GLOBAL_ONLY_SETTINGS` decides which settings `getSettings()` strips out of a
+non-founding region's own overlay document before layering it onto Uganda's
+(`settings/main`). It held `maintenanceMode`, `maintenanceMsg`,
+`openingCountdownEnabled` and `openingCountdownAt` alongside the fields that
+genuinely have no per-country meaning — so putting **Uganda** into maintenance, or
+scheduling **Uganda's** opening countdown, took every other country down with it too,
+and a country trying to set its **own** maintenance switch had it silently stripped
+from its save. Nothing about either field is structurally incapable of varying by
+country: the request middleware that enforces both already reads `getSettings()` for
+the **current** region (it always has — region resolution runs before it), so the only
+thing wrong was the storage layer refusing to let a region keep its own copy.
+
+**`GLOBAL_ONLY_SETTINGS` is now only what is actually incapable of varying by
+country**, split into two real categories rather than one undifferentiated list:
+- `allowedOrigins`/`baseDomain`/`blockRootDomain`/`parkedHosts`/`strictRegionHosts` —
+  decide which **hostnames** may reach the backend at all, resolved before any region
+  is even known.
+- `brandName`/`linkPreviewEnabled` — tied to **static, single-copy files**
+  (`manifest.json`'s name, the `og:`/`twitter:` tags in the page head) that genuinely
+  have only one copy, shared by every country and every host.
+
+`maintenanceMode`/`maintenanceMsg`/`openingCountdownEnabled`/`openingCountdownAt` are
+gone from that list. They now behave exactly like every rate and limit in this file —
+layered per region on top of Uganda's, editable from any country's Settings screen, no
+longer silently stripped or bleeding into a country that never asked for it. The
+admin panel's own `ADMIN_GLOBAL_ONLY` (which strips the same fields client-side before
+a save, so the server doesn't refuse the whole Rates payload over one backend-wide
+field mixed into it) was updated to match — the two lists are asserted to stay in
+exact sync in `test-regions.js`, so they can never quietly disagree again. The
+Settings-tab caption explaining what's per-country versus backend-wide, and its
+translated pattern row across all five languages, were rewritten to match (moved from
+"first four are only editable on {1}" to "first two", since only the app name and the
+domain allowlist are left in that category).
+
+### The auto-ban: removed, not patched again
+Round 179 (the one directly above) had already fixed the specific false-positive path
+where a structurally-doomed manual deposit attempt counted toward the 5-in-a-minute
+threshold. The owner's response was not "good, that's fixed" — it was to remove the
+whole mechanism. Fair: this is the **second** time this exact "5 deposit attempts in a
+minute" auto-ban has produced a real false suspension report (the first is quoted
+verbatim in `server.js`'s own `/deposit/marzpay` comment, from an earlier round: *"when
+you try to deposit with little amount, it says minimum deposit is 30k, when you try
+again deposit with that very minimum amount, it says deposit is already being
+processed!!, when you try again once more it says account suspended"*), and a
+heuristic that keeps finding new ways to suspend a confused, legitimate member is a bad
+bet regardless of how many times its edge cases get patched.
+
+**Deleted, not merely unlinked** (a removed feature whose helpers stay reachable is
+exactly the kind of thing that gets called again by accident): `banUserAutomatically()`,
+`recordDepositAttempt()`, `undoDepositAttempt()`, `markDepositAttemptSucceeded()`,
+`depositSucceededRecently()`, and the `_depAttempts`/`_depAttemptsSucceededAt` maps,
+along with their call sites in `/deposit/marzpay` and `/deposit/manual/init` and their
+cleanup lines in `sweepEphemeralState()`. **`_depCreateDebounce`** (the unrelated "a
+deposit is already being processed" 7-second guard) stays exactly as it was — it never
+banned anyone, it only ever stopped one impatient double-tap from creating two rows
+for the same recharge.
+
+**Nothing else fills the gap, and nothing needs to.** A burst of deposit attempts is
+still visible to an admin via `logSecurityEvent()`/the Suspicious Activity analytics
+tab; it simply no longer bans anyone without a human deciding to. `POST
+/admin/user/ban` (the owner's own manual ban/unban toggle) is completely untouched —
+removing an automatic heuristic must not remove the ability to ban someone on purpose.
+
+**One different automatic ban was deliberately left in place, and is worth being
+explicit about since the owner's instruction was a blanket "remove auto ban":**
+`applyDepositReversal()` bans and debits an account when MTN's own network reverses a
+deposit that had already been credited — a confirmed clawback, not a retry-count
+heuristic. It responds to an external fact (money that WAS credited has since been
+taken back by the network), not to a member's own confused behaviour, and removing it
+would reopen a real fraud path with no replacement. Both `test-region-networks.js` and
+the corresponding mutation harness assert it is still there, by name, so a future
+sweep of "everything with 'ban' in it" cannot accidentally take it out too. If the
+owner does mean this one as well, that is a one-line ask away — it was not assumed.
+
+### Tests
+`test-region-networks.js`'s ban-counter section (Round 179's `undoDepositAttempt()`
+coverage) is replaced with a positive-removal check: every one of the six deleted
+identifiers is confirmed **absent** from live code (comments stripped first, so this
+round's own explanatory comment naming them doesn't defeat the scan — the same trap
+this project has hit five times before), both deposit routes still have their debounce
+and still only ever **read** an existing `'banned'` status, never write a fresh one,
+and the MTN-reversal ban and the admin's manual ban/unban route are both confirmed
+**present**. `verify-region-networks-discriminates.py`'s two ban-counter mutations
+are replaced with two that reintroduce the removed mechanism (the whole abuse-guards
+block, and a fresh ban write inside `/deposit/manual/init`) — both caught. 20
+mutations total, all behave as intended.
+
+`test-regions.js` gained a section that **runs the real `getSettings()`** (lifted with
+`settingsDocId()` and the real `GLOBAL_ONLY_SETTINGS` array alongside it, not a second
+copy of either) against a stub database holding two regions — Uganda with maintenance
+on and its own message, Kenya with maintenance off and a **different** message set on
+purpose (to prove isolation rather than the separate, correct "inherits when unset"
+layering every other setting already has) — and asserts each country reads its own
+switch and its own message, while an ordinary per-region rate (`minWithdraw`) still
+overrides exactly as before. Sanity-checked by temporarily reverting
+`GLOBAL_ONLY_SETTINGS` to its old contents and confirming the new assertions fail for
+the reported reason (Kenya reads Uganda's maintenance flag and message), not some
+unrelated cause. The existing static `GLOBAL_ONLY_SETTINGS` membership checks were
+**flipped**, not merely updated — before, `maintenanceMode`/`openingCountdownEnabled`
+were in the "must stay backend-wide" list; now they're in the "must be per-country"
+list, which is the whole point of this round.
+
+`verify-regions-discriminates.py` had **four** mutations anchored on the old
+`GLOBAL_ONLY_SETTINGS`/`ADMIN_GLOBAL_ONLY` array contents (`maintenanceMode` included),
+all now stale by construction — re-anchored to the current arrays, and one
+(`'maintenance mode becomes a per-country setting'`) had its **direction flipped**
+along with its name: before this round it described the bug to catch (maintenance mode
+escaping to per-country); now the same array is correct per-country and the bug to
+catch is a mutation putting it **back** to backend-wide. All 224 mutations in that
+suite are caught, control behaved, tree restores cleanly.
+
+Rebuilt both bundles (round-trip OK), bumped `user/sw.js` to `chipz-shell-v112` and
+`admin/sw.js` to `chipz-admin-shell-v28`, ran the full `test-*.js` suite (34 files, all
+green), and spot-checked the admin i18n coverage sweep across all five languages after
+touching a widely-visible translated sentence (0 findings in every one).
+

@@ -69,14 +69,35 @@ MUTATIONS = [
      "if (!holder || !['MTN Mobile Money', 'Airtel Money'].includes(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });",
      True),
 
-    ('the ban-counter fix is dropped: a structurally-doomed attempt counts toward the auto-ban again', SERVER,
-     "    if (result.empty) {\n      // Structurally impossible, not merely busy -- see undoDepositAttempt().\n      undoDepositAttempt(userId);",
-     "    if (result.empty) {",
+    # The deposit-attempts auto-ban itself is removed (Round 179b), not
+    # merely patched -- these mutations re-introduce the removed mechanism
+    # piece by piece and require the removal to be noticed.
+    ('the deposit-attempts auto-ban mechanism is reintroduced wholesale', SERVER,
+     "// ── DEPOSIT / WITHDRAWAL ABUSE GUARDS ──\n// The \"5 deposit attempts in a minute\" AUTOMATIC ban is gone",
+     "// ── DEPOSIT / WITHDRAWAL ABUSE GUARDS ──\n"
+     "const _depAttempts = new Map();\n"
+     "function recordDepositAttempt(userId) { const arr = (_depAttempts.get(userId) || []); arr.push(Date.now()); _depAttempts.set(userId, arr); return arr.length; }\n"
+     "async function banUserAutomatically(userId, reason) { await db.collection('users').doc(userId).update({ status: 'banned', banReason: reason }); }\n"
+     "// The \"5 deposit attempts in a minute\" AUTOMATIC ban is gone",
      True),
 
-    ('undoDepositAttempt no longer actually removes the last recorded attempt', SERVER,
-     'function undoDepositAttempt(userId) {\n  const arr = _depAttempts.get(userId);\n  if (!arr || !arr.length) return;\n  arr.pop();',
-     'function undoDepositAttempt(userId) {\n  const arr = _depAttempts.get(userId);\n  if (!arr || !arr.length) return;',
+    ('/deposit/manual/init bans a member for repeated deposit attempts again', SERVER,
+     "    const lastDep = _depCreateDebounce.get(userId) || 0;\n"
+     "    if (Date.now() - lastDep < 7000)\n"
+     "      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });\n"
+     "    _depCreateDebounce.set(userId, Date.now());\n"
+     "\n"
+     "    // uniqueRef() is a real DB round trip",
+     "    const lastDep = _depCreateDebounce.get(userId) || 0;\n"
+     "    if (Date.now() - lastDep < 7000)\n"
+     "      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });\n"
+     "    if ((_depCreateDebounce.get('attempts:' + userId) || 0) >= 5) {\n"
+     "      await db.collection('users').doc(userId).update({ status: 'banned' });\n"
+     "      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });\n"
+     "    }\n"
+     "    _depCreateDebounce.set(userId, Date.now());\n"
+     "\n"
+     "    // uniqueRef() is a real DB round trip",
      True),
 
     ('/admin/regions/save no longer refuses more than 8 networks', SERVER,
