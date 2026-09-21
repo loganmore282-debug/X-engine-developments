@@ -147,13 +147,25 @@ async def main():
         await page.evaluate("closeAnnounce && closeAnnounce()")
 
         # ── open the status page through the real form ──
-        await page.evaluate("openDepositSheet()")
-        await page.wait_for_timeout(700)
-        await page.evaluate("""() => {
-            document.getElementById('depAmount').value = '20000';
-            document.getElementById('depPhone').value = '0742730382';
-        }""")
-        await page.evaluate("() => { submitDeposit(); }")
+        #
+        # Both PAY A and PAY B now collect network + phone on the SAME
+        # network-selector overlay (Round: "l want automatic payment to pass
+        # through that procedure however after confirmation, it will come
+        # back to auto poll not on the final manual pay screen") -- the
+        # amount-only first sheet just opens that overlay, then Confirm there
+        # calls /deposit/marzpay and hands off to this same status page.
+        async def start_recharge(amount):
+            await page.evaluate("openDepositSheet()")
+            await page.wait_for_timeout(700)
+            await page.evaluate(f"document.getElementById('depAmount').value='{amount}'")
+            await page.evaluate("submitDepositChoice()")
+            await page.wait_for_timeout(700)
+            await page.evaluate(
+                """() => document.querySelector('.mp-method[data-method="MTN Mobile Money"]').click()""")
+            await page.evaluate("document.getElementById('manPayPhone').value='0742730382'")
+            await page.evaluate(f"() => {{ manualPayConfirm({amount}); }}")
+
+        await start_recharge(20000)
         await page.wait_for_timeout(900)
 
         print("— the pending screen says the owner's four steps —")
@@ -247,12 +259,7 @@ async def main():
         # Back to a fresh pending screen.
         await page.evaluate("showPage('home')")
         await page.wait_for_timeout(400)
-        await page.evaluate("openDepositSheet()")
-        await page.wait_for_timeout(600)
-        await page.evaluate("""() => {
-            document.getElementById('depAmount').value = '20000';
-            document.getElementById('depPhone').value = '0742730382'; }""")
-        await page.evaluate("() => { submitDeposit(); }")
+        await start_recharge(20000)
         await page.wait_for_timeout(800)
 
         vis = await page.evaluate("""() => {

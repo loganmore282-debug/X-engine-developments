@@ -134,80 +134,95 @@ async def main():
         await page.evaluate("closeSheet({fromAction:true})")
         await page.wait_for_timeout(400)
 
+        # Both PAY A and PAY B now collect network + phone on the SAME
+        # network-selector overlay (Round: "l want automatic payment to pass
+        # through that procedure however after confirmation, it will come
+        # back to auto poll not on the final manual pay screen") -- the
+        # amount-only first sheet just opens that overlay. This helper
+        # reaches it the same way a member does: amount, Confirm, tap MTN's
+        # tile. The phone is left to each case below.
+        async def open_network_screen(amount):
+            await page.evaluate("openDepositSheet()")
+            await page.wait_for_timeout(700)
+            await page.evaluate(f"document.getElementById('depAmount').value='{amount}'")
+            await page.evaluate("submitDepositChoice()")
+            await page.wait_for_timeout(700)
+            await page.evaluate(
+                """() => document.querySelector('.mp-method[data-method="MTN Mobile Money"]').click()""")
+
         print("\n— an empty phone is refused before anything is sent —")
-        # Owner: "l tried to leave not putting number and clicked confirm
-        # deposit but it didn't reject it just continued to go to poll page."
-        # Driven through the REAL form, and asserting the two things that
-        # actually went wrong: a request left the phone, and the poll page
-        # opened. Checking only for an alert would pass on a build that still
-        # fired the deposit.
+        # Owner (an earlier round): "l tried to leave not putting number and
+        # clicked confirm deposit but it didn't reject it just continued to
+        # go to poll page." That guard now lives on the network-selector
+        # screen's own Confirm (manualPayConfirm), reached identically by
+        # PAY A and PAY B -- driven through the REAL form here too, checking
+        # the two things that actually matter: no request left, no poll page
+        # opened.
         await page.evaluate("""()=>{window.__deposits=[];const f=window.fetch;
           window.fetch=function(u,o){ if(String(u).includes('/deposit/marzpay'))
             window.__deposits.push(String(u)); return f.apply(this,arguments);};}""")
-        await page.evaluate("openDepositSheet()")
-        await page.wait_for_timeout(700)
-        filled = await page.evaluate("""()=>{const a=document.getElementById('depAmount'),
-            p=document.getElementById('depPhone');
-          if(!a||!p) return false; a.value='50000'; p.value=''; return true;}""")
-        ck(filled, "the recharge form is open with an amount and NO phone")
-        await page.evaluate("submitDeposit()")
+        await open_network_screen(50000)
+        await page.evaluate("document.getElementById('manPayPhone').value=''")
+        await page.evaluate("manualPayConfirm(50000)")
         await page.wait_for_timeout(900)
         ck(await page.evaluate("()=>window.__deposits.length") == 0,
            "no deposit request is sent (%s)" % await page.evaluate("()=>window.__deposits"))
         ck(not await page.evaluate("()=>document.getElementById('depStatusBg').classList.contains('show')"),
            "and the poll page does NOT open")
-        ck(await page.evaluate("()=>document.getElementById('notifyBg').classList.contains('show')"),
-           "the member is told, in the alert card")
-        said = await page.evaluate("()=>document.getElementById('notifyMsg').textContent")
-        ck('number' in said.lower(), "and told about the NUMBER specifically (%r)" % said)
-        await page.evaluate("closeNotify && closeNotify()")
+        toastState = await page.evaluate("""()=>{const t=document.getElementById('manPayToast');
+          return {shown: !!t && t.classList.contains('show'),
+                   msg: (document.getElementById('manPayToastMsg')||{}).textContent || ''};}""")
+        ck(toastState['shown'], "the member is told, via the network screen's own toast")
+        ck('payment account' in toastState['msg'].lower(),
+           "and told about the number specifically (%r)" % toastState['msg'])
         await page.wait_for_timeout(300)
         # A half-typed number is no better than none.
-        await page.evaluate("""()=>{document.getElementById('depAmount').value='50000';
-          document.getElementById('depPhone').value='07';}""")
-        await page.evaluate("submitDeposit()")
+        await page.evaluate("document.getElementById('manPayPhone').value='07'")
+        await page.evaluate("manualPayConfirm(50000)")
         await page.wait_for_timeout(700)
         ck(await page.evaluate("()=>window.__deposits.length") == 0,
            "a half-typed number is refused too")
-        await page.evaluate("closeNotify && closeNotify(); closeSheet({fromAction:true})")
+        await page.evaluate("closeManualPayOverlay && closeManualPayOverlay({fromAction:true})")
         await page.wait_for_timeout(400)
 
-        print("\n— the 'Redirecting to payment' loader —")
+        print("\n— the loaders around a PAY-A recharge —")
         # Owner: "see critically after confirm deposit a loader saying
-        # Redirecting to payment." It only means anything against a SLOW
-        # response: on an instant one it would flash by unobservably, and a
-        # test that checked the flag rather than the screen could pass on a
-        # build that never showed it. So the endpoint is stalled for 2s.
+        # Redirecting to payment." That loader (#depRedirect) now covers the
+        # brief SHEET-TO-OVERLAY transition only, the same 400ms hop PAY B's
+        # own transition always used -- the two are the same transition now,
+        # unified in an earlier round ("PAY B uses the same 'Redirecting to
+        # payment…' loader as PAY-A"). The GATEWAY REQUEST ITSELF, fired from
+        # the network screen's own Confirm, shows that screen's own generic
+        # loader (#manPayLoading) -- exactly how PAY B's /deposit/manual/init
+        # call has always shown it. Stalled 2s so a real in-flight sample is
+        # possible; an instant response would flash by unobservably.
         async def slow_dep(r):
             await asyncio.sleep(2.0)
             await r.fulfill(status=200, content_type="application/json",
                             body=json.dumps({"status": "success", "depositId": "d1"}))
         await page.route(f"{API}/deposit/marzpay", slow_dep)
-        await page.evaluate("openDepositSheet()")
-        await page.wait_for_timeout(700)
-        await page.evaluate("""()=>{document.getElementById('depAmount').value='50000';
-          document.getElementById('depPhone').value='0742730382';}""")
-        # NOT `evaluate("submitDeposit()")`: that returns the async function's
-        # promise, which Playwright awaits -- so the call would not come back
-        # until the request had already resolved and the loader was down
-        # again, and the "mid-flight" check would run after the flight. Fire
-        # it and return undefined instead.
-        await page.evaluate("()=>{ submitDeposit(); }")
+        await open_network_screen(50000)
+        await page.evaluate("document.getElementById('manPayPhone').value='0742730382'")
+        # NOT `evaluate("manualPayConfirm(...)")`: that returns the async
+        # function's promise, which Playwright awaits -- so the call would
+        # not come back until the request had already resolved, and the
+        # "mid-flight" check would run after the flight. Fire it and return
+        # undefined instead.
+        await page.evaluate("()=>{ manualPayConfirm(50000); }")
         await page.wait_for_timeout(700)          # genuinely mid-flight now
-        st = await page.evaluate("""()=>{const el=document.getElementById('depRedirect');
-          if(!el) return null; const cs=getComputedStyle(el);
-          return {shown:el.classList.contains('show'), display:cs.display,
-                  text:(el.textContent||'').trim(),
-                  ring:!!el.querySelector('.dep-redirect-ring')};}""")
-        ck(bool(st) and st['shown'] and st['display'] != 'none',
-           "the loader is up while the request is in flight (%s)" % st)
-        ck(bool(st) and 'redirecting to payment' in st['text'].lower(),
-           "and says Redirecting to payment (%r)" % (st or {}).get('text'))
-        ck(bool(st) and st['ring'], "with a spinner")
+        st = await page.evaluate("""()=>{const el=document.getElementById('manPayLoading');
+          if(!el) return null;
+          return {shown: !el.classList.contains('mp-hidden'),
+                  text: (el.innerText||'').trim()};}""")
+        ck(bool(st) and st['shown'], "the network screen's own loader is up while the gateway request is in flight (%s)" % st)
+        ck(bool(st) and 'loading' in st['text'].lower(), "and it says Loading (%r)" % (st or {}).get('text'))
         await page.screenshot(path=f"{OUT}/redirecting.png")
         await page.wait_for_timeout(2200)         # let it resolve
-        ck(not await page.evaluate("()=>document.getElementById('depRedirect').classList.contains('show')"),
-           "and it comes down once the request resolves")
+        ck(await page.evaluate("()=>!document.getElementById('manualPayBg').classList.contains('show')"),
+           "the overlay itself closes on success, handing off to the poll screen")
+        ck(await page.evaluate("()=>document.getElementById('depStatusBg').classList.contains('show')"),
+           "which is the same poll screen PAY A always landed on")
+        await page.evaluate("closeDepositStatusModal && closeDepositStatusModal()")
         # And on a REFUSED recharge -- the finally{} is what guarantees this;
         # a loader left covering the form would be worse than none at all.
         await page.unroute(f"{API}/deposit/marzpay")
@@ -216,17 +231,16 @@ async def main():
             await r.fulfill(status=400, content_type="application/json",
                             body=json.dumps({"status": "error", "message": "Nope"}))
         await page.route(f"{API}/deposit/marzpay", bad_dep)
-        await page.evaluate("closeDepositStatusModal && closeDepositStatusModal()")
-        await page.evaluate("openDepositSheet()")
-        await page.wait_for_timeout(700)
-        await page.evaluate("""()=>{document.getElementById('depAmount').value='50000';
-          document.getElementById('depPhone').value='0742730382';}""")
-        await page.evaluate("()=>{ submitDeposit(); }")
+        await open_network_screen(50000)
+        await page.evaluate("document.getElementById('manPayPhone').value='0742730382'")
+        await page.evaluate("()=>{ manualPayConfirm(50000); }")
         await page.wait_for_timeout(1400)
-        ck(not await page.evaluate("()=>document.getElementById('depRedirect').classList.contains('show')"),
+        ck(await page.evaluate("()=>document.getElementById('manPayLoading').classList.contains('mp-hidden')"),
            "a refused recharge does not leave the loader stuck over the form")
+        ck(await page.evaluate("()=>document.getElementById('manualPayBg').classList.contains('show')"),
+           "and the member stays on the network screen to try again, rather than being bounced out")
         await page.unroute(f"{API}/deposit/marzpay")
-        await page.evaluate("closeNotify && closeNotify(); closeSheet({fromAction:true})")
+        await page.evaluate("closeManualPayOverlay && closeManualPayOverlay({fromAction:true})")
         await page.wait_for_timeout(400)
 
         print("\n— polling —")

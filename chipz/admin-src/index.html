@@ -3374,8 +3374,8 @@ function applyAdminBrandName(name){
   try { document.title = n + ' Admin'; } catch (_) {}
 }
 async function renderSettings(){
-  const [r, br, hbr, air, abr, pr, mnr, mpir, cir, bar] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list'), api('/admin/manual-numbers/list', {}), api('/admin/manual-pay-images'), api('/admin/chipz-images'), api('/admin/brand-assets')
+  const [r, br, hbr, air, abr, pr, mnr, mpir, cir, bar, nlr] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list'), api('/admin/manual-numbers/list', {}), api('/admin/manual-pay-images'), api('/admin/chipz-images'), api('/admin/brand-assets'), api('/admin/network-logos')
   ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
@@ -3396,6 +3396,7 @@ async function renderSettings(){
   const profileGifImage = cir.profilegif||'';
   const manualSelectorImage = mpir.selector||'';
   const manualHeroImage = mpir.hero||'';
+  const networkLogoRows = Array.isArray(nlr.logos) ? nlr.logos : [];
   // The app icon and the share card always HAVE an image live (the icon falls
   // back to the one built into the app), so the panel needs the separate
   // `custom` flags to say whether it is the owner's or the stock one --
@@ -3501,7 +3502,7 @@ async function renderSettings(){
 
     <h2 class="sec">Manual payments</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Members now see up to 2 payment options on the Recharge screen, labelled neutrally "PAY A" and "PAY B" (no "manual"/"automatic" wording is ever shown to them) -- enable either one alone, or both at once so the member picks. <b>PAY A</b> is the automatic gateway (MarzPay, LipaPay or PesaJet, chosen below) -- instant, no admin numbers needed, and no network to select either: the gateway detects it from the phone number. <b>PAY B</b> is manual -- assigns the member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
+      <p class="muted" style="margin-top:0">Members now see up to 2 payment options on the Recharge screen, labelled neutrally "PAY A" and "PAY B" (no "manual"/"automatic" wording is ever shown to them) -- enable either one alone, or both at once so the member picks. Both now collect a network and phone number on the same screen, using each country's own network list and the logos set below. <b>PAY A</b> is the automatic gateway (MarzPay, LipaPay or PesaJet, chosen below) -- instant, no admin numbers needed. <b>PAY B</b> is manual -- assigns the member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:6px;"><input type="checkbox" id="depPayAOn" ${v('depositPayAEnabled',true)?'checked':''} style="width:auto"> <b>Enable PAY A</b> (automatic)</label>
       <div id="depPayAGateway" style="margin:0 0 12px 26px">
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> MarzPay</label>
@@ -3545,6 +3546,27 @@ async function renderSettings(){
       <label style="display:flex;align-items:center;gap:8px;width:auto;margin:8px 0 0;font-weight:500"><input type="checkbox" id="mpHeroStrip" checked style="width:auto;margin:0"><span>Cut the dark background off this logo</span></label>
       <label class="btn block file-btn" style="margin-top:8px">Upload image<input type="file" id="mpHeroImgFile" accept="image/*" hidden></label>
       <p class="muted" style="margin:10px 0 0">Both thumbnails sit on a checkerboard, so you can see straight away whether the background really came off. Only background touching the EDGE of the picture is removed &mdash; black inside the artwork, an outline or dark lettering, is left alone. Untick the box to upload a logo exactly as it is.</p>
+    </div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin:0 0 6px">Network logos</h2>
+      <p class="muted" style="margin-top:0">Members now pick a network (MTN, Airtel, Orange, M-Pesa...) on the Recharge and manual-payment screens, on BOTH PAY A and PAY B -- and each country only shows the networks you gave it under Countries &rarr; <i>Networks this country offers</i>. Upload one logo per network NAME here (not per country) &mdash; "MTN Mobile Money" is used by every country whose list has that exact name, since the logo belongs to the network, not to any one country's list. A network with no logo shows a plain letter tile instead of a blank one.</p>
+      <div id="networkLogoList">
+        ${networkLogoRows.length ? networkLogoRows.map(row => `
+        <div class="banner-row" data-nl-key="${esc(row.key)}">
+          ${row.image?`<img class="img-thumb alpha" src="${esc(row.image)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+          <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${esc(row.name)}</div>
+          <button class="btn danger sm nl-clear-btn" data-name="${esc(row.name)}">Remove</button>
+        </div>`).join('') : '<p class="muted" style="margin:0">No network logos uploaded yet.</p>'}
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-top:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px">
+          <label style="margin:0">Network name</label>
+          <input id="nlName" type="text" list="nlNameOptions" placeholder="e.g. MTN Mobile Money" maxlength="40">
+          <datalist id="nlNameOptions">${Array.from(new Set((ADMIN_REGIONS||[]).flatMap(r => Array.isArray(r.networks) ? r.networks : []))).map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;width:auto;margin:0 0 10px;font-weight:500"><input type="checkbox" id="nlStrip" checked style="width:auto;margin:0"><span>Cut the dark background off</span></label>
+      </div>
+      <label class="btn block file-btn" style="margin-top:8px">Upload logo<input type="file" id="nlFile" accept="image/*" hidden></label>
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin:0 0 6px">Payment reminder</h2>
@@ -4204,6 +4226,37 @@ async function renderSettings(){
       if (d.status==='success') renderSettings();
     })());
   });
+  // Same PNG-with-optional-background-removal path the two manual-pay
+  // brand slots use above, keyed by the typed network NAME rather than a
+  // fixed slot -- see server.js's own "Network logos" section for why a
+  // name (not a country) is the key.
+  const nlFileInput = $('nlFile');
+  if (nlFileInput) nlFileInput.addEventListener('change', async e=>{
+    const f = e.target.files[0]; if (!f) return;
+    const name = ($('nlName').value || '').trim();
+    if (!name) { toast('Type the network name first', 'err'); e.target.value = ''; return; }
+    const strip = !!($('nlStrip') && $('nlStrip').checked);
+    await withTabBusy((async()=>{
+      try {
+        toast(strip ? 'Cutting the background…' : 'Uploading…', 'ok');
+        const r = await fileToLogoPng(f, 512, strip);
+        const d = await api('/admin/network-logo/set', { name, image: r.url });
+        if (d.status !== 'success') return toast(d.message || 'Failed', 'err');
+        toast(!strip ? 'Saved as it is'
+              : r.cleared ? 'Background removed, live for every country with this network'
+              : 'Saved, but no dark background was found to cut off', r.cleared || !strip ? 'ok' : 'warn');
+        renderSettings();
+      } catch(err){ toast(err.message||'Could not read image','err'); }
+    })());
+  });
+  document.querySelectorAll('.nl-clear-btn').forEach(btn => btn.addEventListener('click', async()=>{
+    const name = btn.dataset.name;
+    await withTabBusy((async()=>{
+      const d = await api('/admin/network-logo/clear', { name });
+      toast(d.status==='success'?'Removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  }));
   $('saveMpReminder').addEventListener('click', async()=>{
     const upd = { manualPayReminderMtn:$('mpReminderMtn').value, manualPayReminderAirtel:$('mpReminderAirtel').value };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Payment reminder saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
@@ -4535,6 +4588,12 @@ const ADMIN_LANG_ROWS = [
   ['Why this failed', 'Lwaki kino kyagaanye', 'Kwa nini hii ilishindwa', 'Pourquoi cet échec', 'Impamvu ibi byanze', 'Ahabw\'enki eki kikaremwa'],
   ['The member saw:', 'Omuntu yalaba:', 'Mwanachama aliona:', 'Le membre a vu :', 'Umunyamuryango yabonye:', 'Omuntu akareeba:'],
   ['Raw response from the payment provider', 'Eky\'okuddamu ekitatereezebbwa okuva eri katale w\'okusasula', 'Jibu ghafi kutoka kwa mtoa huduma wa malipo', 'Réponse brute du fournisseur de paiement', 'Igisubizo mbisi kivuye ku mutanga wo kwishyura', 'Okugarukamu okutatunganisiibwe kuruga aha muheereza w\'okushashura'],
+  ['Network logos', 'Ebifaananyi by\'emikutu', 'Nembo za mitandao', 'Logos des réseaux', 'Amashusho y\'imiyoboro', 'Ebishushani by\'emiyoboro'],
+  ['Network name', 'Erinnya ly\'omukutu', 'Jina la mtandao', 'Nom du réseau', 'Izina ry\'umuyoboro', 'Eiziina ry\'omuyoboro'],
+  ['No network logos uploaded yet.', 'Tewali kifaananyi kya mukutu kyateekebwaayo.', 'Hakuna nembo za mtandao zilizopakiwa bado.', 'Aucun logo de réseau téléchargé pour le moment.', 'Nta shusho y\'umuyoboro yashyizweho kugeza ubu.', 'Tihariho kishushani ky\'omuyoboro ekyateekyweho.'],
+  ['e.g. MTN Mobile Money', 'gamba nga MTN Mobile Money', 'mfano MTN Mobile Money', 'p. ex. MTN Mobile Money', 'urugero MTN Mobile Money', 'nk\'eky\'okurorraho MTN Mobile Money'],
+  ['Members now see up to 2 payment options on the Recharge screen, labelled neutrally "PAY A" and "PAY B" (no "manual"/"automatic" wording is ever shown to them) -- enable either one alone, or both at once so the member picks. Both now collect a network and phone number on the same screen, using each country\'s own network list and the logos set below. PAY A is the automatic gateway (MarzPay, LipaPay or PesaJet, chosen below) -- instant, no admin numbers needed. PAY B is manual -- assigns the member one of the numbers below to send money to by hand, matched to their order by your phone\'s SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).', 'Abakozesa kaakano balaba emikisa egy\'okusasula okutuuka ku 2 ku layini ya Recharge, nga giyitibwa awatali kusosola "PAY A" ne "PAY B" (tewali kigambo kya "kya bukwakkulizo" oba "ekyokka kyokka" ekibalagibwa). Kkindiza emu yokka, oba zombi ziri ne omukozesa alondamu. Zombi kati zikuŋŋaanya omukutu n\'ennamba ya essimu ku layini emu, nga zikozesa olukalala lw\'omukutu olw\'ensi eyo n\'ebifaananyi ebiteekeddwa wansi. PAY A ye layini eyeekola yokka (MarzPay, LipaPay oba PesaJet, eyalondeddwa wansi) -- ya mangu, tewali nnamba za admin zeetaagisa. PAY B ya mukono -- ewa omukozesa emu ku nnamba ez\'awansi okusindika ssente mu mukono, ekigeraageranyizibwa n\'oda ye okuyita mu SMS forwarder ya ssimu yo (oba omukozesa yekka ng\'ateeka obubaka bwe obw\'okukakasa singa forwarder mpolampola).', 'Wanachama sasa wanaona chaguo hadi mbili za malipo kwenye skrini ya Recharge, zikiitwa kwa kutoegemea upande "PAY A" na "PAY B" (hakuna neno "la mkono"/"kiotomatiki" linaloonyeshwa kwao) -- washa moja peke yake, au zote mbili ili mwanachama achague. Zote mbili sasa hukusanya mtandao na nambari ya simu kwenye skrini moja, kwa kutumia orodha ya mitandao ya nchi yenyewe na nembo zilizowekwa hapa chini. PAY A ni lango la kiotomatiki (MarzPay, LipaPay au PesaJet, lililochaguliwa hapa chini) -- la papo hapo, hakuna namba za msimamizi zinazohitajika. PAY B ni ya mkono -- humpa mwanachama mojawapo ya namba zilizo hapa chini ili atume pesa kwa mkono, ikilinganishwa na oda yake kupitia kisambazaji cha SMS cha simu yako (au mwanachama mwenyewe akibandika maandishi yake ya uthibitisho ikiwa kisambazaji ni cha polepole).', 'Les membres voient désormais jusqu\'à 2 options de paiement sur l\'écran Recharge, appelées neutrement « PAY A » et « PAY B » (aucun mot « manuel »/« automatique » ne leur est jamais montré) -- activez l\'une seule, ou les deux à la fois pour que le membre choisisse. Les deux collectent désormais un réseau et un numéro de téléphone sur le même écran, en utilisant la propre liste de réseaux de chaque pays et les logos définis ci-dessous. PAY A est la passerelle automatique (MarzPay, LipaPay ou PesaJet, choisie ci-dessous) -- instantanée, aucun numéro admin requis. PAY B est manuel -- il attribue au membre l\'un des numéros ci-dessous pour envoyer l\'argent à la main, rapproché de sa commande par le transfert SMS de votre téléphone (ou en collant lui-même son texte de confirmation si le transfert est lent).', 'Abanyamuryango none babona amahitamo y\'ubwishyu kugeza kuri 2 kuri ecran ya Recharge, yitwa "PAY A" na "PAY B" nta vy\'uko (nta jambo "gukorwa n\'intoke"/"otomatike" ribagaragarira) -- fungura imwe gusa, cyangwa zombi kugira umunyamuryango ahitemo. Zombi ubu zikusanya umuyoboro n\'inomero ya telefoni ku ecran imwe, hifashishijwe urutonde rw\'imiyoboro y\'igihugu ubwacyo n\'amashusho ashyizweho hepfo. PAY A ni umuyoboro wikora ubwawo (MarzPay, LipaPay cyangwa PesaJet, watoranyijwe hepfo) -- ako kanya, nta nomero z\'umuyobozi zikenewe. PAY B ni iy\'intoke -- iha umunyamuryango imwe mu nomero ziri hepfo kugira ngo ayoherereze amafaranga mu ntoke, ihuzwa n\'itumizwa rye binyuze muri SMS forwarder ya telefoni yawe (cyangwa umunyamuryango asomeka ubwe ubutumwa bwe bw\'emeza niba forwarder igenda buhoro).', 'Abemeezi n\'obu nibareeba emiringo y\'okusasura kuhika 2 aha screen ya Recharge, ekyeeteibwa "PAY A" na "PAY B" (tihariho ekigambo kya "okukorwa n\'engaro"/"otomatiki" ekirikubareeberwa). Shumurira emwe yonka, nari zombi kugira ngu omwegyendesyereza yeecweho. Zombi hati nizikwata omuyoboro n\'enamba ya esimu aha screen emwe, nizikoresa orutonde rw\'emiyoboro rw\'ihanga ryonka n\'ebishushani ebiteekyweho hansi. PAY A niyo automatic gateway (MarzPay, LipaPay nari PesaJet, eyacwirweho hansi) -- yangu, tihariho enamba za admin ezirikwetagisibwa. PAY B n\'ey\'engaro -- neeha omwegyendesyereza emwe aha namba eziri hansi kutwaza sente omu ngaro, ekigeraniisibwa n\'oda ye okuraba omuri SMS forwarder ya esimu yaawe (nari omwegyendesyereza yenka nayeetekyera obubaka bwe obw\'okukakasa forwarder erikugyenda buhoro).'],
+  ['Members now pick a network (MTN, Airtel, Orange, M-Pesa...) on the Recharge and manual-payment screens, on BOTH PAY A and PAY B -- and each country only shows the networks you gave it under Countries → Networks this country offers. Upload one logo per network NAME here (not per country) — "MTN Mobile Money" is used by every country whose list has that exact name, since the logo belongs to the network, not to any one country\'s list. A network with no logo shows a plain letter tile instead of a blank one.', 'Abakozesa kaakano balonda omukutu (MTN, Airtel, Orange, M-Pesa...) ku layini za Recharge n\'ez\'okusasula mu mukono, ku PAY A ne PAY B zombi -- era buli nsi elaga mikutu gyo gyawadde bwokka wansi wa Countries → Emikutu eggwanga lino gye liwa. Teeka ekifaananyi kimu ku mukutu buli GUYE wano (si buli nsi) -- "MTN Mobile Money" ekozesebwa ensi zonna ezirina erinnya eryo ddala, kubanga ekifaananyi kya mukutu, si nsi emu. Omukutu ogutalina kifaananyi gulaga akabonero k\'ennukuta mu kifo ky\'ekifaananyi ekyereere.', 'Wanachama sasa huchagua mtandao (MTN, Airtel, Orange, M-Pesa...) kwenye skrini za Recharge na malipo ya mkono, kwenye zote mbili PAY A na PAY B -- na kila nchi huonyesha tu mitandao uliyoipa chini ya Countries → Mitandao nchi hii inayotoa. Pakia nembo moja kwa kila JINA la mtandao hapa (si kwa kila nchi) -- "MTN Mobile Money" hutumika na kila nchi ambayo orodha yake ina jina hilo hasa, kwa kuwa nembo ni mali ya mtandao, si ya orodha ya nchi moja. Mtandao usio na nembo huonyesha kigae cha herufi badala ya kigae tupu.', 'Les membres choisissent désormais un réseau (MTN, Airtel, Orange, M-Pesa...) sur les écrans Recharge et paiement manuel, sur PAY A ET PAY B -- et chaque pays n\'affiche que les réseaux que vous lui avez donnés sous Countries → Réseaux offerts par ce pays. Téléchargez un logo par NOM de réseau ici (pas par pays) -- « MTN Mobile Money » est utilisé par chaque pays dont la liste contient exactement ce nom, car le logo appartient au réseau, pas à la liste d\'un pays. Un réseau sans logo affiche une simple tuile-lettre au lieu d\'une tuile vide.', 'Abanyamuryango none bahitamo umuyoboro (MTN, Airtel, Orange, M-Pesa...) kuri ecran za Recharge n\'iz\'ubwishyu bw\'intoke, kuri PAY A na PAY B zombi -- kandi buri gihugu kigaragaza gusa imiyoboro wagihaye munsi ya Countries → Imiyoboro iki gihugu gitanga. Shyiraho ishusho imwe kuri IZINA ry\'umuyoboro hano (atari kuri buri gihugu) -- "MTN Mobile Money" ikoreshwa n\'ikindi gihugu cyose ururutonde rwaco rufite iryo zina neza, kuko ishusho ari iy\'umuyoboro, atari iy\'urutonde rw\'igihugu kimwe. Umuyoboro udafite ishusho werekana agasanduku k\'inyuguti aho gusanduku busa.', 'Abemeezi hati nibacwera omuyoboro (MTN, Airtel, Orange, M-Pesa...) aha screen za Recharge n\'ez\'okusasura n\'engaro, aha PAY A na PAY B zombi -- kandi buri ihanga nirioreka emiyoboro yawaguhaire yonka omuri Countries → Emiyoboro eiri ihanga rirakuha. Teekaho ekishushani kimwe aha EIZIINA ry\'omuyoboro hanu (tihali aha buri ihanga) -- "MTN Mobile Money" nekoresibwa buri ihanga eryine orutonde rurimu eiziina eryo shaho, ahakuba ekishushani n\'eky\'omuyoboro, tikwo eky\'orutonde rw\'ihanga rimwe. Omuyoboro ogutaine kishushani nigworeka akabonero k\'omuharufu omu mwanya gw\'akabonero akatalimu kintu.'],
   ['Ban', 'Gaana', 'Zuia', 'Bloquer', 'Kubuza', 'Zibira'],
   ['Credit', 'Muwe ssente', 'Ongeza pesa', 'Créditer', 'Kongeraho amafaranga', 'Mumuhe sente'],
   ['Debit', 'Muggyeko ssente', 'Toa pesa', 'Débiter', 'Gukuraho amafaranga', 'Mwihyeho sente'],

@@ -125,9 +125,11 @@ async def main():
         async def open_selector():
             await page.evaluate("openDepositSheet()")
             await page.wait_for_timeout(500)
+            # The Payment Phone field that used to live on this first sheet
+            # is gone -- amount + method only now, phone is collected on the
+            # network-selector screen this opens (manPayPhone, below).
             await page.evaluate("""() => {
                 document.getElementById('depAmount').value = '27000';
-                document.getElementById('depPhone').value = '0769968158';
                 submitDepositChoice(); }""")
             await page.wait_for_timeout(1000)
 
@@ -143,8 +145,9 @@ async def main():
         ck(t['shown'] and 'operator' in t['msg'].lower(),
            f"no operator selected -> {t['msg']!r}")
 
-        # 2. Operator chosen, number empty.
-        await page.evaluate("""() => document.querySelector('.mp-method[data-method="MTN"]').click()""")
+        # 2. Operator chosen, number empty. Tiles are built from Uganda's own
+        # real network names now (regionNetworkSet()), not a fixed 'MTN'.
+        await page.evaluate("""() => document.querySelector('.mp-method[data-method="MTN Mobile Money"]').click()""")
         await page.wait_for_timeout(200)
         await page.evaluate("manualPayConfirm(27000)")
         await page.wait_for_timeout(200)
@@ -170,13 +173,25 @@ async def main():
         ck(t['shown'] and 'format is incorrect' in t['msg'].lower(),
            f"a landline -> {t['msg']!r}")
 
-        # 5. Right length, right leading 7, but a prefix no Uganda network uses.
-        await page.evaluate("""() => { document.getElementById('manPayPhone').value = '0719968158'; }""")
+        # 5. Right length, but the wrong leading digit entirely -- not a
+        # mobile number under this country's own prefix rule at all.
+        #
+        # This used to type a genuine MTN/Airtel number on an unassigned
+        # 071 block and rely on a Uganda-only two-digit prefix list
+        # (isValidUgandaMobileNumber's own UGANDA_MOBILE_PREFIXES) that only
+        # ever existed on this manual-pay screen. Round: "for country codes
+        # or countries it should match the wallet network too" unified PAY A
+        # and PAY B onto the SAME cleanPhone() every other screen in the app
+        # already uses (REGION.prefixes, a single leading digit) -- 071 is a
+        # real Ugandan mobile prefix under that rule and is correctly
+        # ACCEPTED now, which this case was silently relying on being
+        # rejected. A number starting with the wrong digit is still refused.
+        await page.evaluate("""() => { document.getElementById('manPayPhone').value = '0812345678'; }""")
         await page.evaluate("manualPayConfirm(27000)")
         await page.wait_for_timeout(200)
         t = await toast(page)
         ck(t['shown'] and 'format is incorrect' in t['msg'].lower(),
-           f"an unused prefix -> {t['msg']!r}")
+           f"the wrong leading digit -> {t['msg']!r}")
 
         # It is a toast, not the app's alert dialog: nothing to dismiss, and it
         # clears itself.

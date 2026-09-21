@@ -18,6 +18,19 @@
  * Two Chipz-only additions are allowed through, both things he asked for in
  * their own rounds and neither a change to Snow's text, shape or weight:
  * the centred .mp-toast notices, and the app-wide Confirm-button glow sweep.
+ *
+ * A third, later round is allowed through too, and it IS a shape change --
+ * flagged rather than silently exempted. Owner: "so l want automatic
+ * payment to pass through that procedure... put names of l will just put
+ * Logos... for country codes or countries it should match the wallet
+ * network too, not everywhere mtn airtel." Snow's own design fixed exactly
+ * two tiles (MTN/Airtel); this app now serves whichever networks the
+ * member's OWN country has (regionNetworkSet()), which can be one, two or
+ * three. `.mp-airtel img{width:36px}` named a tile that no longer exists as
+ * a fixed class, and `.mp-methods` gained flex-wrap so a 3-network country
+ * (DR Congo: Vodacom/Airtel/Orange) doesn't overflow its card. Neither is a
+ * restyle of what Snow drew -- it is the same design accommodating a
+ * network COUNT Snow's reference never had to.
  */
 const fs = require('fs');
 const path = require('path');
@@ -59,6 +72,18 @@ const ALLOWED_EXTRA = [
 ];
 const isAllowedExtra = sel => ALLOWED_EXTRA.some(r => r.test(sel));
 
+// The dynamic-network-count round above, named exactly so a future
+// retokenising of the flow is still caught by the wholesale diff -- these
+// two are the ONLY selectors allowed to drop or differ from Snow's file.
+const ALLOWED_DROPPED = [
+  '#manualPayFlow .mp-method.mp-airtel img', // no fixed Airtel tile any more
+];
+const ALLOWED_MISMATCH = new Map([
+  // Snow's fixed 2-tile row never needed to wrap; a 3-network country would
+  // overflow the card without it.
+  ['#manualPayFlow .mp-methods', 'display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:16px'],
+]);
+
 const snow = rules(SNOW), ours = rules(OURS);
 ck(snow.size > 40, `found Snow's manual-pay CSS (${snow.size} rules)`);
 ck(ours.size > 40, `and ours (${ours.size} rules)`);
@@ -67,18 +92,19 @@ console.log('\n— every rule Snow has, we have with the same values —');
 let mismatched = [];
 let missing = [];
 for (const [sel, bodies] of snow) {
-  if (!ours.has(sel)) { missing.push(sel); continue; }
+  if (!ours.has(sel)) { if (!ALLOWED_DROPPED.includes(sel)) missing.push(sel); continue; }
   // A selector can legitimately appear more than once (ours adds a
   // position:relative host rule for the sweep), so Snow's body must be
   // PRESENT among ours, not necessarily the only one.
   if (!ours.get(sel).includes(bodies[0])) {
+    if (ALLOWED_MISMATCH.has(sel) && ours.get(sel).includes(ALLOWED_MISMATCH.get(sel))) continue;
     mismatched.push(`${sel}\n        snow: ${bodies[0]}\n        ours: ${ours.get(sel).join(' | ')}`);
   }
 }
-ck(missing.length === 0, `no rule was dropped (${missing.length}${missing.length ? ': ' + missing.slice(0, 3).join(', ') : ''})`);
+ck(missing.length === 0, `no rule was dropped beyond the named network-count exception (${missing.length}${missing.length ? ': ' + missing.slice(0, 3).join(', ') : ''})`);
 ck(mismatched.length === 0,
-   mismatched.length ? `${mismatched.length} rule(s) differ from Snow:\n      ` + mismatched.slice(0, 6).join('\n      ')
-                     : 'every rule matches Snow value for value');
+   mismatched.length ? `${mismatched.length} rule(s) differ from Snow beyond the named exception:\n      ` + mismatched.slice(0, 6).join('\n      ')
+                     : 'every rule matches Snow value for value, beyond the named network-count exception');
 
 console.log('\n— nothing was added to the design except what he asked for —');
 const extras = [...ours.keys()].filter(s => !snow.has(s) && !isAllowedExtra(s));

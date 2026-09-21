@@ -7354,3 +7354,149 @@ the actual MarzPay rejection reason for the Cameroon deposit (or any future auto
 gateway failure). Once that lands, the "Why this failed" row under the failed deposit
 is where to look.
 
+## Round 180 — Network logos, and PAY A joins PAY B on one network-selector screen
+
+Owner: *"make when one can select network, l know marz can detect automatically but
+just put it so after payment channel you put network so l will upload network Logos
+from admin panel, the good thing you know network of each country so put names of l
+will just put Logos... let one select amount, then no putting number, so it will
+redirect to the other manual page where l will put network logos, so there, after
+putting number he will hit that polling back there, so it will be like that."*
+Clarified when asked whether a logo is per network-name (shared across countries) or
+per country: *"orange cannot be that of airtel or airtel cannot be that of mtn, so per
+network, logos change... so l want automatic payment to pass through that procedure
+however after confirmation, it will come back to auto poll not on the final manual pay
+screen."*
+
+**Two things he also mentioned were already done, from earlier rounds, and needed no
+new work:** `REGION_DEFAULT_NETWORKS` already covers all 12 MarzPay markets (Round
+179c/Codex), and the withdrawal-wallet screen (`renderWalletSheet()`) already reads
+`regionNetworks()` for its provider list (Round 179). Confirmed by reading the code
+before touching anything, not assumed.
+
+### The shape of the change
+PAY A's phone field on the FIRST deposit sheet (amount + method) is gone. Both PAY A
+and PAY B now click through to the SAME overlay — the network-tile selector PAY B
+already had — where a member picks a network (with its admin-uploaded logo) and types
+their phone. `manualPayConfirm()` (renamed in spirit but not in name, since it now
+serves both methods) branches on `_depPayChoice`:
+
+- **PAY B** — unchanged: `/deposit/manual/init`, then the COPY & PAY code screen.
+- **PAY A** — new: `/deposit/marzpay` with the chosen network, then closes this overlay
+  and hands off to the SAME "Redirecting to payment…" poll screen PAY A always used.
+  Never the manual code screen — that one only ever applies to an admin-held account
+  number, and PAY A never had one to show.
+
+`proceedToManualPaymentMethod()` is renamed `proceedToPaymentMethod()` — it opens the
+shared screen for both methods now, and a name that still said "manual" would be lying
+about what it does the moment PAY A reaches it too, the exact class of stale-comment
+trap this file has flagged repeatedly.
+
+### The tiles: real networks, real logos, not two fixed PNGs
+`openManualPayFlow()`'s two hardcoded `MTN_LOGO_DATA_URI`/`AIRTEL_LOGO_DATA_URI` base64
+blobs and their fixed `data-method="MTN"`/`"Airtel"` buttons are gone, replaced by a
+loop over `regionNetworks()` — the member's own country's real network list, already
+wired everywhere else in the app. Each tile's artwork comes from
+`networkLogoHtml(name)`, which looks up `STATE.networkLogos[normalizedName]` (fetched
+at boot alongside the other manual-pay artwork) and falls back to a plain letter tile
+— never a blank or broken `<img>` — for a network with nothing uploaded yet.
+
+**Server: one upload per network NAME, shared across every country that has it.**
+`networkLogos` is a new Mongo collection, keyed by the SAME normalized name
+(trim + collapse whitespace + lowercase) the client matches against — "MTN Mobile
+Money" resolves identically whichever country's list it came from, because the owner's
+own words are that the logo belongs to the network, not to a country's list of them.
+`GET /public/network-logos` (cached, `IMAGE_CACHE` policy, same as the other manual-pay
+artwork), `GET /admin/network-logos` (admin list, original casing kept for display),
+`POST /admin/network-logo/set`/`clear` (owner-only, same image-shape validation and
+`fileToLogoPng()` black-background-removal upload path the two existing manual-pay
+brand slots already use). New Settings panel-card, "Network logos": upload by typed
+name (a datalist suggests every network name already configured across all countries),
+list of what is uploaded with a Remove button each.
+
+### Two bugs this surfaced and fixed while unifying the flow
+- **`resumeManualPayFlow()`** (resuming a pending manual order after a reload) still
+  mapped a saved order's network through `p.network === 'Airtel Money' ? 'Airtel' :
+  'MTN'` — a leftover from when `_manDepChosenMethod` held a short code. Now that it
+  holds the real network name directly, that ternary would have mislabeled every
+  non-MTN/Airtel network's resumed order as "MTN". Fixed: `_manDepChosenMethod =
+  p.network` directly.
+- **`renderManualPayReminder()`** — the admin-authored per-network payment-reminder
+  template — used `data.network === 'Airtel Money' ? tplAirtel : tplMtn`, an
+  unconditional two-way choice that would have shown MTN's reminder text to an Orange
+  Money or M-Pesa payer. Now: Airtel gets its own template, MTN gets its own, anything
+  else gets none (a safe default; someone else's reminder is not). Caught by writing a
+  real test for it (below) rather than by inspection — running the three cases side by
+  side is what showed the bug, reading the ternary did not.
+
+Phone validation on this screen is now `cleanPhone()` — the same region-aware rule
+every other screen in the app already applies — replacing `isValidUgandaMobileNumber()`
+(a Uganda-only sanity check with its own two-digit `UGANDA_MOBILE_PREFIXES` list,
+deleted along with it, now genuinely dead). "One rule in one place" was already this
+screen's own stated goal for the amount/phone check a round ago; this extends it to the
+network screen itself, and to PAY A, which had always used `cleanPhone()` on its own
+form regardless.
+
+### Tests
+`test-network-logos.js` runs the real functions on both sides: `networkLogoKey()`'s
+normalization, `getAllNetworkLogos()`/`getAllNetworkLogoRows()` against a stub db, each
+route's body checked for the property that matters (owner-only, the actual `.doc(key)`
+call using the normalized key — not just that the helper is mentioned somewhere in the
+route, which the first version of this test got wrong and a mutation caught), the
+client's `networkLogoKeyClient()`/`networkLogoHtml()` fallback behavior, that
+`openManualPayFlow()` is genuinely built from `regionNetworks()` and not a fixed pair,
+that PAY A's branch inside `manualPayConfirm()` calls `/deposit/marzpay` and lands on
+the poll screen (never `/deposit/manual/init`), and `renderManualPayReminder()`'s three
+cases run against a stub DOM. `verify-network-logos-discriminates.py` — **17 mutations,
+all caught**, control correctly MISSED.
+
+`test-manualpay-matches-snow.js` (the file that diffs this screen's CSS byte-for-byte
+against Snow's own stylesheet) gained two named, explained exceptions —
+`.mp-method.mp-airtel img{width:36px}` dropped (no fixed Airtel tile exists to have a
+special width any more) and `.mp-methods` gaining `flex-wrap:wrap` (a 3-network country,
+DR Congo's Vodacom/Airtel/Orange, would overflow the fixed-width row without it) — both
+flagged as a deliberate, requested shape change rather than silently allowed through.
+
+### Five Playwright tests broke on the architecture change, and fixing them found a real bug
+`test-manual-pay-feedback.py`, `test-deposit-one-screen.py`, `test-pay-poll.py`,
+`test-pay-verify.py`, `test-round-bleed-glow-marks.py` and the non-blocking
+`test-form-fields.py` diagnostic all drove the OLD shape directly (`#depPhone` on the
+first sheet, `submitDeposit()`, `data-method="MTN"`). Fixed to route through
+`submitDepositChoice()` → the network tile → `manualPayConfirm()`, matching how a
+member actually reaches either path now.
+
+**One of those failures was a genuine, independently-useful finding, not just fixture
+drift.** `test-manual-pay-feedback.py`'s "an unused prefix" case typed `0719968158`
+expecting `cleanPhone()` to reject it, because the OLD manual-pay-only check
+(`isValidUgandaMobileNumber`) carried a Uganda-specific two-digit prefix allowlist that
+`071` was never on. `cleanPhone()` — used everywhere else in the app, PAY A's own form
+included, even before this round — only checks the SINGLE leading digit
+(`REGION.prefixes`), so `071` is accepted. That is not a regression this round
+introduced: PAY A already accepted `071` numbers on its own form before today, so PAY
+B's stricter check was already an inconsistency between the two methods, invisible
+because they were two different screens. Unifying them onto one screen makes that
+inconsistency impossible to keep, and the correct fix is to unify the RULE, not to
+special-case PAY B — Uganda's operator prefix assignments keep shifting (already
+documented in `cleanPhone()`'s own history), and a hardcoded two-digit table is
+precisely the kind of thing that goes stale silently. The test's case was replaced with
+a number that fails under the UNIFIED rule (wrong leading digit entirely), and the
+comment records why the old case stopped being meaningful.
+
+Full 35-file Node suite green. Both bundles rebuilt (round-trip OK); `user/sw.js`
+bumped to `chipz-shell-v115`, `admin/sw.js` to `chipz-admin-shell-v31`.
+
+### Translations
+`admin-rows-17.py` — 6 rows for the new "Network logos" admin panel section, including
+the two long description paragraphs extracted EXACT via `dump-admin-blocks.py` (their
+only element child is inline `<i>`/`<b>` markup, so the i18n engine treats each as one
+block-translate unit — hand-retyping either risked a key that would never match).
+Admin panel sweep: 0 findings in all 5 languages. Member-app sweep (the removed Payment
+Phone field, the unified network screen, the new PAY-A poll hand-off): 0 findings in
+all 5 languages, 43 screens walked.
+
+### Owner still has to
+Upload logos for whichever networks members actually see — Admin → Settings → Network
+logos — starting with MTN Mobile Money / Airtel Money for Uganda and Orange Money for
+Cameroon/Cote d'Ivoire, since those are the countries already live. Any network with no
+logo yet shows a plain letter tile, which is correct-but-plain, not broken.
+

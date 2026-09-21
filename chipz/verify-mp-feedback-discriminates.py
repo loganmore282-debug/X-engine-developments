@@ -18,8 +18,8 @@ MUTATIONS = [
      "if (!_manDepChosenMethod) { notify('Please select the operator first'); return; }"),
 
     ("Confirm no longer raises the loader while the order is created", SRC,
-     "  manualPayLoading(true);\n  let r;\n  // finally, not a line after the await",
-     "  let r;\n  // finally, not a line after the await"),
+     "  const network = _manDepChosenMethod;\n  manualPayLoading(true);\n  // PAY-A reaches this same screen",
+     "  const network = _manDepChosenMethod;\n  // PAY-A reaches this same screen"),
 
     ("the code screen paints its blank fields with no loader over them", SRC,
      "  manualPayLoading(true);\n  _manDepId = data.depositId;",

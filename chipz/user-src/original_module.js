@@ -1461,34 +1461,6 @@ function cleanPhone(raw){
   if (pfx.length && !pfx.some(p => local.startsWith(p))) return null;
   return dialPlus() + local;
 }
-// Owner: manual-pay's own network-selector screen deliberately assigns the
-// OPPOSITE network's admin account to whichever tile the member taps (see
-// manualPayConfirm()'s own comment), so "does this number match the network
-// I picked" is no longer a meaningful check. This is a plain "is this a
-// real Uganda mobile number at all" sanity check instead -- kept
-// deliberately PERMISSIVE, not a strict MTN-vs-Airtel list, per the owner's
-// own explicit "no need to put rules": Uganda's prefix assignments keep
-// shifting (new blocks granted to operators, Mobile Number Portability
-// approved 2025) and even the owner's own reference table needed a live
-// correction mid-conversation (073, historically Africell's block --
-// Africell exited Uganda in 2021 and where those numbers landed since is
-// unconfirmed) -- so this only screens out something that clearly ISN'T a
-// mobile number (a landline, a toll-free number, garbled digits), never a
-// specific network match.
-// Uganda's own two-digit mobile blocks, still used as the sanity check on
-// the founding region. Other regions are screened on the prefix list the
-// admin gave them (REGION.prefixes) instead -- there is no way to know
-// another country's operator blocks from here, and a wrong hardcoded list
-// would refuse real numbers.
-var UGANDA_MOBILE_PREFIXES = ['70', '73', '74', '75', '76', '77', '78', '79'];
-function isValidUgandaMobileNumber(raw){
-  const d = localDigits(raw);
-  if (!d) return false;
-  if (REGION && REGION.isDefault !== false && dial() === '256')
-    return d[0] === '7' && UGANDA_MOBILE_PREFIXES.indexOf(d.slice(0, 2)) !== -1;
-  const pfx = regionPrefixes();
-  return !pfx.length || pfx.some(p => d.startsWith(p));
-}
 function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
@@ -1778,8 +1750,8 @@ async function boot(){
   // Fired together. Only the first four are awaited.
   const pSettings = api('/public/settings'), pProducts = api('/public/products');
   const pFeed = api('/public/activity-feed'), pBanner = api('/public/banner');
-  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images') ])
-    .then(([ai, mpi, ci]) => { applyBootArtwork(ai, mpi, ci); })
+  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images'), api('/public/network-logos') ])
+    .then(([ai, mpi, ci, nl]) => { applyBootArtwork(ai, mpi, ci, nl); })
     .catch(() => {});
   const [s, p, f, b] = await Promise.all([ pSettings, pProducts, pFeed, pBanner ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
@@ -1828,7 +1800,7 @@ async function boot(){
 // Everything the first screen does not need. Called when the three heavy
 // replies land -- which may be before or after the app becomes visible, so
 // it repaints whatever is currently on screen rather than assuming.
-function applyBootArtwork(ai, mpi, ci){
+function applyBootArtwork(ai, mpi, ci, nl){
   // Fetched with the rest rather than lazily on open, so the announcement
   // dialog's image is known by the time it opens (maybeShowAnnouncement
   // waits on _artPromise) instead of being fetched after it is already up.
@@ -1840,6 +1812,11 @@ function applyBootArtwork(ai, mpi, ci){
   // openManualPayFlow() first renders, not fetched lazily on first open.
   STATE.manualPaySelectorImage = (mpi.status === 'success' && mpi.selector) ? mpi.selector : null;
   STATE.manualPayHeroImage = (mpi.status === 'success' && mpi.hero) ? mpi.hero : null;
+  // Same reasoning once more: the network tiles on that same screen (now
+  // built from regionNetworks(), any country) need their logos known before
+  // the first render too, or the first paint would show fallback letters
+  // for a beat.
+  STATE.networkLogos = (nl && nl.status === 'success' && nl.logos) ? nl.logos : {};
   // Same reasoning once more for the two Chipz-only slots: the Referral
   // page banner and the brand logo on the Account profile card.
   STATE.referralBanner = (ci.status === 'success' && ci.referral) ? ci.referral : null;
@@ -5528,10 +5505,11 @@ window.openDepositSheet = function(){
   if (!payA && !payB) return notify('Recharges are not available right now.');
   openDepositFormSheet(payA, payB);
 };
-// PAY A collects straight off the member's own phone number -- no network
-// selector, because "network is detected by the marzpay system api". PAY B
-// hands off to the manual admin-numbers overlay, which collects its own
-// network and number on its own next screen.
+// Both PAY A and PAY B now collect network + phone on the SAME next screen
+// (the manual overlay's own tile selector, driven by regionNetworks() and
+// admin-uploaded logos -- see proceedToPaymentMethod()/manualPayConfirm()).
+// MarzPay can detect a network from the phone number alone, but the owner
+// wants the member to pick one explicitly either way.
 var _depChosenAmount = 0;
 var _depPayChoice = '';
 function openDepositFormSheet(payA, payB){
@@ -5558,22 +5536,15 @@ function openDepositFormSheet(payA, payB){
   // wording are unchanged.
   const live = (payA ? ['A'] : []).concat(payB ? ['B'] : []);
   const rows = live.map((which, i) => row(which, i === 0 ? 'PAY-A' : 'PAY B')).join('');
-  // PAY B never uses this field, so it is hidden unless PAY A is the live
-  // choice -- asking for a number that is about to be asked for again on the
-  // very next screen is the kind of thing that makes a payment form feel
-  // broken.
-  // ALWAYS shown, for every method and every combination. Owner: "l want even
-  // if pay a or b, the payment phone should be there ... only that one will be
-  // typing the number twice on manual payments, so don't mind with that, what
-  // l need is that payment phone should be there whether single on A available
-  // or B available."
-  //
-  // A previous round hid it for PAY B on the reasoning that the manual overlay
-  // asks for a number again on its own next screen. That reasoning was mine,
-  // not his, and he has now ruled on it: a section that appears and disappears
-  // as the method changes reads as the form breaking, and the duplicate entry
-  // is the smaller cost. PAY B still ignores this value -- its own screen
-  // collects the number it actually uses.
+  // Owner: "let one select amount, then no putting number, so it will
+  // redirect to the other manual page where l will put network logos, so
+  // there, after putting number he will hit that polling back there." The
+  // Payment Phone field that used to live on THIS screen is gone -- both
+  // methods now collect network + phone together on the next screen (the
+  // same tile-with-logo selector PAY B already had), so asking for a number
+  // here as well would be the exact double-entry the field's own previous
+  // round deliberately accepted, and he has now ruled the other way: one
+  // number, asked once, on the screen that actually needs it.
   openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
     <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
@@ -5581,13 +5552,6 @@ function openDepositFormSheet(payA, payB){
 
     <div class="dep-sec"><span class="bar"></span><span>Select Payment Method</span></div>
     ${rows}
-
-    <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
-    <div class="dep-phone">
-      <span class="prefix">${esc(dialPlus())}</span>
-      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (${esc(phoneHintBody())})" oninput="sanitizePhoneInput(this)">
-    </div>
-    <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>
 
     <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDepositChoice()">Confirm Deposit</button>
 
@@ -5611,27 +5575,12 @@ window.pickDepositPayMethod = function(which){
 };
 window.submitDepositChoice = function(){
   if (!_depPayChoice) return notify('Choose PAY-A or PAY B');
-  // Amount and phone are checked HERE, once, for BOTH methods -- not inside
-  // each branch. Owner: "when pay b is selected and no putting number, it just
-  // continues to payment page why???"
-  //
-  // It did because only the PAY-A branch validated the phone;
-  // proceedToManualPaymentMethod() checked the amount and nothing else, on the
-  // reasoning that the manual overlay collects its own number on its next
-  // screen. That reasoning does not survive contact with the screen: the
-  // Payment Phone field is right there, visible for every method (his own
-  // instruction, accepting that PAY B types it twice), so leaving it blank and
-  // sailing through is the same loophole he already caught on PAY-A.
-  //
-  // One rule in one place, using the SAME cleanPhone() the server applies, so
-  // the two methods cannot drift apart again. submitDeposit() still repeats
-  // both checks for itself -- that is the guard on the request actually being
-  // sent, and this is the guard on the form.
   const amount = parseMoneyInput($('depAmount').value);
   if (!amount || amount <= 0) return notify('Enter a valid amount');
-  if (!cleanPhone($('depPhone').value)) return notify('Enter the mobile money number to charge.');
-  if (_depPayChoice === 'A') return submitDeposit();
-  return proceedToManualPaymentMethod();
+  // Both methods now go to the same next screen (network + phone) --
+  // proceedToPaymentMethod() branches on _depPayChoice only once the member
+  // actually confirms there, not here.
+  return proceedToPaymentMethod();
 };
 
 // The chip values still come from the live product prices (owner: "juck put
@@ -5649,7 +5598,7 @@ function depositChipsHtml(s){
 
 // ── Manual deposit flow (admin numbers, SMS-matched) -- reached as PAY B,
 // either directly (openDepositSheet() above, when only PAY B is enabled)
-// or via the 2-box picker's own proceedToManualPaymentMethod() call. Owner
+// or via the 2-box picker's own proceedToPaymentMethod() call. Owner
 // supplied a complete reference payment-page design (2 screens: a payment-
 // method/phone selector, then a "COPY & PAY" code screen) and asked for it
 // used AS-IS -- original colors and layout kept exactly, only wired to
@@ -5683,17 +5632,33 @@ function depositChipsHtml(s){
 // payment company's logo inside Snow's own money-collection screen would
 // misrepresent who's actually processing the payment (it isn't GoPay --
 // it's a direct mobile-money transfer to an admin-held number), so those
-// 2 spots use Snow's own snowflake mark instead. The MTN/Airtel logos are
-// kept exactly as supplied -- unlike the GoPay mark, showing the real
-// network logos here is accurate: the destination account genuinely is a
-// real MTN/Airtel Mobile Money account, matching how mobile-money payment
-// options are shown industry-wide.
+// 2 spots use Snow's own snowflake mark instead.
+//
+// PAY-A now reaches this SAME screen too. Owner: "l know marz can detect
+// automatically but just put it so after payment channel you put network
+// so l will upload network Logos from admin panel... so l want automatic
+// payment to pass through that procedure however after confirmation, it
+// will come back to auto poll not on the final manual pay screen." The
+// tiles below used to be hardcoded to exactly MTN/Airtel with their own
+// logos baked into this file as base64 -- fine while every member was
+// Ugandan, wrong the moment a country whose real networks are Orange/
+// M-Pesa/Moov/etc. existed. They are now built from regionNetworks() (the
+// member's own country's list -- REGION_DEFAULT_NETWORKS/regionNetworkSet()
+// server-side), with each tile's artwork an admin-uploaded logo keyed by
+// that exact network NAME (see networkLogoHtml() below) rather than two
+// fixed PNGs. manualPayConfirm() branches on _depPayChoice: PAY B keeps
+// calling /deposit/manual/init and showing the COPY & PAY screen exactly
+// as before; PAY A instead calls /deposit/marzpay with the chosen network
+// and phone, then closes this overlay and hands off to the SAME
+// "Redirecting to payment…" poll screen PAY A always used -- never the
+// manual code screen, which only ever applies to an admin-held account
+// number.
 // Nothing to fetch yet at this point (network/phone aren't known until the
 // payment-method screen), so this is a purely visual transition -- a brief
 // button spinner before the amount sheet closes and the independent
 // payment overlay opens -- mirroring the reference design's own
 // step-1-to-step-2 loading overlay.
-window.proceedToManualPaymentMethod = function(){
+window.proceedToPaymentMethod = function(){
   const amount = parseMoneyInput($('depAmount').value);
   if (!amount || amount <= 0) return notify('Enter a valid amount');
   // The SAME "Redirecting to payment…" loader PAY-A uses. Owner: "the loader
@@ -5731,9 +5696,28 @@ window.proceedToManualPaymentMethod = function(){
     if (btn) btn.disabled = false;
   }, 400);
 };
-var MTN_LOGO_DATA_URI = 'data:image/png;base64,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';
-var AIRTEL_LOGO_DATA_URI = 'data:image/png;base64,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';
-var _manDepChosenMethod = ''; // 'MTN' | 'Airtel', matches the reference's own dataset.method
+// One tile-sized glyph, used as the fallback artwork for any network with
+// no admin-uploaded logo yet -- never a blank tile, which on a screen
+// whose whole job is "pick your network" would read as broken.
+function networkLogoFallbackHtml(name){
+  const letter = esc(String(name || '?').trim().charAt(0).toUpperCase() || '?');
+  return `<div style="width:29px;height:23px;border-radius:5px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#888;">${letter}</div>`;
+}
+// STATE.networkLogos is a map of NORMALIZED network name -> data URL,
+// populated at boot (see applyBootArtwork()) from the SAME admin upload
+// that fills these tiles for every country -- "Orange Money" resolves the
+// identical way whichever country's list it came from, because the logo
+// belongs to the network, not to any one country's list of them.
+function networkLogoKeyClient(name){
+  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+function networkLogoHtml(name){
+  const url = (STATE.networkLogos || {})[networkLogoKeyClient(name)];
+  return url
+    ? `<img src="${esc(url)}" alt="${esc(name)}" style="width:29px;height:23px;object-fit:contain;">`
+    : networkLogoFallbackHtml(name);
+}
+var _manDepChosenMethod = ''; // the exact network NAME the member tapped, e.g. "MTN Mobile Money"
 var _manDepId = null;
 // Owner: "no frame, let them be independent... don't expect header bars".
 // This whole flow now lives in its OWN full-screen overlay (#manualPayBg,
@@ -5758,7 +5742,7 @@ function openManualPayOverlay(html){
   // overlay takes over that same slot rather than stacking a second entry
   // on top -- one Back tap from here lands straight on Home, matching
   // every other single-purpose overlay in this app. See
-  // proceedToManualPaymentMethod()'s own comment for the real race this
+  // proceedToPaymentMethod()'s own comment for the real race this
   // avoids (pushState racing a still-pending history.back() from
   // closeSheet() tore the overlay back down the instant it opened).
   history.replaceState({ manualPay: true }, '', '');
@@ -5809,12 +5793,9 @@ function openManualPayFlow(amount){
           <div class="mp-amount-line">Payment Amount: <strong>${fmtUGX(amount)}</strong></div>
           <div class="mp-select-label">Please select a payment method</div>
           <div class="mp-methods">
-            <button type="button" class="mp-method mp-mtn" data-method="MTN" onclick="manualPayChooseMethod(this)">
-              <img src="${MTN_LOGO_DATA_URI}" alt="MTN"><span>MTN</span>
-            </button>
-            <button type="button" class="mp-method mp-airtel" data-method="Airtel" onclick="manualPayChooseMethod(this)">
-              <img src="${AIRTEL_LOGO_DATA_URI}" alt="Airtel"><span>Airtel</span>
-            </button>
+            ${regionNetworks().map(n => `<button type="button" class="mp-method" data-method="${esc(n)}" onclick="manualPayChooseMethod(this)">
+              ${networkLogoHtml(n)}<span>${esc(n)}</span>
+            </button>`).join('')}
           </div>
           <div class="mp-phone-wrap">
             <div class="mp-prefix">${esc(dialPlus())}</div>
@@ -5931,7 +5912,10 @@ function maybeResumeManualPayment(){
   resumeManualPayFlow(pending);
 }
 function resumeManualPayFlow(p){
-  _manDepChosenMethod = p.network === 'Airtel Money' ? 'Airtel' : 'MTN';
+  // p.network is already the real network name (this cache is only ever
+  // written by manualPayConfirm()'s own PAY B branch, which stores the
+  // exact tile name that was tapped) -- no MTN/Airtel remapping needed.
+  _manDepChosenMethod = p.network;
   openManualPayFlow(p.amount);
   presentManualPayCodeScreen(p);
 }
@@ -6016,7 +6000,11 @@ function presentManualPayCodeScreen(data){
   // is "send money to THIS number" is the worst possible thing to flash.
   manualPayLoading(true);
   _manDepId = data.depositId;
-  const methodLabel = data.network === 'Airtel Money' ? 'Airtel' : 'MTN';
+  // The network's own name, in full -- this is PAY B only (PAY A never
+  // reaches this screen), and now that the tiles are any country's real
+  // networks (not just MTN/Airtel), the two-way shortening below would
+  // have mislabeled every third network as "MTN".
+  const methodLabel = data.network || '';
   $('manPayMethodName').textContent = methodLabel;
   $('manPayAccountMethod').textContent = methodLabel;
   $('manPayTotal').textContent = fmtUGX(data.amount).replace(cur() + ' ', '');
@@ -6043,7 +6031,14 @@ function presentManualPayCodeScreen(data){
 // only reads as "more below" when there's genuinely another row following it.
 function renderManualPayReminder(data){
   const s = STATE.settings || {};
-  const tpl = data.network === 'Airtel Money' ? (s.manualPayReminderAirtel || '') : (s.manualPayReminderMtn || '');
+  // Only MTN Mobile Money and Airtel Money have an admin-authored template
+  // today -- any OTHER network (Orange Money, M-Pesa, Moov Money...) shows
+  // no reminder rather than being silently handed MTN's, which is what an
+  // unconditional two-way ternary used to do the moment a third network
+  // existed. No reminder is a safe default; someone else's reminder is not.
+  const tpl = data.network === 'Airtel Money' ? (s.manualPayReminderAirtel || '')
+            : data.network === 'MTN Mobile Money' ? (s.manualPayReminderMtn || '')
+            : '';
   const row = $('manPayReminderRow');
   const line = $('manPayYourAccountLine');
   if (!tpl.trim()) { if (row) row.classList.add('mp-hidden'); if (line) line.style.display = 'none'; return; }
@@ -6054,39 +6049,49 @@ function renderManualPayReminder(data){
 }
 window.manualPayConfirm = async function(amount){
   if (!_manDepChosenMethod) { manualPayToast('Please select the operator first'); return; }
-  const n = ($('manPayPhone').value || '').trim();
-  if (n.length < 9) { manualPayToast('Please enter your payment account'); return; }
-  // Owner: "no need to put rules so a notify will just appear to tell a
-  // user that the network is invalid" -- deliberately NOT a check that the
-  // number the member types is on the network they tapped. Someone paying
-  // from an Airtel line into an MTN till is doing something normal, and this
-  // screen is not the place to argue about it. This only rejects something
-  // that isn't a real Uganda mobile number at all (a landline, a toll-free
-  // number, garbled digits) -- see isValidUgandaMobileNumber()'s own comment
-  // for the permissive prefix list it checks against.
-  if (!isValidUgandaMobileNumber(n)) { manualPayToast('The mobile phone number format is incorrect'); return; }
-  // The tapped operator IS the operator of the account the member is sent to.
-  // Owner: "make sure that manual payments are matching very well on orders
-  // generated ie mtn to mtn, airtel to airtel."
-  //
-  // This line used to send the OPPOSITE network on purpose, so tapping MTN
-  // assigned an Airtel account. That reading is now withdrawn. Two things it
-  // broke, beyond the obvious: the USSD reminder printed on the code screen
-  // is chosen by `network`, so an MTN payer was shown Airtel's *185# code;
-  // and restoreManualPayPending() maps a saved order's network straight back
-  // onto the tile (Airtel Money -> the Airtel tile), so reopening a pending
-  // order showed the member an operator they had never tapped. Both are
-  // correct as-is the moment the two agree, which is what this now does.
-  const network = _manDepChosenMethod === 'MTN' ? 'MTN Mobile Money' : 'Airtel Money';
+  const raw = ($('manPayPhone').value || '').trim();
+  if (raw.length < 9) { manualPayToast('Please enter your payment account'); return; }
+  // Region-aware now, not a hardcoded Uganda check -- this same screen is
+  // reached by every country's network list, so the number has to be
+  // validated against the member's own region's shape (the same rule
+  // cleanPhone() and the server both apply), not a Uganda-only sanity
+  // check. Deliberately still NOT a "does this number match the network
+  // tapped" check (Owner: "no need to put rules so a notify will just
+  // appear to tell a user that the network is invalid") -- someone paying
+  // from an Airtel line into an MTN till is doing something normal.
+  const phone = cleanPhone(raw);
+  if (!phone) { manualPayToast('The mobile phone number format is incorrect'); return; }
+  // The tapped tile IS the network the member is sending as/to -- already
+  // the real network name now (regionNetworks() supplies the tiles), not a
+  // fixed MTN/Airtel mapping.
+  const network = _manDepChosenMethod;
   manualPayLoading(true);
+  // PAY-A reaches this same screen (Round: "l want automatic payment to
+  // pass through that procedure however after confirmation, it will come
+  // back to auto poll not on the final manual pay screen"). The manual
+  // /deposit/manual/init path below is unchanged for PAY B; PAY A instead
+  // goes through the automatic gateway and hands off to the ordinary
+  // "Redirecting to payment…" poll screen, never the COPY & PAY screen --
+  // that screen only ever applies to an admin-held account number.
+  if (_depPayChoice === 'A') {
+    let r;
+    try { r = await post('/deposit/marzpay', { amount, phone, network }); }
+    finally { manualPayLoading(false); }
+    if (!r || r.status !== 'success') { manualPayToast((r && r.message) || 'Could not start recharge'); return; }
+    await refreshTransactionsCache();
+    closeManualPayOverlay({ fromAction: true });
+    openDepositStatusModal(amount, phone, network);
+    pollDepositStatus(r.depositId);
+    return;
+  }
   let r;
   // finally, not a line after the await: a rejected init that left this
   // covering the form would be a worse bug than a missing loader.
-  try { r = await post('/deposit/manual/init', { amount, senderPhone: n, network }); }
+  try { r = await post('/deposit/manual/init', { amount, senderPhone: phone, network }); }
   finally { manualPayLoading(false); }
   if (r.status !== 'success') { manualPayToast(r.message || 'Could not start recharge'); return; }
   await refreshTransactionsCache();
-  const data = { depositId: r.depositId, network, amount: r.amount, assignedNumber: r.assignedNumber, holderName: r.holderName, senderPhone: n, expiresAt: r.expiresAt };
+  const data = { depositId: r.depositId, network, amount: r.amount, assignedNumber: r.assignedNumber, holderName: r.holderName, senderPhone: phone, expiresAt: r.expiresAt };
   saveManualPayPending(STATE.user && STATE.user.uid, data);
   presentManualPayCodeScreen(data);
 };

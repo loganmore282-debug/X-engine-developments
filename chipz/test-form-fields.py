@@ -97,14 +97,22 @@ async def main():
                   chip:h('.dep-chip'), cta:h('#depConfirmBtn')||h('.dep-sheet .primary-button'),
                   hasBulb: !!document.querySelector('.dep-instr .ic'), payAlign};}""")
         for k,v in m.items(): print("  %-9s %s" % (k,v))
+        # The Payment Phone field that used to live on the deposit sheet
+        # itself (.dep-phone) is gone -- both PAY A and PAY B now collect
+        # phone + network on the manual-pay overlay's own network-selector
+        # screen instead (.mp-phone-wrap input), which this sheet-only sweep
+        # doesn't open. Guarded rather than crashing: this file is a
+        # diagnostic printout, not a pass/fail gate, but an unguarded
+        # getComputedStyle(null) still throws and takes the whole run down.
         fit = await page.evaluate("""()=>{const i=document.querySelector('.dep-phone input');
+          if (!i) return null;
           const c=document.createElement('span'); const cs=getComputedStyle(i);
           c.style.cssText='position:absolute;visibility:hidden;white-space:pre;font:'+cs.font;
           c.textContent=i.placeholder; document.body.appendChild(c);
           const w=c.getBoundingClientRect().width; c.remove();
           const avail=i.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
           return {placeholderPx:+w.toFixed(0), availablePx:+avail.toFixed(0), fits:w<=avail};}""")
-        print("  placeholder fit:", fit)
+        print("  placeholder fit:", fit, '(N/A -- field moved to the manual-pay network-selector screen)' if fit is None else '')
         # every typed-into field on the deposit + withdraw + password screens
         for fn,label,sels in [("openDepositSheet()","Deposit",['.dep-amt','.dep-phone']),
                               ("openWithdrawSheet()","Withdraw",['.wit-amt','.wit-pw']),

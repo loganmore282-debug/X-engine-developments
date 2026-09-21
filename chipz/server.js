@@ -112,7 +112,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/manual-pay-image/set', '/admin/chipz-image/set', '/admin/app-icon/set', '/admin/link-preview/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/manual-pay-image/set', '/admin/network-logo/set', '/admin/chipz-image/set', '/admin/app-icon/set', '/admin/link-preview/set']);
 // The banner video is capped at 4 MB of actual video, which is ~5.5 MB once
 // base64'd, so it needs the huge parser -- bigJsonParser's 4 MB limit would
 // reject a legal upload before the route's own, friendlier size check ran.
@@ -1704,6 +1704,55 @@ async function getManualPayImage(slot) {
   } catch (_) { _manualPayImgCache[slot] = _manualPayImgCache[slot] || null; }
   _manualPayImgCacheTs[slot] = Date.now();
   return _manualPayImgCache[slot];
+}
+// ── NETWORK LOGOS: one upload per network NAME, shared by every country
+// that has it ──
+//
+// Owner: "orange cannot be that of airtel or airtel cannot be that of mtn,
+// so per network, logos change... so l want automatic payment to pass
+// through that procedure however after confirmation, it will come back to
+// auto poll not on the final manual pay screen." The manual-pay flow's own
+// network tile selector (previously hardcoded to exactly MTN/Airtel, with
+// their logos baked into the client as base64) now renders whichever
+// networks the member's OWN country has (REGION_DEFAULT_NETWORKS /
+// regionNetworkSet()), for BOTH the automatic (PAY A) and manual (PAY B)
+// paths -- so a logo has to exist for names that are not MTN/Airtel too
+// (Orange Money, M-Pesa, Moov Money, Zamtel Money, Vodacom M-Pesa, Free
+// Money...), uploaded by the admin rather than hand-drawn here.
+//
+// Keyed on the NETWORK NAME, not the country -- one upload of Orange
+// Money's logo is used by every country whose networks list includes that
+// exact string, the same way the name itself is already shared text across
+// regions. Normalized (trimmed, lowercased, whitespace collapsed) so
+// "Orange Money" and "orange money" resolve to the same upload; the
+// original casing is kept alongside it purely for the admin list to read
+// back what was actually typed.
+const NETWORK_LOGO_MAX = 40; // matches normalizeRegion()'s own per-network cap
+function networkLogoKey(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+let _networkLogoCache = null, _networkLogoCacheTs = 0;
+async function getAllNetworkLogos() {
+  if (Date.now() - _networkLogoCacheTs < 60 * 1000 && _networkLogoCache !== null) return _networkLogoCache;
+  try {
+    const snap = await db.collection('networkLogos').get();
+    const map = {};
+    for (const doc of snap.docs) {
+      const d = doc.data();
+      if (d && d.image) map[doc.id] = d.image;
+    }
+    _networkLogoCache = map;
+  } catch (_) { _networkLogoCache = _networkLogoCache || {}; }
+  _networkLogoCacheTs = Date.now();
+  return _networkLogoCache;
+}
+async function getAllNetworkLogoRows() {
+  // The admin list needs the ORIGINAL name (what was actually typed), not
+  // just the normalized key -- the key alone can't be shown back as a label.
+  try {
+    const snap = await db.collection('networkLogos').get();
+    return snap.docs.map(doc => ({ key: doc.id, name: doc.data().name || doc.id, image: doc.data().image || null }));
+  } catch (_) { return []; }
 }
 // Admin-authored "About" article: an ordered list of {type:'text',text} /
 // {type:'image',image} blocks -- the admin decides the order and whether/
@@ -4256,6 +4305,15 @@ app.get('/public/manual-pay-images', async (req, res) => {
     const [selector, hero] = await Promise.all([getManualPayImage('selector'), getManualPayImage('hero')]);
     publicJson(req, res, { status: 'success', selector, hero }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// One map, every uploaded network logo, keyed by the SAME normalized name
+// the client matches its region's own network list against -- fetched
+// unconditionally at boot alongside the other manual-pay artwork, for the
+// same reason: a member can reach the payment-method screen moments after
+// boot, on either PAY A or PAY B now.
+app.get('/public/network-logos', async (req, res) => {
+  try { publicJson(req, res, { status: 'success', logos: await getAllNetworkLogos() }, IMAGE_CACHE); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
 // of /public/settings, see getAboutContent()'s own comment for why.
@@ -9485,6 +9543,36 @@ app.post('/admin/manual-pay-image/clear', async (req, res) => {
   try {
     await db.collection('banners').doc('manual-' + slot).delete();
     _manualPayImgCacheTs[slot] = 0;
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the image' }); }
+});
+app.get('/admin/network-logos', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', logos: await getAllNetworkLogoRows() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/network-logo/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
+  if (!name || name.length > NETWORK_LOGO_MAX) return res.status(400).json({ status: 'error', message: `Network name must be 1-${NETWORK_LOGO_MAX} characters` });
+  const image = String(req.body.image || '');
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+    return res.status(400).json({ status: 'error', message: 'Invalid image' });
+  try {
+    const key = networkLogoKey(name);
+    await db.collection('networkLogos').doc(key).set({ name, image });
+    _networkLogoCacheTs = 0;
+    logAdminAction(req, 'network_logo_set', { name });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the image' }); }
+});
+app.post('/admin/network-logo/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ status: 'error', message: 'name is required' });
+  try {
+    await db.collection('networkLogos').doc(networkLogoKey(name)).delete();
+    _networkLogoCacheTs = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the image' }); }
 });

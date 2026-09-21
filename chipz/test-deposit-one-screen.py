@@ -137,8 +137,6 @@ async def main():
                 legacyChips: document.querySelectorAll('.quick-amt').length,
                 btn: (document.getElementById('depSubmitBtn')||{}).textContent,
                 body: document.getElementById('sheetBody').innerText,
-                phoneShown: !!document.getElementById('depPhone') &&
-                    document.getElementById('depPhone').offsetParent !== null,
                 instr: [...document.querySelectorAll('.dep-instr li')].map(li => li.textContent.trim()) })""")
 
             # The title is the single clearest tell: the two dead screens both
@@ -154,15 +152,16 @@ async def main():
             ck(got['btn'].strip() == 'Confirm Deposit',
                f"the current button label (got {got['btn']!r})")
 
-            # Owner: "l want even if pay a or b, the payment phone should be
-            # there ... whether single on A available or B available." An
-            # earlier round hid it for PAY B, reasoning that the manual overlay
-            # asks again on its own screen; he overruled that, and the field is
-            # unconditional now. So it is asserted VISIBLE in all three
-            # combinations, and still visible after switching methods -- a
-            # section that comes and goes as the radio changes is what reads as
-            # the form breaking.
-            ck(got['phoneShown'] is True, "the Payment Phone field is on the screen")
+            # Owner: "let one select amount, then no putting number, so it
+            # will redirect to the other manual page where l will put network
+            # logos." A LATER round overturned the "Payment Phone is always on
+            # this first screen" decision above -- both methods now collect
+            # network + phone together on the NEXT screen instead (the shared
+            # network-selector overlay, see test-manual-pay-feedback.py and
+            # test-network-logos.js), so this sheet asks for amount and method
+            # only. Asserted directly: the field is gone, not merely unchecked.
+            ck(await page.evaluate("!document.getElementById('depPhone')"),
+               "the Payment Phone field is no longer on this first screen")
 
             # Owner: "even deposit instructions shouldn't change please it
             # should use that new one, no changing." Collected per combination
@@ -171,12 +170,6 @@ async def main():
 
             if pay_a and pay_b:
                 ck(got['on'] == [], "with both live, neither is preselected")
-                for pick in ('B', 'A'):
-                    await page.evaluate(f"pickDepositPayMethod('{pick}')")
-                    await page.wait_for_timeout(200)
-                    still = await page.evaluate(
-                        "document.getElementById('depPhone').offsetParent !== null")
-                    ck(still, f"and it stays visible with PAY {pick} selected")
             else:
                 ck(got['on'] == want, f"the only method is preselected ({got['on']})")
 
@@ -193,17 +186,13 @@ async def main():
         await open_app(page, False, True)
         await page.evaluate("openDepositSheet()")
         await page.wait_for_timeout(600)
-        # Read in the SAME page task as the call. proceedToManualPaymentMethod()
+        # Read in the SAME page task as the call. proceedToPaymentMethod()
         # raises the loader synchronously and only then waits 400ms before
         # opening the overlay, so a Python-side read after the click would race
-        # that timer; this cannot.
+        # that timer; this cannot. Amount only now -- phone is collected on
+        # the network-selector screen this opens, not this one.
         mid = await page.evaluate("""() => {
             document.getElementById('depAmount').value = '20000';
-            // The phone is filled in here too. It was not, and this section
-            // passed anyway until the blank-number guard was added -- which
-            // means it had been exercising a path that skipped validation
-            // entirely. Both fields are what a member actually submits.
-            document.getElementById('depPhone').value = '0742730382';
             submitDepositChoice();
             const el = document.getElementById('depRedirect');
             return { shown: !!el && el.classList.contains('show'),
@@ -224,16 +213,22 @@ async def main():
            "the Confirm button is re-enabled, so backing out and retrying works")
         await ctx.close()
 
-        # ── a blank number is refused on BOTH methods ──
-        # Owner: "when pay b is selected and no putting number, it just
-        # continues to payment page why???" Only the PAY-A branch validated the
-        # phone; the manual branch checked the amount and nothing else. Both
-        # methods are driven here with the field left EMPTY, and the pass
-        # condition is what actually went wrong for him: no request left the
-        # app and no payment screen opened.
-        print("\n— a blank payment phone is refused, whichever method —")
-        for pay_a, pay_b, pick, label in [(True, False, 'A', 'the gateway'),
-                                          (False, True, 'B', 'the manual path')]:
+        # ── a blank AMOUNT is refused on both methods; a blank phone is no
+        # longer this screen's problem at all ──
+        #
+        # Owner (an earlier round): "when pay b is selected and no putting
+        # number, it just continues to payment page why???" -- fixed then by
+        # validating the phone on THIS screen before proceeding. A LATER
+        # round removed the phone field from this screen entirely (see
+        # above), so that specific guard moved with it: the phone is now
+        # validated on the network-selector screen's own Confirm
+        # (manualPayConfirm's cleanPhone() check, covered end-to-end by
+        # test-manual-pay-feedback.py's "no number"/"format is incorrect"
+        # cases and test-network-logos.js). What THIS screen still owns is
+        # the amount, so that is what stays covered here.
+        print("\n— a blank amount is refused, whichever method —")
+        for pay_a, pay_b, label in [(True, False, 'the gateway'),
+                                    (False, True, 'the manual path')]:
             ctx = await b.new_context(viewport={"width": 390, "height": 844},
                                       service_workers="block")
             page = await ctx.new_page()
@@ -243,8 +238,7 @@ async def main():
             await page.evaluate("openDepositSheet()")
             await page.wait_for_timeout(600)
             await page.evaluate("""() => {
-                document.getElementById('depAmount').value = '20000';
-                document.getElementById('depPhone').value = '';   // left blank
+                document.getElementById('depAmount').value = '';   // left blank
                 submitDepositChoice(); }""")
             await page.wait_for_timeout(1200)
             state = await page.evaluate("""() => ({
@@ -256,25 +250,27 @@ async def main():
             ck(not state['pay'] and not state['manual'],
                f"{label}: no payment screen opens (poll={state['pay']}, manual={state['manual']})")
             ck(not money, f"{label}: no deposit request is sent ({money[:1]})")
-            ck(state['notify'] and 'number' in state['msg'].lower(),
+            ck(state['notify'] and 'amount' in state['msg'].lower(),
                f"{label}: and it says why ({state['msg']!r})")
             await ctx.close()
 
-        # A valid number still gets through, so the guard is not just a wall.
-        ctx = await b.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
-        page = await ctx.new_page()
-        await open_app(page, False, True)
-        await page.evaluate("openDepositSheet()")
-        await page.wait_for_timeout(600)
-        await page.evaluate("""() => {
-            document.getElementById('depAmount').value = '20000';
-            document.getElementById('depPhone').value = '0742730382';
-            submitDepositChoice(); }""")
-        await page.wait_for_timeout(1200)
-        opened = await page.evaluate(
-            "document.getElementById('manualPayBg').classList.contains('show')")
-        ck(opened, "PAY B still proceeds once the number is filled in")
-        await ctx.close()
+        # A valid amount proceeds straight to the network-selector overlay
+        # for BOTH methods now -- there is nothing else for this screen to
+        # ask for.
+        for pay_a, pay_b, label in [(True, False, 'PAY A'), (False, True, 'PAY B')]:
+            ctx = await b.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
+            page = await ctx.new_page()
+            await open_app(page, pay_a, pay_b)
+            await page.evaluate("openDepositSheet()")
+            await page.wait_for_timeout(600)
+            await page.evaluate("""() => {
+                document.getElementById('depAmount').value = '20000';
+                submitDepositChoice(); }""")
+            await page.wait_for_timeout(1200)
+            opened = await page.evaluate(
+                "document.getElementById('manualPayBg').classList.contains('show')")
+            ck(opened, f"{label} proceeds to the network-selector overlay with amount alone")
+            await ctx.close()
 
         # ── the instruction card never changes ──
         print("\n— the deposit instructions are the same on every method —")

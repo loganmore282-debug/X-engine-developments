@@ -236,29 +236,32 @@ async def main():
             await page.close()
 
         # ── 4. The order is created on the network that was tapped ─────────
+        # Tiles carry the real network NAME as their data-method now (Round:
+        # network logos, any country's real networks -- not a fixed MTN/
+        # Airtel pair), so _manDepChosenMethod holds that same full name
+        # directly rather than a short 'MTN'/'Airtel' label.
         print("\n— MTN to MTN, Airtel to Airtel —")
-        for tile, want in (("MTN", "MTN Mobile Money"), ("Airtel", "Airtel Money")):
+        for want in ("MTN Mobile Money", "Airtel Money"):
             sent = []
             page, errs = await boot(ctx, routes(False, True), sent=sent)
             await page.evaluate("openDepositSheet()")
             await page.wait_for_timeout(500)
             await page.evaluate("""() => {
                 document.getElementById('depAmount').value = '27000';
-                document.getElementById('depPhone').value = '0769968158';
                 submitDepositChoice(); }""")
             await page.wait_for_timeout(1100)
             await page.evaluate(
-                f"""() => document.querySelector('.mp-method[data-method="{tile}"]').click()""")
+                f"""() => document.querySelector('.mp-method[data-method="{want}"]').click()""")
             await page.evaluate("""() => { document.getElementById('manPayPhone').value = '0769968158'; }""")
             await page.evaluate("manualPayConfirm(27000)")
             await page.wait_for_timeout(900)
             got = sent[0].get("network") if sent else None
-            ck(got == want, f"tapping {tile} orders a {want} account (got {got!r})")
+            ck(got == want, f"tapping the {want} tile orders a {want} account (got {got!r})")
             # And the screen agrees with the order it just placed, so reopening
             # a pending order cannot show an operator nobody tapped.
             back = await page.evaluate("_manDepChosenMethod")
-            ck(back == tile, f"and the {tile} tile stays the selected one ({back!r})")
-            ck(not errs, f"no page errors ordering on {tile} ({errs[:1]})")
+            ck(back == want, f"and the {want} tile stays the selected one ({back!r})")
+            ck(not errs, f"no page errors ordering on {want} ({errs[:1]})")
             await page.close()
 
         # ── 5. The admin panel's marks ─────────────────────────────────────
