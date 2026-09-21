@@ -882,35 +882,12 @@ try {
 // A full pass over the document. Run when the language changes -- including
 // changing back TO English, where t() returns each stored original and this
 // restores the page word for word.
-// The word the LOADING SCREEN shows, remembered on the device.
-//
-// Owner: "still more words still in English ie loader 'Loading...'". Two
-// separate reasons it could never be translated, and both had to go:
-//
-//   1. It is thirteen text nodes, ONE PER LETTER, because each letter carries
-//      its own animation-delay for the wave. The translator matches a WHOLE
-//      text node, so no row could ever apply to a node holding "L". This is
-//      the same shape as the About page's one-span-per-word bug.
-//   2. The loading screen is on screen PRECISELY WHILE the core is inflating,
-//      so even as one node there is no translator yet to do it.
-//
-// So it follows the brand name's own solution: the resolved word is written
-// to the device here, and a plain <script> beside the markup paints it before
-// the core loads. A genuinely first-ever launch in a new language shows
-// English once and is right every launch after -- the same honest trade the
-// brand name makes, and better than shipping a second copy of the table into
-// the boot script where it would drift.
-const LOADING_WORD_KEY = 'chipz_loading_word';
-function rememberLoadingWord(){
-  try {
-    const w = t('Loading');
-    localStorage.setItem(LOADING_WORD_KEY, w);
-    // Repaint it now as well: the picker can change language while the
-    // loading screen is still in the DOM (it is only hidden, not removed),
-    // and it is shown again on a re-boot.
-    if (typeof window.__paintLoadingWord === 'function') window.__paintLoadingWord(w);
-  } catch(_){}
-}
+// The loading screen used to show a translated "Loading..." word (with its
+// own localStorage-cached, pre-core-painted translation fix, since the
+// screen is on-screen precisely while the core is still inflating and
+// there is no translator yet to ask). Removed along with the rest of that
+// Chipz-specific loader treatment -- the replacement loader shows a plain
+// numeric percentage only, which needs no translation at all.
 function applyLanguage(){
   try {
     translateTree(document.body);
@@ -918,7 +895,6 @@ function applyLanguage(){
     if (btn) btn.textContent = langMeta(LANG).native;
     document.documentElement.setAttribute('lang', LANG);
     paintLangButton();
-    rememberLoadingWord();
   } catch(_){}
 }
 function setLang(code, opts){
@@ -1226,9 +1202,11 @@ function brandWordmarkHtml(){
   return n ? esc(n) : '';
 }
 // Paints the name into the places that are NOT re-rendered from JavaScript:
-// index.html's own static markup (the loading screen, the auth header, the
-// announcement banner placeholder) and the browser/tab title. Called once the
-// settings land, and safe to call again -- it only ever writes.
+// index.html's own static markup (the pre-launch countdown gate is the only
+// [data-brandmark] left -- the loading screen's own wordmark was dropped
+// along with the rest of its Chipz-derived design) and the browser/tab
+// title. Called once the settings land, and safe to call again -- it only
+// ever writes.
 //
 // The document title is as far as a running app can go. manifest.json's own
 // `name` and the og: tags are read by Chrome at install time and by link

@@ -705,6 +705,76 @@ please everything or design or term which was chipz don't use it here."*
   server.js`, `node build-core.js`, and `node build-admin.js` (round-trip
   OK on both) all pass clean after every edit in this round.
 
+**Loading screen rebuilt from scratch, from a reference GIF (owner still not
+satisfied with the loader after the round above):** owner: *"remove it even
+it has background image like that of chipz, remove it entirely, only put
+that loader everywhere for loading pages, make the best thing... check that
+loader in gif carefully how it works and use it."* Sent a screenshot of the
+live loader (dark red gradient backdrop, "PETRO" + "Loading..." text) next
+to a reference GIF of a glowing circular percentage loader on pure black.
+
+Read the GIF's actual frames (167 frames, `PIL`) rather than guessing from
+the single still Claude Code normally sees, since the owner specifically
+asked for the mechanism to be understood, not just the look copied:
+- Three concentric rings, red at the bottom of the circle fading to
+  blue/violet at the top -- a gradient FIXED in screen space, not rotating
+  with the ring.
+- The visible arc continuously grows and shrinks (nearly-full at frame 0,
+  down to a sliver by frame ~20, back to nearly-full by frame ~40, etc.)
+  while its gap also travels around the circle -- not a fixed spinner and
+  not simple rotation, both together.
+- A plain numeric counter in the centre climbs 0 → 100 over the loop and
+  wraps back to 0 -- cosmetic, not tied to real progress (same as this
+  screen always was; boot time genuinely varies).
+
+Rebuilt `#loadingScreen` in `user-src/index.html` to match that mechanism
+using standard SVG, not an embedded GIF (a raster asset can't recolor or
+scale cleanly, and 167 frames is unnecessary weight for a boot screen):
+- Background is flat `#000` -- no gradient, no image, no admin-configurable
+  backdrop of any kind. (The old CSS comment referenced an
+  `applyLoadingBackground()` admin-image feature for this screen that, on
+  inspection, never actually existed anywhere in the codebase -- a stale
+  comment from Chipz's own history, not a real feature that needed
+  removing. There was never anything to unwire.)
+- Three `<circle>` elements, each with `pathLength="100"` (SVG2, normalises
+  every ring's dash math to a 0-100 scale regardless of its real radius) so
+  all three share ONE `stroke-dasharray`/`stroke-dashoffset` keyframe
+  animation and stay in lockstep instead of spiralling apart -- matching
+  how the reference's three rings move together.
+- `stroke-dashoffset` animating alone (deliberately no `transform:rotate`)
+  is what makes the gap travel around the ring while the `linearGradient`
+  (red low, violet high) stays fixed in screen space, matching the
+  reference exactly -- a transform-based spinner would have dragged the
+  gradient around with it instead.
+- `filter:drop-shadow(...)` (two stacked, red + violet) for the glow halo.
+- A plain `#lsPercent` div, climbing 0-100 in uneven random steps every
+  110ms and wrapping to 0, driven by a small IIFE in the pre-core
+  `<script>` block (has to run before the module exists, same as the old
+  brand-name/loading-word painters it replaces). A `MutationObserver` on
+  `#loadingScreen`'s own `style` attribute starts/stops the interval
+  automatically, rather than editing the ~10 existing call sites that show
+  and hide the loading screen mid-session (login, sign-up, returning to
+  the app, etc.).
+- **No wordmark on this screen at all now** -- the reference has none, and
+  the owner has corrected two rounds in a row for anything added beyond
+  what was actually sent, so nothing was guessed back in. `brandWordmarkHtml()`
+  and `[data-brandmark]` are unchanged and still paint the pre-launch
+  countdown gate's own mark; the loading screen simply no longer has one
+  of those elements to paint into.
+- Old, Chipz-derived CSS/markup/JS actually deleted, not left as dead code,
+  since the owner's ask this round was specifically to stop seeing it
+  anywhere, not just stop rendering it: `.ls-wordmark`, `.ls-text`, the
+  `loadWave` keyframe, the per-letter `<i>` markup, and the entire
+  `LOADING_WORD_KEY`/`rememberLoadingWord()`/`__paintLoadingWord()`
+  pre-core-translation-caching system (no longer needed -- a numeric
+  counter has nothing to translate).
+- **Verified**: `node -c user-src/original_module.js`, `node
+  build-core.js` (round-trip OK). Also rendered the new loader standalone
+  in a headless Chromium (Playwright) and screenshotted it mid-animation to
+  visually confirm the arc-pulse/gradient/glow/counter behavior actually
+  matches the reference before shipping, rather than trusting the CSS math
+  alone.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting

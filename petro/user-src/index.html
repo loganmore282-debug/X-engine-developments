@@ -541,28 +541,44 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
-/* Owner: "on start up loader it will be a word 'Loading...' bouncing in
-   minimum in middle of screen, it will have background set from admin" --
-   the admin-settable background image is applied over the gradient by
-   applyLoadingBackground() when one is configured. */
-#loadingScreen{position:fixed;inset:0;background:linear-gradient(165deg,#0b0b0c 0%,#3a0e12 55%,#7a0e14 100%);background-size:cover;background-position:center;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;}
-/* Was Playfair Display + skewX(-6deg) -- a Chipz-specific typographic
-   treatment (their own bespoke request, see the design-system section of
-   CLAUDE.md), carried over unmodified in the fork. Owner: "please
-   everything or design or term which was chipz don't use it here" --
-   replaced with the app's own body font (Barlow Condensed, already used
-   everywhere else in this app), bold instead of skewed for the same visual
-   weight a wordmark needs. */
+/* Rebuilt entirely per the owner's own reference GIF, frame-by-frame
+   (a 167-frame loop): three concentric rings, red at the bottom fading to
+   blue/violet at the top, whose visible arc continuously grows/shrinks
+   AND travels around the circle (not a fixed spinner), glowing, with a
+   plain numeric counter climbing 0-100 dead centre -- no wordmark, no
+   background image, no gradient backdrop, pure black. Owner: "remove it
+   even it has background image like that of chipz, remove it entirely,
+   only put that loader everywhere for loading pages... check that loader
+   in gif carefully how it works and use it." The old dark-red gradient
+   backdrop and the Chipz-derived wordmark/wave treatment are gone, not
+   just restyled -- there is nothing left here that came from Chipz. */
+#loadingScreen{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;z-index:500;}
 #openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
-#loadingScreen .ls-wordmark{font-weight:800;font-size:32px;letter-spacing:.03em;color:#fff;margin-bottom:32px;min-height:38px;}
-/* Owner: "the letters on 'Loading...' and dots are in like wavy moving
-   animations" -- that per-letter ripple (one <i> per character, staggered
-   animation-delay) was, like the wordmark above, a Chipz-specific
-   choreography, dropped for the same reason. A plain pulse on the whole
-   word keeps the "still moving, not static" feel the owner originally
-   asked for without carrying over Chipz's specific animation design. */
-#loadingScreen .ls-text{font-weight:600;font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.82);animation:lsPulse 1.4s ease-in-out infinite;}
-@keyframes lsPulse{0%,100%{opacity:.5;}50%{opacity:1;}}
+.ring-loader-wrap{position:relative;width:min(38vw,150px);height:min(38vw,150px);display:flex;align-items:center;justify-content:center;}
+.ring-loader{position:absolute;inset:0;width:100%;height:100%;overflow:visible;
+  filter:drop-shadow(0 0 7px rgba(227,6,19,.55)) drop-shadow(0 0 16px rgba(107,76,255,.4));}
+/* pathLength="100" (set on each <circle> in the markup) normalises every
+   ring's dash math to 0-100 regardless of its actual radius, so all three
+   rings -- different circumferences -- can share one keyframe animation
+   and still trace the exact same arc/gap at every instant, matching how
+   the reference's three rings move in lockstep rather than spiralling
+   apart. stroke-dashoffset alone (no transform:rotate) is what makes the
+   gap travel around the ring -- the gradient stays fixed in screen space
+   (red low, blue/violet high) exactly like the reference, instead of
+   rotating with the ring the way a transform-based spinner would. */
+.ring-arc{fill:none;stroke:url(#ringGrad);stroke-linecap:round;
+  stroke-dasharray:2 98;stroke-dashoffset:0;transform-origin:60px 60px;
+  animation:ringSweep 2.4s ease-in-out infinite;}
+.ring-arc-1{stroke-width:3;}
+.ring-arc-2{stroke-width:2.4;opacity:.85;}
+.ring-arc-3{stroke-width:1.8;opacity:.7;}
+@keyframes ringSweep{
+  0%{stroke-dasharray:2 98;stroke-dashoffset:0;}
+  50%{stroke-dasharray:78 22;stroke-dashoffset:-38;}
+  100%{stroke-dasharray:2 98;stroke-dashoffset:-100;}
+}
+.ls-percent{position:relative;z-index:1;font-weight:800;font-size:clamp(20px,7vw,28px);color:#ff3b44;letter-spacing:.02em;
+  text-shadow:0 0 10px rgba(227,6,19,.85),0 0 22px rgba(227,6,19,.4);}
 /* ── Download APP screen ──
    Owner: "make when one taps download, it opens and middle there is a button
    download, and in background there is image uploaded from admin panel."
@@ -2407,8 +2423,21 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 <body>
 
 <div id="loadingScreen">
-  <div class="ls-wordmark" data-brandmark></div>
-  <div class="ls-text">Loading...</div>
+  <div class="ring-loader-wrap">
+    <svg class="ring-loader" viewBox="0 0 120 120" aria-hidden="true">
+      <defs>
+        <linearGradient id="ringGrad" x1="24" y1="104" x2="96" y2="16" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#ff3b44"/>
+          <stop offset="55%" stop-color="#e30613"/>
+          <stop offset="100%" stop-color="#6b4cff"/>
+        </linearGradient>
+      </defs>
+      <circle class="ring-arc ring-arc-1" cx="60" cy="60" r="52" pathLength="100"/>
+      <circle class="ring-arc ring-arc-2" cx="60" cy="60" r="45" pathLength="100"/>
+      <circle class="ring-arc ring-arc-3" cx="60" cy="60" r="38" pathLength="100"/>
+    </svg>
+    <div class="ls-percent" id="lsPercent" role="status" aria-label="Loading">0</div>
+  </div>
 </div>
 
 <script>
@@ -2425,16 +2454,15 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
  *
  * So the name is remembered on the device the first time it is known, and
  * this runs before the 250KB core inflates: every launch after the very first
- * paints the real name in the first frame. It sits here rather than in the
- * head because the loading screen has to exist for it to write into, and the
- * DOMContentLoaded pass catches the marks further down the document (the
- * sign-in header, the announcement banner, the pre-launch gate).
+ * paints the real name in the first frame. The DOMContentLoaded pass catches
+ * every [data-brandmark] further down the document -- currently just the
+ * pre-launch countdown gate's own mark, since the loading screen no longer
+ * carries one.
  *
  * Nothing here falls back to a hard-coded name. Owner: "let's not make chipz
  * to be default name" -- on a genuinely first-ever launch the mark stays
- * blank for the moment it takes settings to land, which is why .ls-wordmark
- * carries a min-height. A blank that fills in is honest; the wrong name is
- * not.
+ * blank for the moment it takes settings to land. A blank that fills in is
+ * honest; the wrong name is not.
  *
  * The mark is built with createTextNode/createElement rather than innerHTML.
  * The server already refuses < and > in the name, but this value has been
@@ -2464,32 +2492,36 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
   document.addEventListener('DOMContentLoaded', window.__paintBrandMarks);
 })();
 
-/* THE LOADING WORD, PAINTED BEFORE THE CORE INFLATES.
+/* THE LOADER'S PERCENTAGE COUNTER.
  *
- * Owner: "still more words still in English ie loader 'Loading...'".
+ * Purely cosmetic, same as the reference GIF's own counter -- boot time
+ * genuinely varies (cold backend, slow network), so this was never a real
+ * progress bar, just the same "still working" motion the reference shows:
+ * climbs 0-100 in uneven steps, wraps back to 0, repeats.
  *
- * The word itself is whatever the module last resolved through the real
- * string table; nothing here holds a table of its own, which is what keeps
- * this from drifting away from LANG_ROWS.
- *
- * A single text node -- the earlier build spelled the word out one <i> per
- * letter so a per-letter wave animation could stagger each one, which was
- * dropped along with the rest of that Chipz-specific loader treatment (see
- * .ls-text's CSS: a plain pulse now runs on the whole word). A single node
- * is also the simpler match for the translator, which only ever replaces a
- * whole text node -- there was never a per-letter reason to need one before.
+ * A MutationObserver on #loadingScreen's own `style` attribute starts and
+ * stops the interval, rather than editing every one of the ~10 call sites
+ * that show/hide the loading screen mid-session (login, sign-up, returning
+ * to the app, etc.) -- one place that reacts to visibility instead of many
+ * places that would each have to remember to announce it.
  */
 (function(){
-  var LKEY = 'chipz_loading_word';
-  window.__paintLoadingWord = function(word){
-    var w = String(word == null ? '' : word).trim();
-    var box = document.querySelector('#loadingScreen .ls-text');
-    if (!box || !w) return;
-    box.textContent = w + '...';
-  };
-  var stored = '';
-  try { stored = (localStorage.getItem(LKEY) || '').trim(); } catch (e) {}
-  if (stored) window.__paintLoadingWord(stored);
+  var ls = document.getElementById('loadingScreen');
+  var el = ls && ls.querySelector('.ls-percent');
+  if (!ls || !el) return;
+  var n = 0, timer = null;
+  function tick(){
+    n += 2 + Math.floor(Math.random() * 5);
+    if (n >= 100) n = 0;
+    el.textContent = n;
+  }
+  function shown(){ return ls.style.display !== 'none'; }
+  function sync(){
+    if (shown() && !timer) { n = 0; el.textContent = '0'; timer = setInterval(tick, 110); }
+    else if (!shown() && timer) { clearInterval(timer); timer = null; }
+  }
+  sync();
+  try { new MutationObserver(sync).observe(ls, { attributes: true, attributeFilter: ['style'] }); } catch (e) {}
 })();
 </script>
 
