@@ -114,7 +114,7 @@ MUTATIONS = [
      True),
 
     ('the deposit route stops refusing an unreachable gateway',
-     "    if (!gatewayServesRegion(provider, currentRegion())) {",
+     "    if (!gatewayServesRegion(provider, paymentRegion)) {",
      "    if (false) {",
      True),
 

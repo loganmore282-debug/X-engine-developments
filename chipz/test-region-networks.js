@@ -191,8 +191,14 @@ console.log('\n— publicRegionView() —');
 console.log('\n— every real call site is region-scoped —');
 {
   const checks = [
-    ["/deposit/marzpay's network label", "app.post('/deposit/marzpay'", "app.post('/deposit/manual/init'", /regionNetworkSet\(\)\.has\(req\.body\.network\)/],
-    ['/deposit/manual/init gates on the region', "app.post('/deposit/manual/init'", "app.post('/deposit/manual/status'", /regionNetworkSet\(\)\.has\(req\.body\.network\)/],
+    // Both deposit routes now hand the member's own region in EXPLICITLY
+    // (`paymentRegion`/`depositRegion`, snapshotted once per request) rather
+    // than letting regionNetworkSet() re-derive it from the async-local
+    // store. Asserted as "a region argument is present", which is strictly
+    // stronger than the bare `regionNetworkSet()` these anchors used to
+    // require -- a money path should not depend on implicit context.
+    ["/deposit/marzpay's network label", "app.post('/deposit/marzpay'", "app.post('/deposit/manual/init'", /regionNetworkSet\(\w*Region\)\.has\(req\.body\.network\)/],
+    ['/deposit/manual/init gates on the region', "app.post('/deposit/manual/init'", "app.post('/deposit/manual/status'", /regionNetworkSet\(\w*Region\)\.has\(req\.body\.network\)/],
     ['/admin/manual-numbers/save validates against the region BEING SAVED', "app.post('/admin/manual-numbers/save'", "app.post('/admin/manual-numbers/toggle'", /regionNetworkSet\(numRegion\)\.has\(network\)/],
     ['/withdraw/request re-validates the bound wallet network', "app.post('/withdraw/request'", "async function processWithdrawalCore", /regionNetworkSet\(\)\.has\(rawNetwork\)/],
     ['/bank/save -- the withdrawal-wallet screen the owner asked about', "app.post('/bank/save'", "app.post('/bank/", /regionNetworkSet\(\)\.has\(rawNetwork\)/],

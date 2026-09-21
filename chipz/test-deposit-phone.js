@@ -93,9 +93,64 @@ check(deposit({ amount: 20000 }).phone === '+256742730382',
 check(!!depositSenderPhone({ amount: 20000 }, '', ['phone']).error,
   'and refuses when there is no field AND no account number either');
 
+// ── WHAT THE REFUSAL ACTUALLY SAYS ──
+// Owner, after a member was shown MarzPay's own raw "Uganda only accepts
+// Ugandan numbers (e.g., +256712345678). Kenyan (+254) numbers are not
+// allowed": "why don't you put ie inside number areas ie for a country put
+// in admin panel ie +2257, or 255, some country l made start differently, so
+// why only mention Uganda and Kenya".
+//
+// Nothing here checked the TEXT before -- only that a bad number was
+// refused -- so the refusal could (and did) stay a generic "Enter a valid
+// mobile-money phone number." that never told anyone what their own country
+// expects. The mutation harness caught that gap: reverting the message
+// passed every assertion in this file.
+console.log('\n— the refusal names the country and its own format —');
+{
+  const CI = { key: 'ci', name: "Cote d'Ivoire", dialCode: '225', localLength: 8, prefixes: ['7', '8'], currency: 'XOF' };
+  const msg = depositSenderPhone({ phone: '0712' }, '', ['phone'], CI).error;
+  check(/Cote d'Ivoire/.test(msg), `it names the member's own country: ${msg}`);
+  // The format comes from that region's OWN admin-set dial code + prefix +
+  // length. A country saved with 225/7/8 is told "+2257XXXXXXX", which is
+  // literally the shape the owner asked to be able to set.
+  check(/\+2257XXXXXXX/.test(msg), '  and the international format built from its dial code and prefix');
+  check(/07XXXXXXX/.test(msg), '  and the local one');
+  check(!/Uganda|Kenya|\+256|\+254/.test(msg),
+    '  and never mentions Uganda or Kenya, which have nothing to do with this member');
+  // Each region gets its own, from its own settings -- not one hardcoded pair.
+  const ug = depositSenderPhone({ phone: '0712' }, '', ['phone'],
+    { key: 'ug', name: 'Uganda', dialCode: '256', localLength: 9, prefixes: ['7'] }).error;
+  check(/Uganda/.test(ug) && /\+2567XXXXXXXX/.test(ug), `a different country gets its own format: ${ug}`);
+  check(msg !== ug, '  and the two are genuinely different sentences');
+  // The account-number fallback path has to say the same thing. Without
+  // this, reverting only that branch's message went undetected -- the
+  // mutation harness reported exactly that.
+  const fb = depositSenderPhone({}, '0712', ['phone'], CI).error;
+  check(/Cote d'Ivoire/.test(fb) && /\+2257XXXXXXX/.test(fb),
+    `the account-number fallback refuses with the same country-specific sentence: ${fb}`);
+  // And the region argument governs VALIDATION, not just wording: this
+  // number is valid in Cote d'Ivoire (8 local digits, leading 7) and invalid
+  // in Uganda (9), so accepting it proves the passed-in region is what was
+  // judged against rather than the ambient request context.
+  // 8 local digits behind a leading 0 -- valid for Cote d'Ivoire as
+  // configured above, and one digit short for Uganda's 9.
+  check(depositSenderPhone({ phone: '071234567' }, '', ['phone'], CI).phone === '+22571234567',
+    "a number valid in THIS country is accepted on its own country's rule");
+  check(!!depositSenderPhone({ phone: '071234567' }, '', ['phone'],
+    { key: 'ug', name: 'Uganda', dialCode: '256', localLength: 9, prefixes: ['7'] }).error,
+    '  while the same digits are refused for a country whose numbers are longer');
+}
+
 console.log('\n— the routes actually use it —');
 check((src.match(/depositSenderPhone\(req\.body/g) || []).length === 2,
   'both deposit routes resolve the number through the one helper');
+// Both routes hand in the member's own region explicitly (paymentRegion /
+// depositRegion, snapshotted once per request) rather than letting the
+// helper re-derive it from async-local context on a money path.
+// `[^)]*` would stop at the ')' inside `uSnap.data()` -- this project's own
+// notes record that exact regex trap already, from `hostOf(made[0])`.
+check((src.match(/depositSenderPhone\(req\.body[\s\S]{0,80}?\w+Region\)/g) || []).length === 2,
+  'and both pass that member\'s own region in explicitly');
 check(!/cleanPhone\(req\.body\.phone \|\| uSnap/.test(src) &&
       !/cleanPhone\(req\.body\.senderPhone \|\| req\.body\.phone \|\| uSnap/.test(src),
   'and neither still uses the || chain that swallowed an empty field');

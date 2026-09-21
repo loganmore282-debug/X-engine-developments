@@ -1987,18 +1987,36 @@ function looksLikeRegionMobile(cleaned, region) {
 // is a sound answer for it -- so that fallback stays, and only that.
 //
 // Returns { phone } or { error }.
-function depositSenderPhone(body, accountPhone, keys) {
+// `region` is passed explicitly by both deposit routes (the member's own,
+// snapshotted once for the request) rather than re-derived per call, so the
+// number is validated against, and the refusal worded for, exactly one
+// country.
+//
+// THE REFUSAL NAMES THAT COUNTRY'S OWN FORMAT. Owner, on being shown
+// MarzPay's raw "Uganda only accepts Ugandan numbers... Kenyan (+254)
+// numbers are not allowed": "why don't you put ie inside number areas ie for
+// a country put in admin panel ie +2257, or 255, some country l made start
+// differently, so why only mention Uganda and Kenya". badPhoneMessage()
+// builds the answer from that region's OWN admin-set dialling code, prefix
+// list and local length -- a country saved with dial 225 and prefix 7 is
+// told "+2257XXXXXXX", which is what he asked for, in whatever language the
+// member is reading (it has a LANG_PATTERNS row; the bare sentence this
+// replaced never did and never could say a country's format at all).
+//
+// This is also what stops MarzPay being ASKED about a wrong-country number
+// in the first place: refused here, the gateway never gets the chance to
+// answer in its own untranslated English.
+function depositSenderPhone(body, accountPhone, keys, region) {
+  const r = region || currentRegion();
   for (const k of keys) {
     if (!Object.prototype.hasOwnProperty.call(body || {}, k)) continue;
     const v = body[k];
     if (v === undefined || v === null) continue;
-    const cleaned = cleanPhone(v);
-    return cleaned ? { phone: cleaned }
-                   : { error: 'Enter a valid mobile-money phone number.' };
+    const cleaned = cleanPhone(v, r);
+    return cleaned ? { phone: cleaned } : { error: badPhoneMessage(r) };
   }
-  const fallback = cleanPhone(accountPhone || '');
-  return fallback ? { phone: fallback }
-                  : { error: 'Enter a valid mobile-money phone number.' };
+  const fallback = cleanPhone(accountPhone || '', r);
+  return fallback ? { phone: fallback } : { error: badPhoneMessage(r) };
 }
 // Which mobile-money network names are valid, for a given region. NOT a
 // single global set -- not every country runs on MTN/Airtel (Cameroon and
@@ -2514,11 +2532,21 @@ async function markDepositFailed(depRef, userId, reason) {
 // ── MARZPAY (mobile money collect/send) ──
 const PROVIDER_BUSY_MSG = 'The payment provider is busy right now. Please try again in a moment.';
 const DEPOSIT_FAILED_MSG = 'Payment was not completed. Please try again.';
+// "This is a transport/capacity problem, not a decision about this payment."
+// One definition, used by both the admin-facing and member-facing wrappers
+// below -- restating it in the second one would be a second source of truth
+// for what counts as busy.
+function marzIsBusy(mp) {
+  const raw = String((mp && (mp.message || mp.data?.message || mp.error || mp.data?.error)) || '');
+  return !!(mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
+    /database error|internal server|server error|unexpected error|try again|temporarily|timeout|timed out|gateway|unavailable|bad gateway/i.test(raw);
+}
+// ADMIN/diagnostic wrapper: passes the provider's own words through, which is
+// what someone debugging a failed payout needs to see. Member-facing paths
+// must use marzMemberMsg() instead -- see its comment.
 function marzUserMsg(mp, fallback) {
   const raw = mp && (mp.message || mp.data?.message || mp.error || mp.data?.error);
-  if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
-      /database error|internal server|server error|unexpected error|try again|temporarily|timeout|timed out|gateway|unavailable|bad gateway/i.test(String(raw || '')))
-    return PROVIDER_BUSY_MSG;
+  if (marzIsBusy(mp)) return PROVIDER_BUSY_MSG;
   return raw || fallback || PROVIDER_BUSY_MSG;
 }
 // Is this MarzPay refusal a PHONE/COUNTRY validation failure -- i.e. the
@@ -2535,16 +2563,63 @@ function marzUserMsg(mp, fallback) {
 // exactly the class of gap the whole i18n project exists to close, just one
 // this codebase cannot see coming because the string is not ours.
 //
-// The error_code check is the reliable signal; the text fallback exists only
-// for a shape their docs do not enumerate (they do not claim the list of
-// error_codes is exhaustive). Kept narrow on purpose -- broadening this to
-// catch every MarzPay refusal would swallow real, specific messages (a
-// frozen account, an insufficient float) behind a generic phone-format
-// sentence that has nothing to do with the actual problem.
-function marzIsPhoneFormatError(mp) {
-  if (mp && mp.error_code === 'INVALID_PHONE_FORMAT') return true;
+// The error_code check is the reliable signal; the text patterns below exist
+// for the shapes their docs do not enumerate (they do not claim the list of
+// error_codes is exhaustive). Still deliberately scoped to the PHONE/COUNTRY
+// family -- it must not swallow real, specific messages (a frozen account, an
+// insufficient float) behind a sentence about phone numbers.
+//
+// ROUND 178b's VERSION MISSED THE REAL MESSAGE, and the owner caught it live:
+// "Uganda only accepts Ugandan numbers (e.g., +256712345678). Kenyan (+254)
+// numbers are not allowed." That text contains no "phone number format"
+// anywhere, so the old text pattern could not match it, and it was only ever
+// caught if MarzPay also set error_code INVALID_PHONE_FORMAT. Round 178b's
+// test asserted that error_code IN ITS OWN FIXTURE -- an assumption about
+// the provider, written by me, then verified against itself. The screenshot
+// is the counter-evidence: the fix shipped and the raw English still landed
+// on a French screen. So the patterns are now keyed on the SHAPES a
+// country/number rejection actually takes, and on a structural signal that
+// needs no phrasing at all: the message naming a dialling code that is not
+// this member's own.
+const MARZ_PHONE_ERROR_CODES = new Set(['INVALID_PHONE_FORMAT', 'INVALID_PHONE_NUMBER', 'COUNTRY_MISMATCH', 'INVALID_COUNTRY']);
+function marzIsPhoneFormatError(mp, region) {
+  if (mp && MARZ_PHONE_ERROR_CODES.has(String(mp.error_code || ''))) return true;
   const raw = String((mp && (mp.message || mp.data?.message)) || '');
-  return /invalid .*phone number format|phone number format/i.test(raw);
+  if (!raw) return false;
+  if (/phone number format|invalid .*phone|only accepts .*numbers|numbers are not allowed|not a valid .*number|wrong country|country mismatch|does not belong to/i.test(raw))
+    return true;
+  // Structural, phrasing-independent: the provider is talking about some
+  // OTHER country's dialling code. Whatever wording it wraps that in, a
+  // member cannot act on it and must never be shown it -- the only country
+  // that means anything to them is their own.
+  // Match the WHOLE digit run after each '+', then ask whether it starts
+  // with this member's dial code -- not a fixed-width slice of it. A first
+  // version matched `\+\d{1,4}`, which chews "+2567" out of the perfectly
+  // ordinary "+256712345678" and called a member's own number foreign.
+  const mine = String((region || currentRegion()).dialCode || '');
+  const runs = raw.match(/\+\d+/g) || [];
+  return !!mine && runs.some(r => !r.slice(1).startsWith(mine));
+}
+// Everything MarzPay might say that is genuinely worth passing through to a
+// member as-is. A message outside this set is replaced with our own sentence
+// rather than shipped raw -- see marzMemberMsg().
+function marzMsgIsSafeForMember(raw) {
+  return /insufficient (balance|funds|float)|frozen|suspended|limit|minimum|maximum|too (small|large|low|high)/i.test(String(raw || ''));
+}
+// THE MEMBER-FACING wrapper, and the structural fix Round 178b should have
+// been. marzUserMsg() passes the provider's own English through by default,
+// which is right for an ADMIN reading a diagnostic and wrong for a member:
+// every sentence MarzPay writes is untranslated prose that cannot have a
+// LANG_PATTERNS row, because it does not exist until the HTTP response
+// arrives. Round 178b tried to catch the one known bad sentence; this
+// inverts the default instead, so the NEXT unforeseen provider sentence is
+// safe by construction rather than waiting to be reported from a screenshot.
+function marzMemberMsg(mp, fallback, region) {
+  if (marzIsBusy(mp)) return PROVIDER_BUSY_MSG;
+  if (marzIsPhoneFormatError(mp, region)) return marzPhoneFormatMsg(region);
+  const raw = String((mp && (mp.message || mp.data?.message || mp.error || mp.data?.error)) || '');
+  if (raw && marzMsgIsSafeForMember(raw)) return raw;
+  return fallback || DEPOSIT_FAILED_MSG;
 }
 // The member-facing replacement for a MarzPay phone/country mismatch: OUR
 // OWN translated sentence, naming the country the ACCOUNT actually belongs
@@ -5240,7 +5315,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     // (the failed attempt had already claimed the debounce window on a
     // deposit that was never actually created).
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
-    const _ph = depositSenderPhone(req.body, uSnap.data().phone, ['phone']);
+    const _ph = depositSenderPhone(req.body, uSnap.data().phone, ['phone'], paymentRegion);
     if (_ph.error) return res.status(400).json({ status: 'error', message: _ph.error });
     const phone = _ph.phone;
 
@@ -5409,10 +5484,13 @@ app.post('/deposit/marzpay', async (req, res) => {
       // this account's real region -- never MarzPay's raw English text
       // (which, on top of never being translated, has no idea which of our
       // regions is asking and can reference the wrong country entirely).
-      const failMsg = marzIsPhoneFormatError(mpData)
-        ? marzPhoneFormatMsg()
-        : marzUserMsg(mpData, 'Could not start the payment');
-      await markDepositFailed(depRef, userId, failMsg);
+      // marzMemberMsg() carries the whole rule now (phone/country -> our own
+      // translated sentence; provider prose replaced unless it is one of the
+      // few families worth reading; the member's OWN region passed
+      // explicitly, never re-derived here). Round 178b did this inline and
+      // only caught the one error shape it knew about.
+      await markDepositFailed(depRef, userId,
+        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion));
       return;
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
@@ -6176,7 +6254,12 @@ app.post('/deposit/manual/init', async (req, res) => {
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
-  const network = regionNetworkSet().has(req.body.network) ? req.body.network : null;
+  // Snapshotted once, same reasoning as /deposit/marzpay's paymentRegion:
+  // the network list, the phone rule and the refusal wording must all be
+  // this member's own country's, decided at one point rather than re-derived
+  // three times.
+  const depositRegion = currentRegion();
+  const network = regionNetworkSet(depositRegion).has(req.body.network) ? req.body.network : null;
   if (!network) return res.status(400).json({ status: 'error', message: 'Select a network' });
   try {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
@@ -6187,7 +6270,7 @@ app.post('/deposit/manual/init', async (req, res) => {
     // Same validate-before-debounce ordering as /deposit/marzpay -- see its
     // own comment for why this order matters.
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
-    const _sph = depositSenderPhone(req.body, uSnap.data().phone, ['senderPhone', 'phone']);
+    const _sph = depositSenderPhone(req.body, uSnap.data().phone, ['senderPhone', 'phone'], depositRegion);
     if (_sph.error) return res.status(400).json({ status: 'error', message: _sph.error });
     const senderPhone = _sph.phone;
 
@@ -6206,7 +6289,7 @@ app.post('/deposit/manual/init', async (req, res) => {
     const expiresAt = Date.now() + MANUAL_DEPOSIT_WINDOW_MS;
     const result = await assignManualNumberAndCreateDeposit(network, amt, {
       userId, phone: senderPhone, senderPhone, network, amount: amt, ref, status: 'pending',
-      method: 'manual', expiresAt, regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp(),
+      method: 'manual', expiresAt, regionKey: depositRegion.key, date, time, createdAt: FieldValue.serverTimestamp(),
     });
     if (!result) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
     if (result.empty) {

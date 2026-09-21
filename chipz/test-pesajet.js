@@ -457,8 +457,15 @@ async function finish() {
   // The payout branch: identifier written BEFORE the call, ambiguity never
   // reverted to pending, acceptance is not completion.
   {
-    const i = S.indexOf("if (withdrawProvider(settNow) === 'pesajet')");
-    const body = S.slice(i, S.indexOf("if (withdrawProvider(settNow) === 'lipapay')", i));
+    // Anchored on the provider NAME rather than the whole call, so the
+    // payout branch stays findable when the region argument changes shape
+    // (it just gained an explicit `payoutRegion`, which is what broke the
+    // literal anchor this replaced).
+    const i = S.search(/if \(withdrawProvider\([^)]*\) === 'pesajet'\)/);
+    const rest = S.slice(i);
+    const endRel = rest.search(/if \(withdrawProvider\([^)]*\) === 'lipapay'\)/);
+    if (i < 0 || endRel < 0) throw new Error('could not locate the PesaJet payout branch -- re-anchor');
+    const body = rest.slice(0, endRel);
     ck(i > 0, 'processWithdrawalCore has a PesaJet branch');
     const iMark = body.indexOf("pesajetRef: sendingMarker");
     const iCall = body.indexOf('pesajetDisburse');

@@ -458,6 +458,53 @@ async def main():
         except Exception as e:
             notes.append(f'user detail: {e}')
 
+        # The COUNTRY EDITOR, which until now was never opened by this sweep:
+        # it visited the Countries tab and stopped there, so the whole edit
+        # dialog -- every field label, the language tickboxes, the networks
+        # field, the clock preview, the number-format preview -- had never
+        # once been rendered while anything was measuring. Its strings were
+        # reported as neither clean nor missing; they simply were not seen.
+        # Same class of false green this file's own header warns about.
+        # Driven by CLICKING the real controls, not by calling regionForm()
+        # -- the bundle is obfuscated, so its functions have no global names
+        # left to call (the first version of this step tried, and the harness
+        # correctly reported it BLIND rather than passing having measured
+        # nothing).
+        for label, opener in (('region-new', '#newRegion'),
+                              ('region-edit', '[data-edit-region]')):
+            try:
+                # The user-detail step above leaves ITS modal open, and that
+                # backdrop swallows every click here -- which is what the
+                # first version of this step actually tripped on, not
+                # anything about the country editor at all.
+                await page.evaluate(
+                    "() => { const r = document.getElementById('modalRoot');"
+                    " if (r) { r.classList.add('hidden'); r.innerHTML = ''; } }")
+                await page.click('button[data-tab="regions"]')
+                await page.wait_for_timeout(1000)
+                await page.click(opener)
+                await page.wait_for_timeout(900)
+                # The number-format preview paints from the three phone
+                # fields, so give it real values to render a real format
+                # rather than its empty-state prompt.
+                await page.evaluate("""() => {
+                  const set = (id, v) => { const el = document.getElementById(id);
+                    if (el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); } };
+                  set('rgDial', '225'); set('rgLen', '8'); set('rgPfx', '7, 8');
+                }""")
+                await page.wait_for_timeout(500)
+                await collect(page, label, found)
+                # Closed by clicking the backdrop, for the same reason the
+                # dialog is opened by clicking: closeModal() has no global
+                # name in the built bundle. Left open, its backdrop swallows
+                # the next step's clicks.
+                await page.evaluate(
+                    "() => { const r = document.getElementById('modalRoot');"
+                    " if (r) { r.classList.add('hidden'); r.innerHTML = ''; } }")
+                await page.wait_for_timeout(500)
+            except Exception as e:
+                notes.append(f'{label} would not open: {e}')
+
         await b.close()
     srv.shutdown()
 

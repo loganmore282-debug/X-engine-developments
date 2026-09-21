@@ -7035,6 +7035,115 @@ Rebuilt both bundles (round-trip OK), bumped `user/sw.js` to `chipz-shell-v111` 
 `admin/sw.js` to `chipz-admin-shell-v27`, and ran the full `test-*.js` suite (34 files,
 all green).
 
+## Round 179c — The raw MarzPay message was STILL shipping, and why 178b's test could not see it
+
+Owner, with the same screenshot again — "Payment not completed / Uganda only accepts
+Ugandan numbers (e.g., +256712345678). Kenyan (+254) numbers are not allowed." on a
+French screen: *"This stuff is persistent, why don't you put ie inside number areas ie
+for a country put in admin panel ie +2257, or 255, some country l made start
+differently, so why only mention Uganda and Kenya"*.
+
+### Why Round 178b did not fix it
+`marzIsPhoneFormatError()` matched exactly two things: `error_code ===
+'INVALID_PHONE_FORMAT'`, or text containing **"phone number format"**. The message in
+the screenshot contains that phrase **nowhere**. So it was only ever caught if MarzPay
+also set that error_code — and 178b's test asserted that error_code **in its own
+fixture**, next to the real sentence. An assumption about the provider, written by me,
+then verified against itself. Every mutation in its harness was caught; the bug shipped
+anyway. **A fixture that encodes what you assumed cannot disagree with you.**
+
+### What replaced it
+- **The detector is keyed on the shapes a country/number rejection actually takes** —
+  "only accepts … numbers", "numbers are not allowed", "not a valid … number", wrong
+  country, country mismatch — plus a signal that needs no phrasing at all: **the message
+  naming a dialling code that is not this member's own**. That last one is what makes
+  the next unforeseen sentence safe rather than the next screenshot.
+  `MARZ_PHONE_ERROR_CODES` also covers the neighbouring codes, not one.
+- **`marzMemberMsg()` inverts the default, which is the actual structural fix.**
+  `marzUserMsg()` passes the provider's own English through — right for an admin reading
+  a diagnostic, wrong for a member, because every sentence MarzPay writes is
+  untranslated prose that *cannot* have a LANG_PATTERNS row (it does not exist until the
+  HTTP response arrives). The member-facing wrapper now replaces anything it does not
+  recognise with our own sentence, and passes through only the few families worth
+  reading (insufficient float, frozen account, a limit). 178b tried to enumerate the one
+  bad sentence; this makes silence the default.
+- **A wrong-country number is refused BEFORE the gateway is asked.**
+  `depositSenderPhone()` now takes the member's region explicitly and refuses with
+  `badPhoneMessage(region)` instead of the generic "Enter a valid mobile-money phone
+  number." That sentence is built from **that country's own admin-set dialling code,
+  prefix and local length** and already has a LANG_PATTERNS row, so a country saved with
+  225/7/8 is told *"Use the format 07XXXXXXX or +2257XXXXXXX"* — literally the "+2257"
+  the owner asked for — in whatever language the member is reading. It also means
+  MarzPay never gets the chance to answer in English for that case at all.
+- **The admin panel now SHOWS the format those three fields add up to**, live as they
+  are typed, plus the exact refusal a member would get (`rgPhoneShape`). The fields were
+  always there; what was missing was any way to see what they produce. Number formats
+  are rendered `data-no-i18n` (a format is data), the refusal example is rendered as the
+  real sentence so it matches the member app's own pattern row, and the sample
+  placeholders ("g26e, shy", "MTN Mobile Money, Orange Money") are marked data too.
+
+### The country editor had never been translated, because nothing ever opened it
+`find-admin-untranslated.py` walked the Countries **tab** and stopped. Every string
+inside the edit **dialog** — every field label, the language tickboxes, Round 179's own
+"Networks this country offers", the clock preview — was therefore reported as neither
+clean nor missing. It was never rendered while anything was measuring, and five rounds
+of "0 findings in all five languages" were partly vacuous for that reason. Opening it
+turned up **23 findings at once**; `admin-rows-15.py` is them (plus `admin-rows-14.py`
+for the new preview). `clean` went 403 → 429, which is how you can tell the new rows are
+actually being matched rather than the sweep still not looking.
+
+Getting that step to work took three tries, each worth knowing: `regionForm()` has no
+global name in the obfuscated bundle (the harness correctly reported **BLIND** rather
+than passing having measured nothing — the guard working as designed), `closeModal()`
+likewise, and the real blocker was the **user-detail step above leaving its own modal
+open**, whose backdrop swallowed every click. Sixth instance in this project of *a
+fixture that cannot reach a state cannot test it*.
+
+### Reviewing Codex's push, which landed mid-round
+Codex pushed four commits to this branch while this was being written: the member's
+region snapshotted and passed explicitly into `marzCollect()`/`marzSendMoney()`, the
+same for `withdrawProvider()`/`payoutIsManual()`, `REGION_DEFAULT_NETWORKS` completed to
+all twelve MarzPay markets, and matching test updates. **Verified and kept** — the
+functions really do take a region (Round 176 added the parameter), so the arguments are
+real rather than silently ignored, and the network table matches the market table in
+Round 177 exactly. Explicit beats implicit on a money path.
+
+**Two corrections to its report, both material:**
+1. *"Your render.yaml has autoDeploy: true, so the backend should redeploy from this
+   branch automatically."* **Not true for Chipz any more.** Render suspended the account
+   in Round 174; the backend runs on **Railway**, deployed from a **fork on a second
+   GitHub account**, which pulls each push only when the owner clicks **Sync fork**.
+   `render.yaml` is kept as documentation. So no push — Codex's or mine — reaches the
+   live backend on its own, which is a strong candidate for why the owner keeps seeing
+   the same message after each "fix".
+2. Codex did not run the full suite: its change left **`test-pesajet.js`** red (its
+   PesaJet payout-branch slice was anchored on the literal `withdrawProvider(settNow)`)
+   and **`test-region-networks.js`** red (the `regionNetworkSet()` anchors). Both
+   re-anchored here — the PesaJet one on the provider *name* via regex so it survives the
+   next argument change, and the network ones tightened to **require** an explicit region
+   argument, which is strictly stronger than what they asserted before.
+
+### Tests
+`test-marz-phone-error.js` now pins the reported message **with no error_code at all**,
+the foreign-dial-code signal in both directions (a member's own `+256…` number is not a
+mismatch — a first version of that check matched `\+\d{1,4}` and chewed "+2567" out of
+an ordinary Ugandan number), wording-only cases with no dial code in them, and the
+never-ship-raw-prose guarantee including one deliberately unforeseen provider sentence.
+`test-deposit-phone.js` gained what it never had: assertions on the refusal's **text** —
+that it names the country, carries that country's own format, never mentions Uganda or
+Kenya, and that the region argument governs **validation** as well as wording (a number
+valid in an 8-digit country is accepted there and refused for a 9-digit one).
+
+`verify-marz-phone-error-discriminates.py` was rewritten around the guarantee rather than
+178b's implementation: **17 mutations, all behaving as intended**, control MISSED. Four
+were wrong on the first run and every one was a hole in my own tests, not the code —
+a mutation that left the structural check standing while claiming to revert it (same
+malformed-mutation shape 178b recorded once already), the wording branch being answered
+entirely by the dial-code check so deleting it went unnoticed, and the refusal text
+being unasserted on two of its three paths. `verify-region-networks-discriminates.py`
+(20) and `verify-gateway-regions-discriminates.py` (23) re-anchored and green; full
+35-file Node suite green; admin sweep 0 findings in all five languages.
+
 ## Round 179b — Maintenance mode and the countdown were backend-wide, and the auto-ban is gone
 
 Owner, a round later: *"Some settings affect whole countries why?, see maintenance

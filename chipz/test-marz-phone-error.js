@@ -63,16 +63,88 @@ const UG = { key: 'ug', name: 'Uganda', dialCode: '256', localLength: 9, prefixe
 const KE = { key: 'ke', name: 'Kenya', dialCode: '254', localLength: 9, prefixes: ['7'] };
 const CM = { key: 'cm', name: 'Cameroon', dialCode: '237', localLength: 9, prefixes: ['6', '2'] };
 
+function constSource(name) {
+  const m = new RegExp('^const ' + name + ' = [^;]*;', 'm').exec(src);
+  if (!m) throw new Error('no such const: ' + name);
+  return m[0];
+}
+
 const api = new Function('CURRENT', `
   function currentRegion() { return CURRENT; }
   ${fnSource('phoneFormatHint')}
   ${fnSource('badPhoneMessage')}
-  ${fnSource('marzUserMsg')}
   const PROVIDER_BUSY_MSG = 'The payment provider is busy right now. Please try again in a moment.';
+  const DEPOSIT_FAILED_MSG = 'Payment was not completed. Please try again.';
+  ${fnSource('marzIsBusy')}
+  ${fnSource('marzUserMsg')}
+  ${constSource('MARZ_PHONE_ERROR_CODES')}
   ${fnSource('marzIsPhoneFormatError')}
+  ${fnSource('marzMsgIsSafeForMember')}
+  ${fnSource('marzMemberMsg')}
   ${fnSource('marzPhoneFormatMsg')}
-  return { phoneFormatHint, badPhoneMessage, marzUserMsg, marzIsPhoneFormatError, marzPhoneFormatMsg };
+  return { phoneFormatHint, badPhoneMessage, marzUserMsg, marzIsPhoneFormatError,
+           marzPhoneFormatMsg, marzMemberMsg, marzIsBusy, DEPOSIT_FAILED_MSG };
 `);
+
+// ── THE MESSAGE FROM THE SCREENSHOT, WITH NO error_code ──
+// This is the case Round 178b got wrong and the owner caught live ("This
+// stuff is persistent"). Its own fixture asserted error_code
+// INVALID_PHONE_FORMAT alongside this text -- an assumption about MarzPay,
+// written by me, then only ever verified against itself. The text carries no
+// "phone number format" anywhere, so with the error_code absent the old
+// detector returned false and MarzPay's raw English shipped to a member
+// reading French. Pinned here WITHOUT the error_code on purpose.
+const REPORTED = 'Uganda only accepts Ugandan numbers (e.g., +256712345678). Kenyan (+254) numbers are not allowed.';
+console.log('— the reported message, with NO error_code (Round 178b missed this) —');
+{
+  const it = api(UG);
+  ck(it.marzIsPhoneFormatError({ status: 'error', message: REPORTED }) === true,
+     'recognised from the text alone, with no error_code at all');
+  ck(it.marzMemberMsg({ status: 'error', message: REPORTED }, 'Could not start the payment', UG) === it.badPhoneMessage(UG),
+     "and replaced with OUR sentence, naming the account's own country");
+  const shown = it.marzMemberMsg({ status: 'error', message: REPORTED }, 'x', UG);
+  ck(!/Kenyan|\+254|only accepts/.test(shown),
+     "  MarzPay's own wording is gone entirely: " + shown);
+  // The structural signal, independent of any phrasing: a message naming a
+  // dialling code that is not this member's own cannot be actionable for
+  // them, whatever words surround it.
+  ck(api(CM).marzIsPhoneFormatError({ message: 'Only +256 numbers work on this account.' }) === true,
+     'a foreign dialling code alone is enough, whatever the wording around it');
+  ck(api(UG).marzIsPhoneFormatError({ message: 'Collection for +256712345678 could not be queued.' }) === false,
+     "  but this member's OWN dialling code is not treated as a mismatch");
+  // The WORDING branch, exercised with no dialling code in the text at all.
+  // Without these two the structural check above answers every case on its
+  // own, and deleting the wording patterns goes unnoticed -- which is
+  // exactly what the mutation harness reported the first time it ran.
+  for (const worded of ['This account only accepts local numbers.',
+                        'Foreign numbers are not allowed on this service.',
+                        'That is not a valid mobile money number for this country.']) {
+    ck(api(UG).marzIsPhoneFormatError({ message: worded }) === true,
+       `recognised from wording alone, with no dialling code in it: "${worded}"`);
+  }
+}
+
+console.log('\n— a member is never shown raw provider prose, even unforeseen prose —');
+{
+  const it = api(UG);
+  // The whole point: the NEXT sentence MarzPay invents is safe by
+  // construction rather than waiting for another screenshot.
+  const unforeseen = { status: 'error', message: 'Collection rejected: MSISDN routing table entry absent for this MNO partition.' };
+  ck(it.marzMemberMsg(unforeseen, 'Could not start the payment', UG) === 'Could not start the payment',
+     'an unrecognised provider sentence is replaced with our own fallback');
+  ck(it.marzUserMsg(unforeseen, 'Could not start the payment') === unforeseen.message,
+     '  while the ADMIN wrapper still shows it verbatim, which is what a diagnostic needs');
+  // ...but the few families that genuinely tell a member something actionable
+  // still come through.
+  for (const keep of ['Insufficient balance.', 'Account is frozen.', 'Amount is below the minimum.']) {
+    ck(it.marzMemberMsg({ message: keep }, 'fallback', UG) === keep,
+       `a genuinely useful refusal still reaches the member: "${keep}"`);
+  }
+  ck(it.marzMemberMsg({ providerDown: true }, 'Could not start the payment', UG) === 'The payment provider is busy right now. Please try again in a moment.',
+     'and a transport failure is still the busy sentence, not a phone complaint');
+  ck(it.marzMemberMsg({ status: 'error' }, 'Could not start the payment', UG) === 'Could not start the payment',
+     'a refusal with no message at all uses the caller\'s own fallback');
+}
 
 console.log('— recognising the documented error family —');
 {
@@ -136,21 +208,30 @@ console.log('\n— wired into the route that actually failed —');
   const end = src.indexOf("app.post('/deposit/", at + 10);
   ck(at > -1 && end > at, 'the deposit route was located');
   const body = src.slice(at, end);
-  ck(/marzIsPhoneFormatError\(mpData\)/.test(body),
-     '/deposit/marzpay checks for the phone-format family');
-  ck(/marzPhoneFormatMsg\(\)/.test(body),
-     '  and uses the translated, region-correct message when it matches');
-  // Ordering: the check has to run on the SAME mpData the raw fallback would
-  // have used, before markDepositFailed is called -- not after. Scoped to
-  // the MarzPay branch specifically: this one route handler also contains
-  // PesaJet's and LipaPay's own EARLIER markDepositFailed calls (they share
-  // this endpoint, branching on `provider`), so a bare indexOf('markDepositFailed')
-  // over the whole route finds one of THOSE instead of this round's own --
-  // which is exactly what happened the first time this assertion was written.
-  const checkAt = body.indexOf('marzIsPhoneFormatError');
-  const markAt = body.indexOf('markDepositFailed', checkAt);
-  ck(checkAt > -1 && markAt > checkAt,
-     '  decided BEFORE the failure is recorded, not after');
+  // Asserted as the PROPERTY, not the shape. The first version of these
+  // three pinned the literal inline `marzIsPhoneFormatError(mpData) ? ... :
+  // marzUserMsg(...)` ternary Round 178b wrote, so they failed the moment
+  // that was replaced by one member-safe wrapper -- defending an
+  // implementation rather than a guarantee, which this project has now done
+  // often enough to have a rule about it. What must be true is: the
+  // member-facing failure text comes from the member-safe wrapper, the
+  // member's OWN region is handed to it explicitly, and the raw
+  // admin/diagnostic wrapper is not what reaches the member here.
+  ck(/marzMemberMsg\(mpData, [^)]*paymentRegion\)/.test(body),
+     "/deposit/marzpay builds the member's message with marzMemberMsg, passing this member's own region");
+  ck(!/markDepositFailed\(depRef, userId,\s*marzUserMsg\(/.test(body),
+     '  and never records the raw provider text as the failure reason');
+  // Ordering: the message has to be decided from the SAME mpData, before
+  // markDepositFailed writes it. Scoped to the MarzPay branch: this one
+  // handler also holds PesaJet's and LipaPay's own EARLIER markDepositFailed
+  // calls (they share this endpoint, branching on `provider`), so a bare
+  // indexOf('markDepositFailed') finds one of THOSE -- which is exactly what
+  // happened the first time this assertion was written.
+  const checkAt = body.indexOf('marzMemberMsg');
+  const markAt = body.lastIndexOf('markDepositFailed', checkAt);
+  ck(checkAt > -1 && markAt > -1 && markAt < checkAt &&
+     /markDepositFailed\(depRef, userId,\s*\n?\s*marzMemberMsg/.test(body),
+     '  and it is that call which records the failure, not a separate earlier one');
 }
 
 console.log('\n— the message is actually translatable now —');

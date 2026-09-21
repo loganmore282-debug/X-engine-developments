@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Re-break the MarzPay phone-format wrapping, one way at a time.
+"""Re-break the "a member never reads raw provider prose" guarantee, one way
+at a time.
 
 Judged on the EXIT CODE, never on FAIL-line counts -- a mutation that crashes
 the harness prints no FAIL line, and counting lines reads that as a pass.
@@ -7,6 +8,16 @@ the harness prints no FAIL line, and counting lines reads that as a pass.
 Opens with a deliberate NO-OP asserted MISSED. If the control is ever CAUGHT,
 the run is failing for a reason unrelated to the mutation and every other
 CAUGHT in it means nothing.
+
+ROUND 179c REWROTE THIS FILE. Round 178b's version mutated an inline ternary
+in /deposit/marzpay and a detector keyed on the single phrase "phone number
+format" -- and every one of its mutations was caught, while the actual bug
+shipped anyway: the real MarzPay message says "Uganda only accepts Ugandan
+numbers... Kenyan (+254) numbers are not allowed", which contains that phrase
+nowhere. The mutations were all faithful to an implementation that was
+answering the wrong question. The ones below target the GUARANTEE instead:
+whatever MarzPay says, a member gets our own translated sentence unless the
+message is one of the few families worth reading.
 """
 import subprocess
 import sys
@@ -19,42 +30,94 @@ CLIENT = HERE / 'user-src' / 'original_module.js'
 # (label, target, old, new, expect_caught)
 MUTATIONS = [
     ('CONTROL: a declared-and-unused constant (must be MISSED)', SERVER,
-     'function marzIsPhoneFormatError(mp) {',
-     'const _unusedControl = 0;\nfunction marzIsPhoneFormatError(mp) {',
+     'function marzIsPhoneFormatError(mp, region) {',
+     'const _unusedControl = 0;\nfunction marzIsPhoneFormatError(mp, region) {',
      False),
 
-    ("the documented error_code is no longer recognised", SERVER,
-     "if (mp && mp.error_code === 'INVALID_PHONE_FORMAT') return true;",
-     "if (false) return true;",
+    # ── the exact regression the owner caught live ──
+    # Reverts the whole detector to 178b by short-circuiting at the first
+    # line -- everything below becomes dead code, which is exactly the
+    # behaviour being tested for. A first version tried to replace the real
+    # body verbatim and its anchor spanned two comment blocks, so it matched
+    # zero times and aborted the run; anchoring on one short line of CODE
+    # cannot drift when a comment above it is reworded.
+    ('the detector goes back to Round 178b: only the documented code and the phrase "phone number format"', SERVER,
+     "  if (mp && MARZ_PHONE_ERROR_CODES.has(String(mp.error_code || ''))) return true;",
+     "  if (mp && mp.error_code === 'INVALID_PHONE_FORMAT') return true;\n"
+     "  return /invalid .*phone number format|phone number format/i.test(String((mp && (mp.message || mp.data?.message)) || ''));",
      True),
 
-    ('every MarzPay refusal is treated as a phone problem', SERVER,
-     "return /invalid .*phone number format|phone number format/i.test(raw);",
-     "return true;",
+    ('the "only accepts ... numbers" / "not allowed" wording is no longer recognised', SERVER,
+     'if (/phone number format|invalid .*phone|only accepts .*numbers|numbers are not allowed|not a valid .*number|wrong country|country mismatch|does not belong to/i.test(raw))',
+     'if (/phone number format|invalid .*phone|wrong country|country mismatch|does not belong to/i.test(raw))',
      True),
 
-    ('the replacement stops naming the ACCOUNT region and reverts to the raw text', SERVER,
-     "const failMsg = marzIsPhoneFormatError(mpData)\n        ? marzPhoneFormatMsg()\n        : marzUserMsg(mpData, 'Could not start the payment');",
-     "const failMsg = marzUserMsg(mpData, 'Could not start the payment');",
+    ('the structural foreign-dial-code signal is dropped', SERVER,
+     """  const mine = String((region || currentRegion()).dialCode || '');
+  const runs = raw.match(/\\+\\d+/g) || [];
+  return !!mine && runs.some(r => !r.slice(1).startsWith(mine));""",
+     '  return false;',
      True),
 
-    # Reverts the WHOLE hunk -- assignment and call together. A first version
-    # of this mutation only swapped the final call and left the now-dead
-    # `failMsg` assignment (and the literal string the "wired into the
-    # route" regex checks for) still sitting in the source above it, so that
-    # check kept passing against source text that was genuinely no longer
-    # doing anything. Reported MISSED, correctly -- the mutation was the
-    # broken part, not the fix.
-    ('the check is dropped from the deposit route entirely', SERVER,
-     "      const failMsg = marzIsPhoneFormatError(mpData)\n        ? marzPhoneFormatMsg()\n        : marzUserMsg(mpData, 'Could not start the payment');\n      await markDepositFailed(depRef, userId, failMsg);",
+    ("the foreign-code test slices a fixed width again, so a member's OWN number reads as foreign", SERVER,
+     'const runs = raw.match(/\\+\\d+/g) || [];\n  return !!mine && runs.some(r => !r.slice(1).startsWith(mine));',
+     "const runs = raw.match(/\\+\\d{1,4}/g) || [];\n  return !!mine && runs.some(r => r.slice(1) !== mine);",
+     True),
+
+    # ── the structural guarantee: unforeseen prose is replaced, not shipped ──
+    ('raw provider prose is passed straight through to the member again', SERVER,
+     '  if (raw && marzMsgIsSafeForMember(raw)) return raw;\n  return fallback || DEPOSIT_FAILED_MSG;',
+     '  return raw || fallback || DEPOSIT_FAILED_MSG;',
+     True),
+
+    ('a genuinely useful refusal (insufficient float, frozen account) is swallowed too', SERVER,
+     'function marzMsgIsSafeForMember(raw) {\n  return /insufficient (balance|funds|float)|frozen|suspended|limit|minimum|maximum|too (small|large|low|high)/i.test(String(raw || \'\'));\n}',
+     'function marzMsgIsSafeForMember(raw) {\n  return false;\n}',
+     True),
+
+    ('a transport failure is reported as a phone problem instead of "busy"', SERVER,
+     '  if (marzIsBusy(mp)) return PROVIDER_BUSY_MSG;\n  if (marzIsPhoneFormatError(mp, region)) return marzPhoneFormatMsg(region);',
+     '  if (marzIsPhoneFormatError(mp, region)) return marzPhoneFormatMsg(region);',
+     True),
+
+    # ── the wiring, and the region it is decided against ──
+    ('the deposit route records the raw admin/diagnostic text as the failure reason', SERVER,
+     "      await markDepositFailed(depRef, userId,\n        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion));",
      "      await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the payment'));",
      True),
 
+    ("the member's own region is no longer handed to the wrapper", SERVER,
+     "marzMemberMsg(mpData, 'Could not start the payment', paymentRegion));",
+     "marzMemberMsg(mpData, 'Could not start the payment'));",
+     True),
+
     ('marzPhoneFormatMsg stops reusing badPhoneMessage and drifts into a second copy', SERVER,
-     "function marzPhoneFormatMsg(region) {\n  return badPhoneMessage(region || currentRegion());\n}",
+     'function marzPhoneFormatMsg(region) {\n  return badPhoneMessage(region || currentRegion());\n}',
      "function marzPhoneFormatMsg(region) {\n  return 'Wrong phone number.';\n}",
      True),
 
+    # ── the refusal a member gets BEFORE the gateway is ever asked ──
+    ("a wrong-country number is refused with a sentence that never names the country's format", SERVER,
+     '    return cleaned ? { phone: cleaned } : { error: badPhoneMessage(r) };',
+     "    return cleaned ? { phone: cleaned } : { error: 'Enter a valid mobile-money phone number.' };",
+     True),
+
+    ('the fallback-to-account-number path loses the same wording', SERVER,
+     '  const fallback = cleanPhone(accountPhone || \'\', r);\n  return fallback ? { phone: fallback } : { error: badPhoneMessage(r) };',
+     "  const fallback = cleanPhone(accountPhone || '', r);\n  return fallback ? { phone: fallback } : { error: 'Enter a valid mobile-money phone number.' };",
+     True),
+
+    ('the number is validated against the request context instead of the region passed in', SERVER,
+     '    const cleaned = cleanPhone(v, r);',
+     '    const cleaned = cleanPhone(v);',
+     True),
+
+    ('the phone rule is no longer told which region to judge against', SERVER,
+     'function depositSenderPhone(body, accountPhone, keys, region) {\n  const r = region || currentRegion();',
+     'function depositSenderPhone(body, accountPhone, keys, region) {\n  const r = currentRegion();',
+     True),
+
+    # ── the sentence itself has to stay translatable ──
     ('the LANG_PATTERNS row is deleted, so the message goes back to untranslated English', CLIENT,
      "['That is not a valid {0} mobile-money number. Use the format {1} or {2}.',",
      "['SOMETHING_ELSE_ENTIRELY {0} {1} {2}',",
@@ -68,13 +131,16 @@ MUTATIONS = [
 
 
 def run():
-    r = subprocess.run(['node', 'test-marz-phone-error.js'], cwd=HERE, capture_output=True, text=True)
-    return r.returncode
+    worst = 0
+    for f in ('test-marz-phone-error.js', 'test-deposit-phone.js'):
+        r = subprocess.run(['node', f], cwd=HERE, capture_output=True, text=True)
+        worst = worst or r.returncode
+    return worst
 
 
 def main():
     if run() != 0:
-        print('REFUSING TO RUN: test-marz-phone-error.js is not green at HEAD')
+        print('REFUSING TO RUN: the phone-error harnesses are not green at HEAD')
         return 1
     fails = 0
     for label, target, old, new, expect in MUTATIONS:

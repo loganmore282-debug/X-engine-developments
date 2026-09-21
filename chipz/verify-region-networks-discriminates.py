@@ -45,12 +45,12 @@ MUTATIONS = [
      True),
 
     ("/deposit/marzpay reverts to the old global network check", SERVER,
-     "const network = regionNetworkSet().has(req.body.network) ? req.body.network : null;\n    await depRef.set({",
+     "const network = regionNetworkSet(paymentRegion).has(req.body.network) ? req.body.network : null;\n    await depRef.set({",
      "const network = ['MTN Mobile Money', 'Airtel Money'].includes(req.body.network) ? req.body.network : null;\n    await depRef.set({",
      True),
 
     ("/deposit/manual/init reverts to the old global network check", SERVER,
-     "const network = regionNetworkSet().has(req.body.network) ? req.body.network : null;\n  if (!network) return res.status(400)",
+     "const network = regionNetworkSet(depositRegion).has(req.body.network) ? req.body.network : null;\n  if (!network) return res.status(400)",
      "const network = ['MTN Mobile Money', 'Airtel Money'].includes(req.body.network) ? req.body.network : null;\n  if (!network) return res.status(400)",
      True),
 
