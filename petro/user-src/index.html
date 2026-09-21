@@ -1892,6 +1892,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .af-v2 input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:#fff;}
 .af-v2 input::placeholder{color:rgba(255,255,255,.58);}
 .af-ic{color:rgba(255,255,255,.78);display:flex;flex-shrink:0;}
+/* Owner: "this time no using subdomains ... only on signup or login one
+   selects country code besides the number area ie 256|" -- restores the
+   dial-code chip the phone field always had, in the SAME slot the person
+   icon used on every other field, so a phone row reads as one continuous
+   pill instead of icon + separate chip. Wired to the exact same
+   paintRegionChrome() -> #loginDial/#regDial/#forgotDial mechanism the
+   deposit screen's own .dep-phone .prefix already uses elsewhere in this
+   app -- nothing new to build, just re-adding the element it already knew
+   how to fill. */
+.af-prefix{flex-shrink:0;font-weight:700;color:#fff;font-size:15px;padding-right:10px;margin-right:2px;border-right:1.5px solid rgba(255,255,255,.24);}
 .af-eye{background:none;border:none;padding:4px;color:rgba(255,255,255,.68);display:flex;align-items:center;flex-shrink:0;cursor:pointer;}
 .af-v2.with-btn{padding-right:6px;}
 .af-inline-btn{flex-shrink:0;background:var(--chipz-orange);color:#fff;border:0;border-radius:var(--r-ctl);
@@ -2563,7 +2573,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
       <div id="loginPane">
         <div id="loginError"></div>
         <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg></span>
+          <span class="af-prefix" id="loginDial">+256</span>
           <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <!-- Which country this web address serves. Shown only when the
@@ -2594,7 +2604,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
       <div id="registerPane" style="display:none;">
         <div id="regError"></div>
         <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg></span>
+          <span class="af-prefix" id="regDial">+256</span>
           <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
@@ -2631,7 +2641,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
       <div id="forgotPane" style="display:none;">
         <div id="forgotError"></div>
         <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg></span>
+          <span class="af-prefix" id="forgotDial">+256</span>
           <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <div class="af-v2 with-btn">

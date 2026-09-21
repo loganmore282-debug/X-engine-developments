@@ -342,7 +342,6 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
-        <button class="tab hidden" data-tab="regions" id="regionsTab">Countries</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -975,9 +974,9 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
   let lastTab = 'dashboard';
   try { const saved = sessionStorage.getItem('snow_admin_tab'); if (saved && VALID_TABS.has(saved)) lastTab = saved; } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'promocodesTab', 'regionsTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'promocodesTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'promocodes', 'regions'].includes(lastTab)) lastTab = 'dashboard';
+  if (!isOwner && ['products', 'settings', 'promocodes'].includes(lastTab)) lastTab = 'dashboard';
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
@@ -1000,10 +999,11 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
 // so uploading a Brand logo changed the member app and left the panel showing
 // something else entirely.
 //
-// Those two SVGs are gone; the markup now ships the Chipz app icon, so the
-// panel is Chipz-branded even with nothing uploaded and even offline. This
-// still overrides it when a Brand logo IS uploaded, which is what he asked
-// for -- it is the second of two tiers now, not the only one.
+// Those two SVGs are gone; the markup now ships the built-in Petro app icon
+// (icon-192.png), so the panel is on-brand even with nothing uploaded and
+// even offline. This still overrides it when a Brand logo IS uploaded,
+// which is what he asked for -- it is the second of two tiers now, not the
+// only one.
 //
 // /public/chipz-images is used rather than the admin API on purpose: the LOGIN
 // screen has to draw this before anyone has signed in, so it cannot depend on
@@ -1145,7 +1145,7 @@ try { setPushUIState(!!localStorage.getItem('snow_admin_push_token')); } catch(_
 }); })();
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','regions','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','admins','auditlog']);
 let _tab='dashboard';
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
@@ -2495,13 +2495,6 @@ function editProduct(p, order){
     <div class="row">
       <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
     </div>
-    <h4 style="margin:16px 0 4px;font-size:14px">Turntable spins from this product</h4>
-    <p class="muted" style="margin:0 0 8px;font-size:11.5px">How many spins buying THIS product earns, and what each of those spins can win. Leave spins at 0 for products that earn none. Each spin pays a random amount between the two figures — set them the same for a fixed amount.</p>
-    <div class="row">
-      <div><label>Spins per purchase <span class="muted" style="font-weight:400">— up to ${ADMIN_MAX_SPINS}</span></label><input id="pSpinCount" type="number" min="0" max="${ADMIN_MAX_SPINS}" value="${p.spinCount||0}"></div>
-      <div><label>Win from (${adminCur()})</label><input id="pSpinMin" type="number" min="0" value="${p.spinMin!=null?p.spinMin:''}" placeholder="200"></div>
-      <div><label>Win to (${adminCur()})</label><input id="pSpinMax" type="number" min="0" value="${p.spinMax!=null?p.spinMax:''}" placeholder="1000"></div>
-    </div>
     <label>Product image <span class="muted" style="font-weight:400">— saved at ${PRODUCT_IMG_W} × ${PRODUCT_IMG_H} px (4:3)</span></label>
     <div class="img-picker">
       <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
@@ -2576,7 +2569,6 @@ function editProduct(p, order){
     const key = p.key || (($('pKey').value || $('pLabel').value).toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24) || ('item'+Date.now()));
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
       expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, order:$('pOrder').value,
-      spinCount:$('pSpinCount').value, spinMin:$('pSpinMin').value, spinMax:$('pSpinMax').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
@@ -2590,16 +2582,6 @@ function editProduct(p, order){
     if (body.openFrom && body.openFrom === body.openTo)
       return toast('A daily window cannot start and end at the same minute','err');
     if(!parseFloat(body.price)) return toast('Enter a price','err');
-    const sMin = parseFloat(body.spinMin), sMax = parseFloat(body.spinMax);
-    if(Number.isFinite(sMin) && Number.isFinite(sMax) && sMax < sMin)
-      return toast('Spin "win to" cannot be less than "win from"','err');
-    if(parseFloat(body.spinCount) > 0 && !(sMax > 0))
-      return toast('Set what a spin can win, or set spins per purchase to 0','err');
-    // max="20" on the input is only a hint -- a typed 50 sails past it and the
-    // server refuses the whole save. Say so here, where the box is.
-    const sCount = parseFloat(body.spinCount);
-    if(Number.isFinite(sCount) && (sCount < 0 || sCount > ADMIN_MAX_SPINS || !Number.isInteger(sCount)))
-      return toast('Spins per purchase must be a whole number from 0 to '+ADMIN_MAX_SPINS,'err');
     const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';
     const d=await api('/admin/products/save', { products:[body] });
     $('pSave').disabled=false; $('pSave').textContent=restore;
@@ -2624,7 +2606,7 @@ async function renderMessages(){
         ? 'This message will go to <b>every country</b>. Pick one country in the switch above to write for that country only &mdash; useful when the wording names an amount, a currency or a payment operator.'
         : `This message will go to <b>${esc(regionByKeyAdmin().name)}</b> members only.`}</div>`:''}
       <div class="row">
-        <div style="flex:2"><label>Title</label><input id="mTitle" type="text" maxlength="200" placeholder="Welcome to Chipz"></div>
+        <div style="flex:2"><label>Title</label><input id="mTitle" type="text" maxlength="200" placeholder="Welcome to Petro"></div>
         <div><label>ID (blank = new)</label><input id="mId" type="text" placeholder="new"></div>
       </div>
       <div style="margin-top:6px"><label>Message</label><textarea id="mBody" rows="5" maxlength="4000" placeholder="Write the message members will read..."></textarea></div>
@@ -3324,10 +3306,8 @@ async function renderSettings(){
   // positional and not worth the risk of misaligning for one dead fetch.
   const referralBannerImage = cir.referral||'';
   const brandLogoImage = cir.logo||'';
-  const spinBannerImage = cir.spin||'';
   const downloadBgImage = cir.downloadbg||'';
   const authHeroImage = cir.authhero||'';
-  const authCardImage = cir.authcard||'';
   const profileGifImage = cir.profilegif||'';
   const homeSlide2Image = cir.banner2||'';
   const homeSlide3Image = cir.banner3||'';
@@ -3407,34 +3387,13 @@ async function renderSettings(){
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
-      <div class="switch-row" style="margin-top:8px"><span><b>Opening countdown</b> <span class="muted">(pre-launch gate, shows a live "Chipz opening in..." timer instead of the app)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>Opening countdown</b> <span class="muted">(pre-launch gate, shows your brand name and a live "Opening in..." timer instead of the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sOpenCd" ${s.openingCountdownEnabled?'checked':''} style="width:auto"></label></div>
       <label>Opening date &amp; time</label><input id="sOpenCdAt" type="datetime-local" value="${msToDatetimeLocal(s.openingCountdownAt)}">
       <p class="muted" style="margin:4px 0 0">While enabled and this time is still in the future, every user (new or existing) sees the countdown instead of the login/app -- it turns off on its own once the time passes, or uncheck it here to open early.</p>
       <label style="margin-top:14px">Allowed website domains</label>
       <textarea id="sAllowedOrigins" rows="4" placeholder="chipz-platform.com&#10;www.chipz-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only websites listed here may talk to the backend. Add your own custom domain when you buy one &mdash; <b>one per line</b>, and add the <b>www.</b> version too if you use it. If a site is not allowed, its pages show "Network error" even though the server is perfectly fine, so this is the first place to look when that happens.<br><br>You do <b>not</b> need to add the Render or EdgeOne addresses: <b>onrender.com</b>, <b>edgeone.app</b>, <b>edgeone.site</b> and <b>edgeone.dev</b> are permanently built in and cannot be removed from here. That is on purpose &mdash; it means a mistake in this box can never lock you out of this admin panel. <br><br><b>Subdomains are included automatically.</b> Listing <b>yourdomain.com</b> also allows <b>g26e.yourdomain.com</b> and every other short address under it &mdash; you never have to add generated addresses here one by one. (This is why subdomains used to load nothing at all: they were refused, and everything in the app, photos included, comes through the backend.)</p>
-      <h2 class="sec" style="margin:14px 0 4px">Where the app may be opened from</h2>
-      <label>Base domain</label>
-      <input id="sBaseDomain" value="${esc(v('baseDomain','chipz-platform.com'))}" placeholder="chipz-platform.com">
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Every country's short address is built from this &mdash; <code>g26e</code> becomes <code>g26e.&lt;base domain&gt;</code>. Set the short names per country on the <b>Countries</b> tab.</p>
-      <div class="switch-row" style="margin-top:12px"><span><b>The root domain does not serve the app</b> <span class="muted">(the bare domain and its www. form show a short notice instead)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sBlockRoot" ${v('blockRootDomain',true)!==false?'checked':''} style="width:auto"></label></div>
-      <p class="muted" style="font-size:12px;margin:6px 0 0"><b>This only works once the base domain above names your real domain</b> &mdash; it is how the server recognises which two addresses to refuse.<br><br>
-      <b>What it does and does not do to <code>www</code>.</b> Deleting the root <code>A</code> record makes the bare domain stop resolving, but <b>not</b> <code>www</code>: a wildcard <code>*</code> record answers for <code>www</code> too, so it keeps loading and this switch is what makes it show the notice instead of the app.<br><br>
-      To make <code>www</code> stop resolving <b>at all</b> (the browser's own "site can't be reached" page, as the bare domain now gives): add <b>any</b> record at the name <code>www</code> in your DNS &mdash; a <b>TXT</b> record with any value is enough. A wildcard only applies to a name that has no records of its own, so one record at <code>www</code> removes it from the wildcard's reach. Do <b>not</b> point it at an address; the point is that it has no address.</p>
-      <div class="switch-row"><span><b>Only a country's own addresses work</b> <span class="muted">(anything else on the base domain shows the notice &mdash; turn this on once you have a wildcard DNS record)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sStrictHosts" ${v('strictRegionHosts',false)?'checked':''} style="width:auto"></label></div>
-      <label style="margin-top:12px">Retired addresses, one per line</label>
-      <textarea id="sParkedHosts" rows="2" placeholder="old.chipz-platform.com">${esc((s.parkedHosts||[]).join('\n'))}</textarea>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Addresses that must never serve the app, on top of the root domain. Your Render and EdgeOne addresses are permanently exempt, so a mistake here cannot lock you out of this panel.</p>
-      <label style="margin-top:14px">Move arrivals to another address &mdash; <b>${esc(regionByKeyAdmin().name)}</b> only</label>
-      <select id="sRotateEntry">
-        <option value="off" ${v('rotateEntry','off')==='off'?'selected':''}>Off &mdash; everyone stays on the address they opened</option>
-        <option value="visitors" ${v('rotateEntry','off')==='visitors'?'selected':''}>Visitors only &mdash; recommended</option>
-        <option value="always" ${v('rotateEntry','off')==='always'?'selected':''}>Everyone, signed-in members included</option>
-      </select>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">When someone opens <code>gfdt.&lt;base domain&gt;</code>, the server sends them on to a different short address of <b>the same country</b> &mdash; <code>b5dh.&lt;base domain&gt;</code> &mdash; for the rest of that visit. Their invite code and the page they were opening travel with them. Give this country <b>several</b> short addresses on the <b>Countries</b> tab first: with only one there is nowhere to send anybody, and only addresses listed there are ever used.<br><br><b>Why "visitors only" is the one to pick.</b> A phone files the saved password, the offline copy of the app and the installed home-screen icon under <b>one</b> address. Move a signed-in member and he loses his saved password, re-downloads the whole app on his own data, and the icon on his home screen still points at the address he left. Someone who has not signed up yet has none of that to lose. This setting is per country &mdash; switch country at the top of this tab to set it for another one.</p>
       <h2 class="sec" style="margin:14px 0 4px">Appearance</h2>
       <label>Number/digit font (every money figure in the app)</label>
       <select id="sNumberFont">${NUMBER_FONT_OPTIONS.map(f=>`<option value="${esc(f)}" ${v('numberFont','Bodoni Moda')===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
@@ -3472,11 +3431,11 @@ async function renderSettings(){
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin:0 0 6px">Manual payment screen images</h2>
-      <p class="muted" style="margin-top:0">Replaces the CHIPZ wordmark on the manual-deposit flow's own 2 screens. An empty slot keeps the wordmark. Saved as PNG, so a logo with no background stays that way.</p>
+      <p class="muted" style="margin-top:0">Replaces the plain text wordmark on the manual-deposit flow's own 2 screens. An empty slot keeps the wordmark (your app name, from Settings -&gt; App name). Saved as PNG, so a logo with no background stays that way.</p>
       <p class="muted" style="margin:0 0 6px"><b>Payment method screen</b> (network/phone selector)</p>
       <div class="banner-row">
         ${manualSelectorImage?`<img class="img-thumb alpha" src="${esc(manualSelectorImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualSelectorImage?'Custom image':'<span class="muted">CHIPZ wordmark</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualSelectorImage?'Custom image':'<span class="muted">Text wordmark</span>'}</div>
         ${manualSelectorImage?`<button class="btn danger sm" id="mpSelectorImgClear">Remove</button>`:''}
       </div>
       <label style="display:flex;align-items:center;gap:8px;width:auto;margin:8px 0 0;font-weight:500"><input type="checkbox" id="mpSelectorStrip" checked style="width:auto;margin:0"><span>Cut the dark background off this logo</span></label>
@@ -3484,7 +3443,7 @@ async function renderSettings(){
       <p class="muted" style="margin:16px 0 6px"><b>Final payment screen</b> (COPY &amp; PAY code screen)</p>
       <div class="banner-row">
         ${manualHeroImage?`<img class="img-thumb alpha" src="${esc(manualHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualHeroImage?'Custom image':'<span class="muted">CHIPZ wordmark</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualHeroImage?'Custom image':'<span class="muted">Text wordmark</span>'}</div>
         ${manualHeroImage?`<button class="btn danger sm" id="mpHeroImgClear">Remove</button>`:''}
       </div>
       <label style="display:flex;align-items:center;gap:8px;width:auto;margin:8px 0 0;font-weight:500"><input type="checkbox" id="mpHeroStrip" checked style="width:auto;margin:0"><span>Cut the dark background off this logo</span></label>
@@ -3596,49 +3555,20 @@ async function renderSettings(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileCardFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Turntable (spin wheel)</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">A daily free spin for every member, plus extra spins earned by buying products. Winnings are credited straight to the wallet and show under the Turntable tab of Balance Record.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:8px;margin-bottom:10px;"><input type="checkbox" id="ttOn" ${s.turntableEnabled?'checked':''} style="width:auto"> Enabled</label>
-      <h4 style="margin:10px 0 6px;font-size:14px">Daily free spin</h4>
-      <p class="muted" style="margin:0 0 8px;font-size:12px">Each member gets one free spin per day, resetting at midnight (EAT). The win is a random amount between these two. Set them to the SAME number for a fixed amount every time.</p>
-      <div class="row">
-        <div><label>Minimum win (${adminCur()})</label><input id="ttMin" type="number" min="0" value="${esc(v('turntableDailyMin',200))}"></div>
-        <div><label>Maximum win (${adminCur()})</label><input id="ttMax" type="number" min="0" value="${esc(v('turntableDailyMax',1000))}"></div>
-      </div>
-      <h4 style="margin:16px 0 6px;font-size:14px">Spins earned by buying products</h4>
-      <p class="muted" style="margin:0 0 8px;font-size:12px">Set per product, not here — open <b>Products</b>, edit a product, and use its "Turntable spins from this product" section to set how many spins it earns and what each can win. That way every product can pay differently.</p>
-      <button class="btn block" id="saveTurntable" style="margin-top:6px">Save turntable settings</button>
-    </div>
-
     <h2 class="sec">Login &amp; Sign Up screen</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The screen a member sees before signing in. It has <b>two parts</b>, and each takes its own picture. Both apply to the Log In tab <b>and</b> the Sign Up tab &mdash; they share this screen, so one image each keeps the background steady when a member switches between them.</p>
+      <p class="muted" style="margin-top:0">The screen a member sees before signing in -- ONE continuous background photo behind Log In, Sign Up and Forgot Password (they share this screen, so one image keeps the background steady switching between them). No separate panel behind the fields any more -- the current design floats dark glass pill fields directly on this one photo.</p>
 
-      <h4 style="margin:16px 0 6px;font-size:14px">1. Top band (behind the CHIPZ logo)</h4>
-      <p class="muted" style="margin:0 0 8px;font-size:12px">The orange area. Landscape, about <b>1200&nbsp;&times;&nbsp;700</b>. An empty slot shows the brand gradient. The picture sits <i>over</i> the gradient, so lowering opacity blends it back toward the orange rather than toward nothing.</p>
+      <p class="muted" style="margin:0 0 8px;font-size:12px">Portrait works best, about <b>1200&nbsp;&times;&nbsp;1600</b>. An empty slot shows the brand gradient. The picture sits <i>over</i> the gradient, so lowering opacity blends it back toward the gradient rather than toward nothing.</p>
       <div class="banner-row">
         ${authHeroImage?`<img class="img-thumb" src="${esc(authHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authHeroImage?'Custom image':'<span class="muted">Brand gradient</span>'}</div>
         ${authHeroImage?`<button class="btn danger sm" id="authHeroClear">Remove</button>`:''}
       </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload top-band image<input type="file" id="authHeroFile" accept="image/*" hidden></label>
+      <label class="btn block file-btn" style="margin-top:10px">Upload background image<input type="file" id="authHeroFile" accept="image/*" hidden></label>
       <div class="row" style="margin-top:10px">
         <div><label>Opacity (0&ndash;100%)</label><input id="authHeroOp" type="number" min="0" max="100" value="${esc(v('authHeroOpacity',100))}"></div>
         <div><label>Blur (0&ndash;40 px)</label><input id="authHeroBlur" type="number" min="0" max="40" value="${esc(v('authHeroBlur',0))}"></div>
-      </div>
-
-      <h4 style="margin:20px 0 6px;font-size:14px">2. The form card (behind the fields)</h4>
-      <p class="muted" style="margin:0 0 8px;font-size:12px">The white panel carrying LOGIN / SIGN UP and the input boxes. Portrait, about <b>900&nbsp;&times;&nbsp;1200</b>. It sits over the white card, so opacity blends it back toward white. <b>Keep this one faint</b> &mdash; try 20&ndash;35% opacity with some blur, or the text and the input boxes become hard to read.</p>
-      <div class="banner-row">
-        ${authCardImage?`<img class="img-thumb" src="${esc(authCardImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${authCardImage?'Custom image':'<span class="muted">Plain white</span>'}</div>
-        ${authCardImage?`<button class="btn danger sm" id="authCardClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload form-card image<input type="file" id="authCardFile" accept="image/*" hidden></label>
-      <div class="row" style="margin-top:10px">
-        <div><label>Opacity (0&ndash;100%)</label><input id="authCardOp" type="number" min="0" max="100" value="${esc(v('authCardOpacity',100))}"></div>
-        <div><label>Blur (0&ndash;40 px)</label><input id="authCardBlur" type="number" min="0" max="40" value="${esc(v('authCardBlur',0))}"></div>
       </div>
 
       <button class="btn block" id="saveAuthBg" style="margin-top:14px">Save opacity &amp; blur</button>
@@ -3652,7 +3582,7 @@ async function renderSettings(){
         Transparency is kept, and the <b>corners are rounded for you</b> &mdash; upload a plain square and it comes out with the rounded shape an app icon has. Keep the logo away from the very edges so the rounding does not cut into it.</p>
       <div class="banner-row">
         ${appIconImage?`<img class="img-thumb" style="border-radius:22%" src="${esc(appIconImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:22%"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${appIconCustom?'Custom icon':'<span class="muted">Built-in Chipz icon</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${appIconCustom?'Custom icon':'<span class="muted">Built-in app icon</span>'}</div>
         ${appIconCustom?`<button class="btn danger sm" id="appIconClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload icon<input type="file" id="appIconFile" accept="image/*" hidden></label>
@@ -3688,16 +3618,6 @@ async function renderSettings(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="refBannerFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Home spin banner</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The lower banner on the app's Home tab, carrying the <b>Go spin</b> button that opens the turntable. It replaced the product list that used to sit there &mdash; products now live on their own tab. Full width, roughly 3:1 (for example 1200&times;400). An empty slot shows the brand gradient behind the button.</p>
-      <div class="banner-row">
-        ${spinBannerImage?`<img class="img-thumb" src="${esc(spinBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${spinBannerImage?'Custom image':'<span class="muted">Default artwork</span>'}</div>
-        ${spinBannerImage?`<button class="btn danger sm" id="spinBannerClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="spinBannerFile" accept="image/*" hidden></label>
-    </div>
 
     <h2 class="sec">Download screen background</h2>
     <div class="panel-card">
@@ -3723,10 +3643,10 @@ async function renderSettings(){
 
     <h2 class="sec">Brand logo</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The round logo on the app's Account profile card. An empty slot shows the CHIPZ wordmark instead. Square images work best -- it is cropped to a circle.</p>
+      <p class="muted" style="margin-top:0">The round logo on the app's Account profile card. An empty slot shows the text wordmark instead. Square images work best -- it is cropped to a circle.</p>
       <div class="banner-row">
         ${brandLogoImage?`<img class="img-thumb" style="border-radius:50%" src="${esc(brandLogoImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:50%"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${brandLogoImage?'Custom logo':'<span class="muted">CHIPZ wordmark</span>'}</div>
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${brandLogoImage?'Custom logo':'<span class="muted">Text wordmark</span>'}</div>
         ${brandLogoImage?`<button class="btn danger sm" id="brandLogoClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="brandLogoFile" accept="image/*" hidden></label>
@@ -3755,17 +3675,10 @@ async function renderSettings(){
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
-    <h2 class="sec">Regulation page</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">Shown under Account → Rules &amp; Regulation. Blank leaves the page empty in the app.</p>
-      <textarea id="regText" rows="8" placeholder="Platform rules and regulation…">${esc(v('rulesText',''))}</textarea>
-      <button class="btn block" id="saveReg">Save regulation</button>
-    </div>
-
     <h2 class="sec">App name</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The platform's name. Changing it renames it everywhere inside the app — the Home wordmark, the profile badge, the loading and sign-in screens, About, Get the app, the browser tab, and the wording on admin credits from now on. Members see it the next time they open the app. Two places keep the old name until the frontend is re-uploaded: the name Android shows under the installed icon, and the title on a shared link — both are read out of files the phone downloads once, not from these settings. Up to 24 characters.</p>
-      <label>App name</label><input id="brandNameInput" maxlength="24" value="${esc(v('brandName','Chipz'))}" placeholder="Chipz">
+      <p class="muted" style="margin-top:0">The platform's name. Changing it renames it everywhere inside the app — the Home wordmark, the profile badge, the pre-launch countdown gate, About, Get the app, the browser tab, and the wording on admin credits from now on. The loading and sign-in screens no longer show any name at all, by design -- see CLAUDE.md. Members see the new name the next time they open the app. Two places keep the old name until the frontend is re-uploaded: the name Android shows under the installed icon, and the title on a shared link — both are read out of files the phone downloads once, not from these settings. Up to 24 characters.</p>
+      <label>App name</label><input id="brandNameInput" maxlength="24" value="${esc(v('brandName','Petro'))}" placeholder="Petro">
       <button class="btn block" id="saveBrandName" style="margin-top:6px">Save app name</button>
     </div>
 
@@ -3824,12 +3737,6 @@ async function renderSettings(){
       // and rejects the whole save naming the bad line rather than silently
       // dropping it.
       allowedOrigins:$('sAllowedOrigins').value, maintenanceMode:$('sMaint').checked,
-      baseDomain:$('sBaseDomain').value.trim(), blockRootDomain:$('sBlockRoot').checked,
-      strictRegionHosts:$('sStrictHosts').checked, parkedHosts:$('sParkedHosts').value,
-      // Per country, unlike the four host controls just above -- it rides
-      // this same payload and gets stamped with the selected country by
-      // api(), because the pool of addresses it draws from is per country.
-      rotateEntry:$('sRotateEntry').value,
       maintenanceMsg:$('sMaintMsg').value.trim(), numberFont:$('sNumberFont').value,
       openingCountdownEnabled:$('sOpenCd').checked,
       openingCountdownAt:$('sOpenCdAt').value ? new Date($('sOpenCdAt').value).getTime() : 0,
@@ -3862,17 +3769,6 @@ async function renderSettings(){
       autoApproveMaxAmount:+$('sAutoApproveMaxAmt').value
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Auto-approve settings saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveTurntable').addEventListener('click', async()=>{
-    const min = +$('ttMin').value, max = +$('ttMax').value;
-    if (!(min >= 0) || !(max >= 0)) return toast('Enter valid win amounts','err');
-    if (max < min) return toast('Maximum win cannot be less than the minimum','err');
-    const upd = {
-      turntableEnabled: $('ttOn').checked,
-      turntableDailyMin: min, turntableDailyMax: max,
-    };
-    const d = await api('/admin/settings/update', { settings: upd });
-    toast(d.status==='success'?'Turntable settings saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('homeBannerFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
@@ -3950,7 +3846,7 @@ async function renderSettings(){
           // The download backdrop and the two auth backdrops all fill large
           // areas, so they keep more resolution than the banners.
           const maxDim = slot==='logo' ? 512
-                       : (slot==='downloadbg' || slot==='authhero' || slot==='authcard') ? 1600
+                       : (slot==='downloadbg' || slot==='authhero') ? 1600
                        : 1280;
           const image = await fileToDataUrl(f, maxDim, 0.82);
           const d = await api('/admin/chipz-image/set', { slot, image });
@@ -3988,7 +3884,7 @@ async function renderSettings(){
   if (appIconClear) appIconClear.addEventListener('click', async()=>{
     await withTabBusy((async()=>{
       const d = await api('/admin/app-icon/clear', {});
-      toast(d.status==='success'?'App icon reset to the built-in Chipz icon':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?'App icon reset to the built-in app icon':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderSettings();
     })());
   });
@@ -4039,18 +3935,15 @@ async function renderSettings(){
   });
   wireChipzImageSlot('referral', 'refBannerFile', 'refBannerClear', 'Referral banner saved, live for every user', 'Referral banner removed');
   wireChipzImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved, live for every user', 'Brand logo removed');
-  wireChipzImageSlot('spin', 'spinBannerFile', 'spinBannerClear', 'Spin banner saved, live for every user', 'Spin banner removed');
   wireChipzImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download screen background saved, live for every user', 'Download screen background removed');
-  wireChipzImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Top-band image saved, live on Log In and Sign Up', 'Top-band image removed');
-  wireChipzImageSlot('authcard', 'authCardFile', 'authCardClear', 'Form-card image saved, live on Log In and Sign Up', 'Form-card image removed');
+  wireChipzImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Background image saved, live on Log In and Sign Up', 'Background image removed');
   wireChipzImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
   wireChipzImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
   wireChipzImageSlot('homefooter', 'homeFooterFile', 'homeFooterClear', 'Footer banner saved, live on Home', 'Footer banner removed');
   wireChipzImageSlot('profilecard', 'profileCardFile', 'profileCardClear', 'Account header photo saved, live for every user', 'Account header photo removed');
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{
-    const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value,
-                   authCardOpacity:+$('authCardOp').value, authCardBlur:+$('authCardBlur').value };
+    const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value };
     for (const [k,val] of Object.entries(nums)) {
       const max = k.endsWith('Blur') ? 40 : 100;
       if (!Number.isFinite(val) || val < 0 || val > max)
@@ -4133,7 +4026,7 @@ async function renderSettings(){
   if (mpSelectorImgClear) mpSelectorImgClear.addEventListener('click', async()=>{
     await withTabBusy((async()=>{
       const d = await api('/admin/manual-pay-image/clear', { slot:'selector' });
-      toast(d.status==='success'?'Reverted to the CHIPZ wordmark':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?'Reverted to the text wordmark':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderSettings();
     })());
   });
@@ -4149,7 +4042,7 @@ async function renderSettings(){
   if (mpHeroImgClear) mpHeroImgClear.addEventListener('click', async()=>{
     await withTabBusy((async()=>{
       const d = await api('/admin/manual-pay-image/clear', { slot:'hero' });
-      toast(d.status==='success'?'Reverted to the CHIPZ wordmark':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?'Reverted to the text wordmark':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderSettings();
     })());
   });
@@ -4163,10 +4056,6 @@ async function renderSettings(){
       whatsappGroup:$('spWaGroup').value.trim(), whatsappContact:$('spWaContact').value.trim(),
       supportHours:$('spHours').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveReg').addEventListener('click', async()=>{
-    const d=await api('/admin/settings/update', { settings: { rulesText:$('regText').value } });
-    toast(d.status==='success'?'Regulation saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveBrandName').addEventListener('click', async()=>{
     const name = $('brandNameInput').value.trim();
@@ -4254,7 +4143,7 @@ function renderManualNumbersEditor(){
         <div><label>Order</label><input type="number" data-mn-order="${i}" value="${n.order||0}"></div>
       </div>
       <label>Phone number</label><input data-mn-number="${i}" value="${esc(toLocalPhoneDisplay(n.number||'', n.regionKey))}" placeholder="0770000001">
-      <label>Account holder name</label><input data-mn-holder="${i}" value="${esc(n.holderName||'')}" placeholder="Chipz MTN 1">
+      <label>Account holder name</label><input data-mn-holder="${i}" value="${esc(n.holderName||'')}" placeholder="Petro MTN 1">
       <label style="width:auto;display:flex;align-items:center;gap:8px;margin:8px 0;"><input type="checkbox" data-mn-active="${i}" ${n.active!==false?'checked':''} style="width:auto"> Active (eligible for round-robin)</label>
       <div class="row">
         <button class="btn ok sm" data-mn-save="${i}" style="flex:1">${n._new||!n.id?'Add':'Save'}</button>
@@ -4581,7 +4470,6 @@ const ADMIN_LANG_ROWS = [
   ['WhatsApp contact', 'Endagiriro ya WhatsApp', 'Mawasiliano ya WhatsApp', 'Contact WhatsApp', 'Aho wahamagara kuri WhatsApp', 'Endagiriro ya WhatsApp'],
   ['WhatsApp group', 'Ekibiina kya WhatsApp', 'Kikundi cha WhatsApp', 'Groupe WhatsApp', 'Itsinda rya WhatsApp', 'Ekibiina kya WhatsApp'],
   ['Save support contacts', 'Tereka endagiriro z\'obuyambi', 'Hifadhi mawasiliano ya usaidizi', 'Enregistrer les contacts d\'assistance', 'Bika aho wahamagara ubufasha', 'Biika endagiriro z\'obuhwezi'],
-  ['Regulation page', 'Olupapula lw\'amateeka', 'Ukurasa wa kanuni', 'Page du règlement', 'Urupapuro rw\'amabwiriza', 'Orupapura rw\'ebiragiro'],
   ['Platform rules and regulation…', 'Amateeka n\'ebiragiro bya pulatifoomu…', 'Sheria na kanuni za jukwaa…', 'Règles et règlement de la plateforme…', 'Amategeko n\'amabwiriza by\'urubuga…', 'Ebiragiro n\'ebiteekateeko by\'orubuga…'],
   ['Save regulation', 'Tereka amateeka', 'Hifadhi kanuni', 'Enregistrer le règlement', 'Bika amabwiriza', 'Biika ebiragiro'],
   ['Save about page', 'Tereka olupapula "Ku ffe"', 'Hifadhi ukurasa wa kuhusu', 'Enregistrer la page À propos', 'Bika urupapuro rwa "Abo turi bo"', 'Biika orupapura "Ahaitwe"'],
@@ -4598,7 +4486,6 @@ const ADMIN_LANG_ROWS = [
   ['Brand gradient', 'Langi ez\'ekika', 'Rangi za chapa', 'Dégradé de la marque', 'Amabara y\'ikirangantego', 'Amarangi g\'eiziina'],
   ['Plain white', 'Ekyeru kyereere', 'Nyeupe tupu', 'Blanc uni', 'Umweru gusa', 'Ekyeru kyonka'],
   ['Default artwork', 'Ekifaananyi ekitongole', 'Mchoro wa chaguo-msingi', 'Illustration par défaut', 'Ishusho isanzwe', 'Ekishushani ekitairweho'],
-  ['Built-in Chipz icon', 'Akabonero ka Chipz akaliwo dda', 'Aikoni ya Chipz iliyojengwa ndani', 'Icône Chipz intégrée', 'Ikimenyetso cya Chipz kiri imbere', 'Ekimanyiso kya Chipz ekiriyo'],
   ['Home banner', 'Ekifaananyi eky\'oku lupapula olusooka', 'Bango la ukurasa wa nyumbani', 'Bannière d\'accueil', 'Ibendera ry\'urupapuro rw\'ahabanza', 'Ekishushani eky\'aha rupapura rw\'omuka'],
   ['Home spin banner', 'Ekifaananyi ky\'nnamuziga ku lupapula olusooka', 'Bango la gurudumu la ukurasa wa nyumbani', 'Bannière de la roue sur l\'accueil', 'Ibendera ry\'uruziga ku rupapuro rw\'ahabanza', 'Ekishushani ky\'orupiira aha rupapura rw\'omuka'],
   ['Referral banner', 'Ekifaananyi ky\'okuyita', 'Bango la mialiko', 'Bannière de parrainage', 'Ibendera ryo gutumira', 'Ekishushani ky\'okweta'],
@@ -4609,7 +4496,6 @@ const ADMIN_LANG_ROWS = [
   ['Link preview', 'Ekifaananyi ky\'ekinywanyizo', 'Muhtasari wa kiungo', 'Aperçu du lien', 'Incamake y\'umurongo', 'Ekishushani ky\'omukwate'],
   ['Manual payment screen images', 'Ebifaananyi by\'olupapula lw\'okusasula n\'emikono', 'Picha za skrini ya malipo ya mkono', 'Images de l\'écran de paiement manuel', 'Amashusho y\'urupapuro rwo kwishyura intoki', 'Ebishushani by\'orupapura rw\'okushashura n\'emikono'],
   ['Login & Sign Up screen', 'Olupapula lw\'okuyingira n\'okwewandiisa', 'Skrini ya kuingia na kujisajili', 'Écran de connexion et d\'inscription', 'Urupapuro rwo kwinjira no kwiyandikisha', 'Orupapura rw\'okutaaha n\'okwehandiisa'],
-  ['1. Top band (behind the CHIPZ logo)', '1. Omusipi ogw\'awaggulu (emabega w\'akabonero ka CHIPZ)', '1. Ukanda wa juu (nyuma ya nembo ya CHIPZ)', '1. Bandeau du haut (derrière le logo CHIPZ)', '1. Umukandara wo hejuru (inyuma y\'ikirango cya CHIPZ)', '1. Omukyeeka ogw\'ahaiguru (enyima y\'ekimanyiso kya CHIPZ)'],
   ['2. The form card (behind the fields)', '2. Kaadi y\'ebibuuzo (emabega w\'ebifo ebijjuzibwa)', '2. Kadi ya fomu (nyuma ya sehemu za kuandika)', '2. La carte du formulaire (derrière les champs)', '2. Ikarita y\'ifishi (inyuma y\'imyanya yuzuzwa)', '2. Ekaadi y\'ebibuuzo (enyima y\'ebyanya ebirikwijuzibwa)'],
   ['Opacity (0–100%)', 'Obuzibu bw\'ekifaananyi (0–100%)', 'Uzito wa rangi (0–100%)', 'Opacité (0–100 %)', 'Ubwijime bw\'ishusho (0–100%)', 'Obuzibu bw\'ekishushani (0–100%)'],
   ['Blur (0–40 px)', 'Okusiikuula (0–40 px)', 'Ufifishaji (0–40 px)', 'Flou (0–40 px)', 'Ukwijima (0–40 px)', 'Okusiikuura (0–40 px)'],
@@ -4666,7 +4552,6 @@ const ADMIN_LANG_ROWS = [
   ['Account ids are 5 digits now. This rewrites ids issued while they were 6 (000001 -> 00001). Ids that genuinely need 6 digits are left alone.', 'Namba z\'akawunti kaakano za nnamba 5. Kino kikyusa ezaaweebwa nga ziri 6 (000001 -> 00001). Ezo ezeetaaga nnamba 6 zisigala nga bwe ziri.', 'Vitambulisho vya akaunti sasa ni tarakimu 5. Hii inaandika upya vilivyotolewa vikiwa 6 (000001 -> 00001). Vinavyohitaji tarakimu 6 kweli vinaachwa.', 'Les identifiants de compte font 5 chiffres désormais. Ceci réécrit ceux émis à 6 (000001 -> 00001). Ceux qui ont vraiment besoin de 6 sont laissés tels quels.', 'Indangamuntu za konti ubu ni imibare 5. Ibi byandika bushya izatanzwe zifite 6 (000001 -> 00001). Izikeneye koko imibare 6 zisigara uko ziri.', 'Namba za akaunti hati n\'embaro 5. Eki nikihindura ezi baahairwe zaaba 6 (000001 -> 00001). Ezirikwetenga embaro 6 buzima nizisigara nk\'oku ziri.'],
   ['How fast the scrolling deposit/withdraw activity strip on the user Home screen flows right to left. Higher is faster; 160 is the current default.', 'Sipiidi olukalala lw\'ebikolwa lwe lutambulira okuva ku ddyo okudda ku kkono ku lupapula olusooka. Omuwendo omunene gwe mwangu; 160 gwe gutongole.', 'Kasi ambayo mkanda wa shughuli za amana/utoaji kwenye ukurasa wa nyumbani unatembea kulia kwenda kushoto. Kubwa ni haraka zaidi; 160 ndiyo chaguo-msingi.', 'La vitesse à laquelle le bandeau d\'activité défile de droite à gauche sur l\'accueil. Plus élevé = plus rapide ; 160 est la valeur par défaut.', 'Umuvuduko umurongo w\'ibikorwa ugenda uva iburyo ujya ibumoso ku rupapuro rw\'ahabanza. Munini ni wihuta; 160 ni cyo gisanzwe.', 'Obwiru orukoora rw\'ebikorwa oru rurikugyendera kuruga aha buryo kuza aha bumosho aha rupapura rw\'omuka. Omubaro omwingi nigwo gw\'obwiru; 160 nigwo ogutairweho.'],
   ['Updates price/cycle/expectedReturn on any saved product back to the current code defaults -- leaves images, active/coming-soon, and order untouched', 'Kikyusa ebbeeyi, ebbanga n\'ebisuubirwa ku kyamaguzi kyonna ekitereddwa okudda ku ntereka entongole -- ebifaananyi, embeera n\'entegeka tebikyusibwa', 'Inasasisha bei/mzunguko/marejesho yanayotarajiwa kwa bidhaa yoyote iliyohifadhiwa hadi chaguo-msingi -- picha, hali, na mpangilio haviguswi', 'Remet le prix/cycle/retour attendu de tout produit enregistré aux valeurs par défaut -- images, état et ordre restent inchangés', 'Ivugurura igiciro/uruziga/inyungu bitegerejwe ku gicuruzwa cyose cyabitswe bigasubira ku bisanzwe -- amashusho, imimerere n\'urutonde ntibihinduka', 'Nihindura ekiingana/obwire/ebirikutebeekanisibwa aha kyamaguzi kyoona ekibiikirwe kigaruke aha bitairweho -- ebishushani, embeera n\'entegyeka tibirikuhindurwa'],
-  ['The round logo on the app\'s Account profile card. An empty slot shows the CHIPZ wordmark instead. Square images work best -- it is cropped to a circle.', 'Akabonero akeetoolooze ku kaadi ya profayiro mu pulogulaamu. Ekifo ekyereere kiraga erinnya CHIPZ. Ebifaananyi ebya kkona bye bisinga -- kisalibwa okuba enkulungo.', 'Nembo ya duara kwenye kadi ya wasifu wa akaunti. Nafasi tupu inaonyesha jina CHIPZ badala yake. Picha za mraba ni bora -- inakatwa kuwa duara.', 'Le logo rond sur la carte de profil du compte. Un emplacement vide affiche le mot CHIPZ à la place. Les images carrées conviennent le mieux -- elle est recadrée en cercle.', 'Ikirango kizengurutse ku ikarita y\'umwirondoro wa konti. Umwanya utariho werekana izina CHIPZ. Amashusho afite impande zingana ni yo meza -- ikatwa mu ruziga.', 'Ekimanyiso ekizengurukire aha kaadi ya profairo ya akaunti. Ekyanya ekitariho nikyoreka eiziina CHIPZ. Ebishushani by\'enkoona nibyo birikukira -- nikishaarwa kuba oruzengurukiro.'],
   ['Check every user\'s wallet balance/deposited/earned/invested against the real records, plus duplicate deposit credits, negative balances, and stuck registrations', 'Kebera ssente za buli mukozesa eziri mu nsawo, eziteekeddwamu, ezifunibwa n\'eziteekeddwa mu bizinensi ng\'ozigeraageranya n\'ebyafaayo ebituufu, n\'ssente eziweereddwa emirundi ebiri, n\'okwewandiisa okukwataganye', 'Angalia salio la pochi/amana/mapato/uwekezaji la kila mtumiaji dhidi ya kumbukumbu halisi, pamoja na amana zilizolipwa mara mbili, salio hasi, na usajili uliokwama', 'Vérifier le solde/dépôts/gains/investissements de chaque utilisateur face aux registres réels, plus les dépôts crédités deux fois, les soldes négatifs et les inscriptions bloquées', 'Genzura amafaranga ari mu mufuka/yabitswe/yinjiye/yashowe ya buri mukoresha ugereranyije n\'inyandiko nyazo, hamwe n\'ubwishyu bwishyuwe kabiri, amafaranga ari munsi ya zero, n\'iyandikwa ryanyuranye', 'Reeba sente za buri mukozesa eziri omu nsaho, ezitairwemu, ezitungirwe n\'ezitairwe omu byamaguzi n\'ozigyeranisa n\'ebyafaayo ebihikire, na sente ezihairwe emirundi ebiri, n\'okwehandiisa okukwatiine'],
   ['Set a new login password for this user via Firebase', 'Teekawo ekisumuluzo ekipya eky\'okuyingira ku mukozesa ono ng\'oyita mu Firebase', 'Weka nenosiri jipya la kuingia kwa mtumiaji huyu kupitia Firebase', 'Définir un nouveau mot de passe de connexion pour cet utilisateur via Firebase', 'Shyiraho ijambobanga rishya ryo kwinjira kuri uyu mukoresha binyuze kuri Firebase', 'Taho ekisumuruzo kisya eky\'okutaaha aha mukozesa ogu orikuraba omu Firebase'],
   ['"Telegram group" and "Direct contact" also show as the two buttons on the app\'s Help Centre page. Leave either blank to hide its button.', '"Ekibiina kya Telegram" ne "Endagiriro ey\'obutereevu" nabyo birabika ng\'obupeesa bubiri ku lupapula lw\'obuyambi. Leka kimu nga kyereere okukweka akapeesa kaakyo.', '"Kikundi cha Telegram" na "Mawasiliano ya moja kwa moja" pia huonyeshwa kama vitufe viwili kwenye ukurasa wa usaidizi. Acha chochote tupu kuficha kitufe chake.', '« Groupe Telegram » et « Contact direct » apparaissent aussi comme les deux boutons de la page Centre d\'aide. Laissez l\'un vide pour masquer son bouton.', '"Itsinda rya Telegram" na "Aho wahamagara ako kanya" na byo bigaragara nk\'buto ebyiri ku rupapuro rw\'ubufasha. Siga kimwe ubusa kugira uhishe buto yacyo.', '"Ekibiina kya Telegram" na "Endagiriro y\'obuhango" nabyo nibyorekwa nk\'obupeera bubiri aha rupapura rw\'obuhwezi. Reka kimwe kitariho kusherekyera akapeera kaakyo.'],
@@ -4718,7 +4603,6 @@ const ADMIN_LANG_ROWS = [
   ['Paste a web address to find out which country it shows, and why. Use this whenever a subdomain behaves oddly — wrong currency, a correct password refused, or a referral code rejected.', 'Teeka endagiriro y\'omukutu okumanya ggwanga ki ly\'eraga, n\'ensonga lwaki. Kozesa kino buli lwe subdomain bw\'ekola bubi — ssente ez\'ekyamu, ekisumuluzo ekituufu okugaanidwa, oba koodi y\'okuyita okugaanidwa.', 'Bandika anwani ya wavuti ili kujua ni nchi gani inaonyesha, na kwa nini. Tumia hii kila mara kikoa kidogo kinapofanya vibaya — sarafu isiyo sahihi, nenosiri sahihi kukataliwa, au msimbo wa mwaliko kukataliwa.', 'Collez une adresse web pour savoir quel pays elle affiche, et pourquoi. Utilisez ceci chaque fois qu\'un sous-domaine se comporte bizarrement — mauvaise devise, mot de passe correct refusé, ou code de parrainage rejeté.', 'Komeka aderesi ya interineti kugira ngo umenye igihugu igaragaza, n\'impamvu. Koresha ibi igihe cyose urubuga rwungirije rukora nabi — ifaranga ritari ryo, ijambobanga ryiza ryanzwe, cyangwa kode yo gutumira yanzwe.', 'Ta endagiriro y\'omutandaao kugira ngo omanye eihanga eri kworeka, n\'ahabw\'enki. Koresa eki obwiraaboona subdomain neekora kubi — sente ezitari zo, ekishumuruzo ekihikire kyangirwe, nari koodi y\'okweta yaangirwe.'],
   ['Paste any link (e.g. a WhatsApp group invite, https://chat.whatsapp.com/...) directly into the message -- it becomes tappable text automatically, right where you typed it.', 'Teeka ekkubo lyonna (ng\'ekyokulabirako okuyita mu ggwanika lya WhatsApp, https://chat.whatsapp.com/...) butereevu mu bubaka -- lifuuka ebiwandiiko ebikwatibwako bwokka, mu kifo we walitadde.', 'Bandika kiungo chochote (mfano mwaliko wa kikundi cha WhatsApp, https://chat.whatsapp.com/...) moja kwa moja kwenye ujumbe -- huwa maandishi yanayogusika chenyewe, pale pale ulipoandika.', 'Collez n\'importe quel lien (par exemple une invitation à un groupe WhatsApp, https://chat.whatsapp.com/...) directement dans le message -- il devient automatiquement un texte cliquable, là où vous l\'avez tapé.', 'Komeka umurongo uwo ari wo wose (urugero ubutumire bw\'itsinda rya WhatsApp, https://chat.whatsapp.com/...) mu butumwa -- uhita uba inyandiko ikandwa, aho wanditse.', 'Ta omuhanda gwoona (nk\'eky\'okureeberaho okweta omu kibiina kya WhatsApp, https://chat.whatsapp.com/...) omu butumwa -- niguhinduka ebihandiiko ebirikukwatwaho gwonka, aho oguteire.'],
   ['Phones that already installed the app keep the old icon. Android copies the icon onto the home screen at install time and does not go back for it. To see a new icon on a phone that already has the app, remove it and install it again. New installs get the new icon straight away.', 'Essimu ezaateekawo dda app zisigala n\'akafaananyi ak\'edda. Android ekoppa akafaananyi n\'akateeka ku lupapula olusooka nga app eteekebwawo, era teddayo kukanoonya. Okulaba akafaananyi akapya ku ssimu erina dda app, ggyawo app ogiteekewo nate. Ezitandikawo obuggya zifuna akafaananyi akapya amangu.', 'Simu ambazo tayari zimesakinisha programu hubaki na aikoni ya zamani. Android hunakili aikoni kwenye skrini ya nyumbani wakati wa usakinishaji na hairudi kuichukua tena. Ili kuona aikoni mpya kwenye simu iliyo na programu tayari, iondoe kisha isakinishe upya. Usakinishaji mpya hupata aikoni mpya mara moja.', 'Les téléphones qui ont déjà installé l\'application gardent l\'ancienne icône. Android copie l\'icône sur l\'écran d\'accueil au moment de l\'installation et ne revient jamais la chercher. Pour voir une nouvelle icône sur un téléphone qui a déjà l\'application, désinstallez-la puis réinstallez-la. Les nouvelles installations reçoivent tout de suite la nouvelle icône.', 'Telefoni zimaze gushyiraho porogaramu zigumana agashushondanga ka kera. Android ikoporora agashushondanga kuri ecran y\'ibanze igihe cyo gushyiraho kandi ntisubira kukazana. Kugira ngo ubone agashushondanga gashya kuri telefoni isanzwe ifite porogaramu, uyikureho hanyuma uyisubizeho. Abashya bahita babona agashushondanga gashya.', 'Enyabarugo ezaataireho puroguramu nizisigara n\'akashushani aka ira. Android neekopa akashushani ekakata aha rupapura orw\'omuka obu puroguramu erikutairweho kandi tegarukayo kukashaka. Kugira ngo oreebe akashushani akasya aha nyabarugo eyine puroguramu, gyiihaho oigarukyemu. Ezirikutandika obusya nizitunga akashushani akasya ahonaaho.'],
-  ['Replaces the CHIPZ wordmark on the manual-deposit flow\'s own 2 screens. An empty slot keeps the wordmark. Saved as PNG, so a logo with no background stays that way.', 'Kiddira mu kifo ky\'akabonero ka CHIPZ ku mpapula 2 ez\'okuteekamu ssente n\'engalo. Ekifo ekyereere kireka akabonero nga bwe kali. Kiterekebwa nga PNG, kale akafaananyi akatalina mabega kasigala nga bwe kali.', 'Inachukua nafasi ya nembo ya maneno ya CHIPZ kwenye skrini 2 za mtiririko wa amana ya mkono. Nafasi tupu huacha nembo ile ile. Huhifadhiwa kama PNG, kwa hivyo nembo isiyo na mandharinyuma hubaki hivyo.', 'Remplace le logotype CHIPZ sur les 2 écrans propres au parcours de dépôt manuel. Un emplacement vide garde le logotype. Enregistré en PNG, donc un logo sans fond le reste.', 'Isimbura ikirango cy\'amagambo CHIPZ ku mapaji 2 y\'inzira yo gushyiramo amafaranga n\'intoki. Umwanya usa ureka ikirango uko kiri. Kibikwa nka PNG, bityo ikirango kidafite inyuma kiguma gityo.', 'Nikitwara omwanya gw\'akamanyiso ka CHIPZ aha mapaaji 2 g\'omuhanda gw\'okuta sente n\'engaro. Omwanya ogwo busha nigureka akamanyiso. Nikibikwa nka PNG, n\'ahabw\'ekyo ekirango ekitaine nyima nikiguma kityo.'],
   ['Shown on the manual-deposit code screen once the member picks that network. Use {{number}} and {{amount}} anywhere in the steps -- both are replaced with that member\'s own real account number and order amount. Leave a network blank to hide the section for it.', 'Kiraga ku lupapula lwa koodi ey\'okuteekamu ssente n\'engalo ng\'omuntu amaze okulonda netiwaka eyo. Kozesa {{number}} ne {{amount}} wonna mu ntambula -- byombi biddizibwa nnamba ya akawunti y\'omuntu oyo ne ssente z\'asaba. Leka netiwaka nga yereere okukweka ekitundu kyayo.', 'Huonyeshwa kwenye skrini ya msimbo wa amana ya mkono mara tu mwanachama anapochagua mtandao huo. Tumia {{number}} na {{amount}} popote kwenye hatua -- vyote hubadilishwa kuwa namba halisi ya akaunti ya mwanachama huyo na kiasi cha oda yake. Acha mtandao wazi ili kuficha sehemu yake.', 'Affiché sur l\'écran du code de dépôt manuel dès que le membre choisit ce réseau. Utilisez {{number}} et {{amount}} n\'importe où dans les étapes -- les deux sont remplacés par le vrai numéro de compte de ce membre et le montant de sa commande. Laissez un réseau vide pour masquer sa section.', 'Bigaragara ku ipaji rya kode yo gushyiramo amafaranga n\'intoki iyo umunyamuryango ahisemo urwo rusobe. Koresha {{number}} na {{amount}} ahantu hose mu ntambwe -- byombi bisimburwa na nimero nyayo ya konti y\'uwo munyamuryango n\'umubare w\'ubusabe bwe. Reka urusobe ubusa kugira ngo uhishe igice cyarwo.', 'Nikireeberwa aha rupapura rwa koodi y\'okuta sente n\'engaro obu omuntu arikucwamu neetiweeki egyo. Koresa {{number}} na {{amount}} hoona omu ntambura -- byombi nibigaruzibwamu namba ya akaunti y\'omuntu ogwo n\'omuhendo gw\'ebi arikushaba. Reka neetiweeki eri busha kugira ngo oshereke akacweka kaayo.'],
   ['Only if you put the file in the same upload as the app — type its name (for example banner.mp4), or paste a full https:// link to a video file. Saving here replaces an uploaded video, and uploading replaces this.', 'Kyokka bw\'oba oteeka fayiro mu kuteeka kwe kumu n\'app — wandiika erinnya lyayo (ng\'ekyokulabirako banner.mp4), oba oteeka ekkubo ekijjuvu erya https:// eridda ku fayiro ya vidiyo. Okutereka wano kiddira mu kifo kya vidiyo eyateekebwa, ate okuteeka vidiyo kiddira mu kifo kya kino.', 'Ni tu ikiwa umeweka faili katika upakiaji ule ule wa programu — andika jina lake (mfano banner.mp4), au bandika kiungo kamili cha https:// cha faili ya video. Kuhifadhi hapa hubadilisha video iliyopakiwa, na kupakia hubadilisha hii.', 'Seulement si vous mettez le fichier dans le même téléversement que l\'application — tapez son nom (par exemple banner.mp4), ou collez un lien https:// complet vers un fichier vidéo. Enregistrer ici remplace une vidéo téléversée, et téléverser remplace ceci.', 'Gusa niba washyize dosiye mu bwoherezwa bumwe na porogaramu — andika izina ryayo (urugero banner.mp4), cyangwa ukomeke umurongo wuzuye wa https:// werekeza kuri dosiye ya videwo. Kubika hano bisimbura videwo yashyizweho, no gushyiraho bisimbura ibi.', 'Kwonka ku oraate eifaira omu kuta kumwe na puroguramu — handiika eiziina ryayo (nk\'eky\'okureeberaho banner.mp4), nari ota omuhanda ogwijwire ogwa https:// ogurikuza aha ifaira ya vidiyo. Okubika hanu nikitwara omwanya gwa vidiyo eyatairweho, kandi okuta vidiyo nikitwara omwanya gw\'eki.'],
   ['MP4 (H.264), up to 4 MB. That cap is about your members, not the database: the clip downloads onto every phone that opens the app. A few silent seconds is what belongs here. Uploaded once, it is then served from its own cached address, so a member downloads it one time and replays it from their phone after that.', 'MP4 (H.264), okutuuka ku 4 MB. Ekkomo eryo likwata ku bantu bo, si ku ttereka: vidiyo ekkakkanyizibwa ku buli ssimu eyiggula app. Obudde obutono obutaliimu maloboozi bwe busaanira wano. Bw\'emala okuteekebwa, eweerezebwa okuva ku ndagiriro yaayo, kale omuntu agikkakkanya omulundi gumu n\'oluvannyuma agizanyisa okuva ku ssimu ye.', 'MP4 (H.264), hadi 4 MB. Kikomo hicho kinahusu wanachama wako, si hifadhidata: klipu hupakuliwa kwenye kila simu inayofungua programu. Sekunde chache zisizo na sauti ndizo zinazofaa hapa. Ikishapakiwa mara moja, hutolewa kutoka anwani yake iliyohifadhiwa, kwa hivyo mwanachama huipakua mara moja kisha huicheza tena kutoka simu yake.', 'MP4 (H.264), jusqu\'à 4 Mo. Cette limite concerne vos membres, pas la base de données : le clip se télécharge sur chaque téléphone qui ouvre l\'application. Quelques secondes sans son, voilà ce qui a sa place ici. Une fois téléversé, il est servi depuis sa propre adresse mise en cache, donc un membre le télécharge une seule fois et le rejoue ensuite depuis son téléphone.', 'MP4 (H.264), kugeza kuri 4 MB. Uwo mupaka ureba abanyamuryango bawe, si ububikoshingiro: agace ka videwo kamanurwa kuri buri telefoni ifungura porogaramu. Amasegonda macye adafite ijwi ni yo akwiriye hano. Iyo yamaze gushyirwaho, itangwa iva kuri aderesi yayo bwite, bityo umunyamuryango ayimanura rimwe akongera kuyireba ava kuri telefoni ye.', 'MP4 (H.264), okuhika aha 4 MB. Ekikomo ekyo nikikwata aha bantu baawe, ti aha bubiiko: vidiyo neeihurwa aha buri nyabarugo erikwigura puroguramu. Obwire obukye obutaine maraka nibwo bushemereire hanu. Ku erikuba etairweho, neeheebwa kuruga aha ndagiriro yaayo, n\'ahabw\'ekyo omuntu naagyihura omurundi gumwe reero akagizaanisa kuruga aha nyabarugo ye.'],

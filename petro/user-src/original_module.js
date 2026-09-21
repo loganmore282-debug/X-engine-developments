@@ -5227,7 +5227,7 @@ function balRowStatus(t){
 // `tab` lets a caller land the member on the tab that answers the question
 // they just asked -- a cash-out opens straight onto Withdraw.
 window.openBalanceRecordSheet = async function(tab){
-  _balTab = ['all','deposit','withdraw','turntable'].indexOf(tab) !== -1 ? tab : 'all';
+  _balTab = ['all','deposit','withdraw'].indexOf(tab) !== -1 ? tab : 'all';
   const hadCache = Array.isArray(STATE.transactions);
   const bal = (STATE.account || {}).walletBalance || 0;
   openSheet('Balance Record', `
@@ -5236,7 +5236,7 @@ window.openBalanceRecordSheet = async function(tab){
       <div class="val" id="balBandValue">${fmtUGX2(0)}</div>
     </div>
     <div class="rec-tabs" id="balTabs">
-      ${['all','deposit','withdraw','turntable'].map(c => `<button class="tb ${_balTab===c?'on':''}" data-cat="${c}" onclick="switchBalTab('${c}')">${c==='all'?'All':c==='deposit'?'Deposit':c==='withdraw'?'Withdraw':'Turntable'}</button>`).join('')}
+      ${['all','deposit','withdraw'].map(c => `<button class="tb ${_balTab===c?'on':''}" data-cat="${c}" onclick="switchBalTab('${c}')">${c==='all'?'All':c==='deposit'?'Deposit':'Withdraw'}</button>`).join('')}
     </div>
     <div id="balBody"></div>`);
   // Painted as zero above and counted up here, once the sheet is in the DOM.
@@ -5260,8 +5260,7 @@ function renderBalTab(cat){
   if (!body) return;
   const rows = (STATE.transactions || []).filter(t => balTabMatch(cat, t));
   if (!rows.length) {
-    body.innerHTML = '<div class="list-empty reveal-in">' +
-      (cat === 'turntable' ? 'No turntable spins yet.' : 'No records yet.') + '</div>';
+    body.innerHTML = '<div class="list-empty reveal-in">No records yet.</div>';
     return;
   }
   const footer = STATE.transactionsTruncated

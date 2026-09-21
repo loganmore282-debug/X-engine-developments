@@ -775,6 +775,143 @@ scale cleanly, and 167 frames is unnecessary weight for a boot screen):
   matches the reference before shipping, rather than trusting the CSS math
   alone.
 
+**Admin panel audit round: real Chipz logos found and replaced, dead
+settings sections removed, subdomain UI removed, auth phone prefix
+restored.** Owner: *"admin panel still have chipz logos... please orgase
+those tabs very well banners or images should have it category too not
+putting in settings, remove unnecessary words in settings those
+sentences... turntable, regulations, etc there are useless things
+there... this time no using subdomains, so remove stuffs of subdomains,
+only on signup or login one selects country code besides the number area
+ie 256|... look for designs and architecture from internet cloud."*
+
+- **The literal Chipz logo, found and replaced.** `user/icon-192.png` /
+  `user/icon-512.png` / `admin/icon-192.png` / `admin/icon-512.png` were
+  never actually replaced since the fork -- opening them showed the literal
+  "CHIPZ" wordmark on the old red-orange gradient. This is not a cosmetic
+  detail: `server.js`'s `bundledBrandAsset()` serves `user/icon-*.png` as
+  the fallback for the `/public/app-icon-*.png` route BOTH apps' favicon,
+  PWA install icon and manifest icon use whenever no custom logo is
+  uploaded -- so every visitor's browser tab and every phone that installs
+  the app has been getting the Chipz logo, this whole time, until the owner
+  uploads their own. `admin/icon-192.png` separately backs the admin
+  panel's own visible `#brandMarkLogin`/`#brandMarkTop` marks (a same-origin
+  `<img src="/icon-192.png">`, not the backend route). Generated a real
+  replacement -- red-to-gold diagonal gradient (the established Corporate
+  Red -> Golden Orange palette), bold white "P" monogram, no serif, no skew
+  -- and wrote it to all four paths. This is a default, not a final brand
+  mark -- the owner can still override it any time via Admin -> Settings ->
+  App icon / Brand logo, which take priority.
+- **Literal "Chipz"/"CHIPZ" text throughout admin-src's Settings copy**,
+  found by grep and fixed one string at a time (not a blanket find/replace,
+  to avoid touching CSS var names, localStorage keys, or historical code
+  comments that are legitimate documentation, not residue): the "CHIPZ
+  wordmark" fallback-state labels on 3 different image-upload rows, "Built-in
+  Chipz icon", "Reverted to the CHIPZ wordmark" toasts (x2), the App
+  name field's own hardcoded `'Chipz'` default (a real bug, same class as
+  the client-side `brandName()` bug fixed last round -- now `'Petro'`,
+  matching `server.js`'s own `DEFAULT_SETTINGS.brandName`), placeholder
+  examples ("Welcome to Chipz", "Chipz MTN 1"), and 4 translation-table rows
+  that were orphaned anyway once their English source text changed (deleted,
+  not re-translated -- the phrases no longer exist to translate).
+- **"Login & Sign Up screen" admin section rewritten** -- it still described
+  the OLD two-part hero-band + white-card auth layout ("1. Top band (behind
+  the CHIPZ logo)... 2. The form card") that the single-photo redesign two
+  rounds ago replaced. This directly answers "where is the option for
+  uploading background images of authentication screens" -- it was always
+  there, just describing a screen that no longer existed. The now-dead
+  second upload slot (`authCardImage`/`authCardFile`/`authCardOp`/
+  `authCardBlur` -- nothing in the current auth markup reads
+  `--auth-card-*` any more, confirmed two rounds ago) is removed, not just
+  relabeled -- **a real bug caught while removing it**: the "Save opacity &
+  blur" button's own handler read `$('authCardOp').value`/`$('authCardBlur').value`
+  unconditionally, which would have thrown the moment those inputs were
+  deleted, breaking the whole button. Fixed by dropping those two keys from
+  the save payload, same as the auth-card upload wiring itself.
+- **Turntable (spin wheel) removed from Settings and Products**, matching
+  the feature's removal from the user app 2 rounds ago (`paintHome()` no
+  longer renders it) -- the "Turntable (spin wheel)" settings section
+  (daily-spin min/max, enabled toggle), the duplicate "Home spin banner"
+  image slot, and the per-product "Turntable spins from this product"
+  fields (spin count/min/max win, on every product's edit form) are all
+  gone -- they configured a feature members can no longer reach at all.
+  **A second real bug caught while removing it**: `$('saveTurntable')` had
+  no null-check (unlike its siblings), which would have thrown and broken
+  every settings handler registered after it the moment the section's HTML
+  came out -- same failure shape as the announcement-removal bug from
+  several rounds ago, caught the same way (grep for the id's every use
+  before deleting the markup, not after). Also found and closed a live gap
+  in the user app itself while tracing this: Balance Record's "Turntable"
+  filter tab was still a real, reachable tab (`_balTab`) even though nothing
+  could ever populate it any more -- removed from the tab list; the
+  now-unreachable `TURNTABLE_TX_TYPES`/`balTabMatch()` branch is left in
+  place, inert.
+- **"Regulation page" settings section removed -- confirmed genuinely dead,
+  not just redundant.** Its `rulesText` fed `window.openInfoSheet('rules')`
+  in the user app, which turned out to have **zero call sites anywhere** --
+  entirely unreachable, so nothing the admin ever typed there was ever
+  shown to a member. (The real "Rules & Terms" content members actually see
+  lives inside the About Us article now, a different, live, working
+  system -- confirmed separately and left untouched.) **A third real bug
+  caught the same way**: `$('saveReg')` also had no null-check.
+- **"About page" section checked and left alone** -- confirmed live and
+  correctly branded (its own empty-state fallback already reads through
+  `brandName()`, which now defaults to 'Petro', not hardcoded 'Chipz').
+  Real, working content management, not residue -- not every section
+  flagged this round turned out to be dead, and this one was verified
+  rather than assumed.
+- **Subdomain/multi-country admin UI removed**: the "Countries" tab
+  (region CRUD, short-address minting, base-domain/host-matching tools --
+  ~300 lines) and the "Where the app may be opened from" Settings section
+  (base domain, root-domain blocking, strict-host matching, retired
+  addresses, arrival-rotation) are gone from the UI the owner can reach.
+  Deliberately **not** a deep rip-out of the underlying region data model
+  (`ADMIN_REGIONS`/`currentRegion()`/`phoneToEmail()`/`regionByKeyAdmin()`
+  in both server.js and admin-src) -- that infrastructure is threaded
+  through Settings/Products/Messages/Users for legitimate non-subdomain
+  reasons (currency labelling, per-country rate/product overrides if a
+  country is ever added again) and, per its own code comments, was already
+  built to hide every multi-region affordance the moment only one region
+  (`_regionsSnapshot = [DEFAULT_REGION]`, Uganda) is configured -- which it
+  already is; nothing has ever added a second country. Ripping that out
+  under time pressure risked exactly the kind of auth breakage this file's
+  own money-safety section warns about (`phoneToEmail()` must keep
+  producing byte-identical addresses for any account that already exists).
+  What actually made "subdomain stuff" visible to the owner was the tab and
+  the settings section, both entry points now gone -- not the dormant
+  data model behind them. **A fourth null-check bug avoided by tracing
+  first**: removed `regionsTab` from the two places (`openShell()`'s
+  role-visibility array, `VALID_TABS`) that referenced it by id before
+  deleting the button itself, instead of after.
+- **Country-code prefix restored on the auth phone fields** -- a real
+  regression from the single-screen auth rebuild 2 rounds ago, now that the
+  owner named it directly: `#loginDial`/`#regDial`/`#forgotDial` were
+  removed from the markup along with the old two-part layout, but
+  `paintRegionChrome()` (`dialPlus()` -> `$(id).textContent`) was **never
+  actually removed** -- it kept null-safely no-op'ing every boot, waiting
+  for elements that no longer existed. Re-added all three as a `.af-prefix`
+  chip in the exact slot the leading icon used to sit (matching the
+  existing `.dep-phone .prefix` chip the deposit screen already uses, not
+  a new pattern), wired to zero new JS -- the mechanism was already there
+  and already correct, it just had nothing left to paint into.
+- **Verified**: `node -c`, `node --check server.js`, `node build-core.js` +
+  `node build-admin.js` (both round-trip OK) all pass clean. Also rendered
+  the actual built `user/index.html` standalone in headless Chromium,
+  forced the auth screen visible offline, and screenshotted the Log In and
+  Sign Up panes to visually confirm the boxed fields, centred layout, the
+  restored "+256" chip and the new "Already have an account?" link all
+  render correctly together -- not just checked in isolation.
+- **Not done this round** (flagged, scope was already very large): the
+  still-Chipz raster PNG artwork (nav/activity/pay-result/chest/spin-wheel
+  clipart -- none of it carries literal Chipz text/logo, confirmed by
+  actually opening several of the files, so lower urgency than the logo
+  fix above) is unchanged; a dedicated "Media"/"Banners" admin tab pulling
+  every image-upload section out of Settings (owner: "banners or images
+  should have it category too not putting in settings") was not built this
+  round -- Settings is shorter now (Turntable, Home spin banner, Regulation
+  page, the old auth-card slot, and the whole subdomain section are gone),
+  but the reorganization itself is still open.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting
