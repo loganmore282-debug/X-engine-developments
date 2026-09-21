@@ -460,6 +460,50 @@ Chipz, unchanged" below.
   inert, unreachable from any UI, lower risk than restructuring
   `getSettings()`/a positional `Promise.all` for a purely cosmetic cleanup.
 
+**Account screen rebuilt to the owner's 2nd mockup round** (`renderAccount()`
+in user-src/original_module.js): red top bar (logo/tagline/bell/gear), a
+profile card over an admin-uploadable refinery photo (new `profilecard`
+image slot, same `CHIPZ_IMAGE_SLOTS` mechanism), a 3-stat row (wallet
+balance/earnings/deposits), and a plain white row list with real coloured-
+circle SVG icons (`acctRowHtml()`, a new helper — kept separate from the old
+`settingRowHtml()` rather than changing it in place, since nothing else uses
+it this round and a shared helper's visual contract shouldn't change under
+call sites that aren't being touched). Row mapping: My Assets → the existing
+"My Products" page (interim — the real consolidated Assets page is the next
+piece), My Team → the existing Team page (same interim reasoning for
+Network), Deposit/Withdrawal/Earnings Records → `openBalanceRecordSheet()`
+with its existing tab param, Gift Codes → the existing treasure-chest sheet,
+**Bind Bank Account → the existing `openWalletSheet()`** (the OTP-gated
+wallet-link flow built earlier this session — just a new row/label, the
+underlying flow is untouched), Security Settings → a new small sheet listing
+the two password-change sheets that already existed as separate rows.
+
+**Deliberately not built this round** (flagged, not invented): a per-member
+profile PHOTO upload (the mockup's camera badge) and phone-number editing
+(the mockup's pencil icon) are both real new backend features — per-member
+file storage, and a changed phone re-derives the synthetic auth email (see
+`phoneToEmail()`'s own "must match server.js exactly" warning) — not a
+visual swap, and nothing in this round's instructions asked for them
+specifically; the header shows a plain placeholder avatar and the phone as
+read-only for now. Same reasoning for the mockup's "Membership Level / VIP 1"
+card: there is no tier system anywhere in this codebase (thresholds,
+benefits, what "View Benefits" would show), so it was not invented here.
+
+**Real bug caught and fixed while touching this file again**:
+`updateMessageBadge()` (the unread-message dot on the top bar's bell) still
+queried `.home-topbar .icon-btn` — the class names from BEFORE the Home
+re-theme (`.home-topbar-v2`/`.htb-icon-btn`) — so it had been silently
+no-op'ing (a null check swallowed the miss, nothing crashed) since that
+earlier commit. Fixed, and also fixed to insert the dot into `.htb-ic`
+specifically rather than the button itself, matching where `paintHome()`'s
+own markup actually expects it (the CSS that positions `.dot` is scoped to
+`.htb-ic .dot`).
+
+**Still 6 bottom-nav tabs, not the mockup's 4** — Account is reachable as-is
+via the existing nav (no nav change needed for this screen alone), but
+Assets/Network don't exist as real pages yet; building those two and then
+collapsing the nav to Home/Assets/Network/Account is the next piece.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting

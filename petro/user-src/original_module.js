@@ -1090,6 +1090,21 @@ var ICONS = {
   eyeOpen: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7c2.3 0 4.3.6 6 1.5M23 12s-1.4 2.5-4 4.5M14.1 14.1a3 3 0 0 1-4.2-4.2"/><path d="M3 3l18 18"/></svg>',
   chevronRight: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  // ── Account/Network/Assets screen icon set (owner's 2nd/3rd/4th mockup
+  // round) -- same real-SVG replacement of the old Chipz raster row icons. ──
+  layers: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 8 12 13l9.5-5L12 3Z"/><path d="m2.5 13 9.5 5 9.5-5"/><path d="m2.5 18 9.5 5 9.5-5"/></svg>',
+  trendUp: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9.5 10l4.5 4.5L21 6"/><path d="M15 6h6v6"/></svg>',
+  peopleGroup: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.6"/><path d="M2.6 19c.7-3.1 3-4.9 6.4-4.9s5.7 1.8 6.4 4.9"/><path d="M15.4 14.7c2.5.4 4 1.9 4.5 4.1"/></svg>',
+  giftSmall: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9.5" width="18" height="10.5" rx="1.6"/><path d="M3 13.5h18"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.6 0-4-.7-4-3 0-1.5 1.2-2.5 2.5-2.5C12.2 4 12 7 12 9.5Z"/><path d="M12 9.5c1.6 0 4-.7 4-3 0-1.5-1.2-2.5-2.5-2.5C11.8 4 12 7 12 9.5Z"/></svg>',
+  shieldCheck: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="m9 12 2.2 2.2L15.5 10"/></svg>',
+  infoCircle: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r="1" fill="currentColor" stroke="none"/></svg>',
+  logoutArrow: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
+  bankLink: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 4l9 6"/><path d="M5 10v9M9.5 10v9M14.5 10v9M19 10v9"/><path d="M3 19h18"/></svg>',
+  diamond: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 3h10l4 6-11 12L2 9l5-6Z" opacity=".92"/></svg>',
+  qrCode: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM19 14v3M14 19h3M19 19h2"/></svg>',
+  linkIcon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5 14.5 9.5"/><path d="M11 6.5 12.5 5A4 4 0 1 1 18 10.5L16.5 12"/><path d="M13 17.5 11.5 19A4 4 0 1 1 6 13.5L7.5 12"/></svg>',
+  trophy: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4.5A2.5 2.5 0 0 0 4 11c.5.8 1.5 1.2 2.5 1"/><path d="M17 6h2.5A2.5 2.5 0 0 1 20 11c-.5.8-1.5 1.2-2.5 1"/><path d="M12 14v3"/><path d="M8.5 20.5h7"/><path d="M9.5 17.5h5v1.5a1.5 1.5 0 0 1-1.5 1.5h-2a1.5 1.5 0 0 1-1.5-1.5v-1.5Z"/></svg>',
+  gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.3M12 18.2v2.3M20.5 12h-2.3M5.8 12H3.5M17.7 6.3l-1.6 1.6M7.9 16.1l-1.6 1.6M17.7 17.7l-1.6-1.6M7.9 7.9 6.3 6.3"/></svg>',
   lock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
   keyIcon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l2 2M14 9l2 2"/></svg>',
   telegram: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 3.5 2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5Z"/></svg>',
@@ -2001,6 +2016,9 @@ function applyBootArtwork(ai, mpi, ci){
   // Stronger Communities" band). Optional -- Home just renders nothing here
   // when it's unset.
   STATE.homeFooterBanner = (ci.status === 'success' && ci.homefooter) ? ci.homefooter : null;
+  // Account screen's header background (the mockup's refinery photo behind
+  // the phone/ID card).
+  STATE.profileCard = (ci.status === 'success' && ci.profilecard) ? ci.profilecard : null;
   // The two Login / Sign Up backdrops.
   STATE.authHeroImage = (ci.status === 'success' && ci.authhero) ? ci.authhero : null;
   STATE.authCardImage = (ci.status === 'success' && ci.authcard) ? ci.authcard : null;
@@ -4373,6 +4391,21 @@ window.copyText = function(text){
 // The wallet balance lives HERE, not on Home (the mockups put it on this
 // screen only), which is why patchHomeBalances()'s live tick targets
 // #acctWallet.
+// New Account/Network row style (owner's mockups): a coloured CIRCLE with a
+// real SVG glyph, not settingRowHtml()'s coloured SQUARE + Chipz raster PNG.
+// Kept as its own helper rather than changing settingRowHtml() in place --
+// that one still backs whatever of the old settings list isn't part of the
+// new Account screen (nothing, as of this round, but changing a shared
+// helper's visual contract under call sites this file isn't touching today
+// is exactly the kind of change that should be its own deliberate pass).
+function acctRowHtml(svgIcon, colorClass, title, sub, onclick){
+  return `
+  <button class="acct-row" onclick="${onclick}">
+    <span class="ar-ic ${colorClass}">${svgIcon}</span>
+    <span class="txt"><span class="t1">${title}</span><span class="t2">${sub}</span></span>
+    ${ICONS.chevronRight}
+  </button>`;
+}
 function settingRowHtml(icon, title, sub, onclick){
   // The icon key doubles as the tile's colour class (.ic-<icon>) -- each row's
   // background is its own measured value off the owner's mockup, so they
@@ -4384,96 +4417,81 @@ function settingRowHtml(icon, title, sub, onclick){
     <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
   </button>`;
 }
+// New mockup's single "Security Settings" row opens a small menu of the two
+// password sheets that already existed as separate Account rows -- reusing
+// both openers as-is rather than rebuilding their forms.
+window.openSecuritySettingsSheet = function(){
+  openSheet('Security Settings', `<div class="acct-row-list" style="margin:0;">
+    ${acctRowHtml(ICONS.lock, 'ar-red', 'Login Password', 'Change your sign-in password', 'openChangeLoginPasswordSheet()')}
+    ${acctRowHtml(ICONS.keyIcon, 'ar-gold', 'Trade Password', 'Change your withdrawal PIN', 'openChangeTradePasswordSheet()')}
+  </div>`);
+};
+// Rebuilt to the owner's Account mockup -- a red header (logo/tagline/
+// bell/settings-gear, same .home-topbar-v2 Home uses), a profile card over
+// an admin-uploadable refinery photo (new 'profilecard' image slot, same
+// CHIPZ_IMAGE_SLOTS mechanism as logo/authhero/etc.), a 3-stat row, and a
+// plain white row list with coloured-circle SVG icons replacing the old
+// settings list's coloured squares + Chipz raster PNGs.
+//
+// Deliberately NOT built into this round: a per-member profile PHOTO upload
+// (the mockup's camera badge) and phone-number editing (the mockup's pencil
+// icon) -- both are real new backend features (per-member file storage; a
+// changed phone re-derives the synthetic auth email, see phoneToEmail()'s
+// own "must match server.js exactly" warning), not a visual swap, and
+// nothing this session was asked to build them. The avatar here is a plain
+// placeholder glyph until that's actually scoped. Same reasoning for the
+// mockup's "Membership Level / VIP 1" card -- there is no tier system
+// anywhere in this codebase (thresholds, benefits, what "View Benefits"
+// would even show), so it is not invented here; flagged in CLAUDE.md.
 async function renderAccount(){
   const a = STATE.account || {};
-  // The profile mark, in priority order: the admin's animated GIF, then a
-  // static brand logo, then the CHIPZ wordmark. The GIF IS the profile logo --
-  // it takes this position rather than sitting beside it.
-  //
-  // A round briefly demoted the GIF here, reading "that gif which appears on
-  // profile icon should be logo" as an instruction to replace it. It was not:
-  // the owner's answer to seeing it gone was "NOOOOOOO, PLEASE PUT IT BACK".
-  // That sentence was about the ADMIN PANEL's own marks -- its dashboard and
-  // login screen should show the uploaded logo, which they now do -- and not
-  // about this card at all. If this ever looks like a candidate for change
-  // again, it is not.
-  //
-  // It gets its own class because it must NOT be cropped to a circle the way
-  // a square logo is: a 300x220 landscape forced into a 60px circle loses
-  // about a quarter of its width off the sides.
-  const logoCls = STATE.profileGif ? 'acct-logo has-gif' : 'acct-logo';
-  // The two onerror handlers call brandTextMark() rather than carrying the
-  // fallback markup as a literal. They are inline attributes -- the browser
-  // HTML-decodes them and then compiles the result as JavaScript -- so a name
-  // interpolated straight in would need to survive BOTH passes, and an
-  // apostrophe in it (a perfectly ordinary thing for an owner to type) would
-  // end the JS string early and make the whole handler a syntax error. A
-  // function call has nothing to escape.
-  const logo = STATE.profileGif
-    ? `<img src="${esc(STATE.profileGif)}" alt="" onerror="this.closest('.acct-logo').classList.remove('has-gif');this.outerHTML=brandTextMark()">`
-    : STATE.brandLogo
-    ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.outerHTML=brandTextMark()">`
-    : brandTextMark();
   const html = `
-<div style="padding:18px 18px 0;">
-  <div class="acct-profile">
-    <div class="p-top">
-      <div class="${logoCls}">${logo}</div>
-      <div style="min-width:0;flex:1;">
-        <div class="p-id">ID: ${esc(a.publicId || '—')}</div>
-        <div class="p-phone">${esc(formatPhoneDisplay(a.phone))}</div>
-      </div>
-    </div>
-    <div class="acct-divider"></div>
-    <div class="bal-label">Wallet Balance</div>
-    <div class="bal-value" id="acctWallet">${fmtUGXCents(a.walletBalance || 0)}</div>
-    <div class="acct-btnrow">
-      <button class="primary-button" onclick="openDepositSheet()">Deposit</button>
-      <button class="secondary-button" onclick="openWithdrawSheet()">Withdraw</button>
+<div class="home-topbar-v2">
+  <div class="htb-brand">
+    <span class="htb-logo">${STATE.brandLogo ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.parentNode.innerHTML=brandTextMark(30)">` : brandTextMark(30)}</span>
+    <div class="htb-text">
+      <div class="htb-title">${esc((STATE.settings || {}).brandTagline || 'Energy for a Better Tomorrow')}</div>
+      <div class="htb-sub">Your Account &middot; Our Priority</div>
     </div>
   </div>
-
-  <div class="sec-head"><span class="bar"></span><h2>SETTINGS</h2><span class="ln"></span></div>
-  <div class="setting-list">
-    ${settingRowHtml('download', 'Download APP', 'Get the mobile app', 'openDownloadSheet()')}
-    ${settingRowHtml('wallet', 'Wallet', 'Manage your withdrawal wallet', 'openWalletSheet()')}
-    <button class="setting-row" onclick="openTurntableSheet()">
-      <span class="sq ic-turntable"><img src="/turntable.png" alt="" style="width:22px;height:22px;object-fit:contain;"></span>
-      <span class="txt"><span class="t1" style="display:block;">Turntable</span><span class="t2" style="display:block;">Daily spin &amp; bonus wins</span></span>
-      <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
+  <div class="htb-icons">
+    <button class="htb-icon-btn" onclick="openMessagesSheet()" aria-label="Notifications">
+      <span class="htb-ic">${ICONS.bell}${unreadMessageCount() ? '<span class="dot"></span>' : ''}</span>
     </button>
-    ${settingRowHtml('balance', 'Balance Record', 'Transaction history', 'openBalanceRecordSheet()')}
-    ${settingRowHtml('messages', 'Messages', 'Notifications &amp; mail', 'openMessagesSheet()')}
-    ${settingRowHtml('loginpw', 'Login Password', 'Change login password', 'openChangeLoginPasswordSheet()')}
-    ${settingRowHtml('tradepw', 'Trade Password', 'Change trade / withdrawal password', 'openChangeTradePasswordSheet()')}
-    <!-- The language button on the sign-in screen is the one the owner asked
-         for, but a member who is already signed in never sees that screen
-         again -- so the same picker is reachable here. Hidden by
-         paintLangButton() when the country allows only one language, exactly
-         like the button. The current language is printed in ITS OWN language
-         (Kiswahili, not Swahili), which is how every language list a person
-         actually uses is written, so [data-no-i18n] keeps the table off it. -->
-    <button class="setting-row" id="langRow" style="display:none;" onclick="openLangPicker()">
-      <span class="sq ic-language">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
-      </span>
-      <span class="txt"><span class="t1" style="display:block;">Language</span><span class="t2" style="display:block;" id="langRowValue" data-no-i18n>English</span></span>
-      <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
+    <button class="htb-icon-btn" onclick="openSecuritySettingsSheet()" aria-label="Settings">
+      <span class="htb-ic">${ICONS.gear}</span>
     </button>
   </div>
-
-  <button class="dark-button logout-btn" onclick="doLogout()">
-    <img src="/logout-door.png" alt="" aria-hidden="true">
-    Log Out
-  </button>
+</div>
+<div style="padding:0 18px;">
+  <div class="acct-card"${STATE.profileCard ? ` style="background-image:linear-gradient(100deg,rgba(255,255,255,.94) 0 44%,rgba(255,255,255,.2) 100%),url('${esc(STATE.profileCard)}')"` : ''}>
+    <div class="acct-avatar">${ICONS.peopleGroup}</div>
+    <div class="acct-idbox">
+      <div class="acct-phone-row">${esc(formatPhoneDisplay(a.phone))}</div>
+      <div class="acct-id-row">ID: ${esc(a.publicId || '—')} <button class="ar-copy-btn" onclick="copyText('${esc(a.publicId || '')}')" aria-label="Copy ID">${ICONS.copy}</button></div>
+    </div>
+  </div>
+  <div class="home-stat-row" style="padding:0;margin:14px 0 16px;">
+    <div class="home-stat"><span class="hs-ic hs-red">${ICONS.layers}</span><div class="hs-lbl">Wallet Balance</div><div class="mono hs-val" id="acctWallet">${esc(fmtUGX(Number(a.walletBalance) || 0))}</div></div>
+    <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.trendUp}</span><div class="hs-lbl">Total Earnings</div><div class="mono hs-val hs-gold-txt">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
+    <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
+  </div>
+  <div class="acct-row-list">
+    ${acctRowHtml(ICONS.layers, 'ar-red', 'My Assets', 'View your purchased assets and earnings', "showPage('products')")}
+    ${acctRowHtml(ICONS.arrowDownTray, 'ar-gold', 'Deposit Records', 'View all your deposit history', "openBalanceRecordSheet('deposit')")}
+    ${acctRowHtml(ICONS.arrowDownTray, 'ar-red', 'Withdrawal Records', 'View all your withdrawal history', "openBalanceRecordSheet('withdraw')")}
+    ${acctRowHtml(ICONS.trendUp, 'ar-gold', 'Earnings Records', 'View daily earnings and rewards', "openBalanceRecordSheet('all')")}
+    ${acctRowHtml(ICONS.peopleGroup, 'ar-dark', 'My Team', 'View your team and referral details', "showPage('team')")}
+    ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
+    ${acctRowHtml(ICONS.bankLink, 'ar-gold', 'Bind Bank Account', 'Link your withdrawal payout account', 'openWalletSheet()')}
+    ${acctRowHtml(ICONS.shieldCheck, 'ar-gold', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
+    ${acctRowHtml(ICONS.headset, 'ar-red', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
+    ${acctRowHtml(ICONS.infoCircle, 'ar-red', 'About Us', 'Platform information and terms', 'openAboutSheet()')}
+  </div>
+  <button class="logout-btn-v2" onclick="doLogout()">${ICONS.logoutArrow} Log Out</button>
   <div style="height:20px;"></div>
 </div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-  // The figure is in the DOM now, so it can be measured and sized to fit.
-  fitBalanceText($('acctWallet'));
-  // The Language row ships hidden and is shown only where the country offers
-  // a choice; this also fills in which language is currently in use.
-  paintLangButton();
 }
 // "+256 742 730 382" -- the shape the mockups show, from whatever the
 // server stored (0742730382 / 256742730382 / +256742730382 all normalise).
@@ -5115,11 +5133,21 @@ window.closeMessageDetail = function(){
 // STATE.messages on every paint.
 function unreadMessageCount(){ return (STATE.messages || []).filter(m => !m.read).length; }
 function updateMessageBadge(){
-  const btn = document.querySelector('.home-topbar .icon-btn');
+  // Real bug caught while touching this file again: the Home top bar was
+  // rebuilt (.home-topbar -> .home-topbar-v2, .icon-btn -> .htb-icon-btn)
+  // for the mockup re-theme, and this selector was never updated to match --
+  // it silently no-op'd (the `if (!btn) return` below swallowed it) rather
+  // than crashing, so the unread dot stopped live-updating with nothing
+  // visibly broken to notice it by.
+  const btn = document.querySelector('.home-topbar-v2 .htb-icon-btn');
   if (!btn) return;
+  // The dot is a child of .htb-ic specifically (matching paintHome()'s own
+  // markup), not of the button itself -- .htb-ic .dot{} is what positions
+  // it, and inserting it one level up would leave it unstyled.
+  const ic = btn.querySelector('.htb-ic') || btn;
   const has = unreadMessageCount() > 0;
-  const dot = btn.querySelector('.dot');
-  if (has && !dot) btn.insertAdjacentHTML('beforeend', '<span class="dot"></span>');
+  const dot = ic.querySelector('.dot');
+  if (has && !dot) ic.insertAdjacentHTML('beforeend', '<span class="dot"></span>');
   if (!has && dot) dot.remove();
 }
 

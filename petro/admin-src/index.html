@@ -3332,6 +3332,7 @@ async function renderSettings(){
   const homeSlide2Image = cir.banner2||'';
   const homeSlide3Image = cir.banner3||'';
   const homeFooterImage = cir.homefooter||'';
+  const profileCardImage = cir.profilecard||'';
   const manualSelectorImage = mpir.selector||'';
   const manualHeroImage = mpir.hero||'';
   // The app icon and the share card always HAVE an image live (the icon falls
@@ -3575,13 +3576,24 @@ async function renderSettings(){
 
     <h2 class="sec">Home footer banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A static image at the very bottom of Home, below the announcement row (the mockup's "Clean Energy Stronger Communities" band). Optional &mdash; hidden entirely when not set.</p>
+      <p class="muted" style="margin-top:0">A static image at the very bottom of Home (the mockup's "Clean Energy Stronger Communities" band). Optional &mdash; hidden entirely when not set.</p>
       <div class="banner-row">
         ${homeFooterImage?`<img class="img-thumb" src="${esc(homeFooterImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeFooterImage?'Custom image':'<span class="muted">Not set &mdash; hidden</span>'}</div>
         ${homeFooterImage?`<button class="btn danger sm" id="homeFooterClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeFooterFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Account screen header photo</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The refinery-photo background behind the phone number/ID card on the Account screen. An empty slot shows a plain card with no photo.</p>
+      <div class="banner-row">
+        ${profileCardImage?`<img class="img-thumb" src="${esc(profileCardImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${profileCardImage?'Custom image':'<span class="muted">Not set &mdash; plain card</span>'}</div>
+        ${profileCardImage?`<button class="btn danger sm" id="profileCardClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileCardFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Turntable (spin wheel)</h2>
@@ -4034,6 +4046,7 @@ async function renderSettings(){
   wireChipzImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
   wireChipzImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
   wireChipzImageSlot('homefooter', 'homeFooterFile', 'homeFooterClear', 'Footer banner saved, live on Home', 'Footer banner removed');
+  wireChipzImageSlot('profilecard', 'profileCardFile', 'profileCardClear', 'Account header photo saved, live for every user', 'Account header photo removed');
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{
     const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value,
