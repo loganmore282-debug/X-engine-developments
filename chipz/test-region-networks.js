@@ -112,6 +112,27 @@ console.log('\n— normalizeRegion(): networks —');
      "Cote d'Ivoire (+225), nothing typed, gets MTN + Orange");
   ck(JSON.stringify(api.normalizeRegion({ dialCode: '229' }, 'bj').networks) === JSON.stringify(['MTN Mobile Money', 'Moov Money']),
      'Benin (+229), nothing typed, gets MTN + Moov');
+  const documentedDefaults = {
+    '256': ['MTN Mobile Money', 'Airtel Money'],
+    '254': ['M-Pesa'],
+    '250': ['MTN Mobile Money', 'Airtel Money'],
+    '243': ['Vodacom M-Pesa', 'Airtel Money', 'Orange Money'],
+    '260': ['MTN Mobile Money', 'Airtel Money', 'Zamtel Money'],
+    '237': ['MTN Mobile Money', 'Orange Money'],
+    '229': ['MTN Mobile Money', 'Moov Money'],
+    '225': ['MTN Mobile Money', 'Orange Money'],
+    '241': ['Airtel Money'],
+    '242': ['MTN Mobile Money', 'Airtel Money'],
+    '221': ['Orange Money', 'Free Money'],
+    '232': ['Orange Money'],
+  };
+  for (const [dial, want] of Object.entries(documentedDefaults)) {
+    const got = api.normalizeRegion({ dialCode: dial }, 'x' + dial).networks;
+    ck(JSON.stringify(got) === JSON.stringify(want),
+       `+${dial} gets its documented MarzPay network defaults (${got.join(', ')})`);
+  }
+  ck(Object.keys(api.REGION_DEFAULT_NETWORKS).length === 12,
+     'REGION_DEFAULT_NETWORKS covers all 12 MarzPay markets');
   // Nothing typed, an UNKNOWN dialling code: falls back to the founding
   // region's networks -- never silently invents a market-specific pair.
   ck(JSON.stringify(api.normalizeRegion({ dialCode: '255' }, 'tz').networks) === JSON.stringify(['MTN Mobile Money', 'Airtel Money']),
