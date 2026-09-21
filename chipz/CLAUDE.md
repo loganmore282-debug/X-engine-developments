@@ -3394,10 +3394,15 @@ labels a figure in the right currency. The picker is **hidden entirely while the
 only one country**.
 
 ### Not done / known limits
-- `NETWORK_NAMES` is still MTN / Airtel. Those are Uganda's operators; a Kenyan region
-  would want Safaricom M-Pesa. Networks are not yet per-region.
-- MarzPay and LipaPay are Uganda-only gateways. A new country should run on **manual
-  payments (PAY B)** until a provider for it is wired in.
+- Networks are per-region and admin-editable. When none are saved, the server seeds
+  defaults for all 12 currently documented MarzPay markets (Uganda, Kenya, Rwanda,
+  DRC, Zambia, Cameroon, Benin, Côte d'Ivoire, Gabon, Congo-Brazzaville, Senegal,
+  Sierra Leone). Unknown countries still fall back to the founding-region pair until
+  an admin configures their real networks.
+- MarzPay is multi-market across those 12 countries. LipaPay and PesaJet remain
+  Uganda-only. The MarzPay collect/send paths must carry the authenticated member's
+  resolved region explicitly into the provider body so `country` can never fall back
+  to Uganda after the request has already been resolved.
 - The SMS parser (`parseMoMoSms` and friends) is written against real MTN/Airtel Uganda
   message formats. It picks the payer's number using the region's own prefixes now, but
   the message *shapes* are still Ugandan.
