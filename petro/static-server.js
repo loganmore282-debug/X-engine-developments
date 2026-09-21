@@ -41,7 +41,7 @@ if (WHICH !== 'user' && WHICH !== 'admin') {
 }
 const ROOT = path.join(__dirname, WHICH);
 const PORT = Number(process.env.PORT) || 8080;
-const API_ORIGIN = (process.env.CHIPZ_API_ORIGIN || 'https://x-engine-developments-production.up.railway.app')
+const API_ORIGIN = (process.env.CHIPZ_API_ORIGIN || 'http://179.198.197.114:3000')
   .trim().replace(/\/+$/, '');
 
 if (!fs.existsSync(path.join(ROOT, 'index.html'))) {

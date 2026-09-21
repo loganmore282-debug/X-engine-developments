@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'chipz-shell-v110';
+const CACHE = 'chipz-shell-v111';
 const VENDOR_CACHE = 'chipz-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/treasure-chest.png', '/turntable.png', '/spin-wheel.png', '/copy-clip.png', '/pay-success.png', '/pay-failed.png', '/logout-door.png',
   '/nav-home.png', '/nav-products.png', '/nav-myproducts.png', '/nav-referral.png', '/nav-team.png', '/nav-account.png',
@@ -55,7 +55,7 @@ const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 // asleep, malformed JSON -- falls through to the manifest exactly as shipped,
 // because a phone that cannot install the app is a far worse outcome than one
 // that installs it under last week's name.
-const API_ORIGIN = 'https://x-engine-developments-production.up.railway.app';
+const API_ORIGIN = 'http://179.198.197.114:3000';
 const BRAND_CACHE = 'chipz-brand-v1';
 const BRAND_KEY = '/__brand-name';
 
