@@ -2155,3 +2155,20 @@ Implemented:
 - Clean GitHub Actions verification passed: member source syntax OK, obfuscated
   syntax OK, and `round-trip : OK`; generated `petro/user/index.html` committed.
   Temporary verification workflow removed before merge.
+
+## 2026-09-22 — Reverted sitewide auth-background UI pass
+
+Owner reported that the sitewide Authentication Background / translucent-surface pass
+broke the previously approved member layout and caused controls/text to render like
+raw browser elements on Home, Network and Account.
+
+Action taken:
+- Restored `petro/user-src/index.html`, `petro/user-src/original_module.js`,
+  generated `petro/user/index.html`, and `petro/user/sw.js` to the exact content
+  from commit `7773485b71328c32848ba675706628636ea4a1f1`, which is the state
+  immediately before the sitewide background/UI pass.
+- This keeps the earlier **Transaction Statement** work and its server-side `B2...`
+  transaction references intact while undoing only the later global background/design
+  changes.
+- Do not reapply the auth background across the full signed-in site without a much
+  narrower, screen-by-screen implementation and visual verification.
