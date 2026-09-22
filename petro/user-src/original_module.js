@@ -2944,10 +2944,21 @@ function startHomeCarousel(){
   _homeCarouselTimer = setInterval(() => {
     const track = document.getElementById('homeCarouselTrack'), dots = document.getElementById('homeCarouselDots');
     if (!track || !dots) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return; }
-    _homeCarouselIdx = (_homeCarouselIdx + 1) % slides.length;
+    const nextIdx = (_homeCarouselIdx + 1) % slides.length;
     const img = track.querySelector('img');
-    if (img) img.src = slides[_homeCarouselIdx];
-    dots.querySelectorAll('.hb-dot').forEach((d, i) => d.classList.toggle('on', i === _homeCarouselIdx));
+    if (!img) return;
+    const nextSrc = slides[nextIdx];
+    const preload = new Image();
+    preload.onload = () => {
+      img.classList.add('hb-fading');
+      setTimeout(() => {
+        img.src = nextSrc;
+        _homeCarouselIdx = nextIdx;
+        dots.querySelectorAll('.hb-dot').forEach((d, i) => d.classList.toggle('on', i === _homeCarouselIdx));
+        requestAnimationFrame(() => requestAnimationFrame(() => img.classList.remove('hb-fading')));
+      }, 520);
+    };
+    preload.src = nextSrc;
   }, 4500);
 }
 // Puts the element that was preloaded during the loading screen INTO the
