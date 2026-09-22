@@ -1135,52 +1135,29 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .chest-win-card .amt{font-size:36px;font-weight:800;margin:0 0 18px;color:var(--snow-wine);}
 .chest-win-card .bal{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 24px;}
 
-/* ── Balance Record (BalanceRecord.dc.html) ── */
-/* Bleeds to the sheet's own edges: .sheet-body is padded 4px 20px 40px. */
-.bal-band{background:var(--petro-hero);padding:26px 18px;text-align:center;margin:-4px -20px 0;}
-.bal-band .lbl{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.7);font-weight:600;}
-.bal-band .val{font-size:40px;color:#fff;margin-top:6px;}
-.rec-tabs{display:flex;margin:16px 0;border-bottom:1.5px solid var(--snow-border);}
-.rec-tabs .tb{flex:1;text-align:center;padding:0 0 12px;font-size:16px;font-weight:700;color:var(--snow-muted);position:relative;background:none;border:none;font-family:inherit;}
-.rec-tabs .tb.on{color:var(--snow-ink);}
-.rec-tabs .tb.on::after{content:'';position:absolute;left:20%;right:20%;bottom:-1.5px;height:2.5px;background:var(--snow-wine);border-radius:var(--r-pill);}
-.rec{display:flex;align-items:center;gap:11px;background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:16px 14px;margin-bottom:12px;box-shadow:var(--sh-card);}
-/* The D / W / T discs. Owner: "see icons of D,W, very clean, defined and
-   high quality." They were a flat wash of one colour with the letter in a
-   darker tone of the same -- at 44px that reads as a smudge with something
-   in it. Three things give a small disc definition: a gradient so it has a
-   lit side, a 1px inner highlight along the top edge so it looks raised
-   rather than printed, and a shadow tinted with its OWN colour instead of
-   grey, which is what makes it sit on the card rather than next to it.
-   Green for money coming in, rose for money going out -- the app's own
-   colours, not the mockup's purple. */
-.rec .av{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;letter-spacing:.01em;}
-.rec .av.g{background:linear-gradient(145deg,#eafaee 0%,#b8e6c6 100%);color:#116434;
-  box-shadow:0 6px 14px -6px rgba(20,96,48,.45),inset 0 1px 0 rgba(255,255,255,.9);}
-.rec .av.w{background:linear-gradient(145deg,#ffe7e1 0%,#f0b3b0 100%);color:#7a1030;
-  box-shadow:0 6px 14px -6px rgba(122,16,48,.42),inset 0 1px 0 rgba(255,255,255,.9);}
-.rec .txt{flex:1;min-width:0;}
-.rec .t1{font-weight:600;font-size:16.5px;line-height:1.25;}
-.rec .t2{font-size:12.5px;color:var(--snow-muted);font-weight:500;margin-top:3px;white-space:nowrap;}
-.rec .t3{font-size:13px;font-weight:500;margin-top:5px;color:var(--snow-muted);}
-.rec .right{text-align:right;flex-shrink:0;}
-.rec .amt{font-size:16.5px;font-weight:700;white-space:nowrap;}
-.rec .amt.pos{color:var(--snow-green);}
-.rec .amt.neg{color:var(--petro-neg);}
-/* Status pills. Owner: "see the colours of paid, deposit pending." They were
-   pale tints with same-hue text -- a green pill on a white card at 12.5px was
-   readable but not LEGIBLE, and Failed and Paid were the same weight of
-   nothing. Solid fill, white text: a status is the one thing on the row worth
-   spotting from arm's length. Each keeps a shadow in its own hue so it reads
-   as a chip laid on the card. */
-.rec-pill{display:inline-block;margin-top:6px;font-size:12.5px;font-weight:700;letter-spacing:.03em;padding:5px 14px;border-radius:var(--r-pill);color:#fff;
-  text-shadow:0 1px 1px rgba(0,0,0,.18);}
-.rec-pill.pend{background:linear-gradient(135deg,#fb8c00,#dd6b00);box-shadow:0 5px 12px -6px rgba(221,107,0,.75);}
-/* The orange is deliberately a stop deeper than the mockup's. White text on
-   a bright #ffa726 measures 2.35:1, which is a label you squint at outdoors;
-   this reads 2.8:1 and still lands as orange next to the green and the red. */
-.rec-pill.paid{background:linear-gradient(135deg,#35c46c,#12894a);box-shadow:0 5px 12px -6px rgba(18,137,74,.7);}
-.rec-pill.fail{background:linear-gradient(135deg,#ef5f52,#c0182a);box-shadow:0 5px 12px -6px rgba(192,24,42,.7);}
+/* ── Transaction Statement ──
+   Professional ledger presentation: categories are one horizontal tab row at
+   the top, and transactions read like a statement rather than a stack of
+   decorative cards. */
+.statement-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--snow-border);margin:0 0 8px;background:var(--snow-canvas);}
+.statement-tabs button{height:48px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--snow-muted);font-family:inherit;font-size:13px;font-weight:650;padding:0 4px;}
+.statement-tabs button.on{color:var(--snow-ink);border-bottom-color:var(--snow-wine);}
+.statement-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:10px 2px 8px;border-bottom:1px solid var(--snow-border);font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--snow-muted);}
+.statement-head span:last-child{text-align:right;}
+.statement-row{padding:15px 2px 14px;border-bottom:1px solid var(--snow-border);}
+.statement-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px;}
+.statement-id{font-size:10.5px;color:var(--snow-muted);font-weight:600;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.statement-date{font-size:10.5px;color:var(--snow-muted);font-weight:500;text-align:right;white-space:nowrap;}
+.statement-main{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:14px;}
+.statement-desc{font-size:14.5px;line-height:1.35;font-weight:650;color:var(--snow-ink);min-width:0;}
+.statement-amount{font-size:13.5px;font-weight:700;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--snow-green);}
+.statement-amount.out{color:var(--petro-neg);}
+.statement-status{display:inline-block;margin-top:6px;font-size:10.5px;font-weight:650;letter-spacing:.02em;}
+.statement-status.completed{color:var(--snow-green);}
+.statement-status.pending{color:#b36b00;}
+.statement-status.failed{color:var(--snow-wine);}
+.statement-empty{padding:64px 0;text-align:center;color:var(--snow-muted);font-size:13px;}
+.statement-end{text-align:center;color:var(--snow-muted);font-size:10.5px;padding:18px 0 8px;}
 
 /* ── Messages (MessagesList.dc.html / Messages.dc.html) ── */
 /* Owner: "they have design ... the mock up has a very clean css, high
