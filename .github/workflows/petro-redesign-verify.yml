@@ -63,7 +63,7 @@ jobs:
 
       - name: Install browser test dependency
         run: |
-          python3 -m pip install playwright
+          python3 -m pip install playwright pillow
           python3 -m playwright install --with-deps chromium
 
       - name: Core regression checks
