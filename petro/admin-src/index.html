@@ -3333,6 +3333,11 @@ async function renderSettings(){
         <div><label>OTP codes/day &middot; password reset</label><input id="sOtpReset" type="number" min="0" value="${v('otpDailyLimitReset',3)}"></div>
         <div><label>OTP codes/day &middot; add bank account</label><input id="sOtpBank" type="number" min="0" value="${v('otpDailyLimitBank',2)}"></div>
       </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Inner pages background opacity (%)</label><input id="sInnerBgOpacity" type="number" min="0" max="100" value="${v('innerBgOpacity',100)}"></div>
+        <div><label>Inner pages background blur (px)</label><input id="sInnerBgBlur" type="number" min="0" max="40" value="${v('innerBgBlur',0)}"></div>
+      </div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Deposit, Withdraw, Wallet and other inner pages. Authentication screens are unchanged.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require OTP to add a payout account</b> <span class="muted">(off by default)</span></span>
@@ -3430,6 +3435,7 @@ async function renderSettings(){
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
+      innerBgOpacity:+$('sInnerBgOpacity').value, innerBgBlur:+$('sInnerBgBlur').value,
       otpDailyLimitRegister:+$('sOtpReg').value, otpDailyLimitReset:+$('sOtpReset').value, otpDailyLimitBank:+$('sOtpBank').value,
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
       bankOtpRequired:$('sBankOtp').checked,
