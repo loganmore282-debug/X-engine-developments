@@ -3167,21 +3167,6 @@ ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.hom
   tryAutoplayHomeBanner();
   startHomeCarousel();
 }
-// Which Home product strip is showing. Top-level binding must be `var`
-// (never const/let) -- see this file's own header rule about the
-// obfuscated build.
-var _homeProductTab = 'hot';
-window.switchHomeProductTab = function(tab){
-  _homeProductTab = tab;
-  document.querySelectorAll('.home-tabs .ht').forEach((b,i) => {
-    const on = (i === 0) === (tab === 'hot');
-    b.className = 'ht ' + (on ? 'active' : 'off');
-  });
-  const products = STATE.products || [];
-  const shown = tab === 'new' ? products.slice(3) : products.slice(0, 3);
-  const host = $('homeProductList');
-  if (host) host.innerHTML = shown.length ? shown.map(productCardHtml).join('') : '<div class="list-empty">Nothing here yet.</div>';
-};
 // THE single place this app works out what a product pays. /public/products
 // already sends resolved expectedReturn/cycle/dailyPayout figures computed
 // by the same code that credits the money, so the normal path here is just
@@ -3318,12 +3303,6 @@ window.openChannelLink = function(){
   window.open(url, '_blank', 'noopener');
 };
 
-// ── PRODUCTS (full catalog tab) ──
-// ── SKELETON LOADERS ──
-// Each of these mirrors the real markup it replaces, so the swap when data
-// lands is a change of content, not of layout. Shown ONLY when there is
-// nothing cached to paint -- with a cache the app still paints real data
-// immediately and refreshes underneath, which is faster than any skeleton.
 // ── ASSETS (owner's 4th mockup round) ──
 // "All Assets" is the mockup's own compact row layout -- a small thumbnail,
 // name, an inline Price/Duration/Daily Cashback/Total Return strip, and a
