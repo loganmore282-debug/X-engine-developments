@@ -135,7 +135,7 @@ const robustEnablePush = `async function enablePush(){
 
     try {
       localStorage.setItem('snow_admin_push_token', token);
-      localStorage.setItem('chipz_admin_push_key_version', 'v2');
+      localStorage.setItem('petro_admin_push_key_version', 'v2');
     } catch(_){}
     setPushUIState(true);
     enabled = true;
@@ -157,7 +157,7 @@ code = code.slice(0, pushStart) + robustEnablePush + code.slice(pushEnd);
 const oldPushState = "try { setPushUIState(!!localStorage.getItem('snow_admin_push_token')); } catch(_){}";
 const newPushState = `try {
   const _pushToken = localStorage.getItem('snow_admin_push_token') || '';
-  const _pushVersion = localStorage.getItem('chipz_admin_push_key_version') || '';
+  const _pushVersion = localStorage.getItem('petro_admin_push_key_version') || '';
   setPushUIState(_pushVersion === 'v2' && Notification.permission === 'granted' && !!_pushToken);
 } catch(_) { setPushUIState(false); }`;
 if (!code.includes(oldPushState)) {
