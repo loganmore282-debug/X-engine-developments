@@ -12,6 +12,7 @@ on:
       - 'petro/build-core.js'
       - 'petro/build-admin.js'
       - 'petro/server.js'
+      - 'petro/test-no-snow-branding.js'
       - '.github/workflows/petro-redesign-verify.yml'
 
 permissions:
