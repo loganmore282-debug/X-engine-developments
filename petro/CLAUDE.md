@@ -1624,3 +1624,63 @@ verified (`node -c`, both `build-core.js`/`build-admin.js` round-trip OK)
 after resolving. If two sessions end up working this branch at once again,
 `git fetch` + read the incoming log before pushing, the way this merge
 did — not `git push --force`.
+
+**CORRECTION to the round above: the "Android compositing bug" diagnosis
+for the Deposit/Withdraw bleed-through was wrong.** The owner reported the
+exact same bleed-through again after that round shipped, hard enough
+("you failed to remove that... l am opening deposit, it triggers the
+other old code") that this time it was actually reproduced locally
+instead of guessed at a third time — got Playwright running against the
+pre-installed Chromium (`/opt/pw-browsers/chromium`, `npm install
+playwright-core` in the scratch dir), and the bug reproduced identically
+on a plain desktop headless browser. That alone disproves "Android-only
+compositing quirk" — it was never mobile-specific.
+
+**Real root cause, found by inspecting computed styles**:
+`getComputedStyle(sheetBg).backgroundColor` was `rgba(0,0,0,0)` --
+fully transparent -- despite `.sheet-bg{background:var(--snow-canvas)}`
+being the only matching rule (confirmed via `document.styleSheets`, no
+override). `getComputedStyle(document.documentElement).getPropertyValue
+('--snow-canvas')` came back **empty on `:root` itself** -- every color
+custom property in the entire app was failing to resolve, not just this
+one background. Traced with a brace/comment-balance script
+(`/* ` vs `*/` counts) and found the actual bug: inside the `:root{}`
+token block's own explanatory comment (written during the fresh-redesign
+round), one sentence read `Variable NAMES are kept (--snow-*/--chipz-*)`
+-- which contains the literal two characters `*/`, the CSS comment
+CLOSE token, sitting inside the comment's own prose. That closes the
+comment early; everything after it in the same sentence becomes raw,
+invalid CSS the parser can't recover into declarations from, and the
+browser drops the entire `:root{}` rule as a result -- so literally
+every `--snow-*`/`--chipz-*` token app-wide silently resolved to nothing
+for this whole round, which is why the `.sheet-head`/`.home-topbar-v2`
+red-removal fix from earlier in this same file still displayed correctly
+(those use literal fallback-free `var()` too, but happened to read as
+"blank" in a way that coincidentally looked like "removed the red" rather
+than obviously broken) while `.sheet-bg`'s "opaque" background silently
+became fully transparent, letting Home show through underneath Deposit/
+Withdraw exactly as screenshotted. The GPU-compositing-layer fix from the
+round before this one was real CSS, harmless, but was never actually the
+cause -- left in place since promoting scrollable overlays to their own
+layer is still a reasonable performance/paint hint on its own merits, not
+reverted.
+
+**Fix**: one space, `--snow-* / --chipz-*` instead of `--snow-*/--chipz-*`,
+in that single comment. Verified properly this time, not just asserted:
+re-ran the same Playwright reproduction after the fix -- `--snow-canvas`
+now resolves to `#f7f7f8` on `:root`, `#sheetBg`'s computed background is
+opaque, and the Deposit sheet screenshot shows zero bleed-through. Also
+swept the entire stylesheet (both `user-src/index.html` and
+`admin-src/index.html`) with the same brace/comment-balance script for
+any OTHER stray `*/` of this same shape -- none found, this was the only
+one. **Lesson for next time this class of bug is suspected**: don't
+re-guess from a screenshot a third time -- `getComputedStyle()` +
+`document.styleSheets` inspection via a real (even headless, even
+desktop) browser finds the actual cause in minutes; CSS custom-property
+cascade bugs are invisible from reading source text alone once a stray
+comment-closer is involved, since the source LOOKS correct at every
+individual rule -- the damage is a side effect several hundred lines
+away. Playwright is not preinstalled in a fresh sandbox -- `npm install
+playwright-core --no-save` against the already-present
+`/opt/pw-browsers/chromium` binary gets a working headless browser in
+seconds without a full Playwright reinstall.
