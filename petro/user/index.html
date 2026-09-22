@@ -1972,6 +1972,60 @@ body.sheet-open .sheet-bg{bottom:0;}
 
 
 .acct-avatar{background:rgba(227,6,19,.20)!important;color:#ff3340!important;}
+
+/* ── Fixed bottom navigation + compact page chrome ─────────────────── */
+.bottom-nav{
+  position:fixed!important;
+  left:0!important;
+  right:0!important;
+  bottom:0!important;
+  z-index:210!important;
+  max-width:480px;
+  margin:0 auto;
+}
+#pageHost{
+  padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px);
+}
+.member-page-title{
+  padding:16px 18px 12px;
+  font-size:22px;
+  line-height:1.2;
+  font-weight:800;
+  color:#fff;
+  letter-spacing:.01em;
+}
+.account-page>.member-page-title{padding-left:0;padding-right:0;}
+
+/* Thin, muted scrollbar across the signed-in app and secondary sheets. */
+#app,.sheet-bg,#pageHost{
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.20) transparent;
+}
+#app::-webkit-scrollbar,.sheet-bg::-webkit-scrollbar,#pageHost::-webkit-scrollbar{width:3px;height:3px;}
+#app::-webkit-scrollbar-track,.sheet-bg::-webkit-scrollbar-track,#pageHost::-webkit-scrollbar-track{background:transparent;}
+#app::-webkit-scrollbar-thumb,.sheet-bg::-webkit-scrollbar-thumb,#pageHost::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.20);
+  border-radius:999px;
+}
+
+/* Carousel is a true two-panel track: each slide is exactly one banner wide. */
+#homeCarouselTrack .hb-slide-track{
+  width:200%;
+  height:100%;
+  display:flex;
+  transform:translate3d(0,0,0);
+  transition:transform .68s cubic-bezier(.22,1,.36,1);
+}
+#homeCarouselTrack .hb-slide-track.hb-moving{transform:translate3d(-50%,0,0);}
+#homeCarouselTrack .hb-slide-track.hb-resetting{transition:none!important;transform:translate3d(0,0,0)!important;}
+#homeCarouselTrack .hb-slide-track img{
+  flex:0 0 50%;
+  width:50%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
 </style>
 </head>
 <body>
