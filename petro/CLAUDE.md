@@ -1154,6 +1154,37 @@ acted on.
   instead; the owner's own next look at the live deploy is the real check.
   sw.js cache bumped (v123 -> v124).
 
+**Real Android rendering bug found immediately after the round above shipped
+— Home's own text was bleeding through underneath the Deposit/Withdraw
+sheets.** Owner sent screenshots: "Energy for a Better Tomorrow" (Home's
+topbar tagline) visible through the Deposit amount grid, the 3-stat row and
+"Daily Check-in" visible through Withdraw's wallet card — not cosmetic, a
+real defect, and not the peach-header bug (that was already fixed; these
+screenshots show the new solid-red header rendering correctly, the ghosting
+is a separate issue underneath it).
+
+- **Root cause, not just a description**: `.sheet-bg`'s background
+  (`var(--snow-canvas)`) is fully opaque and its z-index (200) is above
+  Home's content — this is NOT a stacking/opacity bug, confirmed by reading
+  every `position:fixed` rule in the file and finding nothing above it
+  except `.bottom-nav` (z-index 210, correctly still visible). It's a
+  known Android Chrome/WebView compositing bug: a `position:sticky` child
+  (`.sheet-head`) inside an `overflow-y:auto` container that's just been
+  toggled `display:none -> block` can leave the PREVIOUS screen's
+  already-painted pixels on screen wherever the new content doesn't touch
+  every pixel (grid gaps, the space around text), until something forces a
+  full repaint.
+- **Fix**: `transform:translateZ(0);will-change:transform;` on `.sheet-bg`
+  and `.pay-page` (the deposit-poll page, which reuses `.sheet-head` the
+  same way) — promotes each to its own GPU compositing layer, which forces
+  a full repaint on open instead of a partial one. Purely a paint-layer
+  hint; no visual/layout change.
+- **Verified**: `node -c`, `build-core.js` round-trip OK. This class of bug
+  is specifically a mobile-WebView compositing quirk that does not
+  reproduce in a desktop-style headless browser, so the real test is the
+  owner's own phone after this deploy — noted here rather than claimed as
+  confirmed. sw.js cache bumped (v124 -> v125).
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting

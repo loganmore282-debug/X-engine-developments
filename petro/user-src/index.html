@@ -2275,7 +2275,19 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 #manualPayFlow .mp-reminder-title{font-size:15px;font-weight:800;color:#4b4b4b;margin-bottom:6px;}
 #manualPayFlow .mp-reminder-box{background:#f6f6f6;border-radius:13px;padding:12px 14px;font-size:12px;line-height:1.9;color:#555;}
 
-.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;}
+/* transform:translateZ(0) forces this overlay onto its own GPU compositing
+   layer. Without it, Android Chrome/WebView has a known bug where a
+   position:sticky child (.sheet-head below) inside an overflow-y:auto
+   container that's just been toggled display:none->block can leave the
+   PREVIOUS screen's already-painted pixels showing through wherever this
+   overlay's own content doesn't touch every pixel (the space between grid
+   cards, around text, etc.) -- not a z-index or opacity bug (this
+   background is fully opaque either way), a stale-paint bug. Owner
+   screenshots of Deposit/Withdraw showed exactly this: Home's topbar
+   tagline and stat row visible in the gaps of the sheet supposedly
+   covering them. Promoting to its own layer forces a full repaint instead
+   of a partial one. */
+.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;transform:translateZ(0);will-change:transform;}
 .sheet-bg.show{display:block;}
 /* This was still Chipz's own sub-page header verbatim -- a peach band and a
    cyan-to-blue gradient chevron, neither of which is anywhere in this app's
@@ -2372,7 +2384,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    would push it visibly below centre by half the header's height. */
 .pay-page{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
   background:var(--snow-canvas);z-index:310;display:none;
-  flex-direction:column;overflow-y:auto;}
+  flex-direction:column;overflow-y:auto;transform:translateZ(0);will-change:transform;}
 .pay-page.show{display:flex;}
 .pay-body{flex:1;display:flex;align-items:center;justify-content:center;padding:26px;}
 .pay-card{width:100%;max-width:340px;text-align:center;}
