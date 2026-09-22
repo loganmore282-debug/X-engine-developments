@@ -951,15 +951,6 @@ const DEFAULT_SETTINGS = {
   // above, deliberately left untouched. Resolved by withdrawProvider()/
   // payoutIsManual() -- never read this field raw.
   withdrawMethod: 'follow',
-  // Owner: "make when l can configure what speed the activity checker be
-  // on home screen." The Home activity ticker's own scroll speed (px/sec)
-  // was hand-tuned across several earlier rounds by direct owner request
-  // (45 -> 90 -> 160, Rounds 26/28) -- always a hardcoded constant in
-  // user-src/original_module.js needing a code change + rebuild each time.
-  // Now a plain admin-editable number instead, default 160 to match
-  // whatever every already-deployed database is already running (zero
-  // behavior change until the admin actually touches this field).
-  activityTickerSpeed: 160,
   // ── OTP (SMS one-time codes via MarzSms) ──
   // Owner-specified: registration 2/day, password reset 3/day, per phone
   // number, resetting daily. Bank/withdrawal-account linking wasn't given an
@@ -1403,7 +1394,7 @@ async function getHelpBanner() {
 // new one; see CLAUDE.md's "Design system" section.
 // profilecard is the Account screen's refinery-photo header background
 // (owner's mockup) -- same reused mechanism as every slot before it.
-const PETRO_IMAGE_SLOTS = ['referral', 'logo', 'spin', 'profilegif', 'downloadbg', 'authhero', 'authcard', 'banner2', 'banner3', 'homefooter', 'profilecard'];
+const PETRO_IMAGE_SLOTS = ['logo', 'profilegif', 'downloadbg', 'authhero', 'authcard', 'banner2', 'banner3', 'homefooter', 'profilecard'];
 const _petroImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getPetroImage(slot) {
@@ -3868,19 +3859,15 @@ app.get('/public/announcement-image', async (req, res) => {
   try { publicJson(req, res, { status: 'success', image: await getAnnouncementImage() }, IMAGE_CACHE); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// The Referral banner and the Account brand logo, in one call -- fetched
-// in boot()'s own Promise.all alongside the Home banner so neither pops in.
+// Petro artwork needed by the current member surfaces, fetched together.
 app.get('/public/petro-images', async (req, res) => {
   try {
-    const [referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard] = await Promise.all([
-      getPetroImage('referral'), getPetroImage('logo'), getPetroImage('spin'), getPetroImage('profilegif'),
-      getPetroImage('downloadbg'), getPetroImage('authhero'), getPetroImage('authcard'),
-      getPetroImage('banner2'), getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'),
+    const [logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard] = await Promise.all([
+      getPetroImage('logo'), getPetroImage('profilegif'), getPetroImage('downloadbg'),
+      getPetroImage('authhero'), getPetroImage('authcard'), getPetroImage('banner2'),
+      getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'),
     ]);
-    // The heaviest reply in the app -- now eleven base64 slots. Measured at
-    // 900 KB with the owner's own artwork for the original seven, and it
-    // used to be re-sent on every single launch.
-    publicJson(req, res, { status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -3888,120 +3875,6 @@ app.get('/public/petro-images', async (req, res) => {
 app.get('/public/about-content', async (_req, res) => {
   try { res.json({ status: 'success', blocks: await getAboutContent() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-
-// ── ACTIVITY FEED — simulated, NOT real transactions. Built once here,
-// server-side, and shared by every client (cached ~4s) so everyone watching
-// at the same moment sees the identical feed.
-// The figures the ticker scrolls are derived from the REGION's own products
-// and settings -- see activityPools(). There used to be two hardcoded ladders
-// here (a deposit list running 30,000 to 4,500,000 and withdrawals stepping
-// 5,000 to 900,000), and both were Ugandan amounts handed to every country.
-// On a market where a product costs 500 and the minimum cash-out is 300 that
-// is a ticker scrolling figures sixty times too large -- money nobody there
-// has ever moved. Owner: "make sure on currency change the activity checker
-// should be changing currency too basing on the products and values of the
-// system."
-function maskedMsisdn(used) {
-  // The region's own dialling code, so the ticker on a Kenyan subdomain does
-  // not scroll Ugandan-looking numbers past its members.
-  const dial = String(currentRegion().dialCode || '256');
-  const one = () => dial + '****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-  for (let tries = 0; tries < 50; tries++) {
-    const n = one();
-    if (!used.has(n)) { used.add(n); return n; }
-  }
-  return one();
-}
-// What the ticker is allowed to show, for ONE region, built entirely from
-// that region's own catalogue and its own limits. Nothing here is a constant.
-//
-//   deposits    -- the prices its members actually pay: every active product's
-//                  price, plus the minimum recharge. Those ARE "the products
-//                  and values of the system", and they are already in the
-//                  region's own currency because getProducts() resolved them
-//                  through the region overlay.
-//   withdrawals -- whole multiples of the region's own withdrawal multiple,
-//                  from its own minimum upward. A cash-out that is not a legal
-//                  amount on that market is a number no member could ever have
-//                  requested, so inventing one makes the feed read as fake.
-//
-// Capped at 40 entries so a market with a 1-unit multiple does not build a
-// hundred-thousand-element array, and every pool falls back to something
-// non-empty: an empty pool would index undefined and scroll "UGX NaN".
-function activityPools(sett, products) {
-  const minDep = Math.max(0, finiteMoney(sett && sett.minDeposit));
-  const minWit = Math.max(0, finiteMoney(sett && sett.minWithdraw));
-  const prices = (products || [])
-    .filter(p => p && p.active !== false)
-    .map(p => Math.round(finiteMoney(p.price)))
-    .filter(n => n > 0);
-  let deposits = Array.from(new Set(prices.concat(minDep > 0 ? [minDep] : [])))
-    .filter(n => n >= minDep).sort((a, b) => a - b);
-  if (!deposits.length) deposits = [minDep > 0 ? minDep : 1];
-
-  // The multiple is a real setting (0 turns the rule off), so fall back to the
-  // minimum itself rather than to a number of our own choosing.
-  let step = Math.round(Math.max(0, finiteMoney(sett && sett.withdrawMultiple)));
-  if (step <= 0) step = minWit > 0 ? minWit : Math.max(1, Math.round(deposits[0] / 10));
-  const first = Math.max(step, Math.ceil(Math.max(minWit, step) / step) * step);
-  const ceiling = Math.max(first, deposits[deposits.length - 1]);
-  const withdrawals = [];
-  for (let a = first; a <= ceiling && withdrawals.length < 40; a += step) withdrawals.push(a);
-  if (!withdrawals.length) withdrawals.push(first);
-  return { deposits: deposits.slice(0, 40), withdrawals };
-}
-async function buildActivityFeed() {
-  const sett = await getSettings();
-  let products = [];
-  try { products = await getProducts(); } catch (_) {}
-  const { deposits, withdrawals } = activityPools(sett, products);
-  const rows = [];
-  const usedNumbers = new Set();
-  for (let i = 0; i < 60; i++) {
-    const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
-    const pool = kind === 'deposit' ? deposits : withdrawals;
-    rows.push({ kind, phone: maskedMsisdn(usedNumbers), amount: pool[Math.floor(Math.random() * pool.length)] });
-  }
-  return rows;
-}
-// Cached PER REGION. It used to be one module-level array shared by every
-// country, and that was a real bug with an ugly shape: buildActivityFeed() is
-// already region-correct inside it -- getSettings(), getProducts() and
-// maskedMsisdn() all read the request's region out of the AsyncLocalStorage
-// store -- so whichever country's request happened to build the feed first
-// won, and every other country was served that country's amounts and dialling
-// code for as long as the process lived.
-//
-// It reads WORSE than an obviously wrong number, because the client labels the
-// amount with its OWN currency (fmtUGX -> cur()): a Kenyan member saw Ugandan
-// product prices with "KES" in front of them. Owner: "make sure on currency
-// change, the activity checker should be changing currency too basing on the
-// products and values of the system."
-//
-// A cache in front of a region-aware builder has to carry the region in its
-// key. The same trap is available to anything else module-level here.
-const _activityCache = new Map(); // regionKey -> { feed, ts, building }
-function activitySlot() {
-  const key = currentRegionKey() || DEFAULT_REGION_KEY;
-  let slot = _activityCache.get(key);
-  if (!slot) { slot = { feed: [], ts: 0, building: false }; _activityCache.set(key, slot); }
-  return slot;
-}
-app.get('/public/activity-feed', async (_req, res) => {
-  const slot = activitySlot();
-  if (!slot.feed.length && !slot.building) {
-    slot.building = true;
-    try { slot.feed = await buildActivityFeed(); slot.ts = Date.now(); }
-    catch (e) { console.error('Activity feed error:', e.message); }
-    finally { slot.building = false; }
-  } else if (!slot.building && Date.now() - slot.ts > 4000) {
-    slot.building = true;
-    buildActivityFeed().then(f => { slot.feed = f; slot.ts = Date.now(); })
-      .catch(e => console.error('Activity feed error:', e.message))
-      .finally(() => { slot.building = false; });
-  }
-  res.json({ status: 'success', feed: slot.feed });
 });
 
 // ═══════════════════════════════════════════
@@ -6969,11 +6842,6 @@ const SETTINGS_CRITICAL_RANGES = {
   // able to silently store something outside "any date anyone would ever
   // actually pick here."
   openingCountdownAt: [0, 4102444800000],
-  // A floor above 0 -- the client divides scroll distance by this to get a
-  // duration, so 0 would produce an infinite/frozen animation rather than
-  // a genuinely paused one. 2000 is a generous ceiling, well past anything
-  // that would still read as a legible scroll.
-  activityTickerSpeed: [10, 2000],
   // Login / Sign Up backdrops. Opacity is stored as a PERCENT (0-100)
   // rather than a 0-1 fraction: every other number an admin types in
   // this panel is a whole number, and Math.round() below would flatten
@@ -7484,12 +7352,12 @@ app.post('/admin/regions/delete', async (req, res) => {
 app.get('/admin/petro-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard] = await Promise.all([
-      getPetroImage('referral'), getPetroImage('logo'), getPetroImage('spin'), getPetroImage('profilegif'),
-      getPetroImage('downloadbg'), getPetroImage('authhero'), getPetroImage('authcard'),
-      getPetroImage('banner2'), getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'),
+    const [logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard] = await Promise.all([
+      getPetroImage('logo'), getPetroImage('profilegif'), getPetroImage('downloadbg'),
+      getPetroImage('authhero'), getPetroImage('authcard'), getPetroImage('banner2'),
+      getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'),
     ]);
-    res.json({ status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard });
+    res.json({ status: 'success', logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/petro-image/set', async (req, res) => {
