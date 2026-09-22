@@ -705,12 +705,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .act-track{display:inline-flex;white-space:nowrap;color:var(--snow-muted);font-size:12.5px;font-weight:500;}
 .act-track b{color:var(--snow-ink);font-weight:600;}
 .act-track .sep{color:var(--snow-border);}
-/* Home's lower banner, replacing the product strip. Full-bleed like the top
-   one, with the Go spin call to action sitting on it. */
-.spin-banner{position:relative;margin:0 0 14px;min-height:150px;background:var(--chipz-hero);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;}
-.spin-banner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
-.spin-cta{position:relative;margin:0 0 18px;padding:0 30px;height:44px;border:0;border-radius:var(--r-ctl);background:var(--chipz-grad);color:#fff;font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.04em;cursor:pointer;box-shadow:none;}
-.spin-cta:active{opacity:.85;}
 /* The animated brand mark filling Home's leftover strip above the nav.
    max-height is in vh on purpose -- a GIF arrives at whatever size it was
    exported at, and one tall upload would otherwise push Home into scrolling.
@@ -1288,7 +1282,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .wit-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:22px;gap:10px;}
 .wit-amt span{color:var(--snow-muted);font-weight:700;font-size:21px;}
 .wit-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.btn-bind{display:block;width:100%;height:52px;border:0;border-radius:var(--r-ctl);background:#f3e2ee;color:#6b2f56;font-weight:700;font-size:15px;margin-bottom:22px;font-family:inherit;}
+.btn-bind{display:block;width:100%;height:52px;border:1px solid rgba(227,6,19,.16);border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);font-weight:750;font-size:15px;margin-bottom:22px;font-family:inherit;}
 .wit-pw{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:12px;}
 .wit-pw input{border:0;outline:0;background:transparent;font-size:22px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .wit-fee{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
@@ -1296,35 +1290,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .wit-instr h3{font-size:17px;font-weight:700;margin:0 0 10px;}
 .wit-instr .ln{height:1px;background:var(--snow-border);margin-bottom:10px;}
 .wit-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:13px;font-weight:500;line-height:1.9;}
-
-/* ── Turntable (spin wheel) ──
-   A Chipz-only feature, so there is no mockup to match -- built in the same
-   language as the rest: brand gradient, Playfair numbers, 3D button. The
-   wheel is 8 alternating segments drawn with conic-gradient so it needs no
-   image asset, and the pointer sits above it. */
-.tt-stage{display:flex;flex-direction:column;align-items:center;padding:28px 0 0;}
-.tt-wheel-wrap{position:relative;width:270px;height:270px;display:flex;align-items:center;justify-content:center;}
-.tt-wheel{width:250px;height:250px;border-radius:50%;position:relative;
-  background:conic-gradient(var(--snow-wine) 0deg 45deg,var(--chipz-orange) 45deg 90deg,var(--snow-wine) 90deg 135deg,var(--chipz-orange) 135deg 180deg,var(--snow-wine) 180deg 225deg,var(--chipz-orange) 225deg 270deg,var(--snow-wine) 270deg 315deg,var(--chipz-orange) 315deg 360deg);
-  box-shadow:0 0 0 8px #1a1310,0 18px 34px -14px rgba(30,10,5,.6);
-  transition:transform 4s cubic-bezier(.17,.67,.16,1);}
-/* Owner: "why the spin wheel has no amounts?" -- the eight prize figures, one
-   per wedge, sent by the server so the wheel and the wallet cannot disagree.
-   Placed by left/top from JS at each wedge's own centre and left UPRIGHT
-   rather than rotated to follow the wedge: eight rotated numbers on a 250px
-   wheel are a puzzle to read, and this is money. The currency is stated once
-   under the wheel instead of eight times on it, and the figures are never
-   shortened. pointer-events:none so a label can never swallow a tap. */
-.tt-slice{position:absolute;transform:translate(-50%,-50%);font-size:12.5px;font-weight:800;
-  color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55);white-space:nowrap;pointer-events:none;}
-.tt-cur{margin:2px 0 0;font-size:12.5px;color:var(--snow-sub,#8c7f76);letter-spacing:.02em;}
-.tt-wheel .hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;border-radius:50%;background:var(--snow-surface);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -4px rgba(0,0,0,.4);}
-.tt-pointer{position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-top:26px solid var(--chipz-gold);filter:drop-shadow(0 3px 4px rgba(0,0,0,.4));z-index:2;}
-.tt-spins{font-size:22px;margin:22px 0 2px;}
-.tt-sub{color:var(--snow-muted);font-size:13px;font-weight:500;text-align:center;margin:0 0 22px;line-height:1.6;}
-.tt-rules{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:18px;margin-top:24px;box-shadow:var(--sh-card);}
-.tt-rules h3{font-size:16px;font-weight:700;margin:0 0 10px;}
-.tt-rules li{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.7;margin-left:16px;}
 
 /* ── Notify dialog (Notify.dc.html) ── */
 /* A dark, small, centred toast -- owner: "don't send the same notify design
