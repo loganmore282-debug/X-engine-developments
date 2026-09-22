@@ -1348,22 +1348,19 @@ different, and is what's live right now:
   job is running commands. Only redeploys on a push to the exact branch
   above; a `ping` (GitHub sends one automatically when the webhook is first
   created) is answered without doing anything.
-  **One-time setup, still needs doing** (both sides — until then this route
-  exists in the code but nothing calls it):
-  1. On the VPS: add `DEPLOY_WEBHOOK_SECRET` to `secrets.local.js` (same file
-     as `MONGODB_URI`/`ADMIN_KEY`/etc.), then do ONE LAST manual redeploy
-     (the three commands above) so the running process actually picks up
-     this route and the new secret.
-  2. On GitHub: repo → Settings → Webhooks → Add webhook. Payload URL
-     `http://179.198.197.114:3000/deploy/webhook` (or the real domain once
-     one exists), content type `application/json`, Secret = the same value
-     as step 1, "Just the push event". GitHub's own ping fires immediately
-     on save — a 200 there confirms it's wired up.
-  After that, every future `git push` to this branch reaches the VPS with
-  zero manual steps — this doc's own "the code in this commit needs `git
-  pull` + rebuild + `pm2 reload` on the VPS" notes become unnecessary the
-  moment step 1+2 above are done, though they're left in place below since
-  that hasn't happened yet as of this note.
+  **One-time setup is done, per the owner (2026-09-22) — the webhook is
+  live.** Both sides (`DEPLOY_WEBHOOK_SECRET` in the VPS's
+  `secrets.local.js`, and the GitHub repo webhook pointed at
+  `http://179.198.197.114:3000/deploy/webhook`) are wired up, so **every
+  push to `claude/petro-platform-build` now reaches the VPS with zero
+  manual steps** — this doc's older "the code in this commit needs `git
+  pull` + rebuild + `pm2 reload` on the VPS" notes elsewhere in this file
+  are from before this was wired up and no longer apply. **Caveat: a
+  Claude session cannot verify a delivery actually landed** — this
+  environment's outbound network is HTTPS-through-a-proxy only (see the
+  correction above), so it cannot curl the VPS's bare-HTTP `:3000` or
+  check `pm2 logs` itself; confirm on GitHub → repo → Settings → Webhooks
+  → the delivery log if a push and the live app ever seem out of sync.
 - **Secrets: `petro/deploy/secrets.local.js`**, created directly on the VPS
   (gitignored — see `.gitignore`'s comment on that line), never committed.
   `ecosystem.config.js` try-requires it and spreads its keys into the pm2
