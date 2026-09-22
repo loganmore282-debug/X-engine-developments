@@ -3,7 +3,7 @@
  * The static host for user/ and admin/, for platforms that have no static
  * site type of their own.
  *
- * WHY THIS EXISTS. Render served `chipz/user` and `chipz/admin` as static
+ * WHY THIS EXISTS. Render served `petro/user` and `petro/admin` as static
  * sites and applied their security headers from render.yaml. Railway (and
  * most PaaS) has no equivalent: a service is a process. So the headers that
  * were host configuration become code, and this file is where they live.
@@ -14,7 +14,7 @@
  *
  * Run:  node static-server.js user     (or: admin)
  *
- * PORT comes from the platform. CHIPZ_API_ORIGIN is the backend the pages are
+ * PORT comes from the platform. PETRO_API_ORIGIN is the backend the pages are
  * allowed to talk to -- it is the one value that changes when the backend
  * moves, and getting it wrong is silent: the browser blocks every API call
  * and the app shows its own "Network error" with a perfectly healthy server
@@ -41,13 +41,13 @@ if (WHICH !== 'user' && WHICH !== 'admin') {
 }
 const ROOT = path.join(__dirname, WHICH);
 const PORT = Number(process.env.PORT) || 8080;
-const API_ORIGIN = (process.env.CHIPZ_API_ORIGIN || 'http://179.198.197.114:3000')
+const API_ORIGIN = (process.env.PETRO_API_ORIGIN || 'http://179.198.197.114:3000')
   .trim().replace(/\/+$/, '');
 
 if (!fs.existsSync(path.join(ROOT, 'index.html'))) {
   // Refuse to start rather than serve 404s that look like a broken deploy.
   console.error(`FATAL: ${path.join(ROOT, 'index.html')} does not exist. ` +
-                'Is the service\'s root directory set to the chipz/ folder?');
+                'Is the service\'s root directory set to the petro/ folder?');
   process.exit(1);
 }
 
@@ -183,7 +183,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`chipz static (${WHICH}) on :${PORT} — API origin ${API_ORIGIN}`);
+  console.log(`petro static (${WHICH}) on :${PORT} — API origin ${API_ORIGIN}`);
 });
 
 module.exports = { CSP, BASE_HEADERS, TYPES, REVALIDATE, server };
