@@ -3950,15 +3950,9 @@ async function renderAccount(){
     <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
   </div>
   <div class="acct-row-list">
-    ${acctRowHtml(ICONS.layers, 'ar-red', 'My Assets', 'View your purchased assets and earnings', "showPage('assets')")}
-    ${acctRowHtml(ICONS.arrowDownTray, 'ar-gold', 'Deposit Records', 'View all your deposit history', "openBalanceRecordSheet('deposit')")}
-    ${acctRowHtml(ICONS.arrowDownTray, 'ar-red', 'Withdrawal Records', 'View all your withdrawal history', "openBalanceRecordSheet('withdraw')")}
-    ${acctRowHtml(ICONS.trendUp, 'ar-gold', 'Earnings Records', 'View daily earnings and rewards', "openBalanceRecordSheet('all')")}
-    ${acctRowHtml(ICONS.peopleGroup, 'ar-dark', 'My Team', 'View your team and referral details', "showPage('network')")}
     ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
     ${acctRowHtml(ICONS.walletLg, 'ar-gold', 'Payout Wallet', 'Link your mobile money payout number', 'openWalletSheet()')}
     ${acctRowHtml(ICONS.shieldCheck, 'ar-gold', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
-    ${acctRowHtml(ICONS.bell, 'ar-dark', 'Messages', 'View notifications and updates', 'openMessagesSheet()')}
     ${acctRowHtml(ICONS.headset, 'ar-red', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
     ${acctRowHtml(ICONS.infoCircle, 'ar-red', 'About Us', 'Platform information and terms', 'openAboutSheet()')}
   </div>
