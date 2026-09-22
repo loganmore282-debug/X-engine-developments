@@ -1084,6 +1084,76 @@ appear like as l said, all notifies in middle not bottom."*
   auth background rather than trusting the CSS math alone. sw.js cache
   bumped.
 
+**`.sheet-head` (every sub-page's header) was still Chipz's, verbatim, and
+had never been re-themed — owner sent screenshots of About, Balance
+Record, and Messages all showing a peach band and a cyan-to-blue gradient
+back-chevron, called it out hard: *"still seeing chipz elements... same
+blue navigation arrow... you mixed faeces and food."* Fair — this wasn't a
+subtle miss. `.sheet-head`'s own CSS comment literally claimed the peach
+band + blue chevron was "in the approved mockups", which was simply false;
+nothing in this file's design-system section ever specified that, and the
+SVG ids were named `chipzBack`/`chipzBackPay`, an honest label nobody had
+acted on.
+
+- **Why this was the single highest-leverage fix available**: every
+  sub-page that opens via `openSheet()` — About, all 3 Balance Record tabs,
+  My Team, Gift Codes, Security Settings, Messages, and more — shares this
+  one `.sheet-head` rule. One CSS fix corrects all of them at once, the
+  same "swap the token, not each screen" leverage the original color-token
+  retheme used.
+- Background changed from `linear-gradient(180deg,#ffe3d1,var(--snow-canvas))`
+  (Chipz's peach) to a solid `var(--snow-wine)` (this app's own Corporate
+  Red, `#e30613`) — reusing the same red the Home/Account top bars already
+  established, not inventing a second header style. Title text set to
+  white (`.sheet-head h2{color:#fff}`) to stay legible on it.
+  `#depStatusBg .pay-head` (the deposit-poll page's own header, which
+  intentionally reuses `.sheet-head` byte-for-byte, per its own comment)
+  is fixed for free by the same rule.
+- Both back-chevron `<svg>`s (the sheet header's and the deposit-status
+  page's) had their own duplicated `chipzBack`/`chipzBackPay` cyan-to-blue
+  `<linearGradient>` defs — removed entirely, replaced with a plain
+  `stroke="#fff"` path, since the icon now sits on a solid red background
+  rather than a light peach one.
+- **The bold/condensed font complaint is real and separate**: `body`'s
+  `font-family` was still `'Barlow Condensed'`, Chipz's own inherited
+  choice (see "Design language" above — this was flagged as unrevisited
+  back at the fork, never actually acted on). Because nearly every other
+  rule in this file reads `font-family:inherit`, this was a second
+  single-point fix: swapped to `'Inter'` (normal-width, not condensed —
+  Barlow Condensed's narrowness compounding with this file's many
+  `font-weight:700/800` rules is what read as "chunky/bold"). Also
+  deleted, from the Google Fonts `<link>`, five families that turned out
+  to be dead imports entirely (`Playfair Display`, `Bodoni Moda`,
+  `DM Serif Display`, `Roboto Mono`, `JetBrains Mono`, `Orbitron`) —
+  confirmed by grep that none of them were referenced by any active CSS
+  rule anywhere else in the file before removing them, not assumed.
+  `--number-font` (referenced by `.mono`/`.p-stat .v`/etc.) was never
+  actually *set* anywhere in `:root`, so it was already silently falling
+  back to `inherit` — fixed for free by the same body-font swap, nothing
+  extra needed there.
+- **Not fixed this round, flagged rather than guessed at**: the owner also
+  named the bottom-nav tab-switch animation and the Bind Bank Account
+  card's design ("still shows the one of chipz") as unconvincing. The nav
+  icons/colors were already re-themed (see "Bottom nav collapsed..."
+  above) — what's left is the transition *motion* itself, inherited
+  unchanged from Chipz and never audited. The wallet/bank card
+  (`.wallet-card`, `user-src/index.html`) already uses this app's own
+  red-to-gold gradient, not Chipz's colors — CLAUDE.md's own Account-screen
+  section already flagged its layout (bank-card metaphor, chip icon,
+  sheen animation) as "the underlying flow is untouched" from Chipz, which
+  is exactly what's now being pointed at. Both are real, undone design
+  work — no mockup has specified what either should look like instead, and
+  guessing at a new nav-transition feel or a new bank-card design without
+  one is exactly the "do not invent unprompted" mistake this file warns
+  against elsewhere. Needs the owner's direction (or explicit permission to
+  design freely), not a guess.
+- **Verified**: `node -c user-src/original_module.js`, `node
+  build-core.js` (round-trip OK). Headless-Chromium visual verification
+  was not run this round (no local Playwright install in this sandbox,
+  unlike prior rounds) — confirmed by reading the changed CSS/SVG directly
+  instead; the owner's own next look at the live deploy is the real check.
+  sw.js cache bumped (v123 -> v124).
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting

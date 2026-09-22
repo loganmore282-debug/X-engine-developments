@@ -130,7 +130,18 @@
      option up front (not just whichever is currently selected) means
      switching the admin setting never needs a fresh network request or a
      page reload to take visible effect. -->
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,800;1,700&family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=DM+Serif+Display&family=Roboto+Mono:wght@500;700&family=JetBrains+Mono:wght@500;700&family=Orbitron:wght@600;700&display=swap" rel="stylesheet">
+<!-- Barlow Condensed/Playfair Display/Bodoni Moda/DM Serif Display/Roboto
+     Mono/JetBrains Mono/Orbitron were Chipz's own font auditioning, carried
+     into this fork unmodified -- Barlow Condensed was the one actually in
+     use (body{font-family} below, the single source every other rule's
+     font-family:inherit reads from); the other six were dead imports,
+     referenced nowhere else in this file, just extra network weight on
+     every load. Inter replaces Barlow Condensed as this app's own body/
+     number font: a plain, normal-width sans (Barlow Condensed is
+     condensed/narrow, which combined with this app's many font-weight:700/
+     800 rules is what read as "still Chipz's bold font") with weights wide
+     enough that headings/buttons don't need to reach for 800 to stand out. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ── Chipz design tokens ──────────────────────────────────────────────
    Value-only swap of the token names this codebase already uses everywhere
@@ -229,7 +240,7 @@
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;touch-action:manipulation;}
 *{-webkit-tap-highlight-color:transparent;}
-body{background:var(--snow-canvas);font-weight:400;font-family:'Barlow Condensed','Arial Narrow',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
+body{background:var(--snow-canvas);font-weight:400;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
 .mono{font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,inherit);}
 /* Chipz leads with a serif display face for headings/figures over a
    condensed sans for body copy, matching every approved mockup. */
@@ -2266,12 +2277,18 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 .sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;}
 .sheet-bg.show{display:block;}
-/* Every sub-page header in the approved mockups is a soft peach band with a
-   centred serif title and a bare cyan-to-blue gradient chevron on the left --
-   no circular icon button behind it. */
-.sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:linear-gradient(180deg,#ffe3d1,var(--snow-canvas));border-bottom:1px solid var(--snow-border);z-index:1;}
+/* This was still Chipz's own sub-page header verbatim -- a peach band and a
+   cyan-to-blue gradient chevron, neither of which is anywhere in this app's
+   own red/white/gold/charcoal identity (see CLAUDE.md's "Design system").
+   Every sheet/sub-page in the app shares this one header, so it was the
+   single highest-leverage leftover-Chipz bug in the whole client: fixed
+   once here, fixed on About, Balance Record, Messages, My Team, Gift
+   Codes, Security Settings, and every other screen that opens through
+   openSheet(). Reuses the same solid Corporate Red the Home/Account top
+   bars already established, rather than inventing a second header style. */
+.sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:var(--snow-wine);z-index:1;}
 .sheet-head .back{background:none;border:none;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:23px;font-weight:400;letter-spacing:.03em;}
+.sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:20px;font-weight:700;letter-spacing:.02em;color:#fff;}
 .sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
 
 /* The dark bottom-pill toast (#toastHost, .toast, @keyframes toastIn) was
@@ -2688,7 +2705,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 <div class="sheet-bg" id="sheetBg">
   <div class="sheet-head">
-    <button class="back" onclick="closeSheet()" aria-label="Back"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="chipzBack" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ad4e8"/><stop offset="1" stop-color="#2f6fed"/></linearGradient></defs><path d="M15 5l-7 7 7 7" stroke="url(#chipzBack)" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="back" onclick="closeSheet()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2 id="sheetTitle"></h2>
   </div>
   <div class="sheet-body" id="sheetBody"></div>
@@ -2755,17 +2772,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 <!-- Owner: "include nav arrow '<', and its title space, on that payment page."
      Reuses .sheet-head verbatim so this header IS the app's header, not a
-     lookalike -- same gradient, same 30px chevron, same centred title. The
-     gradient gets its own id (chipzBackPay): two <linearGradient> elements
-     sharing an id in one document is a duplicate-id bug, and although both
-     happen to be identical today, a later change to one would silently and
-     confusingly repaint the other.
+     lookalike -- same red background, same 24px chevron, same centred
+     title (the gradient chevron this comment used to describe was
+     Chipz's own cyan-to-blue -- fixed to a plain white stroke above, along
+     with every other .sheet-head, since they all share one rule).
      #depStatusBody is a DIV, not a <p>: the pending state renders an <ol>
      of steps, and an <ol> inside a <p> is invalid and gets reparented by
      the browser, which drops the list out of the card entirely. -->
 <div class="pay-page" id="depStatusBg">
   <div class="sheet-head pay-head">
-    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="chipzBackPay" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ad4e8"/><stop offset="1" stop-color="#2f6fed"/></linearGradient></defs><path d="M15 5l-7 7 7 7" stroke="url(#chipzBackPay)" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2 id="depStatusHeadTitle">Recharge</h2>
   </div>
   <div class="pay-body">
