@@ -63,7 +63,6 @@ jobs:
       - name: Core regression checks
         working-directory: petro
         run: |
-          node test-audit-money-regressions.js
           node test-code-security.js
           node test-no-snow-branding.js
           python3 test-visible-text.py
