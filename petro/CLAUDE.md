@@ -2031,3 +2031,48 @@ NaN
 NaN
 - Work was based on current `claude/petro-platform-build` and merged normally through
 NaN
+
+## 2026-09-22 — Chipz residue removal pass
+
+Owner explicitly asked to remove the remaining Chipz functions/visuals so Petro
+NaN
+
+Completed after tracing callers before deletion:
+- Removed retired standalone **Products / Catalog / Referral / Team** member-page
+NaN
+NaN
+- Removed the dead **My Products** renderer and its large legacy CSS block. Petro's
+NaN
+- Removed dead Home product-tab code, the removed simulated activity ticker client
+NaN
+NaN
+- Removed old Team summary-card styles while preserving the lower-level member-list
+NaN
+- Removed the unused simulated `/public/activity-feed` backend, its cache/builder and
+NaN
+- Renamed active fork-era identifiers throughout member source, admin source, backend
+NaN
+NaN
+NaN
+- Renamed the old `chipz_test_api.py` file to `petro_test_api.py` and removed the
+NaN
+- Renamed the generic image API to `/public/petro-images`, `/admin/petro-images`,
+NaN
+NaN
+- Existing uploaded images are not discarded: `getPetroImage()` performs a one-time
+NaN
+NaN
+NaN
+- Removed obsolete Referral-banner and Home-spin-banner image slots/translations
+NaN
+- Preserved inherited implementation only where it is still **active Petro behavior**
+NaN
+NaN
+- `user/sw.js` bumped `petro-shell-v132` -> `petro-shell-v133`.
+- Both builds were verified in a clean GitHub Actions environment:
+NaN
+NaN
+NaN
+NaN
+- Work was based on the then-current `claude/petro-platform-build` head and merged
+NaN
