@@ -42,7 +42,7 @@
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' http://179.198.197.114:3000 https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="theme-color" content="#ef6c00">
+<meta name="theme-color" content="#e30613">
 <link rel="manifest" href="/manifest.json">
 <!-- Same server-hosted brand asset the user app installs with, NOT a local
      /icon-192.png. Uploading an icon in Admin -> Brand rewrote the one the
@@ -101,7 +101,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .login-card{background:var(--card);border-radius:20px;padding:30px 26px;width:100%;max-width:380px;
     box-shadow:0 10px 40px rgba(0,0,0,.12);text-align:center;}
   .brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px;}
-  .brand .mk{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7A3200,var(--gold) 60%,var(--gold-deep));display:flex;align-items:center;justify-content:center;}
+  .brand .mk{width:40px;height:40px;border-radius:12px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;}
   .brand .mk svg{width:24px;height:24px}
   /* The mark is an <img> now (see the comment on #brandMarkLogin). It fills
      the round badge rather than sitting inside it as a glyph would, so the
@@ -120,7 +120,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   #langLogin,#langSwitch{width:auto;margin-top:0;padding:7px 9px;border-radius:9px;font-size:12.5px}
   #langLogin{margin-left:auto;flex:0 0 auto}
   label{display:block;font-size:12.5px;color:var(--sub);font-weight:600;margin-top:12px;text-align:left}
-  .btn{background:linear-gradient(180deg,#C97785,var(--gold) 60%,var(--gold-deep));color:var(--gold-ink);border:0;border-radius:11px;padding:12px 18px;font-size:14px;
+  .btn{background:var(--gold);color:var(--gold-ink);border:0;border-radius:10px;padding:12px 18px;font-size:14px;
     font-weight:800;cursor:pointer}
   .btn:active{opacity:.88}
   .btn[disabled]{opacity:.55;cursor:default}
@@ -134,14 +134,14 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   /* shell */
   .topbar{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
   .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0}
-  .topbar .mk{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#7A3200,var(--gold) 60%,var(--gold-deep));display:flex;align-items:center;justify-content:center}
+  .topbar .mk{width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
   .topbar .mk svg{width:20px;height:20px}
   .topbar b{font-size:16px}
   .spacer{flex:1}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 10px}
-  .tab{background:none;border:0;padding:8px 13px;border-radius:20px;font-size:13px;font-weight:700;
+  .tab{background:transparent;border:1px solid transparent;padding:8px 13px;border-radius:9px;font-size:13px;font-weight:700;
     color:var(--sub);cursor:pointer}
-  .tab.active{background:var(--gold);color:var(--gold-ink)}
+  .tab.active{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
   .tab .badge-n{display:inline-block;min-width:17px;padding:0 5px;margin-left:5px;background:var(--danger);color:#fff;
     border-radius:20px;font-size:10px;line-height:16px;}
   .content{padding:18px 0 70px}
@@ -225,7 +225,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .modal-close{position:absolute;right:14px;top:14px;background:var(--line);border:0;border-radius:50%;
     width:30px;height:30px;cursor:pointer;font-size:15px;color:var(--sub)}
 
-  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;
+  .toast{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--ink);color:#fff;
     padding:11px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.2)}
   .toast.ok{background:var(--ok)} .toast.err{background:var(--danger)}
   /* Saved, but not the result he asked for -- an upload whose background did
