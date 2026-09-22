@@ -106,8 +106,8 @@ ck(/openSheet\('About ' \+ brandName\(\)/.test(mod),
 ck(/function brandNameKnown\(\)/.test(mod), 'brandNameKnown() exists');
 ck(/return cached \|\| ''/.test(mod),
    'and it is allowed to return nothing rather than guess a name');
-ck(/function brandName\(\)\s*\{\s*return brandNameKnown\(\) \|\| 'Chipz';/.test(mod),
-   "brandName() keeps a last-resort fallback, for sentences only");
+ck(/function brandName\(\)\s*\{\s*return brandNameKnown\(\) \|\| 'Petro';/.test(mod),
+   "brandName() keeps Petro as the last-resort sentence fallback");
 ck(/const n = brandNameKnown\(\)\.toUpperCase\(\);\s*\n\s*return n \? esc\(n\) : '';/.test(mod),
    'and the wordmark renders nothing at all when the name is not known yet');
 // No hardcoded name left anywhere in the module's actual CODE. Comments are
