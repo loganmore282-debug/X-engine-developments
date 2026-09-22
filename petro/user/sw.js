@@ -34,7 +34,7 @@ const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 
 // ── THE INSTALLED APP'S NAME ──
 //
-// Owner: "let's not make chipz to be default name, let's make it to be
+// Owner: "let's not make petro to be default name, let's make it to be
 // backend such that the set name abides every functions ... system visuals
 // should be backend." The name Android prints under the installed icon, and
 // the one in Chrome's "Install app" sheet, come from manifest.json's `name` --
