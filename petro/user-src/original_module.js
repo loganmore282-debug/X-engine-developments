@@ -5065,7 +5065,8 @@ function depositChipsHtml(s){
   const amounts = Array.from(new Set((STATE.products || [])
     .map(p => Number(p.price) || 0)
     .filter(p => p >= (Number(s.minDeposit) || 0))))
-    .sort((a, b) => a - b);
+    .sort((a, b) => a - b)
+    .slice(0, 5);
   return amounts.map(a =>
     `<button type="button" class="dep-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${Number(a).toLocaleString('en-US')}</button>`
   ).join('');
@@ -5393,12 +5394,18 @@ async function pollDepositStatus(depositId){
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
   const hadCache = Array.isArray(STATE.bankAccounts);
+  if (!hadCache) STATE.bankAccounts = [];
   openSheet('Withdraw', '');
-  if (hadCache) paintWithdrawSheet(s);
+  // Paint the actual withdrawal page immediately. Waiting for /bank/list
+  // left a transparent-looking empty sheet over Home on a cold open.
+  paintWithdrawSheet(s);
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
-  else if (!hadCache) STATE.bankAccounts = [];
-  if (!hadCache && _openSheetTitle === 'Withdraw') paintWithdrawSheet(s);
+  // Only repaint after the first fetch when this sheet is still open and the
+  // member has not started typing into the amount field.
+  if (!hadCache && _openSheetTitle === 'Withdraw' && !document.activeElement?.matches?.('#witAmount')) {
+    paintWithdrawSheet(s);
+  }
 };
 // ── The cash-out window, client side ────────────────────────────────────
 // Mirrors server.js's withdrawWindowState()/hhmmLabel(). The SERVER decides;
