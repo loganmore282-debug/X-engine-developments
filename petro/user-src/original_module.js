@@ -3153,7 +3153,7 @@ function paintHome(){
   // were removed the same way, same instruction ("what I didn't mention,
   // remove it... your treasure chest box, spin... all stuff I never
   // mentioned") -- none of them are in any mockup sent. Their functions
-  // (startActivityTicker/spinBannerHtml/homeGifHtml/openTurntableSheet) are
+  // (startActivityTicker/homeGifHtml and related helpers) are
   // left defined but unreached, same as this session's other supersessions.
   let html = `
 <div class="home-topbar-v2">
