@@ -75,7 +75,7 @@ jobs:
           node test-code-security.js
           node test-no-snow-branding.js
           python3 test-visible-text.py
-          python3 test-nav-sheets.py
+          python3 test-nav-sheets.py /tmp/petro-nav-sheets
           python3 test-csp-runtime.py
 
       - name: Commit generated bundles
