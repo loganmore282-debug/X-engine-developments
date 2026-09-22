@@ -2,7 +2,7 @@
 
 WHY THIS EXISTS. Forty-eight browser harnesses each held their own copy of
 
-    API = 'https://chipz-server.onrender.com'
+    API = 'https://petro-server.onrender.com'
 
 and stubbed it with `page.route(f"{API}/**", ...)`. The moment the backend moved
 to Railway, every one of those patterns matched nothing: the app called the new
@@ -25,7 +25,7 @@ whatever the app is actually going to call, on this host and on the next one.
 
 Usage, replacing the old constant in place:
 
-    from chipz_test_api import API
+    from petro_test_api import API
 """
 
 import re
@@ -44,7 +44,7 @@ def api_origin():
     if not m:
         raise RuntimeError(
             'could not read API_BASE out of user-src/original_module.js -- '
-            'if it was renamed, update chipz_test_api.py and set-backend-url.js together')
+            'if it was renamed, update petro_test_api.py and set-backend-url.js together')
     return m.group(1).rstrip('/')
 
 

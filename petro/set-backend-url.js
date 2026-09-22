@@ -2,7 +2,7 @@
 /**
  * Point the whole project at a different backend, in one command.
  *
- *   node set-backend-url.js https://chipz-server-production.up.railway.app
+ *   node set-backend-url.js https://petro-server-production.up.railway.app
  *   node set-backend-url.js --check          (show where it points now)
  *
  * WHY THIS EXISTS. The backend origin is written into THIRTEEN places across
@@ -69,7 +69,7 @@ const SITES = [
   //                    to the shipped manifest, and the installed app name
   //                    silently never updates again.
   //   admin/sw.js      the icon on a background push notification.
-  //   static-server.js the FALLBACK when CHIPZ_API_ORIGIN is unset. Stale, the
+  //   static-server.js the FALLBACK when PETRO_API_ORIGIN is unset. Stale, the
   //                    CSP header names a dead backend and the browser blocks
   //                    every API call with nothing showing server-side -- the
   //                    "Network error over a healthy backend" this file's own
@@ -78,7 +78,7 @@ const SITES = [
   ['user/sw.js', o => [[/const API_ORIGIN = '[^']*'/g, `const API_ORIGIN = '${o}'`]]],
   ['admin/sw.js', o => [[/(const BRAND_ICON = ')https?:\/\/[^/]+(\/public\/)/g, `$1${o}$2`]]],
   ['static-server.js', o => [
-    [/(process\.env\.CHIPZ_API_ORIGIN \|\| ')https?:\/\/[^']*(')/g, `$1${o}$2`],
+    [/(process\.env\.PETRO_API_ORIGIN \|\| ')https?:\/\/[^']*(')/g, `$1${o}$2`],
   ]],
 ];
 
@@ -92,7 +92,7 @@ function originsIn(text) {
                     /"(https?:\/\/[^/]+)\/public\/app-icon-/g,
                     /const API_ORIGIN = '([^']*)'/g,
                     /const BRAND_ICON = '(https?:\/\/[^/]+)\/public\//g,
-                    /process\.env\.CHIPZ_API_ORIGIN \|\| '([^']*)'/g]) {
+                    /process\.env\.PETRO_API_ORIGIN \|\| '([^']*)'/g]) {
     let m;
     while ((m = re.exec(text))) out.add(m[1].replace(/\/+$/, ''));
   }
@@ -124,7 +124,7 @@ try {
   origin = u.origin;
 } catch (e) {
   console.error(`not a usable origin: ${arg}\n  ${e.message}`);
-  console.error('example: node set-backend-url.js https://chipz-server-production.up.railway.app');
+  console.error('example: node set-backend-url.js https://petro-server-production.up.railway.app');
   process.exit(1);
 }
 
@@ -193,5 +193,5 @@ if (strays.length) {
 console.log(`\nbackend is now ${origin} (${changed} file(s) changed)`);
 console.log('NOW REBUILD, or the app still calls the old address:');
 console.log('  node build-core.js && node build-admin.js');
-console.log('And set CHIPZ_API_ORIGIN to the same value on both static services,');
+console.log('And set PETRO_API_ORIGIN to the same value on both static services,');
 console.log('so the header CSP agrees with the meta tag.');

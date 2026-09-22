@@ -105,7 +105,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .brand .mk svg{width:24px;height:24px}
   /* The mark is an <img> now (see the comment on #brandMarkLogin). It fills
      the round badge rather than sitting inside it as a glyph would, so the
-     Chipz tile IS the badge -- same shape an uploaded Brand logo gets from
+     Petro tile IS the badge -- same shape an uploaded Brand logo gets from
      applyAdminBrandLogo(), so the two tiers cannot look different. */
   .mk img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
   .brand b{font-size:20px}
@@ -269,7 +269,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   <div class="login-card">
     <div class="brand">
       <!-- Owner: "in admin panel still has old svgs and icons ie that slanting
-           8 and that ladder svg on the home, please let it be chipz logo."
+           8 and that ladder svg on the home, please let it be petro logo."
            This was Snow's inherited swoosh -- a slanting infinity mark drawn
            in a hardcoded <path>, which is exactly the "slanting 8". The
            topbar's was a hand-drawn grid, the "ladder". Both are the app's
@@ -361,7 +361,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <script>
-// Chipz Admin panel.
+// Petro Admin panel.
 const SERVER = 'http://179.198.197.114:3000';
 
 let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
@@ -675,7 +675,7 @@ function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('
 // localStorage, not sessionStorage: the tab memory beside it is per-tab on
 // purpose (where you were), this is per-device (what you are working on).
 var ADMIN_REGION = 'ug';
-try { const _r = localStorage.getItem('chipz_admin_region'); if (_r) ADMIN_REGION = _r; } catch (_) {}
+try { const _r = localStorage.getItem('petro_admin_region'); if (_r) ADMIN_REGION = _r; } catch (_) {}
 var ADMIN_REGIONS = [{ key:'ug', name:'Uganda', currency:'UGX', dialCode:'256', localLength:9, prefixes:['7'], utcOffsetMin:180, hosts:[], active:true, isDefault:true }];
 // The languages the member app ships a dictionary column for. Must hold the
 // same codes as LANGUAGE_CODES in server.js and LANGS in
@@ -845,7 +845,7 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
 // which is what he asked for -- it is the second of two tiers now, not the
 // only one.
 //
-// /public/chipz-images is used rather than the admin API on purpose: the LOGIN
+// /public/petro-images is used rather than the admin API on purpose: the LOGIN
 // screen has to draw this before anyone has signed in, so it cannot depend on
 // a session. Failure is silent and the existing SVG simply stays -- a panel
 // that will not paint its own header because a logo fetch failed would be a
@@ -853,7 +853,7 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
 async function applyAdminBrandLogo(){
   let logo = '';
   try {
-    const r = await fetch(SERVER + '/public/chipz-images');
+    const r = await fetch(SERVER + '/public/petro-images');
     const d = await r.json();
     logo = (d && d.status === 'success' && d.logo) || '';
   } catch (_) { return; }
@@ -885,9 +885,9 @@ $('installBtn').addEventListener('click', async ()=>{
 const FIREBASE_CONFIG = {
   // PLACEHOLDER -- this is NOT a real Firebase project. It must be replaced
   // with Petro's own project's web config before anything can sign in.
-  // Deliberately broken rather than left pointing at Chipz's real project:
+  // Deliberately broken rather than left pointing at Petro's real project:
   // a copy-pasted deploy must fail loudly here, not authenticate Petro's
-  // members into Chipz's live user pool. See petro/CLAUDE.md.
+  // members into Petro's live user pool. See petro/CLAUDE.md.
   apiKey: "AIzaSyCOij0DRicI7MKDEibIlFfm0n3dl_faOnM",
   authDomain: "chnpetrol.firebaseapp.com",
   projectId: "chnpetrol",
@@ -1042,7 +1042,7 @@ function paintRegionSwitch(){
       sel._wired = true;
       sel.addEventListener('change', () => {
         ADMIN_REGION = sel.value;
-        try { localStorage.setItem('chipz_admin_region', ADMIN_REGION); } catch (_) {}
+        try { localStorage.setItem('petro_admin_region', ADMIN_REGION); } catch (_) {}
         // Repaint whatever is open against the new country. Every tab reads
         // its data through api(), which stamps the country on, so one
         // re-render is the whole of "changes all contents".
@@ -1201,7 +1201,7 @@ async function renderDashboard(){
     </div>
     <!-- PesaJet. Deliberately NOT called a balance: PesaJet publishes no
          balance endpoint (neither of their official SDKs has one), so this is
-         what Chipz itself has moved through them, which is exact for that and
+         what Petro itself has moved through them, which is exact for that and
          silent about their float. The card is hidden entirely unless PesaJet
          is actually in the payment path or has history, so it does not clutter
          a panel for an operator who does not use it. -->
@@ -2270,7 +2270,7 @@ function editProduct(p, order){
 }
 
 // ── MESSAGES (member inbox broadcasts) ──
-// Chipz has a real in-app inbox (Snow does not). Anything written here is
+// Petro has a real in-app inbox (Snow does not). Anything written here is
 // broadcast to every member's Messages screen; read state is tracked per
 // member server-side, so editing a message does not re-mark it unread.
 async function renderMessages(){
@@ -2407,8 +2407,8 @@ async function renderPromoCodes(){
 // ── COUNTRIES (REGIONS) ──
 //
 // Owner: "l wanted other subdomain to fetch other country code and
-// currency, ie fgdr.chipz-platform.com in ugx, and country code changeable
-// to other country or created, and another can be sfhd.chipz-platform in
+// currency, ie fgdr.petro-platform.com in ugx, and country code changeable
+// to other country or created, and another can be sfhd.petro-platform in
 // KES shs, or any country created."
 //
 // One row per country. A country owns the subdomain(s) it is served from,
@@ -2431,7 +2431,7 @@ async function loadAdminRegions(){
       ADMIN_REGION = 'ug';
       // Forget it on the device too, or every reload resurrects the dead
       // country and resets to Uganda again a moment later.
-      try { localStorage.setItem('chipz_admin_region', ADMIN_REGION); } catch (_) {}
+      try { localStorage.setItem('petro_admin_region', ADMIN_REGION); } catch (_) {}
     }
   }
   // The switch is built from this list, so repaint it here rather than
@@ -2727,7 +2727,7 @@ async function deleteRegion(key){
   toast('Country deleted', 'ok');
   if (ADMIN_REGION === key) {
     ADMIN_REGION = 'ug';
-    try { localStorage.setItem('chipz_admin_region', ADMIN_REGION); } catch (_) {}
+    try { localStorage.setItem('petro_admin_region', ADMIN_REGION); } catch (_) {}
   }
   await loadAdminRegions();
   switchTab('regions');
@@ -2972,7 +2972,7 @@ function applyAdminBrandName(name){
 // tabs, in exchange for not threading one function's closure across two.
 async function renderBanners(){
   const [r, br, cir, bar] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/chipz-images'), api('/admin/brand-assets')
+    api('/admin/settings'), api('/admin/banner'), api('/admin/petro-images'), api('/admin/brand-assets')
   ]);
   if (staleTab('banners')) return;
   const s = r.settings||{};
@@ -3172,9 +3172,9 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  // The two Chipz-only slots share one endpoint pair, so they share one
+  // The two Petro-only slots share one endpoint pair, so they share one
   // wiring helper rather than repeating the upload/clear pair per slot.
-  function wireChipzImageSlot(slot, fileId, clearId, savedMsg, clearedMsg){
+  function wirePetroImageSlot(slot, fileId, clearId, savedMsg, clearedMsg){
     const file = $(fileId);
     if (file) file.addEventListener('change', async e=>{
       const f=e.target.files[0]; if(!f) return;
@@ -3190,7 +3190,7 @@ function wireBannerHandlers(){
                        : (slot==='downloadbg' || slot==='authhero') ? 1600
                        : 1280;
           const image = await fileToDataUrl(f, maxDim, 0.82);
-          const d = await api('/admin/chipz-image/set', { slot, image });
+          const d = await api('/admin/petro-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
           if (d.status==='success') renderBanners();
         } catch(err){ toast(err.message||'Could not read image','err'); }
@@ -3199,7 +3199,7 @@ function wireBannerHandlers(){
     const clear = $(clearId);
     if (clear) clear.addEventListener('click', async()=>{
       await withTabBusy((async()=>{
-        const d = await api('/admin/chipz-image/clear', { slot });
+        const d = await api('/admin/petro-image/clear', { slot });
         toast(d.status==='success'?clearedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
         if (d.status==='success') renderBanners();
       })());
@@ -3274,12 +3274,12 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  wireChipzImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download screen background saved, live for every user', 'Download screen background removed');
-  wireChipzImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Background image saved, live on Log In and Sign Up', 'Background image removed');
-  wireChipzImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
-  wireChipzImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
-  wireChipzImageSlot('homefooter', 'homeFooterFile', 'homeFooterClear', 'Footer banner saved, live on Home', 'Footer banner removed');
-  wireChipzImageSlot('profilecard', 'profileCardFile', 'profileCardClear', 'Account header photo saved, live for every user', 'Account header photo removed');
+  wirePetroImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download screen background saved, live for every user', 'Download screen background removed');
+  wirePetroImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Background image saved, live on Log In and Sign Up', 'Background image removed');
+  wirePetroImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
+  wirePetroImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
+  wirePetroImageSlot('homefooter', 'homeFooterFile', 'homeFooterClear', 'Footer banner saved, live on Home', 'Footer banner removed');
+  wirePetroImageSlot('profilecard', 'profileCardFile', 'profileCardClear', 'Account header photo saved, live for every user', 'Account header photo removed');
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{
     const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value };
@@ -3554,7 +3554,7 @@ var LANG = 'en';
 // Per device, like the country switch beside it. Whoever sits at this browser
 // reads one language; re-picking it on every reload is how a panel ends up
 // being used in a language nobody chose.
-const ADMIN_LANG_KEY = 'chipz_admin_lang';
+const ADMIN_LANG_KEY = 'petro_admin_lang';
 
 // ── THE PANEL'S OWN WORDS ──
 // [english, lg, sw, fr, rw, nyn], exactly the app's table shape, and the same
@@ -3655,7 +3655,6 @@ const ADMIN_LANG_ROWS = [
   ['Withdrawal: Processing', 'Okuggyamu: Kirongoosebwa', 'Utoaji: Inashughulikiwa', 'Retrait : En traitement', 'Kubikuza: Birimo gutunganywa', 'Okwihamu: Nikikorwaho'],
   ['The full-screen picture behind the Download button, on the screen a member reaches from Account → Download APP. Portrait, 1080 × 1920 (any size works — it is cropped to fill). A dark overlay is drawn on top so the white heading and the button stay readable, so a bright picture is fine. An empty slot shows the brand gradient.', 'Ekifaananyi ekijjuza olupapula emabega wa bbaatani ya Download, ku lupapula omuntu lw\'atuukako okuva ku Akaawunti → Download APP. Eky\'obuwanvu, 1080 × 1920 (obunene bwonna bukola — kisalibwa okujjuza). Ekibikka ekiddugavu kiteekebwa waggulu omutwe omweru ne bbaatani bisobole okusomeka, kale ekifaananyi ekitangaavu tekiriiko kabi. Ekifo ekyereere kiraga langi z\'ekitongole.', 'Picha ya skrini nzima nyuma ya kitufe cha Download, kwenye skrini mwanachama anayofikia kutoka Akaunti → Download APP. Wima, 1080 × 1920 (ukubwa wowote unafaa — hukatwa ili kujaza). Kifuniko cheusi huchorwa juu ili kichwa cheupe na kitufe vibaki vinasomeka, kwa hivyo picha nyangavu haina shida. Nafasi tupu huonyesha upinde rangi wa chapa.', 'L\'image plein écran derrière le bouton Download, sur l\'écran que le membre atteint depuis Compte → Download APP. Portrait, 1080 × 1920 (toute taille convient — elle est recadrée pour remplir). Un voile sombre est dessiné par-dessus pour que le titre blanc et le bouton restent lisibles, donc une image claire ne pose pas de problème. Un emplacement vide affiche le dégradé de la marque.', 'Ishusho yuzuye ipaji iri inyuma ya buto ya Download, ku ipaji umunyamuryango agera kuva kuri Konti → Download APP. Ihagaritse, 1080 × 1920 (ingano iyo ari yo yose irakora — icibwa kugira ngo yuzure). Igipfukisho cyijimye gishyirwa hejuru kugira ngo umutwe wera na buto bisomeke, bityo ishusho imurika nta kibazo. Umwanya usa ugaragaza amabara y\'ikirango.', 'Ekishushani ekirikwijuza orupapura enyima ya akabatuni ka Download, aha rupapura omuntu arikuhikaho kuruga aha Akaunti → Download APP. Ekya kwemeera, 1080 × 1920 (obungi bwoona nibukora — nikicwa kugira ngo kiijuze). Ekibundikiro ekikwatsiire nikitebekwa haiguru kugira ngo omutwe omwera n\'akabatuni bishoboke kushomwa, n\'ahabw\'ekyo ekishushani ekyakire tikirikubaho kibi. Omwanya ogwo busha nigworeka amabara g\'ekitongore.'],
   ['The icon members see on their phone\'s home screen after they install the app, and in the browser tab. Upload a square PNG, 1024 × 1024 (512 × 512 also works — anything square does; it is resized here to the exact 512 and 192 sizes Android asks for). Transparency is kept, and the corners are rounded for you — upload a plain square and it comes out with the rounded shape an app icon has. Keep the logo away from the very edges so the rounding does not cut into it.', 'Akafaananyi abantu ke balaba ku lupapula lwa ssimu zaabwe nga bamaze okuteekawo app, ne ku ttabu lya bbulawuza. Teeka PNG ey\'enjuyi enkanaanya, 1024 × 1024 (512 × 512 nayo ekola — kyonna ekikanaanya kikola; kikyusibwa wano okutuuka ku bunene bwa 512 ne 192 Android bw\'esaba). Obwereere bukuumibwa, era ensonda zizingululwa — teeka ekifaananyi ekikanaanya kifuluma nga kirina enkula enzingulule ey\'akafaananyi ka app. Teeka akabonero wala n\'ensonda enkulu okusobola obutasalibwako.', 'Aikoni wanachama wanayoona kwenye skrini ya nyumbani ya simu zao baada ya kusakinisha programu, na kwenye kichupo cha kivinjari. Pakia PNG ya mraba, 1024 × 1024 (512 × 512 pia inafaa — chochote cha mraba kinafaa; hubadilishwa hapa kuwa ukubwa kamili wa 512 na 192 ambao Android huomba). Uwazi huhifadhiwa, na pembe huzungushwa kwa ajili yako — pakia mraba tu na hutoka na umbo la mviringo ambalo aikoni ya programu inalo. Weka nembo mbali na pembezoni kabisa ili mviringo usiikate.', 'L\'icône que les membres voient sur l\'écran d\'accueil de leur téléphone après avoir installé l\'application, et dans l\'onglet du navigateur. Téléversez un PNG carré, 1024 × 1024 (512 × 512 fonctionne aussi — tout carré convient ; il est redimensionné ici aux tailles exactes 512 et 192 demandées par Android). La transparence est conservée et les coins sont arrondis pour vous — téléversez un simple carré et il ressort avec la forme arrondie d\'une icône d\'application. Gardez le logo loin des bords pour que l\'arrondi ne l\'entame pas.', 'Agashushondanga abanyamuryango babona kuri ecran y\'ibanze ya telefoni zabo nyuma yo gushyiraho porogaramu, no ku gice cy\'umushakisha. Shyiraho PNG ifite impande zingana, 1024 × 1024 (512 × 512 na yo irakora — ikintu cyose gifite impande zingana kirakora; ihindurwa hano ikagira ingano nyayo ya 512 na 192 Android isaba). Ububonerane burabikwa, kandi impera zirazingurutswa — shyiraho igishushanyo gisanzwe kigire impande zingana kikazasohoka gifite isura izengurutse agashushondanga ka porogaramu kagira. Shyira ikirango kure y\'impera kugira ngo kuzingurutsa bitagice.', 'Akashushani abantu ka barikureeba aha rupapura rw\'omuka rwa nyabarugo zaabo bwanyima y\'okuteeka puroguramu, n\'aha kacweka ka buraawuza. Ta PNG ey\'empande ezirikwingana, 1024 × 1024 (512 × 512 nayo neekora — kyoona ekirikwingana nikikora; nikihindurwa hanu kikahika aha bungi bwa 512 na 192 Android eri kushaba). Obwereere nibukuumwa, kandi ensonda nizizingurutswa — ta ekirikwingana kwonka kandi nikiija kiine enshusha ezingurukire ei akashushani ka puroguramu karikugira. Ta ekirango hare n\'empera kugira ngo okuzingurutsa kutakicwaho.'],
-  ['The lower banner on the app\'s Home tab, carrying the Go spin button that opens the turntable. It replaced the product list that used to sit there — products now live on their own tab. Full width, roughly 3:1 (for example 1200×400). An empty slot shows the brand gradient behind the button.', 'Akabaawo ak\'ewansi ku ttabu lya Home, akalina bbaatani ya Go spin eggula akanyoolera. Kaddira mu kifo ky\'olukalala lw\'ebyamaguzi olwalibangawo — ebyamaguzi kati biri ku ttabu lyabyo. Obugazi bwonna, nga 3:1 (ng\'ekyokulabirako 1200×400). Ekifo ekyereere kiraga langi z\'ekitongole emabega wa bbaatani.', 'Bango la chini kwenye kichupo cha Nyumbani cha programu, lenye kitufe cha Go spin kinachofungua gurudumu. Lilichukua nafasi ya orodha ya bidhaa iliyokuwa hapo — bidhaa sasa ziko kwenye kichupo chao. Upana kamili, takriban 3:1 (mfano 1200×400). Nafasi tupu huonyesha upinde rangi wa chapa nyuma ya kitufe.', 'La bannière du bas sur l\'onglet Accueil de l\'application, portant le bouton Go spin qui ouvre la roue. Elle a remplacé la liste de produits qui s\'y trouvait — les produits ont maintenant leur propre onglet. Pleine largeur, environ 3:1 (par exemple 1200×400). Un emplacement vide affiche le dégradé de la marque derrière le bouton.', 'Ikirango cyo hasi ku gice cy\'Ahabanza cya porogaramu, gifite buto ya Go spin ifungura uruziga. Cyasimbuye urutonde rw\'ibicuruzwa rwahoze aho — ibicuruzwa ubu bifite igice cyabyo bwite. Ubugari bwose, hafi 3:1 (urugero 1200×400). Umwanya usa ugaragaza amabara y\'ikirango inyuma ya buto.', 'Ekirango eky\'ahansi aha kacweka ka Home, ekiine akabatuni ka Go spin akarikwigura akanyoorera. Kyatwaire omwanya gw\'orutonde rw\'ebyamaguzi orwabaire ruriho — ebyamaguzi hati biri aha kacweka kaabyo. Obugazi bwoona, nka 3:1 (nk\'eky\'okureeberaho 1200×400). Omwanya ogwo busha nigworeka amabara g\'ekitongore enyima y\'akabatuni.'],
   ['The orange area. Landscape, about 1200 × 700. An empty slot shows the brand gradient. The picture sits over the gradient, so lowering opacity blends it back toward the orange rather than toward nothing.', 'Ekitundu ekya langi ya oranji. Eky\'obugazi, nga 1200 × 700. Ekifo ekyereere kiraga langi z\'ekitongole. Ekifaananyi kiteekebwa ku langi, kale okukendeeza ku bulabikirwa kikitabula okudda eri langi ya oranji so si eri bwereere.', 'Eneo la rangi ya machungwa. Mlalo, takriban 1200 × 700. Nafasi tupu huonyesha upinde rangi wa chapa. Picha hukaa juu ya upinde rangi, kwa hivyo kupunguza uwazi huichanganya kurudi kwenye rangi ya machungwa badala ya kuelekea utupu.', 'La zone orange. Paysage, environ 1200 × 700. Un emplacement vide affiche le dégradé de la marque. L\'image repose sur le dégradé, donc baisser l\'opacité la fond vers l\'orange plutôt que vers le vide.', 'Ahantu h\'ibara ry\'icunga. Iryambitse, hafi 1200 × 700. Umwanya usa ugaragaza amabara y\'ikirango. Ishusho iri hejuru y\'amabara, bityo kugabanya ukubonerana biyivanga isubira ku ibara ry\'icunga aho kujya ku busa.', 'Akacweka ak\'erangi ya oranje. Aka kugazire, nka 1200 × 700. Omwanya ogwo busha nigworeka amabara g\'ekitongore. Ekishushani nikitebekwa aha mabara, n\'ahabw\'ekyo okukyendeza aha kureeberwa nikikitaburamu kikagaruka aha rangi ya oranje ti aha busha.'],
   ['The picture that appears when the app\'s link is pasted into WhatsApp, Telegram or Facebook. Upload 1200 × 630 (landscape, just under 2:1). Any size is accepted and centre-cropped to fit, but anything far off that shape loses its edges. Put the logo and any words in the middle — WhatsApp crops the sides on some phones.', 'Ekifaananyi ekirabika ng\'ekkubo lya app liteekeddwa mu WhatsApp, Telegram oba Facebook. Teeka 1200 × 630 (eky\'obugazi, wansi wa 2:1). Obunene bwonna bukkirizibwa era busalibwa wakati okutuukagana, naye ekitali kya nkula eyo kifiirwa ensonda zaakyo. Teeka akabonero n\'ebigambo byonna wakati — WhatsApp esala embiriizi ku ssimu ezimu.', 'Picha inayoonekana wakati kiungo cha programu kinapobandikwa kwenye WhatsApp, Telegram au Facebook. Pakia 1200 × 630 (mlalo, chini kidogo ya 2:1). Ukubwa wowote hukubaliwa na hukatwa katikati ili kutoshea, lakini kitu kilicho mbali na umbo hilo hupoteza pembezoni mwake. Weka nembo na maneno yoyote katikati — WhatsApp hukata pembeni kwenye simu nyingine.', 'L\'image qui apparaît quand le lien de l\'application est collé dans WhatsApp, Telegram ou Facebook. Téléversez 1200 × 630 (paysage, juste en dessous de 2:1). Toute taille est acceptée et recadrée au centre pour s\'ajuster, mais tout ce qui s\'éloigne de cette forme perd ses bords. Mettez le logo et les mots au milieu — WhatsApp rogne les côtés sur certains téléphones.', 'Ishusho igaragara iyo umurongo wa porogaramu ukomekwe muri WhatsApp, Telegram cyangwa Facebook. Shyiraho 1200 × 630 (iryambitse, munsi gato ya 2:1). Ingano iyo ari yo yose iremerwa igacibwa hagati kugira ngo ikwire, ariko ikintu kitandukanye cyane n\'iyo sura kibura impera zacyo. Shyira ikirango n\'amagambo hagati — WhatsApp iceta impande kuri zimwe muri telefoni.', 'Ekishushani ekirikureeberwa ku omuhanda gwa puroguramu gurikutwarwa omu WhatsApp, Telegram nari Facebook. Ta 1200 × 630 (eki kugazire, ahansi ya 2:1). Obungi bwoona nibwikirizibwa kandi nibucwa ahagati kugira ngo buhikaane, kwonka ekitari kya nshusha egyo nikifeerwa empera zaakyo. Ta ekirango n\'ebigambo byoona ahagati — WhatsApp neecwa empande aha nyabarugo ezimwe.'],
   ['The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can withdraw. They can also change it themselves in the app (Account -> Trade Password).', 'PIN ekwekebwa mu ngeri etaddayo -- teyinza kulabika, wabula esobola okuddizibwa. Eteeka ekisumuluzo eky\'obusuubuzi eky\'ennamba 6 ekiri wansi butereevu; kiwe omuntu asobole okuggyamu ssente. Era asobola okukikyusa yekka mu app (Akaawunti -> Trade Password).', 'PIN imefichwa kwa njia isiyorudi nyuma -- haiwezi kamwe kuonekana, inaweza tu kubadilishwa. Huweka nenosiri la biashara la tarakimu 6 lililo hapa chini moja kwa moja; mpe mwanachama ili aweze kutoa pesa. Anaweza pia kulibadilisha mwenyewe kwenye programu (Akaunti -> Trade Password).', 'Le code PIN est haché à sens unique -- il ne peut jamais être consulté, seulement remplacé. Il définit directement le mot de passe de transaction à 6 chiffres ci-dessous ; donnez-le au membre pour qu\'il puisse retirer. Il peut aussi le changer lui-même dans l\'application (Compte -> Trade Password).', 'PIN ihishwe mu buryo budasubirwaho -- ntishobora na rimwe kurebwa, ishobora gusa gusimburwa. Ishyiraho ijambobanga ry\'ubucuruzi ry\'imibare 6 riri hasi ako kanya; rihe umunyamuryango kugira ngo abashe kubikuza. Ashobora no kurihindura ubwe muri porogaramu (Konti -> Trade Password).', 'PIN neeshereekwa omu muringo ogutarikugaruka -- tekirikubaasa kureeberwa, kirikubaasa kwonka kugaruzibwamu. Nekita ekishumuruzo ky\'obushuubuzi eky\'ebibaro 6 ekiri ahansi ahonaaho; kihe omuntu kugira ngo abaase kwihamu sente. Naabaasa kandi kukihindura we omwene omu puroguramu (Akaunti -> Trade Password).'],
@@ -3811,8 +3810,6 @@ const ADMIN_LANG_ROWS = [
   ['Plain white', 'Ekyeru kyereere', 'Nyeupe tupu', 'Blanc uni', 'Umweru gusa', 'Ekyeru kyonka'],
   ['Default artwork', 'Ekifaananyi ekitongole', 'Mchoro wa chaguo-msingi', 'Illustration par défaut', 'Ishusho isanzwe', 'Ekishushani ekitairweho'],
   ['Home banner', 'Ekifaananyi eky\'oku lupapula olusooka', 'Bango la ukurasa wa nyumbani', 'Bannière d\'accueil', 'Ibendera ry\'urupapuro rw\'ahabanza', 'Ekishushani eky\'aha rupapura rw\'omuka'],
-  ['Home spin banner', 'Ekifaananyi ky\'nnamuziga ku lupapula olusooka', 'Bango la gurudumu la ukurasa wa nyumbani', 'Bannière de la roue sur l\'accueil', 'Ibendera ry\'uruziga ku rupapuro rw\'ahabanza', 'Ekishushani ky\'orupiira aha rupapura rw\'omuka'],
-  ['Referral banner', 'Ekifaananyi ky\'okuyita', 'Bango la mialiko', 'Bannière de parrainage', 'Ibendera ryo gutumira', 'Ekishushani ky\'okweta'],
   ['Help Centre banner', 'Ekifaananyi ky\'ekifo ky\'obuyambi', 'Bango la kituo cha usaidizi', 'Bannière du centre d\'aide', 'Ibendera ry\'ikigo cy\'ubufasha', 'Ekishushani ky\'ekicweka ky\'obuhwezi'],
   ['Home announcement dialog', 'Ekiwandiiko ky\'amawulire ku lupapula olusooka', 'Kidirisha cha tangazo la ukurasa wa nyumbani', 'Fenêtre d\'annonce sur l\'accueil', 'Idirishya ry\'itangazo ku rupapuro rw\'ahabanza', 'Ekibaasa ky\'amakuru aha rupapura rw\'omuka'],
   ['Download screen background', 'Ekifaananyi eky\'emabega ku lupapula lw\'okudaunloodinga', 'Mandhari ya skrini ya kupakua', 'Fond de l\'écran de téléchargement', 'Mbuganyuma y\'urupapuro rwo kumanura', 'Ekishushani ky\'enyima aha rupapura rw\'okuteekyera'],

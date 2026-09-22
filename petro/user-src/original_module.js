@@ -1,4 +1,4 @@
-// Chipz backend (Render web service `chipz-server`). The frontend is hosted
+// Petro backend (Render web service `petro-server`). The frontend is hosted
 // separately on Tencent EdgeOne Pages, so every call here is cross-origin --
 // this host must stay in server.js's CORS allowlist, and that allowlist must
 // keep matching *.edgeone.app / *.edgeone.site for the reverse direction.
@@ -15,8 +15,8 @@ function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:
 // ── REGION (which country this app is running as) ──
 //
 // Owner: "l wanted other subdomain to fetch other country code and
-// currency, ie fgdr.chipz-platform.com in ugx, and country code changeable
-// to other country or created, and another can be sfhd.chipz-platform in
+// currency, ie fgdr.petro-platform.com in ugx, and country code changeable
+// to other country or created, and another can be sfhd.petro-platform in
 // KES shs, or any country created, also make when l can edit prices of each
 // product and all settings as these of ugx."
 //
@@ -65,7 +65,7 @@ function applyRegion(r){
     if (r[k] !== undefined && r[k] !== null && r[k] !== '') out[k] = r[k];
   }
   REGION = Object.assign({}, REGION, out);
-  try { localStorage.setItem('chipzRegion', JSON.stringify(REGION)); } catch(_){}
+  try { localStorage.setItem('petroRegion', JSON.stringify(REGION)); } catch(_){}
   paintRegionChrome();
   applyRegionLanguages();
 }
@@ -104,7 +104,7 @@ function paintRegionChrome(){
 // while /public/settings is still in flight.
 (function restoreRegion(){
   try {
-    const raw = localStorage.getItem('chipzRegion');
+    const raw = localStorage.getItem('petroRegion');
     if (raw) { const r = JSON.parse(raw); if (r && r.currency) REGION = Object.assign({}, REGION, r); }
   } catch(_){}
 })();
@@ -153,7 +153,7 @@ var LANG = 'en';
 // English alone -- one option is not a choice, so the button stays hidden
 // rather than flashing a list that is about to change.
 var LANG_ALLOWED = ['en'];
-var LANG_STORE_KEY = 'chipz_lang';
+var LANG_STORE_KEY = 'petro_lang';
 // ── THE TABLE ──
 // One row per English string: [english, lg, sw, fr, rw, nyn].
 //
@@ -886,7 +886,7 @@ try {
 // own localStorage-cached, pre-core-painted translation fix, since the
 // screen is on-screen precisely while the core is still inflating and
 // there is no translator yet to ask). Removed along with the rest of that
-// Chipz-specific loader treatment -- the replacement loader shows a plain
+// Petro-specific loader treatment -- the replacement loader shows a plain
 // numeric percentage only, which needs no translation at all.
 function applyLanguage(){
   try {
@@ -1042,18 +1042,18 @@ function toLocalPhoneDisplay(num){
 // now-local-only field (strips a leading "256" back off first) rather than
 // mangling it down to a wrong, truncated value.
 var ICONS = {
-  // ── Chipz additions ──────────────────────────────────────────────────
+  // ── Petro additions ──────────────────────────────────────────────────
   grid: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
   megaphone: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1Z"/><path d="M14.5 8.5a4.5 4.5 0 0 1 0 7"/><path d="M17.5 5.5a8.5 8.5 0 0 1 0 13"/></svg>',
   envelope: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 6l8 7 8-7"/></svg>',
   // ── Petro re-theme additions: the Home mockup's own icon set (Deposit/
   // Withdraw/Invite/Support tiles, the notification bell, the gift-box
   // Daily Check-in card, the wallet-balance eye toggle, the 3 stat-card
-  // glyphs) -- replacing the old Chipz raster PNGs (/act-deposit.png etc.,
-  // the owner's own uploaded artwork for Chipz, never Petro's) with real
+  // glyphs) -- replacing the old Petro raster PNGs (/act-deposit.png etc.,
+  // the owner's own uploaded artwork for Petro, never Petro's) with real
   // SVG, same 24x24/currentColor/1.8-1.9 stroke convention as every icon
   // above. White-on-red circle badges are painted by .home-action .badge's
-  // own CSS (background var(--chipz-grad)), not baked into these paths.
+  // own CSS (background var(--petro-grad)), not baked into these paths.
   bell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5Z"/><path d="M9.5 18.5a2.5 2.5 0 0 0 5 0"/></svg>',
   headset: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="13" width="4" height="6" rx="1.6"/><rect x="17" y="13" width="4" height="6" rx="1.6"/><path d="M20 19a4 4 0 0 1-4 3h-2.5"/></svg>',
   cardPlus: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.4"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/><path d="M17.2 3.6v5.2M14.6 6.2h5.2"/></svg>',
@@ -1067,7 +1067,7 @@ var ICONS = {
   eyeOff: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7c2.3 0 4.3.6 6 1.5M23 12s-1.4 2.5-4 4.5M14.1 14.1a3 3 0 0 1-4.2-4.2"/><path d="M3 3l18 18"/></svg>',
   chevronRight: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
   // ── Account/Network/Assets screen icon set (owner's 2nd/3rd/4th mockup
-  // round) -- same real-SVG replacement of the old Chipz raster row icons. ──
+  // round) -- same real-SVG replacement of the old Petro raster row icons. ──
   layers: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 8 12 13l9.5-5L12 3Z"/><path d="m2.5 13 9.5 5 9.5-5"/><path d="m2.5 18 9.5 5 9.5-5"/></svg>',
   trendUp: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9.5 10l4.5 4.5L21 6"/><path d="M15 6h6v6"/></svg>',
   peopleGroup: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.6"/><path d="M2.6 19c.7-3.1 3-4.9 6.4-4.9s5.7 1.8 6.4 4.9"/><path d="M15.4 14.7c2.5.4 4 1.9 4.5 4.1"/></svg>',
@@ -1134,7 +1134,7 @@ var ICONS = {
 // -- a value outside this map falls back to Bodoni Moda's stack rather than
 // rendering with no font-family at all.
 // Snow's beer-bottle illustration (ICONS.box) came across with the fork and
-// was still the artwork on Chipz's empty My Products screen -- a different
+// was still the artwork on Petro's empty My Products screen -- a different
 // company's product, in a different brand's style. Replaced with a neutral
 // outline box in the app's own ink colour.
 var EMPTY_ICON = '<svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 8h20l-1.5-3.2A1.5 1.5 0 0 0 19.1 4H4.9a1.5 1.5 0 0 0-1.4.8Z"/><path d="M10 12h4"/></svg>';
@@ -1149,7 +1149,7 @@ var NUMBER_FONT_STACKS = {
   'System default': "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
 };
 // ── THE APP'S NAME ──
-// Owner: "l would like to also to edit the app name chipz, so make it when it
+// Owner: "l would like to also to edit the app name petro, so make it when it
 // can be editable everywhere." It is one admin setting (Settings -> App name)
 // and every screen reads it from here. Nothing in this file spells the name
 // out any more, so a rename cannot half-land -- which is precisely how the
@@ -1164,7 +1164,7 @@ var NUMBER_FONT_STACKS = {
 // script, which runs before this file inflates), then nothing.
 //
 // "Nothing" is a real answer and callers must handle it. Owner: "let's not
-// make chipz to be default name" -- a hardcoded default is exactly what made
+// make petro to be default name" -- a hardcoded default is exactly what made
 // the loading screen keep saying the old name after he had renamed the app,
 // because the loader is on screen while the settings request is still in
 // flight, so the default was all it could ever show.
@@ -1178,20 +1178,20 @@ function brandNameKnown(){
 // For SENTENCES, where a blank would read as a broken string ("Welcome to
 // the  app"). The wordmark deliberately does NOT use this -- see
 // brandWordmarkHtml().
-// Was `|| 'Chipz'` -- a real bug, not a design choice: with no
+// Was `|| 'Petro'` -- a real bug, not a design choice: with no
 // admin-set brandName yet (a fresh Petro deploy, before the owner has
 // opened Admin -> Settings), every sentence-form use of the brand name
-// literally rendered the word "Chipz". Petro is this app's own real name,
+// literally rendered the word "Petro". Petro is this app's own real name,
 // not an inherited-fork placeholder, so it is the correct fallback here --
 // unlike the wordmark below, which stays blank on purpose.
 function brandName(){
   return brandNameKnown() || 'Petro';
 }
-var BRAND_CACHE_KEY = 'chipz_brand_name';
+var BRAND_CACHE_KEY = 'petro_brand_name';
 // The wordmark: just the name, in caps. Used to split off the LAST letter
-// into an accent colour ("CHIP+Z") -- a pun specific to Chipz's own name
+// into an accent colour ("CHIP+Z") -- a pun specific to Petro's own name
 // that means nothing for any other brand, dropped per the owner's "don't
-// use anything that was Chipz" instruction rather than carried over as a
+// use anything that was Petro" instruction rather than carried over as a
 // rule that happens to have one letter highlighted for no reason.
 // The wordmark shows the name or NOTHING. It is the one place a guess is
 // worse than a blank: a blank for the half-second before settings land reads
@@ -1204,7 +1204,7 @@ function brandWordmarkHtml(){
 // Paints the name into the places that are NOT re-rendered from JavaScript:
 // index.html's own static markup (the pre-launch countdown gate is the only
 // [data-brandmark] left -- the loading screen's own wordmark was dropped
-// along with the rest of its Chipz-derived design) and the browser/tab
+// along with the rest of its Petro-derived design) and the browser/tab
 // title. Called once the settings land, and safe to call again -- it only
 // ever writes.
 //
@@ -1219,7 +1219,7 @@ function applyBrandName(){
   document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = brandWordmarkHtml(); });
   try { document.title = known; } catch (_) {}
   // Remember it for the next launch. This is the whole fix for "on start up
-  // loader it was still saying chipz": the loading screen paints long before
+  // loader it was still saying petro": the loading screen paints long before
   // /public/settings answers, so the only way it can show the right name is
   // to already know it. Written on every apply, so a rename reaches the
   // loader on the boot AFTER the one that learned it -- there is no earlier
@@ -1234,7 +1234,7 @@ function applyBrandName(){
 // The name as plain text inside the round profile badge on Account. On
 // `window` because two inline onerror="" attributes call it -- see
 // renderAccount(). Font size divides by the name's length for the same reason
-// chipzMarkHtml()'s does: the badge is a fixed 68px circle with overflow
+// petroMarkHtml()'s does: the badge is a fixed 68px circle with overflow
 // hidden, so a longer name at 19px would simply have its ends cut off.
 // Uses brandName(), not brandNameKnown(): this is the fallback shown when the
 // profile image itself failed to load, so an empty badge would be a hole in
@@ -1257,11 +1257,11 @@ window.brandTextMark = function(box){
 // The font size divides by the NAME'S OWN length rather than the constant 3.4
 // that suited five letters: at a fixed size a longer name simply ran out past
 // the rounded square it sits in.
-function chipzMarkHtml(size){
+function petroMarkHtml(size){
   const px = Number(size) || 44;
   const name = brandName().toUpperCase();
   const fs = Math.max(7, Math.round(px / (0.68 * Math.max(3, name.length))));
-  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--chipz-grad);color:#fff;font-weight:800;font-size:${fs}px;letter-spacing:.02em;">${esc(name)}</span>`;
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--petro-grad);color:#fff;font-weight:800;font-size:${fs}px;letter-spacing:.02em;">${esc(name)}</span>`;
 }
 function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
@@ -1671,7 +1671,7 @@ window.doRegister = async function(){
   // Referral code box is prefilled from ?ref= (see captureReferralFromUrl)
   // but stays editable -- whatever's in the box at submit time wins,
   // whether that's the link's code, untouched, or something typed by hand.
-  // Chipz makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
+  // Petro makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
   if (!window._regOtp.otpId || window._regOtp.phone !== phone)
@@ -1703,7 +1703,7 @@ window.doRegister = async function(){
   }
   catch (e) {
     // Owner-reported real bug: a Firebase Auth account can exist with no
-    // matching Chipz profile -- e.g. an earlier registration attempt whose
+    // matching Petro profile -- e.g. an earlier registration attempt whose
     // account-creation step succeeded but the network call to /register
     // never finished (closed tab, lost connection, a crash) -- the classic
     // "ghost account" this file already self-heals ON LOGIN
@@ -1882,7 +1882,7 @@ window.doLogout = async function(){
 // Owner: "l also need faster loading."
 //
 // MEASURED (test-boot-speed.py, against the real built app): the loader used
-// to wait on about 1.3 MB of JSON, and 900 KB of it was /public/chipz-images
+// to wait on about 1.3 MB of JSON, and 900 KB of it was /public/petro-images
 // -- SEVEN admin-uploaded images, base64'd inside one reply. Of those seven,
 // exactly two can appear on the first screen (Home's spin banner and the
 // profile GIF); the rest belong to screens nobody has opened yet -- the
@@ -1901,11 +1901,11 @@ var _artPromise = null;
 async function boot(){
   // Fired together. Only the first four are awaited.
   const pSettings = api('/public/settings'), pProducts = api('/public/products');
-  const pFeed = api('/public/activity-feed'), pBanner = api('/public/banner');
-  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/chipz-images') ])
+  const pBanner = api('/public/banner');
+  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/petro-images') ])
     .then(([ai, ci]) => { applyBootArtwork(ai, ci); })
     .catch(() => {});
-  const [s, p, f, b] = await Promise.all([ pSettings, pProducts, pFeed, pBanner ]);
+  const [s, p, b] = await Promise.all([ pSettings, pProducts, pBanner ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   // The region that owns this hostname, so the landing screen, Sign Up and
   // the product list already read in the right currency before anybody has
@@ -1927,7 +1927,6 @@ async function boot(){
   // filled, and whichever one wins the race has to be the one that applies it.
   applyBrandName();
   STATE.products = p.status === 'success' ? p.products : [];
-  STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
   // Optional admin-set banner video (Home.dc.html's "ADMIN VIDEO BANNER").
   // Two sources, and an uploaded file always wins over a typed link:
@@ -1956,12 +1955,10 @@ function applyBootArtwork(ai, ci){
   // `ai` (the removed announcement dialog's own image) is no longer read
   // here -- kept as a parameter only because its caller's Promise.all still
   // fetches it; not worth touching that sequence just to drop one entry.
-  // Same reasoning once more for the two Chipz-only slots: the Referral
+  // Same reasoning once more for the two Petro-only slots: the Referral
   // page banner and the brand logo on the Account profile card.
-  STATE.referralBanner = (ci.status === 'success' && ci.referral) ? ci.referral : null;
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   // Home's lower banner (the one carrying the Go spin button).
-  STATE.spinBanner = (ci.status === 'success' && ci.spin) ? ci.spin : null;
   // The animated brand mark. It is the profile logo on Account AND the thing
   // that fills the dead strip between Home's spin banner and the bottom nav
   // (owner: "this white space is idle we need to put the gif which is in
@@ -2628,11 +2625,11 @@ function updateNavIcons(){
 // A NOTE ON FIREBASE LISTENERS, because he asked for those by name: they are
 // not available to this data. Firebase here is Auth only -- who you are. Every
 // figure in the app (balances, plans, records, team, messages) lives in MongoDB
-// behind chipz-server, so there is no Firestore document to attach onSnapshot
+// behind petro-server, so there is no Firestore document to attach onSnapshot
 // to. The equivalent behaviour without rebuilding the backend is this: a short
 // poll that repaints IN PLACE. Nothing reloads, nothing navigates, and the
 // member cannot tell the difference. (A genuine server push would be SSE from
-// chipz-server off a Mongo change stream -- a real option, and a much bigger
+// petro-server off a Mongo change stream -- a real option, and a much bigger
 // change than this.)
 //
 // What it does, and the reasons each part is not optional:
@@ -2742,39 +2739,25 @@ async function liveRefreshVisible(){
     return ok;
   }
 
-  if (STATE.page === 'products') {
-    const r = await api('/investments');
-    if (r.status === 'success' && STATE.page === 'products' && !_openSheetTitle) {
-      STATE.investments = r.investments;
+  if (STATE.page === 'assets') {
+    const [pr, ir] = await Promise.all([api('/public/products'), api('/investments')]);
+    if (pr.status === 'success') STATE.products = pr.products; else ok = false;
+    if (ir.status === 'success') {
+      STATE.investments = ir.investments;
       _investmentsLoadFailed = false;
-      // animate:false -- a repaint every few seconds must not replay the
-      // reveal. paintProducts() restarts the plan countdowns itself.
-      if (liveChanged('investments', r.investments)) paintProducts(false);
-    } else if (r.status !== 'success') ok = false;
-  } else if (STATE.page === 'catalog') {
-    const r = await api('/public/products');
-    if (r.status === 'success' && STATE.page === 'catalog' && !_openSheetTitle) {
-      STATE.products = r.products;
-      if (liveChanged('products', r.products)) renderCatalog();
-    } else if (r.status !== 'success') ok = false;
-  } else if (STATE.page === 'team' || STATE.page === 'referral') {
-    // /team/stats is by far the most expensive read in the app: it walks the
-    // whole downline three levels deep for team deposits, runs a second full
-    // query for the active-L1 count, and sums every team_reward transaction
-    // this member has ever had. Putting THAT on the 5s loop (last round did,
-    // and widened it from Team to Referral as well) multiplies the heaviest
-    // endpoint by every member sitting on those two screens.
-    //
-    // Team figures also move on the scale of someone joining or investing --
-    // minutes, not seconds -- so a slower beat loses the member nothing. The
-    // wallet balance above still refreshes every tick, which is the number
-    // that actually needs to be live.
+    } else ok = false;
+    if (!_openSheetTitle && STATE.page === 'assets') {
+      const changedProducts = pr.status === 'success' && liveChanged('products', pr.products);
+      const changedInvestments = ir.status === 'success' && liveChanged('investments', ir.investments);
+      if (changedProducts || changedInvestments) paintAssets();
+    }
+  } else if (STATE.page === 'network') {
     if (Date.now() - _liveTeamAt >= LIVE_TEAM_MS) {
       _liveTeamAt = Date.now();
       const r = await api('/team/stats');
-      if (r.status === 'success' && STATE.page === 'team' && !_openSheetTitle) {
+      if (r.status === 'success' && STATE.page === 'network' && !_openSheetTitle) {
         STATE.teamStats = r;
-        if (liveChanged('team', r)) patchTeamStats();
+        if (liveChanged('team', r)) paintNetwork();
       } else if (r.status !== 'success') { _liveTeamAt = 0; ok = false; }
     }
   }
@@ -2852,10 +2835,10 @@ window.showPage = async function(name){
   const spent = (detailOpen ? 1 : 0) + (sheetOpen ? 1 : 0);
   if (spent) history.go(-spent);
   if (name === 'products') { _assetsTab = 'mine'; name = 'assets'; }
+  else if (name === 'catalog') { _assetsTab = 'all'; name = 'assets'; }
+  else if (name === 'team' || name === 'referral') { name = 'network'; }
   STATE.page = name;
   updateNavIcons();
-  if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
-  stopActivityTicker();
   if (name === 'home') {
     // Deliberately NOT awaited: renderHome() does its own account/investments
     // refresh (a real network round trip even on a cache-hit repaint), and
@@ -2869,10 +2852,7 @@ window.showPage = async function(name){
     // changes here.
     renderHome();
   }
-  else if (name === 'catalog') await renderCatalog();
   else if (name === 'assets') await renderAssets();
-  else if (name === 'referral') await renderReferral();
-  else if (name === 'team') await renderTeam();
   else if (name === 'network') await renderNetwork();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
@@ -3138,14 +3118,7 @@ function paintHome(){
   // Owner's mockup: logo + tagline header, a 3-stat/wallet block and an
   // inline Daily Check-in card all live on Home now (previously the balance
   // lived on Account only, and Daily Check-in was sheet-only). The
-  // announcement dialog/row was built the same round, then removed entirely
-  // per the owner's own later instruction -- see petro/CLAUDE.md. The
-  // activity ticker, spin banner, profile GIF strip and treasure-chest float
-  // were removed the same way, same instruction ("what I didn't mention,
-  // remove it... your treasure chest box, spin... all stuff I never
-  // mentioned") -- none of them are in any mockup sent. Their functions
-  // (startActivityTicker/homeGifHtml and related helpers) are
-  // left defined but unreached, same as this session's other supersessions.
+  // Home now renders only the surfaces that belong to Petro's current design.
   let html = `
 ${homeBannerBlockHtml(st)}
 <div class="home-actions">
@@ -3194,69 +3167,6 @@ ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.hom
   tryAutoplayHomeBanner();
   startHomeCarousel();
 }
-// The animated brand mark, centred in the strip Home has left over between
-// the spin banner and the bottom nav. Home's content stops short of the nav
-// on a tall phone, and that gap was simply empty.
-//
-// Same STATE.profileGif the Account profile card uses -- uploading the GIF
-// once in Admin -> Chipz images -> Profile animation fills both. With no GIF
-// set this renders nothing at all rather than a placeholder box, so the
-// screen looks exactly as it does today until the owner uploads one.
-//
-// Sized against the VIEWPORT, not the image: a GIF is whatever pixels it was
-// exported at, and letting one set its own height is how a tall upload turns
-// a screen that fits into a screen that scrolls. max-height keeps it inside
-// the gap it is meant to fill on any phone.
-function homeGifHtml(){
-  if (!STATE.profileGif) return '';
-  return `
-<div class="home-gif">
-  <img src="${esc(STATE.profileGif)}" alt="" onload="fitHomeGif()" onerror="this.closest('.home-gif').remove()">
-</div>`;
-}
-// Shrinks the mark to exactly the space that is free, by MEASURING the
-// overflow it caused rather than guessing a cap.
-//
-// The CSS cap (20vh) was a guess, and a guess is wrong by definition here:
-// how much room is left depends on the phone's height minus a fixed stack of
-// content above, so on a 390x844 screen a 20vh GIF overshot by 23px and put a
-// scrollbar on a Home screen that had never had one -- the opposite of
-// filling idle space. This reads the actual overflow and takes exactly that
-// much off, which is right on every screen size without knowing any of them.
-//
-// Runs on the image's own load event because at paint time it has no
-// intrinsic size yet, so there is nothing to measure; and on resize, because
-// rotating the phone changes the answer. The 60px floor stops a genuinely
-// tiny screen from shrinking it to nothing -- there, scrolling a little is
-// the better outcome.
-window.fitHomeGif = function(){
-  const box = document.querySelector('.home-gif');
-  const img = box && box.querySelector('img');
-  if (!img) return;
-  img.style.maxHeight = '';
-  const de = document.documentElement;
-  const over = de.scrollHeight - de.clientHeight;
-  if (over <= 0) return;
-  const h = img.getBoundingClientRect().height;
-  if (h <= 0) return;
-  img.style.maxHeight = Math.max(60, Math.floor(h - over)) + 'px';
-};
-window.addEventListener('resize', () => { if (STATE.page === 'home') fitHomeGif(); });
-// Which Home product strip is showing. Top-level binding must be `var`
-// (never const/let) -- see this file's own header rule about the
-// obfuscated build.
-var _homeProductTab = 'hot';
-window.switchHomeProductTab = function(tab){
-  _homeProductTab = tab;
-  document.querySelectorAll('.home-tabs .ht').forEach((b,i) => {
-    const on = (i === 0) === (tab === 'hot');
-    b.className = 'ht ' + (on ? 'active' : 'off');
-  });
-  const products = STATE.products || [];
-  const shown = tab === 'new' ? products.slice(3) : products.slice(0, 3);
-  const host = $('homeProductList');
-  if (host) host.innerHTML = shown.length ? shown.map(productCardHtml).join('') : '<div class="list-empty">Nothing here yet.</div>';
-};
 // THE single place this app works out what a product pays. /public/products
 // already sends resolved expectedReturn/cycle/dailyPayout figures computed
 // by the same code that credits the money, so the normal path here is just
@@ -3379,9 +3289,9 @@ function startProductCountdowns(){
 }
 async function refreshCatalogNow(){
   const r = await api('/public/products');
-  if (r.status === 'success' && STATE.page === 'catalog') {
+  if (r.status === 'success') {
     STATE.products = r.products;
-    renderCatalog();
+    if (STATE.page === 'assets' && _assetsTab === 'all') paintAssets();
   }
 }
 // Opens whichever community channel the admin configured. Kept separate
@@ -3393,76 +3303,6 @@ window.openChannelLink = function(){
   window.open(url, '_blank', 'noopener');
 };
 
-// ── PRODUCTS (full catalog tab) ──
-// ── SKELETON LOADERS ──
-// Each of these mirrors the real markup it replaces, so the swap when data
-// lands is a change of content, not of layout. Shown ONLY when there is
-// nothing cached to paint -- with a cache the app still paints real data
-// immediately and refreshes underneath, which is faster than any skeleton.
-function skProductCards(n){
-  return Array.from({length:n}, () => `
-  <div class="sk-pcard">
-    <div class="sk sk-img"></div>
-    <div class="sk-body">
-      <div class="sk-stats">
-        <div class="sk sk-stat"></div><div class="sk sk-stat"></div>
-        <div class="sk sk-stat"></div><div class="sk sk-stat"></div>
-      </div>
-      <div class="sk sk-cta"></div>
-    </div>
-  </div>`).join('');
-}
-function paintCatalogSkeleton(){
-  $('pageHost').innerHTML = `
-<div class="page-head"><h2>Products</h2></div>
-<div style="display:flex;flex-direction:column;gap:12px;margin:0 16px;">${skProductCards(3)}</div>
-<div style="height:12px;"></div>`;
-}
-function paintProductsSkeleton(){
-  const row = `
-  <div class="sk-row">
-    <div class="sk-top">
-      <div class="sk sk-thumb"></div>
-      <div style="flex:1;min-width:0;">
-        <div class="sk sk-line" style="width:52%;"></div>
-        <div class="sk sk-line sm" style="width:38%;margin-bottom:0;"></div>
-      </div>
-    </div>
-    <div class="sk sk-bar"></div>
-    <div class="sk sk-line sm" style="width:44%;margin-bottom:0;"></div>
-    <div class="sk-figs">
-      <div><div class="sk sk-line sm" style="width:50%;"></div><div class="sk sk-line" style="width:76%;margin-bottom:0;"></div></div>
-      <div><div class="sk sk-line sm" style="width:50%;"></div><div class="sk sk-line" style="width:76%;margin-bottom:0;"></div></div>
-    </div>
-  </div>`;
-  $('pageHost').innerHTML = `
-<div class="page-head"><h2>My Products</h2></div>
-<div class="sk sk-band"></div>
-<div class="sk-filters"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
-<div class="mp-list">${row}${row}</div>
-<div style="height:12px;"></div>`;
-}
-function paintTeamSkeleton(){
-  const member = `
-  <div class="sk-member">
-    <div class="sk sk-av"></div>
-    <div style="flex:1;min-width:0;">
-      <div class="sk sk-line" style="width:46%;"></div>
-      <div class="sk sk-line sm" style="width:30%;margin-bottom:0;"></div>
-    </div>
-    <div class="sk sk-line" style="width:64px;margin-bottom:0;"></div>
-  </div>`;
-  $('pageHost').innerHTML = `
-<div class="page-head"><h2>Team</h2></div>
-<div class="sk-tcards"><div class="sk"></div><div class="sk"></div></div>
-<div style="display:flex;gap:8px;margin:0 18px 14px;">
-  <div class="sk" style="flex:1;height:36px;"></div>
-  <div class="sk" style="flex:1;height:36px;"></div>
-  <div class="sk" style="flex:1;height:36px;"></div>
-</div>
-<div style="margin:0 18px;">${member}${member}${member}</div>
-<div style="height:12px;"></div>`;
-}
 // ── ASSETS (owner's 4th mockup round) ──
 // "All Assets" is the mockup's own compact row layout -- a small thumbnail,
 // name, an inline Price/Duration/Daily Cashback/Total Return strip, and a
@@ -3473,12 +3313,6 @@ function paintTeamSkeleton(){
 // and its open/soon/countdown states, so nothing about how a purchase
 // actually works changed, only how the row looks.
 //
-// "My Assets" reuses paintProducts()'s EXISTING investment-list rendering
-// as-is, unstyled to match this round's mockups -- the owner's screenshots
-// only ever show "All Assets" selected, so there is no mockup for what "My
-// Assets" should look like in the new style, and inventing one would be
-// exactly the kind of unprompted design this project's own rules warn
-// against. Revisit once the owner sends that state.
 var _assetsTab = 'all';
 window.switchAssetsTab = function(tab){
   _assetsTab = tab;
@@ -3534,26 +3368,6 @@ function paintAssets(){
   if (_assetsTab === 'all') startProductCountdowns();
   else paintMyAssetsInner();
 }
-async function renderCatalog(){
-  if ((STATE.products || []).length) paintCatalog(); else paintCatalogSkeleton();
-  const r = await api('/public/products');
-  if (r.status === 'success' && Array.isArray(r.products)) {
-    STATE.products = r.products;
-    if (STATE.page === 'catalog') paintCatalog();
-  }
-}
-function paintCatalog(){
-  const products = STATE.products || [];
-  let html = `
-<div class="page-head"><h2>Products</h2></div>
-<div style="display:flex;flex-direction:column;gap:12px;margin:0 18px;">
-  ${products.length ? products.map(productCardHtml).join('') : '<div class="list-empty">No products yet.</div>'}
-</div>
-`;
-  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-  startProductCountdowns();
-}
-
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
 // called referral, so here there will be that banner and referral link and
@@ -3618,262 +3432,8 @@ function shareOrigin(){
   const h = STATE.shareHost;
   return h ? (location.protocol + '//' + h) : location.origin;
 }
-async function renderReferral(){
-  // Called BEFORE the first paint on purpose. With the pool already known,
-  // refreshShareHost() advances to the next address synchronously (its warm
-  // branch has no await in front of it), so the link is painted ONCE with
-  // its final address. Painting first and repainting after meant the member
-  // watched the address change a beat after opening the screen.
-  const shareReady = refreshShareHost();
-  paintReferral();
-  // Both at once -- the rotated address must not add a second round trip in
-  // front of a screen the member opened to copy one line of text.
-  const [r] = await Promise.all([ api('/team/stats'), shareReady ]);
-  if (r.status === 'success') STATE.teamStats = r;
-  // Repainted whether or not the stats call succeeded: the ADDRESS may have
-  // changed even when nothing else did, and that is the whole feature.
-  if (STATE.page === 'referral') paintReferral();
-}
-function paintReferral(){
-  const t = STATE.teamStats || {};
-  const a = STATE.account || {};
-  const st = STATE.settings || {};
-  const code = a.referralCode || t.referralCode || '';
-  // Owner: "let the link be '/refCode=' not other more words." So the shared
-  // link is exactly <origin>/refCode=<code> -- no #pages/register, no query
-  // string. It is a PATH, not a query, which means the host has to answer it
-  // with index.html: render.yaml carries a rewrite scoped to /refCode=* for
-  // chipz-app. If the frontend is uploaded to EdgeOne instead, the same
-  // single-path rewrite has to be configured there or every invite link 404s.
-  // ── WHY THIS IS "/?ref=" AND NOT "/refCode=" ──
-  // Owner, on a live subdomain: "https://gigs.myapp.com/refCode=RC9J2N ...
-  // it returns not found, why why".
-  //
-  // Because "/refCode=RC9J2N" is a real URL PATH. The host goes looking for
-  // a file with that name, does not find one, and answers 404. Making it
-  // work needs a rewrite rule (path -> index.html) configured on the host,
-  // and that rule is the single most fragile thing in the whole invite
-  // chain: it lives in render.yaml, which only applies if the service was
-  // created from that blueprint, it has to be re-added by hand on any other
-  // host, and when it is missing NOTHING looks wrong until an invite is
-  // tapped -- the app itself loads fine, because "/" serves index.html by
-  // default.
-  //
-  // "/?ref=CODE" is a query string on "/", so it needs no rule anywhere and
-  // cannot 404 on any host, ever. It is barely longer, and the 404 also
-  // killed the LINK PREVIEW: a crawler that gets a 404 page never reads the
-  // og: tags, so shared invites showed no title and no picture either.
-  //
-  // Every older shape still parses -- see captureReferralFromUrl(), which
-  // reads ?ref=, #...?ref= and /refCode= -- so invites already sent to real
-  // people keep working.
-  const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';
-  let html = `
-<div class="page-head"><h2>Referral</h2></div>
-<div class="ref-banner">
-  ${STATE.referralBanner
-    ? `<img src="${esc(STATE.referralBanner)}" alt="" onerror="this.style.display='none'">`
-    : `<div class="hb-stripes"></div><div class="hb-cap">Invite friends. Earn when they buy their first product.</div>`}
-</div>
-<div class="app-card" style="margin:0 18px;padding:18px;">
-  <div style="font-size:13px;font-weight:800;color:var(--snow-muted);margin-bottom:15px;">Share URL</div>
-  <div class="url-row">
-    <span>${esc(link || 'Your link appears once your code is ready')}</span>
-    <button class="copy-ic" data-copy-group="ref" onclick="copyText('${esc(link)}')" aria-label="Copy link">${COPY_CLIP}</button>
-  </div>
-  <button class="primary-button" data-copy-group="ref" style="width:100%;padding:15px 0;font-size:16px;letter-spacing:.05em;" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
-</div>
-<div class="app-card" style="margin:16px 18px 0;padding:20px;">
-  <!-- Owner: "one mock up on invitation rewards, there is no slash bar '|' on
-       ours." His mockup leads the heading with the app's own accent bar, the
-       same one .sec-head uses on Account -- so this reuses that rule rather
-       than drawing a second, slightly-different bar. -->
-  <h3 style="font-size:17px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:9px;"><span class="inv-bar"></span>Invitation Reward</h3>
-  <p style="font-size:13px;color:var(--snow-muted);font-weight:600;line-height:1.6;margin:0 0 10px;">Share your link, create your wealth, improve your life.</p>
-  <div class="lv-line">LV1 = ${st.commL1 != null ? st.commL1 : 28}%</div>
-  <div class="lv-line">LV2 = ${st.commL2 != null ? st.commL2 : 1}%</div>
-  <div class="lv-line">LV3 = ${st.commL3 != null ? st.commL3 : 1}%</div>
-  <p style="font-size:13px;color:var(--snow-muted);font-weight:600;line-height:1.6;margin:8px 0 0;">Earn daily wages by inviting members to invest.</p>
-</div>
-`;
-  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-}
-// Owner: "balance takes long to load ie when you login it can say
-// 388600.47 but few seconds it increases to 456709.23 which is the right
-// amount, so my question is that why doesn't it load up straight away to
-// right amount instead of starting back, so loader start should load
-// everything smoothly." Root cause: Round 46's own deliberate cache-first
-// boot (owner-requested then -- "it loads basic ui features as backend
-// loads user data... no delays", see loadCachedState()'s own comment)
-// paints a device's last-known balance INSTANTLY so Home never sits on a
-// loading screen, then patchHomeBalances() corrects it the moment the
-// live /account fetch actually resolves. That correction is real and
-// expected -- removing the instant-paint would undo the exact speed
-// feature the owner asked for before -- but an instant textContent swap
-// between two different numbers reads as a glitch, not a deliberate
-// refresh. The correction now animates smoothly from the stale figure up
-// (or down) to the real one instead of snapping, so 388,600 becoming
-// 456,709 reads as money visibly counting up, not a flash of wrong data.
-var _homeBalanceVals = { wallet: null, earned: null, invested: null };
-// Owner: "when one taps balance records l need a live animation of balancing
-// increase from 0 to that current amount the user has."
-//
-// Distinct from animateBalanceEl() below, which corrects a stale figure to a
-// fresh one and only moves when the two differ. This always starts at zero
-// and always runs, because it fires on an OPEN -- it is the entrance the
-// screen makes, not a data correction.
-//
-// requestAnimationFrame, not setInterval: the count is tied to real frames,
-// so it takes the same 1.1s on a fast phone and a slow one instead of
-// running long wherever timers are throttled.
-// Counts one element from any figure to any other. countUpEl() below is this
-// with `from` pinned at zero; the win card counts from the balance the member
-// had BEFORE the reward landed up to the one they have after, so the growth
-// they are being shown is the actual size of the win.
-function countBetweenEl(el, from, to, fmt, ms){
-  if (!el) return;
-  fmt = fmt || fmtUGX2;
-  from = Number(from) || 0;
-  to = Number(to) || 0;
-  // Nowhere to travel, or the phone asked for less motion. Counting a figure
-  // to itself is a second of a member staring at a number that was never
-  // going to move.
-  const still = from === to ||
-    (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  if (still) { el.textContent = fmt(to); return; }
-  const duration = ms || 1100;
-  // Token guards against two counts racing on the same element: reopening the
-  // sheet mid-animation starts a second one, and without this the first would
-  // keep writing over it and land on a stale figure.
-  const token = (el._countToken = (el._countToken || 0) + 1);
-  const start = performance.now();
-  el.textContent = fmt(from);
-  function tick(now){
-    if (el._countToken !== token || !el.isConnected) return;
-    // Clamped at BOTH ends. `now` is the frame's start timestamp, not the
-    // moment this callback runs, so it can be EARLIER than the performance.now()
-    // captured above: a task that runs inside an already-stamped frame (a
-    // promise continuation -- which is exactly what opens the win card) can
-    // schedule a callback that arrives with now < start. Unclamped, t goes
-    // negative, the cubic below goes negative with it, and the figure paints one
-    // frame BELOW where it started -- money visibly dipping on a congratulations
-    // card. Rare and frame-timing dependent, which is how it showed up as one
-    // flaky "it only ever grows" failure rather than a reproducible one.
-    const t = Math.max(0, Math.min(1, (now - start) / duration));
-    // ease-out cubic: quick off the mark, gentle into the real figure, so it
-    // settles onto the number rather than stopping dead on it.
-    const eased = 1 - Math.pow(1 - t, 3);
-    el.textContent = fmt(from + (to - from) * eased);
-    if (t < 1) requestAnimationFrame(tick);
-    else el.textContent = fmt(to);
-  }
-  requestAnimationFrame(tick);
-}
-function countUpEl(el, to, fmt, ms){
-  countBetweenEl(el, 0, to, fmt, ms);
-}
-// `fmt` is the formatter that painted the element in the first place --
-// Account's wallet figure carries cents ("UGX 2,000.00"), the rest don't,
-// and a live-refresh tick must not silently reformat what it re-writes.
-// The wallet figure is the largest text on the screen and its LENGTH is not
-// ours to choose: "UGX 5,000.00" and "UGX 240,000,000.00" (product-12's full
-// payout, so a genuinely reachable balance) differ by more than double in
-// width. At the 44px the design asks for, anything past roughly seven digits
-// wraps onto a second line or spills out of the card on a 390px phone. So the
-// figure is nowrap in CSS and the size steps down here only as far as the
-// real measured width demands -- an ordinary balance still renders at 44px.
-var BAL_MAX_PX = 44, BAL_MIN_PX = 22;
-function fitBalanceText(el, sample){
-  if (!el) return;
-  // Measure against `sample` when the text about to be shown isn't in the
-  // element yet (mid-animation), then put back what was there.
-  const prev = sample == null ? null : el.textContent;
-  if (sample != null) el.textContent = sample;
-  let px = BAL_MAX_PX;
-  el.style.fontSize = px + 'px';
-  // clientWidth is 0 on a page that hasn't been laid out yet; there is
-  // nothing to measure, so leave the size at its maximum.
-  while (el.clientWidth > 0 && px > BAL_MIN_PX && el.scrollWidth > el.clientWidth){
-    px -= 1;
-    el.style.fontSize = px + 'px';
-  }
-  if (prev != null) el.textContent = prev;
-}
-function animateBalanceEl(el, key, toValue, fmt, autoFit){
-  // Chipz's Home no longer carries the balance figures (they live on
-  // Account, per the mockups), so the element genuinely may not exist on
-  // the page the live-refresh tick happens to fire on.
-  if (!el) return;
-  fmt = fmt || fmtUGX;
-  toValue = Number(toValue) || 0;
-  const fromValue = _homeBalanceVals[key];
-  _homeBalanceVals[key] = toValue;
-  if (autoFit){
-    // Size to whichever END of the count is the longer string, so the figure
-    // can't briefly overflow while it is animating between the two.
-    const to = fmt(toValue), from = fromValue === null ? to : fmt(fromValue);
-    fitBalanceText(el, to.length >= from.length ? to : from);
-  }
-  // Nothing to animate on a genuinely first paint (no prior value yet) or
-  // when the figure hasn't actually changed -- avoids needless motion on
-  // every routine live-refresh tick, where balances usually sit still.
-  if (fromValue === null || fromValue === toValue) { el.textContent = fmt(toValue); return; }
-  const start = performance.now(), duration = 700;
-  function tick(now){
-    const t = Math.min(1, (now - start) / duration);
-    const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic -- fast start, gentle settle
-    el.textContent = fmt(fromValue + (toValue - fromValue) * eased);
-    if (t < 1) requestAnimationFrame(tick);
-    else el.textContent = fmt(toValue);
-  }
-  requestAnimationFrame(tick);
-}
-function patchHomeBalances(){
-  const a = STATE.account || {};
-  // Account is where the wallet figure lives in Chipz; these all no-op
-  // safely on a page that doesn't carry the element.
-  animateBalanceEl($('acctWallet'), 'wallet', a.walletBalance, fmtUGXCents, true);
-  animateBalanceEl($('homeTotalEarned'), 'earned', a.totalEarned);
-  animateBalanceEl($('homeTotalInvested'), 'invested', a.totalInvested);
-}
-
-// ── MY PRODUCTS ──
-// Subagent-audit-caught: a genuine fetch failure on first-ever visit (no
-// cache yet to fall back to) used to be rendered byte-for-byte identically
-// to a real "you have no products" empty state -- a member with real active
-// investments who hits this during, say, a Render cold-start could see "No
-// products yet" for money that is actually invested. This flag lets
-// paintProducts() tell the two apart without reworking the whole cache-first
-// pipeline; cleared the moment a real fetch (success or a retry) resolves.
+// ── MY ASSETS investment helpers ──
 var _investmentsLoadFailed = false;
-async function renderProducts(){
-  const hadCache = Array.isArray(STATE.investments);
-  if (hadCache) paintProducts(true); else paintProductsSkeleton();
-  const r = await api('/investments');
-  if (r.status === 'success') { STATE.investments = r.investments; _investmentsLoadFailed = false; }
-  else if (!hadCache) { STATE.investments = []; _investmentsLoadFailed = true; }
-  if (STATE.page !== 'products') return; // navigated away while awaiting
-  paintProducts(!hadCache);
-}
-// Which plan filter is showing. Top-level binding must be `var` (never
-// const/let) -- see this file's own header rule about the obfuscated build.
-var _planFilter = 'running';
-window.switchPlanFilter = function(f){
-  _planFilter = f;
-  paintProducts(false);
-};
-// "12 Aug 2026". Owner: "make sure that one running investment, it shows Date
-// bought." Written out rather than toLocaleDateString(): the month name is
-// spelled the same on every phone regardless of its locale, and a numeric date
-// would be read as 12/08 by some members and 08/12 by others.
-//
-// An investment whose createdAt is missing or unparseable gets an em dash, not
-// today's date -- planStats() falls back to Date.now() for the countdown, which
-// is the right guess for "when is the next payout" and completely the wrong one
-// for "when did I buy this".
-// Takes the RAW createdAt (an ISO string, or ms), never planStats().createdMs
-// -- that one falls back to Date.now(), which is the right guess for "when is
-// the next payout due" and completely the wrong one for "when did I buy this".
 var MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtDay(value){
   if (!value) return '—';
@@ -3887,12 +3447,8 @@ function fmtDay(value){
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
-// The owner's orbiting-chips animation, marking a plan that is still ongoing.
-// Built once as a constant rather than per row: it is fixed markup, and
-// paintProducts() re-renders the whole list on every filter tap and every
-// /investments refresh. Purely decorative -- the row already SAYS "Ongoing" --
-// so it is hidden from screen readers. Its top-level binding is `var` per this
-// file's header rule about the obfuscated build.
+// Petro's compact triangle activity mark. It remains because the live payment
+// polling screen still uses it as its processing indicator.
 var PLAN_SPIN = '<span class="pspin" aria-hidden="true">'
   + '<span class="pspin-orbit"><i class="pspin-chip"></i><i class="pspin-chip"></i><i class="pspin-chip"></i></span>'
   + '<span class="pspin-glow"></span><span class="pspin-core"></span></span>';
@@ -3926,95 +3482,6 @@ function planStats(inv){
     daysLeft: Math.max(0, total - made),
     createdMs: new Date(inv.createdAt || Date.now()).getTime(),
   };
-}
-// Extracted so the Assets screen's "My Assets" tab can reuse this exact
-// list -- unstyled, since the owner's mockups never showed that tab
-// selected (see renderAssets()'s own comment) -- without paintProducts()
-// clobbering the whole page the way its own $('pageHost').innerHTML write
-// would.
-function myProductsInnerHtml(){
-  const investments = STATE.investments || [];
-  const all = investments.filter(i => i.status === 'active' || i.status === 'matured');
-  // Number(...) coercion matters here -- subagent-audit-caught: without it,
-  // a single string-typed amount/paidOut in the /investments response turns
-  // every "+" from here on into string concatenation instead of addition,
-  // the exact "1,000,000,500"-class corruption Round 52 already found and
-  // fixed server-side.
-  const stats = all.map(planStats);
-  const running = all.filter((_, i) => !stats[i].matured);
-  const matured = all.filter((_, i) => stats[i].matured);
-  const totalInvested = stats.reduce((s, x) => s + x.amount, 0);
-  const totalEarned = stats.reduce((s, x) => s + x.earned, 0);
-  // Genuinely new on this screen: what the running plans have still to pay
-  // out, and what they bring in per day between them. A member's real
-  // question is "what am I owed and when", which the old three tiles
-  // (count / invested / earned) never answered.
-  const stillToEarn = stats.reduce((s, x) => s + (x.matured ? 0 : x.remaining), 0);
-  const perDay = stats.reduce((s, x) => s + (x.matured ? 0 : x.daily), 0);
-
-  const shown = _planFilter === 'matured' ? matured : _planFilter === 'all' ? all : running;
-  const counts = { running: running.length, matured: matured.length, all: all.length };
-
-  let html = `
-<div class="page-head"><h2>My Products</h2></div>
-<div class="mp-band">
-  <div class="mp-band-k">Remaining to Earn</div>
-  <div class="mp-band-v">${fmtUGXCents(stillToEarn)}</div>
-  <div class="mp-band-sub">${perDay > 0 ? `${fmtUGXCents(perDay)} a day across ${counts.running} active plan${counts.running===1?'':'s'}` : 'No active plans right now'}</div>
-  <div class="mp-band-row">
-    <div><span>Total Invested</span><b>${fmtUGXCents(totalInvested)}</b></div>
-    <div><span>Total Earned</span><b>${fmtUGXCents(totalEarned)}</b></div>
-  </div>
-</div>
-<div class="mp-filters">
-  ${['running','matured','all'].map(f => `<button class="mp-f ${_planFilter===f?'on':''}" onclick="switchPlanFilter('${f}')">${f==='running'?'Active':f==='matured'?'Completed':'All'}</button>`).join('')}
-</div>
-<div class="mp-list">`;
-
-  if (!investments.length && _investmentsLoadFailed) {
-    html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>Could not load your plans. <button style="background:none;border:none;color:var(--snow-wine);font-weight:600;cursor:pointer;padding:0;font-size:inherit;" onclick="renderProducts()">Tap to retry</button></div>`;
-  } else if (!shown.length) {
-    const msg = _planFilter === 'matured'
-      ? 'Nothing has completed yet. Plans move here once they finish paying out.'
-      : _planFilter === 'all'
-      ? 'No plans yet. Open Products and pick one to get started.'
-      : counts.all ? 'No active plans. Check Completed to see the ones that finished.'
-                   : 'No plans yet. Open Products and pick one to get started.';
-    html += `<div class="list-empty"><div class="empty-icon">${EMPTY_ICON}</div>${msg}</div>`;
-  } else {
-    shown.forEach(inv => {
-      const st = planStats(inv);
-      const p = (STATE.products||[]).find(x=>x.key===inv.tierKey) || {};
-      const thumb = p.image
-        ? `<img src="${esc(p.image)}" alt="" onerror="this.style.display='none'">`
-        : `<span>${esc(String(inv.tierLabel||'?').replace(/[^0-9]/g,'') || String(inv.tierLabel||'?').trim()[0])}</span>`;
-      html += `
-  <div class="mp-row ${st.matured?'done':''}">
-    <div class="mp-top">
-      <div class="mp-thumb">${thumb}</div>
-      <div class="mp-id">
-        <div class="mp-name">${esc(inv.tierLabel)}</div>
-        <div class="mp-meta">${fmtUGXCents(st.amount)} invested</div>
-      </div>
-      <span class="mp-chip ${st.matured?'done':''}">${st.matured?'Completed':'Active'}</span>
-    </div>
-    <div class="mp-days"><span class="lead">${st.matured ? '' : PLAN_SPIN}<b>Day ${st.made} of ${st.total}</b></span><span>${st.matured ? 'Finished' : st.daysLeft + ' Day' + (st.daysLeft===1?'':'s') + ' Remaining'}</span></div>
-    <div class="mp-bought">Started ${fmtDay(inv.createdAt)}</div>
-    <div class="mp-figs">
-      <div><span>Earned</span><b class="up">${fmtUGXCents(st.earned)}</b></div>
-      <div><span>${st.matured ? 'Total paid' : 'Remaining Earnings'}</span><b>${fmtUGXCents(st.matured ? st.expected : st.remaining)}</b></div>
-    </div>
-    ${st.matured ? '' : `<div class="mp-next" data-countdown data-created="${st.createdMs}" data-payouts-made="${st.made}">${ICONS.clock} <b>${fmtUGXCents(st.daily)}</b> in <span class="countdown-val">--:--:--</span></div>`}
-  </div>`;
-    });
-  }
-  html += `</div><div style="height:12px;"></div>`;
-  return html;
-}
-function paintProducts(animate){
-  const html = myProductsInnerHtml();
-  $('pageHost').innerHTML = animate ? '<div class="reveal-in">' + html + '</div>' : html;
-  startPlanCountdowns();
 }
 function myAssetRowHtml(inv){
   const st = planStats(inv);
@@ -4063,105 +3530,6 @@ function paintMyAssetsInner(){
 // Live-ticking "Next cashback in HH:MM:SS" on each active plan card. Cleared
 // whenever the page changes away from My Products so it never keeps ticking
 // (and leaking a timer) in the background.
-var _countdownTimer = null;
-function startPlanCountdowns(){
-  if (_countdownTimer) clearInterval(_countdownTimer);
-  const tick = () => {
-    const nodes = document.querySelectorAll('[data-countdown]');
-    if (!nodes.length) { clearInterval(_countdownTimer); _countdownTimer = null; return; }
-    nodes.forEach(el => {
-      const created = Number(el.dataset.created);
-      const made = Number(el.dataset.payoutsMade);
-      const nextBoundary = created + (made + 1) * 86400000;
-      const remaining = Math.max(0, nextBoundary - Date.now());
-      const h = Math.floor(remaining / 3600000);
-      const m = Math.floor((remaining % 3600000) / 60000);
-      const s = Math.floor((remaining % 60000) / 1000);
-      const pad = n => String(n).padStart(2, '0');
-      el.querySelector('.countdown-val').textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
-    });
-  };
-  tick();
-  _countdownTimer = setInterval(tick, 1000);
-}
-
-// Floating "recent activity" strip on Home -- simulated, not real
-// transactions (see server.js's /public/activity-feed, which says the same
-// thing). Continuously flows/scrolls like a real ticker tape via a pure CSS
-// animation (translateX 0 -> -50% over a track holding two back-to-back
-// copies of the same joined text, looping seamlessly) rather than swapping
-// between discrete messages. Refreshed with new feed data periodically;
-// stopped on every page change the same way _countdownTimer is, so it never
-// keeps refreshing into a detached DOM node in the background.
-var _activityRefreshTimer = null;
-function activityRowText(row){
-  const verb = row.kind === 'deposit' ? 'just deposited' : 'just withdrew';
-  return row.phone + ' ' + verb + ' ' + fmtUGX(row.amount);
-}
-// Home.dc.html styles the phone number white against the amber rest of the
-// line, so the eye lands on who rather than on the sentence.
-// Owner asked for different wording in the activity card. Reads as a short
-// notification line rather than a running commentary: who, what, how much.
-function activityRowHtml(row){
-  const verb = row.kind === 'deposit' ? 'topped up' : 'cashed out';
-  return `<b>${esc(row.phone)}</b> ${esc(verb)} <b>${esc(fmtUGX(row.amount))}</b>`;
-}
-async function renderActivityTicker(){
-  const track = $('activityTickerTrack');
-  if (!track) return;
-  // subagent-audit-caught: this used to check STATE.activityFeed immediately,
-  // racing boot()'s own prefetch instead of actually using it -- on the
-  // cache-hit instant-boot path (Round 46), paintHome()/startActivityTicker()
-  // fire synchronously the moment the app becomes visible, almost always
-  // BEFORE boot()'s three parallel fetches (settings/products/activity-feed)
-  // have had time to land over a real network. STATE.activityFeed was still
-  // null nearly every time, so this fell straight into its own live fetch and
-  // showed "Loading activity…" regardless of the prefetch -- owner: "activity
-  // checker is not loaded... it should have loaded everything after startup
-  // spin loader." Awaiting the SAME _bootPromise every other prefetch
-  // consumer already awaits makes this genuinely wait for (not race) the
-  // prefetch on the very first call; resolves near-instantly on every call
-  // after the first, since _bootPromise only ever settles once.
-  await withTimeout(_bootPromise, 6000);
-  if (STATE.page !== 'home' || !$('activityTickerTrack')) return; // navigated away while awaiting
-  let rows;
-  if (STATE.activityFeed) {
-    // Prefetched by boot() -- consume it once so the ticker paints from the
-    // prefetch instead of firing a redundant live fetch. Every call after
-    // this one does a real fetch again, same as before.
-    rows = STATE.activityFeed;
-    STATE.activityFeed = null;
-  } else {
-    const r = await api('/public/activity-feed');
-    if (STATE.page !== 'home' || !$('activityTickerTrack')) return; // navigated away while awaiting
-    rows = (r.status === 'success' && Array.isArray(r.feed)) ? r.feed : [];
-  }
-  if (!rows.length) return;
-  const joined = rows.map(activityRowHtml).join('<span class="sep">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>');
-  track.style.animation = 'none';
-  track.innerHTML = `<span style="padding-right:48px;">${joined}</span><span style="padding-right:48px;" aria-hidden="true">${joined}</span>`;
-  const singleWidth = track.scrollWidth / 2;
-  // Owner: "make when l can configure what speed the activity checker be
-  // on home screen" -- was a hardcoded 160 (hand-tuned across Rounds
-  // 26/28), now admin-editable via STATE.settings.activityTickerSpeed
-  // (px/sec), falling back to that same original value if it's ever
-  // missing (a boot before settings resolve, or a database from before
-  // this field existed).
-  const speed = (STATE.settings && STATE.settings.activityTickerSpeed) || 160;
-  const duration = Math.max(4, singleWidth / speed); // floor so a short feed doesn't whip past
-  track.style.animation = `tickerFlow ${duration}s linear infinite`;
-}
-function stopActivityTicker(){
-  clearInterval(_activityRefreshTimer); _activityRefreshTimer = null;
-  const track = $('activityTickerTrack');
-  if (track) track.style.animation = 'none';
-}
-function startActivityTicker(){
-  stopActivityTicker(); // idempotent -- a stray extra call must never leak a second interval
-  renderActivityTicker();
-  _activityRefreshTimer = setInterval(renderActivityTicker, 20000);
-}
-
 // ── TEAM ──
 // subagent-audit-caught: same stale-deferred-repaint class Round 59 fixed
 // for Withdraw/Withdrawal Accounts, here on Team -- tapping
@@ -4272,7 +3640,7 @@ function renderTeamMembers(level){
   box.innerHTML = '<div class="reveal-in">' + members.map((m,idx) => `
   <div class="team-member">
     <div class="top">
-      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#ffb000,#e30613)' : 'var(--chipz-grad)'};">${avatar}</div>
+      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#ffb000,#e30613)' : 'var(--petro-grad)'};">${avatar}</div>
       <div style="min-width:0;">
         <div class="name">User</div>
         <div class="phone mono">${esc(maskPhone(m.phone))}</div>
@@ -4322,11 +3690,6 @@ async function renderNetwork(){
 // an ISO string (see server.js's Date -> JSON serialization), and this file
 // has no existing "parse either shape" helper for it outside joinedStamp(),
 // which returns a formatted STRING, not a sortable number.
-function tsMillisLocal(v){
-  if (!v) return 0;
-  const ms = typeof v === 'object' && v.seconds ? v.seconds * 1000 : new Date(v).getTime();
-  return isNaN(ms) ? 0 : ms;
-}
 function paintNetwork(){
   const t = STATE.teamStats || { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
   const rates = t.commRates || {};
@@ -4365,25 +3728,6 @@ function paintNetwork(){
 <div style="height:20px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
-function paintRecentReferrals(){
-  const box = document.getElementById('netRecentBox');
-  if (!box) return;
-  const rows = STATE.recentReferrals || [];
-  if (!rows.length) { box.innerHTML = '<div class="list-empty">No referrals yet.</div>'; return; }
-  box.innerHTML = rows.map(m => `
-    <div class="net-recent-row">
-      <span class="nrr-avatar">${ICONS.peopleGroup}</span>
-      <div class="nrr-text">
-        <div class="nrr-phone mono">${esc(maskPhone(m.phone))} <span class="nrr-level">Level ${m._level}</span></div>
-        <div class="nrr-date">${esc(joinedStamp(m.createdAt) || '—')}</div>
-      </div>
-      <span class="nrr-status">${Number(m.invested) > 0 ? 'Invested' : 'Registered'}</span>
-    </div>`).join('');
-}
-// "View All" -- the full 3-level switcher + member list, reusing exactly
-// what paintTeam()'s own page rendered, just inside a sheet instead of a
-// full page (the mockup's Network screen has no separate full-page slot for
-// this the way the old 'team' tab did).
 window.openAllReferralsSheet = function(){
   openSheet('All Referrals', `
 <div class="lv-switcher" style="margin-bottom:14px;">
@@ -4394,56 +3738,6 @@ window.openAllReferralsSheet = function(){
 <div id="teamMembersBox">${teamLoadingHtml()}</div>`);
   switchTeamLevel(1);
 };
-async function renderTeam(){
-  const hadCache = !!STATE.teamStats;
-  if (hadCache) paintTeam(); else paintTeamSkeleton();
-  const r = await api('/team/stats');
-  if (r.status === 'success') STATE.teamStats = r;
-  else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
-  if (STATE.page !== 'team') return; // navigated away while awaiting
-  if (hadCache) patchTeamStats(); else paintTeam();
-}
-function patchTeamStats(){
-  const t = STATE.teamStats || {};
-  const tt = $('teamTotalCount'); if (tt) tt.textContent = t.totalTeam;
-  const tc = $('teamCommissionAmt'); if (tc) tc.textContent = fmtUGXCents(t.teamCommission);
-  const td = $('teamDepositsAmt'); if (td) td.textContent = fmtUGXCents(t.teamDeposits);
-}
-function paintTeam(){
-  const t = STATE.teamStats || { referralCode:'', commRates:{l1:28,l2:1,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
-  const rates = t.commRates || {};
-  // Team follows Team.dc.html: a Total Team card, a Commission Rate card,
-  // the Level 1/2/3 switcher and the member list. The referral code / invite
-  // link / Invitation Reward blocks that used to live here now have their own
-  // Referral tab (owner: "remove them from team and they come here to this tab").
-  let html = `
-<div style="height:18px;"></div>
-<div class="team-gcard" style="margin:0 18px;">
-  <div class="row1"><span class="ic" aria-hidden="true">${ICONS.peopleGroup}</span><span class="lbl">Total Team</span><span class="num mono" id="teamTotalCount">${t.totalTeam || 0}</span></div>
-  <div class="ln"></div>
-  <div class="amt mono" id="teamDepositsAmt">${fmtUGXCents(t.teamDeposits)}</div>
-  <div class="cap">Purchase</div>
-</div>
-<h2 class="plain-head">Commission Rate</h2>
-<div class="team-gcard comm" style="margin:0 18px;">
-  <div class="lvl" id="teamCommLevelLabel">Level 1</div>
-  <div class="pct" id="teamCommPct">${rates.l1 != null ? rates.l1 : 28}%</div>
-  <div class="amt2 mono" id="teamCommissionAmt">${fmtUGXCents(t.teamCommission)}</div>
-  <div class="mem" id="teamCommMembers">${(t.team && t.team.l1) || 0} Members</div>
-</div>
-<div class="lv-switcher">
-  <button class="lv on" data-level="1" onclick="switchTeamLevel(1)">Level 1</button>
-  <button class="lv" data-level="2" onclick="switchTeamLevel(2)">Level 2</button>
-  <button class="lv" data-level="3" onclick="switchTeamLevel(3)">Level 3</button>
-</div>
-<div style="margin:0 18px;">
-  <div id="teamMembersBox"></div>
-</div>
-`;
-  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-  STATE.teamMembers = {1:null,2:null,3:null};
-  switchTeamLevel(1);
-}
 // ── MISSION CENTER — REMOVED ──
 // Owner: "remove mission center". The screen, both claim flows and the
 // /mission/status fetch that used to run on every boot are gone, and so are
@@ -4569,7 +3863,7 @@ window.copyText = function(text){
 // screen only), which is why patchHomeBalances()'s live tick targets
 // #acctWallet.
 // New Account/Network row style (owner's mockups): a coloured CIRCLE with a
-// real SVG glyph, not settingRowHtml()'s coloured SQUARE + Chipz raster PNG.
+// real SVG glyph, not settingRowHtml()'s coloured SQUARE + Petro raster PNG.
 // Kept as its own helper rather than changing settingRowHtml() in place --
 // that one still backs whatever of the old settings list isn't part of the
 // new Account screen (nothing, as of this round, but changing a shared
@@ -4613,9 +3907,9 @@ window.openSecuritySettingsSheet = function(){
 // Rebuilt to the owner's Account mockup -- a red header (logo/tagline/
 // bell/settings-gear, same .home-topbar-v2 Home uses), a profile card over
 // an admin-uploadable refinery photo (new 'profilecard' image slot, same
-// CHIPZ_IMAGE_SLOTS mechanism as logo/authhero/etc.), a 3-stat row, and a
+// PETRO_IMAGE_SLOTS mechanism as logo/authhero/etc.), a 3-stat row, and a
 // plain white row list with coloured-circle SVG icons replacing the old
-// settings list's coloured squares + Chipz raster PNGs.
+// settings list's coloured squares + Petro raster PNGs.
 //
 // Deliberately NOT built into this round: a per-member profile PHOTO upload
 // (the mockup's camera badge) and phone-number editing (the mockup's pencil
@@ -4881,7 +4175,7 @@ window.confirmWalletOtp = async function(){
 // Shared tail of a successful /bank/save, whether it came from the OTP flow
 // above or straight from submitWallet() when bankOtpRequired is off.
 async function finishWalletSave(){
-  // Chipz binds exactly ONE wallet -- drop any older rows so the card, the
+  // Petro binds exactly ONE wallet -- drop any older rows so the card, the
   // summary row and the Withdraw screen can never disagree about which
   // account a payout goes to.
   const list = await api('/bank/list');
@@ -5215,7 +4509,7 @@ window.submitLoginPasswordChange = async function(){
 };
 
 // ── CHANGE TRADE PASSWORD (ChangePassword.dc.html) ──
-// The 6-digit PIN that confirms withdrawals. Chipz uses 6 digits where Snow
+// The 6-digit PIN that confirms withdrawals. Petro uses 6 digits where Snow
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
 window.openChangeTradePasswordSheet = function(){
   openSheet('Trade Password', `<div class="reveal-in" style="padding-top:22px;">
@@ -5434,7 +4728,7 @@ function isAnyOverlayOpen(){
 // so a screen whose title changes silently drops off it -- test-nav-sheets.py
 // now checks every title in this array is one openSheet() is really called
 // with, which is what would have caught it.
-// 'Wallet' -- not 'Withdrawal Accounts'. That screen was renamed when Chipz
+// 'Wallet' -- not 'Withdrawal Accounts'. That screen was renamed when Petro
 // moved to ONE bound wallet (openWalletSheet), and this entry was left behind
 // pointing at a title nothing opens any more. Dead for however long, and
 // invisible precisely because a title that matches nothing simply never fires.
@@ -6262,7 +5556,7 @@ async function refreshTransactionsCache(){
 }
 window.submitWithdraw = async function(){
   const amount = parseMoneyInput($('witAmount').value);
-  // Chipz binds exactly ONE wallet, so there is no account picker to read --
+  // Petro binds exactly ONE wallet, so there is no account picker to read --
   // the withdrawal always goes to the bound wallet the screen is showing.
   const acct = (STATE.bankAccounts || [])[0] || null;
   if (!amount || amount <= 0) return notify('Enter a valid amount.');
@@ -6419,7 +5713,7 @@ window.openDownloadSheet = function(){
     <div class="dl-scrim"></div>
     <div class="dl-body">
       <div class="dl-top">
-        <div class="dl-mark">${chipzMarkHtml(72)}</div>
+        <div class="dl-mark">${petroMarkHtml(72)}</div>
         <h2 class="dl-title">Get the ${esc(brandName())} app</h2>
         <p class="dl-sub">Install it on your phone for faster access, and open it straight from your home screen.</p>
       </div>
@@ -6496,7 +5790,7 @@ if ('serviceWorker' in navigator) {
 // invite link (/refCode=ABC, ?ref=ABC, #pages/register/?ref=ABC) still
 // carries its code to the address the member ends up on.
 var ENTRY_MOVE_PARAM = '_e';
-var ENTRY_MOVE_KEY = 'chipzEntryMoved';
+var ENTRY_MOVE_KEY = 'petroEntryMoved';
 // True once this browsing session has already been moved -- from the marker
 // in the URL on the hop we just made, or from sessionStorage on every later
 // page load within the same tab. Reading it also CONSUMES the URL marker.

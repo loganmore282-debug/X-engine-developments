@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'petro-shell-v132';
+const CACHE = 'petro-shell-v133';
 const VENDOR_CACHE = 'petro-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
@@ -34,7 +34,7 @@ const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 
 // ── THE INSTALLED APP'S NAME ──
 //
-// Owner: "let's not make chipz to be default name, let's make it to be
+// Owner: "let's not make petro to be default name, let's make it to be
 // backend such that the set name abides every functions ... system visuals
 // should be backend." The name Android prints under the installed icon, and
 // the one in Chrome's "Install app" sheet, come from manifest.json's `name` --

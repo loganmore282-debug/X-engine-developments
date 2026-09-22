@@ -1,7 +1,7 @@
 # nginx site config for Petro on the Hostinger KVM1 VPS.
 #
 # Three subdomains, mirroring the three separate Railway/Render services
-# Chipz used to deploy (server / app / admin) -- kept as three origins on
+# Petro used to deploy (server / app / admin) -- kept as three origins on
 # purpose rather than collapsed onto one, because server.js's own
 # CORS_ALLOWED_ORIGINS + the meta-tag CSP in user-src/index.html and
 # admin-src/index.html already assume the API is a different origin from
