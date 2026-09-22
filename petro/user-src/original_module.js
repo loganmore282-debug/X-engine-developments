@@ -4058,11 +4058,13 @@ function walletLocalPhone(phone){
 }
 function walletPlainRowHtml(w){
   if (!w) return '';
+  const network = String(w.network || 'Mobile Money').replace(/\s*(Mobile )?Money$/i, '') || 'Mobile Money';
   return `
   <div class="wallet-plain-row">
     <div class="wallet-plain-copy">
       <div class="wallet-plain-number mono">${esc(walletLocalPhone(w.phone))}</div>
       <div class="wallet-plain-name">${esc(String(w.holder || '').toUpperCase())}</div>
+      <div class="wallet-plain-network">${esc(network)}</div>
     </div>
     <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button>
   </div>`;
