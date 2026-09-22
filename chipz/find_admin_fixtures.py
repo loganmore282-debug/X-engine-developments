@@ -53,6 +53,17 @@ DEPOSITS = [
      "providerDetail": '{"status":"error","error_code":"SERVICE_NOT_FOUND","message":"Service not found."}'},
 ]
 
+DEPOSIT_ATTEMPTS = [
+    {"id": "a1", "userId": "u1", "accountPhone": "0742730382", "route": "marzpay",
+     "reason": "That is not a valid Benin mobile-money number. Use the format 01XXXXXXXX or +22901XXXXXXXX.",
+     "body": '{"amount":20000,"phone":"0161234567","network":"MTN"}',
+     "createdAt": "2026-09-13T14:00:00Z", "regionKey": "ug"},
+    {"id": "a2", "userId": "u2", "accountPhone": "0771220399", "route": "manual",
+     "reason": "Minimum amount is UGX 30,000",
+     "body": '{"amount":5000,"network":"Airtel Money","senderPhone":"0771220399"}',
+     "createdAt": "2026-09-13T15:00:00Z", "regionKey": "ug"},
+]
+
 WITHDRAWALS = [
     {"id": "w1", "userId": "u1", "phone": "0742730382", "amount": 20000, "fee": 3000,
      "netAmount": 17000, "status": "pending", "accountNumber": "0742730382",
@@ -139,6 +150,8 @@ R = {
                              "counts": {"pending": 1, "review": 1, "completed": 1, "failed": 1},
                              "total": len(DEPOSITS), "processedByDay": [], "processedAmount": 0,
                              "truncated": False, "regionKey": "ug"},
+    "/admin/deposit-attempts/list": {"status": "success", "attempts": DEPOSIT_ATTEMPTS,
+                                      "truncated": False, "regionKey": "ug"},
     "/admin/withdrawals/list": {"status": "success", "withdrawals": WITHDRAWALS,
                                 "counts": {"pending": 1, "processed": 1, "rejected": 1},
                                 "total": len(WITHDRAWALS), "processedByDay": [],

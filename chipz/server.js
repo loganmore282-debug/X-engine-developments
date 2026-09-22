@@ -2486,7 +2486,7 @@ async function invalidateSessionsFor(username) {
 // suspended"). Nothing replaces it -- a suspicious burst of deposit
 // attempts is still visible to an admin via `securityEvents`/`logSecurityEvent`
 // and the Suspicious Activity analytics tab, but no longer bans anyone
-// without a human deciding to. `banUserAutomatically()`, `recordDepositAttempt()`,
+// without a human deciding to. `banUserAutomatically()`, `recordDepositRejection()`,
 // `undoDepositAttempt()`, `markDepositAttemptSucceeded()`, `depositSucceededRecently()`
 // and the `_depAttempts`/`_depAttemptsSucceededAt` maps are deleted along
 // with it, not merely unlinked -- a removed feature whose helpers stay
@@ -2517,6 +2517,34 @@ function logSecurityEvent(userId, type, meta) {
   if (!userId) return;
   db.collection('securityEvents').add({ userId, type, meta: meta || null, createdAt: FieldValue.serverTimestamp() })
     .catch(e => console.error('logSecurityEvent error:', e.message));
+}
+// Owner: "you have to include the json sent when depositing in the admin
+// panel it will help us diagnose the problem" -- a request REFUSED before
+// any pendingDeposits row ever existed (a phone-format rejection, a
+// disabled gateway, a banned account, a below-minimum amount) previously
+// left nothing an admin could inspect at all: no deposit row (markDepositFailed's
+// own providerDetail only ever applies to a row that got as far as calling a
+// provider), only a console.error line on Railway that nobody but the deploy
+// owner can read. This is that window -- exactly what the member's client
+// actually SENT, for the requests that never got far enough to create
+// anything else, which is precisely the class of bug this exists for (the
+// Benin phone-format hint reported live: the member's own request body is
+// the fastest way to see whether the CLIENT sent a mangled number or the
+// SERVER refused a well-formed one).
+//
+// Fire-and-forget, same discipline as logSecurityEvent() right above --
+// never awaited on the money-latency path, and a write failure here must
+// never turn an already-decided refusal into a 500 the member did not
+// cause. `body` is the raw req.body: no secrets ever appear in a deposit
+// request (amount/phone/network only), so nothing here needs redaction the
+// way an auth header or a webhook signature would.
+function recordDepositRejection(userId, route, region, body, reason) {
+  db.collection('depositAttempts').add({
+    userId: userId || null, route, regionKey: (region && region.key) || null,
+    body: JSON.stringify(body || {}).slice(0, 2000),
+    reason: String(reason || '').slice(0, 500),
+    createdAt: FieldValue.serverTimestamp(),
+  }).catch(e => console.error('recordDepositRejection error:', e.message));
 }
 // `adminDetail` (optional) is the PROVIDER'S OWN raw error, never the
 // member-facing `reason` -- stored alongside it, never shown to the member,
@@ -5406,11 +5434,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     // MarzPay serves all markets in MARZPAY_MARKETS; LipaPay/PesaJet are
     // Uganda-only. Refuse BEFORE any pendingDeposit is written.
     if (!gatewayServesRegion(provider, paymentRegion)) {
-      return res.status(400).json({
-        status: 'error', code: 'GATEWAY_REGION',
-        message: 'Automatic recharge is not available in ' + (paymentRegion.name || 'this country') +
-                 ' yet. Please use the other payment method.',
-      });
+      const msg = 'Automatic recharge is not available in ' + (paymentRegion.name || 'this country') + ' yet. Please use the other payment method.';
+      recordDepositRejection(userId, 'marzpay', paymentRegion, req.body, msg);
+      return res.status(400).json({ status: 'error', code: 'GATEWAY_REGION', message: msg });
     }
 
     // Validate BEFORE touching the debounce below -- a below-minimum amount
@@ -5420,9 +5446,16 @@ app.post('/deposit/marzpay', async (req, res) => {
     // retried with the real minimum hit a false "already being processed"
     // (the failed attempt had already claimed the debounce window on a
     // deposit that was never actually created).
-    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
+    if (amt < sett.minDeposit) {
+      const msg = `Minimum amount is ${fmtMoney(sett.minDeposit)}`;
+      recordDepositRejection(userId, 'marzpay', paymentRegion, req.body, msg);
+      return res.status(400).json({ status: 'error', message: msg });
+    }
     const _ph = depositSenderPhone(req.body, uSnap.data().phone, ['phone'], paymentRegion);
-    if (_ph.error) return res.status(400).json({ status: 'error', message: _ph.error });
+    if (_ph.error) {
+      recordDepositRejection(userId, 'marzpay', paymentRegion, req.body, _ph.error);
+      return res.status(400).json({ status: 'error', message: _ph.error });
+    }
     const phone = _ph.phone;
 
     // A deposit already being processed is bounced for 7s -- one impatient
@@ -6367,7 +6400,10 @@ app.post('/deposit/manual/init', async (req, res) => {
   // three times.
   const depositRegion = currentRegion();
   const network = regionNetworkSet(depositRegion).has(req.body.network) ? req.body.network : null;
-  if (!network) return res.status(400).json({ status: 'error', message: 'Select a network' });
+  if (!network) {
+    recordDepositRejection(userId, 'manual', depositRegion, req.body, 'Select a network');
+    return res.status(400).json({ status: 'error', message: 'Select a network' });
+  }
   try {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
@@ -6376,9 +6412,16 @@ app.post('/deposit/manual/init', async (req, res) => {
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
     // Same validate-before-debounce ordering as /deposit/marzpay -- see its
     // own comment for why this order matters.
-    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
+    if (amt < sett.minDeposit) {
+      const msg = `Minimum amount is ${fmtMoney(sett.minDeposit)}`;
+      recordDepositRejection(userId, 'manual', depositRegion, req.body, msg);
+      return res.status(400).json({ status: 'error', message: msg });
+    }
     const _sph = depositSenderPhone(req.body, uSnap.data().phone, ['senderPhone', 'phone'], depositRegion);
-    if (_sph.error) return res.status(400).json({ status: 'error', message: _sph.error });
+    if (_sph.error) {
+      recordDepositRejection(userId, 'manual', depositRegion, req.body, _sph.error);
+      return res.status(400).json({ status: 'error', message: _sph.error });
+    }
     const senderPhone = _sph.phone;
 
     const lastDep = _depCreateDebounce.get(userId) || 0;
@@ -6398,10 +6441,16 @@ app.post('/deposit/manual/init', async (req, res) => {
       userId, phone: senderPhone, senderPhone, network, amount: amt, ref, status: 'pending',
       method: 'manual', expiresAt, regionKey: depositRegion.key, date, time, createdAt: FieldValue.serverTimestamp(),
     });
-    if (!result) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
+    if (!result) {
+      const msg = 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.';
+      recordDepositRejection(userId, 'manual', depositRegion, req.body, msg);
+      return res.status(503).json({ status: 'error', message: msg });
+    }
     if (result.empty) {
       console.error(`Manual deposit refused: no active payment numbers configured for ${network}. Add one in Admin -> Deposits -> payment numbers.`);
-      return res.status(503).json({ status: 'error', message: `No ${network} payment number is available right now. Please choose the other network, or contact customer service.` });
+      const msg = `No ${network} payment number is available right now. Please choose the other network, or contact customer service.`;
+      recordDepositRejection(userId, 'manual', depositRegion, req.body, msg);
+      return res.status(503).json({ status: 'error', message: msg });
     }
     const { assigned, depRef } = result;
     trackManual(assigned.number, 'assigned', { amount: amt });
@@ -10875,6 +10924,31 @@ app.post('/admin/deposits/list', async (req, res) => {
     // the cap even when one of the two source queries was truncated.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
     res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount, truncated, regionKey: want || 'all' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Owner: "you have to include the json sent when depositing in the admin
+// panel it will help us diagnose the problem" -- see recordDepositRejection()'s
+// own comment for exactly what this is and why. Deliberately separate from
+// /admin/deposits/list: a request that succeeded already has its own full
+// row there (with providerDetail on top, if a provider was ever asked); this
+// is the window into requests that never got that far -- refused before any
+// pendingDeposits row existed at all, so nothing else can show them.
+app.post('/admin/deposit-attempts/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [snap, userRegions, usersSnap] = await Promise.all([
+      db.collection('depositAttempts').orderBy('createdAt', 'desc').limit(500).get(),
+      adminUserRegions(),
+      db.collection('users').get(),
+    ]);
+    const phones = {};
+    usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
+    const want = adminRegionFilter(req);
+    let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    rows = scopeRowsToRegion(rows, want, userRegions);
+    rows.forEach(r => { r.accountPhone = phones[r.userId] || ''; });
+    const truncated = snap.docs.length >= 500;
+    res.json({ status: 'success', attempts: rows, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/deposit/force-credit', async (req, res) => {

@@ -7706,3 +7706,99 @@ is still failing after this fix reaches production, that's now a different, unre
 question (e.g. whether their number is genuinely a valid Benin mobile-money number, or
 a network-availability gap like the Cameroon/Orange one from Round 181).
 
+## Round 184 — "You have to include the json sent when depositing" — a new admin diagnostic
+
+Owner, while a Benin deposit was still being diagnosed: *"you have to include the json
+sent when depositing in the admin panel it will help us diagnose the problem."*
+
+**The gap this closes.** Round 179d's "Why this failed" diagnostic (`providerDetail`)
+only ever applies to a deposit that got far enough to call a real payment provider — but
+a REFUSAL (wrong phone format, a disabled gateway, an amount below the minimum) is
+rejected before any `pendingDeposits` row is ever created. Nothing existed for that
+class of failure at all — only a `console.error` line on Railway nobody but the deploy
+owner can read. That gap is exactly what made the Benin phone-format bug (Round 183)
+slow to pin down: there was no way to see what the member's OWN app actually sent.
+
+### What it does
+`recordDepositRejection(userId, route, region, body, reason)` — a new, fire-and-forget
+helper (same discipline as `logSecurityEvent()` right above it: never awaited on the
+money-latency path, a write failure is swallowed, never thrown back at the request it
+was trying to help diagnose) — writes the RAW `req.body`, verbatim, to its own new
+collection, `depositAttempts`. Deliberately a **separate** collection from
+`pendingDeposits`, not a `status:'rejected'` row bolted onto it — this must never be
+able to affect any money total, wallet-integrity check, or stats count that reads
+`pendingDeposits`, and keeping it structurally apart makes that true by construction
+rather than by remembering to exclude a new status value everywhere.
+
+Wired into every early-refusal branch in `/deposit/marzpay` and `/deposit/manual/init`
+that happens AFTER the account is loaded (banned/PAY-disabled checks stay as they were —
+nothing diagnostically useful to capture there): the gateway-region mismatch, the
+below-minimum-amount refusal, the phone-format refusal (the exact bug this exists for),
+no network selected, and — on the manual side — a real attempt that found no available
+payment number. `body` is the caller's raw JSON: no secrets ever appear in a deposit
+request (amount/phone/network only), so nothing needs redacting the way an auth header
+or a webhook signature would. Capped at 2000/500 characters (body/reason), same
+discipline as `providerDetail`'s own cap.
+
+**Admin panel:** a new "Recent rejected deposit attempts" card on the Deposits tab
+(`GET /admin/deposit-attempts/list`, `verifyAdmin`-gated, filtered through the same
+`scopeRowsToRegion()` every other admin list already uses, `truncated` judged on the raw
+read before the country filter) — shows When / User / Method (labelled the member-facing
+"Automatic (PAY A)" / "Manual (PAY B)", never the internal gateway name) / Reason given /
+and the raw JSON body in a `<pre>`, escaped. Ships **hidden entirely** when there is
+nothing to show — `depositAttemptsCard([])` returns `''` — an admin with no rejected
+attempts never sees an empty card. Rows are clickable through to the same user-detail
+modal every other admin list already opens.
+
+### A real naming collision, caught by the test suite itself
+The function was first named `recordDepositAttempt` — and Round 179b's own standing
+guard (`test-region-networks.js`, "the deposit-attempts auto-ban no longer exists")
+explicitly asserts that exact identifier is **absent from live code**, because it was
+the name of the REMOVED auto-ban attempt-counter (a different feature entirely, deleted
+for repeatedly producing false suspensions). Reusing the name would have silently made
+that guard meaningless the moment a function by that name existed again, for any reason.
+Renamed to `recordDepositRejection` before this shipped — no collision, and a clearer
+name for what it actually does (records a refusal, not an "attempt" in the banning
+sense the removed feature used that word for).
+
+### Tests
+`test-deposit-attempts.js` (new) runs the real `recordDepositRejection()` against a stub
+database — collection name, field shapes, null-safe with no userId/region, both caps,
+and that a write failure never throws back at the caller — then checks BOTH deposit
+routes' real bodies for the property that matters: each refusal actually calls it WITH
+that request's own `req.body`, not just that the helper is mentioned somewhere in the
+route (this project's own repeatedly-learned rule: check inside the block, not across
+the file). Also checks the new admin route's body (gated, region-scoped, truncated
+computed correctly) and **runs the real `depositAttemptsCard()`** lifted out of
+`admin-src/index.html`, including the empty-array case.
+
+`verify-deposit-attempts-discriminates.py` (new) — **14 mutations, all caught**, control
+correctly MISSED.
+
+**The fixture trap this project has now hit six times, caught before shipping this
+time.** The first coverage-sweep run reported 0 findings for the new admin copy —
+vacuously: `find_admin_fixtures.py` had no entry for `/admin/deposit-attempts/list`, so
+the unstubbed-route fallback (`{"status":"success"}`, no `attempts` field) meant
+`depositAttemptsCard([])` returned `''` and the new strings never rendered at all. Added
+`DEPOSIT_ATTEMPTS` (two rows, one per route) to the shared fixture module and its `R`
+dict entry; the sweep then found 6 real, genuine findings on the second run. Fixed with
+`admin-rows-18.py` (5 rows + 1 count-pattern) — admin panel now reports 0 findings in all
+five languages, confirmed by re-running the sweep with the fixture actually populated.
+
+Full 36-file Node suite green (35 pre-existing + the new one). Admin bundle rebuilt
+(round-trip OK); `admin/sw.js` bumped to `chipz-admin-shell-v33`. No member-frontend
+change, so `user/sw.js` was not touched.
+
+### What this diagnostic can and cannot tell you
+It shows exactly what the member's client sent and exactly which rule refused it — it
+does NOT create a deposit, touch a wallet, or retry anything. It is read-only evidence,
+same posture as `providerDetail`. The three Bantu translation columns are, as always
+throughout this table, a good-faith first pass wanting a native speaker's review before
+launch.
+
+### Owner still has to
+Nothing beyond the usual Sync fork + Railway redeploy for this to reach production. Once
+live, Admin → Deposits will show the new card the next time any deposit is refused before
+being created — including, if it recurs, the exact request body from any future Benin (or
+any other country's) phone-format report, without needing to ask for another screenshot.
+
