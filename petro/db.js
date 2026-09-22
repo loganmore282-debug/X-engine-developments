@@ -49,12 +49,12 @@ async function connectMongo(uri) {
     waitQueueTimeoutMS:       10000
   });
   await _client.connect();
-  // The database NAME comes from the URI path (mongodb+srv://.../chipz?...).
+  // The database NAME comes from the URI path (mongodb+srv://.../petro?...).
   // Refuse to start without one rather than falling back to a default: this
   // file was forked from Snow, where the fallback was 'snow', and an Atlas
   // ACCOUNT commonly hosts several of this owner's apps on one cluster. A
   // silent default is therefore not a harmless convenience -- it is how
-  // Chipz would end up writing members, deposits and withdrawals straight
+  // Petro would end up writing members, deposits and withdrawals straight
   // into a sibling project's live database, with no error and no signal
   // until the damage is done. Failing loudly at boot costs one clear message
   // in the deploy log; getting it wrong costs someone else's real money.
@@ -62,8 +62,8 @@ async function connectMongo(uri) {
   if (!dbName) {
     throw new Error(
       'MONGODB_URI is missing the database name. It must look like ' +
-      'mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/chipz?retryWrites=true&w=majority ' +
-      '-- note the "/chipz" before the "?". Without it this app would silently ' +
+      'mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/petro?retryWrites=true&w=majority ' +
+      '-- note the "/petro" before the "?". Without it this app would silently ' +
       'share a database with whatever else is on this cluster.'
     );
   }
