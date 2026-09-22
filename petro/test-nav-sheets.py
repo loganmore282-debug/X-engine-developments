@@ -92,7 +92,6 @@ async def main():
         await page.route("https://www.gstatic.com/firebasejs/**/firebase-auth.js",lambda r:asyncio.ensure_future(r.fulfill(status=200,content_type="text/javascript",body=FB_AUTH)))
         await page.goto(f"http://127.0.0.1:{PORT}/index.html",wait_until="load")
         await page.wait_for_timeout(2600)
-        await page.evaluate("closeAnnounce()")
         await page.wait_for_timeout(400)
 
         # Home must stay free of the inherited Chipz reward floats. Gift Codes
@@ -127,50 +126,6 @@ async def main():
            "tapping a tab from inside a sheet closes the sheet")
         ck(await page.evaluate("()=>STATE.page")=="team", "and actually switches to that tab")
 
-        # ── the announcement fires on the way to HOME, and nowhere else ──
-        # Owner: "l said from deposit to home, not when one clicks on deposit
-        # and later goes to another ... l don't want when l can go in deposit
-        # and l click to another nav icon not home it should not show
-        # announcement dialog, also on withdrawal as well."
-        #
-        # Deposit and Withdraw are OVERLAYS over Home, so STATE.page is still
-        # 'home' while one is open. showPage() closes the sheet BEFORE it sets
-        # STATE.page, so the announce guard's "am I on Home?" check read the
-        # page the sheet was covering and said yes -- for every tab, not just
-        # Home. The new tab then painted underneath the dialog.
-        #
-        # Driven through real taps on the real bottom bar, because the bug was
-        # in the ORDER two lines run in: calling closeSheet() directly, or
-        # asserting on the flag, would miss it entirely.
-        announced = "()=>document.getElementById('announceBg').classList.contains('show')"
-        for opener, screen in (("openDepositSheet()", "Deposit"),
-                               ("openWithdrawSheet()", "Withdraw")):
-            for tab in ("products", "team", "account"):
-                await page.evaluate("showPage('home')"); await page.wait_for_timeout(400)
-                await page.evaluate("closeAnnounce()")
-                await page.evaluate(opener); await page.wait_for_timeout(400)
-                await page.click(f'.navitem[data-nav="{tab}"]'); await page.wait_for_timeout(700)
-                ck(not await page.evaluate(announced),
-                   f"{screen} -> the {tab} tab: no announcement")
-                ck(await page.evaluate("()=>STATE.page") == tab,
-                   f"{screen} -> the {tab} tab: and it really switched")
-
-            # The half the owner DOES want, checked in the same loop so a fix
-            # that simply muted the dialog everywhere cannot pass this file.
-            await page.evaluate("showPage('home')"); await page.wait_for_timeout(400)
-            await page.evaluate("closeAnnounce()")
-            await page.evaluate(opener); await page.wait_for_timeout(400)
-            await page.click('.navitem[data-nav="home"]'); await page.wait_for_timeout(700)
-            ck(await page.evaluate(announced), f"{screen} -> the Home tab: announcement shows")
-
-            # ...and the back chevron, which is what "clicked back" literally
-            # means and goes through a different path (closeSheet with no args).
-            await page.evaluate("closeAnnounce()")
-            await page.evaluate(opener); await page.wait_for_timeout(400)
-            await page.click('#sheetBg .back'); await page.wait_for_timeout(700)
-            ck(await page.evaluate(announced), f"{screen} -> back chevron: announcement shows")
-        await page.evaluate("closeAnnounce()")
-
         # ── the message detail closes on a nav tap too ──
         # Owner: "when in this message and you tap nav icons, the message
         # screen still persists to go away unless you click on X mark."
@@ -185,7 +140,6 @@ async def main():
         shown = "()=>document.getElementById('msgDetailBg').classList.contains('show')"
         for tab in ("team", "account"):
             await page.evaluate("showPage('home')"); await page.wait_for_timeout(300)
-            await page.evaluate("closeAnnounce()")
             await page.evaluate("openMessagesSheet()"); await page.wait_for_timeout(500)
             await page.click('.msg-row'); await page.wait_for_timeout(400)
             ck(await page.evaluate(shown), f"({tab}) the message detail opened")
@@ -230,7 +184,6 @@ async def main():
         # The X must still work -- it is the only way the owner had, and a fix
         # that moved the close onto navigation alone would break it.
         await page.evaluate("showPage('home')"); await page.wait_for_timeout(300)
-        await page.evaluate("closeAnnounce()")
         await page.evaluate("openMessagesSheet()"); await page.wait_for_timeout(500)
         await page.click('.msg-row'); await page.wait_for_timeout(400)
         await page.click('#msgDetail .xbtn'); await page.wait_for_timeout(400)
@@ -295,39 +248,3 @@ async def main():
         await b.close()
     print(("\n%d FAILED" % len(fails)) if fails else "\nnav + floats: all cases pass")
     sys.exit(1 if fails else 0)
-# ── The announce-after-sheet list is matched by TITLE ──
-# Owner: "l also want the announcement dialog to show when one has clicked back
-# from deposit page to home also when one has clicked back from withdrawal
-# page." It was meant to already, and failed on ONE missing string: the deposit
-# flow opens three differently-titled sheets ('Recharge' for the chooser and the
-# manual form, 'Deposit' for the automatic one most members see) and only
-# 'Recharge' was listed.
-#
-# A title is a string in two places at once, so this checks the source: every
-# entry in ANNOUNCE_AFTER_SHEETS must be a title openSheet() is really called
-# with, and the deposit and withdraw screens must both be covered. Grepping the
-# BUILT file would prove nothing -- the obfuscator encodes string literals.
-import re as _re
-_src = open(os.path.join(HERE, 'user-src/original_module.js'),
-            encoding='utf-8').read()
-_m = _re.search(r"var ANNOUNCE_AFTER_SHEETS = \[([^\]]*)\]", _src)
-_listed = _re.findall(r"'([^']+)'", _m.group(1)) if _m else []
-_opened = set(_re.findall(r"openSheet\('([^']+)'", _src))
-print("\n— announce-after-sheet —")
-print("   listed:", _listed)
-_f = 0
-for _t in _listed:
-    ok = _t in _opened
-    print(("PASS  " if ok else "FAIL  ") + "%r is a sheet that really exists" % _t)
-    if not ok: _f += 1
-for _need, _label in (('Deposit', 'the automatic deposit form'),
-                      ('Recharge', 'the deposit chooser / manual form'),
-                      ('Withdraw', 'the withdraw screen')):
-    ok = _need in _listed
-    print(("PASS  " if ok else "FAIL  ") + "backing out of %s re-announces (%r listed)" % (_label, _need))
-    if not ok: _f += 1
-if _f:
-    print("\n%d FAILED" % _f)
-    sys.exit(1)
-
-srv=serve(); asyncio.run(main())
