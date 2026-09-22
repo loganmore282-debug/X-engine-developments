@@ -1638,7 +1638,25 @@ function statementIdFor(doc) {
   if (/^B2\d{16}$/.test(String(row.statementId || ''))) return row.statementId;
   const digest = crypto.createHash('sha256').update(String(doc.id)).digest();
   const suffix = String(digest.readUInt32BE(0) % 10000).padStart(4, '0');
-  return 'B2' + statementStamp(row.createdAt) + suffix;
+  let stamp = '';
+  const createdMs = tsMillis(row.createdAt);
+  if (createdMs) {
+    stamp = statementStamp(row.createdAt);
+  } else {
+    // Some very old ledger rows predate createdAt but still carry the
+    // immutable MM/DD/YYYY + HH:MM:SS fields. Use them so their public
+    // statement reference remains stable instead of borrowing "now".
+    const dm = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(row.date || ''));
+    const tm = /^(\d{2}):(\d{2}):(\d{2})/.exec(String(row.time || ''));
+    if (dm && tm) stamp = dm[3].slice(-2) + dm[1] + dm[2] + tm[1] + tm[2] + tm[3];
+  }
+  if (!stamp) {
+    // Last-resort stable numeric segment for malformed legacy rows.
+    const a = digest.readUInt32BE(4).toString().padStart(10, '0').slice(-10);
+    const b = String(digest.readUInt16BE(8) % 100).padStart(2, '0');
+    stamp = a + b;
+  }
+  return 'B2' + stamp + suffix;
 }
 function tsMillis(v) {
   if (!v) return 0;
