@@ -1365,6 +1365,112 @@ section.
 - `package-lock.json`'s `name` field was still `"chipz-server"` (the
   `package.json` rename didn't touch the lockfile). Fixed to `petro-server`.
 
+## 2026-09-22 — fresh Petro visual rebuild / Chipz inheritance audit
+
+Owner direction for this round was explicit: **build the member/admin visual
+identity afresh rather than continuing to patch the Chipz fork.** The current
+Petro design system is therefore no longer an open question:
+
+- Corporate Red **#E30613**
+- Clean White
+- Golden Orange **#F5A000–#FFB000**
+- Charcoal **#25262B**
+- **Inter** for member UI/body/numbers; do not reintroduce Barlow Condensed.
+- Interaction motion is restrained and functional. Do not restore Chipz's
+  spring/squash/overshoot tab motion, perpetual CTA sheen, wallet sheen, or
+  treasure-chest bounce.
+
+### What was verified, not assumed
+
+The current branch was audited directly against `chipz/user/`. Blob hashes
+confirmed that these Petro files were still **byte-for-byte identical to
+Chipz artwork**: `treasure-chest.png`, `turntable.png`,
+`spin-wheel.png`, `copy-clip.png`, `pay-success.png`,
+`pay-failed.png`, `logout-door.png`, all legacy `nav-*.png`,
+`act-*.png`, and `set-*.png`. Only `icon-192.png` and
+`icon-512.png` were already Petro-specific. The identical Chipz artwork is
+now removed from `petro/user/`, and there are no live static references to
+it in member source or the user service worker.
+
+### Member UI rebuild completed
+
+- Bottom navigation is now a clean white industrial rail with a restrained
+  red top indicator and a short signal-dip tap response. The inherited
+  `navBoxBounce` / `navIconBounce` choreography is gone.
+- The old perpetual filled-button highlight sweep is gone.
+- The payout-account screen no longer imitates a plastic bank card: no EMV
+  chip, no card-number treatment, no animated sheen. It is a mobile-money
+  **Payout Wallet** status panel with provider, linked state, number, holder,
+  and network. Account navigation also says **Payout Wallet** rather than
+  **Bind Bank Account**.
+- Gift Codes no longer uses Chipz treasure-chest artwork/metaphor. Redemption
+  and reward-result UI are Petro red/gold vector treatments while the same
+  backend redeem flow remains intact.
+- Team, copy, payment success/failure, settings helper, and payout-wallet
+  visuals no longer depend on inherited raster artwork; inline Petro SVGs are
+  used instead.
+- The dead Home treasure float / `chestBounce` CSS is deleted. Home must
+  carry **zero** inherited treasure/turntable reward floats.
+- The unreachable old Turntable presentation code and old Home “Go spin”
+  banner were removed. **Turntable transaction-history types are retained**
+  so historical ledger records still render; no money ledger semantics were
+  removed.
+- The configurable “System default” number font no longer points back to
+  Barlow Condensed; it uses Inter/system sans.
+- Static page description / OpenGraph branding says Petro rather than Chipz.
+- Existing sheet-header Corporate Red + white-chevron treatment, Inter body
+  font, and Android Chrome `translateZ(0)` sheet compositing fix remain in
+  place.
+
+### Admin / shell cleanup completed
+
+- Admin theme color is Corporate Red; inherited brown/pink gradient logo and
+  button treatments were replaced by the Petro palette.
+- Admin default/example domains now use Petro naming rather than
+  `chipz-platform.com`.
+- **Real fork bug fixed:** `admin/sw.js` was still initialized against
+  Chipz Firebase (`chipz-23a4c`) and labeled background pushes “Chipz
+  Admin”. It now uses Petro's public `chnpetrol` Firebase web config and
+  “Petro Admin”.
+- User SW cache is now **`petro-shell-v126`** (real-change cache bump);
+  vendor/brand cache names are Petro-specific and the shell precache contains
+  only the actual app shell + Petro icons, not the removed Chipz raster pack.
+- Admin SW cache is `petro-admin-shell-v36`.
+- Old-browser build fallbacks now say Petro / Petro Admin.
+
+### Build / verification result for this round
+
+Both generated bundles were rebuilt from their real source folders with the
+repository's own scripts. **Both printed `round-trip OK`** and passed
+source/obfuscated syntax checks.
+
+The final verification run passed:
+- source syntax checks for member module, server, user SW, admin SW
+- guard asserting no live legacy Chipz raster references
+- `node build-core.js`
+- `node build-admin.js`
+- `test-code-security.js`
+- updated Petro branding regression test
+- `test-visible-text.py` in Chromium: all main screens visible, no
+  opacity-zero text offenders, no page errors, rendered region nonblank
+- updated `test-nav-sheets.py` in Chromium
+
+Two inherited tests are explicitly **not valid release gates as written**:
+- `test-audit-money-regressions.js` requires a source anchor
+  `async function _lipaParse(` that is already absent on the untouched
+  pre-redesign target branch.
+- `test-csp-runtime.py` treats the current bare-HTTP VPS test icon
+  `http://179.198.197.114:3000/public/app-icon-192.png` as a legitimate
+  image while the unchanged baseline CSP intentionally allows images from
+  self/data/blob/HTTPS only. That mismatch predates this redesign; do not
+  loosen CSP merely to make that fixture pass. Revisit together with the
+  planned real HTTPS domain/backend-origin cutover.
+
+The navigation test was also updated to match product decisions already in
+this file: the announcement dialog has been removed, Home has no reward
+floats, and the unreachable Turntable screen is not a navigation contract.
+
+
 ## Status
 
 **Fork complete, mechanically.** Boots as "Petro" in name (title, manifest,
@@ -1428,12 +1534,11 @@ the next session, laid out below in the order it probably needs doing:
    built this session, see "OTP verification (MarzSms)" above. Remaining:
    paste in `MARZSMS_KEY`, then `git pull` + redeploy on the VPS so any of
    this session's changes (OTP included) actually take effect there.
-3. Decide the actual oil/gas visual identity — palette, typography, iconography
-   — with the owner, the same deliberate way Chipz's own `CLAUDE.md` records
-   getting its own red/orange identity right (see "Design language / decisions
-   already made" in `chipz/CLAUDE.md` for the *process*, not the *values* —
-   the values are Chipz's). **Waiting on the owner's direction, per "Fixed
-   decisions" above — do not invent this unprompted.**
+3. ~~Decide the actual oil/gas visual identity~~ — done 2026-09-22. Petro's
+   fixed system is Corporate Red #E30613 / Clean White / Golden Orange
+   #F5A000–#FFB000 / Charcoal #25262B with Inter and restrained industrial
+   motion. See the fresh-rebuild section immediately above; do not re-import
+   Chipz visuals or interaction choreography.
 4. Decide the product catalog: real names, prices, cycle lengths.
 5. Decide which countries/currencies/languages/payment gateways actually apply
    to Petro — do not assume Uganda/UGX/MarzPay just because the code defaults
