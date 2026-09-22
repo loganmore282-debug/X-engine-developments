@@ -1979,3 +1979,55 @@ Implemented without changing any deposit/withdraw business logic:
 Still unchanged/open from the prior note: Deposit and Withdraw are still
 implemented through `openSheet()`; this round reframed the pages visually
 only and did **not** convert them into new `STATE.page` routes.
+
+## 2026-09-22 — Assets / Network / Wallet cleanup; Android wallet-input delay
+
+Owner sent live screenshots showing three remaining user-panel problems: the Assets
+NaN
+NaN
+NaN
+NaN
+NaN
+
+Changes made this round:
+- **My Assets is now a Petro-native renderer**, not `myProductsInnerHtml()`. It shows
+NaN
+NaN
+NaN
+NaN
+- Assets no longer carries the extra top slogan/header band. The tab strip is a
+NaN
+- **Network was reduced to essentials**: invitation code, invitation link, Level
+NaN
+NaN
+NaN
+NaN
+- The `Reliable · Sustainable · Together` strip was removed from Home/Assets/Network
+NaN
+- **Wallet linked state now renders only the local mobile-money number (for example
+NaN
+NaN
+NaN
+NaN
+NaN
+- Delete uses the existing `/bank/delete` endpoint and refreshes `STATE.bankAccounts`;
+NaN
+- **Keyboard/input-delay root cause found in the page lifecycle:** with a cached empty
+NaN
+NaN
+NaN
+NaN
+- Also removed the stale `transform:translateZ(0); will-change:transform` from
+NaN
+NaN
+NaN
+NaN
+- The inherited orange/yellow scrollbar thumb was changed to Petro Corporate Red.
+- Network/Assets cold-load states now use the existing small Petro ring loader instead
+NaN
+- `user/sw.js` bumped `petro-shell-v131` → `petro-shell-v132`.
+- `node build-core.js` ran successfully in GitHub Actions: source syntax OK,
+NaN
+NaN
+- Work was based on current `claude/petro-platform-build` and merged normally through
+NaN
