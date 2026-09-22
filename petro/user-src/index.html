@@ -1177,26 +1177,26 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    into a square. */
 .logout-btn img{height:17px;width:auto;display:block;flex-shrink:0;}
 
-/* ── Payout Wallet: Petro industrial status panel ──
-   This deliberately stops pretending a mobile-money payout account is a
-   plastic bank card. No EMV chip, no card sheen and no card-number layout. */
-.wallet-card{position:relative;border-radius:var(--r-card);padding:20px 20px 18px 24px;color:var(--snow-ink);overflow:hidden;margin-bottom:18px;background:linear-gradient(135deg,#fff 0%,#fffaf0 100%);border:1px solid #f0e7d8;box-shadow:0 16px 32px -26px rgba(37,38,43,.55);}
-.wallet-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,var(--snow-wine),var(--chipz-gold));}
-.wallet-card::after{content:'';position:absolute;right:-42px;top:-54px;width:132px;height:132px;border-radius:50%;border:18px solid rgba(245,160,0,.08);pointer-events:none;}
+/* ── Payout Wallet hero ──
+   Withdrawal gets one deliberate surface: the linked mobile-money wallet.
+   The phone number is the hero value; everything around it stays secondary. */
+.wallet-card{position:relative;border-radius:22px;padding:20px 20px 18px;color:#fff;overflow:hidden;margin:0 0 10px;background:var(--snow-ink);border:0;box-shadow:0 18px 38px -28px rgba(37,38,43,.9);}
+.wallet-card::before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,var(--snow-wine),var(--chipz-gold));}
+.wallet-card::after{content:'';position:absolute;right:-46px;bottom:-70px;width:150px;height:150px;border-radius:50%;border:20px solid rgba(245,160,0,.08);pointer-events:none;}
 .wallet-card .row1{position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
-.wallet-ident{display:flex;align-items:center;gap:11px;min-width:0;}
-.wallet-card .wc-mark{width:42px;height:42px;border-radius:12px;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.wallet-card .wc-mark svg{width:22px;height:22px;}
-.wallet-card .wallet-kicker{font-size:10px;line-height:1.2;letter-spacing:.11em;text-transform:uppercase;color:var(--snow-muted);font-weight:700;margin-bottom:4px;}
-.wallet-card .provider{font-size:17px;font-weight:750;letter-spacing:0;color:var(--snow-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;}
-.wallet-card .wallet-status{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:var(--snow-green);background:var(--snow-green-soft);border:1px solid rgba(26,122,62,.14);padding:6px 10px;border-radius:var(--r-pill);white-space:nowrap;}
-.wallet-card .wallet-status.empty{color:var(--snow-muted);background:var(--snow-neutral-soft);border-color:var(--snow-border);}
-.wallet-card .wallet-number-label{position:relative;z-index:1;margin-top:22px;font-size:11px;color:var(--snow-muted);font-weight:600;}
-.wallet-card .num{position:relative;z-index:1;font-size:22px;letter-spacing:.035em;margin-top:5px;font-weight:800;color:var(--snow-ink);font-variant-numeric:tabular-nums;}
-.wallet-card .wallet-meta{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(37,38,43,.08);}
+.wallet-ident{display:flex;align-items:center;gap:10px;min-width:0;}
+.wallet-card .wc-mark{width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.09);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.wallet-card .wc-mark svg{width:20px;height:20px;}
+.wallet-card .wallet-kicker{font-size:9.5px;line-height:1.2;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.58);font-weight:700;margin-bottom:3px;}
+.wallet-card .provider{font-size:15px;font-weight:650;letter-spacing:0;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;}
+.wallet-card .wallet-status{font-size:10px;font-weight:750;letter-spacing:.03em;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);padding:5px 9px;border-radius:var(--r-pill);white-space:nowrap;}
+.wallet-card .wallet-status.empty{color:rgba(255,255,255,.62);background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);}
+.wallet-card .wallet-number-label{position:relative;z-index:1;margin-top:26px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:650;}
+.wallet-card .num{position:relative;z-index:1;font-size:28px;line-height:1.15;letter-spacing:.025em;margin-top:6px;font-weight:720;color:#fff;font-variant-numeric:tabular-nums;}
+.wallet-card .wallet-meta{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:22px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1);}
 .wallet-card .meta-item{min-width:0;}
-.wallet-card .meta-item span{display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);font-weight:700;margin-bottom:4px;}
-.wallet-card .meta-item b{display:block;font-size:13px;color:var(--snow-ink);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wallet-card .meta-item span{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:650;margin-bottom:4px;}
+.wallet-card .meta-item b{display:block;font-size:12.5px;color:#fff;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .wallet-panel{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:20px;margin-bottom:20px;}
 .wallet-panel .lbl{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 6px;}
 .wallet-panel .field{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:50px;display:flex;align-items:center;padding:0 15px;margin-bottom:16px;gap:8px;}
@@ -1223,71 +1223,47 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .wallet-summary .masked{font-size:14px;color:var(--snow-muted);}
 .wallet-summary .holder{font-size:13px;font-weight:500;text-align:right;line-height:1.3;}
 
-/* ── Deposit (Deposit.dc.html) ──
-   Chipz's own deposit screen, replacing the Recharge form inherited from
-   Snow: red-bar section headers, a 3-column grid of quick-amount chips with
-   the picked one filled, the amount field UNDER the chips, an explicit
-   payment-method row, a dark-prefixed phone field, and the numbered
-   instruction card. */
-.dep-sec{display:flex;align-items:center;gap:9px;margin:0 0 12px;}
-.dep-sec .bar{width:4px;height:19px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;}
-.dep-sec span{font-size:17px;font-weight:600;letter-spacing:.02em;}
-/* Owner: "its not a must that quick amounts will always be big, cards,
-   please change positions and designs" -- the old 3-column grid of tall,
-   green-shadowed chips read as a wall of big cards. Rebuilt smaller and
-   denser: 4 per row, pill-shaped, flat (no card shadow), so the amount
-   field below reads as the primary control and the chips as a compact
-   shortcut row above it, not the other way around. */
-.dep-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
-.dep-chip{flex:0 0 auto;text-align:center;padding:9px 14px;border-radius:var(--r-pill);font-weight:600;font-size:13px;border:1.4px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;box-shadow:none;}
-.dep-chip.sel{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:none;}
-/* Kept in step with .wit-amt on purpose -- same control, sibling screen. */
-.dep-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:24px;}
-.dep-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-/* height matters here. Every other field on this screen (.dep-amt, .wit-amt,
-   .wit-pw, .pw-field) sets one; this row alone did not, so it collapsed to
-   its text and rendered 19px tall -- a third the height of the box above it,
-   and a genuinely hard tap target on a phone. Owner: "the number text area is
-   very small". 56px, slightly above the others, because it is the one field
-   on this screen that must be typed into. */
-.dep-phone{display:flex;align-items:stretch;height:56px;border-radius:var(--r-ctl);overflow:hidden;border:1.6px solid var(--snow-border);margin-bottom:8px;background:var(--snow-surface);}
-.dep-phone .prefix{background:var(--snow-ink);color:#fff;font-weight:700;display:flex;align-items:center;padding:0 14px;font-size:15px;flex-shrink:0;}
-.dep-phone input{border:0;outline:0;background:transparent;flex:1;padding:0 12px;font-family:inherit;font-size:15px;color:var(--snow-ink);min-width:0;}
-.dep-hint{font-size:12px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
-.dep-instr{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:18px;}
-.dep-instr .ih{display:flex;align-items:center;margin-bottom:10px;}
-.dep-instr .ih span{font-weight:700;font-size:17px;}
-.dep-instr .ln{height:1px;background:var(--snow-border);margin-bottom:10px;}
-.dep-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:13px;font-weight:500;line-height:1.9;}
+/* ── Deposit: flat transaction form ──
+   One hierarchy, no secondary cards: amount first, quick values as shortcuts,
+   then payment phone. Inputs stay controls; instructions sit directly on page. */
+.dep-sec{display:flex;align-items:center;margin:0 0 10px;}
+.dep-sec .bar{display:none;}
+.dep-sec span{font-size:13px;font-weight:650;letter-spacing:.02em;color:var(--snow-muted);}
+.dep-amt{height:64px;display:flex;align-items:center;padding:0 2px;margin-bottom:8px;background:transparent;border:0;border-bottom:1.6px solid var(--snow-border);border-radius:0;}
+.dep-amt:focus-within{border-bottom-color:var(--snow-wine);}
+.dep-amt input{border:0;outline:0;background:transparent;font-size:30px;font-weight:650;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;font-variant-numeric:tabular-nums;}
+.dep-chips{display:flex;flex-wrap:wrap;gap:0 18px;margin:0 0 30px;border-bottom:1px solid var(--line-soft);padding:0 0 14px;}
+.dep-chip{flex:0 0 auto;text-align:left;padding:8px 0 6px;border-radius:0;font-weight:550;font-size:12.5px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--snow-muted);font-family:inherit;box-shadow:none;}
+.dep-chip.sel{background:transparent;color:var(--snow-wine);border-bottom-color:var(--snow-wine);box-shadow:none;font-weight:700;}
+.dep-phone{display:flex;align-items:center;height:58px;border-radius:0;overflow:visible;border:0;border-bottom:1.6px solid var(--snow-border);margin-bottom:8px;background:transparent;}
+.dep-phone:focus-within{border-bottom-color:var(--snow-wine);}
+.dep-phone .prefix{background:transparent;color:var(--snow-ink);font-weight:700;display:flex;align-items:center;padding:0 12px 0 0;font-size:15px;flex-shrink:0;border-right:1px solid var(--snow-border);}
+.dep-phone input{border:0;outline:0;background:transparent;flex:1;padding:0 0 0 12px;font-family:inherit;font-size:16px;color:var(--snow-ink);min-width:0;}
+.dep-hint{font-size:11.5px;color:var(--snow-muted);font-weight:450;margin:0 0 8px;}
+.dep-instr{background:transparent;border:0;border-top:1px solid var(--line-soft);border-radius:0;padding:20px 0 0;}
+.dep-instr .ih{display:flex;align-items:center;margin-bottom:8px;}
+.dep-instr .ih span{font-weight:700;font-size:15px;}
+.dep-instr .ln{display:none;}
+.dep-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:12.5px;font-weight:450;line-height:1.8;}
 
-/* ── Withdraw (Withdraw.dc.html) ── */
-.wit-bal{background:linear-gradient(120deg,#eaf7ee 0%,#fdf0da 55%,#fbe6ea 100%);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:18px 20px;margin-bottom:20px;box-shadow:var(--sh-card);}
-/* Owner: "you see the difference on withdrawal screen with my mockups,
-   things are small even see number, it is small in size, and words."
-   Measured rather than guessed: his mockup and a screenshot of the live
-   screen are both 720px wide, so glyph heights compare directly. Three
-   things came back genuinely undersized, all by the same ~1.45x --
-   the balance figure (38 -> 55 device px of ink), the amount you type
-   (19 -> 28) and the trade-password field (14 -> 21). Everything else on
-   the screen already matched or beat the mockup: the section headings are
-   23 against his 24, and the instruction list is 18-23 against his 16.
-   Those are left alone deliberately -- scaling them too would overshoot
-   the thing he actually pointed at. */
-.wit-bal .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--snow-muted);font-weight:500;}
-.wit-bal .val{font-size:40px;color:var(--snow-ink);margin-top:6px;}
-/* The field grows with its text. Leaving the 52px height while the type
-   goes 16 -> 23px puts the digits hard against the border. */
-.wit-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:22px;gap:10px;}
-.wit-amt span{color:var(--snow-muted);font-weight:700;font-size:21px;}
-.wit-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.btn-bind{display:block;width:100%;height:52px;border:1px solid rgba(227,6,19,.16);border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);font-weight:750;font-size:15px;margin-bottom:22px;font-family:inherit;}
-.wit-pw{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:12px;}
+/* ── Withdraw: wallet-led, flat form ──
+   The payout wallet is the only hero card. Balance, amount, fee and guidance
+   are intentionally page-level information instead of stacked cards. */
+.wit-bal{background:transparent;border:0;border-radius:0;padding:18px 0 10px;margin:0;box-shadow:none;border-bottom:1px solid var(--line-soft);}
+.wit-bal .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--snow-muted);font-weight:650;}
+.wit-bal .val{font-size:24px;font-weight:650;color:var(--snow-ink);margin-top:5px;font-variant-numeric:tabular-nums;}
+.wit-amt{background:transparent;border:0;border-bottom:1.6px solid var(--snow-border);border-radius:0;height:68px;display:flex;align-items:center;padding:0 2px;margin-bottom:16px;gap:10px;}
+.wit-amt:focus-within{border-bottom-color:var(--snow-wine);}
+.wit-amt span{color:var(--snow-muted);font-weight:650;font-size:15px;}
+.wit-amt input{border:0;outline:0;background:transparent;font-size:30px;font-weight:650;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;font-variant-numeric:tabular-nums;}
+.btn-bind{display:block;width:auto;height:auto;border:0;border-radius:0;background:transparent;color:var(--snow-wine);font-weight:700;font-size:12.5px;margin:0 0 10px auto;padding:8px 0;font-family:inherit;}
+.wit-pw{background:transparent;border:0;border-bottom:1.6px solid var(--snow-border);border-radius:0;height:62px;display:flex;align-items:center;padding:0 2px;margin-bottom:12px;}
 .wit-pw input{border:0;outline:0;background:transparent;font-size:22px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.wit-fee{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
-.wit-instr{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:18px;}
-.wit-instr h3{font-size:17px;font-weight:700;margin:0 0 10px;}
-.wit-instr .ln{height:1px;background:var(--snow-border);margin-bottom:10px;}
-.wit-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:13px;font-weight:500;line-height:1.9;}
+.wit-fee{font-size:12px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
+.wit-instr{background:transparent;border:0;border-top:1px solid var(--line-soft);border-radius:0;padding:20px 0 0;}
+.wit-instr h3{font-size:15px;font-weight:700;margin:0 0 8px;}
+.wit-instr .ln{display:none;}
+.wit-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:12.5px;font-weight:450;line-height:1.8;}
 
 /* ── Notify dialog (Notify.dc.html) ── */
 /* A dark, small, centred toast -- owner: "don't send the same notify design

@@ -5787,8 +5787,8 @@ function openDepositFormSheet(){
   const s = STATE.settings || {};
   openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
-    <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
     <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
+    <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
 
     <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
     <div class="dep-phone">
@@ -6204,6 +6204,9 @@ function paintWithdrawSheet(s){
   const w = (STATE.bankAccounts || [])[0] || null;
   const fee = s.withdrawFeePct || 15;
   $('sheetBody').innerHTML = `<div class="reveal-in" style="padding-top:18px;">
+    ${walletCardHtml(w)}
+    <button class="btn-bind" type="button" onclick="openWalletSheet()">${w ? 'Change Wallet' : 'Bind Wallet'}</button>
+
     <div class="wit-bal">
       <div class="lbl">Available Balance</div>
       <div class="val">${fmtUGX2(balance)}</div>
@@ -6212,10 +6215,6 @@ function paintWithdrawSheet(s){
       <span>${esc(cur())}</span>
       <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="syncWithdrawReceiveAmt()">
     </div>
-
-    <div class="dep-sec"><span class="bar"></span><span>Withdrawal Wallet</span></div>
-    ${walletCardHtml(w)}
-    <button class="btn-bind" type="button" onclick="openWalletSheet()">${w ? 'Change Wallet' : 'Bind Wallet'}</button>
 
     <div class="wit-fee">Fee: ${fee}%</div>
     <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
