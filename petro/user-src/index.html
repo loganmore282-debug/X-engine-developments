@@ -248,34 +248,13 @@ h1,h2,h3,.section-title,.stat-val,.bal-value{}
 button{cursor:pointer;font-family:inherit;}
 input{font-family:inherit;}
 a{color:inherit;}
-/* Owner: "l want the scroll bar to be orange not dull color."
- *
- * This needs BOTH properties, and only one of them is the one he can see.
- *
- * The file used to say `::-webkit-scrollbar{display:none}`, which is why the
- * bar he is looking at is grey: Android always draws OVERLAY scrollbars, and
- * since Chromium 121 overlay scrollbars are painted natively and ignore the
- * ::-webkit-scrollbar pseudo-elements entirely. The rule was not being
- * disobeyed -- it simply does not reach that scrollbar, so the phone fell
- * back to the system thumb. The standard `scrollbar-color` is the one thing
- * overlay scrollbars do obey.
- *
- * ::-webkit-scrollbar is kept for the classic (non-overlay) scrollbars an
- * older Chromium or a desktop browser still draws, where `scrollbar-color`
- * alone would leave a default-width grey track around an orange thumb.
- *
- * scrollbar-color is an INHERITED property, so setting it on the root covers
- * every scroller in the app -- the sheets, the announcement body, the message
- * detail, the manual-pay overlay -- without naming any of them. Naming them
- * is how the next one added gets missed.
- *
- * The track is transparent on purpose: a filled track on a phone is a grey
- * stripe down the edge of every screen, which is the thing being removed. */
-html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
-::-webkit-scrollbar{width:6px;height:6px;}
+/* Petro uses the corporate red scrollbar. The inherited orange/yellow thumb
+   was a Chipz-era visual residue and is intentionally gone. */
+html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
+::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:var(--chipz-orange);border-radius:var(--r-pill);}
-::-webkit-scrollbar-thumb:hover{background:var(--snow-wine);}
+::-webkit-scrollbar-thumb{background:var(--snow-wine);border-radius:var(--r-pill);}
+::-webkit-scrollbar-thumb:hover{background:var(--snow-wine-deep);}
 ::-webkit-scrollbar-corner{background:transparent;}
 
 .app-card{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);box-shadow:var(--sh-card);}
@@ -820,61 +799,57 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .ar-ic.ar-dark{background:var(--snow-neutral-soft);color:var(--snow-ink);}
 .logout-btn-v2{width:100%;height:52px;border-radius:var(--r-pill);border:none;background:var(--snow-wine-soft);color:var(--snow-wine);font-family:inherit;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .logout-btn-v2 svg{width:18px;height:18px;}
-/* ── Network screen (owner's mockup) ── */
-.net-subhead{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;padding:2px 18px 16px;background:var(--chipz-grad);color:#fff;}
-.net-title{font-size:20px;font-weight:800;line-height:1;}
-.net-sub{font-size:12px;font-weight:600;opacity:.9;margin-top:4px;}
-.net-tag{font-size:11px;font-weight:700;opacity:.85;border-bottom:2px solid rgba(255,255,255,.6);padding-bottom:2px;}
-.net-hero{margin:0 18px 16px;border-radius:var(--r-card);padding:20px;background:var(--snow-surface);background-size:cover;background-position:center;box-shadow:var(--sh-card);}
-.net-hero-title{font-size:19px;font-weight:800;color:var(--snow-ink);line-height:1.25;}
-.net-hero-sub{font-size:12.5px;color:var(--snow-muted);font-weight:500;margin:8px 0 14px;max-width:78%;line-height:1.45;}
-.net-hero-btn{background:var(--chipz-grad);color:#fff;border:none;font-family:inherit;font-weight:700;font-size:13.5px;padding:11px 18px;border-radius:var(--r-pill);display:flex;align-items:center;gap:4px;}
-.net-hero-btn svg{width:15px;height:15px;}
-.net-code-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 18px;margin-bottom:16px;}
-.net-code-box{background:var(--snow-wine-soft);border-radius:var(--r-card);padding:12px;display:flex;align-items:center;gap:9px;min-width:0;}
-.nc-ic{color:var(--snow-wine);flex-shrink:0;display:flex;}
-.nc-ic svg{width:18px;height:18px;}
-.net-code-box > div{min-width:0;flex:1;}
-.nc-lbl{font-size:10.5px;color:var(--snow-muted);font-weight:600;}
-.nc-val{font-size:14px;font-weight:800;color:var(--snow-ink);margin-top:2px;}
-.nc-val.nc-link{font-size:10.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.nc-copy{background:none;border:none;color:var(--snow-wine);flex-shrink:0;display:flex;padding:2px;}
-.nc-copy svg{width:15px;height:15px;}
-.net-comm-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:0 18px;margin-bottom:16px;}
-.net-comm-card{border-radius:var(--r-card);padding:13px 10px;box-shadow:var(--sh-card);}
-.net-comm-card.nc-red{background:var(--snow-wine-soft);}
-.net-comm-card.nc-gold{background:var(--snow-wave-on-wine);}
-.net-comm-card.nc-dark{background:var(--snow-neutral-soft);}
-.ncc-lbl{font-size:10.5px;font-weight:700;color:var(--snow-muted);}
-.ncc-pct{font-size:22px;font-weight:800;margin-top:4px;}
-.nc-red .ncc-pct{color:var(--snow-wine);}
-.nc-gold .ncc-pct{color:var(--chipz-gold);}
-.nc-dark .ncc-pct{color:var(--snow-ink);}
-.ncc-sub{font-size:9.5px;color:var(--snow-muted);font-weight:500;line-height:1.3;margin-top:5px;}
-.net-trophy-card{margin:0 18px 16px;padding:15px 16px;border-radius:var(--r-card);background:linear-gradient(100deg,#fff6e0 0%,#ffe9bd 100%);display:flex;align-items:center;gap:12px;box-shadow:var(--sh-card);}
-.ntc-ic{color:var(--chipz-gold);flex-shrink:0;display:flex;}
-.ntc-title{font-size:14.5px;font-weight:800;color:var(--snow-ink);}
-.ntc-sub{font-size:11px;color:var(--snow-muted);font-weight:500;margin-top:2px;}
-.net-recent{margin:0 18px 20px;background:var(--snow-surface);border-radius:var(--r-card);padding:14px;box-shadow:var(--sh-card);}
-.net-recent-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
-.nrh-ic{color:var(--snow-wine);display:flex;}
-.nrh-ic svg{width:18px;height:18px;}
-.nrh-title{flex:1;font-size:14.5px;font-weight:800;color:var(--snow-ink);}
-.nrh-more{background:none;border:none;font-family:inherit;font-size:12px;font-weight:700;color:var(--snow-wine);display:flex;align-items:center;gap:2px;}
-.nrh-more svg{width:12px;height:12px;}
-.net-recent-row{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--snow-border);}
-.net-recent-row:first-child{border-top:none;padding-top:0;}
-.nrr-avatar{width:34px;height:34px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.nrr-avatar svg{width:17px;height:17px;}
-.nrr-text{flex:1;min-width:0;}
-.nrr-phone{font-size:12.5px;font-weight:700;color:var(--snow-ink);}
-.nrr-level{font-size:10px;font-weight:600;color:var(--snow-muted);margin-left:4px;}
-.nrr-date{font-size:10.5px;color:var(--snow-muted);margin-top:2px;}
-.nrr-status{flex-shrink:0;font-size:10.5px;font-weight:700;color:var(--snow-green);background:var(--snow-green-soft);padding:5px 10px;border-radius:var(--r-pill);}
-/* ── Assets screen (owner's mockup) ── */
-.assets-tabs{display:flex;gap:8px;padding:0 18px;margin:12px 0 14px;}
-.assets-tabs .at{flex:1;text-align:center;padding:12px 0;border-radius:var(--r-ctl);font-weight:700;font-size:13.5px;border:none;font-family:inherit;background:var(--snow-neutral-soft);color:var(--snow-muted);}
-.assets-tabs .at.on{background:var(--chipz-grad);color:#fff;}
+/* ── Network: compact Petro view ──
+   The old mockup pass stacked a hero, slogans, two invite cards, three member
+   cards, an earnings card, three commission cards, a trophy card and recent
+   referrals. The owner explicitly rejected that density. Keep only the facts
+   and actions needed on this screen. */
+.net-simple{padding:14px 18px 0;}
+.net-invite-line{display:flex;align-items:center;gap:12px;padding:15px 0;border-bottom:1px solid var(--snow-border);}
+.net-invite-line>div{flex:1;min-width:0;}
+.net-invite-line span{display:block;font-size:11px;color:var(--snow-muted);font-weight:550;margin-bottom:4px;}
+.net-invite-line b{display:block;font-size:16px;color:var(--snow-ink);font-weight:700;}
+.net-invite-line .net-link{font-size:12px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--snow-ink);}
+.net-invite-line button{width:34px;height:34px;border:0;background:transparent;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
+.net-invite-line button svg{width:18px;height:18px;}
+.net-levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:22px 0;border-top:1px solid var(--snow-border);border-bottom:1px solid var(--snow-border);}
+.net-levels>div{text-align:center;padding:16px 8px;position:relative;}
+.net-levels>div+div::before{content:'';position:absolute;left:0;top:14px;bottom:14px;width:1px;background:var(--snow-border);}
+.net-levels b{display:block;font-size:23px;color:var(--snow-ink);font-weight:700;}
+.net-levels span{display:block;font-size:11px;color:var(--snow-muted);margin-top:3px;}
+.net-levels small{display:block;font-size:12px;color:var(--snow-wine);font-weight:700;margin-top:5px;}
+.net-earn-simple{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0 16px;}
+.net-earn-simple>div:first-child{min-width:0;}
+.net-earn-simple span{display:block;font-size:11px;color:var(--snow-muted);margin-bottom:4px;}
+.net-earn-simple b{display:block;font-size:24px;color:var(--snow-ink);font-weight:700;}
+.net-earn-actions{display:flex;align-items:center;gap:8px;}
+.net-earn-actions button{border:0;background:transparent;color:var(--snow-wine);font-family:inherit;font-weight:700;font-size:12px;padding:8px;}
+.net-earn-actions button svg{width:18px;height:18px;display:block;}
+
+/* ── Assets ── */
+.assets-tabs{display:flex;gap:24px;padding:18px 18px 8px;margin:0 0 14px;border-bottom:1px solid var(--snow-border);}
+.assets-tabs .at{flex:0 0 auto;text-align:left;padding:0 0 10px;border-radius:0;font-weight:650;font-size:13.5px;border:none;border-bottom:2px solid transparent;font-family:inherit;background:transparent;color:var(--snow-muted);}
+.assets-tabs .at.on{background:transparent;color:var(--snow-wine);border-bottom-color:var(--snow-wine);}
+.my-assets-list{display:flex;flex-direction:column;}
+.my-asset-row{padding:16px 0;border-bottom:1px solid var(--snow-border);}
+.my-asset-row:last-child{border-bottom:0;}
+.mar-head{display:flex;align-items:center;gap:11px;}
+.mar-thumb{width:44px;height:44px;border-radius:10px;overflow:hidden;background:var(--snow-neutral-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--snow-muted);font-weight:750;}
+.mar-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.mar-id{flex:1;min-width:0;}
+.mar-name{font-size:14.5px;font-weight:700;color:var(--snow-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mar-date{font-size:10.5px;color:var(--snow-muted);margin-top:3px;}
+.mar-status{font-size:10.5px;font-weight:700;color:var(--snow-wine);flex-shrink:0;}
+.my-asset-row.done .mar-status{color:var(--snow-green);}
+.mar-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px;}
+.mar-values span{display:block;font-size:9.5px;color:var(--snow-muted);margin-bottom:3px;}
+.mar-values b{display:block;font-size:11.5px;color:var(--snow-ink);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mar-progress{height:3px;background:var(--snow-border);margin-top:13px;overflow:hidden;border-radius:var(--r-pill);}
+.mar-progress i{display:block;height:100%;background:var(--snow-wine);border-radius:inherit;}
+.my-asset-row.done .mar-progress i{background:var(--snow-green);}
+.mar-foot{display:flex;justify-content:space-between;gap:12px;margin-top:7px;font-size:10.5px;color:var(--snow-muted);}
+.mar-foot span:last-child{text-align:right;}
+.my-assets-empty{padding:70px 0;text-align:center;color:var(--snow-muted);font-size:13px;}
 .asset-row{display:flex;gap:12px;background:var(--snow-surface);border-radius:var(--r-card);padding:14px;margin-bottom:12px;box-shadow:var(--sh-card);}
 .asset-thumb{width:64px;height:64px;border-radius:var(--r-ctl);overflow:hidden;flex-shrink:0;background:var(--snow-neutral-soft);}
 .asset-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
@@ -1197,26 +1172,33 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .wallet-card .meta-item{min-width:0;}
 .wallet-card .meta-item span{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:650;margin-bottom:4px;}
 .wallet-card .meta-item b{display:block;font-size:12.5px;color:#fff;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.wallet-panel{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:20px;margin-bottom:20px;}
-.wallet-panel .lbl{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 6px;}
-.wallet-panel .field{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:50px;display:flex;align-items:center;padding:0 15px;margin-bottom:16px;gap:8px;}
-.wallet-panel .field input,.wallet-panel .field select{border:0;outline:0;background:transparent;font-size:15px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-/* Wallet provider picker -- a field that drops a plain list under it, as the
-   mockup shows, instead of handing off to Android's own system picker. */
+.wallet-minimal{padding-top:8px;}
+.wallet-plain-row{display:flex;align-items:center;gap:16px;padding:22px 2px;border-bottom:1px solid var(--snow-border);}
+.wallet-plain-copy{flex:1;min-width:0;}
+.wallet-plain-number{font-size:26px;font-weight:700;letter-spacing:.025em;color:var(--snow-ink);font-variant-numeric:tabular-nums;}
+.wallet-plain-name{font-size:12px;color:var(--snow-muted);font-weight:550;margin-top:6px;letter-spacing:.02em;}
+.wallet-delete{width:40px;height:40px;border:0;background:transparent;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;}
+.wallet-delete svg{width:20px;height:20px;}
+.wallet-add-form{padding-top:4px;}
+.wallet-line-field{height:58px;display:flex;align-items:center;border-bottom:1.5px solid var(--snow-border);margin-bottom:14px;gap:8px;}
+.wallet-line-field:focus-within{border-bottom-color:var(--snow-wine);}
+.wallet-line-field input{border:0;outline:0;background:transparent;font-size:16px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;padding:0 2px;}
+.wallet-save{width:100%;height:52px;margin-top:10px;}
+.wallet-otp-actions{display:flex;gap:12px;margin-top:12px;}
+.wallet-otp-actions button{flex:1;height:48px;border:0;border-radius:var(--r-ctl);font-family:inherit;font-weight:650;}
+.wallet-otp-actions button:first-child{background:var(--snow-neutral-soft);color:var(--snow-ink);}
+.wallet-minimal #walResendBtn{display:block;text-align:center;margin-top:12px;color:var(--snow-wine);font-size:12px;text-decoration:none;}
 .prov-pick{position:relative;}
 .prov-pick .prov-input{cursor:pointer;}
 .prov-pick .prov-input input{cursor:pointer;}
 .prov-caret{color:var(--snow-muted);flex-shrink:0;transition:transform .15s;}
 .prov-pick.open .prov-caret{transform:rotate(180deg);}
-.prov-list{display:none;position:absolute;left:0;right:0;top:52px;z-index:5;background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);overflow:hidden;box-shadow:0 14px 28px -14px rgba(30,10,5,.35);}
+.prov-list{display:none;position:absolute;left:0;right:0;top:58px;z-index:5;background:var(--snow-surface);border:1px solid var(--snow-border);overflow:hidden;box-shadow:0 14px 28px -14px rgba(30,10,5,.35);}
 .prov-pick.open .prov-list{display:block;}
-.prov-opt{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--snow-border);padding:14px 15px;font-family:inherit;font-size:15px;color:var(--snow-ink);cursor:pointer;}
+.prov-opt{display:block;width:100%;text-align:left;background:var(--snow-surface);border:0;border-bottom:1px solid var(--snow-border);padding:14px 12px;font-family:inherit;font-size:14px;color:var(--snow-ink);cursor:pointer;}
 .prov-opt:last-child{border-bottom:0;}
 .prov-opt:active{background:var(--snow-neutral-soft);}
-.prov-opt.on{color:var(--snow-wine);font-weight:600;}
-.wallet-panel .btnrow{display:flex;gap:12px;}
-.wallet-panel .btnrow button{flex:1;height:48px;font-size:14px;padding:0;}
-.wallet-panel .btnrow .cancel{border:0;border-radius:var(--r-ctl);background:#f3e2ee;color:#6b2f56;font-weight:600;font-family:inherit;box-shadow:none;}
+.prov-opt.on{color:var(--snow-wine);font-weight:650;}
 .plain-h2{font-size:17px;font-weight:700;margin:0 0 12px;}
 .wallet-summary{display:flex;align-items:center;justify-content:space-between;background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:16px 18px;gap:10px;}
 .wallet-summary .prov{font-weight:600;font-size:14px;flex-shrink:0;}
@@ -1732,19 +1714,11 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .milestone-fill{height:100%;border-radius:var(--r-pill);background:var(--snow-wine);}
 .milestone-fill.done{background:var(--snow-green);}
 
-/* transform:translateZ(0) forces this overlay onto its own GPU compositing
-   layer. Without it, Android Chrome/WebView has a known bug where a
-   position:sticky child (.sheet-head below) inside an overflow-y:auto
-   container that's just been toggled display:none->block can leave the
-   PREVIOUS screen's already-painted pixels showing through wherever this
-   overlay's own content doesn't touch every pixel (the space between grid
-   cards, around text, etc.) -- not a z-index or opacity bug (this
-   background is fully opaque either way), a stale-paint bug. Owner
-   screenshots of Deposit/Withdraw showed exactly this: Home's topbar
-   tagline and stat row visible in the gaps of the sheet supposedly
-   covering them. Promoting to its own layer forces a full repaint instead
-   of a partial one. */
-.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;transform:translateZ(0);will-change:transform;}
+/* Keep the scrollable form layer untransformed. The earlier translateZ(0) fix
+   was based on a diagnosis later disproved by the real CSS-token bug; on
+   Android a transformed fixed scroller can also make input focus/IME viewport
+   changes more expensive. */
+.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
 /* Owner: "in withdrawal page still when tapped the nav icons still remain
    why? Remove them please, it's not a must that withdrawal page will be
    looking like that." Every sub-page opened via openSheet() (Deposit,

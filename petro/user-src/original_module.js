@@ -2851,6 +2851,7 @@ window.showPage = async function(name){
   // entry, so including it would retire someone else's.
   const spent = (detailOpen ? 1 : 0) + (sheetOpen ? 1 : 0);
   if (spent) history.go(-spent);
+  if (name === 'products') { _assetsTab = 'mine'; name = 'assets'; }
   STATE.page = name;
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
@@ -2870,7 +2871,6 @@ window.showPage = async function(name){
   }
   else if (name === 'catalog') await renderCatalog();
   else if (name === 'assets') await renderAssets();
-  else if (name === 'products') await renderProducts();
   else if (name === 'referral') await renderReferral();
   else if (name === 'team') await renderTeam();
   else if (name === 'network') await renderNetwork();
@@ -3147,13 +3147,6 @@ function paintHome(){
   // (startActivityTicker/homeGifHtml and related helpers) are
   // left defined but unreached, same as this session's other supersessions.
   let html = `
-<div class="home-topbar-v2">
-  <div class="htb-brand">
-    <div class="htb-text">
-      <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
-    </div>
-  </div>
-</div>
 ${homeBannerBlockHtml(st)}
 <div class="home-actions">
   <button class="home-action" onclick="openDepositSheet()">
@@ -3494,7 +3487,8 @@ window.switchAssetsTab = function(tab){
 async function renderAssets(){
   const hadProducts = (STATE.products || []).length > 0;
   const hadInvestments = Array.isArray(STATE.investments);
-  if (hadProducts || hadInvestments) paintAssets(); else paintCatalogSkeleton();
+  if (hadProducts || hadInvestments) paintAssets();
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
   const [pr, ir] = await Promise.all([api('/public/products'), api('/investments')]);
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
   if (ir.status === 'success') { STATE.investments = ir.investments; _investmentsLoadFailed = false; }
@@ -3526,16 +3520,6 @@ function assetRowHtml(p){
 function paintAssets(){
   const products = STATE.products || [];
   const html = `
-<div class="home-topbar-v2">
-  <div class="htb-brand">
-    <div class="htb-text">
-      <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
-    </div>
-  </div>
-</div>
-<div class="net-subhead">
-  <div><div class="net-title">Assets</div><div class="net-sub">Choose the right asset and start earning</div></div>
-</div>
 <div class="assets-tabs">
   <button class="at ${_assetsTab === 'all' ? 'on' : ''}" onclick="switchAssetsTab('all')">All Assets</button>
   <button class="at ${_assetsTab === 'mine' ? 'on' : ''}" onclick="switchAssetsTab('mine')">My Assets</button>
@@ -4032,11 +4016,49 @@ function paintProducts(animate){
   $('pageHost').innerHTML = animate ? '<div class="reveal-in">' + html + '</div>' : html;
   startPlanCountdowns();
 }
+function myAssetRowHtml(inv){
+  const st = planStats(inv);
+  const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
+  const name = inv.tierLabel || p.name || 'Asset';
+  const initial = esc(String(name || '?').trim()[0] || '?');
+  const thumb = p.image
+    ? `<img src="${esc(p.image)}" alt="" onerror="this.outerHTML='&lt;span&gt;${initial}&lt;/span&gt;'">`
+    : `<span>${initial}</span>`;
+  const progress = st.total > 0 ? Math.max(0, Math.min(100, (st.made / st.total) * 100)) : 0;
+  return `
+  <div class="my-asset-row ${st.matured ? 'done' : ''}">
+    <div class="mar-head">
+      <div class="mar-thumb">${thumb}</div>
+      <div class="mar-id">
+        <div class="mar-name">${esc(name)}</div>
+        <div class="mar-date">${esc(fmtDay(inv.createdAt))}</div>
+      </div>
+      <span class="mar-status">${st.matured ? 'Completed' : 'Active'}</span>
+    </div>
+    <div class="mar-values">
+      <div><span>Invested</span><b class="mono">${fmtUGXCents(st.amount)}</b></div>
+      <div><span>Earned</span><b class="mono">${fmtUGXCents(st.earned)}</b></div>
+      <div><span>${st.matured ? 'Return' : 'Daily'}</span><b class="mono">${fmtUGXCents(st.matured ? st.expected : st.daily)}</b></div>
+    </div>
+    <div class="mar-progress"><i style="width:${progress}%"></i></div>
+    <div class="mar-foot">
+      <span>${st.matured ? 'Finished' : `Day ${st.made} of ${st.total}`}</span>
+      <span>${st.matured ? fmtUGXCents(st.expected) + ' paid' : fmtUGXCents(st.remaining) + ' remaining'}</span>
+    </div>
+  </div>`;
+}
+function myAssetsInnerHtml(){
+  const investments = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured');
+  if (!STATE.investments && _investmentsLoadFailed) {
+    return '<div class="my-assets-empty">Could not load your assets.</div>';
+  }
+  if (!investments.length) return '<div class="my-assets-empty">No assets yet.</div>';
+  return '<div class="my-assets-list">' + investments.map(myAssetRowHtml).join('') + '</div>';
+}
 function paintMyAssetsInner(){
   const box = document.getElementById('myAssetsInner');
   if (!box) return;
-  box.innerHTML = myProductsInnerHtml();
-  startPlanCountdowns();
+  box.innerHTML = myAssetsInnerHtml();
 }
 // Live-ticking "Next cashback in HH:MM:SS" on each active plan card. Cleared
 // whenever the page changes away from My Products so it never keeps ticking
@@ -4288,25 +4310,13 @@ window.toggleEarningsVisibility = function(){
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
   const shareReady = refreshShareHost();
-  if (hadCache) paintNetwork(); else paintTeamSkeleton();
+  if (hadCache) paintNetwork();
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
   const [r] = await Promise.all([api('/team/stats'), shareReady]);
   if (r.status === 'success') STATE.teamStats = r;
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
-  if (STATE.page !== 'network') return; // navigated away while awaiting
-  paintNetwork();
-  // Recent Referrals preview: the 3 levels' member lists aren't cached
-  // together anywhere (switchTeamLevel() fetches one level at a time, lazily,
-  // for the "View All" sheet below), so this fetches all 3 in parallel just
-  // for the top few rows shown inline -- capped and merged, not a full list.
-  const levels = await Promise.all([1, 2, 3].map(l =>
-    (STATE.teamMembers && STATE.teamMembers[l]) ? Promise.resolve(STATE.teamMembers[l]) :
-    api('/team/members?level=' + l).then(x => x.status === 'success' ? x.members : [])));
   if (STATE.page !== 'network') return;
-  const merged = [];
-  levels.forEach((members, i) => (members || []).forEach(m => merged.push(Object.assign({ _level: i + 1 }, m))));
-  merged.sort((a, b) => (tsMillisLocal(b.createdAt) - tsMillisLocal(a.createdAt)));
-  STATE.recentReferrals = merged.slice(0, 4);
-  if (STATE.page === 'network') paintRecentReferrals();
+  paintNetwork();
 }
 // Client-side mirror of the server's own tsMillis() -- createdAt arrives as
 // an ISO string (see server.js's Date -> JSON serialization), and this file
@@ -4325,65 +4335,35 @@ function paintNetwork(){
   const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';
   const earnText = _earningsHidden ? 'UGX ••••••' : fmtUGX(Number(t.teamCommission) || 0);
   const html = `
-<div class="home-topbar-v2">
-  <div class="htb-brand">
-    <div class="htb-text">
-      <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
+<div class="net-simple">
+  <div class="net-invite-line">
+    <div><span>Invitation code</span><b class="mono">${esc(code || '—')}</b></div>
+    <button data-copy-group="net" onclick="copyText('${esc(code)}')" aria-label="Copy invitation code">${ICONS.copy}</button>
+  </div>
+  <div class="net-invite-line">
+    <div><span>Invitation link</span><b class="net-link">${esc(link || '—')}</b></div>
+    <button data-copy-group="net" onclick="copyText('${esc(link)}')" aria-label="Copy invitation link">${ICONS.copy}</button>
+  </div>
+
+  <div class="net-levels">
+    <div><b class="mono">${(t.team && t.team.l1) || 0}</b><span>Level 1</span><small>${rates.l1 != null ? rates.l1 : 27}%</small></div>
+    <div><b class="mono">${(t.team && t.team.l2) || 0}</b><span>Level 2</span><small>${rates.l2 != null ? rates.l2 : 2}%</small></div>
+    <div><b class="mono">${(t.team && t.team.l3) || 0}</b><span>Level 3</span><small>${rates.l3 != null ? rates.l3 : 1}%</small></div>
+  </div>
+
+  <div class="net-earn-simple">
+    <div>
+      <span>Referral earnings</span>
+      <b class="mono" id="netEarnAmt">${esc(earnText)}</b>
+    </div>
+    <div class="net-earn-actions">
+      <button id="netEarnEyeBtn" onclick="toggleEarningsVisibility()" aria-label="Show or hide earnings">${_earningsHidden ? ICONS.eyeOff : ICONS.eyeOpen}</button>
+      <button onclick="openAllReferralsSheet()">View team</button>
     </div>
   </div>
 </div>
-<div class="net-subhead">
-  <div><div class="net-title">Network</div><div class="net-sub">Invite, grow and earn together</div></div>
-  <div class="net-tag">People Drive Progress</div>
-</div>
-<div class="net-hero"${STATE.referralBanner ? ` style="background-image:linear-gradient(100deg,rgba(0,0,0,.15),rgba(0,0,0,.5)),url('${esc(STATE.referralBanner)}')"` : ''}>
-  <div class="net-hero-title">Build Your Network<br>Build a Brighter Future</div>
-  <div class="net-hero-sub">Share your invitation link and earn rewards when others join and invest.</div>
-  <button class="net-hero-btn" data-copy-group="net" onclick="copyText('${esc(link)}')">Invite Now ${ICONS.chevronRight}</button>
-</div>
-<div class="net-code-row">
-  <div class="net-code-box">
-    <span class="nc-ic">${ICONS.qrCode}</span>
-    <div><div class="nc-lbl">My Invitation Code</div><div class="nc-val mono">${esc(code || '—')}</div></div>
-    <button class="nc-copy" data-copy-group="net" onclick="copyText('${esc(code)}')" aria-label="Copy code">${ICONS.copy}</button>
-  </div>
-  <div class="net-code-box">
-    <span class="nc-ic">${ICONS.linkIcon}</span>
-    <div><div class="nc-lbl">My Invitation Link</div><div class="nc-val nc-link">${esc(link || '—')}</div></div>
-    <button class="nc-copy" data-copy-group="net" onclick="copyText('${esc(link)}')" aria-label="Copy link">${ICONS.copy}</button>
-  </div>
-</div>
-<div class="home-stat-row" style="padding:0 18px;margin:14px 0 16px;">
-  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.peopleGroup}</span><div class="hs-lbl">Direct Members (Level 1)</div><div class="mono hs-val">${(t.team && t.team.l1) || 0}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.peopleGroup}</span><div class="hs-lbl">Indirect Members (Level 2)</div><div class="mono hs-val hs-gold-txt">${(t.team && t.team.l2) || 0}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.peopleGroup}</span><div class="hs-lbl">Indirect Members (Level 3)</div><div class="mono hs-val">${(t.team && t.team.l3) || 0}</div></div>
-</div>
-<div class="wallet-bal-card" style="margin:0 18px 16px;">
-  <div class="wbc-row1">
-    <span class="wbc-lbl">Total Referral Earnings</span>
-    <button class="wbc-eye" id="netEarnEyeBtn" onclick="toggleEarningsVisibility()" aria-label="Show or hide earnings">${_earningsHidden ? ICONS.eyeOff : ICONS.eyeOpen}</button>
-  </div>
-  <div class="wbc-row2">
-    <span class="mono wbc-amt" id="netEarnAmt">${esc(earnText)}</span>
-    <button class="wbc-details" onclick="openAllReferralsSheet()">View Details ${ICONS.chevronRight}</button>
-  </div>
-</div>
-<div class="net-comm-row">
-  <div class="net-comm-card nc-red"><div class="ncc-lbl">Level 1 Commission</div><div class="ncc-pct">${rates.l1 != null ? rates.l1 : 27}%</div><div class="ncc-sub">Earn ${rates.l1 != null ? rates.l1 : 27}% from your direct referrals' investments</div></div>
-  <div class="net-comm-card nc-gold"><div class="ncc-lbl">Level 2 Commission</div><div class="ncc-pct">${rates.l2 != null ? rates.l2 : 2}%</div><div class="ncc-sub">Earn ${rates.l2 != null ? rates.l2 : 2}% from your second level referrals</div></div>
-  <div class="net-comm-card nc-dark"><div class="ncc-lbl">Level 3 Commission</div><div class="ncc-pct">${rates.l3 != null ? rates.l3 : 1}%</div><div class="ncc-sub">Earn ${rates.l3 != null ? rates.l3 : 1}% from your third level referrals</div></div>
-</div>
-<div class="net-trophy-card">
-  <span class="ntc-ic">${ICONS.trophy}</span>
-  <div><div class="ntc-title">Let's Grow Together</div><div class="ntc-sub">The bigger your network, the greater your rewards.</div></div>
-</div>
-<div class="net-recent">
-  <div class="net-recent-head"><span class="nrh-ic">${ICONS.peopleGroup}</span><span class="nrh-title">Recent Referrals</span><button class="nrh-more" onclick="openAllReferralsSheet()">View All ${ICONS.chevronRight}</button></div>
-  <div id="netRecentBox">${teamLoadingHtml()}</div>
-</div>
 <div style="height:20px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-  if (STATE.recentReferrals) paintRecentReferrals();
 }
 function paintRecentReferrals(){
   const box = document.getElementById('netRecentBox');
@@ -4716,14 +4696,23 @@ function formatPhoneDisplay(phone){
 // deleted after the new one lands). Not Snow's list-of-many model.
 var _walletEditing = false;
 window.openWalletSheet = async function(){
-  _walletEditing = false;
   const hadCache = Array.isArray(STATE.bankAccounts);
+  _walletEditing = hadCache ? !(STATE.bankAccounts || []).length : false;
   openSheet('Wallet', hadCache ? '' : '<div class="list-empty">Loading&hellip;</div>');
   if (hadCache) renderWalletSheet();
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!hadCache) STATE.bankAccounts = [];
-  if (_openSheetTitle === 'Wallet' && !_walletEditing) renderWalletSheet();
+  if (!hadCache) {
+    _walletEditing = !(STATE.bankAccounts || []).length;
+    if (_openSheetTitle === 'Wallet') renderWalletSheet();
+  } else if (!_walletEditing && _openSheetTitle === 'Wallet') {
+    // A linked-wallet display has no focused input to destroy, so it is safe
+    // to refresh. When the add form is visible, do NOT repaint it under the
+    // member's finger: replacing #walPhone after focus is exactly what makes
+    // Android's keyboard appear late or fail to stay open.
+    renderWalletSheet();
+  }
 };
 function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
 function maskedTail(phone){
@@ -4755,63 +4744,54 @@ function walletCardHtml(w){
     </div>
   </div>`;
 }
+function walletLocalPhone(phone){
+  let d = String(phone || '').replace(/\D/g, '');
+  const dc = dial();
+  if (d.slice(0, dc.length) === dc) d = d.slice(dc.length);
+  d = d.replace(/^0+/, '');
+  return d ? '0' + d : '';
+}
+function walletPlainRowHtml(w){
+  if (!w) return '';
+  return `
+  <div class="wallet-plain-row">
+    <div class="wallet-plain-copy">
+      <div class="wallet-plain-number mono">${esc(walletLocalPhone(w.phone))}</div>
+      <div class="wallet-plain-name">${esc(String(w.holder || '').toUpperCase())}</div>
+    </div>
+    <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button>
+  </div>`;
+}
 function renderWalletSheet(){
   const w = currentWallet();
   const providers = ['MTN Mobile Money', 'Airtel Money'];
-  const editPanel = !_walletEditing ? '' : `
-  <div class="wallet-panel">
-    <div class="sec-head" style="margin:0 0 16px;"><span class="bar"></span><h2 style="font-size:17px;font-weight:700;">Edit Wallet</h2></div>
-    <div id="walFormGroup">
-      <div class="lbl">Wallet Provider</div>
-      <!-- Not a <select>. A native select hands the whole thing to Android's own
-           grey system picker, which is what the owner objected to. This is a
-           read-only field that drops a plain list underneath it, exactly as the
-           mockup shows. Read-only, not a free-text box, because the value has to
-           be one of the providers the backend accepts. -->
+  if (w && !_walletEditing) {
+    $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + walletPlainRowHtml(w) + '</div>';
+    return;
+  }
+  $('sheetBody').innerHTML = `<div class="wallet-minimal reveal-in">
+    <div class="wallet-add-form" id="walFormGroup">
       <div class="prov-pick" id="walProviderPick">
-        <div class="field prov-input" onclick="toggleProviderList()">
-          <input id="walProvider" type="text" readonly placeholder="Select wallet provider" value="${w && w.network ? esc(w.network) : ''}">
+        <div class="wallet-line-field prov-input" onclick="toggleProviderList()">
+          <input id="walProvider" type="text" readonly placeholder="Select network" value="${w && w.network ? esc(w.network) : ''}">
           <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </div>
         <div class="prov-list" id="walProviderList">
           ${providers.map(p => `<button type="button" class="prov-opt${w && w.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
         </div>
       </div>
-      <div class="lbl">Wallet Account</div>
-      <div class="field"><input id="walPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${w ? esc(w.phone || '') : ''}" oninput="sanitizePhoneInput(this)"></div>
-      <div class="lbl">Account Holder Name</div>
-      <div class="field"><input id="walHolder" type="text" placeholder="Full name" value="${w ? esc(w.holder || '') : ''}"></div>
-      <div class="btnrow">
-        <button class="cancel" onclick="toggleWalletEdit(false)">Cancel</button>
-        <button class="primary-button" id="walSaveBtn" onclick="submitWallet()">Submit</button>
-      </div>
+      <div class="wallet-line-field"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="Phone number" value="${w ? esc(walletLocalPhone(w.phone)) : ''}" oninput="sanitizePhoneInput(this)"></div>
+      <div class="wallet-line-field"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" placeholder="Account holder name" value="${w ? esc(w.holder || '') : ''}"></div>
+      <button class="primary-button wallet-save" id="walSaveBtn" onclick="submitWallet()">Save</button>
     </div>
-    <!-- Shown only once /auth/otp/send has actually gone out (see
-         submitWallet() above) -- proves it's the account holder adding this
-         payout destination, texted to THEIR OWN phone on file, never to the
-         wallet number just entered above. -->
     <div id="walOtpGroup" style="display:none;">
-      <div class="lbl">Enter the 6-digit code sent to your phone</div>
-      <div class="field"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"></div>
-      <div class="btnrow">
-        <button class="cancel" onclick="cancelWalletOtp()">Back</button>
+      <div class="wallet-line-field"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"></div>
+      <div class="wallet-otp-actions">
+        <button type="button" onclick="cancelWalletOtp()">Back</button>
         <button class="primary-button" id="walConfirmBtn" onclick="confirmWalletOtp()">Confirm</button>
       </div>
-      <p class="auth-switch" style="margin-top:10px;"><a href="#" id="walResendBtn" onclick="submitWallet();return false;">Resend code</a></p>
+      <a href="#" id="walResendBtn" onclick="submitWallet();return false;">Resend code</a>
     </div>
-  </div>`;
-  const summary = w ? `
-  <h2 class="plain-h2">Your Wallet</h2>
-  <div class="wallet-summary">
-    <span class="prov">${esc(String(w.network || '').replace(/\s*(Mobile )?Money$/i, '') || 'Wallet')}</span>
-    <span class="masked">${maskedTail(w.phone)}</span>
-    <span class="holder">${esc(String(w.holder || '').toUpperCase()).replace(/\s+/, '<br>')}</span>
-  </div>` : '';
-  $('sheetBody').innerHTML = `<div class="reveal-in">
-    ${walletCardHtml(w)}
-    ${_walletEditing ? '' : `<button class="dark-button" style="width:100%;height:52px;padding:0;margin-bottom:22px;" onclick="toggleWalletEdit(true)">Edit Wallet</button>`}
-    ${editPanel}
-    ${summary}
   </div>`;
 }
 window.toggleWalletEdit = function(on){ _walletEditing = !!on; _walletPending = null; _walletOtpId = null; renderWalletSheet(); };
@@ -4917,6 +4897,17 @@ async function finishWalletSave(){
   notify('Wallet saved');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
 }
+window.deleteWallet = function(id){
+  if (!id) return;
+  openSimpleConfirm('Delete wallet', 'Remove this payout number?', async () => {
+    const r = await post('/bank/delete', { id });
+    if (r.status !== 'success') { notify(r.message || 'Could not remove the wallet.'); return false; }
+    STATE.bankAccounts = (STATE.bankAccounts || []).filter(x => x.id !== id);
+    _walletEditing = true;
+    if (_openSheetTitle === 'Wallet') renderWalletSheet();
+    return true;
+  });
+};
 
 // ── NOTIFY DIALOG (Notify.dc.html) ──
 // The app-wide validation alert: dimmed backdrop, amber warning triangle,
