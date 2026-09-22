@@ -34,7 +34,6 @@ ROUTES={
    {"kind":"withdraw","phone":"075****456","amount":25500},
    {"kind":"deposit","phone":"070****789","amount":90000}]},
  "/public/banner":{"status":"success","image":None},
- "/public/announcement-image":{"status":"success","image":None},
  "/public/manual-pay-images":{"status":"success","selector":None,"hero":None},
  "/public/chipz-images":{"status":"success","referral":None,"logo":None},
  "/account":{"status":"success","account":ACCOUNT},
@@ -222,7 +221,7 @@ async def main():
         ck(not await page.evaluate("()=>!!document.querySelector('.sheet-bg.show')"),
            "a second Back then closes the Messages list")
         await page.evaluate("showPage('home')")
-        await page.wait_for_timeout(400); await page.evaluate("closeAnnounce()")
+        await page.wait_for_timeout(400)
 
         # ── no Snow wording in the BUILT app ──
         # Chipz is a fork of Snow. test-no-snow-branding.js checks the
