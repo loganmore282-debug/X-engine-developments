@@ -1926,6 +1926,7 @@ async function boot(){
   // cached instant-boot path -- because each is a way STATE.settings gets
   // filled, and whichever one wins the race has to be the one that applies it.
   applyBrandName();
+  applyInnerBackgroundSettings();
   STATE.products = p.status === 'success' ? p.products : [];
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
   // Optional admin-set banner video (Home.dc.html's "ADMIN VIDEO BANNER").
@@ -2048,6 +2049,14 @@ function applyAuthBackgrounds(){
   // the CSS -- is what decides.
   const hero = $('authHero');
   if (hero) hero.classList.toggle('has-bg', !!STATE.authHeroImage);
+}
+function applyInnerBackgroundSettings(){
+  const s = STATE.settings || {};
+  const root = document.documentElement;
+  const op = Number(s.innerBgOpacity);
+  const bl = Number(s.innerBgBlur);
+  root.style.setProperty('--inner-bg-opacity', String(Number.isFinite(op) ? Math.min(100, Math.max(0, op)) / 100 : 1));
+  root.style.setProperty('--inner-bg-blur', (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
 }
 function applyAuthTagline(){
   const el = $('authTagline');
