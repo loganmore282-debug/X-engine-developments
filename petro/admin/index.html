@@ -415,5 +415,52 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+<script data-inner-bg-admin>
+(function(){
+  var busy=false,lastRegion='';
+  function token(){try{return sessionStorage.getItem('snow_admin_token')||'';}catch(_){return '';}}
+  function region(){try{var r=localStorage.getItem('petro_admin_region')||'ug';return !r||r==='all'?'ug':r;}catch(_){return 'ug';}}
+  async function req(path,body){
+    var h={};var t=token();if(t)h.Authorization='Bearer '+t;
+    var o={method:body?'POST':'GET',headers:h};
+    if(body){h['Content-Type']='application/json';o.body=JSON.stringify(body);}
+    var r=await fetch('http://179.198.197.114:3000'+path,o);return r.json();
+  }
+  async function mount(){
+    if(busy)return;
+    var settingsTab=document.querySelector('[data-tab="settings"].active');
+    var content=document.getElementById('content');
+    if(!settingsTab||!content)return;
+    var reg=region();
+    if(document.getElementById('innerBgAdminPanel')&&lastRegion===reg)return;
+    busy=true;lastRegion=reg;
+    try{
+      var path='/admin/settings'+(reg!=='ug'?'?region='+encodeURIComponent(reg):'');
+      var d=await req(path),s=(d&&d.settings)||{};
+      var old=document.getElementById('innerBgAdminPanel');if(old)old.remove();
+      var box=document.createElement('div');
+      box.id='innerBgAdminPanel';
+      box.innerHTML='<h2 class="sec">Signed-in page background</h2>'
+        +'<div class="panel-card"><p class="muted" style="margin-top:0">Controls only Home, Assets, Network, Profile, Deposit, Withdraw, Wallet and other pages after login. Login, Sign Up and Forgot Password are not changed.</p>'
+        +'<div class="row"><div><label>Background opacity (0–100%)</label><input id="innerBgOpAdmin" type="number" min="0" max="100" value="'+(s.innerBgOpacity!=null?s.innerBgOpacity:100)+'"></div>'
+        +'<div><label>Background blur (0–40 px)</label><input id="innerBgBlurAdmin" type="number" min="0" max="40" value="'+(s.innerBgBlur!=null?s.innerBgBlur:0)+'"></div></div>'
+        +'<button class="btn block" id="saveInnerBgAdmin" style="margin-top:12px">Save inner background</button></div>';
+      content.appendChild(box);
+      document.getElementById('saveInnerBgAdmin').onclick=async function(){
+        var op=Number(document.getElementById('innerBgOpAdmin').value);
+        var bl=Number(document.getElementById('innerBgBlurAdmin').value);
+        if(!Number.isFinite(op)||op<0||op>100||!Number.isFinite(bl)||bl<0||bl>40){alert('Opacity must be 0–100 and blur 0–40.');return;}
+        var btn=this;btn.disabled=true;btn.textContent='Saving…';
+        var out=await req('/admin/settings/update',{region:reg,settings:{innerBgOpacity:op,innerBgBlur:bl}});
+        btn.disabled=false;btn.textContent=out&&out.status==='success'?'Saved':'Save inner background';
+        if(!(out&&out.status==='success'))alert((out&&out.message)||'Could not save');
+      };
+    }catch(_){}
+    busy=false;
+  }
+  var obs=new MutationObserver(function(){setTimeout(mount,20);});
+  document.addEventListener('DOMContentLoaded',function(){var c=document.getElementById('content');if(c)obs.observe(c,{childList:true,subtree:false});document.addEventListener('click',function(){setTimeout(mount,50);});mount();});
+})();
+</script>
 </body>
 </html>
