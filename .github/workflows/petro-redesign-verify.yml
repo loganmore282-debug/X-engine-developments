@@ -13,6 +13,7 @@ on:
       - 'petro/build-admin.js'
       - 'petro/server.js'
       - 'petro/test-no-snow-branding.js'
+      - 'petro/test-nav-sheets.py'
       - '.github/workflows/petro-redesign-verify.yml'
 
 permissions:
