@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * build-core.js — secure the Chipz user app.
+ * build-core.js — secure the Petro user app.
  *
  * Source (readable, EDIT THIS)    : user-src/index.html (+ user-src/original_module.js after first run)
  * Output (obfuscated, DEPLOYED)   : user/index.html (Render serves this folder as-is)
@@ -119,7 +119,7 @@ if (typeof DecompressionStream === 'undefined') {
   var show=function(){
     var m=document.createElement('div');
     m.style.cssText='position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:#111111;color:#fff;font-family:sans-serif;font-size:15px;line-height:1.5';
-    m.textContent='This browser is too old to run Chipz. Please update your browser (or open this link in Chrome) and try again.';
+    m.textContent='This browser is too old to run Petro. Please update your browser (or open this link in Chrome) and try again.';
     document.body.appendChild(m);
   };
   if (document.body) show(); else document.addEventListener('DOMContentLoaded', show);
@@ -147,4 +147,4 @@ if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(OUT_HTML, outHtml);
 log('user/index.html:', fs.statSync(OUT_HTML).size, 'bytes — deployed artifact written');
 
-log('\nDone. Render deploys straight from user/ (git-based, autoDeploy) — commit both user-src/ (readable) and user/ (built).');
+log('\nDone. Deploy the generated user/ (git-based, autoDeploy) — commit both user-src/ (readable) and user/ (built).');
