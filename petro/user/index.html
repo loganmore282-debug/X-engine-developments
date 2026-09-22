@@ -2584,5 +2584,29 @@ document.head.appendChild(s);
   }
 })();
 </script>
+<script data-petro-sheet-hotfix>
+(function(){
+  function install(){
+    if(typeof window.openSheet!=='function'||typeof window.api!=='function'||typeof window.paintWithdrawSheet!=='function') return false;
+    window.openWithdrawSheet=async function(){
+      var s=(window.STATE&&window.STATE.settings)||{};
+      var hadCache=Array.isArray(window.STATE&&window.STATE.bankAccounts);
+      if(!hadCache&&window.STATE) window.STATE.bankAccounts=[];
+      window.openSheet('Withdraw','');
+      window.paintWithdrawSheet(s);
+      var r=await window.api('/bank/list');
+      if(r&&r.status==='success'&&window.STATE) window.STATE.bankAccounts=r.accounts;
+      if(!hadCache&&window._openSheetTitle==='Withdraw'){
+        var ae=document.activeElement;
+        if(!(ae&&ae.id==='witAmount')) window.paintWithdrawSheet(s);
+      }
+    };
+    return true;
+  }
+  if(!install()){
+    var tries=0,t=setInterval(function(){tries++;if(install()||tries>500)clearInterval(t);},20);
+  }
+})();
+</script>
 </body>
 </html>
