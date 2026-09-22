@@ -2709,6 +2709,12 @@ body.sheet-open .sheet-bg{bottom:0;}
     return d?'0'+d:'';
   }
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function applyInner(){
+    var s=(window.STATE&&window.STATE.settings)||{};
+    var op=Number(s.innerBgOpacity), bl=Number(s.innerBgBlur);
+    document.documentElement.style.setProperty('--inner-bg-opacity',String(Number.isFinite(op)?Math.max(0,Math.min(100,op))/100:1));
+    document.documentElement.style.setProperty('--inner-bg-blur',(Number.isFinite(bl)?Math.max(0,Math.min(40,bl)):0)+'px');
+  }
   function walletBox(w){
     if(!w)return '<div class="wallet-card"><div class="wallet-kicker">Payout Wallet</div><div class="num" style="font-size:18px">No payout wallet linked</div><div class="wallet-meta"><div class="meta-item"><span>Network</span><b>—</b></div></div></div>';
     var network=String(w.network||'Mobile Money').replace(/\s*(Mobile )?Money$/i,'')||'Mobile Money';
@@ -2742,9 +2748,14 @@ body.sheet-open .sheet-bg{bottom:0;}
   }
   function install(){
     if(typeof window.openSheet!=='function'||typeof window.api!=='function')return false;
+    applyInner();
+    var originalRenderWallet=window.renderWalletSheet;
+    var originalShowPage=window.showPage;
+
     window.openWithdrawSheet=async function(){
       var S=window.STATE||{};
       if(!Array.isArray(S.bankAccounts))S.bankAccounts=[];
+      applyInner();
       window.openSheet('Withdraw','');
       renderWithdraw();
       try{
@@ -2753,22 +2764,28 @@ body.sheet-open .sheet-bg{bottom:0;}
         if(window._openSheetTitle==='Withdraw')renderWithdraw();
       }catch(_){}
     };
+
     window.renderWalletSheet=function(){
       var S=window.STATE||{}, w=(S.bankAccounts||[])[0]||null;
-      var body=document.getElementById('sheetBody');
-      if(!body)return;
-      if(w){
-        var network=String(w.network||'Mobile Money').replace(/\s*(Mobile )?Money$/i,'')||'Mobile Money';
-        body.innerHTML='<div class="wallet-minimal reveal-in"><div class="wallet-plain-row"><div class="wallet-plain-copy">'
-          +'<div class="wallet-plain-number mono">'+esc(localPhone(w.phone))+'</div>'
-          +'<div class="wallet-plain-name">'+esc(String(w.holder||'').toUpperCase())+'</div>'
-          +'<div class="wallet-plain-network">'+esc(network)+'</div>'
-          +'</div><button class="wallet-delete" type="button" onclick="deleteWallet(\''+esc(w.id)+'\')" aria-label="Delete payout wallet">'+((window.ICONS&&window.ICONS.trash)||'×')+'</button></div></div>';
+      if(!w){
+        if(typeof originalRenderWallet==='function')return originalRenderWallet();
         return;
       }
-      // Fall back to the existing add-wallet flow when there is no linked wallet.
-      if(typeof window.toggleWalletEdit==='function'){window._walletEditing=true;}
+      var body=document.getElementById('sheetBody');
+      if(!body)return;
+      var network=String(w.network||'Mobile Money').replace(/\s*(Mobile )?Money$/i,'')||'Mobile Money';
+      body.innerHTML='<div class="wallet-minimal reveal-in"><div class="wallet-plain-row"><div class="wallet-plain-copy">'
+        +'<div class="wallet-plain-number mono">'+esc(localPhone(w.phone))+'</div>'
+        +'<div class="wallet-plain-name">'+esc(String(w.holder||'').toUpperCase())+'</div>'
+        +'<div class="wallet-plain-network">'+esc(network)+'</div>'
+        +'</div><button class="wallet-delete" type="button" onclick="deleteWallet(\''+esc(w.id)+'\')" aria-label="Delete payout wallet">'+((window.ICONS&&window.ICONS.trash)||'×')+'</button></div></div>';
     };
+
+    if(typeof originalShowPage==='function'&&!window.__innerBgWrapped){
+      window.__innerBgWrapped=true;
+      window.showPage=async function(){applyInner();return originalShowPage.apply(this,arguments);};
+    }
+    var n=0,t=setInterval(function(){applyInner();if(++n>12)clearInterval(t);},400);
     return true;
   }
   if(!install()){
