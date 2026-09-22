@@ -2748,7 +2748,7 @@ async function renderPromoCodes(){
 // and number shape its members type, and the clock its cash-out hours and
 // product windows are judged against. Its RATES and its PRODUCT PRICES are
 // edited on the Settings and Products tabs, with this country picked there.
-var ADMIN_BASE_DOMAIN = 'chipz-platform.com';
+var ADMIN_BASE_DOMAIN = 'petro-platform.com';
 async function loadAdminRegions(){
   const r = await api('/admin/regions');
   if (r && r.status === 'success' && Array.isArray(r.regions) && r.regions.length) {
@@ -2855,7 +2855,7 @@ function adminOwnDomain(){
 // The value server.js ships as its built-in default. It is a placeholder, not
 // a domain anybody owns, so finding it still in place means the setting has
 // never been filled in.
-const BASE_DOMAIN_PLACEHOLDER = 'chipz-platform.com';
+const BASE_DOMAIN_PLACEHOLDER = 'petro-platform.com';
 function baseDomainWarningHtml(){
   const withLabels = ADMIN_REGIONS.filter(r => (r.labels || []).length);
   const own = adminOwnDomain();
@@ -2984,7 +2984,7 @@ function regionForm(r){
     <input id="rgLabels" value="${esc((cur.labels || []).join(', '))}" placeholder="g26e, shy">
     <p class="muted" style="margin:6px 0 10px">Each one becomes <code>&lt;name&gt;.${esc(ADMIN_BASE_DOMAIN)}</code>. Separate several with commas. Use <b>+ Address</b> on the list to have one generated for you.</p>
     <label>Full web addresses, one per line <span class="muted" style="font-weight:400">— only for a domain that is not ${esc(ADMIN_BASE_DOMAIN)}</span></label>
-    <textarea id="rgHosts" rows="2" placeholder="chipz-ke.example.com">${esc((cur.hosts || []).join('\n'))}</textarea>
+    <textarea id="rgHosts" rows="2" placeholder="petro-ke.example.com">${esc((cur.hosts || []).join('\n'))}</textarea>
     <p class="muted" style="margin:6px 0 0">A member opening any of these sees this country's currency and prices. They are allowed to reach the backend automatically, so there is nothing to add to the domain allowlist. <b>DNS still has to point them at the app</b> — a wildcard record for <code>*.${esc(ADMIN_BASE_DOMAIN)}</code> makes every short address work the moment it is saved.</p>
     ${cur.isDefault ? '<p class="muted" style="margin:8px 0 0">This is the founding country. Its id cannot change and it cannot be switched off -- it is where any unrecognised address, and any account with no country of its own, lands.</p>' : ''}
     <div class="row" style="margin-top:14px;justify-content:flex-end;gap:8px">
@@ -3771,7 +3771,7 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
       <label style="margin-top:14px">Allowed website domains</label>
-      <textarea id="sAllowedOrigins" rows="4" placeholder="chipz-platform.com&#10;www.chipz-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
+      <textarea id="sAllowedOrigins" rows="4" placeholder="petro-platform.com&#10;www.petro-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. Render/EdgeOne addresses are always allowed.</p>
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Set the gateway under Manual payments below. Every cash-out waits as Pending until you act on it in Withdrawals.</p>
@@ -4369,7 +4369,7 @@ const ADMIN_LANG_ROWS = [
   ['Tell members what\'s new, or invite them to your Telegram group…', 'Buulira abakozesa ekipya, oba bayite mu kibiina kyo ekya Telegram…', 'Waambie wanachama kipya, au wakaribishe kwenye kikundi chako cha Telegram…', 'Dites aux membres ce qui est nouveau, ou invitez-les sur votre groupe Telegram…', 'Bwira abanyamuryango ibishya, cyangwa ubatumire mu itsinda ryawe rya Telegram…', 'Gambira abakozesa ekisya, nari obayete omu kibiina kyawe kya Telegram…'],
   ['Mint five at once -- what moving arrivals between addresses needs', 'Kola ttaano mu kiseera kimu -- kye kyetaagisa okukyusa abatuuka mu ndagiriro', 'Tengeneza tano kwa mara moja -- ndivyo kuhamisha wanaofika kati ya anwani kunahitaji', 'Créer cinq d\'un coup -- ce qu\'exige le déplacement des arrivants entre adresses', 'Gukora eshanu icyarimwe -- ni byo kwimura abaza hagati y\'aderesi bisaba', 'Hanga itaano omu kaanya kamwe -- nikyo okwimura abarikuhika omu ndagiriro kirikwetenga'],
   ['The most recent 200 sensitive actions across the panel, newest first.', 'Ebikolwa 200 ebisembayo eby\'obwegendereza ku lupapula lwonna, ebipya bisooka.', 'Vitendo 200 vya hivi karibuni nyeti katika paneli nzima, vipya kwanza.', 'Les 200 actions sensibles les plus récentes du panneau, les plus récentes d\'abord.', 'Ibikorwa 200 bya vuba byitondewe muri paneli yose, bishya mbere.', 'Ebikorwa 200 eby\'obwegyendereza eby\'obwire obuhingwire, ebisya bikatandika.'],
-  ['Mint a new short address for this country, e.g. g26e.chipz-platform.com', 'Kola endagiriro empya ennyimpi ey\'eggwanga lino, okugeza g26e.chipz-platform.com', 'Tengeneza anwani fupi mpya kwa nchi hii, mfano g26e.chipz-platform.com', 'Créer une nouvelle adresse courte pour ce pays, ex. g26e.chipz-platform.com', 'Gukora aderesi ngufi nshya y\'iki gihugu, urugero g26e.chipz-platform.com', 'Hanga endagiriro empya engufu y\'ihanga eri, nk\'okugyera g26e.chipz-platform.com'],
+  ['Mint a new short address for this country, e.g. g26e.petro-platform.com', 'Kola endagiriro empya ennyimpi ey\'eggwanga lino, okugeza g26e.petro-platform.com', 'Tengeneza anwani fupi mpya kwa nchi hii, mfano g26e.petro-platform.com', 'Créer une nouvelle adresse courte pour ce pays, ex. g26e.petro-platform.com', 'Gukora aderesi ngufi nshya y\'iki gihugu, urugero g26e.petro-platform.com', 'Hanga endagiriro empya engufu y\'ihanga eri, nk\'okugyera g26e.petro-platform.com'],
   ['Recompute this member\'s streak from their real check-in history right now', 'Ddamu obale olunyiriri lw\'okukyalira kw\'omukozesa ono okuva mu byafaayo bye kaakano', 'Hesabu upya mfululizo wa mwanachama huyu kutoka historia yake halisi sasa hivi', 'Recalculer la série de ce membre à partir de son historique réel, maintenant', 'Kongera kubara uruhererekane rw\'uyu munyamuryango uhereye ku mateka ye nyayo ubu', 'Garuka obare omunyororo gw\'okwoleka kw\'omukozesa ogu kuruga omu byafaayo bye hati'],
   ['Uploading a picture saves it immediately. Opacity and blur need this button.', 'Okuteekamu ekifaananyi kikitereka mangu ago. Obuzibu n\'okusiikuula byetaaga akapeesa kano.', 'Kupakia picha huihifadhi papo hapo. Uzito na ufifishaji vinahitaji kitufe hiki.', 'Téléverser une image l\'enregistre aussitôt. L\'opacité et le flou demandent ce bouton.', 'Gushyiramo ishusho biyibika ako kanya. Ubwijime n\'ukwijima bisaba iyi buto.', 'Okutaamu ekishushani nikikibiika ahonaaho. Obuzibu n\'okusiikuura nibyetenga akapeera aka.'],
   ['Shown under Account → Rules & Regulation. Blank leaves the page empty in the app.', 'Kirabika wansi wa Akawunti → Amateeka. Bwe kiba kyereere olupapula lusigala nga lwereere mu pulogulaamu.', 'Inaonyeshwa chini ya Akaunti → Sheria na Kanuni. Tupu huacha ukurasa mtupu kwenye programu.', 'Affiché sous Compte → Règles et règlement. Vide laisse la page vide dans l\'application.', 'Bigaragara munsi ya Konti → Amategeko n\'amabwiriza. Ubusa busiga urupapuro rutariho muri porogaramu.', 'Nikyorekwa ahansi ya Akaunti → Ebiragiro. Ku kiraaba kitariho orupapura nirusigara rutariho omu porogaraamu.'],
