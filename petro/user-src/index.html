@@ -290,7 +290,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
    depend on it (the page's bottom padding, the sheet overlay's bottom
    inset, the Download panel's height) and they used to repeat 68 as a
    literal, so growing the bar meant finding all four. */
-.bottom-nav{z-index:210;background:rgba(255,255,255,.98);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;height:var(--nav-h);position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:0 8px;box-shadow:0 -10px 30px -28px rgba(37,38,43,.55);}
+.bottom-nav{z-index:210;background:rgba(255,255,255,.88);border-top:1px solid rgba(255,255,255,.74);display:flex;align-items:center;justify-content:space-around;height:var(--nav-h);position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:0 8px;box-shadow:0 -8px 24px -22px rgba(37,38,43,.45);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);}
 .navitem{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--snow-muted);background:none;border:none;padding:8px 2px 6px;flex:1;min-width:0;position:relative;}
 /* Petro navigation is an industrial rail, not Petro's springy selector box.
    The active tab is marked by a restrained red line that stays anchored to
@@ -413,7 +413,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .team-deposits-card{grid-column:1 / -1;position:relative;overflow:hidden;border-radius:var(--r-card);padding:20px;color:#fff;background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));box-shadow:0 14px 28px -22px rgba(17,17,17,.3);}
 
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
-.wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
+.wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;padding-bottom:calc(var(--nav-h) + 20px);
+  background-color:rgba(247,247,248,.86);
+  background-image:linear-gradient(rgba(247,247,248,.80),rgba(247,247,248,.90)),var(--auth-hero-img,none);
+  background-size:cover;background-position:center;background-attachment:fixed;}
 /* Rebuilt entirely per the owner's own reference GIF, frame-by-frame
    (a 167-frame loop): three concentric rings, red at the bottom fading to
    blue/violet at the top, whose visible arc continuously grows/shrinks
@@ -647,7 +650,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
    solid red circle (rather than translucent-white-on-red) so the logo
    still carries the brand color even though the bar itself no longer
    does. */
-.home-topbar-v2{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px 18px 10px;background:var(--snow-surface);color:var(--snow-ink);border-bottom:1px solid var(--snow-border);}
+.home-topbar-v2{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px 18px 10px;background:rgba(255,255,255,.72);color:var(--snow-ink);border-bottom:1px solid rgba(255,255,255,.62);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
 .htb-brand{display:flex;align-items:center;gap:10px;min-width:0;}
 .htb-logo{width:40px;height:40px;border-radius:50%;background:var(--snow-wine);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;}
 .htb-logo img{width:100%;height:100%;object-fit:cover;}
@@ -674,7 +677,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .wbc-details svg{width:13px;height:13px;}
 /* ── 3-up stat row (Cumulative Earnings / Total Deposits / Total Withdrawals) ── */
 .home-stat-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:0 18px;margin-bottom:16px;}
-.home-stat{background:var(--snow-surface);border-radius:var(--r-card);padding:14px 10px;box-shadow:var(--sh-card);text-align:center;}
+.home-stat{background:rgba(255,255,255,.84);border:1px solid rgba(255,255,255,.72);border-radius:var(--r-card);padding:14px 10px;box-shadow:0 8px 24px -22px rgba(37,38,43,.45);text-align:center;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);}
 .hs-ic{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;}
 .hs-ic svg{width:16px;height:16px;}
 .hs-ic.hs-gold{background:var(--snow-wave-on-wine);color:var(--petro-gold);}
@@ -685,15 +688,19 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .hs-gold-txt{color:var(--petro-gold);}
 .hs-red-txt{color:var(--snow-wine);}
 /* ── Daily Check-in card ── */
-.checkin-card{margin:0 18px 16px;padding:16px 16px;border-radius:var(--r-card);background:linear-gradient(100deg,#fff6e0 0%,#ffe9bd 100%);display:flex;align-items:center;gap:12px;box-shadow:var(--sh-card);}
+.checkin-card{margin:0 18px 16px;padding:16px;border-radius:var(--r-card);background:rgba(255,255,255,.84);border:1px solid rgba(255,255,255,.72);display:flex;align-items:center;gap:12px;box-shadow:0 8px 24px -22px rgba(37,38,43,.45);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);}
 .cic-gift{width:44px;height:44px;flex-shrink:0;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;}
 .cic-text{flex:1;min-width:0;}
 .cic-title{font-size:14.5px;font-weight:800;color:var(--snow-ink);}
 .cic-sub{font-size:11.5px;color:var(--snow-muted);font-weight:500;line-height:1.35;margin-top:2px;}
 .cic-btn{flex-shrink:0;background:var(--petro-grad);color:#fff;border:none;font-family:inherit;font-weight:700;font-size:13px;padding:10px 18px;border-radius:var(--r-pill);}
 .home-footer-banner{display:block;width:calc(100% - 36px);margin:0 18px 16px;border-radius:var(--r-card);object-fit:cover;}
+.account-toolbar{display:flex;align-items:center;justify-content:space-between;padding:20px 18px 12px;}
+.account-toolbar h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em;color:var(--snow-ink);}
+.account-settings{width:36px;height:36px;border:1px solid rgba(255,255,255,.75);border-radius:10px;background:rgba(255,255,255,.72);color:var(--snow-ink);display:flex;align-items:center;justify-content:center;padding:0;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);}
+.account-settings svg{width:19px;height:19px;}
 /* ── Account screen (owner's mockup) ── */
-.acct-card{position:relative;border-radius:var(--r-card);padding:16px;display:flex;align-items:center;gap:14px;background:var(--snow-surface);background-size:cover;background-position:center;box-shadow:var(--sh-card);overflow:hidden;}
+.acct-card{position:relative;border-radius:var(--r-card);padding:16px;display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.82);background-size:cover;background-position:center;border:1px solid rgba(255,255,255,.72);box-shadow:0 10px 28px -24px rgba(37,38,43,.48);overflow:hidden;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
 .acct-avatar{width:56px;height:56px;border-radius:50%;background:var(--snow-neutral-soft);color:var(--snow-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .acct-avatar svg{width:26px;height:26px;}
 .acct-idbox{min-width:0;}
@@ -704,17 +711,18 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 /* Coloured-circle row icons -- three tones, cycled per row to match the
    mockup (it alternates red/gold/dark rather than using one colour for
    every row, which is what made the old .setting-row squares read as flat). */
-.acct-row-list{display:flex;flex-direction:column;gap:10px;margin:0 0 16px;}
-.acct-row{display:flex;align-items:center;gap:13px;background:var(--snow-surface);border:none;border-radius:var(--r-card);padding:13px 14px;box-shadow:var(--sh-card);width:100%;text-align:left;font-family:inherit;color:var(--snow-ink);}
+.acct-row-list{display:flex;flex-direction:column;gap:0;margin:0 0 16px;background:rgba(255,255,255,.86);border:1px solid rgba(255,255,255,.72);border-radius:var(--r-card);overflow:hidden;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
+.acct-row{display:flex;align-items:center;gap:13px;background:transparent;border:0;border-bottom:1px solid var(--snow-border);border-radius:0;padding:15px 14px;box-shadow:none;width:100%;text-align:left;font-family:inherit;color:var(--snow-ink);}
+.acct-row:last-child{border-bottom:0;}
 .acct-row .txt{flex:1;min-width:0;}
 .acct-row .t1{display:block;font-size:14px;font-weight:800;}
 .acct-row .t2{display:block;font-size:11.5px;color:var(--snow-muted);font-weight:500;margin-top:2px;}
 .acct-row svg:last-child{width:16px;height:16px;color:var(--snow-muted);flex-shrink:0;}
-.ar-ic{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ar-ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .ar-ic svg{width:19px;height:19px;}
-.ar-ic.ar-red{background:var(--snow-wine-soft);color:var(--snow-wine);}
-.ar-ic.ar-gold{background:var(--snow-wave-on-wine);color:var(--petro-gold);}
-.ar-ic.ar-dark{background:var(--snow-neutral-soft);color:var(--snow-ink);}
+.ar-ic.ar-red{background:rgba(227,6,19,.10);color:var(--snow-wine);}
+.ar-ic.ar-gold{background:rgba(245,160,0,.12);color:#9a6200;}
+.ar-ic.ar-dark{background:rgba(37,38,43,.07);color:var(--snow-ink);}
 .logout-btn-v2{width:100%;height:52px;border-radius:var(--r-pill);border:none;background:var(--snow-wine-soft);color:var(--snow-wine);font-family:inherit;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .logout-btn-v2 svg{width:18px;height:18px;}
 /* ── Network: compact Petro view ──
@@ -722,7 +730,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
    cards, an earnings card, three commission cards, a trophy card and recent
    referrals. The owner explicitly rejected that density. Keep only the facts
    and actions needed on this screen. */
-.net-simple{padding:14px 18px 0;}
+.net-simple{margin:16px 18px 0;padding:2px 16px 0;background:rgba(255,255,255,.86);border:1px solid rgba(255,255,255,.72);border-radius:var(--r-card);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
 .net-invite-line{display:flex;align-items:center;gap:12px;padding:15px 0;border-bottom:1px solid var(--snow-border);}
 .net-invite-line>div{flex:1;min-width:0;}
 .net-invite-line span{display:block;font-size:11px;color:var(--snow-muted);font-weight:550;margin-bottom:4px;}
@@ -768,7 +776,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .mar-foot{display:flex;justify-content:space-between;gap:12px;margin-top:7px;font-size:10.5px;color:var(--snow-muted);}
 .mar-foot span:last-child{text-align:right;}
 .my-assets-empty{padding:70px 0;text-align:center;color:var(--snow-muted);font-size:13px;}
-.asset-row{display:flex;gap:12px;background:var(--snow-surface);border-radius:var(--r-card);padding:14px;margin-bottom:12px;box-shadow:var(--sh-card);}
+.asset-row{display:flex;gap:12px;background:rgba(255,255,255,.86);border:1px solid rgba(255,255,255,.72);border-radius:var(--r-card);padding:14px;margin-bottom:10px;box-shadow:0 8px 24px -22px rgba(37,38,43,.45);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);}
 .asset-thumb{width:64px;height:64px;border-radius:var(--r-ctl);overflow:hidden;flex-shrink:0;background:var(--snow-neutral-soft);}
 .asset-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
 .ar-glyph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:var(--snow-muted);}
@@ -1065,7 +1073,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .dep-phone .prefix{background:transparent;color:var(--snow-ink);font-weight:700;display:flex;align-items:center;padding:0 12px 0 0;font-size:15px;flex-shrink:0;border-right:1px solid var(--snow-border);}
 .dep-phone input{border:0;outline:0;background:transparent;flex:1;padding:0 0 0 12px;font-family:inherit;font-size:16px;color:var(--snow-ink);min-width:0;}
 .dep-hint{font-size:11.5px;color:var(--snow-muted);font-weight:450;margin:0 0 8px;}
-.dep-instr{background:transparent;border:0;border-top:1px solid var(--line-soft);border-radius:0;padding:20px 0 0;}
+.dep-instr{background:transparent;border:0;border-top:1px solid var(--snow-border);border-radius:0;padding:20px 0 0;}
 .dep-instr .ih{display:flex;align-items:center;margin-bottom:8px;}
 .dep-instr .ih span{font-weight:700;font-size:15px;}
 .dep-instr .ln{display:none;}
@@ -1538,7 +1546,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
    was based on a diagnosis later disproved by the real CSS-token bug; on
    Android a transformed fixed scroller can also make input focus/IME viewport
    changes more expensive. */
-.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+.sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+  background-color:rgba(247,247,248,.91);
+  background-image:linear-gradient(rgba(247,247,248,.86),rgba(247,247,248,.93)),var(--auth-hero-img,none);
+  background-size:cover;background-position:center;background-attachment:fixed;}
 /* Owner: "in withdrawal page still when tapped the nav icons still remain
    why? Remove them please, it's not a must that withdrawal page will be
    looking like that." Every sub-page opened via openSheet() (Deposit,
@@ -1563,10 +1574,13 @@ body.sheet-open .sheet-bg{bottom:0;}
    minimal header now: no background fill, dark text/icon, a thin bottom
    rule for separation. Red stays reserved for buttons, active states and
    real emphasis, not page furniture. */
-.sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:var(--snow-surface);border-bottom:1px solid var(--snow-border);z-index:1;}
+.sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:rgba(255,255,255,.88);border-bottom:1px solid rgba(255,255,255,.72);z-index:1;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);}
 .sheet-head .back{background:none;border:none;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:18px;font-weight:700;letter-spacing:.01em;color:var(--snow-ink);}
-.sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
+.sheet-body{padding:12px 20px 40px;max-width:480px;margin:0 auto;}
+.sheet-body>div.reveal-in,.sheet-body>.wallet-minimal{background:rgba(255,255,255,.84);border:1px solid rgba(255,255,255,.70);border-radius:var(--r-card);padding:18px;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}
+.sheet-body>.wallet-minimal{margin-top:8px;}
+.sheet-body .statement-tabs{margin-top:-6px;}
 
 /* The dark bottom-pill toast (#toastHost, .toast, @keyframes toastIn) was
    removed here. Owner: "l nolonger need those dark tiny notifies you already
@@ -1649,7 +1663,7 @@ body.sheet-open .sheet-bg{bottom:0;}
    would push it visibly below centre by half the header's height. */
 .pay-page{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
   background:var(--snow-canvas);z-index:310;display:none;
-  flex-direction:column;overflow-y:auto;transform:translateZ(0);will-change:transform;}
+  flex-direction:column;overflow-y:auto;transform:translateZ(0);will-change:transform;;background-color:rgba(247,247,248,.91);background-image:linear-gradient(rgba(247,247,248,.86),rgba(247,247,248,.93)),var(--auth-hero-img,none);background-size:cover;background-position:center;background-attachment:fixed;}
 .pay-page.show{display:flex;}
 .pay-body{flex:1;display:flex;align-items:center;justify-content:center;padding:26px;}
 .pay-card{width:100%;max-width:340px;text-align:center;}
