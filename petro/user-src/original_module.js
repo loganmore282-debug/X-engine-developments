@@ -1901,11 +1901,11 @@ var _artPromise = null;
 async function boot(){
   // Fired together. Only the first four are awaited.
   const pSettings = api('/public/settings'), pProducts = api('/public/products');
-  const pFeed = api('/public/activity-feed'), pBanner = api('/public/banner');
+  const pBanner = api('/public/banner');
   _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/petro-images') ])
     .then(([ai, ci]) => { applyBootArtwork(ai, ci); })
     .catch(() => {});
-  const [s, p, f, b] = await Promise.all([ pSettings, pProducts, pFeed, pBanner ]);
+  const [s, p, b] = await Promise.all([ pSettings, pProducts, pBanner ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   // The region that owns this hostname, so the landing screen, Sign Up and
   // the product list already read in the right currency before anybody has
@@ -1927,7 +1927,6 @@ async function boot(){
   // filled, and whichever one wins the race has to be the one that applies it.
   applyBrandName();
   STATE.products = p.status === 'success' ? p.products : [];
-  STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
   // Optional admin-set banner video (Home.dc.html's "ADMIN VIDEO BANNER").
   // Two sources, and an uploaded file always wins over a typed link:
@@ -1958,10 +1957,8 @@ function applyBootArtwork(ai, ci){
   // fetches it; not worth touching that sequence just to drop one entry.
   // Same reasoning once more for the two Petro-only slots: the Referral
   // page banner and the brand logo on the Account profile card.
-  STATE.referralBanner = (ci.status === 'success' && ci.referral) ? ci.referral : null;
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   // Home's lower banner (the one carrying the Go spin button).
-  STATE.spinBanner = (ci.status === 'success' && ci.spin) ? ci.spin : null;
   // The animated brand mark. It is the profile logo on Account AND the thing
   // that fills the dead strip between Home's spin banner and the bottom nav
   // (owner: "this white space is idle we need to put the gif which is in
@@ -2842,7 +2839,6 @@ window.showPage = async function(name){
   else if (name === 'team' || name === 'referral') { name = 'network'; }
   STATE.page = name;
   updateNavIcons();
-  stopActivityTicker();
   if (name === 'home') {
     // Deliberately NOT awaited: renderHome() does its own account/investments
     // refresh (a real network round trip even on a cache-hit repaint), and
@@ -3122,14 +3118,7 @@ function paintHome(){
   // Owner's mockup: logo + tagline header, a 3-stat/wallet block and an
   // inline Daily Check-in card all live on Home now (previously the balance
   // lived on Account only, and Daily Check-in was sheet-only). The
-  // announcement dialog/row was built the same round, then removed entirely
-  // per the owner's own later instruction -- see petro/CLAUDE.md. The
-  // activity ticker, spin banner, profile GIF strip and treasure-chest float
-  // were removed the same way, same instruction ("what I didn't mention,
-  // remove it... your treasure chest box, spin... all stuff I never
-  // mentioned") -- none of them are in any mockup sent. Their functions
-  // (startActivityTicker/homeGifHtml and related helpers) are
-  // left defined but unreached, same as this session's other supersessions.
+  // Home now renders only the surfaces that belong to Petro's current design.
   let html = `
 ${homeBannerBlockHtml(st)}
 <div class="home-actions">
@@ -3178,54 +3167,6 @@ ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.hom
   tryAutoplayHomeBanner();
   startHomeCarousel();
 }
-// The animated brand mark, centred in the strip Home has left over between
-// the spin banner and the bottom nav. Home's content stops short of the nav
-// on a tall phone, and that gap was simply empty.
-//
-// Same STATE.profileGif the Account profile card uses -- uploading the GIF
-// once in Admin -> Petro images -> Profile animation fills both. With no GIF
-// set this renders nothing at all rather than a placeholder box, so the
-// screen looks exactly as it does today until the owner uploads one.
-//
-// Sized against the VIEWPORT, not the image: a GIF is whatever pixels it was
-// exported at, and letting one set its own height is how a tall upload turns
-// a screen that fits into a screen that scrolls. max-height keeps it inside
-// the gap it is meant to fill on any phone.
-function homeGifHtml(){
-  if (!STATE.profileGif) return '';
-  return `
-<div class="home-gif">
-  <img src="${esc(STATE.profileGif)}" alt="" onload="fitHomeGif()" onerror="this.closest('.home-gif').remove()">
-</div>`;
-}
-// Shrinks the mark to exactly the space that is free, by MEASURING the
-// overflow it caused rather than guessing a cap.
-//
-// The CSS cap (20vh) was a guess, and a guess is wrong by definition here:
-// how much room is left depends on the phone's height minus a fixed stack of
-// content above, so on a 390x844 screen a 20vh GIF overshot by 23px and put a
-// scrollbar on a Home screen that had never had one -- the opposite of
-// filling idle space. This reads the actual overflow and takes exactly that
-// much off, which is right on every screen size without knowing any of them.
-//
-// Runs on the image's own load event because at paint time it has no
-// intrinsic size yet, so there is nothing to measure; and on resize, because
-// rotating the phone changes the answer. The 60px floor stops a genuinely
-// tiny screen from shrinking it to nothing -- there, scrolling a little is
-// the better outcome.
-window.fitHomeGif = function(){
-  const box = document.querySelector('.home-gif');
-  const img = box && box.querySelector('img');
-  if (!img) return;
-  img.style.maxHeight = '';
-  const de = document.documentElement;
-  const over = de.scrollHeight - de.clientHeight;
-  if (over <= 0) return;
-  const h = img.getBoundingClientRect().height;
-  if (h <= 0) return;
-  img.style.maxHeight = Math.max(60, Math.floor(h - over)) + 'px';
-};
-window.addEventListener('resize', () => { if (STATE.page === 'home') fitHomeGif(); });
 // Which Home product strip is showing. Top-level binding must be `var`
 // (never const/let) -- see this file's own header rule about the
 // obfuscated build.
@@ -3527,12 +3468,8 @@ function fmtDay(value){
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
-// The owner's orbiting-chips animation, marking a plan that is still ongoing.
-// Built once as a constant rather than per row: it is fixed markup, and
-// paintProducts() re-renders the whole list on every filter tap and every
-// /investments refresh. Purely decorative -- the row already SAYS "Ongoing" --
-// so it is hidden from screen readers. Its top-level binding is `var` per this
-// file's header rule about the obfuscated build.
+// Petro's compact triangle activity mark. It remains because the live payment
+// polling screen still uses it as its processing indicator.
 var PLAN_SPIN = '<span class="pspin" aria-hidden="true">'
   + '<span class="pspin-orbit"><i class="pspin-chip"></i><i class="pspin-chip"></i><i class="pspin-chip"></i></span>'
   + '<span class="pspin-glow"></span><span class="pspin-core"></span></span>';
@@ -3567,11 +3504,6 @@ function planStats(inv){
     createdMs: new Date(inv.createdAt || Date.now()).getTime(),
   };
 }
-// Extracted so the Assets screen's "My Assets" tab can reuse this exact
-// list -- unstyled, since the owner's mockups never showed that tab
-// selected (see renderAssets()'s own comment) -- without paintProducts()
-// clobbering the whole page the way its own $('pageHost').innerHTML write
-// would.
 function myAssetRowHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
@@ -3619,83 +3551,6 @@ function paintMyAssetsInner(){
 // Live-ticking "Next cashback in HH:MM:SS" on each active plan card. Cleared
 // whenever the page changes away from My Products so it never keeps ticking
 // (and leaking a timer) in the background.
-// Floating "recent activity" strip on Home -- simulated, not real
-// transactions (see server.js's /public/activity-feed, which says the same
-// thing). Continuously flows/scrolls like a real ticker tape via a pure CSS
-// animation (translateX 0 -> -50% over a track holding two back-to-back
-// copies of the same joined text, looping seamlessly) rather than swapping
-// between discrete messages. Refreshed with new feed data periodically;
-// stopped on every page change the same way _countdownTimer is, so it never
-// keeps refreshing into a detached DOM node in the background.
-var _activityRefreshTimer = null;
-function activityRowText(row){
-  const verb = row.kind === 'deposit' ? 'just deposited' : 'just withdrew';
-  return row.phone + ' ' + verb + ' ' + fmtUGX(row.amount);
-}
-// Home.dc.html styles the phone number white against the amber rest of the
-// line, so the eye lands on who rather than on the sentence.
-// Owner asked for different wording in the activity card. Reads as a short
-// notification line rather than a running commentary: who, what, how much.
-function activityRowHtml(row){
-  const verb = row.kind === 'deposit' ? 'topped up' : 'cashed out';
-  return `<b>${esc(row.phone)}</b> ${esc(verb)} <b>${esc(fmtUGX(row.amount))}</b>`;
-}
-async function renderActivityTicker(){
-  const track = $('activityTickerTrack');
-  if (!track) return;
-  // subagent-audit-caught: this used to check STATE.activityFeed immediately,
-  // racing boot()'s own prefetch instead of actually using it -- on the
-  // cache-hit instant-boot path (Round 46), paintHome()/startActivityTicker()
-  // fire synchronously the moment the app becomes visible, almost always
-  // BEFORE boot()'s three parallel fetches (settings/products/activity-feed)
-  // have had time to land over a real network. STATE.activityFeed was still
-  // null nearly every time, so this fell straight into its own live fetch and
-  // showed "Loading activity…" regardless of the prefetch -- owner: "activity
-  // checker is not loaded... it should have loaded everything after startup
-  // spin loader." Awaiting the SAME _bootPromise every other prefetch
-  // consumer already awaits makes this genuinely wait for (not race) the
-  // prefetch on the very first call; resolves near-instantly on every call
-  // after the first, since _bootPromise only ever settles once.
-  await withTimeout(_bootPromise, 6000);
-  if (STATE.page !== 'home' || !$('activityTickerTrack')) return; // navigated away while awaiting
-  let rows;
-  if (STATE.activityFeed) {
-    // Prefetched by boot() -- consume it once so the ticker paints from the
-    // prefetch instead of firing a redundant live fetch. Every call after
-    // this one does a real fetch again, same as before.
-    rows = STATE.activityFeed;
-    STATE.activityFeed = null;
-  } else {
-    const r = await api('/public/activity-feed');
-    if (STATE.page !== 'home' || !$('activityTickerTrack')) return; // navigated away while awaiting
-    rows = (r.status === 'success' && Array.isArray(r.feed)) ? r.feed : [];
-  }
-  if (!rows.length) return;
-  const joined = rows.map(activityRowHtml).join('<span class="sep">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>');
-  track.style.animation = 'none';
-  track.innerHTML = `<span style="padding-right:48px;">${joined}</span><span style="padding-right:48px;" aria-hidden="true">${joined}</span>`;
-  const singleWidth = track.scrollWidth / 2;
-  // Owner: "make when l can configure what speed the activity checker be
-  // on home screen" -- was a hardcoded 160 (hand-tuned across Rounds
-  // 26/28), now admin-editable via STATE.settings.activityTickerSpeed
-  // (px/sec), falling back to that same original value if it's ever
-  // missing (a boot before settings resolve, or a database from before
-  // this field existed).
-  const speed = (STATE.settings && STATE.settings.activityTickerSpeed) || 160;
-  const duration = Math.max(4, singleWidth / speed); // floor so a short feed doesn't whip past
-  track.style.animation = `tickerFlow ${duration}s linear infinite`;
-}
-function stopActivityTicker(){
-  clearInterval(_activityRefreshTimer); _activityRefreshTimer = null;
-  const track = $('activityTickerTrack');
-  if (track) track.style.animation = 'none';
-}
-function startActivityTicker(){
-  stopActivityTicker(); // idempotent -- a stray extra call must never leak a second interval
-  renderActivityTicker();
-  _activityRefreshTimer = setInterval(renderActivityTicker, 20000);
-}
-
 // ── TEAM ──
 // subagent-audit-caught: same stale-deferred-repaint class Round 59 fixed
 // for Withdraw/Withdrawal Accounts, here on Team -- tapping
