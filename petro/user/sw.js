@@ -2,12 +2,9 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'chipz-shell-v125';
-const VENDOR_CACHE = 'chipz-vendor-firebase-v1';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/treasure-chest.png', '/turntable.png', '/spin-wheel.png', '/copy-clip.png', '/pay-success.png', '/pay-failed.png', '/logout-door.png',
-  '/nav-home.png', '/nav-products.png', '/nav-myproducts.png', '/nav-referral.png', '/nav-team.png', '/nav-account.png',
-  '/act-deposit.png', '/act-withdraw.png', '/act-channel.png', '/act-service.png', '/act-bell.png',
-  '/set-download.png', '/set-wallet.png', '/set-balance.png', '/set-messages.png', '/set-loginpw.png', '/set-tradepw.png'];
+const CACHE = 'petro-shell-v126';
+const VENDOR_CACHE = 'petro-vendor-firebase-v1';
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();
@@ -56,7 +53,7 @@ const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 // because a phone that cannot install the app is a far worse outcome than one
 // that installs it under last week's name.
 const API_ORIGIN = 'http://179.198.197.114:3000';
-const BRAND_CACHE = 'chipz-brand-v1';
+const BRAND_CACHE = 'petro-brand-v1';
 const BRAND_KEY = '/__brand-name';
 
 async function rememberedBrandName() {
@@ -129,7 +126,7 @@ self.addEventListener('fetch', e => {
     // back to the browser untouched, which is what respondWith(fetch(...))
     // was approximating anyway -- minus a service-worker round trip, and
     // minus the worker sitting in the middle of media streaming. The Home
-    // banner video is served from chipz-server with byte ranges; a worker
+    // banner video is served from Petro backend with byte ranges; a worker
     // relaying 206 responses is a known source of stalled video, and there is
     // nothing to gain here since none of this is cached.
     return;
