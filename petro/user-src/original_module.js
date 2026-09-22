@@ -2926,9 +2926,10 @@ function homeCarouselSlides(){
 function homeBannerBlockHtml(st){
   const slides = homeCarouselSlides();
   if (!slides) return `<div class="home-banner">${homeBannerInnerHtml(st)}</div>`;
-  const dots = slides.map((_, i) => `<span class="hb-dot${i === 0 ? ' on' : ''}"></span>`).join('');
-  return `<div class="home-banner" id="homeCarouselTrack"><img src="${esc(slides[0])}" alt="" onerror="this.style.display='none'"></div>
-<div class="hb-dots" id="homeCarouselDots">${dots}</div>`;
+  return `<div class="home-banner" id="homeCarouselTrack"><div class="hb-slide-track">
+    <img class="hb-slide-current" src="${esc(slides[0])}" alt="">
+    <img class="hb-slide-next" src="${esc(slides[1])}" alt="">
+  </div></div>`;
 }
 var _homeCarouselTimer = null;
 var _homeCarouselIdx = 0;
@@ -2942,23 +2943,32 @@ function startHomeCarousel(){
   if (!slides) return;
   _homeCarouselIdx = 0;
   _homeCarouselTimer = setInterval(() => {
-    const track = document.getElementById('homeCarouselTrack'), dots = document.getElementById('homeCarouselDots');
-    if (!track || !dots) { clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return; }
+    const wrap = document.getElementById('homeCarouselTrack');
+    const track = wrap && wrap.querySelector('.hb-slide-track');
+    const current = track && track.querySelector('.hb-slide-current');
+    const next = track && track.querySelector('.hb-slide-next');
+    if (!track || !current || !next) {
+      clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return;
+    }
+    if (track.classList.contains('hb-moving')) return;
     const nextIdx = (_homeCarouselIdx + 1) % slides.length;
-    const img = track.querySelector('img');
-    if (!img) return;
-    const nextSrc = slides[nextIdx];
-    const preload = new Image();
-    preload.onload = () => {
-      img.classList.add('hb-fading');
-      setTimeout(() => {
-        img.src = nextSrc;
-        _homeCarouselIdx = nextIdx;
-        dots.querySelectorAll('.hb-dot').forEach((d, i) => d.classList.toggle('on', i === _homeCarouselIdx));
-        requestAnimationFrame(() => requestAnimationFrame(() => img.classList.remove('hb-fading')));
-      }, 520);
+    const afterIdx = (nextIdx + 1) % slides.length;
+    // The next image is already beside the current one, so there is never a
+    // blank/red frame between slides. They physically pass each other.
+    if (next.getAttribute('src') !== slides[nextIdx]) next.src = slides[nextIdx];
+    track.classList.add('hb-moving');
+    const finish = () => {
+      track.removeEventListener('transitionend', finish);
+      current.src = slides[nextIdx];
+      next.src = slides[afterIdx];
+      _homeCarouselIdx = nextIdx;
+      track.classList.add('hb-resetting');
+      track.classList.remove('hb-moving');
+      // Force the zero-position reset without animation, then restore motion.
+      void track.offsetWidth;
+      track.classList.remove('hb-resetting');
     };
-    preload.src = nextSrc;
+    track.addEventListener('transitionend', finish);
   }, 4500);
 }
 // Puts the element that was preloaded during the loading screen INTO the
@@ -3931,36 +3941,23 @@ window.openSecuritySettingsSheet = function(){
 async function renderAccount(){
   const a = STATE.account || {};
   const html = `
-<div class="home-topbar-v2">
-  <div class="htb-brand">
-    <div class="htb-text">
-      <div class="htb-sub">Your Account &middot; Our Priority</div>
-    </div>
-  </div>
-  <div class="htb-icons">
-    <button class="htb-icon-btn" onclick="openSecuritySettingsSheet()" aria-label="Settings">
-      <span class="htb-ic">${ICONS.gear}</span>
-    </button>
-  </div>
-</div>
-<div style="padding:0 18px;">
-  <div class="acct-card"${STATE.profileCard ? ` style="background-image:linear-gradient(100deg,rgba(255,255,255,.94) 0 44%,rgba(255,255,255,.2) 100%),url('${esc(STATE.profileCard)}')"` : ''}>
+<div class="account-page" style="padding:16px 18px 0;">
+  <div class="acct-card"${STATE.profileCard ? ` style="background-image:linear-gradient(100deg,rgba(255,255,255,.08),rgba(20,12,8,.30)),url('${esc(STATE.profileCard)}')"` : ''}>
     <div class="acct-avatar">${ICONS.peopleGroup}</div>
     <div class="acct-idbox">
       <div class="acct-phone-row">${esc(formatPhoneDisplay(a.phone))}</div>
-      <div class="acct-id-row">ID: ${esc(a.publicId || '—')} <button class="ar-copy-btn" onclick="copyText('${esc(a.publicId || '')}')" aria-label="Copy ID">${ICONS.copy}</button></div>
     </div>
   </div>
   <div class="home-stat-row" style="padding:0;margin:14px 0 16px;">
     <div class="home-stat"><span class="hs-ic hs-red">${ICONS.layers}</span><div class="hs-lbl">Wallet Balance</div><div class="mono hs-val" id="acctWallet">${esc(fmtUGX(Number(a.walletBalance) || 0))}</div></div>
-    <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.trendUp}</span><div class="hs-lbl">Total Earnings</div><div class="mono hs-val hs-gold-txt">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
-    <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
+    <div class="home-stat"><span class="hs-ic hs-red">${ICONS.trendUp}</span><div class="hs-lbl">Total Earnings</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
+    <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
   </div>
   <div class="acct-row-list">
-    ${acctRowHtml(ICONS.docLg, 'ar-dark', 'Transaction Statement', 'Income, deposits and withdrawals', "openTransactionStatement('income')")}
+    ${acctRowHtml(ICONS.docLg, 'ar-red', 'Transaction Statement', 'Income, deposits and withdrawals', "openTransactionStatement('income')")}
     ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
-    ${acctRowHtml(ICONS.walletLg, 'ar-gold', 'Payout Wallet', 'Link your mobile money payout number', 'openWalletSheet()')}
-    ${acctRowHtml(ICONS.shieldCheck, 'ar-gold', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
+    ${acctRowHtml(ICONS.walletLg, 'ar-red', 'Payout Wallet', 'Link your mobile money payout number', 'openWalletSheet()')}
+    ${acctRowHtml(ICONS.shieldCheck, 'ar-red', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
     ${acctRowHtml(ICONS.headset, 'ar-red', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
     ${acctRowHtml(ICONS.infoCircle, 'ar-red', 'About Us', 'Platform information and terms', 'openAboutSheet()')}
   </div>
@@ -4934,15 +4931,17 @@ window.openCheckinSheet = function(){
   const onCooldown = !!lastAt && eatDayIndex(lastAt) === eatDayIndex(now);
   const nextAt = onCooldown ? eatMidnightAfter(now) : 0;
   openSheet('Daily Check-in', `<div class="reveal-in">
-    <div class="app-card" style="padding:24px 20px;text-align:center;">
-      <div style="font-size:12.5px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.5px;">Current streak</div>
-      <div class="mono" style="font-size:36px;font-weight:800;margin-top:6px;color:var(--snow-green);">${streak}<span style="font-size:15px;font-weight:600;color:var(--snow-muted);"> day${streak===1?'':'s'}</span></div>
-      <div style="font-size:13px;color:var(--snow-muted);margin-top:12px;line-height:1.5;">Check in once every day (resets at midnight) to keep your streak and earn ${fmtUGX(bonus)} each time.</div>
-      <button class="primary-button" id="checkinBtn" data-checkin-next="${nextAt}" style="width:100%;padding:15px 0;font-size:15px;margin-top:20px;" ${onCooldown?'disabled':''} onclick="submitCheckin()">${onCooldown?'Available in <span class="countdown-val">--:--:--</span>':'Check In &middot; '+fmtUGX(bonus)}</button>
+    <div class="checkin-panel">
+      <div class="checkin-kicker">Current streak</div>
+      <div class="checkin-streak mono">${streak}<span> day${streak===1?'':'s'}</span></div>
+      <div class="checkin-copy">${onCooldown
+        ? `You have checked in today. Your next check-in opens at midnight.`
+        : `Check in once every day to keep your streak and earn ${fmtUGX(bonus)} each time.`}</div>
+      <button class="primary-button checkin-action" id="checkinBtn" ${onCooldown ? `data-checkin-next="${nextAt}" disabled` : ''} onclick="submitCheckin()">${onCooldown ? 'Checked in today' : 'Check In &middot; ' + fmtUGX(bonus)}</button>
     </div>
   </div>`);
   if (onCooldown) startCheckinCountdown();
-};
+}
 // Self-terminating, same idiom as startPlanCountdowns(): the tick just stops
 // itself once #checkinBtn's countdown attribute is gone (sheet closed or
 // re-rendered), no separate close-hook needed. Once the cooldown genuinely
@@ -4950,41 +4949,24 @@ window.openCheckinSheet = function(){
 // refresh/reopen needed to see the app catch up.
 var _checkinCountdownTimer = null;
 function startCheckinCountdown(){
-  if (_checkinCountdownTimer) clearInterval(_checkinCountdownTimer);
-  const tick = () => {
-    // Subagent-audit-caught real bug: this only ever checked whether the
-    // button node still exists in the DOM -- but closeSheet()/popstate never
-    // clear #sheetBody's innerHTML (only toggle the overlay's .show class),
-    // so the button stays findable by a document-wide querySelector long
-    // after the Daily Check-in sheet is visually closed. Without the
-    // _openSheetTitle check every other countdown timer in this file already
-    // uses (see _manPayTimerInterval's own tick), this kept ticking on a
-    // now-invisible, detached-from-view node for up to ~24h after the
-    // member navigated away -- a real battery/CPU drain, not just a style
-    // inconsistency.
-    if (_openSheetTitle !== 'Daily Check-in') { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; return; }
-    const btn = document.querySelector('[data-checkin-next]');
-    if (!btn) { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; return; }
-    const remaining = Number(btn.dataset.checkinNext) - Date.now();
-    if (remaining <= 0) {
-      clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null;
-      btn.removeAttribute('data-checkin-next');
-      btn.disabled = false;
-      const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
-      btn.innerHTML = 'Check In &middot; ' + fmtUGX(bonus);
-      return;
-    }
-    const val = btn.querySelector('.countdown-val');
-    if (val) {
-      const h = Math.floor(remaining / 3600000);
-      const m = Math.floor((remaining % 3600000) / 60000);
-      const s = Math.floor((remaining % 60000) / 1000);
-      const pad = n => String(n).padStart(2, '0');
-      val.textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
-    }
-  };
-  tick();
-  _checkinCountdownTimer = setInterval(tick, 1000);
+  if (_checkinCountdownTimer) { clearTimeout(_checkinCountdownTimer); _checkinCountdownTimer = null; }
+  if (_openSheetTitle !== 'Daily Check-in') return;
+  const btn = document.querySelector('[data-checkin-next]');
+  if (!btn) return;
+  const remaining = Number(btn.dataset.checkinNext) - Date.now();
+  if (remaining <= 0) {
+    btn.removeAttribute('data-checkin-next');
+    btn.disabled = false;
+    const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
+    btn.innerHTML = 'Check In &middot; ' + fmtUGX(bonus);
+    const copy = document.querySelector('.checkin-copy');
+    if (copy) copy.textContent = 'Check in once every day to keep your streak and earn ' + fmtUGX(bonus) + ' each time.';
+    return;
+  }
+  _checkinCountdownTimer = setTimeout(() => {
+    _checkinCountdownTimer = null;
+    startCheckinCountdown();
+  }, Math.min(remaining + 150, 2147483000));
 }
 window.submitCheckin = async function(){
   const btn = $('checkinBtn');
