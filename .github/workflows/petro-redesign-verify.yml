@@ -65,6 +65,9 @@ jobs:
         run: |
           python3 -m pip install playwright pillow
           python3 -m playwright install --with-deps chromium
+          CHROME_PATH="$(python3 -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()")"
+          sudo mkdir -p /opt/pw-browsers
+          sudo ln -sf "$CHROME_PATH" /opt/pw-browsers/chromium
 
       - name: Core regression checks
         working-directory: petro
