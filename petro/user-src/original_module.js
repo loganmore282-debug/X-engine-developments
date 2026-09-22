@@ -3371,6 +3371,7 @@ function assetRowHtml(p){
 function paintAssets(){
   const products = STATE.products || [];
   const html = `
+<div class="member-page-title">My Assets</div>
 <div class="assets-tabs">
   <button class="at ${_assetsTab === 'all' ? 'on' : ''}" onclick="switchAssetsTab('all')">All Assets</button>
   <button class="at ${_assetsTab === 'mine' ? 'on' : ''}" onclick="switchAssetsTab('mine')">My Assets</button>
@@ -3715,6 +3716,7 @@ function paintNetwork(){
   const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';
   const earnText = _earningsHidden ? 'UGX ••••••' : fmtUGX(Number(t.teamCommission) || 0);
   const html = `
+<div class="member-page-title">Network</div>
 <div class="net-simple">
   <div class="net-invite-line">
     <div><span>Invitation code</span><b class="mono">${esc(code || '—')}</b></div>
@@ -3941,7 +3943,8 @@ window.openSecuritySettingsSheet = function(){
 async function renderAccount(){
   const a = STATE.account || {};
   const html = `
-<div class="account-page" style="padding:16px 18px 0;">
+<div class="account-page" style="padding:0 18px;">
+  <div class="member-page-title">Profile</div>
   <div class="acct-card"${STATE.profileCard ? ` style="background-image:linear-gradient(100deg,rgba(255,255,255,.08),rgba(20,12,8,.30)),url('${esc(STATE.profileCard)}')"` : ''}>
     <div class="acct-avatar">${ICONS.peopleGroup}</div>
     <div class="acct-idbox">
