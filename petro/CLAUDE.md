@@ -1684,3 +1684,100 @@ away. Playwright is not preinstalled in a fresh sandbox -- `npm install
 playwright-core --no-save` against the already-present
 `/opt/pw-browsers/chromium` binary gets a working headless browser in
 seconds without a full Playwright reinstall.
+
+**Immediately after that fix confirmed working, a large new instruction
+list** (owner, verbatim, since it's long and specific): *"it's not a
+mistake to put wallet card, a number only can get saved as bank
+account, remove notification bell and support svgs in top right
+everywhere, also let the navigation bar remain on parent pages, ie when
+l tap deposit, it should be fresh page... the background banner on
+authentication will appear even in the pages everywhere in the website
+as background such that the card matches like that on authentication
+screens, please take a look on loaders in network, same 4 triangles
+still doing, why they should be removed, remove also those logo of
+petrol everywhere and those words of energy for better tomorrow should
+be removed completely."*
+
+**Done this round** (the bounded, mechanical parts):
+- **Notification bell removed from every top bar** (`.home-topbar-v2`,
+  reused by Home x2 render paths, Network, and Account) — Account keeps
+  its Settings gear (not named for removal, a distinct icon from "bell"/
+  "support"). Since this was the ONLY way to reach `openMessagesSheet()`
+  from anywhere, and the owner only asked to remove the icon, not the
+  feature, added a **new "Messages" row to Account's row list**
+  (`acctRowHtml(ICONS.bell, ..., 'Messages', ...)`) — same pattern
+  Customer Support already used to stay reachable after ITS own top-bar
+  icon was never there in the first place on some screens. `Support`
+  icon removed from Home's top bar too (was only ever there, not on the
+  other screens) — Customer Support was already reachable via Account's
+  own row, so nothing new needed there.
+- **`updateMessageBadge()` neutered to a deliberate no-op**, not left
+  broken: it used to find "the first `.htb-icon-btn` on the page" and
+  paint an unread dot onto it — with the bell gone everywhere, that
+  selector would have matched Account's Settings gear instead and
+  wrongly painted a message-unread dot onto a Settings icon. Same
+  no-op-not-deleted precedent as `maybeShowAnnouncement()` elsewhere in
+  this file, so none of its 5+ call sites needed individual guards.
+- **Petro logo mark (`.htb-logo`) and the "Energy for a Better Tomorrow"
+  tagline (`.htb-title`) removed from all 5 top-bar occurrences**, and
+  from the Home banner's own fallback caption (`hb-cap`, shown when no
+  banner image/video is uploaded — now just the diagonal-stripe
+  placeholder, no text). `.htb-sub` (the smaller "Reliable · Sustainable
+  · Together" / "Your Account · Our Priority" line) was NOT named for
+  removal, left in place.
+- **Network's team/referral-list loading spinner swapped off PLAN_SPIN**
+  (the "4 triangle chips orbiting" mark) — this one was flagged by name,
+  repeatedly, this round. `teamLoadingHtml()` now renders a plain CSS
+  ring spinner (`.ring-spin`, a single rotating border) instead. PLAN_SPIN
+  itself is UNTOUCHED everywhere else it's used (ongoing-plan progress
+  rows, the payment-poll page) — those weren't named, and per this file's
+  own earlier note, that spinner was itself a real, explicit owner request
+  in an earlier round ("I wanted the other which has 4 triangle chips
+  rotating"), not Chipz residue — reversing it everywhere without being
+  asked would be guessing at a second reversal on top of the first.
+- **Verified**: `node -c`, `build-core.js` round-trip OK. Rendered Home,
+  Account, and Network standalone in headless Chromium after the change
+  (same Playwright rig from the fix above) — zero JS errors on any of the
+  three, logo/tagline/bell/support confirmed gone from the screenshots,
+  Settings gear still present and correctly alone on Account's bar.
+
+**Not done this round, flagged rather than rushed** (both large,
+genuinely architectural, and risky to guess at right after today's
+one-character outage):
+- **"Background banner on authentication should appear everywhere as
+  the page background, cards matching the auth-screen look, we no
+  longer use white"** — this is a full reversal of the established split
+  in "Design system: Premium Industrial Energy" above (dark photo
+  backdrop for auth vs. white dashboard elsewhere was itself an explicit
+  earlier owner decision, quoted there). A real, large redesign: every
+  page's canvas background, every card's contrast treatment against a
+  photo backdrop instead of a flat color, readability of red/gold text
+  over a photo in dozens of screens — not a token swap this time, since
+  cards over a photo need actual glass/blur treatment to stay legible,
+  which the current card components don't have. Needs to be built
+  deliberately, screen by screen, and verified visually (the same
+  Playwright rig now available) before shipping, not guessed at in the
+  same pass as everything else.
+- **"Deposit/Withdraw should be a fresh page, not override the parent"**
+  — currently both open via `openSheet()`/`.sheet-bg` (a full-screen
+  overlay stacked on top of whatever page is open underneath, same
+  mechanism as About/Balance Record/Messages/etc.). The bottom nav
+  already stays visible during this (`.sheet-bg{bottom:var(--nav-h)}`),
+  so the literal complaint from earlier rounds (Home content bleeding
+  through) is now fixed — but the owner's ask here reads as wanting
+  Deposit/Withdraw to be genuine `STATE.page` navigations (like Assets/
+  Network/Account) rather than sheets, which is a real architecture
+  change: `openSheet()`'s single shared `#sheetBody`/history-stack
+  model vs. `showPage()`'s per-page render functions are two different
+  systems in this file, and Deposit/Withdraw's own forms (amount/method/
+  phone) would need to become real page-render functions. Money-adjacent
+  code (the same file's own "money-safety invariants" section applies to
+  the surrounding flow, if not the exact credit logic) — needs its own
+  careful pass and verification, not a rushed change appended to an
+  already-large round.
+- **"A number only can get saved as bank account"** — read as the owner
+  accepting/justifying the wallet card feature (walking back an earlier
+  "not a must to put the card of wallet" from 2 rounds ago), not a
+  request to simplify the bind-wallet form's fields (provider + number +
+  holder name, unchanged). If that reading is wrong, say so directly
+  next round rather than this file guessing further.

@@ -2941,7 +2941,7 @@ function homeBannerInnerHtml(st){
         onerror="this.parentNode&&this.parentNode.classList.add('hb-video-failed')"></video>`;
   }
   if (STATE.homeBanner) return `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">`;
-  return `<div class="hb-stripes"></div><div class="hb-cap">${esc(st.brandTagline || 'Energy for a Better Tomorrow')}</div>`;
+  return `<div class="hb-stripes"></div>`;
 }
 // ── HOME BANNER CAROUSEL (owner: "those slide images will be uploaded
 // from admin panel") ──
@@ -3158,19 +3158,9 @@ function paintHome(){
   let html = `
 <div class="home-topbar-v2">
   <div class="htb-brand">
-    <span class="htb-logo">${STATE.brandLogo ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.parentNode.innerHTML=brandTextMark(30)">` : brandTextMark(30)}</span>
     <div class="htb-text">
-      <div class="htb-title">${esc(st.brandTagline || 'Energy for a Better Tomorrow')}</div>
       <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
     </div>
-  </div>
-  <div class="htb-icons">
-    <button class="htb-icon-btn" onclick="openMessagesSheet()" aria-label="Notifications">
-      <span class="htb-ic">${ICONS.bell}${unread ? '<span class="dot"></span>' : ''}</span><span class="htb-ic-lbl">Notifications</span>
-    </button>
-    <button class="htb-icon-btn" onclick="openCustomerService()" aria-label="Support">
-      <span class="htb-ic">${ICONS.headset}</span><span class="htb-ic-lbl">Support</span>
-    </button>
   </div>
 </div>
 ${homeBannerBlockHtml(st)}
@@ -3547,19 +3537,9 @@ function paintAssets(){
   const html = `
 <div class="home-topbar-v2">
   <div class="htb-brand">
-    <span class="htb-logo">${STATE.brandLogo ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.parentNode.innerHTML=brandTextMark(30)">` : brandTextMark(30)}</span>
     <div class="htb-text">
-      <div class="htb-title">${esc((STATE.settings || {}).brandTagline || 'Energy for a Better Tomorrow')}</div>
       <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
     </div>
-  </div>
-  <div class="htb-icons">
-    <button class="htb-icon-btn" onclick="openMessagesSheet()" aria-label="Notifications">
-      <span class="htb-ic">${ICONS.bell}${unreadMessageCount() ? '<span class="dot"></span>' : ''}</span><span class="htb-ic-lbl">Notifications</span>
-    </button>
-    <button class="htb-icon-btn" onclick="openCustomerService()" aria-label="Support">
-      <span class="htb-ic">${ICONS.headset}</span><span class="htb-ic-lbl">Support</span>
-    </button>
   </div>
 </div>
 <div class="net-subhead">
@@ -4208,7 +4188,7 @@ window.switchTeamLevel = async function(level){
 // the same markup the ongoing-plan rows and the payment page use -- every
 // length inside it is a fraction of --s, so one mark serves 32px, 56px and
 // 150px with no second copy and no second set of keyframes.
-function teamLoadingHtml(){ return '<div class="list-loading">' + PLAN_SPIN + '</div>'; }
+function teamLoadingHtml(){ return '<div class="list-loading"><span class="ring-spin" aria-hidden="true"></span></div>'; }
 function maskPhone(phone){
   const s = String(phone||'').replace(/\D/g,'');
   if (s.length < 7) return phone || '';
@@ -4340,16 +4320,9 @@ function paintNetwork(){
   const html = `
 <div class="home-topbar-v2">
   <div class="htb-brand">
-    <span class="htb-logo">${STATE.brandLogo ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.parentNode.innerHTML=brandTextMark(30)">` : brandTextMark(30)}</span>
     <div class="htb-text">
-      <div class="htb-title">${esc((STATE.settings || {}).brandTagline || 'Energy for a Better Tomorrow')}</div>
       <div class="htb-sub">Reliable &middot; Sustainable &middot; Together</div>
     </div>
-  </div>
-  <div class="htb-icons">
-    <button class="htb-icon-btn" onclick="openMessagesSheet()" aria-label="Notifications">
-      <span class="htb-ic">${ICONS.bell}${unreadMessageCount() ? '<span class="dot"></span>' : ''}</span>
-    </button>
   </div>
 </div>
 <div class="net-subhead">
@@ -4672,16 +4645,11 @@ async function renderAccount(){
   const html = `
 <div class="home-topbar-v2">
   <div class="htb-brand">
-    <span class="htb-logo">${STATE.brandLogo ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.parentNode.innerHTML=brandTextMark(30)">` : brandTextMark(30)}</span>
     <div class="htb-text">
-      <div class="htb-title">${esc((STATE.settings || {}).brandTagline || 'Energy for a Better Tomorrow')}</div>
       <div class="htb-sub">Your Account &middot; Our Priority</div>
     </div>
   </div>
   <div class="htb-icons">
-    <button class="htb-icon-btn" onclick="openMessagesSheet()" aria-label="Notifications">
-      <span class="htb-ic">${ICONS.bell}${unreadMessageCount() ? '<span class="dot"></span>' : ''}</span>
-    </button>
     <button class="htb-icon-btn" onclick="openSecuritySettingsSheet()" aria-label="Settings">
       <span class="htb-ic">${ICONS.gear}</span>
     </button>
@@ -4709,6 +4677,7 @@ async function renderAccount(){
     ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
     ${acctRowHtml(ICONS.walletLg, 'ar-gold', 'Payout Wallet', 'Link your mobile money payout number', 'openWalletSheet()')}
     ${acctRowHtml(ICONS.shieldCheck, 'ar-gold', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
+    ${acctRowHtml(ICONS.bell, 'ar-dark', 'Messages', 'View notifications and updates', 'openMessagesSheet()')}
     ${acctRowHtml(ICONS.headset, 'ar-red', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
     ${acctRowHtml(ICONS.infoCircle, 'ar-red', 'About Us', 'Platform information and terms', 'openAboutSheet()')}
   </div>
@@ -5189,24 +5158,17 @@ window.closeMessageDetail = function(){
 // from whatever the last /messages fetch returned -- Home itself re-reads
 // STATE.messages on every paint.
 function unreadMessageCount(){ return (STATE.messages || []).filter(m => !m.read).length; }
-function updateMessageBadge(){
-  // Real bug caught while touching this file again: the Home top bar was
-  // rebuilt (.home-topbar -> .home-topbar-v2, .icon-btn -> .htb-icon-btn)
-  // for the mockup re-theme, and this selector was never updated to match --
-  // it silently no-op'd (the `if (!btn) return` below swallowed it) rather
-  // than crashing, so the unread dot stopped live-updating with nothing
-  // visibly broken to notice it by.
-  const btn = document.querySelector('.home-topbar-v2 .htb-icon-btn');
-  if (!btn) return;
-  // The dot is a child of .htb-ic specifically (matching paintHome()'s own
-  // markup), not of the button itself -- .htb-ic .dot{} is what positions
-  // it, and inserting it one level up would leave it unstyled.
-  const ic = btn.querySelector('.htb-ic') || btn;
-  const has = unreadMessageCount() > 0;
-  const dot = ic.querySelector('.dot');
-  if (has && !dot) ic.insertAdjacentHTML('beforeend', '<span class="dot"></span>');
-  if (!has && dot) dot.remove();
-}
+// Deliberate no-op (owner: "remove notification bell ... svgs in top right
+// everywhere"). This used to paint an unread dot onto the top bar's bell
+// button; that button no longer exists on ANY screen -- Messages is now
+// reached from Account's own row list instead (acctRowHtml(ICONS.bell,
+// ..., 'Messages', ..., 'openMessagesSheet()')), which has nowhere
+// sensible to keep a live badge dot from every screen the way the top bar
+// did. Kept as a callable no-op rather than deleted, since every call
+// site (5+ spots across deposit/withdraw completion, page renders) would
+// otherwise need its own guard -- same precedent as maybeShowAnnouncement()
+// elsewhere in this file after its own feature was removed.
+function updateMessageBadge(){}
 
 // ── CHANGE LOGIN PASSWORD (ChangeLoginPassword.dc.html) ──
 function pwLockSvg(){

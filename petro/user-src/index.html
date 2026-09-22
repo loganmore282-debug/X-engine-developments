@@ -2210,6 +2210,13 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    triangles not Loading..."). */
 .list-loading{padding:34px 4px;display:flex;justify-content:center;align-items:center;}
 .list-loading .pspin{--s:56px;}
+/* Network's own team/referral loading state used PLAN_SPIN (the orbiting-
+   chips mark) too, by explicit earlier request. Owner later named it
+   directly and asked for it gone specifically here -- a plain ring instead,
+   PLAN_SPIN itself untouched everywhere else (ongoing-plan rows, the
+   payment page) since only this one use was called out. */
+.ring-spin{width:40px;height:40px;border-radius:50%;border:3px solid var(--snow-border);border-top-color:var(--snow-wine);animation:ringSpin .8s linear infinite;}
+@keyframes ringSpin{to{transform:rotate(360deg);}}
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
 .list-empty .empty-icon{display:flex;justify-content:center;margin-bottom:14px;opacity:.85;}
 .list-empty .empty-icon svg{width:64px;height:64px;}
