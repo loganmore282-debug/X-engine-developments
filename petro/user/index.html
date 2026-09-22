@@ -1877,6 +1877,26 @@ body.sheet-open .sheet-bg{bottom:0;}
   backdrop-filter:blur(9px);
 }
 
+
+/* ── Static refinery backdrop on every signed-in screen ─────────────── */
+#app{position:relative;isolation:isolate;background:#1d130f;}
+#app::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,rgba(12,7,4,.48) 0%,rgba(12,7,4,.62) 48%,rgba(12,7,4,.74) 100%),var(--auth-hero-img);background-size:cover,cover;background-position:center center,center center;background-repeat:no-repeat,no-repeat;}
+#pageHost,.bottom-nav{position:relative;z-index:1;}
+.sheet-bg{isolation:isolate;background:transparent;}
+.sheet-bg::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,rgba(12,7,4,.54) 0%,rgba(12,7,4,.68) 100%),var(--auth-hero-img);background-size:cover,cover;background-position:center center,center center;background-repeat:no-repeat,no-repeat;}
+.sheet-head{background:rgba(20,12,8,.64);border-bottom-color:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);}
+.sheet-head h2{color:#fff;}
+.sheet-head .back svg path{stroke:#fff;}
+.sheet-body{margin:14px auto 26px;padding:18px 20px 40px;border:1px solid rgba(255,255,255,.14);border-radius:var(--r-card);background:rgba(20,12,8,.46);box-shadow:0 16px 34px -20px rgba(0,0,0,.72);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);color:#fff;}
+.sheet-body .dep-sec span,.sheet-body .dep-hint,.sheet-body .dep-instr ol,.sheet-body .wit-bal .lbl,.sheet-body .wit-fee,.sheet-body .wit-instr ol,.sheet-body .statement-id,.sheet-body .statement-date,.sheet-body .statement-head,.sheet-body .statement-empty,.sheet-body .statement-end,.sheet-body .form-hint{color:rgba(255,255,255,.62);}
+.sheet-body .dep-amt input,.sheet-body .dep-phone input,.sheet-body .dep-phone .prefix,.sheet-body .wit-bal .val,.sheet-body .wit-amt input,.sheet-body .wit-pw input,.sheet-body .wit-amt span,.sheet-body .wit-instr h3,.sheet-body .statement-desc,.sheet-body .statement-tabs button.on,.sheet-body .form-field label{color:#fff;}
+.sheet-body .dep-amt,.sheet-body .dep-phone,.sheet-body .dep-instr,.sheet-body .wit-bal,.sheet-body .wit-amt,.sheet-body .wit-pw,.sheet-body .wit-instr,.sheet-body .statement-tabs,.sheet-body .statement-head,.sheet-body .statement-row{border-color:rgba(255,255,255,.14);}
+.sheet-body .statement-tabs{background:transparent;}
+.sheet-body .statement-tabs button{color:rgba(255,255,255,.58);}
+.sheet-body .statement-tabs button.on{color:#fff;border-bottom-color:#ff3340;}
+#homeCarouselTrack>img{opacity:1;transition:opacity .55s cubic-bezier(.22,1,.36,1);will-change:opacity;}
+#homeCarouselTrack>img.hb-fading{opacity:0;}
+
 </style>
 </head>
 <body>
