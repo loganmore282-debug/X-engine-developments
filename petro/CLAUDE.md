@@ -1942,3 +1942,40 @@ one-character outage):
   request to simplify the bind-wallet form's fields (provider + number +
   holder name, unchanged). If that reading is wrong, say so directly
   next round rather than this file guessing further.
+
+## 2026-09-22 — Deposit / Withdraw visual reframing
+
+Owner supplied live screenshots of both transaction screens and asked for a
+different, cleaner approach based on current mobile-finance patterns, with an
+important constraint: **do not add new elements**. The specific direction was
+to remove the stacked-card feel from both pages, while keeping the payout
+wallet itself as the one intentional hero card on Withdraw; the saved mobile
+money number should be the hero value inside that card.
+
+Implemented without changing any deposit/withdraw business logic:
+- **Deposit** is now a flat, amount-first form. The amount field sits before
+  the product-price shortcuts; the shortcuts are lightweight text/underline
+  controls rather than pill cards; Payment Phone uses a flat underline field;
+  Deposit Instructions are no longer boxed in their own card.
+- **Withdraw** now leads with the existing payout wallet as the single hero
+  card. The wallet hero uses Charcoal with the established red→gold Petro
+  accent and makes the saved phone number the dominant value. The
+  Bind/Change Wallet action is a lightweight text action below it.
+- The old gradient **Available Balance** card is removed: balance is now plain
+  page-level information, followed by a flat amount input. Fee and withdrawal
+  instructions are also unboxed/page-level.
+- No transaction fields, settings, routes, validation, payout behavior,
+  gateway logic, or money-safety code changed. This was markup ordering +
+  CSS only.
+- `user/sw.js` bumped `petro-shell-v130` → `petro-shell-v131`.
+- `node build-core.js` ran in a clean GitHub Actions environment and completed
+  successfully, including its source syntax check and `round-trip : OK`; the
+  generated `petro/user/index.html` was committed from that build. The
+  temporary build workflow was removed before merge.
+- Work was done from a temporary branch based on current
+  `claude/petro-platform-build`, then merged with a normal merge (PR #4),
+  not force-pushed.
+
+Still unchanged/open from the prior note: Deposit and Withdraw are still
+implemented through `openSheet()`; this round reframed the pages visually
+only and did **not** convert them into new `STATE.page` routes.
