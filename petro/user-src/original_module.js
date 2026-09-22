@@ -2040,6 +2040,11 @@ function applyAuthBackgrounds(){
   }
   set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
   set('card', STATE.authCardImage, s.authCardOpacity, s.authCardBlur);
+  // authhero is intentionally the one visual backdrop for the entire member
+  // experience now. Signed-in pages read --auth-hero-img directly in CSS,
+  // so changing the Authentication Background upload changes the full site
+  // without a second image slot or duplicated admin setting.
+  root.classList.toggle('has-member-bg', !!STATE.authHeroImage);
   // The bottom-of-the-banner fade (.auth-hero::after) is switched on only
   // when there is a banner to fade. Owner: "there should be like whites or
   // color bleeding into the image of banner uploaded from admin panel." With
@@ -3920,17 +3925,9 @@ window.openSecuritySettingsSheet = function(){
 async function renderAccount(){
   const a = STATE.account || {};
   const html = `
-<div class="home-topbar-v2">
-  <div class="htb-brand">
-    <div class="htb-text">
-      <div class="htb-sub">Your Account &middot; Our Priority</div>
-    </div>
-  </div>
-  <div class="htb-icons">
-    <button class="htb-icon-btn" onclick="openSecuritySettingsSheet()" aria-label="Settings">
-      <span class="htb-ic">${ICONS.gear}</span>
-    </button>
-  </div>
+<div class="account-toolbar">
+  <h1>Account</h1>
+  <button class="account-settings" onclick="openSecuritySettingsSheet()" aria-label="Settings">${ICONS.gear}</button>
 </div>
 <div style="padding:0 18px;">
   <div class="acct-card"${STATE.profileCard ? ` style="background-image:linear-gradient(100deg,rgba(255,255,255,.94) 0 44%,rgba(255,255,255,.2) 100%),url('${esc(STATE.profileCard)}')"` : ''}>
