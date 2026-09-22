@@ -7570,3 +7570,58 @@ from Cameroon's network list under Countries so members are never offered a netw
 cannot currently collect. Same applies to any other country/network pair MarzPay has not
 turned on yet; the admin diagnostic is now the tool to find out which.
 
+## Round 182 — Reading MarzPay's real integration reference, after being asked whether I had
+
+Owner, directly: *"but did you read marzpy documentation?"* Honest answer: not for Round
+181's fix — `wallet.wearemarz.com`/`docs.wearemarz.com` are refused by this environment's
+egress proxy (confirmed again this round), so that fix was built from MarzPay's own
+published SDK (`marzpay-js` on npm) rather than their docs. The owner then supplied a
+comprehensive MarzPay integration reference document directly, which is what this round
+is built from.
+
+**It confirms Round 181's fix and extends it.** The doc's own error table lists
+`SERVICE_NOT_AVAILABLE` ("Product disabled") and `SERVICE_NOT_SUBSCRIBED` ("Missing
+marketplace subscription") right alongside `DEPOSITS_NOT_ALLOWED` — the same family of
+account/product-level permanent refusal, not a transient one "try again in a moment"
+ever fixes. Both are added to `MARZ_PERMANENT_ERROR_CODES` — now
+`new Set(['DEPOSITS_NOT_ALLOWED', 'SERVICE_NOT_SUBSCRIBED', 'SERVICE_NOT_AVAILABLE'])` —
+same discipline as `MARZ_PHONE_ERROR_CODES`: grown from what the provider actually
+documents, not guessed at.
+
+**A second concern the doc surfaced, investigated and found to be a non-issue.** The
+doc's error table lists `INSUFFICIENT_BALANCE` ambiguously as "Low wallet balance", with
+no distinction between the member's own mobile-money balance (fine to show on a
+collection) and Chipz's own MarzPay float (would be actively misleading to show on a
+withdrawal, since it implies the member's problem rather than an operational one Chipz
+needs to fix — and the same doc separately confirms `ACCOUNT_FROZEN` means "Business
+frozen", i.e. Chipz's own merchant account, not the member's). Traced every raw-text-
+capable MarzPay wrapper call site in `server.js`:
+- `marzMemberMsg()` (the member-safe, filtered wrapper) is called from exactly ONE
+  place — the deposit path (line ~5583). Never from the withdrawal/send-money path.
+- `marzUserMsg()` (the admin-facing, raw-passthrough wrapper) is called from the
+  withdrawal-processing route (`/admin/withdraw/process`, `verifyAdmin`-gated) and the
+  MarzPay-balance route (`/admin/marzpay/balance`, also `verifyAdmin`-gated).
+
+**Both `marzUserMsg()` call sites are behind `verifyAdmin`.** A member never reaches
+raw MarzPay text on the withdrawal side at all — a failed automatic payout reverts the
+withdrawal to `'pending'` with no raw reason surfaced to the member; only an admin,
+reading the diagnostic, sees MarzPay's actual words. So the `INSUFFICIENT_BALANCE` /
+`ACCOUNT_FROZEN` ambiguity is real information an admin needs to interpret correctly
+(and now knows to, from this round), but it is not a member-facing leak — no code
+change was needed there.
+
+### Tests
+`test-marz-phone-error.js` gained explicit coverage for both new codes (mirroring the
+existing `DEPOSITS_NOT_ALLOWED` case): `marzIsBusy()` returns false, `marzMemberMsg()`
+gives the honest fallback instead of "try again in a moment", `marzUserMsg()` is
+unaffected. `verify-marz-phone-error-discriminates.py` gained a matching mutation
+(dropping the two new codes back out of the set) — **23 mutations total, all caught**,
+control correctly MISSED. Full 35-file Node suite green.
+
+Server-only change; no frontend/admin bundle to rebuild, no sw.js bump needed.
+
+### Owner still has to
+Nothing new from this round specifically — the network-availability asks from Round 181
+(enable Orange Money for Cameroon on MarzPay's side, or remove it from that country's
+network list until they do) still stand.
+

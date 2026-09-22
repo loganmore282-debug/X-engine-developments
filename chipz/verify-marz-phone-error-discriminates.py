@@ -85,6 +85,13 @@ MUTATIONS = [
      "  const raw = String((mp && (mp.message || mp.data?.message || mp.error || mp.data?.error)) || '');",
      True),
 
+    # ── Round 182: the two codes added once the user-supplied MarzPay
+    #    integration reference confirmed them, not guessed at ──
+    ('SERVICE_NOT_SUBSCRIBED / SERVICE_NOT_AVAILABLE are dropped back out of the permanent set', SERVER,
+     "const MARZ_PERMANENT_ERROR_CODES = new Set(['DEPOSITS_NOT_ALLOWED', 'SERVICE_NOT_SUBSCRIBED', 'SERVICE_NOT_AVAILABLE']);",
+     "const MARZ_PERMANENT_ERROR_CODES = new Set(['DEPOSITS_NOT_ALLOWED']);",
+     True),
+
     # ── the wiring, and the region it is decided against ──
     ('the deposit route records the raw admin/diagnostic text as the failure reason', SERVER,
      "      await markDepositFailed(depRef, userId,\n        marzMemberMsg(mpData, 'Could not start the payment', paymentRegion),\n        JSON.stringify(mpData));",

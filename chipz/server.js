@@ -2608,7 +2608,12 @@ const DEPOSIT_FAILED_MSG = 'Payment was not completed. Please try again.';
 // its own named set rather than folded into marzIsBusy()'s regex: these are
 // specific, provider-confirmed codes, not a wording guess, and the list
 // grows only from evidence the same way MARZ_PHONE_ERROR_CODES did.
-const MARZ_PERMANENT_ERROR_CODES = new Set(['DEPOSITS_NOT_ALLOWED']);
+// SERVICE_NOT_SUBSCRIBED ("missing marketplace subscription") and
+// SERVICE_NOT_AVAILABLE ("product disabled") joined the set once MarzPay's
+// own integration reference confirmed both, alongside DEPOSITS_NOT_ALLOWED,
+// as the same family of account/product-level refusal that no retry fixes --
+// not a live failure yet, but documented by the provider rather than guessed.
+const MARZ_PERMANENT_ERROR_CODES = new Set(['DEPOSITS_NOT_ALLOWED', 'SERVICE_NOT_SUBSCRIBED', 'SERVICE_NOT_AVAILABLE']);
 // "This is a transport/capacity problem, not a decision about this payment."
 // One definition, used by both the admin-facing and member-facing wrappers
 // below -- restating it in the second one would be a second source of truth

@@ -172,6 +172,25 @@ console.log('\n— a confirmed PERMANENT refusal is not mistaken for a transient
      'an ordinary transport failure with no permanent error_code is still busy');
 }
 
+// Round 182: the user-supplied MarzPay integration reference documents
+// SERVICE_NOT_SUBSCRIBED ("missing marketplace subscription") and
+// SERVICE_NOT_AVAILABLE ("product disabled") as the same family of
+// account/product-level refusal as DEPOSITS_NOT_ALLOWED -- confirmed by the
+// provider's own docs, not guessed at, same discipline as every other entry
+// in this set.
+console.log('\n— the other two documented permanent refusals behave the same way —');
+for (const code of ['SERVICE_NOT_SUBSCRIBED', 'SERVICE_NOT_AVAILABLE']) {
+  const it = api(CM);
+  const permanent = { status: 'error', error_code: code, providerDown: true,
+    message: 'MarzPay refusal: ' + code };
+  ck(it.marzIsBusy(permanent) === false,
+     code + ' overrides the HTTP-status-derived providerDown flag');
+  ck(it.marzMemberMsg(permanent, 'Could not start the payment', CM) === 'Could not start the payment',
+     code + ': the member is told the recharge did not start, not invited to retry');
+  ck(it.marzUserMsg(permanent, 'Could not start the payment') === permanent.message,
+     code + ': the ADMIN diagnostic still shows the raw reason');
+}
+
 console.log('— recognising the documented error family —');
 {
   const it = api(UG);
