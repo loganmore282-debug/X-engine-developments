@@ -182,7 +182,7 @@
   --snow-radius-tile:16px;
   --snow-radius-control:16px;
   --snow-radius-sheet:32px;
-  /* Petro-specific additions (no Snow equivalent) */
+  /* Petro additions (no Snow equivalent) */
   /* Bottom nav height. Grew from 68px when the icons did -- owner, twice:
      "the nav icons are small". */
   --nav-h:68px;
@@ -249,7 +249,7 @@ button{cursor:pointer;font-family:inherit;}
 input{font-family:inherit;}
 a{color:inherit;}
 /* Petro uses the corporate red scrollbar. The inherited orange/yellow thumb
-   was a Petro-era visual residue and is intentionally gone. */
+   was a legacy visual residue and is intentionally gone. */
 html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -423,7 +423,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
    even it has background image like that of petro, remove it entirely,
    only put that loader everywhere for loading pages... check that loader
    in gif carefully how it works and use it." The old dark-red gradient
-   backdrop and the Petro-derived wordmark/wave treatment are gone, not
+   backdrop and the Petro wordmark/wave treatment are gone, not
    just restyled -- there is nothing left here that came from Petro. */
 #loadingScreen{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;z-index:500;}
 #openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
@@ -564,57 +564,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .sk-member{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--snow-border);}
 .sk-member .sk-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;}
 
-/* ── MY PRODUCTS ──
-   Deliberately not Snow's layout. Snow leads with three white count tiles
-   and a flat "Active Plans" list; this leads with the one figure a member
-   actually wants -- what they are still owed -- on a full-bleed band, then
-   filters (Running / Matured / All, which Snow has no equivalent of), then
-   rows that carry a progress bar, days remaining, earned-vs-still-to-come
-   and a live next-payout countdown. */
-.mp-band{margin:0 0 14px;padding:20px 18px 16px;background:var(--petro-hero);color:#fff;}
-.mp-band-k{font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;font-weight:600;}
-.mp-band-v{font-size:38px;font-weight:700;margin-top:4px;line-height:1.05;}
-.mp-band-sub{font-size:14.5px;opacity:.8;margin-top:6px;}
-.mp-band-row{display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.22);}
-.mp-band-row > div{flex:1;min-width:0;}
-.mp-band-row span{display:block;font-size:13px;opacity:.75;}
-.mp-band-row b{display:block;font-size:17px;font-weight:700;margin-top:2px;white-space:nowrap;}
-.mp-filters{display:flex;gap:8px;margin:0 16px 12px;}
-/* Owner: "remove counter showing number of plans, it is in userpanel so
-   remove it." The `<i>3</i>` badge is gone from the markup, so its two
-   rules go with it rather than styling an element that no longer exists. */
-.mp-f{flex:1;min-width:0;height:42px;border:1px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-muted);border-radius:var(--r-ctl);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;box-shadow:none;}
-.mp-f.on{background:var(--petro-grad);color:#fff;border-color:transparent;}
-.mp-list{display:flex;flex-direction:column;gap:10px;margin:0 16px;}
-.mp-row{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:16px 15px;box-shadow:var(--sh-card);}
-.mp-row.done{opacity:.85;}
-.mp-top{display:flex;align-items:center;gap:11px;}
-.mp-thumb{width:46px;height:46px;flex-shrink:0;border-radius:var(--r-ctl);background:var(--petro-hero);display:flex;align-items:center;justify-content:center;overflow:hidden;color:#fff;font-weight:700;font-size:18px;}
-.mp-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
-.mp-id{flex:1;min-width:0;}
-.mp-name{font-size:17px;font-weight:600;color:var(--snow-ink);}
-.mp-meta{font-size:14px;color:var(--snow-muted);margin-top:1px;}
-.mp-chip{flex-shrink:0;font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:var(--r-pill);background:var(--snow-green-soft);color:var(--snow-green);}
-.mp-chip.done{background:var(--snow-neutral-soft);color:var(--snow-muted);}
-/* Owner: "remove progress bar on running products so on you will see how
-   you'll organize it but remove progress bar."
-   The bar is gone. This line used to be its CAPTION -- two muted greys sitting
-   6px under the track, which without the bar above them read as a leftover
-   label rather than content. So it takes over the bar's own slot (13px, where
-   the eye already expects the next thing after the header) and the day count
-   is promoted to ink at the row's weight: the fact the bar was drawing is now
-   simply stated. The right-hand half stays muted, because "26 days left" is
-   the same arithmetic said a second way and should not compete with it. */
-.mp-days{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;color:var(--snow-muted);margin-top:13px;}
-.mp-days .lead{display:flex;align-items:center;gap:9px;min-width:0;}
-.mp-days b{font-size:15px;font-weight:600;color:var(--snow-ink);}
-/* Owner: "make sure that one running investment, it shows Date bought."
-   Its own quiet line rather than a third column in .mp-figs: those columns
-   would drop from 161px to 104px each, and "UGX 571,300.00" at 16px does not
-   fit in 104. Shown on matured rows too -- when a finished plan was bought is
-   the same fact, and hiding it there would be an odd gap. */
-.mp-bought{font-size:12.5px;color:var(--snow-muted);margin-top:5px;}
-
 /* ── THE ONGOING MARK ──
    Owner sent this as a 180px standalone loader ("put this animation on aside of
    running product, it should be well defined") -- three chips orbiting a
@@ -665,39 +614,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
   .pspin-orbit,.pspin-chip,.pspin-core,.pspin-glow{animation:none;}
   .pspin-core{transform:translate(-50%,-50%);}
   .pspin-glow{transform:translateX(-50%);}
-}
-.mp-figs{display:flex;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--snow-border);}
-.mp-figs > div{flex:1;min-width:0;}
-.mp-figs span{display:block;font-size:13px;color:var(--snow-muted);}
-.mp-figs b{display:block;font-size:16px;font-weight:700;color:var(--snow-ink);margin-top:2px;white-space:nowrap;}
-.mp-figs b.up{color:var(--snow-green);}
-.mp-next{display:flex;align-items:center;gap:6px;margin-top:11px;font-size:12px;color:var(--snow-muted);}
-.mp-next b{color:var(--snow-ink);font-weight:700;}
-.mp-next .countdown-val{color:var(--snow-ink);font-weight:600;}
-.mp-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-/* Activity card: a notification line, led by a bell, rather than the old
-   dark pill. Sits on the app surface like every other card now. */
-.act-card{margin:0 16px 14px;display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--sh-card);}
-.act-bell{flex-shrink:0;width:30px;height:30px;display:flex;align-items:center;justify-content:center;}
-.act-bell img{width:100%;height:100%;object-fit:contain;display:block;}
-.act-track-wrap{overflow:hidden;flex:1;min-width:0;}
-.act-track{display:inline-flex;white-space:nowrap;color:var(--snow-muted);font-size:12.5px;font-weight:500;}
-.act-track b{color:var(--snow-ink);font-weight:600;}
-.act-track .sep{color:var(--snow-border);}
-/* The animated brand mark filling Home's leftover strip above the nav.
-   max-height is in vh on purpose -- a GIF arrives at whatever size it was
-   exported at, and one tall upload would otherwise push Home into scrolling.
-   The right padding is wider than the left by the width of the floating
-   chest: the chest is position:fixed over that corner, so centring inside
-   the FULL width would put the mark half under it. This centres it in the
-   space that is actually free, which is what reads as centred on the phone.
-   pointer-events:none so the strip can never eat a tap meant for the chest. */
-.home-gif{display:flex;align-items:center;justify-content:center;padding:2px 96px 0 18px;pointer-events:none;}
-.home-gif img{max-width:100%;max-height:20vh;width:auto;height:auto;display:block;}
-.ref-banner{height:150px;margin-bottom:18px;}
-.home-banner img,.ref-banner img{display:block;width:100%;height:100%;object-fit:cover;}
-.hb-stripes{position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.06) 0 14px,transparent 14px 30px);}
-.hb-cap{position:absolute;bottom:12px;left:16px;right:16px;color:#fff;font-weight:700;font-size:15px;text-shadow:0 2px 8px rgba(0,0,0,.4);}
+
+.home-banner img{display:block;width:100%;height:100%;object-fit:cover;}
 /* Admin video banner (Home.dc.html). Owner: "l dont want it to be tappable
    or pause or play, l want it to go or run on its own." So the play ring is
    gone entirely and the video takes NO pointer events -- a tap on the banner
@@ -861,10 +779,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .asset-stats span svg{width:12px;height:12px;flex-shrink:0;}
 .asset-stats b{color:var(--snow-ink);font-weight:800;margin-left:2px;}
 .asset-row .p-cta{width:100%;height:38px;padding:0;font-size:13px;margin:0;}
-.home-tabs{display:flex;gap:10px;padding:0 18px;margin:14px 0;}
-.home-tabs .ht{flex:1;text-align:center;padding:11px 0;border-radius:var(--r-pill);font-weight:700;font-size:14px;letter-spacing:.03em;border:none;font-family:inherit;}
-.home-tabs .ht.active{background:var(--petro-grad);color:#fff;box-shadow:none;}
-.home-tabs .ht.off{background:var(--snow-surface);color:var(--snow-muted);border:1.5px solid var(--snow-border);}
 .page-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 18px 12px;}
 .page-head h2{margin:0;font-size:23px;font-weight:400;letter-spacing:.02em;}
 .page-head span{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
@@ -880,77 +794,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .primary-button.copied{pointer-events:none;}
 .lv-line{font-size:13px;font-weight:700;color:var(--snow-ink);margin:4px 0;}
 
-/* ── Team (Team.dc.html) ── */
-.plain-head{font-size:19px;font-weight:400;margin:22px 18px 12px;}
-/* Team cards, measured off the owner's mockup rather than eyeballed. Both his
-   screenshot and ours came off the same phone at 1080x2340, and our card is
-   973 device px for a CSS width of 354, so 1 CSS px = 2.749 device px and his
-   figures convert directly:
-
-                              ours      his
-     card 1 height          157.2    164.8 CSS
-     card 2 height          163.7    177.9
-     "45" / "1%" cap height  25.1     33.8  -> both his figures are ~47px
-     green glow on the edge   none    ~12% alpha, fading over ~16px
-     arcs top-right           none    2 hairlines, r 41.5 and 61.5
-
-   The GREEN is on the card EDGE only. Owner: "see some green behind the
-   percentage, and number, also on card edges" -- but sampling the haze around
-   his figures gives (212,228,244) against a (223,229,245) fill: a shadow in
-   the GLYPH's own hue, not a green one. So the figures get a halo in their own
-   brand colour and the green stays where it was measured, on the edge. */
-.team-gcard{position:relative;overflow:hidden;background:linear-gradient(135deg,#fff0e6,#ffd9b3);border-radius:var(--r-card);padding:21px 20px;border:1px solid #ffe0bf;
-  box-shadow:0 6px 24px rgba(74,170,108,.34),0 2px 8px rgba(74,170,108,.20);}
-/* The two clipped rings in his top-right corner. Centre sits 19.6px INSIDE the
-   corner, so a circle of radius R is offset (19.6 - R) from both edges and the
-   card's own overflow:hidden cuts it into the semi-circle he described. Card 2
-   has none in his mockup, hence :not(.comm). Barely-there strokes on purpose:
-   measured only ~4 luminance units above the fill. */
-.team-gcard:not(.comm)::before,.team-gcard:not(.comm)::after{content:'';position:absolute;border-radius:50%;border:1.5px solid rgba(255,255,255,.55);pointer-events:none;}
-.team-gcard:not(.comm)::before{width:123px;height:123px;top:-41.9px;right:-41.9px;}
-.team-gcard:not(.comm)::after{width:83px;height:83px;top:-21.9px;right:-21.9px;}
-/* Owner: "you failed to put that icon total team icon just as the same team
-   icon on our app, dont use that in mockup" -- the card had no icon at all,
-   and the mockup he was holding up marks it with a bare emoji. This is the
-   app's own team artwork, the same file the bottom nav uses, so the icon for
-   "team" is one thing everywhere instead of an emoji in one place and a
-   picture in another. align-items:center, not baseline: a picture has no
-   baseline to sit on and would hang low against the text. */
-.team-gcard .row1{display:flex;align-items:center;justify-content:center;gap:8px;}
-.team-gcard .row1 .ic{width:24px;height:24px;object-fit:contain;flex-shrink:0;
-  filter:drop-shadow(0 3px 5px rgba(30,10,5,.28));}
-.team-gcard .row1 .lbl{font-size:15px;font-weight:500;color:#7a5a3a;}
-/* Owner: "on team there are some green behind the number, see our mockup on
-   percentage and number of team, some green is there behind numbers, see
-   clearly rather than guess."
-
-   Measured off his mockup rather than eyeballed. Sampling across the glow on
-   his big "45": the halo pixels read (176,220,219) against a (197,230,249)
-   card, so every channel drops but BLUE drops most (-30) and green least
-   (-10) -- the signature of a green cast, not a shadow. Solving that back
-   through normal alpha compositing at a plausible 20-30% puts the glow's own
-   colour between (92,180,99) and (127,197,149): a medium leafy green, not
-   the deep --snow-green and not a mint.
-
-   Ours had a red glow (rgba(226,27,42,.30)) -- the numeral's own colour,
-   which reads as a blur of the digit rather than as anything behind it. The
-   geometry was already right: his halo dies out about 10-25 device px from
-   the stroke, which at his screenshot's 1.846 device px per CSS px is the
-   ~14px reach an 18px blur has. Only the colour changes.
-
-   One token, used by both numbers, so the two can never drift. */
-:root{--team-glow:rgba(45,170,85,.42);}
-.team-gcard .row1 .num{font-size:47px;color:var(--snow-wine);line-height:1.05;
-  text-shadow:0 0 18px var(--team-glow);}
-.team-gcard .ln{height:1px;background:rgba(122,90,58,.25);margin:14px 0;}
-.team-gcard .amt{text-align:center;font-size:22px;font-weight:700;color:var(--snow-ink);}
-.team-gcard .cap{text-align:center;font-size:12px;color:#7a5a3a;font-weight:500;margin-top:2px;}
-.team-gcard.comm{padding:30px 22px;text-align:center;}
-.team-gcard.comm .lvl{font-size:14px;font-weight:500;color:#7a5a3a;margin-bottom:4px;}
-.team-gcard.comm .pct{font-size:47px;color:var(--snow-wine);line-height:1.1;
-  text-shadow:0 0 18px var(--team-glow);}
-.team-gcard.comm .amt2{font-size:20px;color:var(--snow-ink);margin-top:6px;}
-.team-gcard.comm .mem{font-size:12px;color:#7a5a3a;font-weight:500;margin-top:2px;}
 /* ── The member card, measured off his mockup ──────────────────────────
    Owner: "l need that exactly what you're seeing, all the arrangements, have
    you seen even those green winnings on cards, l need them, also figures are
