@@ -61,6 +61,11 @@ jobs:
         working-directory: petro
         run: node build-admin.js
 
+      - name: Install browser test dependency
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+
       - name: Core regression checks
         working-directory: petro
         run: |
