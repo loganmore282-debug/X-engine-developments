@@ -1,0 +1,83 @@
+name: Petro fresh redesign verification
+
+on:
+  push:
+    branches:
+      - petro/fresh-redesign-audit
+    paths:
+      - 'petro/user-src/**'
+      - 'petro/admin-src/**'
+      - 'petro/user/sw.js'
+      - 'petro/admin/sw.js'
+      - 'petro/build-core.js'
+      - 'petro/build-admin.js'
+      - 'petro/server.js'
+      - '.github/workflows/petro-redesign-verify.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: petro/fresh-redesign-audit
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: petro/package-lock.json
+
+      - name: Install build dependencies
+        working-directory: petro
+        run: npm ci
+
+      - name: Syntax checks
+        working-directory: petro
+        run: |
+          node --check user-src/original_module.js
+          node --check server.js
+          node --check user/sw.js
+          node --check admin/sw.js
+
+      - name: Verify no live legacy raster UI references
+        working-directory: petro
+        run: |
+          if grep -En '["'\''`]/(treasure-chest|turntable|spin-wheel|copy-clip|pay-success|pay-failed|logout-door|nav-(home|products|myproducts|referral|team|account)|act-(deposit|withdraw|channel|service|bell)|set-(download|wallet|balance|messages|loginpw|tradepw))\.png["'\''`]' user-src/index.html user-src/original_module.js; then
+            echo "Legacy Chipz raster reference still reachable from source"
+            exit 1
+          fi
+
+      - name: Build user bundle
+        working-directory: petro
+        run: node build-core.js
+
+      - name: Build admin bundle
+        working-directory: petro
+        run: node build-admin.js
+
+      - name: Core regression checks
+        working-directory: petro
+        run: |
+          node test-audit-money-regressions.js
+          node test-code-security.js
+          node test-no-snow-branding.js
+          python3 test-visible-text.py
+          python3 test-nav-sheets.py
+          python3 test-csp-runtime.py
+
+      - name: Commit generated bundles
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add petro/user/index.html petro/admin/index.html
+          if git diff --cached --quiet; then
+            echo "Generated bundles already current"
+          else
+            git commit -m "Build Petro fresh redesign bundles"
+            git push origin HEAD:petro/fresh-redesign-audit
+          fi
