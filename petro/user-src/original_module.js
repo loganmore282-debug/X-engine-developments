@@ -6204,6 +6204,9 @@ function paintWithdrawSheet(s){
   const w = (STATE.bankAccounts || [])[0] || null;
   const fee = s.withdrawFeePct || 15;
   $('sheetBody').innerHTML = `<div class="reveal-in" style="padding-top:18px;">
+    ${walletCardHtml(w)}
+    <button class="btn-bind" type="button" onclick="openWalletSheet()">${w ? 'Change Wallet' : 'Bind Wallet'}</button>
+
     <div class="wit-bal">
       <div class="lbl">Available Balance</div>
       <div class="val">${fmtUGX2(balance)}</div>
@@ -6212,10 +6215,6 @@ function paintWithdrawSheet(s){
       <span>${esc(cur())}</span>
       <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="syncWithdrawReceiveAmt()">
     </div>
-
-    <div class="dep-sec"><span class="bar"></span><span>Withdrawal Wallet</span></div>
-    ${walletCardHtml(w)}
-    <button class="btn-bind" type="button" onclick="openWalletSheet()">${w ? 'Change Wallet' : 'Bind Wallet'}</button>
 
     <div class="wit-fee">Fee: ${fee}%</div>
     <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
