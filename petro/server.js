@@ -145,6 +145,10 @@ app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 // this copy -- it has no business reaching Petro's database.
 const CORS_ALLOWED_ORIGINS = new Set([
   'https://petro-platform.com', 'https://www.petro-platform.com',
+  // Direct VPS frontend used while Petro is served/tested on port 8080.
+  // Different ports are different browser origins, so without this exact
+  // entry the member page loads but every API call to :3000 is blocked by CORS.
+  'http://179.198.197.114:8080',
 ]);
 // Suffix-matched hosts. EdgeOne hands out *.edgeone.app, *.edgeone.site AND
 // *.edgeone.dev subdomains, and the project can be renamed or redeployed to
