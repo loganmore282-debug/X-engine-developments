@@ -3487,7 +3487,8 @@ window.switchAssetsTab = function(tab){
 async function renderAssets(){
   const hadProducts = (STATE.products || []).length > 0;
   const hadInvestments = Array.isArray(STATE.investments);
-  if (hadProducts || hadInvestments) paintAssets(); else paintCatalogSkeleton();
+  if (hadProducts || hadInvestments) paintAssets();
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
   const [pr, ir] = await Promise.all([api('/public/products'), api('/investments')]);
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
   if (ir.status === 'success') { STATE.investments = ir.investments; _investmentsLoadFailed = false; }
@@ -4309,7 +4310,8 @@ window.toggleEarningsVisibility = function(){
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
   const shareReady = refreshShareHost();
-  if (hadCache) paintNetwork(); else paintTeamSkeleton();
+  if (hadCache) paintNetwork();
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
   const [r] = await Promise.all([api('/team/stats'), shareReady]);
   if (r.status === 'success') STATE.teamStats = r;
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
@@ -4701,8 +4703,16 @@ window.openWalletSheet = async function(){
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!hadCache) STATE.bankAccounts = [];
-  if (!hadCache) _walletEditing = !(STATE.bankAccounts || []).length;
-  if (_openSheetTitle === 'Wallet') renderWalletSheet();
+  if (!hadCache) {
+    _walletEditing = !(STATE.bankAccounts || []).length;
+    if (_openSheetTitle === 'Wallet') renderWalletSheet();
+  } else if (!_walletEditing && _openSheetTitle === 'Wallet') {
+    // A linked-wallet display has no focused input to destroy, so it is safe
+    // to refresh. When the add form is visible, do NOT repaint it under the
+    // member's finger: replacing #walPhone after focus is exactly what makes
+    // Android's keyboard appear late or fail to stay open.
+    renderWalletSheet();
+  }
 };
 function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
 function maskedTail(phone){
