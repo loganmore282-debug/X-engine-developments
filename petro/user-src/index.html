@@ -1469,16 +1469,23 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .tt-rules li{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.7;margin-left:16px;}
 
 /* ── Notify dialog (Notify.dc.html) ── */
-/* A dark, small, bottom-sliding toast -- owner: "don't send the same notify
-   design as old Chipz code... make these dark small, not designed, and
-   open/appear from down." No dimmed backdrop and no OK button: the toast
-   itself is the only tappable thing (dismiss early by tapping it), it also
-   auto-dismisses on its own (see notify()'s timer), and it never blocks
-   taps on the rest of the screen -- .notify-bg spans the width but takes no
-   pointer events itself, only .notify-card does. */
-.notify-bg{position:fixed;left:0;right:0;bottom:calc(var(--nav-h) + 14px);display:flex;justify-content:center;padding:0 20px;z-index:400;pointer-events:none;}
-.notify-card{pointer-events:auto;max-width:420px;background:rgba(37,38,43,.96);color:#fff;padding:13px 20px;border-radius:14px;font-size:13.5px;font-weight:600;line-height:1.4;text-align:center;box-shadow:0 14px 30px -12px rgba(0,0,0,.5);transform:translateY(140%);opacity:0;transition:transform .28s cubic-bezier(.34,1.35,.64,1),opacity .22s;}
-.notify-bg.show .notify-card{transform:translateY(0);opacity:1;}
+/* A dark, small, centred toast -- owner: "don't send the same notify design
+   as old Chipz code... make these dark small, not designed" (kept), then
+   later: "l nolonger need such notifies of in page... all notifies in
+   middle not bottom" -- moved from bottom-anchored to the middle of the
+   screen, and this is now the ONLY place a validation/error message shows
+   anywhere in the app (the auth screens used to write their own inline
+   pink error boxes into the page instead of calling this -- see
+   regError()/forgotError() and doLogin() in original_module.js -- that
+   second pattern is gone, not just hidden). No dimmed backdrop and no OK
+   button: the toast itself is the only tappable thing (dismiss early by
+   tapping it), it also auto-dismisses on its own (see notify()'s timer),
+   and it never blocks taps on the rest of the screen -- .notify-bg spans
+   the full screen but takes no pointer events itself, only .notify-card
+   does. */
+.notify-bg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:0 28px;z-index:400;pointer-events:none;}
+.notify-card{pointer-events:auto;max-width:360px;background:rgba(37,38,43,.96);color:#fff;padding:14px 20px;border-radius:14px;font-size:13.5px;font-weight:600;line-height:1.4;text-align:center;box-shadow:0 18px 40px -14px rgba(0,0,0,.55);transform:scale(.9);opacity:0;transition:transform .22s cubic-bezier(.34,1.35,.64,1),opacity .18s;}
+.notify-bg.show .notify-card{transform:scale(1);opacity:1;}
 .notify-msg{white-space:pre-line;}
 
 /* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
@@ -1964,7 +1971,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .milestone-track{height:5px;border-radius:var(--r-pill);background:var(--snow-border);margin-top:10px;overflow:hidden;}
 .milestone-fill{height:100%;border-radius:var(--r-pill);background:var(--snow-wine);}
 .milestone-fill.done{background:var(--snow-green);}
-.auth-error{background:var(--snow-wine-soft);color:var(--snow-wine-deep);border-radius:var(--r-ctl);padding:10px 14px;font-size:12.5px;margin-bottom:14px;}
 
 /* ── Manual deposit: payment-method + "COPY & PAY" screens ──
    Owner supplied this exact reference design and asked for it kept as-is --
@@ -2571,7 +2577,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
     </button>
     <div class="auth-scroll-v2">
       <div id="loginPane">
-        <div id="loginError"></div>
         <div class="af-v2">
           <span class="af-prefix" id="loginDial">+256</span>
           <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
@@ -2602,7 +2607,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
            server.js's completeRegistrationCore()/withdraw/request for the
            matching backend removal. -->
       <div id="registerPane" style="display:none;">
-        <div id="regError"></div>
         <div class="af-v2">
           <span class="af-prefix" id="regDial">+256</span>
           <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
@@ -2639,7 +2643,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
            screen specifically, but the same "one screen, exactly the
            fields needed" treatment applies for consistency. -->
       <div id="forgotPane" style="display:none;">
-        <div id="forgotError"></div>
         <div class="af-v2">
           <span class="af-prefix" id="forgotDial">+256</span>
           <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">

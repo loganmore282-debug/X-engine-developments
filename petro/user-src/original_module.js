@@ -1498,8 +1498,6 @@ function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
   $('forgotPane').style.display = tab === 'forgot' ? '' : 'none';
-  $('loginError').innerHTML = ''; $('regError').innerHTML = '';
-  const fe = $('forgotError'); if (fe) fe.innerHTML = '';
   // Clears any OTP already sent/verified for whichever pane is being
   // switched INTO -- a member who backs out of Sign Up partway through and
   // later taps it again should not have doRegister() silently reuse a
@@ -1595,9 +1593,8 @@ async function tryAutoSignIn(){
 window.doLogin = async function(){
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
-  if (!phone) return $('loginError').innerHTML = '<div class="auth-error">Enter a valid ' + esc(regionName()) + ' mobile number.</div>';
-  if (!pass) return $('loginError').innerHTML = '<div class="auth-error">Enter your password.</div>';
-  $('loginError').innerHTML = '';
+  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
+  if (!pass) return notify('Enter your password.');
   setBtnLoading('loginBtn', true, 'Log In', 'Logging in…');
   try {
     // Tries this region's address, then the other shape for the same region
@@ -1633,7 +1630,7 @@ window.doLogin = async function(){
     const many = Number(STATE.regionCount) > 1;
     if (many && /no account|not found|password|credential/i.test(msg))
       msg += ' If you signed up on another country\'s site, please sign in there.';
-    $('loginError').innerHTML = `<div class="auth-error">${esc(msg)}</div>`;
+    notify(msg);
     setBtnLoading('loginBtn', false, 'Log In');
   }
 };
@@ -1646,7 +1643,14 @@ window.doLogin = async function(){
 // taps (Send Code, then Register) with no separate "step" screens to
 // navigate through.
 window._regOtp = { otpId: null, ticket: null, phone: '' };
-function regError(msg){ $('regError').innerHTML = msg ? `<div class="auth-error">${esc(msg)}</div>` : ''; }
+// Owner: "l nolonger need such notifies of in page... all notifies in
+// middle not bottom" -- was an inline pink box written into #regError,
+// sitting inside the form itself. Routed through the same app-wide
+// notify() toast every other screen already uses, instead of a second,
+// auth-screen-only error pattern. Kept as its own function (rather than
+// replacing every call site with notify() directly) purely so nothing
+// else about doRegSendOtp()/doRegister() has to change.
+function regError(msg){ if (msg) notify(msg); }
 window.doRegSendOtp = async function(){
   const phone = cleanPhone($('regPhone').value);
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
@@ -1743,7 +1747,7 @@ window.doRegister = async function(){
 // otpId, the real verify happens inside the submit handler), not the
 // earlier 3-step wizard.
 window._forgotOtp = { otpId: null, ticket: null, phone: '' };
-function forgotError(msg){ const el = $('forgotError'); if (el) el.innerHTML = msg ? `<div class="auth-error">${esc(msg)}</div>` : ''; }
+function forgotError(msg){ if (msg) notify(msg); }
 window.doForgotSendOtp = async function(){
   const phone = cleanPhone($('forgotPhone').value);
   if (!phone) return forgotError('Enter a valid ' + regionName() + ' mobile number.');

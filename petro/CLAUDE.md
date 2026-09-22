@@ -1038,6 +1038,52 @@ banner, push notification settings."*
   markup, to catch any other landmine of the same shape before shipping,
   not just the ones caught by hand. Both service-worker caches bumped.
 
+**Auth screens had their own second error pattern, found live from a
+screenshot; notify() moved from bottom to centre.** Owner sent a
+screenshot of a "SMS verification is not available right now" message
+sitting as a light-pink box inline in the Register form, asked *"why
+this"* and said *"l nolonger need such notifies of in page, l need it to
+appear like as l said, all notifies in middle not bottom."*
+
+- **The "why"**: `/auth/otp/send` correctly refuses with 503 whenever
+  `MARZSMS_KEY` is unset (see the OTP round above) -- expected server
+  behaviour, not a bug. What WAS wrong is how the error reached the
+  screen: `regError()`/`forgotError()` and two spots in `doLogin()` wrote
+  their own `<div class="auth-error">` (a light pink box, `--snow-wine-soft`)
+  straight into `#regError`/`#forgotError`/`#loginError` -- a second,
+  auth-screen-only error UI that existed alongside the app-wide `notify()`
+  toast every other screen already uses. Not a design choice anyone
+  remembers making on purpose -- it predates this session's own auth
+  rebuild and just never got reconciled with `notify()` when everything
+  else did.
+- **Fixed by routing through `notify()`, not by patching the old pattern**:
+  `regError(msg)`/`forgotError(msg)` are now one-line wrappers
+  (`if (msg) notify(msg);`) so every existing call site
+  (`doRegSendOtp`/`doRegister`/`doForgotSendOtp`/`doForgotSubmit`) needed no
+  changes at all. `doLogin()`'s two inline writes became direct `notify()`
+  calls. The now-permanently-empty `#loginError`/`#regError`/`#forgotError`
+  containers are removed from the markup (not just left inert -- nothing
+  writes into them any more, so there was nothing to preserve), and the
+  now-fully-unused `.auth-error` CSS rule is deleted outright, same "the
+  owner said stop using this, so it's actually gone" standard as the
+  Chipz-design sweep two rounds back.
+- **`notify()` repositioned from bottom-anchored to screen-centre** --
+  `.notify-bg` was `position:fixed;...bottom:calc(var(--nav-h) + 14px)`
+  (a deliberate earlier decision, "open/appear from down", kept until now);
+  it's `inset:0;display:flex;align-items:center;justify-content:center`
+  now. The entrance animation changed from a slide-up (`translateY`, which
+  only made sense anchored to an edge) to a scale+fade
+  (`transform:scale(.9)->scale(1)`), still small and dark, still no
+  backdrop/OK button, still auto-dismissing on its own timer -- only the
+  position and the matching entrance motion changed, not the toast's own
+  visual language from 2 rounds ago.
+- **Verified**: `node -c` passes, `build-core.js` round-trip OK, and
+  rendered the actual built bundle standalone in headless Chromium with the
+  Register pane forced open and `notify()` called with the owner's exact
+  screenshot message, to confirm the toast now centres correctly over the
+  auth background rather than trusting the CSS math alone. sw.js cache
+  bumped.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting
