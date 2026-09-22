@@ -462,5 +462,54 @@ if ('serviceWorker' in navigator) {
   document.addEventListener('DOMContentLoaded',function(){var c=document.getElementById('content');if(c)obs.observe(c,{childList:true,subtree:false});document.addEventListener('click',function(){setTimeout(mount,50);});mount();});
 })();
 </script>
+<script data-petro-inner-bg-admin>
+(function(){
+  var SERVER='http://179.198.197.114:3000';
+  function token(){try{return sessionStorage.getItem('snow_admin_token')||'';}catch(_){return '';}}
+  function region(){try{return localStorage.getItem('petro_admin_region')||'ug';}catch(_){return 'ug';}}
+  async function req(path,body){
+    var r=region(), url=SERVER+path+(body?'':(r&&r!=='ug'?'?region='+encodeURIComponent(r):''));
+    var opts={method:body?'POST':'GET',headers:{}};
+    var t=token(); if(t)opts.headers.Authorization='Bearer '+t;
+    if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(Object.assign({region:r},body));}
+    try{var res=await fetch(url,opts);return await res.json();}catch(_){return {status:'error'};}
+  }
+  function toastLocal(msg){
+    var el=document.getElementById('adToast');
+    if(!el){el=document.createElement('div');el.id='adToast';document.body.appendChild(el);}
+    el.className='toast ok';el.textContent=msg;setTimeout(function(){if(el&&el.parentNode)el.remove();},2400);
+  }
+  async function mount(){
+    var content=document.getElementById('content');
+    if(!content||document.getElementById('petroInnerBgControls')||!document.getElementById('sMinDep'))return;
+    var card=document.createElement('div');
+    card.id='petroInnerBgControls';
+    card.innerHTML='<h2 class="sec">Inner pages background</h2>'
+      +'<div class="panel-card">'
+      +'<p class="muted" style="margin-top:0">Controls only the background after login: Home, Assets, Network, Profile, Deposit, Withdraw, Wallet and other inner pages. Login, Sign Up and Forgot Password are not changed.</p>'
+      +'<div class="row"><div><label>Opacity (0–100%)</label><input id="petroInnerOp" type="number" min="0" max="100" value="100"></div>'
+      +'<div><label>Blur (0–40 px)</label><input id="petroInnerBlur" type="number" min="0" max="40" value="0"></div></div>'
+      +'<button class="btn block" id="petroInnerSave" style="margin-top:10px">Save inner background</button></div>';
+    content.insertBefore(card,content.firstChild);
+    var d=await req('/admin/settings');
+    if(d&&d.settings){
+      document.getElementById('petroInnerOp').value=d.settings.innerBgOpacity==null?100:d.settings.innerBgOpacity;
+      document.getElementById('petroInnerBlur').value=d.settings.innerBgBlur==null?0:d.settings.innerBgBlur;
+    }
+    document.getElementById('petroInnerSave').onclick=async function(){
+      var op=Number(document.getElementById('petroInnerOp').value);
+      var bl=Number(document.getElementById('petroInnerBlur').value);
+      if(!Number.isFinite(op)||op<0||op>100||!Number.isFinite(bl)||bl<0||bl>40){toastLocal('Opacity 0–100, blur 0–40');return;}
+      this.disabled=true;this.textContent='Saving…';
+      var out=await req('/admin/settings/update',{settings:{innerBgOpacity:op,innerBgBlur:bl}});
+      this.disabled=false;this.textContent='Save inner background';
+      toastLocal(out&&out.status==='success'?'Inner background saved':((out&&out.message)||'Could not save'));
+    };
+  }
+  var obs=new MutationObserver(function(){mount();});
+  document.addEventListener('DOMContentLoaded',function(){var c=document.getElementById('content');if(c)obs.observe(c,{childList:true,subtree:true});mount();});
+  setInterval(mount,1000);
+})();
+</script>
 </body>
 </html>
