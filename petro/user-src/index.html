@@ -2563,98 +2563,60 @@ body.sheet-open .sheet-bg{bottom:0;}
 <script data-nx-core></script>
 
 
+
 <script data-petro-ui-hotfix>
 (function(){
   function install(){
     if (typeof window.homeCarouselSlides !== 'function' ||
-        typeof window.acctRowHtml !== 'function' ||
-        typeof window.openSheet !== 'function') return false;
+        typeof window.homeBannerInnerHtml !== 'function') return false;
 
-    // Banner markup and motion are overridden together so the deployed build
-    // can never end up with new motion code looking for old single-image DOM.
     window.homeBannerBlockHtml = function(st){
       var slides=window.homeCarouselSlides();
       if(!slides) return '<div class="home-banner">'+window.homeBannerInnerHtml(st)+'</div>';
-      return '<div class="home-banner" id="homeCarouselTrack"><div class="hb-slide-track">'
-        +'<img class="hb-slide-current" src="'+window.esc(slides[0])+'" alt="">'
-        +'<img class="hb-slide-next" src="'+window.esc(slides[1])+'" alt="">'
+      return '<div class="home-banner" id="homeCarouselTrack"><div class="hb-fade-stack">'
+        +'<img class="hb-fade-current" src="'+window.esc(slides[0])+'" alt="">'
+        +'<img class="hb-fade-next" src="'+window.esc(slides[1])+'" alt="">'
         +'</div></div>';
     };
 
     window.startHomeCarousel = function(){
-      if (window._homeCarouselTimer) { clearInterval(window._homeCarouselTimer); window._homeCarouselTimer=null; }
+      if(window._homeCarouselTimer){clearInterval(window._homeCarouselTimer);window._homeCarouselTimer=null;}
       var slides=window.homeCarouselSlides();
       if(!slides) return;
       window._homeCarouselIdx=0;
       window._homeCarouselTimer=setInterval(function(){
         var wrap=document.getElementById('homeCarouselTrack');
-        var track=wrap&&wrap.querySelector('.hb-slide-track');
-        var current=track&&track.querySelector('.hb-slide-current');
-        var next=track&&track.querySelector('.hb-slide-next');
-        if(!track||!current||!next){clearInterval(window._homeCarouselTimer);window._homeCarouselTimer=null;return;}
-        if(track.classList.contains('hb-moving')) return;
+        var stack=wrap&&wrap.querySelector('.hb-fade-stack');
+        var current=stack&&stack.querySelector('.hb-fade-current');
+        var next=stack&&stack.querySelector('.hb-fade-next');
+        if(!stack||!current||!next){clearInterval(window._homeCarouselTimer);window._homeCarouselTimer=null;return;}
+        if(stack.classList.contains('hb-crossfading')) return;
         var nextIdx=(window._homeCarouselIdx+1)%slides.length;
         var afterIdx=(nextIdx+1)%slides.length;
-        next.src=slides[nextIdx];
-        track.classList.add('hb-moving');
-        setTimeout(function(){
-          current.src=slides[nextIdx];
-          next.src=slides[afterIdx];
-          window._homeCarouselIdx=nextIdx;
-          track.classList.add('hb-resetting');
-          track.classList.remove('hb-moving');
-          void track.offsetWidth;
-          track.classList.remove('hb-resetting');
-        },700);
+        var pre=new Image();
+        pre.onload=function(){
+          next.src=slides[nextIdx];
+          requestAnimationFrame(function(){stack.classList.add('hb-crossfading');});
+          setTimeout(function(){
+            current.src=slides[nextIdx];
+            next.src=slides[afterIdx];
+            window._homeCarouselIdx=nextIdx;
+            stack.classList.add('hb-fade-reset');
+            stack.classList.remove('hb-crossfading');
+            void stack.offsetWidth;
+            stack.classList.remove('hb-fade-reset');
+          },760);
+        };
+        pre.src=slides[nextIdx];
       },4500);
-    };
-
-    // Titles on the three non-Home tabs.
-    function ensureTitle(text){
-      var host=document.getElementById('pageHost');
-      if(!host) return;
-      var root=host.firstElementChild||host;
-      if(root.querySelector&&root.querySelector(':scope > .member-page-title')) return;
-      var title=document.createElement('div');
-      title.className='member-page-title';
-      title.textContent=text;
-      root.insertBefore(title,root.firstChild);
-    }
-    if(!window.__petroTitled){
-      window.__petroTitled=true;
-      var oldAssets=window.renderAssets;
-      if(typeof oldAssets==='function') window.renderAssets=async function(){var r=await oldAssets.apply(this,arguments);ensureTitle('My Assets');return r;};
-      var oldNetwork=window.renderNetwork;
-      if(typeof oldNetwork==='function') window.renderNetwork=async function(){var r=await oldNetwork.apply(this,arguments);ensureTitle('Network');return r;};
-    }
-
-    window.renderAccount = async function(){
-      var a=window.STATE&&window.STATE.account||{};
-      var row=window.acctRowHtml, I=window.ICONS;
-      var html='<div class="account-page" style="padding:0 18px;">'
-        +'<div class="member-page-title">Profile</div>'
-        +'<div class="acct-card"><div class="acct-avatar">'+I.peopleGroup+'</div><div class="acct-idbox"><div class="acct-phone-row">'+window.esc(window.formatPhoneDisplay(a.phone))+'</div></div></div>'
-        +'<div class="home-stat-row" style="padding:0;margin:14px 0 16px;">'
-        +'<div class="home-stat"><span class="hs-ic hs-red">'+I.layers+'</span><div class="hs-lbl">Wallet Balance</div><div class="mono hs-val" id="acctWallet">'+window.esc(window.fmtUGX(Number(a.walletBalance)||0))+'</div></div>'
-        +'<div class="home-stat"><span class="hs-ic hs-red">'+I.trendUp+'</span><div class="hs-lbl">Total Earnings</div><div class="mono hs-val">'+window.esc(window.fmtUGX(Number(a.totalEarned)||0))+'</div></div>'
-        +'<div class="home-stat"><span class="hs-ic hs-red">'+I.arrowDownCircle+'</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val">'+window.esc(window.fmtUGX(Number(a.totalDeposited)||0))+'</div></div></div>'
-        +'<div class="acct-row-list">'
-        +row(I.docLg,'ar-red','Transaction Statement','Income, deposits and withdrawals',"openTransactionStatement('income')")
-        +row(I.giftSmall,'ar-red','Gift Codes','Redeem gift codes','openChestSheet()')
-        +row(I.walletLg,'ar-red','Payout Wallet','Link your mobile money payout number','openWalletSheet()')
-        +row(I.shieldCheck,'ar-red','Security Settings','Change password, manage security','openSecuritySettingsSheet()')
-        +row(I.headset,'ar-red','Customer Support','Get help anytime','openCustomerService()')
-        +row(I.infoCircle,'ar-red','About Us','Platform information and terms','openAboutSheet()')
-        +'</div><button class="logout-btn-v2" onclick="doLogout()">'+I.logoutArrow+' Log Out</button><div style="height:20px;"></div></div>';
-      document.getElementById('pageHost').innerHTML='<div class="reveal-in">'+html+'</div>';
     };
 
     try{
       if(window.STATE&&window.STATE.page==='home'&&document.getElementById('app')&&document.getElementById('app').style.display!=='none'){
         window.paintHome();
-      } else if(window.STATE&&window.STATE.page==='assets') ensureTitle('My Assets');
-      else if(window.STATE&&window.STATE.page==='network') ensureTitle('Network');
-      else if(window.STATE&&window.STATE.page==='account') window.renderAccount();
+      }else if(document.getElementById('homeCarouselTrack')){
+        window.startHomeCarousel();
+      }
     }catch(_){}
     return true;
   }
