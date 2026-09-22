@@ -81,8 +81,8 @@ MUTATIONS = [
      ""),
 
     ('a route reads the region out of the request body', SERVER,
-     "      regionKey: currentRegionKey(),\n      date, time, createdAt: FieldValue.serverTimestamp()",
-     "      regionKey: req.body.regionKey,\n      date, time, createdAt: FieldValue.serverTimestamp()"),
+     "status: 'pending', regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp() });",
+     "status: 'pending', regionKey: req.body.regionKey, date, time, createdAt: FieldValue.serverTimestamp() });"),
 
     ('a referral code from another currency is accepted', SERVER,
      """      if (refRegion !== myRegion) {
@@ -947,8 +947,8 @@ MUTATIONS = [
      "  const [s, p, f, b] = await Promise.all([ pSettings, pProducts, pFeed, pBanner ]);",
      "  const [s, p, f, b] = await Promise.all([ pSettings, pProducts, pFeed, pBanner, _artPromise ]);"),
     ('the artwork is fetched lazily instead of at start-up', CLIENT,
-     "  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images') ])",
-     "  _artPromise = Promise.resolve([{}, {}, {}])\n    .then(() => [{}, {}, {}])"),
+     "  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/manual-pay-images'), api('/public/chipz-images'), api('/public/network-logos') ])",
+     "  _artPromise = Promise.resolve([{}, {}, {}, {}])\n    .then(() => [{}, {}, {}, {}])"),
     ('Home never repaints, so the spin banner and profile GIF never appear', CLIENT,
      "  try { if (STATE.page === 'home' && $('app') && $('app').style.display !== 'none') paintHome(); } catch (_) {}",
      ""),
@@ -1027,6 +1027,18 @@ MUTATIONS = [
     ('the panel stops sending the ticked languages', ADMIN,
      "      languages: Array.from(document.querySelectorAll('.rg-lang')).filter(c => c.checked).map(c => c.value),",
      "      "),
+
+    # Round 183: a real live bug -- a country whose own prefix already starts
+    # with '0' (Benin's post-2021 '01', part of the significant number
+    # itself) got a SECOND '0' prepended to its shown local format, one digit
+    # longer than the region's own declared Local number length. Confirmed
+    # from a real admin panel screenshot and a real member's failed deposit.
+    ('the doubled-leading-0 bug comes back for a country whose prefix already starts with 0', SERVER,
+     "  const local = lead.startsWith('0') ? body : '0' + body;",
+     "  const local = '0' + body;"),
+    ('the admin panel\'s own preview drifts back out of sync with the server (same bug, second copy)', ADMIN,
+     "    const local = lead.startsWith('0') ? body : '0' + body;",
+     "    const local = '0' + body;"),
 ]
 
 

@@ -7625,3 +7625,84 @@ Nothing new from this round specifically — the network-availability asks from 
 (enable Orange Money for Cameroon on MarzPay's side, or remove it from that country's
 network list until they do) still stand.
 
+## Round 183 — A real bug: Benin's own phone-format hint was one digit too long
+
+Owner sent three screenshots: a Benin deposit form, the Admin → Countries "Edit Benin"
+panel showing *"Numbers here must look like `001XXXXXXXXX` or `+22901XXXXXXXXX`"*, and a
+real member's failed deposit reading *"Ce n'est pas un numéro mobile money Benin valide.
+Utilisez le format 001XXXXXXXXX ou +22901XXXXXXXXX."* — with the admin's Benin settings
+right there: Local number length **10**, Number starts with **01**.
+
+**Confirmed by running the live function, not by reading it.** `phoneFormatHint(benin)`
+against exactly those saved settings really does return `{ local: '001XXXXXXXX', ... }`
+— **11 digits**, one more than the region's own declared length of 10.
+
+**Root cause:** `phoneFormatHint()` built the "how to type it" example as
+`'0' + prefix + fillerX's`, unconditionally — correct for Uganda (`prefix: '7'`, so the
+result is `0` + `7XXXXXXXX` = the familiar `07XXXXXXXX`, where the leading `0` is a
+trunk-access digit genuinely separate from the 9-digit significant number). **Wrong for
+Benin**, where the admin correctly entered `prefix: '01'` — because Benin's real,
+post-2021 numbering plan made `01` the first two digits of the significant number
+*itself*, not a separate trunk marker the way Uganda's `0` is. So `phoneFormatHint()`
+was prepending a **second**, spurious leading `0` on top of a prefix that already had
+one, and showing it as the canonical format to a member — one digit too long, on a money
+screen, for every country configured the way Benin correctly was.
+
+**This bug existed in THREE copies simultaneously, one written to deliberately mirror
+another:**
+- `server.js`'s `phoneFormatHint()` — used by `badPhoneMessage()`, which is what the
+  member actually reads on a failed deposit (confirmed live in the third screenshot).
+- `admin-src/index.html`'s `paintPhoneShape()` — the live "Numbers here must look like…"
+  preview under the country-edit form (Round 179c), whose own comment says *"Mirrors the
+  server's own phoneFormatHint()/badPhoneMessage() exactly"* — and it did, bug included,
+  because nothing had ever run it and compared its actual output to the server's.
+- `user-src/original_module.js`'s `phoneHintBody()` — checked and found to be **dead
+  code** (declared, zero call sites), so it needed no fix, just confirmation it isn't
+  reachable.
+
+**Fix:** both live copies now only prepend the trunk `'0'` when the region's own prefix
+does **not** already start with `'0'` — `lead.startsWith('0') ? body : '0' + body`.
+Uganda (and any prefix not itself starting with `0`) is byte-for-byte unaffected; Benin
+(and any future country configured the same way) now shows the correct, exactly-`len`-
+digit example. `localDigits()`/`cleanPhone()` — the actual VALIDATION logic, as opposed
+to the display hint — needed no change: it already tolerated both the exact-length form
+and a form with one extra leading `0` stripped off, so this was purely a "what a member
+is *told* to type" bug, not a "what actually gets accepted" bug.
+
+### Tests
+`test-regions.js` gained a Benin fixture (`dialCode:'229', localLength:10,
+prefixes:['01']`) and: `phoneFormatHint().local === '01XXXXXXXX'` (never
+`'001XXXXXXXX'`), the rendered length matches the region's own declared `localLength`
+exactly, the international format is unaffected, `badPhoneMessage()` names Benin and
+never shows the doubled zero, and — separately — Uganda re-checked right next to the
+Benin case so a future change can't fix one shape and break the other. It also **runs
+the admin panel's own `paintPhoneShape()`** (sliced out of `admin-src/index.html` by
+brace-counting, driven with a stub `$`/real `esc()`, exactly the way this project's other
+harnesses lift admin functions) against the same Benin fields, and asserts its rendered
+`innerHTML` both shows the correct format **and** contains the exact same
+`badPhoneMessage()` sentence the server would send a member — proving the two copies
+genuinely agree at runtime, not just that both source files contain a similar-looking
+line.
+
+`verify-regions-discriminates.py` gained two mutations (reverting each copy's fix
+independently) — both caught. While in the file, re-anchored two **pre-existing,
+unrelated** drifted anchors found by the harness's own "SKIPPED (anchor appears 0
+times)" report (from earlier rounds' unrelated edits — a withdrawal route's `regionKey`
+write reformatted onto one line, and boot's `_artPromise` gaining a fourth
+`network-logos` fetch in Round 180) — neither touched by this round's fix, fixed anyway
+since a harness claiming "all N mutations caught" while silently skipping two is worse
+than known-broken. **226 mutations total, all caught**, tree restores cleanly.
+
+Full 35-file Node suite green. Admin bundle rebuilt (round-trip OK) since
+`admin-src/index.html` changed; `admin/sw.js` bumped to `chipz-admin-shell-v32`. No
+member-frontend change, so `user/sw.js` was not touched.
+
+### Owner still has to
+Nothing code-related — this was a pure bug fix, no admin action needed once the fix
+reaches Railway (Sync fork + redeploy, per the standing Round 174 note). Worth noting:
+this bug did NOT stop the Benin member's number from being *validated* correctly if they
+happened to type the right 10 digits despite the misleading hint — but if their deposit
+is still failing after this fix reaches production, that's now a different, unrelated
+question (e.g. whether their number is genuinely a valid Benin mobile-money number, or
+a network-availability gap like the Cameroon/Orange one from Round 181).
+

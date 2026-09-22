@@ -787,6 +787,70 @@ ck(/Uganda/.test(api.badPhoneMessage()), 'and a rejection names Uganda');
 api.setCurrent(KE);
 ck(api.phoneFormatHint().intl === '+2547XXXXXXXX', 'Kenya is told its own shape');
 ck(/Kenya/.test(api.badPhoneMessage()), 'and a rejection names Kenya');
+
+// Round 183: real live bug, confirmed from an actual admin panel screenshot
+// (the "Edit Benin" preview) and a real member's "Payment not completed"
+// screen. Benin's own post-2021 numbering plan makes '01' the first two
+// digits of the SIGNIFICANT number -- not a separate trunk-access '0' the
+// way Uganda's leading '0' is -- so its admin-entered prefix is '01' and its
+// Local number length is 10 (01 + 8 digits). phoneFormatHint() unconditionally
+// prepended a SECOND '0' on top of that, showing "001XXXXXXXX" (11 digits)
+// as the format to type -- one digit too long for the region's own declared
+// length, and wrong regardless of what a member actually typed.
+const BJ = api.normalizeRegion({
+  key: 'bj', name: 'Benin', currency: 'XOF', dialCode: '229', localLength: 10,
+  prefixes: ['01'], utcOffsetMin: 60, active: true,
+}, 'bj');
+api.setCurrent(BJ);
+ck(api.phoneFormatHint().local === '01XXXXXXXX',
+   'Benin (prefix already starting with 0) is told to type 01XXXXXXXX, not 001XXXXXXXX');
+ck(api.phoneFormatHint().local.length === BJ.localLength,
+   'the shown local format is exactly the region\'s own declared length (10), not one digit longer');
+ck(api.phoneFormatHint().intl === '+22901XXXXXXXX', 'and the international format is unaffected');
+ck(/Benin/.test(api.badPhoneMessage()) && !/001X/.test(api.badPhoneMessage()),
+   'the rejection sentence names Benin and never shows the doubled leading 0');
+// Uganda-shaped countries (a prefix that does NOT itself start with '0')
+// must be completely unaffected by this fix -- re-checked here, right next
+// to the Benin case, so a future change cannot fix one and break the other.
+api.setCurrent(UG);
+ck(api.phoneFormatHint().local === '07XXXXXXXX', 'Uganda (prefix not starting with 0) is unaffected by the Benin fix');
+
+console.log('\n— the admin panel\'s own live preview agrees with the server, byte for byte —');
+{
+  // paintPhoneShape() in admin-src/index.html is a hand-kept SECOND COPY of
+  // phoneFormatHint()/badPhoneMessage() -- its own comment says so ("Mirrors
+  // the server's own phoneFormatHint()/badPhoneMessage() exactly"). The
+  // doubled-leading-0 bug lived in BOTH copies at once, because nothing ever
+  // ran the admin one and compared its OUTPUT against the server's -- run it
+  // for real here, against the exact fields the owner's own screenshot
+  // showed for Benin, rather than trusting the comment's claim.
+  const adminSrc = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+  const escSrc = (adminSrc.match(/function esc\(s\)\{[^\n]*\}/) || [''])[0];
+  if (!escSrc) throw new Error('could not find esc() in admin-src/index.html');
+  const start = adminSrc.indexOf('const paintPhoneShape = () => {');
+  if (start === -1) throw new Error('could not find paintPhoneShape() in admin-src/index.html');
+  let depth = 0, end = -1;
+  for (let k = adminSrc.indexOf('{', start); k < adminSrc.length; k++) {
+    if (adminSrc[k] === '{') depth++;
+    else if (adminSrc[k] === '}') { depth--; if (depth === 0) { end = k + 1; break; } }
+  }
+  if (end === -1) throw new Error('unbalanced braces in paintPhoneShape()');
+  const paintSrc = adminSrc.slice(start, end);
+
+  const fields = { rgDial: '229', rgLen: '10', rgPfx: '01', rgName: 'Benin' };
+  const box = { innerHTML: '' };
+  const $ = (id) => (id === 'rgPhoneShape' ? box : { value: fields[id] || '' });
+  const esc = new Function(escSrc + '; return esc;')();
+  new Function('$', 'esc', paintSrc + '\npaintPhoneShape();')($, esc);
+
+  ck(box.innerHTML.includes('01XXXXXXXX'),
+     'the admin panel really renders 01XXXXXXXX for Benin -- not just the server function');
+  ck(!box.innerHTML.includes('001XXXXXXXX'),
+     'and the admin preview never shows the doubled-leading-0 form either');
+  api.setCurrent(BJ);
+  ck(box.innerHTML.includes(api.badPhoneMessage()),
+     'and the refusal sentence shown in the admin panel is EXACTLY what a Benin member actually reads');
+}
 api.setCurrent(UG);
 ck(api.looksLikeRegionMobile('+256742730382') === true, 'a Ugandan mobile looks like one');
 ck(api.looksLikeRegionMobile('+256412345678') === false, 'a Ugandan landline does not');

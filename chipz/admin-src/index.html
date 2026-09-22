@@ -3062,6 +3062,12 @@ function regionForm(r){
     if (!dial || !len) { box.textContent = 'Fill in the dialling code and length to see the number format members here must use.'; return; }
     const lead = pfx[0] || '';
     const body = lead + 'X'.repeat(Math.max(0, len - lead.length));
+    // Round 183: matches the server's own fix -- a prefix that already
+    // starts with '0' (Benin's '01', part of the significant number itself,
+    // not a separate trunk-access digit like Uganda's leading '0') must not
+    // get a second '0' prepended, or this preview -- and the sentence a
+    // member is actually shown -- is one digit too long.
+    const local = lead.startsWith('0') ? body : '0' + body;
     const name = $('rgName').value.trim() || 'this country';
     // Each piece is its own text node on purpose. The number formats are
     // DATA (data-no-i18n -- a format is not copy), the words around them are
@@ -3071,11 +3077,11 @@ function regionForm(r){
     // table, so it translates here for free instead of needing a second row
     // that could drift from what members actually read.
     box.innerHTML =
-      '<div>Numbers here must look like <b data-no-i18n>0' + esc(body) + '</b> or <b data-no-i18n>+' + esc(dial + body) + '</b></div>'
+      '<div>Numbers here must look like <b data-no-i18n>' + esc(local) + '</b> or <b data-no-i18n>+' + esc(dial + body) + '</b></div>'
       + (pfx.length > 1 ? '<div>Any of these may lead: <b data-no-i18n>' + esc(pfx.join(', ')) + '</b></div>' : '')
       + '<div style="margin-top:4px">A member who types anything else is refused with this, in their own language:</div>'
-      + '<div><i>' + esc('That is not a valid ' + name + ' mobile-money number. Use the format 0'
-        + body + ' or +' + dial + body + '.') + '</i></div>';
+      + '<div><i>' + esc('That is not a valid ' + name + ' mobile-money number. Use the format '
+        + local + ' or +' + dial + body + '.') + '</i></div>';
   };
   for (const id of ['rgDial', 'rgLen', 'rgPfx', 'rgName']) $(id).addEventListener('input', paintPhoneShape);
   paintPhoneShape();

@@ -2003,7 +2003,18 @@ function phoneFormatHint(region) {
   const len = Number(r.localLength) || 9;
   const lead = (Array.isArray(r.prefixes) && r.prefixes[0]) || '';
   const body = lead + 'X'.repeat(Math.max(0, len - lead.length));
-  return { local: '0' + body, intl: '+' + String(r.dialCode || '') + body, name: r.name || '' };
+  // Round 183: a prefix that ALREADY starts with '0' -- Benin's post-2021
+  // numbering, where '01' really is the first two digits of the significant
+  // number, not a separate trunk-access marker the way Uganda's leading '0'
+  // is -- means `body` is already exactly what a member dials and exactly
+  // `len` digits long. Unconditionally prepending another '0' (the old
+  // behaviour) made the shown example, and the refusal sentence built from
+  // it, one digit too long: "001XXXXXXXX" against a declared Local number
+  // length of 10. Confirmed live from the admin panel's own preview and a
+  // real member's "Payment not completed" screen for Benin -- add the trunk
+  // '0' only when the prefix does not already carry one.
+  const local = lead.startsWith('0') ? body : '0' + body;
+  return { local, intl: '+' + String(r.dialCode || '') + body, name: r.name || '' };
 }
 function badPhoneMessage(region) {
   const h = phoneFormatHint(region);
