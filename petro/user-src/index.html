@@ -65,7 +65,7 @@
      icon and every previously-shared link at the same time. -->
 <link rel="icon" href="http://179.198.197.114:3000/public/app-icon-192.png">
 <link rel="apple-touch-icon" href="http://179.198.197.114:3000/public/app-icon-192.png">
-<meta name="description" content="Chipz — invest, earn daily income, and grow your team.">
+<meta name="description" content="Petro — invest, earn daily income, and grow your team.">
 <!-- ── og:image IS THE BACKEND ROUTE, SO THE UPLOADED CARD IS WHAT SHOWS ──
      Owner: "l wanted the uploaded link preview to be shown not the
      hardcoded, please check out that very well."
@@ -110,14 +110,14 @@
      served from; a hard-coded one would silently go stale the day a custom
      domain is added. -->
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Chipz">
+<meta property="og:site_name" content="Petro">
 <meta property="og:title" content="Petro">
 <meta property="og:description" content="Invest, earn daily income, and grow your team.">
 <meta property="og:image" content="http://179.198.197.114:3000/public/link-preview.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Chipz">
+<meta property="og:image:alt" content="Petro">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Petro">
 <meta name="twitter:description" content="Invest, earn daily income, and grow your team.">
@@ -294,52 +294,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .dark-button{background:var(--snow-ink);color:#fff;border:none;border-radius:var(--r-ctl);font-weight:700;letter-spacing:.04em;
   box-shadow:none;transition:opacity .1s;}
 .dark-button:active:not(:disabled){opacity:.85;}
-/* A band of light travels across every filled CTA on a loop, clipped to the
-   button's own rounded box. Owner asked for it "left to right" first, then
-   corrected to "let it move from right to left" -- it now enters at the
-   right edge and exits left.
-
-   Applied to the FILLED buttons only -- the ones that read as a call to
-   action. Deliberately NOT on the bottom-nav items, the Home action icons,
-   the round icon buttons or the close X: those are transparent or 26-38px
-   artwork, and a shine crossing them reads as flicker, not polish.
-
-   The band is a pseudo-element moved with transform alone, which the browser
-   animates on the compositor -- no layout, no repaint, no per-frame work on
-   the main thread. That matters here because these run forever on cheap
-   Android phones. `will-change` is deliberately NOT set: it would pin a
-   layer per button for the life of the page, and a running transform is
-   auto-promoted anyway.
-
-   The sweep runs for the first 55% of the cycle and rests for the remainder,
-   so it reads as a repeating pass rather than a strobe.
-
-   --sweep is the band's colour, so a pale button can override it: white on
-   white would be invisible, so those get a brand-tinted sheen instead. */
-.primary-button,.secondary-button,.dark-button,.spin-cta,.notify-ok,.btn-bind,
-.wallet-panel .btnrow .cancel,#manualPayFlow .mp-confirm-btn{position:relative;overflow:hidden;}
-.primary-button::after,.secondary-button::after,.dark-button::after,.spin-cta::after,
-.notify-ok::after,.btn-bind::after,.wallet-panel .btnrow .cancel::after,
-#manualPayFlow .mp-confirm-btn::after{
-  content:'';position:absolute;top:0;bottom:0;left:0;width:38%;pointer-events:none;
-  background:linear-gradient(90deg,transparent 0%,var(--sweep,rgba(255,255,255,.45)) 50%,transparent 100%);
-  transform:translateX(360%) skewX(-20deg);
-  animation:btnGlowSweep 2.8s ease-in-out infinite;}
-/* Pale buttons: a white band on a near-white face shows nothing, so tint it. */
-.secondary-button,.btn-bind,.wallet-panel .btnrow .cancel{--sweep:rgba(226,27,42,.18);}
-/* A disabled button must not look alive. */
-.primary-button:disabled::after,.secondary-button:disabled::after,.dark-button:disabled::after,
-.spin-cta:disabled::after,.notify-ok:disabled::after,.btn-bind:disabled::after,
-.wallet-panel .btnrow .cancel:disabled::after,#manualPayFlow .mp-confirm-btn:disabled::after{display:none;}
-/* Owner: "let it move from right to left." Starts off the RIGHT edge and
-   travels off the left. */
-@keyframes btnGlowSweep{
-  0%{transform:translateX(360%) skewX(-20deg);}
-  55%,100%{transform:translateX(-140%) skewX(-20deg);}}
-@media (prefers-reduced-motion:reduce){
-  .primary-button::after,.secondary-button::after,.dark-button::after,.spin-cta::after,
-  .notify-ok::after,.btn-bind::after,.wallet-panel .btnrow .cancel::after,
-  #manualPayFlow .mp-confirm-btn::after{animation:none;display:none;}}
+/* Petro CTAs stay visually stable at rest. The old perpetual highlight sweep
+   was inherited interaction choreography; only deliberate press/focus states
+   move now, which keeps the industrial interface quiet and predictable. */
 
 /* Team member Active / Pending. Same treatment as the record pills, for the
    same reason -- one pill vocabulary across the app, so a status looks like a
@@ -354,103 +311,29 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    depend on it (the page's bottom padding, the sheet overlay's bottom
    inset, the Download panel's height) and they used to repeat 68 as a
    literal, so growing the bar meant finding all four. */
-.bottom-nav{z-index:210;background:var(--snow-surface);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;height:var(--nav-h);position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:0 2px;}
-.navitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--snow-muted);background:none;border:none;padding:6px 2px;flex:1;min-width:0;position:relative;}
-/* The bottom nav's selector box and its icon animation are TWO separate
-   things, and an earlier build had them the wrong way round. Owner, putting
-   it straight: "l said the icon fades in and out when tapped not static and
-   selector doesn't disappear."
-
-   So:
-     - the BOX is the active-tab marker. It STAYS on whichever tab is
-       selected and does not fade away -- it only eases across as the
-       selection changes (the transition below).
-     - the ICON is what animates on a tap: it fades out and straight back in,
-       so tapping never looks static.
-
-   The box sits BEHIND the icon and label, which is why both are given a
-   z-index: a positioned pseudo-element otherwise paints on top of its own
-   element's text and artwork, and the box would cover the very icon it is
-   meant to sit behind. z-index:-1 is not the answer either -- the bar's own
-   white background would then hide it completely.
-
-   Brand-tinted rather than the reference's lavender, per the standing rule:
-   copy the shape from a reference, never another app's colours. */
-/* Owner: "the nav tab is still small in width can you extend it abit."
-   Widened from a fixed 54px to as wide as the tab allows, capped at 62px.
-   Sized with left/right insets + margin:auto rather than the old
-   left:50% / margin-left:-27px, because that older trick pinned the width to
-   a hard-coded number AND, more importantly, centring via transform would
-   collide with navBoxBounce: the keyframes set transform to a bare scale(),
-   which would throw away any translate the centring depended on. This way
-   `transform` belongs entirely to the animation.
-   The cap matters on a wide phone: 6 tabs across a 430px screen give ~71px
-   each, and a box that grew to fill it would nearly touch its neighbours. */
-.navitem::before{content:'';position:absolute;top:3px;left:3px;right:3px;max-width:56px;margin:0 auto;height:42px;
-  border-radius:14px;background:rgba(226,27,42,.13);opacity:0;transform:scale(.72);pointer-events:none;z-index:0;
-  transition:opacity .2s ease,transform .2s ease;}
-.navitem.active::before{opacity:1;transform:scale(1);}
+.bottom-nav{z-index:210;background:rgba(255,255,255,.98);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;height:var(--nav-h);position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:0 8px;box-shadow:0 -10px 30px -28px rgba(37,38,43,.55);}
+.navitem{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--snow-muted);background:none;border:none;padding:8px 2px 6px;flex:1;min-width:0;position:relative;}
+/* Petro navigation is an industrial rail, not Chipz's springy selector box.
+   The active tab is marked by a restrained red line that stays anchored to
+   the bar; taps use a short signal-dip, with no squash/overshoot/bounce. */
+.navitem::before{content:'';position:absolute;top:0;left:50%;width:24px;height:3px;border-radius:0 0 3px 3px;background:var(--snow-wine);opacity:0;transform:translateX(-50%) scaleX(.35);transform-origin:center;transition:opacity .16s ease,transform .16s ease;}
+.navitem.active::before{opacity:1;transform:translateX(-50%) scaleX(1);}
 .navitem .nav-ic,.navitem .lbl{position:relative;z-index:1;}
-/* Owner: "not only the nav icon bounces in and out but also the selector
-   should do so." So the box presses with the icon -- same curve, so the two
-   read as ONE press rather than two things moving near each other.
-   opacity stays pinned at 1 for the whole animation: the box is the active-tab
-   selector and it must never look like it is going away ("selector doesn't
-   disappear"), so only the scale moves. Slightly gentler than the icon's
-   (.78/1.14 against .74/1.18) because it is a 54x40 slab rather than a 26px
-   glyph, and the same numbers on that area read as a wobble.
-   It is .42s to the icon's .46s deliberately -- hookNavTapBox() ends the tap
-   by watching for navIconBounce, and removing the class kills any animation
-   still running, so the box has to finish FIRST or it gets cut off. */
-.navitem.nav-tap.active::before{animation:navBoxBounce .42s cubic-bezier(.34,1.56,.64,1);}
-@keyframes navBoxBounce{
-  0%{opacity:1;transform:scale(1);}
-  28%{opacity:1;transform:scale(.78);}   /* in  */
-  62%{opacity:1;transform:scale(1.14);}  /* out */
-  82%{opacity:1;transform:scale(.97);}
-  100%{opacity:1;transform:scale(1);}}
-/* The other half of the tap animation lives on the ICON.
-   Owner, third pass: "the nav icons when tapped be live bounce in and out
-   ... it is like tapping something and bounces 1 in and out 1." So it is a
-   BOUNCE now, not the fade it was: the icon presses IN (squashes down),
-   springs back OUT past its own size, then settles. One in, one out.
-   Opacity stays at 1 the whole way -- a fade was what he was rejecting, and
-   an icon that dims mid-bounce reads as a loading state, not a press.
-   The overshoot to 1.18 is what makes it feel physical; without it this is
-   just a scale transition and the "bounce" is gone. */
-.navitem.nav-tap .nav-ic svg{animation:navIconBounce .46s cubic-bezier(.34,1.56,.64,1);}
-@keyframes navIconBounce{
-  0%{transform:scale(1);}
-  28%{transform:scale(.74);}   /* in  */
-  62%{transform:scale(1.18);}  /* out */
-  82%{transform:scale(.95);}
-  100%{transform:scale(1);}}
-@media (prefers-reduced-motion:reduce){
-  .navitem::before{transition:none;}
-  .navitem.nav-tap.active::before{animation:none;}
-  .navitem.nav-tap .nav-ic svg{animation:none;}}
+.navitem .nav-ic{display:flex;align-items:center;justify-content:center;width:31px;height:31px;color:var(--snow-muted);transition:color .16s ease,transform .16s ease;}
+.navitem .nav-ic svg{width:23px;height:23px;transition:transform .16s ease,opacity .16s ease;}
+.navitem .lbl{font-size:10px;font-weight:600;white-space:nowrap;transition:color .16s ease;}
 .navitem.active{color:var(--snow-wine);}
-.navitem .lbl{font-size:10px;font-weight:600;white-space:nowrap;}
-.navitem.active .lbl{font-weight:700;}
-.navitem svg{width:28px;height:28px;}
-.chest-float.turntable-float{animation:none;right:14px;bottom:212px;width:56px;height:56px;border-radius:50%;background:var(--chipz-grad);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 20px -8px rgba(226,27,42,.6);}
-.chest-float.turntable-float svg{width:26px;height:26px;}
-/* Left over from the old dark ticker pill: white-on-dark. The card is white
-   now, so this rule made every phone number in it invisible. Same element,
-   same id -- the colours just had to follow the card. */
-#activityTickerTrack b{color:var(--snow-ink);font-weight:600;}
-#activityTickerTrack .sep{color:var(--snow-border);}
-/* 31px. The history matters, because this has now been wrong in both
-   directions: the mockup drew these at 23px, which read as specks on a real
-   phone with six tabs sharing the width, so two rounds of "the nav icons are
-   small" pushed them to 38 -- and 38 turned out to be too far the other way
-   ("reduce on sizes of nav icons, they are too big eeh"). 31 is between the
-   two, nearer the smaller end because that is the direction of the last
-   complaint. The bar comes down with it (--nav-h 76 -> 68) rather than
-   leaving a shrunken glyph floating in the old height. */
-.navitem .nav-ic{display:flex;align-items:center;justify-content:center;height:31px;color:var(--snow-muted);transition:color .15s;}
-.navitem .nav-ic svg{width:23px;height:23px;}
-.navitem.active .nav-ic{color:var(--snow-wine);}
+.navitem.active .nav-ic{color:var(--snow-wine);transform:translateY(-1px);}
+.navitem.active .lbl{font-weight:700;color:var(--snow-wine);}
+.navitem.nav-tap .nav-ic svg{animation:navTapSignal .18s ease-out;}
+@keyframes navTapSignal{
+  0%{transform:translateY(0);opacity:1;}
+  45%{transform:translateY(1px);opacity:.62;}
+  100%{transform:translateY(0);opacity:1;}}
+@media (prefers-reduced-motion:reduce){
+  .navitem::before,.navitem .nav-ic,.navitem .nav-ic svg,.navitem .lbl{transition:none;}
+  .navitem.nav-tap .nav-ic svg{animation:none;}}
+
 
 
 .wordmark{display:flex;align-items:center;gap:9px;}
@@ -822,12 +705,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .act-track{display:inline-flex;white-space:nowrap;color:var(--snow-muted);font-size:12.5px;font-weight:500;}
 .act-track b{color:var(--snow-ink);font-weight:600;}
 .act-track .sep{color:var(--snow-border);}
-/* Home's lower banner, replacing the product strip. Full-bleed like the top
-   one, with the Go spin call to action sitting on it. */
-.spin-banner{position:relative;margin:0 0 14px;min-height:150px;background:var(--chipz-hero);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;}
-.spin-banner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
-.spin-cta{position:relative;margin:0 0 18px;padding:0 30px;height:44px;border:0;border-radius:var(--r-ctl);background:var(--chipz-grad);color:#fff;font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.04em;cursor:pointer;box-shadow:none;}
-.spin-cta:active{opacity:.85;}
 /* The animated brand mark filling Home's leftover strip above the nav.
    max-height is in vh on purpose -- a GIF arrives at whatever size it was
    exported at, and one tall upload would otherwise push Home into scrolling.
@@ -1013,17 +890,13 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .home-tabs .ht{flex:1;text-align:center;padding:11px 0;border-radius:var(--r-pill);font-weight:700;font-size:14px;letter-spacing:.03em;border:none;font-family:inherit;}
 .home-tabs .ht.active{background:var(--chipz-grad);color:#fff;box-shadow:none;}
 .home-tabs .ht.off{background:var(--snow-surface);color:var(--snow-muted);border:1.5px solid var(--snow-border);}
-/* Owner: "the treasure chest box bouncing minimum in bottom right." */
-.chest-float{position:fixed;right:10px;bottom:112px;width:86px;height:86px;border:none;background:none;padding:0;z-index:40;animation:chestBounce 1.8s ease-in-out infinite;}
-.chest-float img{width:100%;display:block;filter:drop-shadow(0 12px 16px rgba(30,10,5,.35));}
-@keyframes chestBounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
 .page-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 18px 12px;}
 .page-head h2{margin:0;font-size:23px;font-weight:400;letter-spacing:.02em;}
 .page-head span{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
 .url-row{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);padding:0 14px;min-height:66px;margin-bottom:18px;}
 .url-row span{flex:1;min-width:0;font-size:12px;line-height:1.45;color:var(--snow-muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;}
 .url-row .copy-ic{width:45px;height:42px;border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);border:none;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
-.url-row .copy-ic img{width:auto;height:24px;display:block;}
+.url-row .copy-ic svg{width:22px;height:22px;display:block;}
 /* Owner: "the copy turns to tick." Green, as in his -- a tick in the brand red
    would read as an error mark. Applies to every copy control (the URL row's
    icon, the manual-payment number/name buttons) and to the labelled button,
@@ -1261,7 +1134,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .setting-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--snow-border);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left;color:var(--snow-ink);font-family:inherit;}
 .setting-row:last-child{border-bottom:0;}
 .setting-row .sq{width:41px;height:41px;border-radius:var(--r-ctl);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--snow-neutral-soft);}
-.setting-row .sq img{width:30px;height:30px;object-fit:contain;}
+.setting-row .sq svg{width:22px;height:22px;display:block;}
 .setting-row .txt{flex:1;min-width:0;}
 .setting-row .t1{font-weight:600;font-size:15px;}
 .setting-row .t2{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
@@ -1304,17 +1177,26 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    into a square. */
 .logout-btn img{height:17px;width:auto;display:block;flex-shrink:0;}
 
-/* ── Wallet (Wallet.dc.html) ──
-   Was a glossy bank-card tile (sheen sweep, embossed chip, the works) --
-   real owner-requested polish in an earlier round, but the same owner's
-   own later instruction reversed it: "not a must to put the card of
-   wallet no please." Replaced with a plain info panel -- same 3 fields
-   (provider/number/holder), same data, no bank-card metaphor. */
-.wallet-info{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--r-card);padding:6px 18px;margin-bottom:18px;}
-.wallet-info .wi-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--snow-border);}
-.wallet-info .wi-row:last-child{border-bottom:none;}
-.wallet-info .wi-lbl{font-size:12.5px;color:var(--snow-muted);font-weight:600;}
-.wallet-info .wi-val{font-size:14.5px;color:var(--snow-ink);font-weight:700;text-align:right;}
+/* ── Payout Wallet: Petro industrial status panel ──
+   This deliberately stops pretending a mobile-money payout account is a
+   plastic bank card. No EMV chip, no card sheen and no card-number layout. */
+.wallet-card{position:relative;border-radius:var(--r-card);padding:20px 20px 18px 24px;color:var(--snow-ink);overflow:hidden;margin-bottom:18px;background:linear-gradient(135deg,#fff 0%,#fffaf0 100%);border:1px solid #f0e7d8;box-shadow:0 16px 32px -26px rgba(37,38,43,.55);}
+.wallet-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,var(--snow-wine),var(--chipz-gold));}
+.wallet-card::after{content:'';position:absolute;right:-42px;top:-54px;width:132px;height:132px;border-radius:50%;border:18px solid rgba(245,160,0,.08);pointer-events:none;}
+.wallet-card .row1{position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.wallet-ident{display:flex;align-items:center;gap:11px;min-width:0;}
+.wallet-card .wc-mark{width:42px;height:42px;border-radius:12px;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.wallet-card .wc-mark svg{width:22px;height:22px;}
+.wallet-card .wallet-kicker{font-size:10px;line-height:1.2;letter-spacing:.11em;text-transform:uppercase;color:var(--snow-muted);font-weight:700;margin-bottom:4px;}
+.wallet-card .provider{font-size:17px;font-weight:750;letter-spacing:0;color:var(--snow-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;}
+.wallet-card .wallet-status{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:var(--snow-green);background:var(--snow-green-soft);border:1px solid rgba(26,122,62,.14);padding:6px 10px;border-radius:var(--r-pill);white-space:nowrap;}
+.wallet-card .wallet-status.empty{color:var(--snow-muted);background:var(--snow-neutral-soft);border-color:var(--snow-border);}
+.wallet-card .wallet-number-label{position:relative;z-index:1;margin-top:22px;font-size:11px;color:var(--snow-muted);font-weight:600;}
+.wallet-card .num{position:relative;z-index:1;font-size:22px;letter-spacing:.035em;margin-top:5px;font-weight:800;color:var(--snow-ink);font-variant-numeric:tabular-nums;}
+.wallet-card .wallet-meta{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(37,38,43,.08);}
+.wallet-card .meta-item{min-width:0;}
+.wallet-card .meta-item span{display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);font-weight:700;margin-bottom:4px;}
+.wallet-card .meta-item b{display:block;font-size:13px;color:var(--snow-ink);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .wallet-panel{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:20px;margin-bottom:20px;}
 .wallet-panel .lbl{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 6px;}
 .wallet-panel .field{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:50px;display:flex;align-items:center;padding:0 15px;margin-bottom:16px;gap:8px;}
@@ -1407,7 +1289,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .wit-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:22px;gap:10px;}
 .wit-amt span{color:var(--snow-muted);font-weight:700;font-size:21px;}
 .wit-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.btn-bind{display:block;width:100%;height:52px;border:0;border-radius:var(--r-ctl);background:#f3e2ee;color:#6b2f56;font-weight:700;font-size:15px;margin-bottom:22px;font-family:inherit;}
+.btn-bind{display:block;width:100%;height:52px;border:1px solid rgba(227,6,19,.16);border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);font-weight:750;font-size:15px;margin-bottom:22px;font-family:inherit;}
 .wit-pw{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:12px;}
 .wit-pw input{border:0;outline:0;background:transparent;font-size:22px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .wit-fee{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
@@ -1415,35 +1297,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .wit-instr h3{font-size:17px;font-weight:700;margin:0 0 10px;}
 .wit-instr .ln{height:1px;background:var(--snow-border);margin-bottom:10px;}
 .wit-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:13px;font-weight:500;line-height:1.9;}
-
-/* ── Turntable (spin wheel) ──
-   A Chipz-only feature, so there is no mockup to match -- built in the same
-   language as the rest: brand gradient, Playfair numbers, 3D button. The
-   wheel is 8 alternating segments drawn with conic-gradient so it needs no
-   image asset, and the pointer sits above it. */
-.tt-stage{display:flex;flex-direction:column;align-items:center;padding:28px 0 0;}
-.tt-wheel-wrap{position:relative;width:270px;height:270px;display:flex;align-items:center;justify-content:center;}
-.tt-wheel{width:250px;height:250px;border-radius:50%;position:relative;
-  background:conic-gradient(var(--snow-wine) 0deg 45deg,var(--chipz-orange) 45deg 90deg,var(--snow-wine) 90deg 135deg,var(--chipz-orange) 135deg 180deg,var(--snow-wine) 180deg 225deg,var(--chipz-orange) 225deg 270deg,var(--snow-wine) 270deg 315deg,var(--chipz-orange) 315deg 360deg);
-  box-shadow:0 0 0 8px #1a1310,0 18px 34px -14px rgba(30,10,5,.6);
-  transition:transform 4s cubic-bezier(.17,.67,.16,1);}
-/* Owner: "why the spin wheel has no amounts?" -- the eight prize figures, one
-   per wedge, sent by the server so the wheel and the wallet cannot disagree.
-   Placed by left/top from JS at each wedge's own centre and left UPRIGHT
-   rather than rotated to follow the wedge: eight rotated numbers on a 250px
-   wheel are a puzzle to read, and this is money. The currency is stated once
-   under the wheel instead of eight times on it, and the figures are never
-   shortened. pointer-events:none so a label can never swallow a tap. */
-.tt-slice{position:absolute;transform:translate(-50%,-50%);font-size:12.5px;font-weight:800;
-  color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55);white-space:nowrap;pointer-events:none;}
-.tt-cur{margin:2px 0 0;font-size:12.5px;color:var(--snow-sub,#8c7f76);letter-spacing:.02em;}
-.tt-wheel .hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;border-radius:50%;background:var(--snow-surface);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -4px rgba(0,0,0,.4);}
-.tt-pointer{position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-top:26px solid var(--chipz-gold);filter:drop-shadow(0 3px 4px rgba(0,0,0,.4));z-index:2;}
-.tt-spins{font-size:22px;margin:22px 0 2px;}
-.tt-sub{color:var(--snow-muted);font-size:13px;font-weight:500;text-align:center;margin:0 0 22px;line-height:1.6;}
-.tt-rules{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:18px;margin-top:24px;box-shadow:var(--sh-card);}
-.tt-rules h3{font-size:16px;font-weight:700;margin:0 0 10px;}
-.tt-rules li{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.7;margin-left:16px;}
 
 /* ── Notify dialog (Notify.dc.html) ── */
 /* A dark, small, centred toast -- owner: "don't send the same notify design
@@ -1466,65 +1319,28 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .notify-msg{white-space:pre-line;}
 
 /* ── Treasure chest (Chest.dc.html / ChestSuccess.dc.html) ── */
-/* The mockup frames the whole block with a hairline above the chest and
-   another below the button -- a light rule that fades out at both ends, not
-   a hard border edge to edge. */
-.chest-stage{display:flex;flex-direction:column;align-items:center;padding:30px 0 0;}
-.chest-rule{width:64%;height:1px;flex-shrink:0;background:linear-gradient(to right,transparent,var(--snow-border) 22%,var(--snow-border) 78%,transparent);}
-.chest-rule.top{margin-bottom:22px;}
-.chest-rule.bottom{margin-top:24px;}
-/* Owner: "on treasure chest there are 2 linings circulating the chest box, you
-   can even see clearly that one inside is solid and one outside is dotted ...
-   also some greener background on that chest box."
-   We had ONE dotted ring and an orange wash. All three values below were
-   sampled off his screenshot rather than eyeballed -- scanning the vertical
-   centre line through the circle finds the outer dotted ring at rgb(166,206,180)
-   (a muted mint), the inner solid one 27 image-px inside it at rgb(234,227,209)
-   (a warm tan), and the field between them tinted rgb(198,227,199) against
-   rgb(250,248,240) paper, which is the green wash. At his 1080px capture on a
-   ~393pt screen that is a 191px outer circle, a 172px inner one, and roughly
-   10px between them. */
-.glow-ring{width:230px;height:230px;border-radius:50%;
-  background:radial-gradient(circle,rgba(76,196,140,.34) 0%,rgba(76,196,140,.13) 45%,rgba(76,196,140,0) 70%);
-  display:flex;align-items:center;justify-content:center;position:relative;}
-/* OUTER: dotted, mint. Fine dots, not the 1.5px dashes an earlier round had --
-   those read as a drawn border rather than the faint guide circle it should be. */
-.glow-ring::before{content:'';position:absolute;inset:16px;border-radius:50%;border:1px dotted rgba(126,178,148,.75);}
-/* INNER: solid, warm tan, ~10px further in. */
-.glow-ring::after{content:'';position:absolute;inset:26px;border-radius:50%;border:1px solid rgba(208,180,132,.72);}
-.glow-ring img{width:140px;filter:drop-shadow(0 18px 20px rgba(30,10,5,.35));animation:chestBounce 1.8s ease-in-out infinite;}
-.chest-stage h2{font-size:26px;font-weight:700;text-align:center;margin:26px 0 6px;}
-.chest-stage .sub{color:var(--snow-muted);font-size:14px;font-style:italic;font-weight:500;text-align:center;margin:0 0 26px;}
-/* Owner: "l want you to see the chest box password input card, it has green on
-   it, don't you see the mockup image."
-   It does -- sampling down the field's left edge in his screenshot gives
-   rgb(184,213,195) on the border rows against a rgb(254,253,251) fill. Undoing
-   the JPEG's blend against the paper puts the real border near rgb(156,197,174).
-   It is the same sage the rings and the wash use, which is why the whole block
-   reads as one thing there and read as a plain grey box here. Only this field
-   is greened: it is the one that belongs to the chest. */
-.key-field{width:100%;height:54px;border:1.6px solid rgba(150,196,172,.9);border-radius:var(--r-ctl);background:var(--snow-surface);display:flex;align-items:center;padding:0 18px;margin-bottom:16px;}
-.key-field input{border:0;outline:0;background:transparent;font-size:16px;text-align:center;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.chest-win-bg{position:fixed;inset:0;background:#2ecc71;display:none;align-items:center;justify-content:center;padding:28px;z-index:320;}
-.chest-win-bg.show{display:flex;animation:winFlash .5s ease-out;}
-@keyframes winFlash{0%{background:#fff;}60%{background:#8ef0b4;}100%{background:#2ecc71;}}
-.chest-win-ghost{position:absolute;top:120px;left:50%;transform:translateX(-50%);width:120px;filter:blur(6px) brightness(1.3);opacity:.55;}
-/* Owner: "when one spins it shows that spin icon background icon l generated
-   my own instead of chest box, so it will show that inside background blur."
-   The wheel is his own artwork and is taller than it is wide (it stands on a
-   base), so it gets its own size and sits a little higher -- at the chest's
-   120px it read as a small smudge rather than the thing he drew. */
-/* Its own opacity and filter, not the chest's. The chest is warm brown, so
-   lifting its brightness on the green flash just made it glow; the wheel is
-   red and white, and the same treatment turned the red to mud and let the
-   green through the white segments until it read as mint. Truer colour, a
-   softer blur, and enough opacity to keep it his artwork rather than a stain
-   on the background. */
-.chest-win-ghost.spin{top:92px;width:172px;filter:blur(5px);opacity:.9;}
-.chest-win-card{position:relative;width:100%;max-width:340px;background:linear-gradient(160deg,#fff,#fbe9ee);border-radius:var(--r-card);border:2px solid #bfe3ff;box-shadow:0 24px 50px -20px rgba(0,0,0,.35);padding:36px 26px 30px;text-align:center;}
-.chest-win-card h1{font-size:26px;font-weight:700;margin:0 0 10px;background:var(--chipz-grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
-.chest-win-card .sub{font-size:15px;font-style:italic;color:var(--snow-muted);font-weight:500;margin:0 0 14px;}
-.chest-win-card .amt{font-size:38px;font-weight:700;margin:0 0 18px;background:var(--chipz-grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+/* ── Gift Codes: Petro energy-voucher treatment ──
+   The old treasure-chest scene was Chipz artwork and metaphor. Petro keeps
+   the same redeem flow but presents it as a clean code/voucher utility. */
+.gift-code-stage{display:flex;flex-direction:column;align-items:center;padding:28px 0 4px;}
+.gift-code-mark{width:104px;height:104px;border-radius:28px;background:linear-gradient(145deg,var(--snow-wine-soft),#fff3d8);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;position:relative;border:1px solid #f3d9c5;box-shadow:0 18px 34px -28px rgba(37,38,43,.55);}
+.gift-code-mark::after{content:'';position:absolute;right:14px;top:14px;width:12px;height:12px;border-radius:50%;background:var(--chipz-gold);box-shadow:0 0 0 5px rgba(245,160,0,.12);}
+.gift-code-mark svg{width:48px;height:48px;stroke-width:1.55;}
+.gift-code-stage h2{font-size:24px;font-weight:750;text-align:center;margin:22px 0 7px;color:var(--snow-ink);}
+.gift-code-stage .sub{color:var(--snow-muted);font-size:13.5px;font-weight:500;line-height:1.5;text-align:center;margin:0 8px 24px;max-width:290px;}
+.key-field{width:100%;height:54px;border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);background:var(--snow-surface);display:flex;align-items:center;padding:0 18px;margin-bottom:14px;box-shadow:inset 4px 0 0 rgba(245,160,0,.32);}
+.key-field:focus-within{border-color:var(--snow-wine);box-shadow:inset 4px 0 0 var(--chipz-gold),0 0 0 3px rgba(227,6,19,.08);}
+.key-field input{border:0;outline:0;background:transparent;font-size:16px;text-align:center;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;letter-spacing:.05em;}
+.chest-win-bg{position:fixed;inset:0;background:rgba(37,38,43,.96);display:none;align-items:center;justify-content:center;padding:28px;z-index:320;}
+.chest-win-bg.show{display:flex;animation:winFlash .24s ease-out;}
+@keyframes winFlash{from{opacity:0;}to{opacity:1;}}
+.gift-win-mark{position:absolute;top:calc(50% - 220px);left:50%;transform:translateX(-50%);width:72px;height:72px;border-radius:22px;background:var(--snow-green-soft);color:var(--snow-green);display:flex;align-items:center;justify-content:center;border:1px solid rgba(26,122,62,.14);box-shadow:0 16px 28px -20px rgba(0,0,0,.5);}
+.gift-win-mark svg{width:34px;height:34px;}
+.chest-win-card{position:relative;width:100%;max-width:340px;background:#fff;border-radius:var(--r-card);border:1px solid rgba(255,255,255,.7);box-shadow:0 28px 60px -24px rgba(0,0,0,.7);padding:42px 26px 30px;text-align:center;overflow:hidden;}
+.chest-win-card::before{content:'';position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,var(--snow-wine),var(--chipz-gold));}
+.chest-win-card h1{font-size:25px;font-weight:800;margin:0 0 10px;color:var(--snow-ink);}
+.chest-win-card .sub{font-size:14px;color:var(--snow-muted);font-weight:500;margin:0 0 12px;}
+.chest-win-card .amt{font-size:36px;font-weight:800;margin:0 0 18px;color:var(--snow-wine);}
 .chest-win-card .bal{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 24px;}
 
 /* ── Balance Record (BalanceRecord.dc.html) ── */
@@ -2382,7 +2198,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    does not jump as the poll resolves. */
 .dep-status-icon{width:150px;height:150px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;}
 .dep-status-icon .pspin{--s:150px;}
-.dep-status-icon img{width:116px;height:116px;object-fit:contain;display:block;}
+.dep-status-icon>svg{width:116px;height:116px;display:block;}
 
 /* The orbiting-chips mark while a list is being fetched. Owner, on the Team
    downline: "add the other loader of 'Loading...' while Loading users on team
@@ -2725,7 +2541,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
      behind a Congratulations card. Its own layer, not a sheet -- it covers
      the chest screen it was opened from. -->
 <div class="chest-win-bg" id="chestWinBg">
-  <img class="chest-win-ghost" id="chestWinGhost" src="/treasure-chest.png" alt="">
+  <div class="gift-win-mark" id="chestWinGhost" aria-hidden="true"></div>
   <div class="chest-win-card">
     <h1>Congratulations!</h1>
     <div class="sub">You won</div>

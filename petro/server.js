@@ -189,11 +189,11 @@ function normalizeAllowedHost(raw) {
   let s = String(raw == null ? '' : raw).trim().toLowerCase();
   if (!s) return { skip: true };
   s = s.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
-  if (!s) return { error: 'Enter a domain such as chipz-platform.com' };
+  if (!s) return { error: 'Enter a domain such as petro-platform.com' };
   if (s.length > 253) return { error: `"${raw}" is too long to be a domain.` };
   if (s.includes('*')) return { error: `Wildcards are not allowed ("${raw}"). Add each domain on its own line.` };
   const labels = s.split('.');
-  if (labels.length < 2) return { error: `"${raw}" is not a full domain. Use something like chipz-platform.com.` };
+  if (labels.length < 2) return { error: `"${raw}" is not a full domain. Use something like petro-platform.com.` };
   if (!labels.every(l => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(l)))
     return { error: `"${raw}" is not a valid domain name.` };
   return { host: s };

@@ -1146,7 +1146,7 @@ var NUMBER_FONT_STACKS = {
   'Roboto Mono': "'Roboto Mono',ui-monospace,'SFMono-Regular',monospace",
   'JetBrains Mono': "'JetBrains Mono',ui-monospace,'SFMono-Regular',monospace",
   'Orbitron': "'Orbitron',ui-sans-serif,sans-serif",
-  'System default': "'Barlow Condensed','Arial Narrow',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+  'System default': "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
 };
 // ── THE APP'S NAME ──
 // Owner: "l would like to also to edit the app name chipz, so make it when it
@@ -2526,7 +2526,7 @@ var NAV_ICON_SVG = {
 // Owner: "the icon fades in and out when tapped not static and selector
 // doesn't disappear." The selector BOX is pure CSS off .navitem.active and
 // needs no help here -- it stays put. This is only for the ICON's tap
-// animation (@keyframes navIconBounce): put the class on when a thumb lands,
+// tap signal animation: put the class on when a thumb lands,
 // take it off when the animation ends so it can replay.
 //
 // Bound on the BAR, not on each of the six items -- one listener instead of
@@ -2592,7 +2592,7 @@ function hookNavTapBox(){
   // Clean the class off once it has played, so the next tap is a fresh run
   // and nothing is left holding a finished animation.
   nav.addEventListener('animationend', e => {
-    if (e.animationName === 'navIconBounce') {
+    if (e.animationName === 'navTapSignal') {
       // The animation is on the <img> INSIDE the item, so the event target
       // is the image -- the class to clear is on its .navitem ancestor.
       const btn = e.target.closest && e.target.closest('.navitem');
@@ -3153,7 +3153,7 @@ function paintHome(){
   // were removed the same way, same instruction ("what I didn't mention,
   // remove it... your treasure chest box, spin... all stuff I never
   // mentioned") -- none of them are in any mockup sent. Their functions
-  // (startActivityTicker/spinBannerHtml/homeGifHtml/openTurntableSheet) are
+  // (startActivityTicker/homeGifHtml and related helpers) are
   // left defined but unreached, same as this session's other supersessions.
   let html = `
 <div class="home-topbar-v2">
@@ -3268,21 +3268,6 @@ window.fitHomeGif = function(){
   img.style.maxHeight = Math.max(60, Math.floor(h - over)) + 'px';
 };
 window.addEventListener('resize', () => { if (STATE.page === 'home') fitHomeGif(); });
-// Home's lower banner. Replaces the product strip the owner asked to be
-// taken off Home entirely (products live on their own tab now). The artwork
-// is admin-uploadable like every other banner; with none set it falls back
-// to the brand gradient so the "Go spin" call to action is never stranded on
-// a blank block.
-function spinBannerHtml(){
-  const img = STATE.spinBanner
-    ? `<img src="${esc(STATE.spinBanner)}" alt="" onerror="this.style.display='none'">`
-    : '';
-  return `
-<div class="spin-banner">
-  ${img}
-  <button class="spin-cta" onclick="openTurntableSheet()">Go spin</button>
-</div>`;
-}
 // Which Home product strip is showing. Top-level binding must be `var`
 // (never const/let) -- see this file's own header rule about the
 // obfuscated build.
@@ -4474,7 +4459,7 @@ function paintTeam(){
   let html = `
 <div style="height:18px;"></div>
 <div class="team-gcard" style="margin:0 18px;">
-  <div class="row1"><img class="ic" src="/nav-team.png" alt="" onerror="this.remove()"><span class="lbl">Total Team</span><span class="num mono" id="teamTotalCount">${t.totalTeam || 0}</span></div>
+  <div class="row1"><span class="ic" aria-hidden="true">${ICONS.peopleGroup}</span><span class="lbl">Total Team</span><span class="num mono" id="teamTotalCount">${t.totalTeam || 0}</span></div>
   <div class="ln"></div>
   <div class="amt mono" id="teamDepositsAmt">${fmtUGXCents(t.teamDeposits)}</div>
   <div class="cap">Purchase</div>
@@ -4544,7 +4529,7 @@ function rapidTapGuardOk(key){
 // global white->transparent would have punched holes in the clipboard's own
 // white paper, the same trap the spin-wheel cutout hit. Height is set in CSS
 // (.url-row .copy-ic img), not here, so the tile and the art stay in step.
-var COPY_CLIP = '<img src="/copy-clip.png" alt="" aria-hidden="true">';
+var COPY_CLIP = ICONS.copy;
 var COPY_TICK = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
   + 'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
 function flashCopiedOne(btn){
@@ -4639,12 +4624,19 @@ function acctRowHtml(svgIcon, colorClass, title, sub, onclick){
   </button>`;
 }
 function settingRowHtml(icon, title, sub, onclick){
-  // The icon key doubles as the tile's colour class (.ic-<icon>) -- each row's
-  // background is its own measured value off the owner's mockup, so they
-  // cannot drift apart from the artwork they sit behind.
+  const rowIcons = {
+    download: ICONS.download,
+    wallet: ICONS.walletLg,
+    turntable: ICONS.wheel,
+    balance: ICONS.docLg,
+    messages: ICONS.envelope,
+    loginpw: ICONS.lock,
+    tradepw: ICONS.keyIcon,
+    language: ICONS.globe || ICONS.gear
+  };
   return `
   <button class="setting-row" onclick="${onclick}">
-    <span class="sq ic-${icon}"><img src="/set-${icon}.png" alt=""></span>
+    <span class="sq ic-${icon}">${rowIcons[icon] || ICONS.gear}</span>
     <span class="txt"><span class="t1" style="display:block;">${title}</span><span class="t2" style="display:block;">${sub}</span></span>
     <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
   </button>`;
@@ -4715,7 +4707,7 @@ async function renderAccount(){
     ${acctRowHtml(ICONS.trendUp, 'ar-gold', 'Earnings Records', 'View daily earnings and rewards', "openBalanceRecordSheet('all')")}
     ${acctRowHtml(ICONS.peopleGroup, 'ar-dark', 'My Team', 'View your team and referral details', "showPage('network')")}
     ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
-    ${acctRowHtml(ICONS.bankLink, 'ar-gold', 'Bind Bank Account', 'Link your withdrawal payout account', 'openWalletSheet()')}
+    ${acctRowHtml(ICONS.walletLg, 'ar-gold', 'Payout Wallet', 'Link your mobile money payout number', 'openWalletSheet()')}
     ${acctRowHtml(ICONS.shieldCheck, 'ar-gold', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
     ${acctRowHtml(ICONS.headset, 'ar-red', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
     ${acctRowHtml(ICONS.infoCircle, 'ar-red', 'About Us', 'Platform information and terms', 'openAboutSheet()')}
@@ -4741,9 +4733,9 @@ function formatPhoneDisplay(phone){
 }
 
 // ── WALLET (Wallet.dc.html) ──
-// ONE bound payout account, shown as a bank-card tile. "Edit Wallet"
+// ONE bound payout account, shown as a mobile-money status panel. "Edit Wallet"
 // reveals the provider/account/holder form; Submit saves through the same
-// /bank/save endpoint the app already had, and because Chipz binds exactly
+// /bank/save endpoint the app already had, and because Petro binds exactly
 // one wallet, saving a second one replaces the first (any older rows are
 // deleted after the new one lands). Not Snow's list-of-many model.
 var _walletEditing = false;
@@ -4763,14 +4755,28 @@ function maskedTail(phone){
   return d ? '****' + d.slice(-4) : '****';
 }
 function walletCardHtml(w){
-  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : brandName().toUpperCase();
-  const num = w && w.phone ? String(w.phone).replace(/\D/g, '') : 'XXXXXXXXXX';
-  const holder = w && w.holder ? esc(String(w.holder).toUpperCase()) : 'NO WALLET BOUND';
+  const linked = !!(w && w.phone);
+  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : 'Mobile Money';
+  const displayPhone = linked ? formatPhoneDisplay(w.phone) : 'No payout number linked';
+  const holder = w && w.holder ? esc(String(w.holder).toUpperCase()) : 'Not yet linked';
   return `
-  <div class="wallet-info">
-    <div class="wi-row"><span class="wi-lbl">Provider</span><span class="wi-val">${esc(provider)}</span></div>
-    <div class="wi-row"><span class="wi-lbl">Number</span><span class="wi-val mono">${esc(num)}</span></div>
-    <div class="wi-row"><span class="wi-lbl">Account Holder</span><span class="wi-val">${holder}</span></div>
+  <div class="wallet-card">
+    <div class="row1">
+      <div class="wallet-ident">
+        <span class="wc-mark" aria-hidden="true">${ICONS.walletLg}</span>
+        <div>
+          <div class="wallet-kicker">Payout Wallet</div>
+          <div class="provider">${esc(provider)}</div>
+        </div>
+      </div>
+      <span class="wallet-status ${linked ? '' : 'empty'}">${linked ? 'Linked' : 'Not linked'}</span>
+    </div>
+    <div class="wallet-number-label">Mobile money number</div>
+    <div class="num">${esc(displayPhone)}</div>
+    <div class="wallet-meta">
+      <div class="meta-item"><span>Account holder</span><b>${holder}</b></div>
+      <div class="meta-item"><span>Network</span><b>${esc(provider)}</b></div>
+    </div>
   </div>`;
 }
 function renderWalletSheet(){
@@ -4935,195 +4941,6 @@ async function finishWalletSave(){
   notify('Wallet saved');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
 }
-
-// ── TURNTABLE (spin wheel) ──
-// Chipz-only; Snow has no equivalent, so none of this is ported. Owner's
-// spec: a free daily spin like check-in, plus extra spins earned by buying
-// products from a given tier upward, those paying a percentage of the
-// product's price. All the amounts and thresholds are admin-set.
-var _ttSpinning = false;
-var _ttAngle = 0;
-// The eight amounts currently drawn on the wheel, as the server last sent
-// them. Kept so a spin can tell whether the wheel it is about to stop is
-// still labelled with the prizes that spin was actually drawn from.
-var _ttSlices = null;
-var TT_SLICE_DEG = 45;          // 360 / 8, matching .tt-wheel's conic-gradient
-// Owner: "why the spin wheel has no amounts?" -- it had none because there
-// were no fixed prizes; the payout was any figure inside the admin's band.
-// The server now picks one of eight slice amounts and tells us which, so the
-// wheel can be labelled and can stop on the exact figure being paid.
-//
-// The figures come from the SERVER, never derived here. The wheel and the
-// wallet must agree, and the only way to guarantee that is for one side to
-// compute them and the other to render what it was given.
-//
-// The currency is deliberately NOT repeated on each slice -- eight of
-// "UGX 1,000" is unreadable at this size -- it is stated once under the
-// wheel. Full figures, never shortened.
-// The figure alone, no currency and never shortened -- the same rule the rest
-// of the app follows for money the member cares about. Cents only appear if
-// the band actually has them, so a whole-number band reads 1,000 not 1,000.00.
-function ttSliceAmount(n){
-  const v = Number(n) || 0;
-  return v.toLocaleString('en-US', Math.round(v * 100) % 100
-    ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
-}
-function ttWheelLabelsHtml(slices){
-  if (!Array.isArray(slices) || !slices.length) return '';
-  return slices.map((amt, i) => {
-    const mid = (i * TT_SLICE_DEG + TT_SLICE_DEG / 2) * Math.PI / 180;
-    // 0deg is 12 o'clock and the gradient runs clockwise, so x follows sin
-    // and y follows -cos. 34% of the box is 68% of the radius: far enough out
-    // to sit in the fat part of the wedge, inside the rim either way.
-    const left = 50 + 34 * Math.sin(mid);
-    const top = 50 - 34 * Math.cos(mid);
-    return `<span class="tt-slice" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%">${esc(ttSliceAmount(amt))}</span>`;
-  }).join('');
-}
-function paintTurntableWheel(slices){
-  const wheel = $('ttWheel');
-  if (!wheel || !Array.isArray(slices) || !slices.length) return;
-  _ttSlices = slices.slice();
-  wheel.innerHTML = ttWheelLabelsHtml(slices) + '<span class="hub">SPIN</span>';
-}
-window.openTurntableSheet = async function(){
-  _ttSpinning = false;
-  openSheet('TURNTABLE', `<div class="reveal-in tt-stage">
-    <div class="tt-wheel-wrap">
-      <span class="tt-pointer" aria-hidden="true"></span>
-      <div class="tt-wheel" id="ttWheel"><span class="hub">SPIN</span></div>
-    </div>
-    <div class="tt-spins" id="ttSpinCount">&nbsp;</div>
-    <p class="tt-cur" id="ttCur">&nbsp;</p>
-    <p class="tt-sub" id="ttSub">Loading&hellip;</p>
-    <div style="width:100%;">
-      <button class="primary-button" id="ttSpinBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.1em;" onclick="doTurntableSpin()" disabled>SPIN</button>
-    </div>
-    <div class="tt-rules" style="width:100%;">
-      <h3>How it works</h3>
-      <ul style="margin:0;padding:0;">
-        <li id="ttRuleDaily">One free spin every day, resetting at midnight.</li>
-        <li id="ttRuleProduct">Buying products earns you extra spins.</li>
-        <li>Winnings go straight into your wallet.</li>
-      </ul>
-    </div>
-  </div>`);
-  await refreshTurntable();
-};
-async function refreshTurntable(){
-  const r = await api('/turntable/status');
-  if (_openSheetTitle !== 'TURNTABLE') return;
-  const sub = $('ttSub'), btn = $('ttSpinBtn'), count = $('ttSpinCount');
-  if (!sub || !btn || !count) return;
-  if (r.status !== 'success') { sub.textContent = 'Could not load the turntable. Pull back and try again.'; return; }
-  if (!r.enabled) {
-    count.textContent = '';
-    sub.textContent = 'The turntable is not running right now. Check back soon.';
-    btn.disabled = true;
-    return;
-  }
-  STATE.turntable = r;
-  // Label the wheel with the band the NEXT spin is drawn from -- which is the
-  // daily one only while the daily spin is still free; after that it is the
-  // oldest earned spin, carrying its own product's band. The server resolves
-  // that the same way the spin route does and sends the slices.
-  paintTurntableWheel(r.slices);
-  const ttCur = $('ttCur');
-  if (ttCur) ttCur.textContent = Array.isArray(r.slices) && r.slices.length
-    ? `All amounts in ${cur()}` : '';
-  const total = r.totalSpins || 0;
-  count.textContent = total === 1 ? '1 spin available' : `${total} spins available`;
-  sub.innerHTML = total
-    ? (r.dailyAvailable ? 'Your free daily spin is ready.' : 'Spins earned from your purchases are ready.')
-    : `No spins left. Your next free spin unlocks at midnight.`;
-  btn.disabled = !total;
-  const dailyRule = $('ttRuleDaily');
-  if (dailyRule && (r.dailyMin || r.dailyMax)) {
-    dailyRule.textContent = r.dailyMin === r.dailyMax
-      ? `One free spin every day, worth ${fmtUGX(r.dailyMin)}.`
-      : `One free spin every day, worth between ${fmtUGX(r.dailyMin)} and ${fmtUGX(r.dailyMax)}.`;
-  }
-}
-window.doTurntableSpin = async function(){
-  if (_ttSpinning) return;
-  const btn = $('ttSpinBtn'), wheel = $('ttWheel');
-  if (!btn || !wheel) return;
-  _ttSpinning = true;
-  btn.disabled = true;
-  // Spin the wheel immediately for feedback, then land on the real result
-  // when the server answers. The wheel is decoration -- the amount the
-  // server returns is the truth, and the animation never decides it.
-  // Timed from HERE, because this is when the wheel starts moving.
-  const wheelStartedAt = performance.now();
-  _ttAngle += 360 * 5 + Math.floor(Math.random() * 360);
-  wheel.style.transform = `rotate(${_ttAngle}deg)`;
-  const r = await post('/turntable/spin', {});
-  if (r.status !== 'success') {
-    _ttSpinning = false;
-    await refreshTurntable();
-    return notify(r.message || 'The spin could not be completed.');
-  }
-  // Owner: "why does the congratulations card delay to appear ... when has got
-  // spin rewards." Two reasons, both fixed here.
-  //
-  // First, the wheel's own transition is 4s (.tt-wheel in index.html) and it
-  // begins at the tap -- but the wait used to be a flat 4000ms measured from
-  // when the SERVER answered, so every millisecond the request took was spent
-  // again staring at a wheel that had already stopped. Waiting only for what
-  // is LEFT of the transition means the card lands exactly as the wheel
-  // settles, however long the network took. If the request outlived the spin
-  // the remainder is zero and the card is immediate.
-  //
-  // Second, it then awaited three more round trips before showing anything.
-  // /turntable/spin already returns the post-credit walletBalance, so there
-  // is nothing to fetch -- the refreshes now happen behind the open card.
-  const WHEEL_MS = 4000;
-  const remaining = Math.max(0, WHEEL_MS - (performance.now() - wheelStartedAt));
-  // LAND ON THE SLICE THAT WON. The wheel started turning at the tap toward a
-  // provisional angle; now that the server has said which of its eight slices
-  // paid, re-aim at that one.
-  //
-  // The re-aim SHORTENS the transition to whatever is left of the original 4s
-  // rather than starting a fresh one. Re-targeting a transform restarts the
-  // transition by default, which would serve the request time twice over --
-  // the exact delay the round above this one was written to remove. The
-  // wheel therefore still settles 4s after the tap, and now settles on the
-  // right number.
-  //
-  // Slice i's centre sits at i*45 + 22.5 degrees clockwise from 12 o'clock,
-  // so it reaches the pointer when the wheel has turned the negative of that.
-  // Only ever forward: the remainder is taken modulo 360 upward, so the wheel
-  // never visibly reverses to reach its answer.
-  let landMs = remaining;
-  if (Array.isArray(r.slices) && r.slices.length && Number.isInteger(r.sliceIndex)) {
-    // The spin actually taken may not be the one /turntable/status described
-    // -- another device could have used the daily spin in between -- so
-    // relabel before landing rather than stopping on a stale prize.
-    if (!_ttSlices || _ttSlices.join('|') !== r.slices.join('|')) paintTurntableWheel(r.slices);
-    const target = -(r.sliceIndex * TT_SLICE_DEG + TT_SLICE_DEG / 2);
-    _ttAngle += (((target - _ttAngle) % 360) + 360) % 360;
-    // A floor of 600ms so a request slower than the whole spin still shows
-    // the wheel arriving somewhere rather than teleporting -- and the card
-    // waits for it, or it would announce a prize the wheel has not reached.
-    landMs = Math.max(600, remaining);
-    wheel.style.transitionDuration = landMs + 'ms';
-    wheel.style.transform = `rotate(${_ttAngle}deg)`;
-  }
-  setTimeout(() => {
-    // Hand the 4s transition back, or the next spin inherits this one's
-    // shortened duration and snaps round instead of turning.
-    wheel.style.transitionDuration = '';
-    _ttSpinning = false;
-    const before = Number((STATE.account || {}).walletBalance) || 0;
-    const reward = Number(r.reward) || 0;
-    const after = Number.isFinite(Number(r.walletBalance)) && r.walletBalance !== null
-      ? Number(r.walletBalance) : before + reward;
-    if (STATE.account) STATE.account.walletBalance = after;
-    showChestWin(reward, before, after, 'spin');
-    refreshAfterWin();
-    refreshTurntable();
-  }, landMs);
-};
 
 // ── NOTIFY DIALOG (Notify.dc.html) ──
 // The app-wide validation alert: dimmed backdrop, amber warning triangle,
@@ -5474,23 +5291,15 @@ window.submitTradePasswordChange = async function(){
 // chest artwork, key field, OPEN CHEST. A valid key flashes the green
 // full-screen win state with the amount won and the new balance.
 window.openChestSheet = function(){
-  openSheet('TREASURE CHEST', `<div class="reveal-in chest-stage">
-    <div class="chest-rule top"></div>
-    <div class="glow-ring"><img src="/treasure-chest.png" alt=""></div>
-    <h2>Mystery Treasure</h2>
-    <p class="sub">Enter your key to unlock the reward</p>
+  openSheet('Gift Codes', `<div class="reveal-in gift-code-stage">
+    <div class="gift-code-mark" aria-hidden="true">${ICONS.giftBox}</div>
+    <h2>Redeem Gift Code</h2>
+    <p class="sub">Enter a valid gift code to add its reward to your balance.</p>
     <div style="width:100%;">
-      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
-      <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.1em;" onclick="submitChestKey()">OPEN CHEST</button>
+      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter gift code" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
+      <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:16px;letter-spacing:.06em;" onclick="submitChestKey()">REDEEM CODE</button>
     </div>
-    <div class="chest-rule bottom"></div>
   </div>`);
-  // Owner: "avoid stimulating keyboard when one taps chest box."
-  // This used to focus the key field on open, which pops the phone keyboard
-  // over the chest the moment the screen appears -- the artwork, the title and
-  // the rules are all hidden behind it before the member has even looked. They
-  // tap the field themselves when they are ready to type.
-
 };
 window.submitChestKey = async function(){
   // Codes are issued uppercase-only, so normalise here as well as in the
@@ -5498,12 +5307,12 @@ window.submitChestKey = async function(){
   const raw = ($('chestKey').value || '').trim().toUpperCase();
   // Owner named these two exactly: "so on 'please enter the treasure chest
   // key', 'wrong treasure chest password'."
-  if (!raw) return notify('Please enter the treasure chest key');
+  if (!raw) return notify('Please enter a gift code');
   const btn = $('chestOpenBtn');
-  btn.disabled = true; btn.textContent = 'OPENING…';
+  btn.disabled = true; btn.textContent = 'REDEEMING…';
   const r = await post('/redeem', { code: raw });
-  btn.disabled = false; btn.textContent = 'OPEN CHEST';
-  if (r.status !== 'success') return notify(r.message || 'That key did not open the chest.');
+  btn.disabled = false; btn.textContent = 'REDEEM CODE';
+  if (r.status !== 'success') return notify(r.message || 'That gift code could not be redeemed.');
   // Owner: "why does the congratulations card delay to appear when one has
   // claimed treasure code." Because it used to wait on TWO more round trips
   // after the redeem itself -- /account and the transactions cache -- purely
@@ -5561,11 +5370,7 @@ var _chestWinBalFrom = 0;
 function chestWinBalFmt(v){ return 'New Balance: ' + fmtUGX2(v); }
 function showChestWin(reward, balanceBefore, balanceAfter, source){
   const ghost = $('chestWinGhost');
-  if (ghost) {
-    const spin = source === 'spin';
-    ghost.src = spin ? '/spin-wheel.png' : '/treasure-chest.png';
-    ghost.classList.toggle('spin', spin);
-  }
+  if (ghost) ghost.innerHTML = source === 'spin' ? ICONS.wheel : ICONS.giftBox;
   _chestWinBalFrom = Number(balanceBefore) || 0;
   $('chestWinAmount').textContent = fmtUGX2(reward);
   $('chestWinBg').classList.add('show');
@@ -6903,7 +6708,7 @@ function setDepositStatusPending(amount, phone, network){
 function setDepositStatusSuccess(){
   $('depStatusIcon').className = 'dep-status-icon success';
   // The owner's own artwork, cut out of the images he supplied.
-  $('depStatusIcon').innerHTML = '<img src="/pay-success.png" alt="" aria-hidden="true">';
+  $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-green-soft)" stroke="var(--snow-green)" stroke-width="4"/><path d="M36 61l15 15 34-36" stroke="var(--snow-green)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   $('depStatusTitle').textContent = 'Payment confirmed';
   // Names the actual figure when it is known (it always is on the automatic
   // path, since the pending state set it moments earlier) and falls back to
@@ -6924,7 +6729,7 @@ function setDepositStatusSuccess(){
 }
 function setDepositStatusFailed(msg){
   $('depStatusIcon').className = 'dep-status-icon failed';
-  $('depStatusIcon').innerHTML = '<img src="/pay-failed.png" alt="" aria-hidden="true">';
+  $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-wine-soft)" stroke="var(--snow-wine)" stroke-width="4"/><path d="M43 43l34 34M77 43L43 77" stroke="var(--snow-wine)" stroke-width="8" stroke-linecap="round"/></svg>';
   $('depStatusTitle').textContent = 'Payment not completed';
   // Says what is true and checkable -- the wallet balance did not move -- and
   // deliberately makes no claim about the member's mobile money account,
