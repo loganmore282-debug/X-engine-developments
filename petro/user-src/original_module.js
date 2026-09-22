@@ -2926,9 +2926,9 @@ function homeCarouselSlides(){
 function homeBannerBlockHtml(st){
   const slides = homeCarouselSlides();
   if (!slides) return `<div class="home-banner">${homeBannerInnerHtml(st)}</div>`;
-  return `<div class="home-banner" id="homeCarouselTrack"><div class="hb-slide-track">
-    <img class="hb-slide-current" src="${esc(slides[0])}" alt="">
-    <img class="hb-slide-next" src="${esc(slides[1])}" alt="">
+  return `<div class="home-banner" id="homeCarouselTrack"><div class="hb-fade-stack">
+    <img class="hb-fade-current" src="${esc(slides[0])}" alt="">
+    <img class="hb-fade-next" src="${esc(slides[1])}" alt="">
   </div></div>`;
 }
 var _homeCarouselTimer = null;
@@ -2944,31 +2944,31 @@ function startHomeCarousel(){
   _homeCarouselIdx = 0;
   _homeCarouselTimer = setInterval(() => {
     const wrap = document.getElementById('homeCarouselTrack');
-    const track = wrap && wrap.querySelector('.hb-slide-track');
-    const current = track && track.querySelector('.hb-slide-current');
-    const next = track && track.querySelector('.hb-slide-next');
-    if (!track || !current || !next) {
+    const stack = wrap && wrap.querySelector('.hb-fade-stack');
+    const current = stack && stack.querySelector('.hb-fade-current');
+    const next = stack && stack.querySelector('.hb-fade-next');
+    if (!stack || !current || !next) {
       clearInterval(_homeCarouselTimer); _homeCarouselTimer = null; return;
     }
-    if (track.classList.contains('hb-moving')) return;
+    if (stack.classList.contains('hb-crossfading')) return;
     const nextIdx = (_homeCarouselIdx + 1) % slides.length;
     const afterIdx = (nextIdx + 1) % slides.length;
-    // The next image is already beside the current one, so there is never a
-    // blank/red frame between slides. They physically pass each other.
-    if (next.getAttribute('src') !== slides[nextIdx]) next.src = slides[nextIdx];
-    track.classList.add('hb-moving');
-    const finish = () => {
-      track.removeEventListener('transitionend', finish);
-      current.src = slides[nextIdx];
-      next.src = slides[afterIdx];
-      _homeCarouselIdx = nextIdx;
-      track.classList.add('hb-resetting');
-      track.classList.remove('hb-moving');
-      // Force the zero-position reset without animation, then restore motion.
-      void track.offsetWidth;
-      track.classList.remove('hb-resetting');
+    const preload = new Image();
+    preload.onload = () => {
+      next.src = slides[nextIdx];
+      requestAnimationFrame(() => stack.classList.add('hb-crossfading'));
+      setTimeout(() => {
+        current.src = slides[nextIdx];
+        next.src = slides[afterIdx];
+        _homeCarouselIdx = nextIdx;
+        stack.classList.add('hb-fade-reset');
+        stack.classList.remove('hb-crossfading');
+        void stack.offsetWidth;
+        stack.classList.remove('hb-fade-reset');
+      }, 760);
     };
-    track.addEventListener('transitionend', finish);
+    preload.onerror = () => { _homeCarouselIdx = nextIdx; };
+    preload.src = slides[nextIdx];
   }, 4500);
 }
 // Puts the element that was preloaded during the loading screen INTO the
