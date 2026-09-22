@@ -2307,5 +2307,48 @@ s.textContent=code;
 document.head.appendChild(s);
 });
 })();</script>
+<script data-petro-carousel-fade>
+(function(){
+  function install(){
+    if (typeof window.startHomeCarousel !== 'function') return false;
+    window.startHomeCarousel = function(){
+      if (window._homeCarouselTimer) { clearInterval(window._homeCarouselTimer); window._homeCarouselTimer = null; }
+      var slides = (typeof window.homeCarouselSlides === 'function') ? window.homeCarouselSlides() : null;
+      if (!slides) return;
+      window._homeCarouselIdx = 0;
+      window._homeCarouselTimer = setInterval(function(){
+        var track=document.getElementById('homeCarouselTrack');
+        var dots=document.getElementById('homeCarouselDots');
+        if(!track||!dots){clearInterval(window._homeCarouselTimer);window._homeCarouselTimer=null;return;}
+        var img=track.querySelector('img');
+        if(!img) return;
+        var nextIdx=(window._homeCarouselIdx+1)%slides.length;
+        var nextSrc=slides[nextIdx];
+        var pre=new Image();
+        pre.onload=function(){
+          img.classList.add('hb-fading');
+          setTimeout(function(){
+            img.src=nextSrc;
+            window._homeCarouselIdx=nextIdx;
+            dots.querySelectorAll('.hb-dot').forEach(function(d,i){d.classList.toggle('on',i===window._homeCarouselIdx);});
+            requestAnimationFrame(function(){requestAnimationFrame(function(){img.classList.remove('hb-fading');});});
+          },520);
+        };
+        pre.src=nextSrc;
+      },4500);
+    };
+    try {
+      if (document.getElementById('homeCarouselTrack')) window.startHomeCarousel();
+    } catch(_){}
+    return true;
+  }
+  if(!install()){
+    var tries=0, t=setInterval(function(){
+      tries++;
+      if(install()||tries>500) clearInterval(t);
+    },20);
+  }
+})();
+</script>
 </body>
 </html>
