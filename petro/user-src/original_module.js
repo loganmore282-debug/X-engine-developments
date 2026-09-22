@@ -4760,7 +4760,7 @@ function renderWalletSheet(){
     return;
   }
   $('sheetBody').innerHTML = `<div class="wallet-minimal reveal-in">
-    <div class="wallet-add-form">
+    <div class="wallet-add-form" id="walFormGroup">
       <div class="prov-pick" id="walProviderPick">
         <div class="wallet-line-field prov-input" onclick="toggleProviderList()">
           <input id="walProvider" type="text" readonly placeholder="Select network" value="${w && w.network ? esc(w.network) : ''}">
