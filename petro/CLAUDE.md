@@ -912,6 +912,132 @@ ie 256|... look for designs and architecture from internet cloud."*
   page, the old auth-card slot, and the whole subdomain section are gone),
   but the reorganization itself is still open.
 
+**Admin panel deep cleanup: bank OTP made optional, Settings gutted down to
+what's real, a new Banners tab, Products renamed to Assets, asset renaming
+fixed.** The still-open items flagged in the round above (the Banners tab,
+verbose copy) are done now. Owner's message this round, verbatim, since it's
+long and specific: *"remove otp on withdrawal bank account please, also
+remove require code option in admin panel, it should be optional... remove
+those explanations in admin panel those all sentences, l line is enough
+simple summarized, remove appearance settings, remove countdown settings,
+remove multiplier of with multiples of withdrawal settings, remove product,
+these are assets please, make sure all 2 asset name fields are editable in
+admin, remove spin rewards in them... remove all images in settings, we
+should create a new category call banners, so everything lives there, and
+let's remove auto approve settings, profile animation settings... remove
+brand logo, help center banner, support contacts only put group field and
+customer service tg contact link, and WhatsApp group or channel, referral
+banner, push notification settings."*
+
+- **OTP on adding a bank/payout account is now optional, off by default**
+  (`bankOtpRequired` setting, new admin toggle under Rates & limits ->
+  Withdrawals). `/bank/save` only calls `consumeOtpTicket()` when the
+  setting is on. Client-side, `submitWallet()` branches: off saves straight
+  away, on keeps the exact same two-phase OTP flow as before -- extracted
+  the shared post-save tail (dedupe to one wallet, refresh state, notify)
+  into `finishWalletSave()` so both paths call the same code instead of
+  duplicating it.
+- **Owner asked about OTP security directly, sent MarzSMS's real API docs.**
+  Checked against them rather than assumed: the system already matched
+  every property asked for -- `OTP_EXPIRES_MS = 10 * 60 * 1000` (exactly
+  10 minutes), `codeHash: scryptHash(code)` (the raw code is never stored,
+  same as a password), server-generated via `crypto.randomInt`, 5-attempt
+  cap, daily per-phone throttling. `marzSmsSend()` was also already
+  correctly wired to the real API -- right base URL, right endpoint, right
+  body shape, and the response-shape comment already correctly notes
+  MarzSMS's `{success,message,error}` envelope (no `status` field) has no
+  bearing on `resp.ok`, which is what the code actually branches on. Nothing
+  needed changing; the only real gap is `MARZSMS_KEY` itself, still unset.
+- **Settings gutted to what's real**, each confirmed dead or genuinely
+  redundant before removal, not assumed:
+  - **Appearance** (number/digit font, home activity-ticker speed) --
+    removed. The ticker speed setting was already controlling a UI element
+    (the activity ticker) removed from Home 3 rounds ago -- doubly dead.
+  - **Opening countdown** -- admin toggle and date/time removed (defaults
+    to off already, so the pre-launch gate is now permanently unreachable
+    from the UI, same "leave the dormant code, remove the only way to turn
+    it on" pattern as Turntable/subdomains in the round above).
+  - **Withdrawal multiple** -- admin field removed; `DEFAULT_SETTINGS.withdrawMultiple`
+    changed from 5000 to 0 (0 = any amount above the minimum). **Caveat**: this
+    only changes the default for a *fresh* settings document -- if a
+    non-zero multiple was ever actually saved live, it stays in the
+    database until cleared by hand (no DB access from this session to
+    confirm either way; low risk since no real config work has happened
+    yet per this file's own status notes).
+  - **Auto-approve withdrawals** -- section, its confirm-before-enabling
+    guard, and its save handler all removed (`autoApproveWithdrawalsEnabled`
+    already defaults to false, so this is permanently off now).
+  - **Profile animation** (the GIF slot) -- section and its raw-bytes
+    upload/clear handlers removed.
+  - **Brand logo**, **Help Centre banner**, **Referral banner** -- sections
+    and handlers removed outright (not moved to Banners) -- the owner named
+    these specifically as "not talked about yet."
+  - **Support contacts** cut from 6 fields to 3: Telegram group, Customer
+    Service (Telegram), WhatsApp group or channel. Telegram channel,
+    WhatsApp contact and Support hours dropped.
+  - **"Regulation page"** and the old **auth-card** slot were already
+    removed in the round above; this round's own sweep found and removed 3
+    more real crash bugs of the exact same shape (`$('saveTurntable')`,
+    `$('saveReg')`, `$('sAutoApproveOn')`/`$('saveAutoApprove')`, `$('pushClearAllBtn')`
+    was already null-checked) -- an unguarded `.addEventListener` on an id
+    whose markup this same round deleted, which would have thrown and
+    broken every settings handler wired after it. Every removal in this
+    round was traced (grep the id's every use) before the markup came out,
+    specifically to keep from repeating this.
+  - Every remaining `<p class="muted">` explanation across Rates & limits,
+    Manual payments, Withdrawals, Payment numbers, Payment reminder, App
+    name and About page cut to one line, dropping the backstory/rationale
+    (kept in code comments, just not shown to the admin).
+- **New "Banners" tab** -- every image/video upload pulled out of Settings:
+  Home banner (+ video), Home banner slides 2 & 3, Home footer banner,
+  Account screen header photo, Login & Sign Up background, App icon, Link
+  preview, Download screen background, Manual payment screen images. Own
+  `renderBanners()` + `wireBannerHandlers()`, own small `Promise.all` (self-
+  contained, same pattern every other tab already uses, rather than sharing
+  `renderSettings()`'s closure) -- one extra small fetch round-trip on
+  switching tabs, in exchange for not threading one function's state across
+  two. Every handler moved verbatim, with `renderSettings()` calls inside
+  them swapped for `renderBanners()` so a save/clear correctly repaints the
+  tab it's actually on.
+- **Products renamed to Assets everywhere it's visible** -- the tab label,
+  every heading/button/toast/confirm text ("New asset", "Edit asset",
+  "Delete this asset?", "No assets yet", etc.). Internal identifiers
+  (`data-tab="products"`, `renderProducts()`, `/admin/products/*` routes)
+  deliberately left alone -- renaming code identifiers this deep for a
+  label change is unnecessary churn/risk with zero user-visible benefit.
+- **"Make sure all 2 asset name fields are editable"** -- read as Name and
+  Key, the two text-identifier fields on the asset editor; Key was disabled
+  once an asset existed. Re-enabling it naively would have reintroduced the
+  exact bug this file's own history already fixed once (editing "product-1"
+  silently creating a second "product1" doc) -- so this is a real rename
+  feature, not just an unlocked input:
+  - Client (`editProduct()`): the Key field is no longer disabled. On save,
+    a *typed* Key value is slugified and used; an untouched/blank Key box
+    falls back to the original key unchanged (never re-derived from Name --
+    that fallback is exactly what caused the original bug). `oldKey` is
+    sent only when the key actually changed.
+  - Server (`/admin/products/save`): a rename is a delete-old + set-new in
+    the same batch, not a second `set` alongside the old key. Refuses
+    outright if the new key already belongs to a *different* existing
+    asset (would otherwise silently overwrite it) or if `oldKey` doesn't
+    correspond to a real existing document. Rename is only accepted when
+    saving to the founding region -- a region-scoped save only ever patches
+    a `regions.<key>` sub-object on a document it does not own the identity
+    of, so it has nothing to rename.
+  - **"Remove spin rewards in them"**: already fully done last round
+    (the per-product Turntable fields removed from the editor) -- verified
+    while investigating the rename feature that `sanitizeProductInput()`
+    unconditionally writes `spinMin`/`spinMax`/`spinCount` into the
+    sanitized object (null/0 when absent from the payload), so every save
+    of an existing asset already clears any old spin config to nothing.
+    No further action needed, confirmed rather than assumed.
+- **Verified**: `node -c`, `node --check server.js`, `node build-core.js` +
+  `node build-admin.js` (both round-trip OK) all pass clean. A script
+  cross-checked every unguarded `$('id').addEventListener/.value/...` in
+  admin-src against every id that still actually exists in the file's own
+  markup, to catch any other landmine of the same shape before shipping,
+  not just the ones caught by hand. Both service-worker caches bumped.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting

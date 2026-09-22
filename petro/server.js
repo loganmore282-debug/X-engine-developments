@@ -756,7 +756,11 @@ const DEFAULT_SETTINGS = {
   // multiple should be 5000, ie one withdrawals 5000,10000,25000,30000,
   // 35000 like that." Set to 0 to turn the rule off entirely and allow any
   // amount above the minimum.
-  withdrawMultiple: 5000,
+  // Owner: "remove multiplier of with multiples of withdrawal settings" --
+  // 0 means any amount above the minimum is allowed (see the check at
+  // /withdraw/request). Admin control for this removed; left settable only
+  // by editing this default or writing to the setting directly.
+  withdrawMultiple: 0,
   // Login / Sign Up backdrops: fully opaque and unblurred, so an
   // uploaded image shows exactly as supplied until the owner dials it
   // back. With no image set these do nothing at all.
@@ -857,6 +861,12 @@ const DEFAULT_SETTINGS = {
   // for the actual server-side enforcement.
   openingCountdownEnabled: false, openingCountdownAt: 0,
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
+  // Owner: "remove otp on withdrawal bank account... it should be
+  // optional" -- OTP-verifying a member's OWN phone before they can add a
+  // payout destination was previously unconditional (see /bank/save).
+  // Default OFF now; an owner who wants that extra step back can switch it
+  // on here.
+  bankOtpRequired: false,
   // The hours cash-out is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
@@ -7122,14 +7132,15 @@ app.post('/bank/save', async (req, res) => {
     // destination -- sent to THEIR OWN phone on file (resolved by
     // /auth/otp/send's 'bank' purpose), not to `phone` above, which is the
     // new account being added and could belong to someone else entirely
-    // (a family member's mobile money, for instance).
-    const ownPhone = cleanPhone((uSnap.exists && uSnap.data().phone) || '');
-    const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), ownPhone, 'bank');
-    if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify with the code sent to your phone first.' });
-    // Owner: the transaction PIN belongs to the actual Withdraw money flow
-    // only, not to managing which accounts CAN receive a future withdrawal
-    // -- saving/removing a payout destination here doesn't move any money by
-    // itself (see /withdraw/request, still fully PIN-gated, for that).
+    // (a family member's mobile money, for instance). Optional now, per
+    // the owner -- off by default (see DEFAULT_SETTINGS.bankOtpRequired).
+    if ((await getSettings()).bankOtpRequired) {
+      const ownPhone = cleanPhone((uSnap.exists && uSnap.data().phone) || '');
+      const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), ownPhone, 'bank');
+      if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify with the code sent to your phone first.' });
+    }
+    // Saving/removing a payout destination here doesn't move any money by
+    // itself -- see /withdraw/request for the actual money-moving path.
     const dup = await withLock('bank-save:' + userId, async () => {
       const dupSnap = await db.collection('bankAccounts').where('userId', '==', userId).where('phone', '==', phone).limit(1).get();
       if (!dupSnap.empty) return true;
@@ -7736,7 +7747,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
   otpDailyLimitRegister: [0, 50], otpDailyLimitReset: [0, 50], otpDailyLimitBank: [0, 50],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts'];
+const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts', 'bankOtpRequired'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -8704,6 +8715,13 @@ app.post('/admin/products/save', async (req, res) => {
     if (regionKey !== region.key)
       return res.status(400).json({ status: 'error', message: `There is no region "${regionKey}".` });
     const sanitized = [];
+    // Owner: "make sure all 2 asset name fields are editable" -- Key is no
+    // longer locked once an asset exists, so a save can now be a RENAME
+    // (oldKey !== key), not just an update. Renaming is moving the document,
+    // not writing a second one alongside the old key -- exactly the bug
+    // sanitizeProductInput's own history already warns about, see
+    // editProduct() in admin-src for the client-side half of this fix.
+    const renames = [];
     for (let i = 0; i < list.length; i++) {
       const why = {};
       const clean = sanitizeProductInput(list[i], i, why);
@@ -8712,15 +8730,44 @@ app.post('/admin/products/save', async (req, res) => {
         const what = why.field ? `"${why.field}" ${why.why}` : 'has a field the server cannot read';
         return res.status(400).json({ status: 'error', message: `${who}: ${what}. Nothing was saved.`, field: why.field || '' });
       }
+      const oldKey = String(list[i]?.oldKey || '').trim();
+      if (oldKey && oldKey !== clean.key) {
+        if (!/^[a-zA-Z0-9_-]+$/.test(oldKey))
+          return res.status(400).json({ status: 'error', message: `"${oldKey}" is not a real existing key.` });
+        if (region.key !== DEFAULT_REGION_KEY)
+          return res.status(400).json({ status: 'error', message: 'An asset can only be renamed from its founding country.' });
+        renames.push({ oldKey, newKey: clean.key });
+      }
       sanitized.push(clean);
+    }
+    // Refuse a rename onto a key that already belongs to a DIFFERENT asset --
+    // silently overwriting it is exactly the "two products, one name"
+    // failure mode this whole mechanism exists to prevent, just backwards.
+    for (const { oldKey, newKey } of renames) {
+      const collision = await db.collection('products').doc(newKey).get();
+      if (collision.exists) return res.status(400).json({ status: 'error', message: `"${newKey}" is already another asset's key. Choose a different one.` });
+      const old = await db.collection('products').doc(oldKey).get();
+      if (!old.exists) return res.status(400).json({ status: 'error', message: `"${oldKey}" is not a real existing key.` });
     }
     const batch = db.batch();
     if (region.key === DEFAULT_REGION_KEY) {
       // The founding region writes the document's own fields, exactly as
       // this route always did. `regions` is untouched because merge:true
       // leaves fields the payload does not mention -- so repricing Uganda
-      // never disturbs another country's prices.
-      sanitized.forEach(p => batch.set(db.collection('products').doc(p.key), p, { merge: true }));
+      // never disturbs another country's prices. A renamed asset is the one
+      // exception: the whole document moves to its new key, so it is a
+      // fresh `set` (not merge) on the new id, plus a delete of the old --
+      // merging here would leave the old doc's `regions.*` behind, or worse,
+      // silently blend it into the new key's history.
+      sanitized.forEach(p => {
+        const rename = renames.find(r => r.newKey === p.key);
+        if (rename) {
+          batch.delete(db.collection('products').doc(rename.oldKey));
+          batch.set(db.collection('products').doc(p.key), p);
+        } else {
+          batch.set(db.collection('products').doc(p.key), p, { merge: true });
+        }
+      });
     } else {
       // Another region writes ONLY into its own corner of the document, and
       // only the fields it is allowed its own value for: name, image and

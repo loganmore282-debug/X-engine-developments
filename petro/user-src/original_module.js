@@ -4859,12 +4859,15 @@ document.addEventListener('click', function(e){
   const box = document.getElementById('walProviderPick');
   if (box && box.classList.contains('open') && !box.contains(e.target)) box.classList.remove('open');
 });
-// Adding/changing the payout wallet requires an OTP first (owner decision --
-// same reasoning as registration/reset: prove it's really the account
-// holder, sent to THEIR OWN phone on file, never to the wallet number being
-// entered above). Two phases, kept in these two closure vars rather than
-// re-rendering the sheet between them -- a re-render would wipe whatever the
-// member just typed into walProvider/walPhone/walHolder.
+// Adding/changing the payout wallet used to always require an OTP first
+// (prove it's really the account holder, sent to THEIR OWN phone on file,
+// never to the wallet number being entered above). Owner: "remove otp on
+// withdrawal bank account... it should be optional" -- now admin-controlled
+// via STATE.settings.bankOtpRequired (default off, see server.js). Off:
+// submitWallet() saves straight away. On: same two-phase OTP flow as
+// before, kept in these two closure vars rather than re-rendering the sheet
+// between them -- a re-render would wipe whatever the member just typed
+// into walProvider/walPhone/walHolder.
 var _walletPending = null;
 var _walletOtpId = null;
 window.submitWallet = async function(){
@@ -4875,6 +4878,13 @@ window.submitWallet = async function(){
   if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
   if (!holder) return notify('Enter the account holder name.');
   const btn = $('walSaveBtn');
+  if (!(STATE.settings || {}).bankOtpRequired) {
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const r = await post('/bank/save', { holder, network, phone });
+    btn.disabled = false; btn.textContent = 'Submit';
+    if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
+    return finishWalletSave();
+  }
   btn.disabled = true; btn.textContent = 'Sending code…';
   const d = await post('/auth/otp/send', { purpose: 'bank' });
   btn.disabled = false; btn.textContent = 'Submit';
@@ -4906,6 +4916,11 @@ window.confirmWalletOtp = async function(){
   btn.disabled = false; btn.textContent = 'Confirm';
   if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
   _walletPending = null; _walletOtpId = null;
+  await finishWalletSave();
+};
+// Shared tail of a successful /bank/save, whether it came from the OTP flow
+// above or straight from submitWallet() when bankOtpRequired is off.
+async function finishWalletSave(){
   // Chipz binds exactly ONE wallet -- drop any older rows so the card, the
   // summary row and the Withdraw screen can never disagree about which
   // account a payout goes to.
@@ -4921,7 +4936,7 @@ window.confirmWalletOtp = async function(){
   _walletEditing = false;
   notify('Wallet saved');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
-};
+}
 
 // ── TURNTABLE (spin wheel) ──
 // Chipz-only; Snow has no equivalent, so none of this is ported. Owner's
