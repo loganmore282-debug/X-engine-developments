@@ -2219,6 +2219,40 @@ body.sheet-open .sheet-bg{bottom:0;}
 .wit-bal .val,.wit-amt span,.wit-amt input,.wit-instr h3{color:#fff!important;}
 .wit-bal,.wit-amt,.wit-instr{border-color:rgba(255,255,255,.20)!important;}
 
+
+/* ── Account cleanup + stable signed-in wallpaper ──────────────────────
+   Remove the three summary tiles from Profile and keep the refinery image
+   locked to a single oversized fixed layer. Oversizing with negative inset
+   avoids mobile Chrome's visual-viewport resize/stretch from exposing or
+   rescaling the wallpaper during a hard scroll. */
+.account-page .home-stat-row{display:none!important;}
+
+html,body,#app{
+  overscroll-behavior-y:none;
+}
+#app::before{
+  top:-48px!important;
+  right:-48px!important;
+  bottom:-48px!important;
+  left:-48px!important;
+  width:auto!important;
+  height:auto!important;
+  min-height:0!important;
+  transform:none!important;
+  -webkit-transform:none!important;
+  background-size:cover,cover!important;
+  background-position:center center,center center!important;
+  background-repeat:no-repeat,no-repeat!important;
+  backface-visibility:hidden;
+  -webkit-backface-visibility:hidden;
+}
+@supports (height:100lvh){
+  #app::before{
+    height:auto!important;
+    min-height:0!important;
+  }
+}
+
 </style>
 </head>
 <body>
