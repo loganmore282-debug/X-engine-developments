@@ -207,7 +207,7 @@ var LANG_ROWS = [
   ['Creating your account\u2026', 'Tukolawo akawunti yo\u2026', 'Inatengeneza akaunti yako\u2026', 'Cr\u00e9ation de votre compte\u2026', 'Turimo gushyiraho konti yawe\u2026', 'Nitukora akaunti yaawe\u2026'],
   ['Wallet', 'Ensawo', 'Pochi', 'Portefeuille', 'Umufuka', 'Ensaho'],
   ['Messages', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa'],
-  ['Balance Record', 'Ebiwandiiko bya Ssente', 'Rekodi ya Salio', 'Historique du solde', 'Amateka y\'amafaranga', 'Ebihandiiko bya Sente'],
+  ['Transaction Statement', 'Ebiwandiiko bya Ssente', 'Rekodi ya Salio', 'Historique du solde', 'Amateka y\'amafaranga', 'Ebihandiiko bya Sente'],
   ['Login Password', 'Ekisumuluzo ky\'Okuyingira', 'Nenosiri la Kuingia', 'Mot de passe de connexion', 'Ijambobanga ryo kwinjira', 'Ekisumuruzo ky\'Okutaaha'],
   ['Trade Password', 'Ekisumuluzo ky\'Okusuubula', 'Nenosiri la Malipo', 'Mot de passe de transaction', 'Ijambobanga ry\'ubucuruzi', 'Ekisumuruzo ky\'Okushuubura'],
   ['Download APP', 'Tikka APP', 'Pakua APP', 'T\u00e9l\u00e9charger l\'application', 'Kuramo APP', 'Tikka APP'],
@@ -2712,21 +2712,17 @@ async function liveRefreshVisible(){
       // renderAccount() it cannot reset the member's scroll position, which
       // would read as the reload he does not want.
       patchHomeBalances();
-      const band = $('balBandValue');
-      if (band && sheet === 'Balance Record') {
-        band.textContent = fmtUGX2(Number(acc.account.walletBalance) || 0);
-      }
     }
   } else ok = false;
 
   // An open sheet is what the member is actually looking at, so it wins over
   // the page behind it.
-  if (sheet === 'Balance Record') {
+  if (sheet === 'Transaction Statement') {
     const r = await api('/transactions');
-    if (r.status === 'success' && _openSheetTitle === 'Balance Record') {
+    if (r.status === 'success' && _openSheetTitle === 'Transaction Statement') {
       STATE.transactions = r.transactions;
       STATE.transactionsTruncated = !!r.truncated;
-      if (liveChanged('tx', r.transactions)) renderBalTab(_balTab);
+      if (liveChanged('tx', r.transactions)) renderStatement();
     } else if (r.status !== 'success') ok = false;
     return ok;
   }
@@ -3950,15 +3946,10 @@ async function renderAccount(){
     <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
   </div>
   <div class="acct-row-list">
-    ${acctRowHtml(ICONS.layers, 'ar-red', 'My Assets', 'View your purchased assets and earnings', "showPage('assets')")}
-    ${acctRowHtml(ICONS.arrowDownTray, 'ar-gold', 'Deposit Records', 'View all your deposit history', "openBalanceRecordSheet('deposit')")}
-    ${acctRowHtml(ICONS.arrowDownTray, 'ar-red', 'Withdrawal Records', 'View all your withdrawal history', "openBalanceRecordSheet('withdraw')")}
-    ${acctRowHtml(ICONS.trendUp, 'ar-gold', 'Earnings Records', 'View daily earnings and rewards', "openBalanceRecordSheet('all')")}
-    ${acctRowHtml(ICONS.peopleGroup, 'ar-dark', 'My Team', 'View your team and referral details', "showPage('network')")}
+    ${acctRowHtml(ICONS.docLg, 'ar-dark', 'Transaction Statement', 'Income, deposits and withdrawals', "openTransactionStatement('income')")}
     ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
     ${acctRowHtml(ICONS.walletLg, 'ar-gold', 'Payout Wallet', 'Link your mobile money payout number', 'openWalletSheet()')}
     ${acctRowHtml(ICONS.shieldCheck, 'ar-gold', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
-    ${acctRowHtml(ICONS.bell, 'ar-dark', 'Messages', 'View notifications and updates', 'openMessagesSheet()')}
     ${acctRowHtml(ICONS.headset, 'ar-red', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
     ${acctRowHtml(ICONS.infoCircle, 'ar-red', 'About Us', 'Platform information and terms', 'openAboutSheet()')}
   </div>
@@ -4232,145 +4223,119 @@ window.closeNotify = function(){
   if (fn) fn();
 };
 
-// ── BALANCE RECORD (BalanceRecord.dc.html) ──
-// Current-balance band + All / Deposit / Withdraw / Turntable tabs over the
-// same /transactions ledger the app already keeps. Rows carry a lettered
-// avatar, a status pill for deposits/withdrawals, and a wine-red negative
-// amount -- exactly as the mockups show, including the no-space
-// "UGX2,000.00" money format used on this screen only.
-var _balTab = 'all';
-// Turntable (the daily spin bonus) has its own ledger type; until the
-// backend feature ships, the tab renders empty rather than being hidden --
-// the mockups show it as a permanent fourth tab.
-var TURNTABLE_TX_TYPES = new Set(['turntable', 'spin', 'spin_bonus']);
-function balTabMatch(cat, t){
+// ── TRANSACTION STATEMENT ──
+// One professional statement surface. Categories stay horizontal at the top;
+// no balance hero, avatar discs, record cards or separate deposit/withdraw/
+// earnings screens.
+var _statementCat = 'income';
+var STATEMENT_INCOME_TYPES = new Set([
+  'cashback','commission','team_reward','promocode','checkin','welcome_bonus',
+  'mission_salary','mission_deposit_reward','turntable','spin','spin_bonus',
+  'admin_credit'
+]);
+function statementCategoryMatch(cat, t){
   if (cat === 'deposit') return t.type === 'deposit';
   if (cat === 'withdraw') return t.type === 'withdraw';
-  if (cat === 'turntable') return TURNTABLE_TX_TYPES.has(t.type);
-  return true;
+  return STATEMENT_INCOME_TYPES.has(t.type);
 }
-// "UGX2,000.00" -- no space after UGX, always 2 decimals. Only this screen
-// and the wallet band use it; every other screen keeps fmtUGX().
-// "UGX 2,000.00" -- the spaced variant Account.dc.html's wallet balance uses.
-// Built from the grouped digits rather than by slicing the currency back
-// off fmtUGX2()'s answer -- .slice(3) was right only while the label was
-// always the three letters "UGX", and a region labelled "KES" or "TZS" is
-// three too, but "KSH" or a 4-character label would have shaved a digit off
-// every amount on the screen.
-function fmtUGXCents(n){ return cur() + ' ' + moneyDigits2(n); }
-function moneyDigits2(n){
-  const v = Math.abs(Number(n) || 0);
-  return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtUGX2(n){ return cur() + moneyDigits2(n); }
-// One-letter avatar + its colour: withdrawals get the wine treatment, and
-// everything that adds money gets the green one.
-function balAvatar(t){
-  const label = balRowTitle(t);
-  const letter = (label.trim()[0] || '?').toUpperCase();
-  const wine = t.type === 'withdraw';
-  return `<div class="av ${wine ? 'w' : 'g'}">${esc(letter)}</div>`;
-}
-var BAL_TITLES = {
-  deposit: 'Deposit', withdraw: 'Withdraw', promocode: 'Treasure Chest',
-  commission: 'Commission', cashback: 'Daily Income', checkin: 'Check-in Bonus',
-  welcome_bonus: 'Welcome Bonus',
-  team_reward: 'Team Reward', mission_salary: 'Mission Salary',
-  mission_deposit_reward: 'Mission Reward', invest: 'Purchase',
-  turntable: 'Turntable', spin: 'Turntable', spin_bonus: 'Turntable',
-};
-// admin_credit is deliberately NOT in the map above: its label carries the
-// app's name, and the map is built once when this file loads -- before the
-// settings that hold the name have arrived. Resolving it here reads the name
-// at the moment the row is drawn, so a rename shows up without a reload.
-function balRowTitle(t){
+function statementDescription(t){
+  if (t.type === 'deposit') return 'Deposit';
+  if (t.type === 'withdraw') return 'Withdrawal';
+  if (t.type === 'cashback') return 'Daily Income';
+  if (t.type === 'commission') return 'Referral Commission';
+  if (t.type === 'promocode') return 'Gift Code';
+  if (t.type === 'checkin') return 'Check-in Reward';
+  if (t.type === 'welcome_bonus') return 'Welcome Bonus';
+  if (t.type === 'team_reward') return 'Team Reward';
+  if (t.type === 'mission_salary') return 'Mission Salary';
+  if (t.type === 'mission_deposit_reward') return 'Mission Reward';
+  if (t.type === 'turntable' || t.type === 'spin' || t.type === 'spin_bonus') return 'Reward';
   if (t.type === 'admin_credit') return brandName() + ' Credit';
-  return BAL_TITLES[t.type] || 'Transaction';
+  return 'Transaction';
 }
-// The status pill (deposit/withdraw only) or the plain grey sub-label
-// (everything else) that sits under the date, per the mockup.
-// Owner: "remove details in records, ie if treasure code don't put details, if
-// withdrawal failed due to refund, just put failed, turntable like that no
-// putting words down that daily spin, welcome bonus like that don't put that
-// welcome gift ... even on withdrawal no putting words of details down."
-//
-// The row already names what happened (balRowTitle) and shows the amount and
-// the date. The description underneath was the SERVER's own sentence -- "Gift
-// code redeemed: ABC123", "Turntable daily spin", "Withdrawal: Failed --
-// refunded to wallet" -- restating the title in more words.
-//
-// So: deposits and withdrawals keep a status, because pending / paid / failed
-// is genuinely new information, and it is now ONE word. Everything else gets
-// nothing at all. The server's descriptions are untouched -- they are still
-// written to the ledger and still what the admin panel reads; this only stops
-// repeating them to the member.
-function balRowStatus(t){
-  if (t.type !== 'deposit' && t.type !== 'withdraw') return '';
-  const raw = (depWitStatusLabel(String(t.description || '')) || 'Pending').toLowerCase();
-  const cls = /fail|declin|reject|cancel/.test(raw) ? 'fail'
-    : /pend|process|await/.test(raw) ? 'pend' : 'paid';
-  // Derived from the class, not echoed from the description: a refunded
-  // withdrawal's sentence reads "Failed -- refunded to wallet", and he asked
-  // for "just failed".
-  const text = cls === 'fail' ? 'Failed' : cls === 'pend' ? 'Pending' : 'Paid';
-  return `<span class="rec-pill ${cls}">${text}</span>`;
+function statementStatus(t){
+  const rawStatus = String(t.status || '').toLowerCase();
+  const desc = String(t.description || '').toLowerCase();
+  const raw = rawStatus + ' ' + desc;
+  if (/fail|declin|reject|cancel|error/.test(raw)) return { text:'Failed', cls:'failed' };
+  if (/pend|process|await|initiating/.test(raw)) return { text:'Pending', cls:'pending' };
+  return { text:'Completed', cls:'completed' };
 }
-// `tab` lets a caller land the member on the tab that answers the question
-// they just asked -- a cash-out opens straight onto Withdraw.
-window.openBalanceRecordSheet = async function(tab){
-  _balTab = ['all','deposit','withdraw'].indexOf(tab) !== -1 ? tab : 'all';
-  const hadCache = Array.isArray(STATE.transactions);
-  const bal = (STATE.account || {}).walletBalance || 0;
-  openSheet('Balance Record', `
-    <div class="bal-band">
-      <div class="lbl">Current Balance</div>
-      <div class="val" id="balBandValue">${fmtUGX2(0)}</div>
-    </div>
-    <div class="rec-tabs" id="balTabs">
-      ${['all','deposit','withdraw'].map(c => `<button class="tb ${_balTab===c?'on':''}" data-cat="${c}" onclick="switchBalTab('${c}')">${c==='all'?'All':c==='deposit'?'Deposit':'Withdraw'}</button>`).join('')}
-    </div>
-    <div id="balBody"></div>`);
-  // Painted as zero above and counted up here, once the sheet is in the DOM.
-  // Rendering the real figure first and then resetting it to zero would flash
-  // the true balance for a frame before the count started.
-  countUpEl($('balBandValue'), bal, fmtUGX2);
-  if (hadCache) renderBalTab(_balTab);
-  const r = await api('/transactions');
-  if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
-  else if (!hadCache) STATE.transactions = [];
-  if (!hadCache && $('balBody')) renderBalTab(_balTab);
-};
-window.switchBalTab = function(cat){
-  _balTab = cat;
-  const tabs = $('balTabs');
-  if (tabs) tabs.querySelectorAll('.tb').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
-  renderBalTab(cat);
-};
-function renderBalTab(cat){
-  const body = $('balBody');
+function statementDate(t){
+  const d = String(t.date || '');
+  const parts = d.split('/');
+  const date = parts.length === 3 ? parts[1] + '/' + parts[0] + '/' + parts[2] : d;
+  return (date + (t.time ? ' · ' + t.time : '')).trim();
+}
+function statementAmountText(t){
+  const amt = recordsRowAmount(t);
+  const sign = amt < 0 ? '−' : '+';
+  return sign + fmtUGXCents(Math.abs(amt));
+}
+function renderStatement(){
+  const body = $('statementBody');
   if (!body) return;
-  const rows = (STATE.transactions || []).filter(t => balTabMatch(cat, t));
+  const rows = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
   if (!rows.length) {
-    body.innerHTML = '<div class="list-empty reveal-in">No records yet.</div>';
+    body.innerHTML = '<div class="statement-empty">No transactions in this category.</div>';
     return;
   }
   const footer = STATE.transactionsTruncated
-    ? '<div class="list-end">Showing your most recent records</div>'
-    : '<div class="list-end">No more data</div>';
-  body.innerHTML = '<div class="reveal-in">' + rows.map(t => {
+    ? '<div class="statement-end">Showing your most recent transactions</div>'
+    : '<div class="statement-end">End of statement</div>';
+  body.innerHTML = rows.map(t => {
+    const st = statementStatus(t);
     const amt = recordsRowAmount(t);
     return `
-    <div class="rec">
-      ${balAvatar(t)}
-      <div class="txt">
-        <div class="t1">${esc(balRowTitle(t))}</div>
-        <div class="t2">${esc(t.date || '')} ${esc(t.time || '')}</div>
-        ${balRowStatus(t)}
-      </div>
-      <div class="right"><div class="amt ${amt < 0 ? 'neg' : 'pos'}">${amt < 0 ? '-' : '+'}${fmtUGX2(amt)}</div></div>
-    </div>`;
-  }).join('') + footer + '</div>';
+      <article class="statement-row">
+        <div class="statement-meta">
+          <span class="statement-id mono">${esc(t.statementId || t.id || '—')}</span>
+          <span class="statement-date">${esc(statementDate(t))}</span>
+        </div>
+        <div class="statement-main">
+          <div class="statement-desc">${esc(statementDescription(t))}</div>
+          <div class="statement-amount ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</div>
+        </div>
+        <div class="statement-status ${st.cls}">${st.text}</div>
+      </article>`;
+  }).join('') + footer;
 }
+window.switchStatementCategory = function(cat){
+  if (!['income','deposit','withdraw'].includes(cat)) return;
+  _statementCat = cat;
+  const tabs = $('statementTabs');
+  if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
+  renderStatement();
+};
+window.openTransactionStatement = async function(cat){
+  _statementCat = ['income','deposit','withdraw'].includes(cat) ? cat : 'income';
+  const hadCache = Array.isArray(STATE.transactions);
+  openSheet('Transaction Statement', `
+    <div class="statement-tabs" id="statementTabs">
+      <button data-cat="income" class="${_statementCat==='income'?'on':''}" onclick="switchStatementCategory('income')">Income</button>
+      <button data-cat="deposit" class="${_statementCat==='deposit'?'on':''}" onclick="switchStatementCategory('deposit')">Deposits</button>
+      <button data-cat="withdraw" class="${_statementCat==='withdraw'?'on':''}" onclick="switchStatementCategory('withdraw')">Withdrawals</button>
+    </div>
+    <div class="statement-head" aria-hidden="true">
+      <span>Transaction</span><span>Amount</span>
+    </div>
+    <div id="statementBody"></div>`);
+  if (hadCache) renderStatement();
+  else $('statementBody').innerHTML = '<div class="statement-empty">Loading statement…</div>';
+  const r = await api('/transactions');
+  if (r.status === 'success') {
+    STATE.transactions = r.transactions;
+    STATE.transactionsTruncated = !!r.truncated;
+  } else if (!hadCache) {
+    STATE.transactions = [];
+  }
+  if (_openSheetTitle === 'Transaction Statement') renderStatement();
+};
+// Compatibility for post-withdraw flows and any stale call sites.
+window.openBalanceRecordSheet = function(tab){
+  const cat = tab === 'deposit' ? 'deposit' : tab === 'withdraw' ? 'withdraw' : 'income';
+  return openTransactionStatement(cat);
+};
 
 // ── MESSAGES (MessagesList.dc.html / Messages.dc.html) ──
 // Real inbox, backed by /messages (admin-authored broadcasts) with per-
@@ -5025,7 +4990,7 @@ window.submitCheckin = async function(){
   if (acc.status === 'success') STATE.account = acc.account;
   // Same stale-Records fix Round 72 applied to deposit/withdraw --
   // /checkin already wrote a real ledger row server-side by this point;
-  // without this, Records' Income tab could sit stale for a reload or two
+  // without this, Transaction Statement's Income tab could sit stale for a reload or two
   // (owner: "some records are created or reflect after reloading").
   await refreshTransactionsCache();
   closeSheet({ fromAction: true });
@@ -5307,7 +5272,7 @@ function setDepositStatusSuccess(){
   $('depStatusBody').innerHTML = '<p>' + (_depPendingAmount
     ? esc(fmtUGX(_depPendingAmount)) + ' has been added to your ' + esc(brandName()) + ' balance.'
     : 'Your recharge has been added to your ' + esc(brandName()) + ' balance.')
-    + ' You can see it any time under Balance Record.</p>';
+    + ' You can see it any time under Transaction Statement.</p>';
   setDepButtons(false, true);
 }
 function setDepositStatusFailed(msg){
@@ -5328,7 +5293,7 @@ function setDepositStatusUnknown(){
   $('depStatusTitle').textContent = 'Still waiting for the provider';
   $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
     + 'If it goes through, your balance updates on its own. Tap Verify to check again, '
-    + 'or look under Balance Record later.</p>';
+    + 'or look under Transaction Statement later.</p>';
   // Both buttons: the payment is genuinely unresolved, so Verify must stay,
   // and the member also needs a way off this screen.
   setDepButtons(true, true);
@@ -5533,7 +5498,7 @@ window.syncWithdrawReceiveAmt = function(){
   const hint = $('witReceiveHint');
   if (hint) hint.style.display = amount > 0 ? '' : 'none';
 };
-// Balance Record (openBalanceRecordSheet()) is cache-first: it paints from
+// Transaction Statement (openBalanceRecordSheet()) is cache-first: it paints from
 // whatever STATE.transactions already holds, and per Round 55's own fix,
 // deliberately does NOT repaint once its own background refetch lands (that
 // was to stop a sheet that's already open from silently reloading itself

@@ -2076,3 +2076,41 @@ NaN
 NaN
 - Work was based on the then-current `claude/petro-platform-build` head and merged
 NaN
+
+## 2026-09-22 — Account cleanup + Transaction Statement
+
+Owner marked Account rows for removal and asked for the separate Deposit /
+Withdrawal / Earnings record entries to become one professional transaction
+statement rather than more decorative cards.
+
+Implemented:
+- Removed Account rows: **My Assets**, **Deposit Records**, **Withdrawal Records**,
+  **Earnings Records**, **My Team**, and **Messages**.
+- Added one Account row: **Transaction Statement**.
+- Transaction Statement replaces the old Balance Record presentation. It has
+  exactly three horizontal categories at the top: **Income | Deposits | Withdrawals**.
+  The control is a restrained underline tab row, not cards/pills.
+- Statement rows are flat ledger rows separated by hairlines. Each row shows a
+  stable public transaction reference, date/time, concise description, amount,
+  and status. The old balance hero, avatar discs, record cards and status pills
+  are gone from this screen.
+- Income includes current earning-credit types (cashback, referral commission,
+  team reward, gift code, check-in, welcome bonus, historical mission rewards,
+  turntable/spin rewards, and owner/admin credits). Deposits and withdrawals
+  remain their own categories.
+- New transaction rows receive a **server-generated `B2...` statement ID** in
+  the shape `B2 + YYMMDDHHMMSS + 4 digits` (example style:
+  `B2609220514561788`). The suffix is generated server-side with crypto randomness.
+- Historical rows that predate `statementId` receive a stable server-derived B2
+  reference based on their immutable transaction document ID plus stored
+  timestamp/date fields; the reference does not change on reload.
+- `/transactions` returns the member-facing `statementId` for every row.
+- Existing `openBalanceRecordSheet()` is kept only as a compatibility wrapper so
+  older post-deposit/post-withdraw call sites land in Transaction Statement
+  instead of reopening the retired screen.
+- Live refresh recognizes `Transaction Statement` and repaints its current
+  category when new ledger rows arrive.
+- `user/sw.js` bumped `petro-shell-v133` -> `petro-shell-v134`.
+- Verification in a clean GitHub Actions environment passed: `node --check
+  server.js`, member source syntax OK, obfuscated syntax OK, and `round-trip : OK`.
+  Generated `petro/user/index.html` was committed; temporary workflow removed.

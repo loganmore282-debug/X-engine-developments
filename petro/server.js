@@ -1616,6 +1616,48 @@ function nowStr() {
     time: pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds())
   };
 }
+// Public member-facing transaction reference. Format:
+// B2 + YYMMDDHHMMSS + 4 digits, for example B2609220514561788.
+// New rows receive a cryptographically-random suffix server-side. Older
+// ledger rows predate this field, so /transactions derives the SAME stable
+// B2 reference from the immutable transaction document id instead of
+// inventing a different id on every read.
+function statementStamp(ts) {
+  const ms = tsMillis(ts) || Date.now();
+  const d = new Date(ms + tzOffMs());
+  const pad = n => String(n).padStart(2, '0');
+  return String(d.getUTCFullYear()).slice(-2)
+    + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate())
+    + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds());
+}
+function newStatementId() {
+  return 'B2' + statementStamp(Date.now()) + String(crypto.randomInt(0, 10000)).padStart(4, '0');
+}
+function statementIdFor(doc) {
+  const row = doc.data() || {};
+  if (/^B2\d{16}$/.test(String(row.statementId || ''))) return row.statementId;
+  const digest = crypto.createHash('sha256').update(String(doc.id)).digest();
+  const suffix = String(digest.readUInt32BE(0) % 10000).padStart(4, '0');
+  let stamp = '';
+  const createdMs = tsMillis(row.createdAt);
+  if (createdMs) {
+    stamp = statementStamp(row.createdAt);
+  } else {
+    // Some very old ledger rows predate createdAt but still carry the
+    // immutable MM/DD/YYYY + HH:MM:SS fields. Use them so their public
+    // statement reference remains stable instead of borrowing "now".
+    const dm = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(row.date || ''));
+    const tm = /^(\d{2}):(\d{2}):(\d{2})/.exec(String(row.time || ''));
+    if (dm && tm) stamp = dm[3].slice(-2) + dm[1] + dm[2] + tm[1] + tm[2] + tm[3];
+  }
+  if (!stamp) {
+    // Last-resort stable numeric segment for malformed legacy rows.
+    const a = digest.readUInt32BE(4).toString().padStart(10, '0').slice(-10);
+    const b = String(digest.readUInt16BE(8) % 100).padStart(2, '0');
+    stamp = a + b;
+  }
+  return 'B2' + stamp + suffix;
+}
 function tsMillis(v) {
   if (!v) return 0;
   if (typeof v.toMillis === 'function') return v.toMillis();
@@ -3033,7 +3075,7 @@ async function _settleDueInvestmentNow(doc) {
       }
       const { date, time } = nowStr();
       await db.collection('transactions').add({
-        userId: f.userId, type: 'cashback', description: `${f.tierLabel} daily cashback`,
+        userId: f.userId, statementId: newStatementId(), type: 'cashback', description: `${f.tierLabel} daily cashback`,
         amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
       });
     });
@@ -3152,7 +3194,7 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount) {
       if (priorCommissionTx.empty) {
         const commissionTxId = `commission:${investmentId}:${i}:${id}`;
         await db.collection('transactions').doc(commissionTxId).createIfAbsent({
-          userId: id, type: 'commission', description: `Level ${i + 1} reward`,
+          userId: id, statementId: newStatementId(), type: 'commission', description: `Level ${i + 1} reward`,
           amount: reward, status: 'success', date, time, investmentId, commissionLevel: i,
           createdAt: FieldValue.serverTimestamp()
         });
@@ -3295,7 +3337,7 @@ app.post('/team/milestone/claim', async (req, res) => {
         const { date, time } = nowStr();
         t.update(uRef, { walletBalance: FieldValue.increment(m.reward), totalEarned: FieldValue.increment(m.reward), [claimFlag]: true });
         t.set(db.collection('transactions').doc(), {
-          userId, type: 'team_reward',
+          userId, statementId: newStatementId(), type: 'team_reward',
           description: isDeposit ? `Task Center: whole team deposits ${fmtMoney(m.target)}` : `Task Center: ${m.target} active referrals`,
           amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -4068,7 +4110,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     if (WELCOME > 0) {
       const { date, time } = nowStr();
       await db.collection('transactions').add({
-        userId, type: 'welcome_bonus', description: 'Welcome gift',
+        userId, statementId: newStatementId(), type: 'welcome_bonus', description: 'Welcome gift',
         amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     }
@@ -4336,7 +4378,7 @@ app.post('/checkin', async (req, res) => {
         // otherwise reset tomorrow because the ledger has a hole in it.
         try {
           await db.collection('transactions').doc(`checkin:${uid}:${todayKey}`).createIfAbsent({
-            userId: uid, type: 'checkin', description: `Daily check-in, day ${u.checkinStreak || 1}`,
+            userId: uid, statementId: newStatementId(), type: 'checkin', description: `Daily check-in, day ${u.checkinStreak || 1}`,
             amount: Number(sett.dailyCheckin) || 0, status: 'success',
             date: nowStr().date, time: nowStr().time, createdAt: FieldValue.serverTimestamp(),
           });
@@ -4373,7 +4415,7 @@ app.post('/checkin', async (req, res) => {
       // deterministic id means the next attempt today repairs it.
       try {
         await db.collection('transactions').doc(`checkin:${uid}:${todayKey}`).createIfAbsent({
-          userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
+          userId: uid, statementId: newStatementId(), type: 'checkin', description: `Daily check-in, day ${streak}`,
           amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
       } catch (ledgerErr) {
@@ -4724,7 +4766,7 @@ app.post('/turntable/spin', async (req, res) => {
       const { date, time } = nowStr();
       try {
         await db.collection('transactions').add({
-          userId: uid, type: 'turntable', description: label, amount: reward,
+          userId: uid, statementId: newStatementId(), type: 'turntable', description: label, amount: reward,
           status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
         });
       } catch (ledgerErr) {
@@ -4844,7 +4886,7 @@ app.post('/invest/create', async (req, res) => {
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         await db.collection('transactions').add({
-          userId, type: 'investment', description: `Bought ${liveTier.name}`, amount: -liveTier.price,
+          userId, statementId: newStatementId(), type: 'investment', description: `Bought ${liveTier.name}`, amount: -liveTier.price,
           status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
         });
       } catch (createErr) {
@@ -5018,7 +5060,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       // the walletBalance/totalDeposited integrity math stays honest, but
       // Records' own amount column reads THIS field so a failed deposit
       // still shows what was actually attempted instead of "+UGX 0".
-      userId, type: 'deposit', description: `Deposit: Processing (${fmtMoney(amt)})`,
+      userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(amt)})`,
       amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
     }).catch(e => console.error(`Deposit ledger row create failed for dep=${depRef.id}:`, e.message));
 
@@ -5241,7 +5283,7 @@ async function _creditDepositNow(depDoc) {
         } else {
           const { date, time } = nowStr();
           await db.collection('transactions').add({
-            userId: depUserId, type: 'deposit', description: `Deposit: Success (${fmtMoney(depAmount)})`,
+            userId: depUserId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Success (${fmtMoney(depAmount)})`,
             amount: depAmount, displayAmount: depAmount, status: 'success', date, time, ref: fd.ref, depositId: depDoc.id,
             createdAt: FieldValue.serverTimestamp()
           });
@@ -5528,7 +5570,7 @@ app.post('/withdraw/request', async (req, res) => {
           // walletBalance/totalDeposited integrity math honest -- but that
           // used to also make Records' amount column show "+UGX 0" for a
           // refunded withdrawal instead of what was actually attempted.
-          userId, type: 'withdraw', description: `Withdrawal: Processing (${fmtMoney(amt)})`,
+          userId, statementId: newStatementId(), type: 'withdraw', description: `Withdrawal: Processing (${fmtMoney(amt)})`,
           amount: -amt, displayAmount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
         });
       } catch (createErr) {
@@ -6487,7 +6529,7 @@ app.post('/redeem', async (req, res) => {
       if (priorTx.empty) {
         const { date, time } = nowStr();
         await db.collection('transactions').add({
-          userId, type: 'promocode', description: `Gift code redeemed: ${code}`, giftCode: code,
+          userId, statementId: newStatementId(), type: 'promocode', description: `Gift code redeemed: ${code}`, giftCode: code,
           amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
       }
@@ -6535,7 +6577,7 @@ app.get('/transactions', async (req, res) => {
     // stop claiming completeness it can't back up.
     const TX_LIST_LIMIT = 2000;
     const snap = await db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(TX_LIST_LIMIT).get();
-    const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const transactions = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     res.json({ status: 'success', transactions, truncated: transactions.length >= TX_LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your records' }); }
 });
@@ -8805,7 +8847,7 @@ app.post('/admin/deposit', async (req, res) => {
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
       t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
-      t.set(db.collection('transactions').doc(), { userId, type: 'admin_credit', description: creditDesc, amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+      t.set(db.collection('transactions').doc(), { userId, statementId: newStatementId(), type: 'admin_credit', description: creditDesc, amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
     }));
     logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Credited ${fmtMoney(amt)}` });
@@ -8831,7 +8873,7 @@ app.post('/admin/debit', async (req, res) => {
       if (amt > bal) throw new Error(`Cannot debit ${fmtMoney(amt)}, this wallet only holds ${fmtMoney(bal)}`);
       newBal = bal - amt;
       t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
-      t.set(db.collection('transactions').doc(), { userId, type: 'admin_debit', description: note || 'Balance adjustment', amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
+      t.set(db.collection('transactions').doc(), { userId, statementId: newStatementId(), type: 'admin_debit', description: note || 'Balance adjustment', amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
     }));
     logAdminAction(req, 'manual_debit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Removed ${fmtMoney(amt)}. New balance ${fmtMoney(newBal)}`, newBalance: newBal });
