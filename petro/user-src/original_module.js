@@ -5787,8 +5787,8 @@ function openDepositFormSheet(){
   const s = STATE.settings || {};
   openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
-    <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
     <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
+    <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
 
     <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
     <div class="dep-phone">
