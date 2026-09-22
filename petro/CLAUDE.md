@@ -2114,3 +2114,44 @@ Implemented:
 - Verification in a clean GitHub Actions environment passed: `node --check
   server.js`, member source syntax OK, obfuscated syntax OK, and `round-trip : OK`.
   Generated `petro/user/index.html` was committed; temporary workflow removed.
+
+## 2026-09-22 — Sitewide professional UI + auth background everywhere
+
+Owner asked for the professional treatment to extend beyond Transaction Statement
+and for the existing Authentication Background upload to become the visual backdrop
+across the full signed-in member experience.
+
+Implemented:
+- Reused the existing **authhero / Authentication Background** upload as the single
+  global member-site backdrop. No second background slot was introduced.
+- Home / Assets / Network / Account main canvas now renders over the authhero image
+  with a restrained light veil for readability.
+- Full-page member sheets (Deposit, Withdraw, Wallet, Transaction Statement, About,
+  Security, team-detail sheets, etc.) use the same authhero backdrop and veil.
+- Payment-status page and Download page also use the authhero backdrop.
+- Bottom navigation, sheet headers and top chrome were changed to translucent
+  blurred surfaces so the shared backdrop remains visible without hurting contrast.
+- Account header was simplified to a professional `Account` title + compact settings
+  control instead of another slogan/header strip.
+- Account menu is now one grouped translucent list with separators rather than a
+  vertical stack of floating cards. Its icons use compact rounded-square markers
+  instead of repeated colored circles.
+- Home stat blocks, check-in block and asset rows use restrained translucent work
+  surfaces with minimal shadow.
+- Home quick actions changed from four bright red circular buttons to compact glass
+  utility tiles with red glyphs.
+- Home/Account stat icons changed from colorful circles to subtle rounded-square
+  markers.
+- Network is contained in one readable glass work surface so its flat rows remain
+  legible over the global photo.
+- Wallet / Deposit / Withdraw and other sheet content gets a consistent light glass
+  working surface while retaining the already-approved flat input treatment.
+- Transaction Statement keeps its horizontal categories but now inherits the same
+  translucent surface instead of an opaque grey strip.
+- Removed the obsolete transformed/composited payment-status layer while touching
+  that page; it now uses the same non-transformed full-page approach as the fixed
+  sheet after the earlier Android input-focus diagnosis was corrected.
+- `user/sw.js` bumped `petro-shell-v134` -> `petro-shell-v135`.
+- Clean GitHub Actions verification passed: member source syntax OK, obfuscated
+  syntax OK, and `round-trip : OK`; generated `petro/user/index.html` committed.
+  Temporary verification workflow removed before merge.
