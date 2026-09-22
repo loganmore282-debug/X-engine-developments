@@ -769,6 +769,9 @@ const DEFAULT_SETTINGS = {
   // back. With no image set these do nothing at all.
   authHeroOpacity: 100, authHeroBlur: 0,
   authCardOpacity: 100, authCardBlur: 0,
+  // Background treatment for signed-in Home/Assets/Network/Profile and
+  // secondary pages. Authentication screens keep their own controls above.
+  innerBgOpacity: 100, innerBgBlur: 0,
   // ── Turntable (daily spin wheel) ──
   // Owner's spec: "spin wheel bonus, so everyday one spins just like daily
   // check-in and earns the set amount in admin panel, also spin can also be
@@ -6899,6 +6902,8 @@ const SETTINGS_CRITICAL_RANGES = {
   withdrawMultiple: [0, MAX_MONEY_AMOUNT],
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
+  // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
+  innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
   otpDailyLimitRegister: [0, 50], otpDailyLimitReset: [0, 50], otpDailyLimitBank: [0, 50],
 };
 const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts', 'bankOtpRequired'];
