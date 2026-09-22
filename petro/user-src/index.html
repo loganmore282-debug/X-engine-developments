@@ -865,18 +865,25 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .home-action .badge svg{width:22px;height:22px;}
 .home-action .badge img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 6px 8px rgba(30,10,5,.28));}
 .home-action .lbl{font-size:12px;font-weight:600;}
-/* ── Home top bar v2 (logo + tagline + Notifications/Support) ── */
-.home-topbar-v2{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px 18px 10px;background:var(--chipz-grad);color:#fff;}
+/* ── Home top bar v2 (logo + tagline + Notifications/Support) ──
+   Was a solid Corporate Red band on every screen that reuses this class
+   (Home, Account, Network, My Assets...). Owner: "remove all red headers"
+   -- at that frequency a colored band reads as repetitive page furniture,
+   same call as .sheet-head above. White bar now; the PETRO mark becomes a
+   solid red circle (rather than translucent-white-on-red) so the logo
+   still carries the brand color even though the bar itself no longer
+   does. */
+.home-topbar-v2{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px 18px 10px;background:var(--snow-surface);color:var(--snow-ink);border-bottom:1px solid var(--snow-border);}
 .htb-brand{display:flex;align-items:center;gap:10px;min-width:0;}
-.htb-logo{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;}
+.htb-logo{width:40px;height:40px;border-radius:50%;background:var(--snow-wine);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;}
 .htb-logo img{width:100%;height:100%;object-fit:cover;}
 .htb-text{min-width:0;}
 .htb-title{font-size:15.5px;font-weight:800;line-height:1.2;}
-.htb-sub{font-size:11.5px;font-weight:600;opacity:.88;letter-spacing:.02em;margin-top:2px;}
+.htb-sub{font-size:11.5px;font-weight:600;opacity:.7;letter-spacing:.02em;margin-top:2px;}
 .htb-icons{display:flex;gap:16px;flex-shrink:0;}
-.htb-icon-btn{background:none;border:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:3px;color:#fff;font-family:inherit;}
+.htb-icon-btn{background:none;border:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--snow-ink);font-family:inherit;}
 .htb-ic{position:relative;width:26px;height:26px;display:flex;align-items:center;justify-content:center;}
-.htb-ic .dot{position:absolute;top:-1px;right:-1px;width:8px;height:8px;border-radius:50%;background:var(--chipz-gold);border:2px solid var(--snow-wine);}
+.htb-ic .dot{position:absolute;top:-1px;right:-1px;width:8px;height:8px;border-radius:50%;background:var(--chipz-gold);border:2px solid var(--snow-surface);}
 .htb-ic-lbl{font-size:10.5px;font-weight:600;}
 /* ── Banner carousel dots ── */
 .hb-dots{display:flex;justify-content:center;gap:6px;margin:-6px 0 14px;}
@@ -1298,57 +1305,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .logout-btn img{height:17px;width:auto;display:block;flex-shrink:0;}
 
 /* ── Wallet (Wallet.dc.html) ──
-   ONE bound payout account shown as a bank-card tile, an Edit Wallet
-   toggle that reveals the provider/account/holder form, and a compact
-   "Your Wallet" summary row underneath. */
-.wallet-card{position:relative;border-radius:var(--r-card);padding:22px 22px 20px;color:#fff;overflow:hidden;margin-bottom:18px;box-shadow:0 18px 34px -18px rgba(30,10,5,.55);background:linear-gradient(120deg,#1a1a1d 0%,#7a0e14 42%,#e30613 62%,#f5a000 100%);}
-/* Owner: "on wallet that wallet card having number, it has a glow sweep
-   animation too."
-
-   .sheen was a STATIC diagonal highlight painted across the whole card -- the
-   look of a sweep frozen mid-pass, which is why it reads as almost-right. It
-   travels now, and it deliberately reuses this app's own sweep convention
-   rather than inventing a second one: the same right-to-left direction the
-   owner asked for on the buttons ("let it move from right to left"), the same
-   band-narrower-than-its-box shape, and the same run-then-rest cycle so it
-   reads as a repeating pass rather than a strobe. Slower than the buttons'
-   2.8s because this is a big card at rest, not a control asking to be tapped.
-
-   The band is WIDER than the buttons' 38% and the card is wider still, so it
-   keeps the broad soft gradient the static version had instead of turning
-   into a hard stripe. overflow:hidden is already on .wallet-card. */
-.wallet-card .sheen{position:absolute;top:-20%;bottom:-20%;left:0;width:55%;pointer-events:none;
-  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.26) 50%,transparent 100%);
-  transform:translateX(210%) skewX(-20deg);
-  animation:wcSheenSweep 5.2s ease-in-out infinite;}
-@keyframes wcSheenSweep{
-  0%{transform:translateX(210%) skewX(-20deg);}
-  55%,100%{transform:translateX(-120%) skewX(-20deg);}}
-@media (prefers-reduced-motion:reduce){
-  /* Back to the static highlight rather than nothing: the card is glossy by
-     design, and a flat gradient-only card looks unfinished. */
-  .wallet-card .sheen{animation:none;top:0;bottom:0;width:100%;
-    transform:none;
-    background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);}}
-.wallet-card .row1{position:relative;display:flex;align-items:flex-start;justify-content:space-between;}
-/* The card number measured bigger than the mockup's (32 against 24 device
-   px of ink), so what reads as "small" here is TRACKING, not size: his
-   digits are widely spaced and ours were nearly touching. Widened rather
-   than enlarged. The provider label is genuinely bigger in his. */
-.wallet-card .provider{font-size:24px;font-weight:600;letter-spacing:.02em;}
-/* The same two-cards artwork used by the Wallet row on Account -- the owner's
-   own icon, not a drawn approximation of it, so the two places agree. */
-.wallet-card .wc-mark{width:38px;height:38px;object-fit:contain;display:block;flex-shrink:0;filter:drop-shadow(0 4px 6px rgba(0,0,0,.35));}
-.wallet-card .chip{position:relative;width:42px;height:32px;margin:20px 0 22px;border-radius:5px;background:linear-gradient(135deg,#f6dc95,#c9973a);box-shadow:inset 0 0 0 1px rgba(120,80,10,.35);}
-/* The contact pads. Two hairline grids drawn with gradients rather than an
-   image, so the chip reads as a chip at any size. */
-.wallet-card .chip::before{content:'';position:absolute;inset:5px 3px;
-  background:linear-gradient(to right,transparent 0 32%,rgba(120,80,10,.5) 32% 34%,transparent 34% 66%,rgba(120,80,10,.5) 66% 68%,transparent 68%),
-             linear-gradient(to bottom,transparent 0 45%,rgba(120,80,10,.5) 45% 55%,transparent 55%);}
-.wallet-card .chip::after{content:'';position:absolute;left:34%;right:34%;top:5px;bottom:5px;border:1px solid rgba(120,80,10,.5);border-radius:2px;}
-.wallet-card .num{position:relative;font-size:24px;letter-spacing:.16em;margin-bottom:16px;}
-.wallet-card .holder-lbl{position:relative;font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;font-weight:500;}
-.wallet-card .holder-name{position:relative;font-size:15px;font-weight:500;margin-top:3px;}
+   Was a glossy bank-card tile (sheen sweep, embossed chip, the works) --
+   real owner-requested polish in an earlier round, but the same owner's
+   own later instruction reversed it: "not a must to put the card of
+   wallet no please." Replaced with a plain info panel -- same 3 fields
+   (provider/number/holder), same data, no bank-card metaphor. */
+.wallet-info{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--r-card);padding:6px 18px;margin-bottom:18px;}
+.wallet-info .wi-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--snow-border);}
+.wallet-info .wi-row:last-child{border-bottom:none;}
+.wallet-info .wi-lbl{font-size:12.5px;color:var(--snow-muted);font-weight:600;}
+.wallet-info .wi-val{font-size:14.5px;color:var(--snow-ink);font-weight:700;text-align:right;}
 .wallet-panel{background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:20px;margin-bottom:20px;}
 .wallet-panel .lbl{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 6px;}
 .wallet-panel .field{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:50px;display:flex;align-items:center;padding:0 15px;margin-bottom:16px;gap:8px;}
@@ -2289,18 +2255,22 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    of a partial one. */
 .sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;transform:translateZ(0);will-change:transform;}
 .sheet-bg.show{display:block;}
-/* This was still Chipz's own sub-page header verbatim -- a peach band and a
-   cyan-to-blue gradient chevron, neither of which is anywhere in this app's
-   own red/white/gold/charcoal identity (see CLAUDE.md's "Design system").
-   Every sheet/sub-page in the app shares this one header, so it was the
-   single highest-leverage leftover-Chipz bug in the whole client: fixed
-   once here, fixed on About, Balance Record, Messages, My Team, Gift
-   Codes, Security Settings, and every other screen that opens through
-   openSheet(). Reuses the same solid Corporate Red the Home/Account top
-   bars already established, rather than inventing a second header style. */
-.sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:var(--snow-wine);z-index:1;}
+/* Round 1 of this fix made every sub-page header a solid Corporate Red
+   band, replacing Chipz's own peach-band-plus-blue-chevron. Owner's own
+   follow-up: "remove all red headers" -- a colored band across the top of
+   every single secondary screen (About, Balance Record, Messages, Deposit,
+   Withdraw, etc.) reads as heavy/repetitive at that frequency, not as this
+   app's identity. Chipz's own owner independently reached the same
+   conclusion once already, for the manual-pay overlay specifically (see
+   the long comment above depositChipsHtml() in original_module.js: "don't
+   expect header bars or red colors, just fresh well sized screen") --
+   this is that same call, made for every other sub-page too. Plain,
+   minimal header now: no background fill, dark text/icon, a thin bottom
+   rule for separation. Red stays reserved for buttons, active states and
+   real emphasis, not page furniture. */
+.sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:var(--snow-surface);border-bottom:1px solid var(--snow-border);z-index:1;}
 .sheet-head .back{background:none;border:none;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:20px;font-weight:700;letter-spacing:.02em;color:#fff;}
+.sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:18px;font-weight:700;letter-spacing:.01em;color:var(--snow-ink);}
 .sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
 
 /* The dark bottom-pill toast (#toastHost, .toast, @keyframes toastIn) was
@@ -2717,7 +2687,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 
 <div class="sheet-bg" id="sheetBg">
   <div class="sheet-head">
-    <button class="back" onclick="closeSheet()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="back" onclick="closeSheet()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#25262b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2 id="sheetTitle"></h2>
   </div>
   <div class="sheet-body" id="sheetBody"></div>
@@ -2793,7 +2763,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
      the browser, which drops the list out of the card entirely. -->
 <div class="pay-page" id="depStatusBg">
   <div class="sheet-head pay-head">
-    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#25262b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <h2 id="depStatusHeadTitle">Recharge</h2>
   </div>
   <div class="pay-body">

@@ -4767,16 +4767,10 @@ function walletCardHtml(w){
   const num = w && w.phone ? String(w.phone).replace(/\D/g, '') : 'XXXXXXXXXX';
   const holder = w && w.holder ? esc(String(w.holder).toUpperCase()) : 'NO WALLET BOUND';
   return `
-  <div class="wallet-card">
-    <div class="sheen"></div>
-    <div class="row1">
-      <span class="provider">${esc(provider)}</span>
-      <img class="wc-mark" src="/set-wallet.png" alt="" onerror="this.style.display='none'">
-    </div>
-    <div class="chip"></div>
-    <div class="num">${esc(num)}</div>
-    <div class="holder-lbl">Account Holder</div>
-    <div class="holder-name">${holder}</div>
+  <div class="wallet-info">
+    <div class="wi-row"><span class="wi-lbl">Provider</span><span class="wi-val">${esc(provider)}</span></div>
+    <div class="wi-row"><span class="wi-lbl">Number</span><span class="wi-val mono">${esc(num)}</span></div>
+    <div class="wi-row"><span class="wi-lbl">Account Holder</span><span class="wi-val">${holder}</span></div>
   </div>`;
 }
 function renderWalletSheet(){

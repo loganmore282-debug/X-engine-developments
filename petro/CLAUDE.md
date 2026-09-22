@@ -1185,6 +1185,70 @@ is a separate issue underneath it).
   owner's own phone after this deploy — noted here rather than claimed as
   confirmed. sw.js cache bumped (v124 -> v125).
 
+**Owner pushed back again, harder, immediately after the round above:
+"remove all red headers... build a different page of everything, not
+copying... withdrawal page... not a must to put the card of wallet...
+not a must to put many quick amounts... put network boxes 2 of them such
+that one can select mtn or airtel also images of logos of network will be
+uploaded from admin panel."** Screenshots showed the solid-red
+`.sheet-head` fix from the round above with a hand-drawn circle around
+Home's OWN top bar too, plus the still-unconfirmed compositing fix (same
+old Deposit/Withdraw screenshots re-sent, not fresh ones — whether that
+bug is actually gone hasn't been re-verified live yet). Treated
+"remove all red headers" as covering both, since it's explicit and Home's
+top bar was circled directly.
+
+- **`.sheet-head` and `.home-topbar-v2`** (the latter shared by Home,
+  Account, Network, and My Assets — one more high-leverage single-class
+  fix) both dropped their solid Corporate Red fill entirely, in favor of a
+  plain white bar with dark text/icons and a thin bottom rule. Chipz's own
+  owner independently reached the identical conclusion once already, for
+  the manual-pay overlay specifically (see the long comment above
+  `depositChipsHtml()` in original_module.js: *"don't expect header bars
+  or red colors, just fresh well sized screen"*) — this is that same call,
+  generalized to every other header. Red is now reserved for buttons,
+  active states, and real emphasis, not page furniture. The PETRO mark in
+  `.htb-logo` became a solid red circle (was translucent-white-on-red) so
+  the brand color survives even though the bar itself no longer carries
+  it. Both back-chevron SVGs recolored from white to charcoal to match.
+- **`.wallet-card` (the glossy bank-card tile with the sheen-sweep
+  animation) replaced with a plain 3-row info panel** (`.wallet-info`,
+  `walletCardHtml()` in original_module.js) — same provider/number/holder
+  data, no bank-card metaphor, no animation. Real reversal of a genuine
+  owner-requested feature from an earlier round (the sheen sweep was a
+  specific, deliberate ask, quoted in the CSS comment it replaced) — not a
+  bug fix, a direction change, and treated as one (old CSS deleted
+  outright, not left as dead code, matching this file's "when told to stop
+  using something, actually remove it" standard).
+- **Not done this round, flagged rather than rushed**: the "many quick
+  amounts" chip grid on Deposit (`depositChipsHtml()`) shows one chip per
+  distinct asset price — currently 12, one per product, which is WHY it's
+  dense, not a bug in the chip logic itself. Capping it to an arbitrary
+  smaller number would silently hide real asset prices a member might
+  want, which is a real product-catalog-size question, not a quick visual
+  fix — needs the owner's call on whether they want fewer PRESET amounts
+  (decoupled from the asset list) or the catalog itself trimmed, not a
+  guess. The network-selector ask ("2 boxes, MTN or Airtel, admin-
+  uploadable logos") is a real, separate feature: an MTN/Airtel 2-box
+  picker with logos already exists (`.mp-method`, `MTN_LOGO_DATA_URI`/
+  `AIRTEL_LOGO_DATA_URI`, `manualPayChooseMethod()`) but only inside the
+  manual-payment (PAY-B) sub-flow, reached after Deposit's own amount/
+  method step, not on the Deposit page itself, and its logos are hardcoded
+  data URIs, not admin-uploadable. Moving/duplicating this to the top of
+  Deposit touches real payment-routing logic (`_manDepChosenMethod`,
+  which network's admin numbers get shown) — genuinely the "build a
+  different page of everything" work the owner asked for, needs its own
+  careful pass (plus a new admin-panel upload slot + asset-serving route
+  for the logos, real backend work) rather than a rushed change to a
+  money path under time pressure. Flagged here as the next concrete step,
+  not silently skipped.
+- **Verified**: `node -c`, `build-core.js` round-trip OK. sw.js cache
+  bumped (v125 -> v126). Not yet re-confirmed live: whether the previous
+  round's compositing-layer fix actually resolved the Home-bleed-through
+  bug (the owner's screenshots this round were the same ones from before
+  that fix shipped, not fresh) — worth explicitly asking about on the next
+  check-in rather than assuming either way.
+
 ## Money-safety invariants (do not regress — inherited from Chipz verbatim)
 
 - `db.js`'s `runTransaction` is a **fake that does not lock**. Money-crediting
