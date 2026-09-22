@@ -1744,6 +1744,138 @@ body.sheet-open .sheet-bg{bottom:0;}
    duplicate was left in anyway. Adding a third rule to win the cascade would
    have kept the trap loaded; there is now exactly one .reveal-word rule. */
 
+
+/* ── Member glass surfaces ───────────────────────────────────────────────
+   Reuses the authentication screen's uploaded background and its smoked
+   glass language inside the four main member tabs. This is deliberately a
+   CSS-only surface pass: no markup, navigation, API, money logic or sheet
+   behavior changes. Red CTAs stay solid; content cards become translucent
+   so the refinery image can live behind them without turning the app into
+   a stack of white blocks. */
+#app{
+  min-height:100vh;
+  color:#fff;
+  background-color:#1d130f;
+  background-image:
+    linear-gradient(180deg,rgba(12,7,4,.48) 0%,rgba(12,7,4,.62) 48%,rgba(12,7,4,.74) 100%),
+    var(--auth-hero-img);
+  background-size:cover,cover;
+  background-position:center top,center top;
+  background-repeat:no-repeat,no-repeat;
+}
+#pageHost{min-height:calc(100vh - var(--nav-h));background:transparent;}
+@supports (min-height:100dvh){#app{min-height:100dvh;}#pageHost{min-height:calc(100dvh - var(--nav-h));}}
+
+.home-topbar-v2,
+.bottom-nav,
+.assets-tabs{
+  background:rgba(20,12,8,.58);
+  border-color:rgba(255,255,255,.14);
+  -webkit-backdrop-filter:blur(12px);
+  backdrop-filter:blur(12px);
+}
+.home-topbar-v2{color:#fff;}
+.htb-icon-btn{color:rgba(255,255,255,.86);}
+.htb-sub{color:rgba(255,255,255,.68);}
+.htb-ic .dot{border-color:rgba(20,12,8,.58);}
+.bottom-nav{box-shadow:0 -12px 30px -20px rgba(0,0,0,.58);}
+.navitem,.navitem .nav-ic,.navitem .lbl{color:rgba(255,255,255,.64);}
+.navitem.active,.navitem.active .nav-ic,.navitem.active .lbl{color:#ff3340;}
+.navitem::before{background:#ff3340;}
+
+.home-action{color:#fff;}
+.home-action .lbl{color:rgba(255,255,255,.92);}
+
+.home-stat,
+.checkin-card,
+.acct-card,
+.acct-row,
+.asset-row,
+.p-card,
+.stat-tile{
+  background:rgba(20,12,8,.46);
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:0 12px 28px -18px rgba(0,0,0,.7);
+  -webkit-backdrop-filter:blur(9px);
+  backdrop-filter:blur(9px);
+}
+.checkin-card{background:rgba(55,34,18,.48);}
+.p-card{overflow:hidden;}
+.p-stat{background:rgba(255,255,255,.08);}
+.p-stat.warm{background:rgba(245,160,0,.14);}
+
+.hs-lbl,
+.cic-sub,
+.acct-id-row,
+.acct-row .t2,
+.asset-stats span,
+.mar-date,
+.mar-values span,
+.mar-foot,
+.p-stat .k,
+.page-head span,
+.net-invite-line span,
+.net-levels span,
+.net-earn-simple span,
+.list-empty,
+.my-assets-empty{
+  color:rgba(255,255,255,.62);
+}
+.hs-val,
+.cic-title,
+.acct-phone-row,
+.acct-row,
+.acct-row .t1,
+.asset-name,
+.asset-stats b,
+.mar-name,
+.mar-values b,
+.p-stat .v,
+.net-invite-line b,
+.net-invite-line .net-link,
+.net-levels b,
+.net-earn-simple b,
+.page-head h2{
+  color:#fff;
+}
+.hs-ic.hs-dark,
+.acct-avatar,
+.ar-ic.ar-dark,
+.asset-thumb,
+.mar-thumb{
+  background:rgba(255,255,255,.10);
+  color:rgba(255,255,255,.82);
+}
+.hs-ic.hs-red,.ar-ic.ar-red{background:rgba(227,6,19,.20);}
+.hs-ic.hs-gold,.ar-ic.ar-gold{background:rgba(245,160,0,.20);}
+
+.assets-tabs{border-bottom:1px solid rgba(255,255,255,.14);}
+.assets-tabs .at{color:rgba(255,255,255,.58);}
+.assets-tabs .at.on{color:#ff3340;border-bottom-color:#ff3340;}
+
+.net-simple{
+  margin:14px 18px 0;
+  padding:4px 16px 2px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:var(--r-card);
+  background:rgba(20,12,8,.46);
+  box-shadow:0 12px 28px -18px rgba(0,0,0,.7);
+  -webkit-backdrop-filter:blur(9px);
+  backdrop-filter:blur(9px);
+}
+.net-invite-line{border-bottom-color:rgba(255,255,255,.14);}
+.net-levels{border-top-color:rgba(255,255,255,.14);border-bottom-color:rgba(255,255,255,.14);}
+.net-levels>div+div::before{background:rgba(255,255,255,.14);}
+.net-invite-line button,.net-earn-actions button{color:#ff3340;}
+
+.logout-btn-v2{
+  background:rgba(20,12,8,.46);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.18);
+  -webkit-backdrop-filter:blur(9px);
+  backdrop-filter:blur(9px);
+}
+
 </style>
 </head>
 <body>
