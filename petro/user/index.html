@@ -2437,17 +2437,31 @@ document.head.appendChild(s);
 });
 })();</script>
 
+
 <script data-petro-ui-hotfix>
 (function(){
   function install(){
-    if (typeof window.homeCarouselSlides !== 'function' || typeof window.acctRowHtml !== 'function' || typeof window.openSheet !== 'function') return false;
+    if (typeof window.homeCarouselSlides !== 'function' ||
+        typeof window.acctRowHtml !== 'function' ||
+        typeof window.openSheet !== 'function') return false;
+
+    // Banner markup and motion are overridden together so the deployed build
+    // can never end up with new motion code looking for old single-image DOM.
+    window.homeBannerBlockHtml = function(st){
+      var slides=window.homeCarouselSlides();
+      if(!slides) return '<div class="home-banner">'+window.homeBannerInnerHtml(st)+'</div>';
+      return '<div class="home-banner" id="homeCarouselTrack"><div class="hb-slide-track">'
+        +'<img class="hb-slide-current" src="'+window.esc(slides[0])+'" alt="">'
+        +'<img class="hb-slide-next" src="'+window.esc(slides[1])+'" alt="">'
+        +'</div></div>';
+    };
 
     window.startHomeCarousel = function(){
-      if (window._homeCarouselTimer) { clearInterval(window._homeCarouselTimer); window._homeCarouselTimer = null; }
-      var slides = window.homeCarouselSlides();
-      if (!slides) return;
-      window._homeCarouselIdx = 0;
-      window._homeCarouselTimer = setInterval(function(){
+      if (window._homeCarouselTimer) { clearInterval(window._homeCarouselTimer); window._homeCarouselTimer=null; }
+      var slides=window.homeCarouselSlides();
+      if(!slides) return;
+      window._homeCarouselIdx=0;
+      window._homeCarouselTimer=setInterval(function(){
         var wrap=document.getElementById('homeCarouselTrack');
         var track=wrap&&wrap.querySelector('.hb-slide-track');
         var current=track&&track.querySelector('.hb-slide-current');
@@ -2456,10 +2470,9 @@ document.head.appendChild(s);
         if(track.classList.contains('hb-moving')) return;
         var nextIdx=(window._homeCarouselIdx+1)%slides.length;
         var afterIdx=(nextIdx+1)%slides.length;
-        if(next.getAttribute('src')!==slides[nextIdx]) next.src=slides[nextIdx];
+        next.src=slides[nextIdx];
         track.classList.add('hb-moving');
-        var finish=function(){
-          track.removeEventListener('transitionend',finish);
+        setTimeout(function(){
           current.src=slides[nextIdx];
           next.src=slides[afterIdx];
           window._homeCarouselIdx=nextIdx;
@@ -2467,15 +2480,34 @@ document.head.appendChild(s);
           track.classList.remove('hb-moving');
           void track.offsetWidth;
           track.classList.remove('hb-resetting');
-        };
-        track.addEventListener('transitionend',finish);
+        },700);
       },4500);
     };
+
+    // Titles on the three non-Home tabs.
+    function ensureTitle(text){
+      var host=document.getElementById('pageHost');
+      if(!host) return;
+      var root=host.firstElementChild||host;
+      if(root.querySelector&&root.querySelector(':scope > .member-page-title')) return;
+      var title=document.createElement('div');
+      title.className='member-page-title';
+      title.textContent=text;
+      root.insertBefore(title,root.firstChild);
+    }
+    if(!window.__petroTitled){
+      window.__petroTitled=true;
+      var oldAssets=window.renderAssets;
+      if(typeof oldAssets==='function') window.renderAssets=async function(){var r=await oldAssets.apply(this,arguments);ensureTitle('My Assets');return r;};
+      var oldNetwork=window.renderNetwork;
+      if(typeof oldNetwork==='function') window.renderNetwork=async function(){var r=await oldNetwork.apply(this,arguments);ensureTitle('Network');return r;};
+    }
 
     window.renderAccount = async function(){
       var a=window.STATE&&window.STATE.account||{};
       var row=window.acctRowHtml, I=window.ICONS;
-      var html='<div class="account-page" style="padding:16px 18px 0;">'
+      var html='<div class="account-page" style="padding:0 18px;">'
+        +'<div class="member-page-title">Profile</div>'
         +'<div class="acct-card"><div class="acct-avatar">'+I.peopleGroup+'</div><div class="acct-idbox"><div class="acct-phone-row">'+window.esc(window.formatPhoneDisplay(a.phone))+'</div></div></div>'
         +'<div class="home-stat-row" style="padding:0;margin:14px 0 16px;">'
         +'<div class="home-stat"><span class="hs-ic hs-red">'+I.layers+'</span><div class="hs-lbl">Wallet Balance</div><div class="mono hs-val" id="acctWallet">'+window.esc(window.fmtUGX(Number(a.walletBalance)||0))+'</div></div>'
@@ -2492,37 +2524,12 @@ document.head.appendChild(s);
       document.getElementById('pageHost').innerHTML='<div class="reveal-in">'+html+'</div>';
     };
 
-    window.openCheckinSheet = function(){
-      var a=window.STATE&&window.STATE.account||{};
-      var bonus=Number(window.STATE&&window.STATE.settings&&window.STATE.settings.dailyCheckin)||0;
-      var streak=Number(a.checkinStreak)||0;
-      var now=Date.now();
-      var lastAt=a.lastCheckinAt?Number(a.lastCheckinAt):0;
-      var onCooldown=!!lastAt&&window.eatDayIndex(lastAt)===window.eatDayIndex(now);
-      var nextAt=onCooldown?window.eatMidnightAfter(now):0;
-      window.openSheet('Daily Check-in','<div class="reveal-in"><div class="checkin-panel"><div class="checkin-kicker">Current streak</div><div class="checkin-streak mono">'+streak+'<span> day'+(streak===1?'':'s')+'</span></div><div class="checkin-copy">'+(onCooldown?'You have checked in today. Your next check-in opens at midnight.':'Check in once every day to keep your streak and earn '+window.fmtUGX(bonus)+' each time.')+'</div><button class="primary-button checkin-action" id="checkinBtn" '+(onCooldown?'data-checkin-next="'+nextAt+'" disabled':'')+' onclick="submitCheckin()">'+(onCooldown?'Checked in today':'Check In &middot; '+window.fmtUGX(bonus))+'</button></div></div>');
-      if(onCooldown&&typeof window.startCheckinCountdown==='function') window.startCheckinCountdown();
-    };
-
-    window.startCheckinCountdown = function(){
-      if(window._checkinCountdownTimer){clearTimeout(window._checkinCountdownTimer);window._checkinCountdownTimer=null;}
-      var btn=document.querySelector('[data-checkin-next]');
-      if(!btn) return;
-      var remaining=Number(btn.dataset.checkinNext)-Date.now();
-      if(remaining<=0){
-        btn.removeAttribute('data-checkin-next');btn.disabled=false;
-        var bonus=Number(window.STATE&&window.STATE.settings&&window.STATE.settings.dailyCheckin)||0;
-        btn.innerHTML='Check In &middot; '+window.fmtUGX(bonus);
-        var copy=document.querySelector('.checkin-copy');
-        if(copy) copy.textContent='Check in once every day to keep your streak and earn '+window.fmtUGX(bonus)+' each time.';
-        return;
-      }
-      window._checkinCountdownTimer=setTimeout(function(){window._checkinCountdownTimer=null;window.startCheckinCountdown();},Math.min(remaining+150,2147483000));
-    };
-
     try{
-      if(window.STATE&&window.STATE.page==='account'&&document.getElementById('app')&&document.getElementById('app').style.display!=='none') window.renderAccount();
-      if(document.getElementById('homeCarouselTrack')) window.startHomeCarousel();
+      if(window.STATE&&window.STATE.page==='home'&&document.getElementById('app')&&document.getElementById('app').style.display!=='none'){
+        window.paintHome();
+      } else if(window.STATE&&window.STATE.page==='assets') ensureTitle('My Assets');
+      else if(window.STATE&&window.STATE.page==='network') ensureTitle('Network');
+      else if(window.STATE&&window.STATE.page==='account') window.renderAccount();
     }catch(_){}
     return true;
   }
