@@ -1146,7 +1146,7 @@ var NUMBER_FONT_STACKS = {
   'Roboto Mono': "'Roboto Mono',ui-monospace,'SFMono-Regular',monospace",
   'JetBrains Mono': "'JetBrains Mono',ui-monospace,'SFMono-Regular',monospace",
   'Orbitron': "'Orbitron',ui-sans-serif,sans-serif",
-  'System default': "'Barlow Condensed','Arial Narrow',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+  'System default': "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
 };
 // ── THE APP'S NAME ──
 // Owner: "l would like to also to edit the app name chipz, so make it when it
@@ -2526,7 +2526,7 @@ var NAV_ICON_SVG = {
 // Owner: "the icon fades in and out when tapped not static and selector
 // doesn't disappear." The selector BOX is pure CSS off .navitem.active and
 // needs no help here -- it stays put. This is only for the ICON's tap
-// animation (@keyframes navIconBounce): put the class on when a thumb lands,
+// tap signal animation: put the class on when a thumb lands,
 // take it off when the animation ends so it can replay.
 //
 // Bound on the BAR, not on each of the six items -- one listener instead of
