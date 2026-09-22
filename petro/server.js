@@ -91,8 +91,7 @@ app.use('/admin/', async (req, _res, next) => {
 // 60/min per-user cap rather than only the 400/min global one.
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/bank/delete',
  '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
- '/team/milestone/claim', '/checkin', '/turntable/spin', '/deposit/manual/init',
- '/deposit/manual/paste-sms']
+ '/team/milestone/claim', '/checkin', '/turntable/spin']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -113,7 +112,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/manual-pay-image/set', '/admin/chipz-image/set', '/admin/app-icon/set', '/admin/link-preview/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/chipz-image/set', '/admin/app-icon/set', '/admin/link-preview/set']);
 // The banner video is capped at 4 MB of actual video, which is ~5.5 MB once
 // base64'd, so it needs the huge parser -- bigJsonParser's 4 MB limit would
 // reject a legal upload before the route's own, friendlier size check ran.
@@ -932,50 +931,26 @@ const DEFAULT_SETTINGS = {
   // own body face is now the default for money figures; the serif options
   // below are still selectable here, they are just no longer forced on.
   numberFont: 'System default',
-  // Owner: "let us also add manual payments... make when l can toggle
-  // payment method to manual or automatic (marzpay), current one." Only
-  // one method is ever live at a time -- MarzPay's own code is completely
-  // untouched, just gated behind this flag alongside the new manual-deposit
-  // path (see the "MANUAL DEPOSITS" section below). Values are
-  // 'marzpay' | 'pesajet' | 'manual' ('automatic' is still recognized as a
-  // legacy alias for 'marzpay' by depositProvider()/withdrawProvider()
-  // below, so an already-deployed database with the old value keeps working
-  // exactly as before with zero migration). Never read this field raw --
-  // always go through depositProvider()/payoutIsManual().
+  // Which automatic gateway a DEPOSIT uses. 'marzpay' | 'pesajet'
+  // ('manual' and the legacy 'automatic' alias are still accepted by
+  // normalizeProviderValue() for an already-deployed database, but manual
+  // DEPOSIT collection itself -- the admin-number/SMS-matched PAY B flow --
+  // was removed outright per owner instruction: "remove manual payment in
+  // the whole codes... remove them all." Automatic is now the only deposit
+  // path; there is no PAY A/PAY B choice left for a member to make. Never
+  // read this field raw -- always go through depositProvider().
   depositMethod: 'marzpay',
   // Owner, after the first version tied payouts to depositMethod: "yeah it
   // can also work and vice versa" -- so the two directions are separable.
   // 'follow' keeps the original behaviour (payouts do whatever deposits do,
   // which is what most setups want and what everyone is already on);
-  // 'marzpay'/'pesajet'/'manual' pin the payout side independently. Resolved
-  // by withdrawProvider()/payoutIsManual() -- never read this field raw.
+  // 'marzpay'/'pesajet'/'manual' pin the payout side independently. This is
+  // the WITHDRAWAL side's own manual mode (an admin sending a payout by
+  // hand, real safety fallback for a region no gateway reaches) -- a
+  // completely different feature from the removed manual DEPOSIT flow
+  // above, deliberately left untouched. Resolved by withdrawProvider()/
+  // payoutIsManual() -- never read this field raw.
   withdrawMethod: 'follow',
-  // Owner: "let us establish Payment reminder, so as it is also editable in
-  // admin panel for mtn and airtel" -- free-text, network-specific transfer
-  // instructions shown on the manual-deposit code screen (e.g. the real USSD
-  // steps for that network), rendered client-side with {{number}}/{{amount}}
-  // substituted for the member's own real assigned account/order amount so
-  // the same admin-authored template stays accurate across every order.
-  // Blank means the section doesn't render for that network at all -- never
-  // guess at a network's real USSD flow with an invented default; the owner
-  // supplied MTN's own real steps directly, so that one is prefilled exactly
-  // as given, Airtel is left blank for the admin to fill in with their own
-  // verified steps.
-  manualPayReminderMtn: '1: Dial *165#\n2: Select 1 Send Money\n3: Select 1 Mobile User\n4: Enter number {{number}}\n5: Enter Amount {{amount}}\n6: Enter Reason\n7: Enter your PIN code',
-  manualPayReminderAirtel: '',
-  // Owner (Round 145): "we will enable 2 payment methods for users to tap
-  // and use... let it just be PAY A / PAY B" -- both can now be offered to
-  // the member AT THE SAME TIME (previously depositMethod was a single
-  // exclusive choice: automatic OR manual, never both). PAY A is always
-  // the automatic gateway (whichever depositMethod itself resolves to via
-  // depositAutomaticProvider() below -- MarzPay or PesaJet); PAY B is
-  // always the admin-managed manual flow. Neither name ("manual"/
-  // "automatic") is ever shown to a member -- the app only ever renders
-  // the neutral "PAY A"/"PAY B" labels. See getSettings()'s own migration
-  // comment for how an already-deployed database (which only ever had the
-  // single depositMethod field) gets sane values for these two the first
-  // time it's read after this round ships.
-  depositPayAEnabled: true, depositPayBEnabled: false,
   // Owner: "make when l can configure what speed the activity checker be
   // on home screen." The Home activity ticker's own scroll speed (px/sec)
   // was hand-tuned across several earlier rounds by direct owner request
@@ -1056,20 +1031,6 @@ async function getSettings(regionKey) {
   try {
     const snap = await db.collection('settings').doc('main').get();
     const stored = snap.exists ? snap.data() : {};
-    // Migration (Round 145): a database saved before the PAY A/PAY B split
-    // never wrote depositPayAEnabled/depositPayBEnabled at all -- letting
-    // DEFAULT_SETTINGS' own true/false defaults silently fill them in below
-    // would incorrectly reopen automatic recharges on a platform the owner
-    // had deliberately set to depositMethod:'manual' (manual-only). Derive
-    // real starting values from the old single depositMethod value instead,
-    // exactly once -- the moment an admin explicitly saves the new toggles
-    // via /admin/settings/update, both fields land in the stored doc for
-    // real and this block is skipped for that database from then on.
-    if (!('depositPayAEnabled' in stored) && !('depositPayBEnabled' in stored)) {
-      const legacyManualOnly = stored.depositMethod === 'manual';
-      stored.depositPayAEnabled = !legacyManualOnly;
-      stored.depositPayBEnabled = legacyManualOnly;
-    }
     let overlay = {};
     if (key !== DEFAULT_REGION_KEY) {
       const rs = await db.collection('settings').doc(settingsDocId(key)).get();
@@ -1122,13 +1083,10 @@ function normalizeProviderValue(v) {
 function depositProvider(sett) {
   return normalizeProviderValue(sett && sett.depositMethod);
 }
-// Resolves the automatic GATEWAY (marzpay vs pesajet) "PAY A" should use,
-// once the /deposit/marzpay route has already confirmed PAY A is actually
-// enabled (depositPayAEnabled) -- deliberately distinct from
-// depositProvider() above, which withdrawals' own 'follow' mode still
-// reads raw and untouched by the Round 145 PAY A/PAY B split. A legacy
-// depositMethod:'manual' value (stored from before that split, back when
-// this one field doubled as the single always-on method) must never leak
+// Resolves the automatic GATEWAY (marzpay vs pesajet) deposits should use --
+// deliberately distinct from depositProvider() above, which withdrawals'
+// own 'follow' mode still reads raw. A legacy depositMethod:'manual' value
+// (from before manual deposit collection was removed) must never leak
 // through here as an "automatic" gateway -- it falls back to MarzPay, the
 // historical default, same as every other unrecognized value.
 function depositAutomaticProvider(sett) {
@@ -1193,7 +1151,7 @@ function marzMarket(region) {
 // not what the country was named.
 //
 // WHY THIS EXISTS. A new region inherits settings/main -- which is Uganda's,
-// carrying depositMethod:'marzpay' AND depositPayAEnabled:true. So on the day
+// carrying depositMethod:'marzpay'. So on the day
 // a region is created for a country its gateway cannot reach, every deposit
 // there is handed to that gateway with a foreign number, and so is every
 // payout, and NOTHING said so: the member sees a provider failure and the
@@ -1214,12 +1172,14 @@ function gatewayServesRegion(gateway, region) {
   const r = region || currentRegion();
   return gatewayServesDial(gateway, r && r.dialCode);
 }
-// Is PAY A (automatic recharge) genuinely usable here? The admin's own flag
-// AND a gateway that can reach this country. Served to the app as the
-// RESOLVED answer, the same way payoutManual and referralRequired already are,
-// so the member never meets a payment method that cannot work.
+// Is automatic recharge genuinely usable here? Manual (admin-number,
+// SMS-matched) deposits were removed outright per owner instruction --
+// automatic is now the only deposit path, so this is just "does a gateway
+// reach this country" (the PAY A/PAY B enable toggle this used to also
+// check is gone). Served to the app as the RESOLVED answer, the same way
+// payoutManual and referralRequired already are, so the member never
+// meets a payment method that cannot work.
 function payAAvailable(sett, region) {
-  if (!sett || sett.depositPayAEnabled === false) return false;
   return gatewayServesRegion(depositAutomaticProvider(sett), region);
 }
 function withdrawProvider(sett, region) {
@@ -1585,26 +1545,6 @@ async function getAnnouncementImage() {
   } catch (_) { _announceImageCache = _announceImageCache || null; }
   _announceImageCacheTs = Date.now();
   return _announceImageCache;
-}
-// Two more independent slots, same pattern as the three above -- optional
-// admin-uploaded images replacing the Snow snowflake mark on the manual-
-// deposit flow's own 2 screens (owner: "make sure l can upload image to
-// replace those snow on payment network screen and final payment
-// screenshot... they will be 2 different images"). 'selector' = the
-// payment-method/phone screen's brand mark; 'hero' = the COPY & PAY code
-// screen's hero logo. Kept as one shared getter taking a slot name rather
-// than duplicating the whole function twice, since the two are otherwise
-// identical in every respect (own doc, own cache, own fallback to null).
-const _manualPayImgCache = { selector: null, hero: null };
-const _manualPayImgCacheTs = { selector: 0, hero: 0 };
-async function getManualPayImage(slot) {
-  if (Date.now() - _manualPayImgCacheTs[slot] < 60 * 1000 && _manualPayImgCache[slot] !== null) return _manualPayImgCache[slot];
-  try {
-    const snap = await db.collection('banners').doc('manual-' + slot).get();
-    _manualPayImgCache[slot] = (snap.exists && snap.data().image) || null;
-  } catch (_) { _manualPayImgCache[slot] = _manualPayImgCache[slot] || null; }
-  _manualPayImgCacheTs[slot] = Date.now();
-  return _manualPayImgCache[slot];
 }
 // Admin-authored "About" article: an ordered list of {type:'text',text} /
 // {type:'image',image} blocks -- the admin decides the order and whether/
@@ -3514,13 +3454,16 @@ app.get('/public/settings', async (req, res) => {
       ...rest,
       maintenanceMsg: s.maintenanceMode ? maintenanceMsg : '',
       payoutManual: payoutIsManual(s),
-      // RESOLVED, not the raw flag: PAY A is only real if a gateway can
-      // actually reach this country's phone numbers. Sending the raw setting
-      // would show a Kenyan member an automatic recharge option that fails at
-      // the provider every time -- the app reads this field directly
-      // (`s.depositPayAEnabled !== false`), so resolving it here is what hides
-      // the method rather than asking the app to know about gateways.
-      depositPayAEnabled: payAAvailable(s),
+      // RESOLVED, not a raw setting: deposits are only real if a gateway can
+      // actually reach this country's phone numbers. Sending an unresolved
+      // flag would show a Kenyan member a recharge option that fails at the
+      // provider every time -- the app reads this field directly
+      // (`s.depositAvailable !== false`), so resolving it here is what hides
+      // deposits rather than asking the app to know about gateways. (Named
+      // depositPayAEnabled before manual deposit collection -- PAY B -- was
+      // removed outright; renamed since "PAY A" no longer means anything
+      // once there is no PAY B to contrast it with.)
+      depositAvailable: payAAvailable(s),
       referralRequired: await referralRequiredNow(),
     // How many countries this platform runs in. The app only uses it to add
     // "if you signed up on another country's site, sign in there" to a
@@ -3923,16 +3866,6 @@ app.get('/public/chipz-images', async (req, res) => {
     // 900 KB with the owner's own artwork for the original seven, and it
     // used to be re-sent on every single launch.
     publicJson(req, res, { status: 'success', referral, logo, spin, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard }, IMAGE_CACHE);
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-// Both slots in one call (not two round trips) -- fetched unconditionally
-// inside boot()'s own Promise.all, same "cheap when unset" tradeoff every
-// other banner-style image already accepts, so a member who reaches the
-// manual-deposit flow moments after boot never sees a pop-in.
-app.get('/public/manual-pay-images', async (req, res) => {
-  try {
-    const [selector, hero] = await Promise.all([getManualPayImage('selector'), getManualPayImage('hero')]);
-    publicJson(req, res, { status: 'success', selector, hero }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -5096,15 +5029,6 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
-    // Real gap found while adding LipaPay as a 2nd automatic provider (Round
-    // 102): this route never actually checked whether PAY A was even
-    // enabled -- a direct call here used to always go straight through the
-    // automatic provider regardless of the admin's own settings, silently
-    // bypassing intent. Round 145 widened this from a single exclusive
-    // depositMethod choice to an independent depositPayAEnabled flag (PAY A
-    // and PAY B -- manual -- can now both be live at once). Mirrors
-    // /deposit/manual/init's own symmetric guard below.
-    if (!sett.depositPayAEnabled) return res.status(400).json({ status: 'error', message: 'Automatic recharges are not enabled right now.' });
     const provider = depositAutomaticProvider(sett);
     // The gateway has to be able to reach THIS country's phone numbers. Every
     // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
@@ -5116,8 +5040,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (!gatewayServesRegion(provider, currentRegion())) {
       return res.status(400).json({
         status: 'error', code: 'GATEWAY_REGION',
-        message: 'Automatic recharge is not available in ' + (currentRegion().name || 'this country') +
-                 ' yet. Please use the other payment method.',
+        message: 'Automatic recharge is not available in ' + (currentRegion().name || 'this country') + ' yet.',
       });
     }
 
@@ -5561,704 +5484,6 @@ app.post('/deposit/callback', async (req, res) => {
     }
   } catch (e) { console.error('Deposit callback error:', e.message); }
 });
-// ═══════════════════════════════════════════
-// MANUAL DEPOSITS (admin-managed MTN/Airtel numbers, SMS-matched)
-// Owner: "let us also add manual payments, so payment numbers and names
-// will be put in admin panel, so make when l can toggle payment method to
-// manual or automatic (marzpay)." Only one method is ever live at a time
-// (settings.depositMethod) -- MarzPay's own code above is completely
-// untouched by any of this.
-//
-// Deliberately reuses the SAME `pendingDeposits` collection, the SAME
-// creditDeposit()/markDepositFailed() functions, and the SAME
-// "Deposit: Status (Amount)" ledger-row convention the MarzPay flow already
-// uses -- both functions only ever read dep.userId/dep.amount and are
-// already fully idempotent (claim-before-credit + updateIf() token), so a
-// manual deposit's credit path is exactly as safe as an automatic one with
-// zero new crediting logic. What differs between the two methods is only
-// HOW a pendingDeposits doc gets from 'pending' to 'matched': MarzPay polls
-// its own API; manual deposits wait for the member to paste the confirmation
-// SMS their own phone received. A manual doc carries `method:'manual'` plus
-// network/assignedNumber/holderName/senderPhone/expiresAt fields the MarzPay
-// path doesn't use.
-// ═══════════════════════════════════════════
-const MANUAL_DEPOSIT_WINDOW_MS = 15 * 60 * 1000; // owner: "deposit payment timer should read 15minutes"
-// ── Per-number activity tracking ──────────────────────────────────────
-// Owner: "make sure l can track number activity in analytics ie success
-// rates, whether their Forwarder sends/forwards messages, success rates,
-// total transactions, messages forwarded, dates time and much more so that
-// l can track every number... daily number transactions, deposits received,
-// sms forwarded, health, duration of sms forwarding delivery to server."
-//
-// Two documents get touched per event, both by atomic $inc so concurrent
-// SMS from several phones can never lose a count:
-//   manualNumberDaily/<number>_<YYYY-MM-DD>  one row per number per EAT day
-//   manualPaymentNumbers/<id>                lifetime rollup + last-seen
-// Recording is always best-effort and wrapped by the caller: a stats write
-// must NEVER be able to fail a deposit. Money first, bookkeeping second.
-const MANUAL_EVENT_FIELDS = {
-  forwarded: 'smsForwarded',      // a message arrived from a phone, whatever it was
-  credited: 'credited',           // matched an order and the wallet was credited
-  unmatched: 'unmatched',         // real money SMS, no order waiting for it
-  ambiguous: 'ambiguous',         // more than one candidate, credited nothing
-  mismatch: 'mismatch',           // sender disagreed with the order, sent to review
-  duplicate: 'duplicate',         // same transaction id seen before
-  unparsed: 'unparsed',           // looked like money but no parser claimed it
-  ignored: 'ignored',             // not a money message at all
-  assigned: 'assigned',           // an order was pointed at this number
-  expired: 'expired',             // an order on this number ran out of time
-  unknownNumber: 'unknownNumber', // a phone reported a number nobody has saved
-};
-async function recordManualNumberEvent(number, event, opts) {
-  if (!number) return;
-  const o = opts || {};
-  const field = MANUAL_EVENT_FIELDS[event];
-  if (!field) return;
-  const day = eatDayKey(new Date());
-  const inc = { [field]: FieldValue.increment(1) };
-  if (o.amount) inc.amount = FieldValue.increment(Number(o.amount) || 0);
-  // Latency is measured ON THE PHONE (SMS arrival -> POST), so it is immune
-  // to clock skew between a handset and the server. Kept as a sum plus a
-  // count so an average survives without storing every sample, alongside
-  // the worst case, which is what actually tells you a phone is struggling.
-  const lat = Number(o.deliveryMs);
-  if (Number.isFinite(lat) && lat >= 0 && lat < 24 * 3600000) {
-    inc.deliveryMsSum = FieldValue.increment(lat);
-    inc.deliverySamples = FieldValue.increment(1);
-  }
-  const dailyRef = db.collection('manualNumberDaily').doc(number + '_' + day);
-  await dailyRef.set({ number, day, ...inc, lastEventAt: FieldValue.serverTimestamp() }, { merge: true });
-  if (Number.isFinite(lat) && lat >= 0) {
-    const cur = await dailyRef.get();
-    const worst = cur.exists ? Number(cur.data().deliveryMsMax || 0) : 0;
-    if (lat > worst) await dailyRef.set({ deliveryMsMax: lat }, { merge: true });
-  }
-  // Lifetime rollup on the number's own record, so the list can show totals
-  // without summing every day ever recorded.
-  try {
-    const numSnap = await db.collection('manualPaymentNumbers').where('number', '==', number).limit(1).get();
-    if (!numSnap.empty) {
-      const patch = { ['total_' + field]: FieldValue.increment(1), lastEventAt: FieldValue.serverTimestamp() };
-      if (o.amount) patch.totalAmount = FieldValue.increment(Number(o.amount) || 0);
-      if (event === 'forwarded') {
-        patch.lastSmsAt = FieldValue.serverTimestamp();
-        // A phone forwarding messages but not yet heartbeating (an older
-        // build, or one just installed) would otherwise show no device at
-        // all in the panel, even though every message it sends carries one.
-        if (o.device) patch.device = o.device;
-        if (o.appVersion) patch.appVersion = o.appVersion;
-      }
-      await numSnap.docs[0].ref.set(patch, { merge: true });
-    }
-  } catch (_) { /* rollup is a convenience, the daily row is the record */ }
-}
-// Never let bookkeeping break a payment path.
-function trackManual(number, event, opts) {
-  recordManualNumberEvent(number, event, opts).catch(e =>
-    console.warn('Manual number stats (non-critical):', e.message));
-}
-
-
-// Parse an MTN / Airtel Uganda "you have received" SMS. Ported from the
-// proven Nexus implementation (root server.js) -- same regex, same
-// field shape. Returns { amount, txId, sender, raw } or null if it isn't a
-// genuine incoming-money message.
-// Shared bits, verified against real MTN and Airtel Uganda messages.
-// Amount: always the FIRST UGX figure -- both operators put the transacted
-// amount before the running balance ("Bal UGX ..." / "New balance: UGX ...").
-function _smsAmount(t) {
-  const m = t.match(/(?:ugx|ush|shs?)\s*([\d,]+(?:\.\d+)?)/i) ||
-            t.match(/([\d,]+(?:\.\d+)?)\s*(?:ugx|ush|shs?)/i);
-  if (!m) return NaN;
-  return parseFloat(m[1].replace(/,/g, ''));
-}
-// Operator transaction id. Airtel labels it "TID 155198427834."; MTN's newer
-// format ends with "ID: 43140073868" (older ones said "Transaction ID ...").
-function _smsTxId(t) {
-  const idm = t.match(/(?:txn\s*id|transaction\s*id|trans\.?\s*id|\btid\b|ref(?:erence)?|financial transaction id)[:\s#]*([A-Za-z0-9.\-]{6,})/i)
-           || t.match(/\bid[:\s#]+(\d{6,})/i);
-  return idm ? idm[1].replace(/\.$/, '') : '';
-}
-// The counterparty's number moves around a lot between operators and between
-// same-network and cross-network transfers, so this scans for candidates
-// after the keyword rather than assuming a position. Real observed shapes:
-//   Airtel in   "from 741234567, JOHN"            -- number first
-//   MTN in      "from UMAR KIZITO, 256764628233"  -- name first
-//   Airtel out  "to NAME on 256769968158"         -- number after "on"
-//   MTN in x-net"from Airtel Money ... Reason: IBRAHIM NANKOOLA , 0731880221"
-//               -- "from" is the OPERATOR, the payer's number is in Reason
-//
-// Two guards matter here:
-//  - \b on the keyword, so a name ending in "to" (KIZITO) is not read as it.
-//  - (?<!\d)...(?!\d), so a 9-13 digit window is never sliced out of a
-//    LONGER number. MTN puts a 19-digit value in "Reason:" on same-network
-//    transfers; without this, a cross-network message carrying one before
-//    the payer's number yields 13 junk digits instead of the real number.
-// Among valid candidates, prefer one that looks like a Ugandan mobile
-// (+2567...), since Reason is a free-text field that can hold anything.
-function _smsCounterparty(t, keyword) {
-  const re = new RegExp('\\b' + keyword + '\\s+([\\s\\S]*)', 'i');
-  const tail = t.match(re);
-  if (!tail) return '';
-  const candidates = tail[1].match(/(?<!\d)\+?\d{9,13}(?!\d)/g);
-  if (!candidates || !candidates.length) return '';
-  for (const c of candidates) {
-    const cleaned = cleanPhone(c);
-    if (looksLikeRegionMobile(cleaned)) return c.replace(/[\s\-]/g, '');
-  }
-  return candidates[0].replace(/[\s\-]/g, '');
-}
-
-// An INCOMING "you have received" message, as it lands on an admin payment
-// phone. This is what the SMS forwarder posts.
-// Operators reword these templates without notice, so direction is decided
-// on a spread of phrasings rather than one exact sentence. Kept deliberately
-// wide: the (receivingNumber, amount) match plus the sender cross-check are
-// what actually protect the money, so a generous reading here costs nothing
-// while a narrow one silently stops matching the day a template changes.
-const RE_INCOMING = /(received|credited|credit of|deposit of|you've received)/i;
-const RE_OUTGOING = /(sent to|you have sent|you've sent|\bsent\b|withdrawn|debited|paid to|transferred|transfer of|payment of)/i;
-const RE_NOT_MONEY = /(airtime|bundle|\bdata\b|megabytes|\bMBs?\b)/i;
-
-function parseMoMoSms(text) {
-  if (!text) return null;
-  const t = String(text).replace(/\s+/g, ' ').trim();
-  // "Download MoMo App ... to get 500MBs" rides along on real MTN deposit
-  // messages, so the not-money check must not veto an otherwise valid one --
-  // it only decides between the two directions when both could read true.
-  const isReceive  = RE_INCOMING.test(t);
-  const isOutgoing = /(sent to|you have sent|you've sent|withdrawn|debited|paid to)/i.test(t);
-  if (!isReceive || isOutgoing) return null;
-  const amount = _smsAmount(t);
-  if (!amount || isNaN(amount)) return null;
-  return { amount, txId: _smsTxId(t), sender: _smsCounterparty(t, 'from'), raw: t };
-}
-
-// An OUTGOING "you have sent" message, as it lands on the MEMBER's own phone.
-//
-// Owner, correcting a real bug: "I sending message, it says sent not sender
-// one to receive... so sender doesn't receive, sender has sent message."
-// Exactly right -- the member never gets a "received" SMS, so the paste-SMS
-// fallback was validating their text with parseMoMoSms() above, which
-// explicitly REJECTS outgoing wording. Every paste attempt failed. This
-// parses the direction the member actually has.
-//
-// Returns { amount, txId, recipient, raw } or null. `recipient` is the
-// number they paid TO, which should be the admin number we assigned them.
-function parseSentMoMoSms(text) {
-  if (!text) return null;
-  const t = String(text).replace(/\s+/g, ' ').trim();
-  const isSent = RE_OUTGOING.test(t);
-  if (!isSent) return null;
-  // Direction must be unambiguous. A message that reads as incoming is never
-  // treated as outgoing, so the two parsers can never both claim one message
-  // (the paste endpoint tries this one first).
-  if (RE_INCOMING.test(t)) return null;
-  // Airtime/bundle purchases are outgoing money but not deposits. Only vetoed
-  // here, where no legitimate transfer message carries these words.
-  if (RE_NOT_MONEY.test(t)) return null;
-  const amount = _smsAmount(t);
-  if (!amount || isNaN(amount)) return null;
-  return { amount, txId: _smsTxId(t), recipient: _smsCounterparty(t, 'to'), raw: t };
-}
-
-// Picks a number from this network's pool at RANDOM (owner: "remove
-// following of order of numbers let them be choose at random but
-// everything should be uniformly assigned" -- was a deterministic
-// round-robin walking a persisted lastIndex, so who got which number was
-// entirely predictable from order alone; replaced with a real Fisher-
-// Yates shuffle of the whole pool on every single call, so every active
-// number has an EQUAL chance of being tried first, second, third, etc. --
-// "uniformly assigned" means fair long-run distribution across the pool,
-// which random selection gives for free; a fixed round-robin sequence
-// does NOT need randomness to already be perfectly even, so this is a
-// pure ordering change, not a fairness fix). The old
-// `manualNumberRotation` collection/lastIndex state this used to persist
-// is gone entirely -- nothing needs to remember "which number is next"
-// once the pick is random every time.
-// Skips any number that already has an active pending order for this
-// EXACT amount (owner: "if user A deposit on number 1, user B deposits on
-// number 2... every session, it's own number" -- the multi-number pool
-// itself is the collision-avoidance mechanism, not Nexus's own "add
-// random shillings to the amount" trick, which would fight the whole
-// point of wanting several clean, round-number-friendly destinations).
-// Locked per network so two concurrent inits can never both claim the
-// same shuffled-first candidate.
-// Subagent-audit-caught HIGH-severity real bug: this used to only PICK a
-// number under the lock and return it -- the caller then wrote the actual
-// pendingDeposits doc separately, after an awaited uniqueRef() call (a real
-// DB round trip), outside this lock entirely. Two members requesting the
-// same network + exact same amount concurrently could both run their own
-// clash-check in that gap, before either doc existed to be seen, and get
-// assigned the SAME number for the SAME amount. Two such orders degrade
-// safely at match time (the ambiguous-match logic below already flags 2+
-// non-expired candidates and credits neither) -- UNLESS one order later
-// expires (a payer being slow is entirely outside server control) while the
-// other is still live: at that point the survivor is the only remaining
-// candidate, so a genuinely late real payment for the FIRST (now-expired)
-// order matches and silently credits the SECOND member instead -- a real
-// wrong-member credit, produced by this assignment race plus ordinary
-// 15-minute expiry, not by any failure of the ambiguous-detection code
-// itself. Closed by moving the deposit-doc WRITE itself inside the SAME
-// lock as the clash-check (via depositFields, supplied by the one caller),
-// so a concurrent call's own clash-check can never run in the gap between
-// "picked" and "written" -- there no longer is one.
-async function assignManualNumberAndCreateDeposit(network, amount, depositFields) {
-  const regionKey = currentRegionKey();
-  return withLock('manual-number-assign:' + regionKey + ':' + network, async () => {
-    const numsSnap = await db.collection('manualPaymentNumbers')
-      .where('network', '==', network).where('active', '==', true).get();
-    // Scoped to THIS region -- a Ugandan MTN number is not somewhere a
-    // Kenyan member can send money. Filtered here in JavaScript rather than
-    // in the query because every number added before regions existed has no
-    // regionKey field at all, and a `where('regionKey','==','ug')` would
-    // match none of them and turn away every Ugandan payer. The pool is a
-    // handful of documents, so this costs nothing.
-    const pool = numsSnap.docs
-      .filter(d => String(d.data().regionKey || DEFAULT_REGION_KEY) === regionKey)
-      .map(d => ({ id: d.id, number: d.data().number, holderName: d.data().holderName }));
-    // 'none' and 'busy' are different problems and need different words. Now
-    // that the tapped operator really is the operator assigned (owner: "mtn
-    // to mtn, airtel to airtel"), an admin who has only ever added Airtel
-    // numbers will have every MTN payer hit this -- and telling them the
-    // numbers are "busy, try a slightly different amount" would send them
-    // round a loop that cannot end. Distinguished here, worded at the caller.
-    if (!pool.length) return { empty: true };
-    // Fisher-Yates -- every permutation of the pool is equally likely, so
-    // the candidate tried first (and, if it clashes, second, third, ...)
-    // is genuinely uniformly random on every call, not just "different
-    // from last time."
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = crypto.randomInt(i + 1);
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    const now = Date.now();
-    for (const candidate of pool) {
-      const clash = await db.collection('pendingDeposits')
-        .where('method', '==', 'manual').where('assignedNumber', '==', candidate.number)
-        .where('amount', '==', amount).where('status', '==', 'pending').limit(5).get();
-      const stillActive = clash.docs.some(d => (d.data().expiresAt || 0) > now);
-      if (!stillActive) {
-        const depRef = db.collection('pendingDeposits').doc();
-        await depRef.set({
-          ...depositFields,
-          assignedNumberId: candidate.id, assignedNumber: candidate.number, holderName: candidate.holderName,
-        });
-        return { assigned: candidate, depRef };
-      }
-    }
-    return null; // every number on this network currently clashes on this exact amount
-  });
-}
-
-app.post('/deposit/manual/init', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const amt = parseInt(req.body.amount, 10);
-  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
-  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
-  if (!network) return res.status(400).json({ status: 'error', message: 'Select a network' });
-  try {
-    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (!sett.depositPayBEnabled) return res.status(400).json({ status: 'error', message: 'Manual deposits are not enabled right now.' });
-    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
-    // Same validate-before-touching-abuse-counters ordering as
-    // /deposit/marzpay -- see its own comment for why this order matters.
-    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)}` });
-    const _sph = depositSenderPhone(req.body, uSnap.data().phone, ['senderPhone', 'phone']);
-    if (_sph.error) return res.status(400).json({ status: 'error', message: _sph.error });
-    const senderPhone = _sph.phone;
-
-    const lastDep = _depCreateDebounce.get(userId) || 0;
-    if (Date.now() - lastDep < 7000)
-      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
-    const attemptCount = recordDepositAttempt(userId);
-    if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
-      await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    }
-    _depCreateDebounce.set(userId, Date.now());
-
-    // uniqueRef() is a real DB round trip -- deliberately run BEFORE
-    // acquiring assignManualNumberAndCreateDeposit()'s lock (it doesn't need
-    // to be inside it, self-contained), so the lock is held for the
-    // shortest window that still needs it: pick-a-number-and-write, and
-    // nothing else.
-    const ref = await uniqueRef('M');
-    const { date, time } = nowStr();
-    const expiresAt = Date.now() + MANUAL_DEPOSIT_WINDOW_MS;
-    const result = await assignManualNumberAndCreateDeposit(network, amt, {
-      userId, phone: senderPhone, senderPhone, network, amount: amt, ref, status: 'pending',
-      method: 'manual', expiresAt, regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp(),
-    });
-    if (!result) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
-    if (result.empty) {
-      console.error(`Manual deposit refused: no active payment numbers configured for ${network}. Add one in Admin -> Deposits -> payment numbers.`);
-      return res.status(503).json({ status: 'error', message: `No ${network} payment number is available right now. Please choose the other network, or contact customer service.` });
-    }
-    const { assigned, depRef } = result;
-    trackManual(assigned.number, 'assigned', { amount: amt });
-    // Same "recorded immediately, not eventually" reasoning as
-    // /deposit/marzpay's own ledger-row-up-front comment.
-    await db.collection('transactions').add({
-      userId, type: 'deposit', description: `Deposit: Processing (${fmtMoney(amt)})`,
-      amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
-    }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${depRef.id}:`, e.message));
-
-    res.json({
-      status: 'success', depositId: depRef.id, reference: ref,
-      assignedNumber: assigned.number, holderName: assigned.holderName, network, amount: amt, expiresAt,
-      message: `Send exactly ${fmtMoney(amt)} to ${assigned.number} (${assigned.holderName}).`
-    });
-  } catch (e) {
-    console.error('Manual deposit init error:', e.message);
-    if (!res.headersSent) res.status(500).json({ status: 'error', message: 'Could not start the deposit right now' });
-  }
-});
-
-app.post('/deposit/manual/status', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
-    if (!depSnap.exists || depSnap.data().userId !== userId || depSnap.data().method !== 'manual')
-      return res.status(404).json({ status: 'error', message: 'Deposit not found' });
-    const dep = depSnap.data();
-    if (dep.status === 'matched') {
-      if (dep.needsManualCredit) await creditDeposit(depSnap).catch(() => {});
-      return res.json({ status: 'success', state: 'matched' });
-    }
-    if (dep.status === 'failed') return res.json({ status: 'success', state: 'failed', message: dep.failureReason });
-    // A human is already looking at this one (ambiguous SMS match, sender
-    // mismatch, or a member-pasted SMS) -- never auto-fail it out from
-    // under them just because its original 15-minute window has lapsed.
-    if (dep.status === 'review') return res.json({ status: 'success', state: 'review' });
-    if ((dep.expiresAt || 0) <= Date.now()) {
-      const reallyFailed = await markDepositFailed(depSnap.ref, userId, 'Payment window expired.');
-      if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
-      return res.json({ status: 'success', state: 'failed', message: 'Payment window expired.' });
-    }
-    return res.json({ status: 'success', state: 'pending', expiresAt: dep.expiresAt });
-  } catch (e) {
-    console.error('Manual deposit status error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not check payment status' });
-  }
-});
-
-// Member pastes the confirmation text their own phone received. Scoped so
-// it can only ever touch their own already-existing pending order, and —
-// per this codebase's own "never trust user input for a balance change"
-// rule — this NEVER credits by itself. It only ever queues the order for a
-// human to confirm.
-app.post('/deposit/manual/paste-sms', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  try {
-    const depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
-    if (!depSnap.exists || depSnap.data().userId !== userId || depSnap.data().method !== 'manual')
-      return res.status(404).json({ status: 'error', message: 'Deposit not found' });
-    const dep = depSnap.data();
-    if (dep.status !== 'pending' && dep.status !== 'review')
-      return res.status(400).json({ status: 'error', message: 'This deposit is no longer waiting for payment.' });
-    const text = String(req.body.text || '').trim().slice(0, 2000);
-    if (!text) return res.status(400).json({ status: 'error', message: 'Paste the payment message you received first.' });
-    // The member's own phone gets a SENT message, so that's the normal case.
-    // A received message is still accepted in case they somehow relay the
-    // admin phone's copy instead.
-    const sent = parseSentMoMoSms(text);
-    const received = sent ? null : parseMoMoSms(text);
-    const info = sent || received;
-
-    // UNPARSEABLE TEXT IS NO LONGER REFUSED. This used to answer 400 with
-    // "that doesn't look like a mobile-money message" and store nothing, so
-    // a real payment whose SMS wording this parser does not recognise --
-    // a new operator template, a forwarded/edited message, an Airtel format
-    // we have not seen -- simply vanished, and the member had no way to be
-    // paid. Owner: "the sent message ... should appear to admin panel in its
-    // full details so as admin verifies manually or rejects." The human is
-    // the judge now, so the job here is to DELIVER what they sent, intact,
-    // never to sit in front of them deciding what is worth passing on.
-    //
-    // What has NOT changed, and must not: this endpoint still never calls
-    // creditDeposit(). It only ever queues the order for a person, per this
-    // codebase's own "never trust user input for a balance change" rule. An
-    // unparsed message is strictly LESS trusted, not more.
-    const counterparty = info ? (sent ? sent.recipient : received.sender) : '';
-    const amountMatches = info ? Number(info.amount) === Number(dep.amount) : null;
-    const cleanCounterparty = counterparty ? (cleanPhone(counterparty) || counterparty) : '';
-    const cleanAssigned = dep.assignedNumber ? (cleanPhone(dep.assignedNumber) || dep.assignedNumber) : '';
-    const paidRightNumber = sent && cleanCounterparty && cleanAssigned
-      ? cleanCounterparty === cleanAssigned
-      : null;   // null = could not be checked
-
-    const notes = [info
-      ? (sent ? 'Member pasted their own sent-money SMS' : 'Member pasted a received-money SMS')
-      : 'Member pasted a message this server could not read automatically -- check it by hand'];
-    if (info && !amountMatches) notes.push(`amount says ${fmtMoney(info.amount)} but the order is ${fmtMoney(dep.amount)}`);
-    if (paidRightNumber === false) notes.push(`paid ${counterparty} but was assigned ${dep.assignedNumber}`);
-
-    await depSnap.ref.update({
-      status: 'review',
-      reviewReason: notes.join('; '),
-      // The member's OWN text, byte for byte, parsed or not.
-      //
-      // This used to store `info.raw` whenever the message parsed, and
-      // `info.raw` is the parser's working copy: /\s+/g collapsed to single
-      // spaces so the patterns can match across line breaks. Fine for
-      // matching, wrong to keep -- a mobile-money SMS puts the transaction
-      // id, the balance and the fee on their own lines, and the admin panel
-      // renders this in a <pre style="white-space:pre-wrap"> precisely so a
-      // person can read that shape. Collapsed, every message arrived as one
-      // run-on line and the <pre> had nothing left to preserve.
-      //
-      // Owner: "make sure that messages are sent correctly in full to admin
-      // panel to approve or reject." In full means as they sent it.
-      pastedSms: text,
-      pastedSmsParsed: !!info,
-      pastedSmsAmount: info ? info.amount : null,
-      pastedSmsTxId: (info && info.txId) || '',
-      pastedSmsCounterparty: counterparty || '',
-      pastedSmsDirection: info ? (sent ? 'sent' : 'received') : '',
-      pastedSmsAmountMatches: amountMatches,
-      pastedSmsNumberMatches: paidRightNumber,
-      pastedAt: FieldValue.serverTimestamp()
-    });
-    res.json({ status: 'success', message: "Thanks, we're checking this and will credit your wallet shortly if it's genuine." });
-  } catch (e) {
-    console.error('Manual deposit paste-sms error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not submit this right now' });
-  }
-});
-
-// 1-minute sweep for manual orders nobody's actively polling -- the poll
-// endpoint above already expires one lazily the instant a member checks it,
-// this just makes sure an abandoned tab's order still gets released (and
-// its number freed back to the pool) even if nobody ever polls it again.
-async function reconcileManualDeposits() {
-  try {
-    const now = Date.now();
-    const snap = await db.collection('pendingDeposits').where('method', '==', 'manual').where('status', '==', 'pending').limit(500).get();
-    for (const doc of snap.docs) {
-      const d = doc.data();
-      if ((d.expiresAt || 0) <= now) {
-        await markDepositFailed(doc.ref, d.userId, 'Payment window expired.').catch(e => console.error('Manual deposit expiry error:', e.message));
-        trackManual(d.assignedNumber, 'expired', { amount: d.amount });
-      }
-    }
-  } catch (e) { console.error('Reconcile manual deposits error:', e.message); }
-}
-
-// A phone is called healthy only while it is actively checking in. The
-// thresholds are generous on purpose: the app heartbeats every 15 minutes,
-// so one missed check-in is normal (a tunnel, a flaky tower) and should not
-// raise an alarm, while several hours of silence genuinely means somebody
-// needs to go and look at that handset.
-const MANUAL_HEALTH_OK_MS = 45 * 60 * 1000;
-const MANUAL_HEALTH_WARN_MS = 3 * 60 * 60 * 1000;
-function manualNumberHealth(lastHeartbeatMs, lastSmsMs) {
-  const seen = Math.max(Number(lastHeartbeatMs) || 0, Number(lastSmsMs) || 0);
-  if (!seen) return { state: 'unknown', label: 'Never checked in', lastSeenAt: null };
-  const age = Date.now() - seen;
-  if (age <= MANUAL_HEALTH_OK_MS) return { state: 'healthy', label: 'Online', lastSeenAt: seen };
-  if (age <= MANUAL_HEALTH_WARN_MS) return { state: 'stale', label: 'Not checked in recently', lastSeenAt: seen };
-  return { state: 'offline', label: 'Offline', lastSeenAt: seen };
-}
-
-// Everything the owner asked to be able to see per number: how many messages
-// each phone forwarded, how many became real deposits, the success rate,
-// how long forwarding actually takes, whether the phone is alive, and the
-// same broken out day by day.
-app.post('/admin/manual-numbers/analytics', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const days = Math.min(90, Math.max(1, parseInt(req.body && req.body.days, 10) || 14));
-    const cutoffDay = eatDayKey(new Date(Date.now() - (days - 1) * 86400000));
-    const [numsSnap, dailySnap] = await Promise.all([
-      db.collection('manualPaymentNumbers').orderBy('network', 'asc').orderBy('order', 'asc').get(),
-      db.collection('manualNumberDaily').where('day', '>=', cutoffDay).limit(20000).get(),
-    ]);
-
-    const byNumber = new Map();
-    dailySnap.forEach(d => {
-      const row = d.data();
-      if (!byNumber.has(row.number)) byNumber.set(row.number, []);
-      byNumber.get(row.number).push(row);
-    });
-
-    const blank = () => ({
-      smsForwarded: 0, credited: 0, unmatched: 0, ambiguous: 0, mismatch: 0,
-      duplicate: 0, unparsed: 0, ignored: 0, assigned: 0, expired: 0,
-      unknownNumber: 0,
-      amount: 0, deliveryMsSum: 0, deliverySamples: 0, deliveryMsMax: 0,
-    });
-    const sumInto = (acc, row) => {
-      for (const k of Object.keys(acc)) {
-        if (k === 'deliveryMsMax') acc[k] = Math.max(acc[k], Number(row[k]) || 0);
-        else acc[k] += Number(row[k]) || 0;
-      }
-      return acc;
-    };
-
-    const numbers = numsSnap.docs.map(doc => {
-      const n = doc.data();
-      const rows = (byNumber.get(n.number) || []).slice().sort((a, b) => (a.day < b.day ? -1 : 1));
-      const totals = rows.reduce((acc, r) => sumInto(acc, r), blank());
-      // Success rate is measured against messages that were REAL money
-      // arriving, not against every text the phone forwarded -- an operator
-      // advert or a duplicate is not a failure of this number, and counting
-      // it as one would make a perfectly healthy phone look broken.
-      const realMoney = totals.credited + totals.unmatched + totals.ambiguous + totals.mismatch;
-      const health = manualNumberHealth(tsMillis(n.lastHeartbeatAt), tsMillis(n.lastSmsAt));
-      return {
-        id: doc.id, number: n.number, holderName: n.holderName || '', network: n.network || '',
-        active: n.active !== false,
-        health: health.state, healthLabel: health.label, lastSeenAt: health.lastSeenAt,
-        lastHeartbeatAt: tsMillis(n.lastHeartbeatAt) || null,
-        lastSmsAt: tsMillis(n.lastSmsAt) || null,
-        device: n.device || '', appVersion: n.appVersion || '',
-        forwardingActive: n.forwardingActive === true,
-        battery: Number.isFinite(Number(n.battery)) ? Number(n.battery) : null,
-        ...totals,
-        realMoneySms: realMoney,
-        successRate: realMoney ? Math.round((totals.credited / realMoney) * 1000) / 10 : null,
-        // How much of what this number was ASKED to collect actually landed.
-        fillRate: totals.assigned ? Math.round((totals.credited / totals.assigned) * 1000) / 10 : null,
-        avgDeliveryMs: totals.deliverySamples ? Math.round(totals.deliveryMsSum / totals.deliverySamples) : null,
-        maxDeliveryMs: totals.deliveryMsMax || null,
-        daily: rows.map(r => ({
-          day: r.day,
-          smsForwarded: Number(r.smsForwarded) || 0,
-          credited: Number(r.credited) || 0,
-          unmatched: Number(r.unmatched) || 0,
-          ambiguous: Number(r.ambiguous) || 0,
-          mismatch: Number(r.mismatch) || 0,
-          duplicate: Number(r.duplicate) || 0,
-          unparsed: Number(r.unparsed) || 0,
-          assigned: Number(r.assigned) || 0,
-          expired: Number(r.expired) || 0,
-          amount: Number(r.amount) || 0,
-          avgDeliveryMs: Number(r.deliverySamples) ? Math.round(Number(r.deliveryMsSum) / Number(r.deliverySamples)) : null,
-          maxDeliveryMs: Number(r.deliveryMsMax) || null,
-        })),
-      };
-    });
-
-    // Any daily row whose number is NOT in the saved list came from a phone
-    // configured with a number nobody set up -- the silent-failure case. It
-    // would otherwise be invisible here, since this list is built from the
-    // saved numbers only, which is exactly how it stayed hidden before.
-    const savedSet = new Set(numsSnap.docs.map(d => d.data().number).filter(Boolean));
-    const unknownNumbers = [];
-    for (const [num, rows] of byNumber.entries()) {
-      if (savedSet.has(num)) continue;
-      const totals = rows.reduce((acc, r) => sumInto(acc, r), blank());
-      unknownNumbers.push({
-        number: num, ...totals,
-        lastSeenAt: Math.max(...rows.map(r => tsMillis(r.lastEventAt) || 0), 0) || null,
-      });
-    }
-    unknownNumbers.sort((a, b) => (b.smsForwarded || 0) - (a.smsForwarded || 0));
-
-    const platform = numbers.reduce((acc, n) => sumInto(acc, n), blank());
-    const platformReal = platform.credited + platform.unmatched + platform.ambiguous + platform.mismatch;
-    res.json({
-      status: 'success', days, numbers, unknownNumbers,
-      totals: {
-        ...platform,
-        realMoneySms: platformReal,
-        successRate: platformReal ? Math.round((platform.credited / platformReal) * 1000) / 10 : null,
-        avgDeliveryMs: platform.deliverySamples ? Math.round(platform.deliveryMsSum / platform.deliverySamples) : null,
-        numbersOnline: numbers.filter(n => n.health === 'healthy').length,
-        numbersTotal: numbers.length,
-      },
-    });
-  } catch (e) {
-    console.error('Manual numbers analytics error:', e.message);
-    res.status(500).json({ status: 'error', message: e.message });
-  }
-});
-
-// ── ADMIN: manual payment numbers (5 MTN + 5 Airtel, or however many the
-// owner wants) ──
-app.post('/admin/manual-numbers/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('manualPaymentNumbers').orderBy('network', 'asc').orderBy('order', 'asc').get();
-    res.json({ status: 'success', numbers: snap.docs.map(d => ({ id: d.id, ...d.data(), regionKey: String(d.data().regionKey || DEFAULT_REGION_KEY) })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/manual-numbers/save', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const { id, network, number, holderName, active, order } = req.body;
-    if (!NETWORK_NAMES.has(network)) return res.status(400).json({ status: 'error', message: 'Select a valid network' });
-    // The number is validated against the REGION it is being added for, not
-    // against the admin panel's own host: a Kenyan collection line is not a
-    // valid Ugandan number and would otherwise be refused outright.
-    await getRegions();
-    const numRegion = regionByKey(req.body.region || DEFAULT_REGION_KEY);
-    const cleanNumber = cleanPhone(number, numRegion);
-    if (!cleanNumber) return res.status(400).json({ status: 'error', message: badPhoneMessage(numRegion) });
-    const name = String(holderName || '').trim().slice(0, 80);
-    if (!name) return res.status(400).json({ status: 'error', message: 'Enter the account holder name' });
-    const doc = { network, number: cleanNumber, holderName: name, active: active !== false, order: Number(order) || 0, regionKey: numRegion.key };
-    if (id) await db.collection('manualPaymentNumbers').doc(String(id)).set(doc, { merge: true });
-    else await db.collection('manualPaymentNumbers').add({ ...doc, createdAt: FieldValue.serverTimestamp() });
-    logAdminAction(req, 'manual_number_saved', { id: id || null, network, number: cleanNumber });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/manual-numbers/delete', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const id = String(req.body.id || '');
-    if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
-    const numDoc = await db.collection('manualPaymentNumbers').doc(id).get();
-    // Refuse to delete a number a member is actively mid-payment against --
-    // the assigned-number is the only thing letting a later SMS find its way
-    // back to the right pending deposit; deleting it out from under a live
-    // order would strand a real payment the member is about to make. The
-    // order self-resolves within 15 minutes either way (expiry sweep), so
-    // this is a short wait, not a permanent block.
-    if (numDoc.exists) {
-      const number = numDoc.data().number;
-      if (number) {
-        const activeSnap = await db.collection('pendingDeposits')
-          .where('method', '==', 'manual').where('assignedNumber', '==', number)
-          .where('status', '==', 'pending').limit(1).get();
-        if (!activeSnap.empty) {
-          return res.status(409).json({ status: 'error', message: 'This number has a live pending deposit assigned to it right now -- it will free up on its own within 15 minutes, or once that deposit resolves.' });
-        }
-      }
-    }
-    await db.collection('manualPaymentNumbers').doc(id).delete();
-    logAdminAction(req, 'manual_number_deleted', { id });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-// Admin resolution for a MANUAL_REVIEW order that turns out NOT to be a
-// genuine payment (fabricated/irrelevant pasted text, a real mismatch,
-// etc.) -- the opposite of /admin/deposit/force-credit, which already
-// works unmodified for the "yes, credit it" resolution (it operates on any
-// pendingDeposits doc via creditDeposit(), manual or automatic alike).
-app.post('/admin/deposit/manual/reject', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const depositId = String(req.body.depositId || '');
-    if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
-    const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
-    if (depositFullyCredited(snap.data())) return res.status(400).json({ status: 'error', message: 'This deposit was already credited -- cannot reject it now.' });
-    const rejected = await markDepositFailed(snap.ref, snap.data().userId, 'Rejected by admin after review.');
-    if (!rejected) return res.status(409).json({ status: 'error', message: 'This deposit was credited by another process just now.' });
-    logAdminAction(req, 'manual_deposit_rejected', { depositId });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-
 // ═══════════════════════════════════════════
 // WITHDRAWAL (MarzPay send-money, mobile money only)
 // ═══════════════════════════════════════════
@@ -7747,7 +6972,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
   otpDailyLimitRegister: [0, 50], otpDailyLimitReset: [0, 50], otpDailyLimitBank: [0, 50],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'depositPayAEnabled', 'depositPayBEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts', 'bankOtpRequired'];
+const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'strictRegionHosts', 'bankOtpRequired'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7882,13 +7107,11 @@ app.post('/admin/settings/update', async (req, res) => {
     // it's still recognized when READING an already-stored legacy value
     // (normalizeProviderValue()), but nothing should ever WRITE it again
     // now that 'marzpay'/'pesajet' are the real, distinct canonical values.
-    // 'manual' is likewise no longer accepted as of Round 145 -- this field
-    // now only ever picks PAY A's own automatic GATEWAY; whether manual
-    // (PAY B) is offered at all is controlled independently by
-    // depositPayBEnabled below, not by this field. An already-stored
-    // legacy 'manual' value is still read correctly (see getSettings()'s
-    // own migration + depositAutomaticProvider()'s own fallback) -- it
-    // just can never be WRITTEN again going forward.
+    // 'manual' is likewise no longer accepted here -- manual deposit
+    // collection was removed outright, so this field only ever picks the
+    // automatic GATEWAY now. An already-stored legacy 'manual' value is
+    // still read correctly (depositAutomaticProvider()'s own fallback to
+    // MarzPay) -- it just can never be WRITTEN again going forward.
     if ('depositMethod' in updates && !['marzpay', 'pesajet'].includes(updates.depositMethod))
       return res.status(400).json({ status: 'error', message: `depositMethod must be 'marzpay' or 'pesajet'` });
     if ('withdrawMethod' in updates && !['follow', 'marzpay', 'pesajet', 'manual'].includes(updates.withdrawMethod))
@@ -8489,37 +7712,6 @@ app.post('/admin/announcement-image/clear', async (req, res) => {
   try {
     await db.collection('banners').doc('announcement').delete();
     _announceImageCacheTs = 0;
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the image' }); }
-});
-app.get('/admin/manual-pay-images', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const [selector, hero] = await Promise.all([getManualPayImage('selector'), getManualPayImage('hero')]);
-    res.json({ status: 'success', selector, hero });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/manual-pay-image/set', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const slot = String(req.body.slot || '');
-  if (slot !== 'selector' && slot !== 'hero') return res.status(400).json({ status: 'error', message: 'slot must be selector or hero' });
-  const image = String(req.body.image || '');
-  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
-    return res.status(400).json({ status: 'error', message: 'Invalid image' });
-  try {
-    await db.collection('banners').doc('manual-' + slot).set({ image });
-    _manualPayImgCacheTs[slot] = 0;
-    logAdminAction(req, 'manual_pay_image_set', { slot });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the image' }); }
-});
-app.post('/admin/manual-pay-image/clear', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const slot = String(req.body.slot || '');
-  if (slot !== 'selector' && slot !== 'hero') return res.status(400).json({ status: 'error', message: 'slot must be selector or hero' });
-  try {
-    await db.collection('banners').doc('manual-' + slot).delete();
-    _manualPayImgCacheTs[slot] = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the image' }); }
 });
@@ -11195,6 +10387,5 @@ connectMongo(MONGODB_URI)
     setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
-    setInterval(reconcileManualDeposits, 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

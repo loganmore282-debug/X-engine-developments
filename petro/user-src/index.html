@@ -1232,27 +1232,18 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .dep-sec{display:flex;align-items:center;gap:9px;margin:0 0 12px;}
 .dep-sec .bar{width:4px;height:19px;border-radius:var(--r-pill);background:var(--chipz-grad);flex-shrink:0;}
 .dep-sec span{font-size:17px;font-weight:600;letter-spacing:.02em;}
-.dep-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px;}
-/* Owner: "every amount card on deposit has some green, see clearly and
-   critically". Measured off his screenshot rather than picked: walking out
-   of a chip's edge gives a 1px border at rgb(203,214,206) -- a light
-   green-grey, not the warm --snow-border we had -- and outside it a green
-   shadow peaking around rgb(227,243,232) against a rgb(247,246,241) page,
-   fading over ~10 device px (about 5 CSS px at this screenshot's scale).
-   The shadow DARKENS red and blue while leaving green almost untouched,
-   which is what makes it read as green rather than as grey. */
-.dep-chip{text-align:center;padding:17px 4px;border-radius:var(--r-ctl);font-weight:700;font-size:17px;border:1.6px solid #cbd9cf;background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;
-  box-shadow:0 3px 0 #dfeade,0 4px 12px rgba(120,190,145,.42);}
+/* Owner: "its not a must that quick amounts will always be big, cards,
+   please change positions and designs" -- the old 3-column grid of tall,
+   green-shadowed chips read as a wall of big cards. Rebuilt smaller and
+   denser: 4 per row, pill-shaped, flat (no card shadow), so the amount
+   field below reads as the primary control and the chips as a compact
+   shortcut row above it, not the other way around. */
+.dep-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.dep-chip{flex:0 0 auto;text-align:center;padding:9px 14px;border-radius:var(--r-pill);font-weight:600;font-size:13px;border:1.4px solid var(--snow-border);background:var(--snow-surface);color:var(--snow-ink);font-family:inherit;box-shadow:none;}
 .dep-chip.sel{background:var(--chipz-grad);color:#fff;border-color:transparent;box-shadow:none;}
 /* Kept in step with .wit-amt on purpose -- same control, sibling screen. */
 .dep-amt{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 18px;margin-bottom:24px;}
 .dep-amt input{border:0;outline:0;background:transparent;font-size:23px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.pay-row{position:relative;display:flex;align-items:center;justify-content:center;background:var(--snow-surface);border:2px solid var(--snow-border);border-radius:var(--r-ctl);height:56px;padding:0 18px;margin-bottom:14px;width:100%;font-family:inherit;color:var(--snow-ink);}
-.pay-row.on{border-color:var(--snow-ink);}
-.pay-row span{font-weight:600;font-size:15px;letter-spacing:.03em;}
-.pay-row .pay-radio{position:absolute;right:18px;top:50%;transform:translateY(-50%);}
-.pay-radio{width:22px;height:22px;border-radius:50%;border:2px solid var(--snow-ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 0 rgba(26,19,16,.25);}
-.pay-row.on .pay-radio::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--snow-ink);}
 /* height matters here. Every other field on this screen (.dep-amt, .wit-amt,
    .wit-pw, .pw-field) sets one; this row alone did not, so it collapsed to
    its text and rendered 19px tall -- a third the height of the box above it,
@@ -1765,298 +1756,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .milestone-fill{height:100%;border-radius:var(--r-pill);background:var(--snow-wine);}
 .milestone-fill.done{background:var(--snow-green);}
 
-/* ── Manual deposit: payment-method + "COPY & PAY" screens ──
-   Owner supplied this exact reference design and asked for it kept as-is --
-   original colors and layout unchanged, only wired to real backend calls.
-   Round 118 embedded it inside this app's own sheet system (header bar +
-   side padding); the owner then said that read as a "frame" around the
-   reference's own full-page design and asked for it to be "independent"
-   with no header bars -- so this round moves it OUT of the sheet system
-   entirely into its own dedicated full-screen overlay (#manualPayBg,
-   same position:fixed;inset:0 pattern as #openingGate/#loadingScreen),
-   which means the reference's own ORIGINAL min-height:100vh + 190px/220px
-   padding numbers now apply exactly as authored -- no more adaptation
-   needed, since there's a real bare viewport under it again. Every other
-   rule below is still the reference's own exact CSS, just class-prefixed
-   (.foo -> .mp-foo) and scoped so it can't leak into the rest of this app.
-   Two further owner corrections applied this round: the reference's own
-   red accents (#c92727/#c92b2b) are gone -- replaced with the same neutral
-   dark tone the rest of the reference's own body text already uses, not a
-   new color; and the account-number/account-name figures (a real
-   +256XXXXXXXXX number is 13 characters) now scale down with clamp()
-   instead of the reference's own two fixed breakpoints, which were still
-   wide enough to push the copy-button off the right edge on a real phone
-   number at the reference's own 35px mobile size. See
-   openManualDepositFormSheet()'s own comment in original_module.js for why
-   the reference's own "GOPAY" brand logo specifically was swapped for
-   Snow's own mark (a real third-party e-wallet company's logo, not
-   shipped) while the real MTN/Airtel logos were kept exactly as supplied. */
-.mp-overlay{position:fixed;inset:0;z-index:250;display:none;overflow-y:auto;background:#050505;-webkit-overflow-scrolling:touch;}
-.mp-overlay.show{display:block;}
-/* One small, unobtrusive circular back button -- deliberately NOT a full-
-   width title bar ("no header bars"), fixed in the same spot regardless of
-   which of the reference's 2 internal screens is showing. */
-.mp-back-btn{position:fixed;top:16px;left:16px;z-index:5;width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
-#manualPayFlow {
-  --gold:#e58d00;
-  --gold2:#f5c55a;
-  --text:#2d2d2d;
-  --muted:#8f8f8f;
-  --soft:#f6f6f6;
-}
-#manualPayFlow *{box-sizing:border-box}
-#manualPayFlow button,#manualPayFlow input{font:inherit}
-#manualPayFlow button{-webkit-tap-highlight-color:transparent}
-#manualPayFlow .mp-hidden{display:none!important}
-/* Owner: "the network payment page should be balanced in the middle of the
-   page" -- the reference's own version just top-aligned the card with a lot
-   of empty space below it on a real phone screen. Flex-centered instead;
-   min-height (not height) still lets genuinely tall content (a validation
-   message, a long phone number) grow past one viewport rather than clipping. */
-#manualPayFlow .mp-selector-screen{
-  min-height:100vh;
-  padding:32px 16px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  background:
-    linear-gradient(180deg,#050505 0%,#252525 18%,#515151 40%,#515151 100%);
-}
-#manualPayFlow .mp-selector-card{
-  width:min(560px,100%);
-  margin:0 auto;
-  background:#fff;
-  border-radius:22px;
-  overflow:hidden;
-  box-shadow:0 8px 25px rgba(0,0,0,.08);
-}
-/* Owner: "the tabs are stills very big plus text, make them small tabs
-   copy text icons cards, words are very big" -- every size below in this
-   flow was scaled down (roughly the same proportion throughout, not just
-   the one clipped spot) from the reference design's own desktop-oriented
-   base sizes to genuinely small, phone-appropriate cards/tabs/copy/icons. */
-#manualPayFlow .mp-selector-inner{padding:30px 18px 20px}
-#manualPayFlow .mp-brand-center{display:flex;justify-content:center;margin-bottom:22px}
-#manualPayFlow .mp-brand-center img{width:56px;height:auto;object-fit:contain}
-/* The reference's own brand mark here was a real third-party e-wallet
-   company's logo ("GOPAY") -- swapped for Snow's own snowflake mark
-   (see the top-of-section comment above openManualDepositFormSheet for
-   why), sized to match this round's smaller brand-mark size. */
-#manualPayFlow .mp-brand-center svg{width:44px;height:44px}
-#manualPayFlow .mp-lead{
-  margin:0 0 18px;
-  font-size:13px;
-  line-height:1.35;
-  font-weight:700;
-  color:#4b4b4b;
-}
-#manualPayFlow .mp-amount-line{
-  font-size:13px;
-  font-weight:700;
-  color:#555;
-  margin-bottom:16px;
-}
-#manualPayFlow .mp-amount-line strong{color:#d78200}
-#manualPayFlow .mp-select-label{
-  font-size:12px;
-  color:#656565;
-  font-weight:700;
-  margin-bottom:10px;
-}
-#manualPayFlow .mp-methods{display:flex;gap:10px;justify-content:center;margin-bottom:16px;}
-#manualPayFlow .mp-method{
-  width:96px;height:78px;background:white;border:1px solid #cfcfcf;border-radius:11px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
-  color:#777;font-size:12px;font-weight:700;position:relative;
-  box-shadow:0 5px 12px rgba(0,0,0,.06);cursor:pointer;
-}
-#manualPayFlow .mp-method img{width:29px;height:23px;object-fit:contain}
-#manualPayFlow .mp-method.mp-airtel img{width:36px}
-#manualPayFlow .mp-method.mp-active{border-color:#d7a957;background:#fffaf3;box-shadow:0 6px 14px rgba(220,150,20,.16)}
-#manualPayFlow .mp-method.mp-active:after{
-  content:"✓";position:absolute;right:0;bottom:0;width:20px;height:20px;
-  clip-path:polygon(100% 0,100% 100%,0 100%);background:#d7a957;color:white;
-  display:flex;align-items:flex-end;justify-content:flex-end;padding:0 3px 1px 0;font-size:10px;
-}
-#manualPayFlow .mp-phone-wrap{
-  height:46px;border:1px solid #bdbdbd;border-radius:13px;display:flex;align-items:center;
-  overflow:hidden;background:#fff;margin-bottom:14px;
-}
-#manualPayFlow .mp-prefix{padding:0 10px;color:#d48717;font-size:13px;font-weight:700;white-space:nowrap}
-#manualPayFlow .mp-phone-wrap input{
-  flex:1;min-width:0;border:0;outline:none;font-size:13px;padding:0 12px 0 0;background:transparent;color:#222;
-}
-#manualPayFlow .mp-phone-wrap input::placeholder{color:#c5c5c5}
-#manualPayFlow .mp-warning{
-  margin:0 -18px 16px;padding:10px 18px;background:#fff0f0;color:#cb6565;
-  font-size:11.5px;line-height:1.45;display:flex;gap:8px;align-items:flex-start;
-}
-#manualPayFlow .mp-warning .mp-bang{
-  width:16px;height:16px;border-radius:50%;background:#ffd3d3;color:#d95d5d;display:inline-flex;
-  align-items:center;justify-content:center;font-weight:800;flex:0 0 auto;margin-top:1px;font-size:10px;
-}
-#manualPayFlow .mp-confirm-wrap{display:flex;justify-content:center;padding:0 0 4px}
-#manualPayFlow .mp-confirm-btn{
-  width:min(220px,100%);height:46px;border:none;border-radius:26px;color:white;font-size:14px;font-weight:700;
-  background:linear-gradient(#f8cf71,#e99b1d);box-shadow:inset 0 1px rgba(255,255,255,.5);
-  cursor:pointer;
-}
-#manualPayFlow .mp-confirm-btn span{font-size:18px;font-weight:300;margin-left:5px;vertical-align:-2px}
-#manualPayFlow .mp-pay-screen{min-height:100vh;background:#f6f6f6;padding-bottom:44px}
-#manualPayFlow .mp-hero{
-  height:168px;position:relative;overflow:hidden;color:white;
-  background:
-    radial-gradient(1000px 240px at -10% 20%,rgba(180,160,115,.18),transparent 50%),
-    repeating-linear-gradient(12deg,rgba(255,255,255,.035) 0 2px,transparent 2px 10px),
-    linear-gradient(155deg,#050505,#33342f 55%,#565853);
-}
-#manualPayFlow .mp-hero:before{
-  content:"";position:absolute;inset:24px -120px auto -80px;height:140px;
-  background:
-    linear-gradient(20deg,transparent 0 28%,rgba(191,181,150,.12) 29% 32%,transparent 33% 44%,rgba(180,170,140,.1) 45% 47%,transparent 48%),
-    linear-gradient(-22deg,transparent 0 38%,rgba(255,255,255,.06) 39% 42%,transparent 43%);
-  transform:skewX(-18deg);
-}
-#manualPayFlow .mp-hero-logo{position:absolute;left:44px;top:16px;width:52px;height:auto;object-fit:contain}
-/* Same swap as .mp-brand-center above (GoPay logo -> Snow's own mark),
-   sized to match this round's smaller hero-logo size. */
-#manualPayFlow .mp-hero-logo svg{width:32px;height:32px}
-#manualPayFlow .mp-expiry{position:absolute;right:10px;top:14px;text-align:right;font-size:11px;color:#eee}
-#manualPayFlow .mp-expiry .mp-label{background:rgba(74,74,74,.72);padding:2px 12px 3px 18px;clip-path:polygon(12% 0,100% 0,100% 100%,0 100%)}
-#manualPayFlow .mp-timer{margin-top:6px;font-size:15px;letter-spacing:1px}
-#manualPayFlow .mp-timer span{
-  display:inline-block;min-width:14px;padding:1px 1px;margin:0 1px;border:1px solid #8c8c8c;border-radius:2px;
-  background:linear-gradient(#696969,#333);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);
-}
-#manualPayFlow .mp-timeline-card{
-  width:calc(100% - 20px);max-width:560px;margin:-58px auto 0;background:#fff;border-radius:18px;
-  position:relative;z-index:2;padding:18px 15px;box-shadow:0 18px 28px rgba(0,0,0,.12);
-}
-/* One row per real section (COPY & PAY / Payment completed / Your payment
-   account / Payment reminder) instead of 3 icons absolutely positioned
-   against the WHOLE card's own height -- that only worked while the card's
-   total height was fixed; the new Payment reminder section is admin-authored
-   free text of unpredictable length, so each row now carries its own icon +
-   a connecting line sized to its own row height via flex, not a guessed
-   pixel offset. */
-#manualPayFlow .mp-tl-row{display:flex;gap:11px;}
-#manualPayFlow .mp-tl-rail{display:flex;flex-direction:column;align-items:center;flex:0 0 32px;}
-#manualPayFlow .mp-tl-icon{
-  width:32px;height:32px;border-radius:50%;background:#e9eef4;flex:0 0 auto;
-  display:flex;align-items:center;justify-content:center;color:#6f89aa;
-}
-#manualPayFlow .mp-tl-line{flex:1;width:0;min-height:14px;border-left:2px dashed #d6d6d6;margin:4px 0;}
-#manualPayFlow .mp-tl-row:last-child .mp-tl-line{display:none}
-#manualPayFlow .mp-tl-body{flex:1;min-width:0;padding-bottom:20px;}
-#manualPayFlow .mp-tl-row:last-child .mp-tl-body{padding-bottom:0;}
-#manualPayFlow .mp-card-title{font-size:16.5px;font-weight:800;margin:0 0 6px}
-#manualPayFlow .mp-sub{font-size:12px;color:#919191;margin-bottom:11px}
-#manualPayFlow .mp-sub b{color:#4b4b4b;font-size:13px}
-#manualPayFlow .mp-detail-box{
-  background:#f6f6f6;border-radius:13px;padding:14px 13px;margin:0 0 14px;overflow:hidden;
-}
-#manualPayFlow .mp-label{font-size:11px;color:#8e8e8e;font-weight:700;margin-bottom:5px}
-#manualPayFlow .mp-total{font-size:clamp(18px,5.5vw,24px);color:#e58d00;font-weight:800;margin-bottom:12px;}
-#manualPayFlow .mp-total small{font-size:12px;margin-right:6px}
-#manualPayFlow .mp-account-value{font-size:clamp(15px,5vw,20px);color:#e58d00;font-weight:800;line-height:1.15;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;}
-#manualPayFlow .mp-account-value span{min-width:0;overflow-wrap:anywhere;}
-#manualPayFlow .mp-name-value{font-size:clamp(13px,4.5vw,17px);color:#e58d00;font-weight:800;line-height:1.2;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;}
-#manualPayFlow .mp-name-value span{min-width:0;overflow-wrap:anywhere;}
-#manualPayFlow .mp-copybtn{
-  width:24px;height:24px;border:0;background:transparent;position:relative;flex:0 0 24px;cursor:pointer;
-}
-#manualPayFlow .mp-copybtn:before,#manualPayFlow .mp-copybtn:after{
-  content:"";position:absolute;border:2px solid #817b73;border-radius:2px;width:15px;height:15px;
-}
-#manualPayFlow .mp-copybtn:before{left:1px;top:1px}
-#manualPayFlow .mp-copybtn:after{left:6px;top:6px;background:#f6f6f6}
-#manualPayFlow .mp-copybtn i:before,#manualPayFlow .mp-copybtn i:after{
-  content:"";position:absolute;background:#817b73;z-index:2
-}
-#manualPayFlow .mp-copybtn i:before{width:7px;height:2px;left:10px;top:13px}
-#manualPayFlow .mp-copybtn i:after{height:7px;width:2px;left:13px;top:10px}
-#manualPayFlow .mp-paydone{font-size:15px;font-weight:700;margin:2px 0 2px}
-#manualPayFlow .mp-refresh-text{font-size:11.5px;color:#8f8f8f;margin-bottom:10px}
-#manualPayFlow .mp-refresh-text b{color:#4b4b4b;font-size:12.5px}
-#manualPayFlow .mp-paid-box{background:#f6f6f6;border-radius:13px;padding:12px 14px;margin-bottom:14px}
-#manualPayFlow .mp-paid-row{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #d8d8d8;padding-bottom:8px;gap:8px;}
-#manualPayFlow .mp-paid-label{font-size:11px;font-weight:700}
-#manualPayFlow .mp-paid-value{font-size:14px;color:#a8a8a8;font-weight:800;margin-top:3px}
-#manualPayFlow .mp-refresh-btn{
-  border:0;background:#f09400;color:#fff;border-radius:18px;padding:7px 16px;font-size:12.5px;cursor:pointer;flex-shrink:0;
-}
-#manualPayFlow .mp-refresh-btn:disabled{opacity:.6}
-#manualPayFlow .mp-note{font-size:10.5px;color:#9b9b9b;padding-top:7px}
-#manualPayFlow .mp-your-account{font-size:13px;font-weight:700;margin-top:6px}
-#manualPayFlow .mp-your-number{font-size:13.5px;margin-top:3px;color:#111}
-#manualPayFlow .mp-loading-overlay{
-  position:fixed;inset:0;background:rgba(255,255,255,.0);z-index:20;display:flex;align-items:center;justify-content:center;
-}
-#manualPayFlow .mp-loader-box{
-  width:130px;height:130px;border-radius:10px;background:rgba(71,71,71,.76);color:white;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:15px;
-}
-#manualPayFlow .mp-spinner{
-  width:34px;height:34px;border:3px solid rgba(255,255,255,.25);border-top-color:white;border-radius:50%;
-  animation:sp 1s linear infinite;margin-bottom:12px;
-}
-/* The reference's own validation toast, back -- owner: "l need to see such
-   notifies, ie when one taps confirm but when no number or operator set, and
-   when invalid number is set." His screenshots show a CENTRED dark box, not
-   the bottom pill an earlier version of this had.
-   
-   That bottom pill was removed for a real reason, recorded below, and this
-   avoids it by construction: it is a FIXED, self-centring element parented to
-   #manualPayFlow, exactly like .mp-loading-overlay, which has always worked.
-   It never becomes a child of a .reveal-in wrapper, so this app's stagger
-   entrance cannot reach it, cannot override its transform, and cannot leave it
-   sitting off-centre with its own opacity:0 still applied.
-   
-   It sits ABOVE the loading overlay (z-index 30 against 20): the two can
-   legitimately overlap -- a failed init lowers the loader and raises the toast
-   in the same tick -- and the message is the part the member needs to read. */
-#manualPayFlow .mp-toast{
-  position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
-  padding:36px;pointer-events:none;
-}
-#manualPayFlow .mp-toast.show{display:flex;}
-#manualPayFlow .mp-toast span{
-  max-width:290px;background:rgba(71,71,71,.88);color:#fff;border-radius:var(--r-card);
-  padding:16px 22px;font-size:15.5px;line-height:1.45;text-align:center;
-}
-@media (prefers-reduced-motion:no-preference){
-  #manualPayFlow .mp-toast.show span{animation:mpToastIn .16s ease-out;}
-}
-@keyframes mpToastIn{from{opacity:0;transform:scale(.94);}to{opacity:1;transform:scale(1);}}
-/* The reference's own local bottom-pill toast was removed (see
-   openManualDepositFormSheet()'s own comment in original_module.js for
-   the real bug it had -- being a direct child of the .reveal-in wrapper
-   meant this app's own stagger-entrance animation permanently overrode its
-   `transform:translateX(-50%)` centering after playing once, and its own
-   `opacity:0` default with it, leaving a small dark box with no text
-   sitting off-center near the bottom of the screen). Validation/status
-   messages on this screen now go through this app's own already-correct,
-   already-centered global toast() instead, per the owner's own "notify
-   doesn't open from middle" -- matching every other message in this app.
-
-   Get-results-faster SMS/transaction-ID fallback -- hidden until the
-   member has tapped Refresh at least once and it's still not confirmed
-   (owner: "the sms forward forwards sms and server matches automatically,
-   we are just putting them as fallback... when one clicks refresh, the
-   page spreads so one puts sms and submits"). */
-#manualPayFlow .mp-sms-fallback{margin:4px 0 14px;}
-#manualPayFlow .mp-sms-title{font-size:13px;font-weight:800;color:#e58d00;margin-bottom:3px;}
-#manualPayFlow .mp-sms-sub{font-size:11.5px;font-weight:700;color:#2d2d2d;margin-bottom:8px;}
-#manualPayFlow .mp-sms-fallback textarea{width:100%;min-height:76px;border:1px solid #bdbdbd;border-radius:12px;padding:10px 12px;font-size:11px;line-height:1.5;color:#222;resize:vertical;font-family:inherit;}
-#manualPayFlow .mp-sms-fallback textarea::placeholder{color:#bbb;}
-#manualPayFlow .mp-sms-warn{font-size:10.5px;color:#cb6565;margin:7px 0 12px;}
-/* Admin-authored, network-specific transfer steps (owner: "let us establish
-   Payment reminder, so as it is also editable in admin panel for mtn and
-   airtel") -- only rendered when the admin has actually filled in a template
-   for the network the member picked; see renderManualPayReminder(). */
-#manualPayFlow .mp-reminder-title{font-size:15px;font-weight:800;color:#4b4b4b;margin-bottom:6px;}
-#manualPayFlow .mp-reminder-box{background:#f6f6f6;border-radius:13px;padding:12px 14px;font-size:12px;line-height:1.9;color:#555;}
-
 /* transform:translateZ(0) forces this overlay onto its own GPU compositing
    layer. Without it, Android Chrome/WebView has a known bug where a
    position:sticky child (.sheet-head below) inside an overflow-y:auto
@@ -2070,6 +1769,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
    covering them. Promoting to its own layer forces a full repaint instead
    of a partial one. */
 .sheet-bg{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);background:var(--snow-canvas);z-index:200;display:none;overflow-y:auto;overscroll-behavior:contain;transform:translateZ(0);will-change:transform;}
+/* Owner: "in withdrawal page still when tapped the nav icons still remain
+   why? Remove them please, it's not a must that withdrawal page will be
+   looking like that." Every sub-page opened via openSheet() (Deposit,
+   Withdraw, About, Balance Record, Messages, My Team, ...) shares this one
+   overlay, so body.sheet-open is the one flag that turns the bottom nav off
+   for all of them at once -- same "swap one token" leverage as the
+   .sheet-head retheme. The sheet itself extends to fill the space the nav
+   used to occupy instead of leaving a dead gap. */
+body.sheet-open .bottom-nav{display:none;}
+body.sheet-open .sheet-bg{bottom:0;}
 .sheet-bg.show{display:block;}
 /* Round 1 of this fix made every sub-page header a solid Corporate Red
    band, replacing Chipz's own peach-band-plus-blue-chevron. Owner's own
@@ -2211,12 +1920,20 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
 .list-loading{padding:34px 4px;display:flex;justify-content:center;align-items:center;}
 .list-loading .pspin{--s:56px;}
 /* Network's own team/referral loading state used PLAN_SPIN (the orbiting-
-   chips mark) too, by explicit earlier request. Owner later named it
-   directly and asked for it gone specifically here -- a plain ring instead,
-   PLAN_SPIN itself untouched everywhere else (ongoing-plan rows, the
-   payment page) since only this one use was called out. */
-.ring-spin{width:40px;height:40px;border-radius:50%;border:3px solid var(--snow-border);border-top-color:var(--snow-wine);animation:ringSpin .8s linear infinite;}
-@keyframes ringSpin{to{transform:rotate(360deg);}}
+   chips mark) too, by explicit earlier request, then a plain spinning ring.
+   Owner, this round: "l need the other start up loader to be in navigation
+   of loading so it will be smaller even" -- reusing the boot screen's own
+   three-ring SVG mark (see #loadingScreen above) here, just small, rather
+   than a third distinct spinner design. It shares the same .ring-arc/
+   ringSweep animation rules, but carries its OWN gradient def
+   (#miniRingGrad, identical stops to the boot screen's #ringGrad) instead
+   of pointing at that one: confirmed by rendering this offline that a
+   url(#ringGrad) paint-server reference from OUTSIDE a display:none
+   subtree does not reliably resolve in Chromium once #loadingScreen
+   itself is display:none -- the ring painted with no stroke at all. A
+   self-contained def has no dependency on #loadingScreen's visibility. */
+.mini-ring-loader{width:34px;height:34px;overflow:visible;filter:drop-shadow(0 0 4px rgba(227,6,19,.4));}
+.mini-ring-loader .ring-arc{stroke:url(#miniRingGrad);}
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
 .list-empty .empty-icon{display:flex;justify-content:center;margin-bottom:14px;opacity:.85;}
 .list-empty .empty-icon svg{width:64px;height:64px;}
@@ -2601,12 +2318,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--chipz-orange) transparent;}
     </div>
   </div>
 </div>
-
-<div class="mp-overlay" id="manualPayBg">
-  <button type="button" class="mp-back-btn" onclick="closeManualPayOverlay()" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
-  <div id="manualPayFlow"></div>
-</div>
-
 
 <script type="module">
   import { initializeApp, getApps }

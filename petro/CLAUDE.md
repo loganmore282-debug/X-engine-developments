@@ -1534,6 +1534,170 @@ The navigation test was also updated to match product decisions already in
 this file: the announcement dialog has been removed, Home has no reward
 floats, and the unreachable Turntable screen is not a navigation contract.
 
+## Manual payment collection removed entirely; deposit chips, sheet nav, and a shared loading mark
+
+Owner, verbatim, since it's long and specific: *"remove option for payment
+methods, remove manual payment in the whole codes even if in server or what
+remove them all bro, please see its not a mist that quick amounts will be
+always big, cards, please change positions and designs please, in
+withdrawal page still when tapped the nav icons still remain why? Remove
+them please, it's not a must that withdrawal page will be looking like
+that... also bro l need the other start up loader to be in navigation of
+loading so it will be smaller even."* Four separate asks, all done this
+round:
+
+**1. The PAY-A/PAY-B choice and manual (admin-number, SMS-matched) deposit
+collection are gone — client, server, and admin, not disabled.** This is a
+real reversal of the earlier "What stayed, deliberately" note under
+"Removed from Petro" above, which had kept manual deposits as the owner's
+own established replacement for the SMS-forwarder app. That flow is now
+named directly for removal too, so it came out completely rather than
+staying behind a flag:
+- **`server.js`**: `depositPayAEnabled`/`depositPayBEnabled` and the two
+  manual-pay reminder fields dropped from `DEFAULT_SETTINGS`;
+  `getSettings()`'s ~14-line legacy PAY-A/PAY-B migration block removed;
+  `payAAvailable()` simplified to just a region-serviceability check (no
+  more enable/disable toggle); `/public/settings`'s `depositPayAEnabled`
+  field renamed to `depositAvailable`. The entire `// ═══ MANUAL DEPOSITS
+  ═══` section (698 lines) is gone: `trackManual`, `parseMoMoSms`/
+  `parseSentMoMoSms`, `/deposit/manual/init`, `/deposit/manual/status`,
+  `/deposit/manual/paste-sms`, `manualNumberHealth`, every
+  `/admin/manual-numbers/*` and `/admin/deposit/manual/reject` route, the
+  manual-pay-image slots and their two `/admin/manual-pay-image/*` routes,
+  `MANUAL_DEPOSIT_WINDOW_MS`, `recordManualNumberEvent`. **Caught before
+  shipping**: `/deposit/marzpay`'s own gate,
+  `if (!sett.depositPayAEnabled) return res.status(400)...`, would have
+  permanently blocked every deposit once that field was deleted — removed
+  along with the field, not left behind pointing at nothing.
+- **`db.js`**: the manual-numbers/SMS-log Mongo index definitions removed
+  (~24 lines).
+- **`user-src/original_module.js`**: `openDepositSheet()`/
+  `openDepositFormSheet()` rewritten — no PAY-A/PAY-B radio rows, straight
+  to amount → phone → confirm, one screen, no method choice to make. The
+  entire manual-pay overlay block (571 lines —
+  `openManualPayFlow`/`manualPayChooseMethod`/`presentManualPayCodeScreen`/
+  `submitManualPasteSms`/etc.) is deleted, along with
+  `pickDepositPayMethod`/`submitDepositChoice` (validation folded into the
+  existing `submitDeposit()`, itself unchanged).
+- **`user-src/index.html`**: `.pay-row`/`.pay-radio` CSS and the entire
+  `#manualPayFlow`-scoped block (292 lines of `.mp-*` rules) removed —
+  carefully, since `.mp-*` is *also* the unrelated "My Products" list's own
+  prefix (kept, untouched) — plus the `#manualPayBg` markup itself.
+- **`admin-src/index.html`**: the Settings "Manual payments" section (PAY-A/
+  PAY-B checkboxes, payment-number round-robin editor, payment-reminder
+  panel) replaced by a plain "Payments" card — one deposit-gateway radio
+  pair, the withdrawal-method radios (4th option, "Always manual", kept —
+  see below). `renderManualNumbersEditor()`, `NETWORK_OPTIONS`, the whole
+  "── PAYMENT-NUMBER ACTIVITY ──" analytics block (126 lines), the deposits
+  tab's manual-reject button and `data-smsresolve` handler, the Banners
+  tab's "Manual payment screen images" upload row and `uploadManualPayLogo()`
+  + its 4 handlers, and the dead logo-cutout canvas utilities
+  (`removeDarkBackdrop`/`trimTransparentEdges`/`fileToLogoPng`, used only by
+  that upload) are all gone. **10 now-orphaned i18n translation-table rows**
+  (their English source text described PAY-A/PAY-B or the manual-deposit
+  flow, verified by grep that none of that exact text is used anywhere in
+  the rebuilt file any more) were deleted outright, not re-translated —
+  same convention this file has followed every other time a translated
+  string's English source stopped existing.
+- **Three dangling-reference crash bugs caught before shipping**, each
+  found by grepping every use of an identifier before its definition/markup
+  came out, not after: `setInterval(reconcileManualDeposits, 60*1000)` in
+  `server.js` (would have crashed the whole process on boot — the function
+  no longer existed); the phone back-button's `popstate` handler in
+  `original_module.js` calling the now-deleted `manualPayOverlayOpen()`
+  (would have thrown on every single Android back-button press); and
+  admin-src's `$('mpSelectorImgFile').addEventListener('change', ...)` with
+  no null-check (would have thrown and broken every settings/banner handler
+  registered after it the moment its markup came out) — the same failure
+  shape this file's own history has now caught five separate times.
+- **Deliberately kept, confirmed still legitimate, not touched**: the
+  withdrawal side's own "Always manual" payout mode
+  (`withdrawMethod:'manual'`, `payoutIsManual()`, `_witManualPayouts`, "Mark
+  as paid" on the Withdrawals tab) — a real, separate safety fallback where
+  an admin sends payouts by hand and marks them paid, nothing to do with
+  collecting deposits. Also kept: `needsManualCredit` (an unrelated
+  money-safety error-recovery flag), `manual_credit`/`manual_debit` (the
+  unrelated admin wallet-adjustment feature), and the passive
+  `d.method==='manual'` display labels + `manual_sms_log_resolved`/
+  `manual_pay_image_set` audit-log label-map entries that only ever format
+  **historical** deposit rows already sitting in the database — harmless,
+  since nothing can create a new one of these rows any more.
+
+**2. Deposit's quick-amount chips redesigned** — owner: *"its not a must
+that quick amounts will always be big, cards, please change positions and
+designs."* The old 3-column grid of tall (17px padding), heavily
+green-shadowed chips read as a wall of big cards. Rebuilt as a flat,
+wrapping row of small pill chips (9px padding, 13px text, no card shadow)
+— `.dep-chips` went from a fixed 3-column `grid` to `flex-wrap`, so each
+chip is only as wide as its own number and up to 4-5 fit per row depending
+on digit count, rather than every chip stretching to fill a column. Same
+underlying price list, same `pickDepositAmount()`/`syncDepositQuickAmt()`
+wiring — only the chip's own look and layout changed.
+
+**3. Bottom nav now hides behind every `openSheet()` sub-page** (Deposit,
+Withdraw, About, Balance Record, Messages, My Team, Gift Codes, Security
+Settings, ...) — owner: *"in withdrawal page still when tapped the nav
+icons still remain why? Remove them please, it's not a must that
+withdrawal page will be looking like that."* Rather than the larger
+sheet-vs-real-page architecture rewrite this file has flagged (and
+deferred) twice before, this is the small, low-risk fix that actually
+answers what was asked: `openSheet()` now adds `sheet-open` to
+`document.body`, and `closeSheet()` plus the phone-back `popstate` handler
+both remove it — the one flag reaches every sheet at once, the same
+"swap one token" leverage the `.sheet-head` retheme used. CSS:
+`body.sheet-open .bottom-nav{display:none}`, and `.sheet-bg` extends to
+`bottom:0` while that class is set, so the sheet fills the space the nav
+used to occupy instead of leaving a dead gap behind it. The larger "make
+Deposit/Withdraw real `STATE.page` navigations instead of sheets"
+question from two rounds ago is still open and still not what was asked
+for this time — this fix directly answers "the nav icons still remain",
+without touching the sheet/page architecture at all.
+
+**4. A shared small loading mark, reused instead of inventing a third
+spinner design** — owner: *"l need the other start up loader to be in
+navigation of loading so it will be smaller even."* Read as: reuse the
+boot screen's own three-ring SVG mark (red-to-violet gradient, pulsing
+arc, see `#loadingScreen` above) — small — for in-app loading states,
+rather than the separate `.ring-spin` plain-CSS ring that Network's
+team/referral list-loading state (`teamLoadingHtml()`) had been using
+since an earlier round. `.ring-spin`/`@keyframes ringSpin` removed
+outright (its only caller was this one function, now switched over) — new
+`MINI_RING_LOADER` (a 34px version of the same `.ring-arc`/`ringSweep`
+markup) is a plain JS string constant so any future loading state can
+reuse it without duplicating the SVG. **A real render bug found and fixed
+while building this, not before shipping it blind**: pointing the mini
+mark's `<circle>` strokes at the boot screen's existing `#ringGrad`
+gradient def seemed like the more obviously "shared" approach, but
+rendering it standalone in headless Chromium showed the ring paint with NO
+stroke at all — a paint-server def does not reliably resolve for an
+element outside it once its own ancestor (`#loadingScreen`) is
+`display:none`, which is exactly the boot screen's normal resting state
+after the app has loaded. Fixed by giving the mini mark its own
+self-contained `#miniRingGrad` def (identical stops) instead of pointing
+at the boot screen's — confirmed by re-rendering after the fix that the
+ring now paints with its full red-to-violet gradient.
+
+**Verified**: `node -c` on every touched file, `node build-core.js` +
+`node build-admin.js` (both round-trip OK). A full grep sweep for every
+manual-deposit/PAY-A/PAY-B identifier across `server.js`, `db.js`,
+`user-src/`, and `admin-src/` turned up zero dangling references after the
+three bugs above were fixed. Rendered the actual built `user/index.html`
+standalone in headless Chromium (Playwright, the same rig this file's
+other rounds have used) with STATE force-populated offline: opened
+Deposit (screenshot confirms the new pill chips, no payment-method
+section, bottom nav gone), opened Withdraw (bottom nav confirmed gone via
+`getComputedStyle`), and rendered `teamLoadingHtml()`'s output directly
+(confirmed the `.mini-ring-loader` paints with its gradient). Zero page
+errors in any of it. `user/sw.js` bumped v129→v130, `admin/sw.js` bumped
+v36→v37.
+
+**Not run this round**: the legacy Python/Playwright test suite
+(`test-nav-sheets.py`, `test-visible-text.py`, etc.) — its own fixture
+data still references `depositPayAEnabled`/`depositPayBEnabled`, which is
+exactly the kind of file this document's own "work through the inherited
+test suite file by file" item (see Status below) already calls out as
+undone, not a new gap introduced here.
+
 
 ## Status
 

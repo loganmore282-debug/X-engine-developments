@@ -616,167 +616,6 @@ function fileToSquarePng(file, size){
   });
 }
 
-// ── Lifting a logo off its black background ─────────────────────────────
-// Owner: "there are logos l would like to upload ... but they have black
-// background so l wanted the system to refine it such that it remains as it
-// is with no background so as it shows up on transparent sitting with no
-// black background."
-//
-// "Remains as it is" is the hard part, and it rules out the obvious
-// implementation. Keying every dark pixel in the image would also hollow out
-// the dark parts INSIDE the logo -- an outline, a shadow, black lettering --
-// and hand back a logo with holes in it. So this uses the same rule the door
-// icon and the spin wheel were cut out with: FLOOD-FILL INWARD FROM THE
-// BORDER. Only background actually connected to the edge of the picture is
-// removed; anything enclosed by the artwork is untouched no matter how black
-// it is.
-//
-// The second half is the rim. A logo sitting on black has an antialiased edge
-// whose pixels are already a blend of logo colour and black -- cut those at a
-// threshold and the logo keeps a dirty dark fringe, which is the usual tell
-// of a badly cut-out image. Composited over black a pixel is simply
-// c = alpha * C, so inside the flood region both are recoverable: take alpha
-// from the brightness and divide the colour back out. That turns the fringe
-// into a genuine soft edge at the logo's own colour.
-//
-// Returns how many pixels it actually cleared, so the caller can tell the
-// difference between "background removed" and "this image had no dark
-// background to remove" rather than claiming success either way.
-function removeDarkBackdrop(ctx, w, h, hard, soft){
-  hard = hard == null ? 46 : hard;    // at or under this: pure background
-  soft = soft == null ? 132 : soft;   // over this: never touched at all
-  if (soft <= hard) soft = hard + 1;
-  const d = ctx.getImageData(0, 0, w, h), p = d.data;
-  const lumAt = i => (p[i] * 299 + p[i + 1] * 587 + p[i + 2] * 114) / 1000;
-  const region = new Uint8Array(w * h);
-  const stack = [];
-  const consider = (x, y) => {
-    if (x < 0 || y < 0 || x >= w || y >= h) return;
-    const k = y * w + x;
-    if (region[k]) return;
-    const i = k * 4;
-    // Already-transparent pixels belong to the background too, so a PNG that
-    // is part cut out already still floods properly across the gap.
-    if (p[i + 3] !== 0 && lumAt(i) > soft) return;
-    region[k] = 1; stack.push(k);
-  };
-  for (let x = 0; x < w; x++){ consider(x, 0); consider(x, h - 1); }
-  for (let y = 0; y < h; y++){ consider(0, y); consider(w - 1, y); }
-  while (stack.length){
-    const k = stack.pop(), x = k % w, y = (k - x) / w;
-    consider(x - 1, y); consider(x + 1, y); consider(x, y - 1); consider(x, y + 1);
-  }
-  let cleared = 0;
-  for (let k = 0; k < w * h; k++){
-    if (!region[k]) continue;
-    const i = k * 4;
-    if (p[i + 3] === 0) continue;
-    const L = lumAt(i);
-    if (L <= hard){ p[i + 3] = 0; cleared++; continue; }
-    const a = Math.min(1, (L - hard) / (soft - hard));
-    p[i + 3] = Math.round(p[i + 3] * a);
-    p[i]     = Math.min(255, Math.round(p[i] / a));
-    p[i + 1] = Math.min(255, Math.round(p[i + 1] / a));
-    p[i + 2] = Math.min(255, Math.round(p[i + 2] / a));
-    cleared++;
-  }
-  ctx.putImageData(d, 0, 0);
-  return cleared;
-}
-// Once the backdrop is gone the artwork is usually floating in a wide empty
-// margin, and these two slots draw at 56px and 32px -- so a logo that fills
-// half its own file would arrive on screen half the size it should be.
-// Trimming the transparent border makes the mark fill its box. Alpha > 8
-// rather than > 0: the recovered rim above leaves a few nearly-invisible
-// pixels that would otherwise pin the box back to its original size.
-function trimTransparentEdges(canvas){
-  const w = canvas.width, h = canvas.height;
-  const p = canvas.getContext('2d').getImageData(0, 0, w, h).data;
-  let x0 = w, y0 = h, x1 = -1, y1 = -1;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
-    if (p[(y * w + x) * 4 + 3] > 8){
-      if (x < x0) x0 = x; if (x > x1) x1 = x;
-      if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
-  }
-  if (x1 < 0) return canvas;                       // nothing left; keep as-is
-  if (x0 === 0 && y0 === 0 && x1 === w - 1 && y1 === h - 1) return canvas;
-  const out = document.createElement('canvas');
-  out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
-  out.getContext('2d').drawImage(canvas, x0, y0, out.width, out.height,
-                                 0, 0, out.width, out.height);
-  return out;
-}
-// A logo for one of the manual-payment screens, as a PNG.
-//
-// PNG and not JPEG, and that alone is half the bug: these two slots went up
-// through fileToDataUrl(), which exports image/jpeg. JPEG HAS NO ALPHA
-// CHANNEL, so the slot could never hold a transparent logo however clean the
-// file he picked -- every upload came back on a solid backdrop. Background
-// removal without this change would have been undone on the way out.
-//
-// Resolves { url, cleared } so the caller can say what actually happened.
-function fileToLogoPng(file, maxDim, stripDark){
-  maxDim = maxDim || 512;
-  return new Promise((resolve, reject) => {
-    if (!file) return reject(new Error('No file'));
-    if (!/^image\//.test(file.type || guessMimeFromName(file.name)))
-      return reject(new Error('Please choose an image file'));
-    const fr = new FileReader();
-    fr.onerror = () => reject(new Error('Could not read the file'));
-    fr.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('That image could not be loaded'));
-      img.onload = () => {
-        const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-        if (!iw || !ih) return reject(new Error('That image could not be loaded'));
-        // Keyed at FULL resolution and downscaled afterwards. Downscaling
-        // first blends the black backdrop into the logo's edge pixels, and a
-        // fringe mixed in by the resampler cannot be told from artwork.
-        let c = document.createElement('canvas');
-        c.width = iw; c.height = ih;
-        let ctx = c.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0);
-        let cleared = 0;
-        if (stripDark){
-          try { cleared = removeDarkBackdrop(ctx, iw, ih); }
-          catch (_) { return reject(new Error('That image could not be processed on this browser')); }
-          c = trimTransparentEdges(c);
-        }
-        const cw = c.width, ch = c.height;
-        const s = Math.min(1, maxDim / Math.max(cw, ch));
-        const out = document.createElement('canvas');
-        out.width = Math.max(1, Math.round(cw * s));
-        out.height = Math.max(1, Math.round(ch * s));
-        const octx = out.getContext('2d');
-        octx.imageSmoothingQuality = 'high';
-        octx.drawImage(c, 0, 0, out.width, out.height);
-        let url;
-        try { url = out.toDataURL('image/png'); }
-        catch (e) { return reject(new Error('Could not process the image')); }
-        // The route caps the stored string; a big photographic PNG can pass
-        // that. Step the size down rather than failing on the server with a
-        // message that would not tell him what to do about it.
-        let dim = maxDim;
-        while (url.length > 2600000 && dim > 96){
-          dim = Math.round(dim * 0.7);
-          const s2 = Math.min(1, dim / Math.max(cw, ch));
-          out.width = Math.max(1, Math.round(cw * s2));
-          out.height = Math.max(1, Math.round(ch * s2));
-          const c2 = out.getContext('2d');
-          c2.imageSmoothingQuality = 'high';
-          c2.clearRect(0, 0, out.width, out.height);
-          c2.drawImage(c, 0, 0, out.width, out.height);
-          url = out.toDataURL('image/png');
-        }
-        if (url.length > 2600000) return reject(new Error('That image is too detailed to store. Try a smaller or simpler logo.'));
-        resolve({ url: url, cleared: cleared });
-      };
-      img.src = fr.result;
-    };
-    fr.readAsDataURL(file);
-  });
-}
 // Reads the file EXACTLY as it is, with no canvas round trip. fileToDataUrl()
 // above draws onto a canvas and exports image/jpeg, which for an animated GIF
 // means one still frame and no transparency -- the animation would be
@@ -824,8 +663,8 @@ function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('
 // /admin/settings/update calls and the product editor, it is stamped on
 // here, in the one place every admin request already passes through:
 //   * reading  /admin/settings or /admin/products  ->  ?region=<key>
-//   * saving   /admin/settings/update, /admin/products/save,
-//              /admin/manual-numbers/save  ->  region:'<key>' in the body
+//   * saving   /admin/settings/update, /admin/products/save
+//              -> region:'<key>' in the body
 // Uganda ('ug') is the default and sends nothing extra, so with one region
 // configured every request is byte-for-byte what it always was.
 // Remembered on the device. The switch is meant to be set once and then
@@ -853,7 +692,7 @@ const ADMIN_LANGS = [
   { code:'nyn', name:'Runyankole',  native:'Runyankore' },
 ];
 const REGION_SCOPED_READS = ['/admin/settings', '/admin/products'];
-const REGION_SCOPED_WRITES = ['/admin/settings/update', '/admin/products/save', '/admin/manual-numbers/save'];
+const REGION_SCOPED_WRITES = ['/admin/settings/update', '/admin/products/save'];
 // ── THE COUNTRY TOGGLE, ON EVERY SCREEN ──
 // Owner: "make sure dashboards can be categorized so one toggle to see a
 // country settings ie dashboard, analytics, referrals, transactions,
@@ -1454,10 +1293,9 @@ async function renderAnalytics(silent){
   // Suspicious-activity data is owner-only end to end (server refuses it to
   // staff outright) -- only even requested when the session is the owner's,
   // so a staff session never sees the request in its own network tab either.
-  const [a, ab, mn] = await Promise.all([
+  const [a, ab] = await Promise.all([
     api('/admin/analytics', { days:_anPeriod }),
     isOwner ? api('/admin/analytics/abuse', { days:_anPeriod }) : Promise.resolve(null),
-    api('/admin/manual-numbers/analytics', { days: _numDays })
   ]);
   if(staleTab('analytics')) return;
   if(a.status!=='success'){ if(!silent) $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
@@ -1563,136 +1401,8 @@ async function renderAnalytics(silent){
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Amount</th></tr></thead>
       <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No withdrawals yet</td></tr>'}</tbody></table></div></div>
     ${staffTable}
-    ${numbersSection(mn)}
     ${abuseSection}`;
   document.querySelectorAll('[data-per]').forEach(b=>b.addEventListener('click',()=>{ _anPeriod=parseInt(b.dataset.per); renderAnalytics(); }));
-  wireNumbersSection();
-}
-
-// ── PAYMENT-NUMBER ACTIVITY ──
-// Owner: "make sure l can track number activity in analytics ie success
-// rates, whether their Forwarder sends/forwards messages... total
-// transactions, messages forwarded, dates time... daily number
-// transactions, deposits received, sms forwarded, health, duration of sms
-// forwarding delivery to server."
-var _numDays = 14;
-var _numAnalytics = null;
-var _numOpen = {};        // which numbers have their day-by-day table expanded
-
-function healthPill(n){
-  const map = {
-    healthy: ['t-ok', 'Online'],
-    stale:   ['t-warn', 'Quiet'],
-    offline: ['t-bad', 'Offline'],
-    unknown: ['t-warn', 'Never seen'],
-  };
-  const [cls, label] = map[n.health] || map.unknown;
-  return `<span class="pill-tag ${cls}" title="${esc(n.healthLabel||'')}">${label}</span>`;
-}
-function ms(v){
-  if(v===null||v===undefined) return 'No data';
-  if(v < 1000) return v + ' ms';
-  if(v < 60000) return (v/1000).toFixed(1) + ' s';
-  return Math.round(v/60000) + ' min';
-}
-function pct(v){ return v===null||v===undefined ? 'No data' : v + '%'; }
-function ago(msTs){
-  if(!msTs) return 'Never';
-  const d = Date.now() - msTs;
-  if(d < 60000) return 'Just now';
-  if(d < 3600000) return Math.round(d/60000) + ' min ago';
-  if(d < 86400000) return Math.round(d/3600000) + ' h ago';
-  return Math.round(d/86400000) + ' d ago';
-}
-function numbersSection(mn){
-  if(!mn || mn.status!=='success') return '';
-  _numAnalytics = mn;
-  const t = mn.totals || {};
-  const nums = mn.numbers || [];
-  if(!nums.length) return `<h2 class="sec">Payment numbers</h2>
-    <div class="panel-card"><p class="muted" style="margin:0">No payment numbers saved yet. Add them under Settings, Manual payments.</p></div>`;
-  const dayOpts = [7,14,30,60,90].map(d=>`<option value="${d}" ${_numDays===d?'selected':''}>Last ${d} days</option>`).join('');
-  return `
-    <div class="row" style="align-items:center;margin:18px 0 8px">
-      <h2 class="sec" style="flex:1;margin:0">Payment number activity</h2>
-      <select id="numDays" style="width:auto">${dayOpts}</select>
-    </div>
-    <p class="muted" style="margin:0 0 10px">Every message each phone forwarded, what became of it, and whether the phone is still checking in. A number counts as <b>Online</b> while its forwarder has pinged in the last 45 minutes.</p>
-    <div class="cards">
-      <div class="stat"><div class="n">${t.numbersOnline||0} / ${t.numbersTotal||0}</div><div class="l">Phones online</div></div>
-      <div class="stat"><div class="n">${t.smsForwarded||0}</div><div class="l">Messages forwarded</div></div>
-      <div class="stat"><div class="n" style="color:var(--ok)">${t.credited||0}</div><div class="l">Deposits credited</div></div>
-      <div class="stat"><div class="n">${pct(t.successRate)}</div><div class="l">Success rate</div></div>
-      <div class="stat"><div class="n">${ugx(t.amount)}</div><div class="l">Received via SMS match</div></div>
-      <div class="stat"><div class="n">${ms(t.avgDeliveryMs)}</div><div class="l">Average forwarding delay</div></div>
-    </div>
-    ${unknownCard(mn.unknownNumbers)}
-    ${nums.map(n=>numberCard(n)).join('')}`;
-}
-// A phone configured with a number that is not in the saved list forwards
-// perfectly happily while every payment to it is lost, and it would never
-// appear above, because that list is built from the saved numbers only.
-// This is the one place it becomes visible.
-function unknownCard(unknown){
-  if(!unknown || !unknown.length) return '';
-  return `<div class="panel-card" style="margin-bottom:10px;border:1px solid var(--danger)">
-    <h2 class="sec" style="margin:0 0 4px;color:var(--danger)">Messages from numbers you have not saved</h2>
-    <p class="muted" style="margin:0 0 8px">A forwarder is reporting these numbers, but they are not in your payment numbers list. Members are never told to pay them, so <b>nothing sent to them can ever be matched or credited</b>. Either correct the number on that phone, or add it under Settings, Manual payments.</p>
-    <div class="table-scroll"><table><thead><tr><th>Number reported</th><th>Messages</th><th>Money seen</th><th>Last seen</th></tr></thead>
-    <tbody>${unknown.map(u=>`<tr><td><b>${esc(u.number)}</b></td><td>${u.smsForwarded||0}</td><td>${u.amount?ugx(u.amount):'0'}</td><td>${ago(u.lastSeenAt)}</td></tr>`).join('')}</tbody></table></div>
-  </div>`;
-}
-function numberCard(n){
-  const open = !!_numOpen[n.number];
-  // Anything that reached the server as real money but did NOT get credited
-  // is worth an admin's attention, so it is called out rather than buried.
-  const needsLook = (n.unmatched||0) + (n.ambiguous||0) + (n.mismatch||0) + (n.unparsed||0);
-  return `<div class="panel-card" style="margin-bottom:10px">
-    <div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
-      <div style="flex:1">
-        <b>${esc(n.holderName||'Unnamed')}</b> <span class="muted">${esc(toLocalPhoneDisplay(n.number, n.regionKey))}</span>
-        <div class="muted" style="font-size:11px">${esc(n.network||'')}${n.active?'':' · disabled'}${n.device?' · '+esc(n.device):''}${n.appVersion?' · app '+esc(n.appVersion):''}${n.battery!==null&&n.battery!==undefined?' · battery '+n.battery+'%':''}</div>
-      </div>
-      ${healthPill(n)}
-    </div>
-    <div class="muted" style="font-size:11px;margin-bottom:8px">
-      Last check-in ${ago(n.lastHeartbeatAt)} · last message ${ago(n.lastSmsAt)}${n.forwardingActive?'':' · forwarding is switched OFF on the phone'}
-    </div>
-    <div class="cards" style="margin-bottom:6px">
-      <div class="stat"><div class="n">${n.smsForwarded||0}</div><div class="l">Forwarded</div></div>
-      <div class="stat"><div class="n" style="color:var(--ok)">${n.credited||0}</div><div class="l">Credited</div></div>
-      <div class="stat"><div class="n">${pct(n.successRate)}</div><div class="l">Success rate</div></div>
-      <div class="stat"><div class="n">${ugx(n.amount)}</div><div class="l">Amount received</div></div>
-      <div class="stat"><div class="n">${n.assigned||0}</div><div class="l">Orders assigned</div></div>
-      <div class="stat"><div class="n">${pct(n.fillRate)}</div><div class="l">Orders completed</div></div>
-      <div class="stat"><div class="n">${ms(n.avgDeliveryMs)}</div><div class="l">Average delay</div></div>
-      <div class="stat"><div class="n">${ms(n.maxDeliveryMs)}</div><div class="l">Slowest delay</div></div>
-    </div>
-    ${needsLook?`<p class="muted" style="margin:0 0 6px">Needs a look: ${n.unmatched||0} unmatched, ${n.ambiguous||0} ambiguous, ${n.mismatch||0} sender mismatch, ${n.unparsed||0} unreadable, ${n.expired||0} orders expired, ${n.duplicate||0} duplicates.</p>`:''}
-    <button class="btn sm ghost" data-numtoggle="${esc(n.number)}">${open?'Hide daily breakdown':'Show daily breakdown'}</button>
-    ${open?dailyTable(n):''}
-  </div>`;
-}
-function dailyTable(n){
-  const rows = (n.daily||[]).slice().reverse();
-  if(!rows.length) return '<p class="muted" style="margin:10px 0 0">Nothing recorded in this period.</p>';
-  return `<div class="table-scroll" style="max-height:320px;margin-top:10px"><table>
-    <thead><tr><th>Day</th><th>Forwarded</th><th>Credited</th><th>Amount</th><th>Assigned</th><th>Expired</th><th>Unmatched</th><th>Avg delay</th></tr></thead>
-    <tbody>${rows.map(d=>`<tr>
-      <td>${dayLabel(d.day)}</td><td>${d.smsForwarded}</td>
-      <td><b>${d.credited}</b></td><td>${d.amount?ugx(d.amount):'0'}</td>
-      <td>${d.assigned}</td><td>${d.expired}</td>
-      <td>${d.unmatched + d.ambiguous + d.mismatch}</td><td>${ms(d.avgDeliveryMs)}</td>
-    </tr>`).join('')}</tbody></table></div>`;
-}
-function wireNumbersSection(){
-  const sel = $('numDays');
-  if(sel) sel.addEventListener('change', ()=>{ _numDays = parseInt(sel.value,10)||14; renderAnalytics(); });
-  document.querySelectorAll('[data-numtoggle]').forEach(b=>b.addEventListener('click', ()=>{
-    const k = b.dataset.numtoggle;
-    _numOpen[k] = !_numOpen[k];
-    renderAnalytics(true);
-  }));
 }
 
 // ── USERS ──
@@ -2098,36 +1808,12 @@ async function syncMarzPay(btn, afterFn){
 }
 const DEP_GROUPS = { pending: ['initiating','pending'], review: ['review'], matched: ['matched'], failed: ['failed','rejected'] };
 let _deps=[], _depFilter='pending';
-let _reversals = [];
-function reversalOutcomeLabel(v){
-  if (v.applied) return 'Auto-debited & banned';
-  if (v.ambiguous) return 'Matched multiple members, needs a look';
-  return 'No matching credited deposit found';
-}
-function reversalsCard(rows){
-  if(!rows.length) return '';
-  return `<div class="panel-card" id="revAlertsWrap" style="margin-bottom:12px;border:1px solid var(--danger)">
-    <h2 class="sec" style="margin:0 0 4px;color:var(--danger)">Deposit reversal alerts (${rows.length})</h2>
-    <p class="muted" style="margin:0 0 10px">A payment phone reported an MTN reversal SMS. When exactly one member matched, the server already debited the exact reversed amount and banned that account automatically. An "ambiguous"/"unmatched" row still needs a human, find the right member (search Users by the payer's phone) and act by hand.</p>
-    <div class="table-scroll"><table><thead><tr><th>When</th><th>Outcome</th><th>Amount</th><th>Admin number</th><th>Payer</th><th>Message</th><th></th></tr></thead>
-    <tbody>${rows.map(v=>`<tr${v.matchedUserId?` class="clickable" data-uid="${esc(v.matchedUserId)}"`:''}>
-      <td>${fdate(v.createdAt)}</td>
-      <td>${esc(reversalOutcomeLabel(v))}${v.resolved?' <span class="muted">(reviewed)</span>':''}</td>
-      <td>${v.amount!=null?ugx(v.amount):'Unknown'}</td>
-      <td>${esc(v.receivingNumber||'Not set')}</td>
-      <td>${esc(v.payerPhone||'Not shown')}</td>
-      <td style="max-width:260px;white-space:normal;font-size:11px;color:var(--muted)">${esc((v.raw||'').slice(0,220))}</td>
-      <td>${(!v.applied && !v.resolved && SESSION_ROLE==='owner')?`<button class="btn sm ghost" data-smsresolve="${esc(v.id)}">Mark reviewed</button>`:''}</td>
-    </tr>`).join('')}</tbody></table></div>
-  </div>`;
-}
 async function renderDeposits(){
-  const [r, revR] = await Promise.all([api('/admin/deposits/list', {}), api('/admin/manual-reversals/list', {})]);
+  const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits')) return;
   _deps = r.deposits||[];
-  _reversals = revR.rows||[];
   const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
-  const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
+  const subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
   const dpbd = r.processedByDay||[];
   const dMaxP = Math.max(1, ...dpbd.map(d=>d.count));
   const dRows = dpbd.slice().reverse();
@@ -2140,26 +1826,15 @@ async function renderDeposits(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time -- automatic (MarzPay or LipaPay) or manual (admin numbers, SMS-matched). Needs Review covers a manual order the SMS matcher couldn't safely resolve on its own (ambiguous match, sender mismatch, or a member-pasted confirmation) -- approve it once you've verified the money genuinely landed, or reject it if it didn't.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time, through the automatic gateway (MarzPay or PesaJet).</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' deposits only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
-    ${reversalsCard(_reversals)}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Paid from</th><th>Method</th><th>Amount</th><th>Ref</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
   $('depSync').addEventListener('click', ()=>syncMarzPay($('depSync'), renderDeposits));
   $('depSearch').addEventListener('input', drawDeps);
   document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); }));
-  document.querySelectorAll('[data-smsresolve]').forEach(b=>b.addEventListener('click',async(e)=>{
-    e.stopPropagation();
-    if(!confirm("Mark this reviewed? Only do this once you've either acted on it by hand, or confirmed no action is needed."))return;
-    b.disabled=true;b.textContent='…'; const d=await api('/admin/manual-sms-log/resolve',{id:b.dataset.smsresolve});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); refreshBadges();
-  }));
-  document.querySelectorAll('#revAlertsWrap tr[data-uid]').forEach(tr=>tr.addEventListener('click', e=>{
-    if(e.target.closest('button')) return;
-    openUser(tr.dataset.uid);
-  }));
   drawDeps();
 }
 function drawDeps(){
@@ -2175,15 +1850,14 @@ function drawDeps(){
     const isManual = d.method==='manual';
     const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed' || d.status==='review';
     const code = d.referralCode;
-    // /admin/deposit/force-credit and /admin/deposit/manual/reject are both
-    // verifyOwner-gated (crediting/rejecting a deposit that was never
-    // resolved automatically is a real money-safety decision, not a routine
-    // action) -- the buttons match that, same silent pattern as every other
-    // owner-only control, rather than showing a button that just errors.
+    // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
+    // that was never resolved automatically is a real money-safety decision,
+    // not a routine action) -- the button matches that, same silent pattern
+    // as every other owner-only control, rather than showing one that just
+    // errors.
     let actions = '';
     if (SESSION_ROLE === 'owner' && stuck) {
-      actions = `<button class="btn ok sm" data-force="${esc(d.id)}">${d.status==='review'?'Approve':'Force-credit'}</button>`;
-      if (isManual && d.status==='review') actions += ` <button class="btn danger sm" data-mreject="${esc(d.id)}">Reject</button>`;
+      actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
     }
     const methodLabel = isManual
       // data-no-i18n: the network and the collection number are DATA, and the
@@ -2253,12 +1927,6 @@ function drawDeps(){
     e.stopPropagation();
     if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
-  }));
-  document.querySelectorAll('[data-mreject]').forEach(b=>b.addEventListener('click',async(e)=>{
-    e.stopPropagation();
-    if(!confirm('Reject this deposit? The member will be told the payment failed and no wallet credit will be given.'))return;
-    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/manual/reject',{depositId:b.dataset.mreject});
     toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
   }));
 }
@@ -3282,7 +2950,6 @@ let _aboutBlocksDirty = false;
 window.addEventListener('beforeunload', (e) => {
   if (_aboutBlocksDirty) { e.preventDefault(); e.returnValue = ''; }
 });
-let _manualNumbers = [];
 // The panel wears the platform's name too, so renaming the app renames this.
 // The <title> and the two "<name> Admin" headings are the whole surface --
 // everything else in here is admin vocabulary, not brand.
@@ -3304,8 +2971,8 @@ function applyAdminBrandName(name){
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
 async function renderBanners(){
-  const [r, br, mpir, cir, bar] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/manual-pay-images'), api('/admin/chipz-images'), api('/admin/brand-assets')
+  const [r, br, cir, bar] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/chipz-images'), api('/admin/brand-assets')
   ]);
   if (staleTab('banners')) return;
   const s = r.settings||{};
@@ -3313,8 +2980,6 @@ async function renderBanners(){
   const bannerImage = br.image||'';
   const bannerVideo = br.video||'';
   const bannerVideoUploaded = br.videoVersion||'';
-  const manualSelectorImage = mpir.selector||'';
-  const manualHeroImage = mpir.hero||'';
   const downloadBgImage = cir.downloadbg||'';
   const authHeroImage = cir.authhero||'';
   const homeSlide2Image = cir.banner2||'';
@@ -3442,26 +3107,6 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="downloadBgFile" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Manual payment screen images</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">Replaces the app-name text on the manual-deposit flow's 2 screens. Saved as PNG so transparency is kept.</p>
-      <p class="muted" style="margin:0 0 6px"><b>Payment method screen</b></p>
-      <div class="banner-row">
-        ${manualSelectorImage?`<img class="img-thumb alpha" src="${esc(manualSelectorImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualSelectorImage?'Custom image':'<span class="muted">Text wordmark</span>'}</div>
-        ${manualSelectorImage?`<button class="btn danger sm" id="mpSelectorImgClear">Remove</button>`:''}
-      </div>
-      <label style="display:flex;align-items:center;gap:8px;width:auto;margin:8px 0 0;font-weight:500"><input type="checkbox" id="mpSelectorStrip" checked style="width:auto;margin:0"><span>Cut the dark background off this logo</span></label>
-      <label class="btn block file-btn" style="margin-top:8px">Upload image<input type="file" id="mpSelectorImgFile" accept="image/*" hidden></label>
-      <p class="muted" style="margin:16px 0 6px"><b>Final payment screen</b></p>
-      <div class="banner-row">
-        ${manualHeroImage?`<img class="img-thumb alpha" src="${esc(manualHeroImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${manualHeroImage?'Custom image':'<span class="muted">Text wordmark</span>'}</div>
-        ${manualHeroImage?`<button class="btn danger sm" id="mpHeroImgClear">Remove</button>`:''}
-      </div>
-      <label style="display:flex;align-items:center;gap:8px;width:auto;margin:8px 0 0;font-weight:500"><input type="checkbox" id="mpHeroStrip" checked style="width:auto;margin:0"><span>Cut the dark background off this logo</span></label>
-      <label class="btn block file-btn" style="margin-top:8px">Upload image<input type="file" id="mpHeroImgFile" accept="image/*" hidden></label>
-    </div>
   `;
   wireBannerHandlers();
 }
@@ -3646,71 +3291,16 @@ function wireBannerHandlers(){
     const d = await api('/admin/settings/update', { settings: nums });
     toast(d.status==='success'?'Login screen opacity & blur saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  // Both manual-pay logo slots go up as PNG through fileToLogoPng(), NOT as
-  // JPEG through fileToDataUrl(). JPEG has no alpha channel, so these two
-  // slots could not hold a transparent logo at all, whatever he uploaded.
-  // Owner: "they have black background so l wanted the system to refine it
-  // such that it remains as it is with no background."
-  //
-  // The toast names what actually happened, because "Saved" on an image whose
-  // background did not come off is the one message that would send him
-  // looking at the member app to find out.
-  async function uploadManualPayLogo(slot, file, strip){
-    toast(strip ? 'Cutting the background…' : 'Uploading…', 'ok');
-    const r = await fileToLogoPng(file, 512, strip);
-    const d = await api('/admin/manual-pay-image/set', { slot: slot, image: r.url });
-    if (d.status !== 'success') return toast(d.message || 'Failed', 'err');
-    toast(!strip ? 'Saved as it is, live for every user'
-          : r.cleared ? 'Background removed, live for every user'
-          : 'Saved, but no dark background was found to cut off', r.cleared || !strip ? 'ok' : 'warn');
-    renderBanners();
-  }
-  $('mpSelectorImgFile').addEventListener('change', async e=>{
-    const f=e.target.files[0]; if(!f) return;
-    const strip = !!($('mpSelectorStrip') && $('mpSelectorStrip').checked);
-    await withTabBusy((async()=>{
-      try { await uploadManualPayLogo('selector', f, strip); }
-      catch(err){ toast(err.message||'Could not read image','err'); }
-    })());
-  });
-  const mpSelectorImgClear = $('mpSelectorImgClear');
-  if (mpSelectorImgClear) mpSelectorImgClear.addEventListener('click', async()=>{
-    await withTabBusy((async()=>{
-      const d = await api('/admin/manual-pay-image/clear', { slot:'selector' });
-      toast(d.status==='success'?'Reverted to the text wordmark':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') renderBanners();
-    })());
-  });
-  $('mpHeroImgFile').addEventListener('change', async e=>{
-    const f=e.target.files[0]; if(!f) return;
-    const strip = !!($('mpHeroStrip') && $('mpHeroStrip').checked);
-    await withTabBusy((async()=>{
-      try { await uploadManualPayLogo('hero', f, strip); }
-      catch(err){ toast(err.message||'Could not read image','err'); }
-    })());
-  });
-  const mpHeroImgClear = $('mpHeroImgClear');
-  if (mpHeroImgClear) mpHeroImgClear.addEventListener('click', async()=>{
-    await withTabBusy((async()=>{
-      const d = await api('/admin/manual-pay-image/clear', { slot:'hero' });
-      toast(d.status==='success'?'Reverted to the text wordmark':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') renderBanners();
-    })());
-  });
 }
 async function renderSettings(){
   // Image/banner uploads all moved to their own tab, see renderBanners() --
   // this fetch only needs what Rates/Payments/Support/App name/About
   // actually render now.
-  const [r, abr, mnr] = await Promise.all([
-    api('/admin/settings'), api('/admin/about-content'), api('/admin/manual-numbers/list', {})
+  const [r, abr] = await Promise.all([
+    api('/admin/settings'), api('/admin/about-content')
   ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
-  // Only the picked country's collection numbers -- a Ugandan MTN line is
-  // not somewhere a Kenyan member can send money, and the server assigns
-  // them per country too (see assignManualNumberAndCreateDeposit).
-  _manualNumbers = (mnr.numbers||[]).filter(n => String(n.regionKey || 'ug') === adminOneRegion());
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
   applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
@@ -3774,42 +3364,24 @@ async function renderSettings(){
       <textarea id="sAllowedOrigins" rows="4" placeholder="petro-platform.com&#10;www.petro-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. Render/EdgeOne addresses are always allowed.</p>
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
-      <p class="muted" style="margin:0 0 4px">Set the gateway under Manual payments below. Every cash-out waits as Pending until you act on it in Withdrawals.</p>
+      <p class="muted" style="margin:0 0 4px">Automatic recharge is the only deposit method. Every cash-out waits as Pending until you act on it in Withdrawals.</p>
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
-    <h2 class="sec">Manual payments</h2>
+    <h2 class="sec">Payments</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Members see up to 2 options: <b>PAY A</b> (automatic gateway) and <b>PAY B</b> (manual, matched by hand). Enable either or both.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:6px;"><input type="checkbox" id="depPayAOn" ${v('depositPayAEnabled',true)?'checked':''} style="width:auto"> <b>Enable PAY A</b> (automatic)</label>
-      <div id="depPayAGateway" style="margin:0 0 12px 26px">
+      <label>Deposit gateway</label>
+      <div style="margin:0 0 12px">
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> MarzPay</label>
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depGateway" id="depGatewayPesa" value="pesajet" ${normalizeProv(v('depositMethod','marzpay'))==='pesajet'?'checked':''} style="width:auto"> PesaJet</label>
       </div>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="checkbox" id="depPayBOn" ${v('depositPayBEnabled',false)?'checked':''} style="width:auto"> <b>Enable PAY B</b> (manual, admin numbers below)</label>
-      <p class="muted" style="margin:10px 0 0">Withdrawal method is set separately, below &mdash; Manual means you send each payout yourself and tap Mark as paid.</p>
       <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
-      <p class="muted" style="margin:0 0 8px">Follows PAY A above by default &mdash; pin a different method only if deposits and withdrawals should differ.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the payment method above</label>
+      <p class="muted" style="margin:0 0 8px">Follows the deposit gateway above by default &mdash; pin a different method only if deposits and withdrawals should differ.</p>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the deposit gateway above</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
-    </div>
-    <div class="panel-card">
-      <h2 class="sec" style="margin:0 0 6px">Payment numbers</h2>
-      <p class="muted" style="margin-top:0">Assigned to members round-robin when PAY B is on. Use real holder names.</p>
-      <div id="manualNumbersList"></div>
-      <button class="btn block" id="mnAddBtn" style="margin-top:6px">+ Add payment number</button>
-    </div>
-    <div class="panel-card">
-      <h2 class="sec" style="margin:0 0 6px">Payment reminder</h2>
-      <p class="muted" style="margin-top:0">Use <code>{{number}}</code> and <code>{{amount}}</code> as placeholders. Leave a network blank to hide it.</p>
-      <label>MTN steps</label>
-      <textarea id="mpReminderMtn" rows="7" placeholder="1: Dial *165#&#10;2: Select 1 Send Money&#10;3: Select 1 Mobile User&#10;4: Enter number {{number}}&#10;5: Enter Amount {{amount}}&#10;6: Enter Reason&#10;7: Enter your PIN code">${esc(v('manualPayReminderMtn',''))}</textarea>
-      <label>Airtel steps</label>
-      <textarea id="mpReminderAirtel" rows="7" placeholder="e.g. Dial *185#, Select Send Money…">${esc(v('manualPayReminderAirtel',''))}</textarea>
-      <button class="btn block" id="saveMpReminder" style="margin-top:6px">Save payment reminder</button>
     </div>
 
     <h2 class="sec">Support contacts</h2>
@@ -3840,32 +3412,16 @@ async function renderSettings(){
       <button class="btn block" id="saveAbout">Save about page</button>
     </div>`;
   renderAboutBlocksEditor();
-  renderManualNumbersEditor();
-  // PAY A's own gateway sub-choice only matters while PAY A is enabled --
-  // dimmed (not hidden, so the previously-chosen gateway stays visible/
-  // legible) when it's off, so the admin isn't left guessing which
-  // gateway will apply the next time PAY A gets switched back on.
-  const syncPayAGatewayDim = () => { $('depPayAGateway').style.opacity = $('depPayAOn').checked ? '1' : '.4'; };
-  $('depPayAOn').addEventListener('change', syncPayAGatewayDim);
-  syncPayAGatewayDim();
   $('saveDepMethod').addEventListener('click', async()=>{
-    const payAOn = $('depPayAOn').checked;
-    const payBOn = $('depPayBOn').checked;
     const gateway = document.querySelector('input[name="depGateway"]:checked').value;
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
     const d = await api('/admin/settings/update', { settings: {
-      depositPayAEnabled: payAOn, depositPayBEnabled: payBOn, depositMethod: gateway, withdrawMethod: witMethod,
+      depositMethod: gateway, withdrawMethod: witMethod,
     } });
     const payoutProv = witMethod==='follow' ? gateway : witMethod;
-    const payALabel = payAOn ? `PAY A on (${PROVIDER_LABEL[normalizeProv(gateway)]})` : 'PAY A off';
-    const payBLabel = payBOn ? 'PAY B on (manual)' : 'PAY B off';
     toast(d.status==='success'
-      ? `Saved. Recharges: ${payALabel}, ${payBLabel}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
+      ? `Saved. Deposits: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('mnAddBtn').addEventListener('click', ()=>{
-    _manualNumbers.push({ id:'', network:'MTN Mobile Money', number:'', holderName:'', active:true, order:(_manualNumbers.length?Math.max(...(_manualNumbers.map(n=>n.order||0)))+1:1), _new:true });
-    renderManualNumbersEditor();
   });
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
@@ -3886,10 +3442,6 @@ async function renderSettings(){
       maintenanceMsg:$('sMaintMsg').value.trim(),
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveMpReminder').addEventListener('click', async()=>{
-    const upd = { manualPayReminderMtn:$('mpReminderMtn').value, manualPayReminderAirtel:$('mpReminderAirtel').value };
-    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Payment reminder saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(),
@@ -3963,68 +3515,6 @@ function renderAboutBlocksEditor(){
   }));
   box.querySelectorAll('[data-ab-text]').forEach(ta=>ta.addEventListener('input', ()=>{
     _aboutBlocks[+ta.dataset.abText].text = ta.value; _aboutBlocksDirty=true;
-  }));
-}
-
-// Each row saves/deletes itself immediately against /admin/manual-numbers/*
-// (unlike the About-blocks editor above, which batches into one big array
-// save) -- there's no shared payload here, each number is its own document
-// server-side, so per-row actions map directly onto per-row endpoints with
-// nothing to lose by not batching.
-const NETWORK_OPTIONS = ['MTN Mobile Money', 'Airtel Money'];
-function renderManualNumbersEditor(){
-  const box = $('manualNumbersList'); if (!box) return;
-  if (!_manualNumbers.length) { box.innerHTML = '<p class="muted" style="margin:8px 0">No payment numbers yet -- add one below before switching Manual on.</p>'; return; }
-  box.innerHTML = _manualNumbers.map((n,i)=>`
-    <div class="panel-card" style="margin-bottom:8px;padding:10px;">
-      <div class="row">
-        <div><label>Network</label><select data-mn-network="${i}">${NETWORK_OPTIONS.map(net=>`<option value="${esc(net)}" ${n.network===net?'selected':''}>${esc(net)}</option>`).join('')}</select></div>
-        <div><label>Order</label><input type="number" data-mn-order="${i}" value="${n.order||0}"></div>
-      </div>
-      <label>Phone number</label><input data-mn-number="${i}" value="${esc(toLocalPhoneDisplay(n.number||'', n.regionKey))}" placeholder="0770000001">
-      <label>Account holder name</label><input data-mn-holder="${i}" value="${esc(n.holderName||'')}" placeholder="Petro MTN 1">
-      <label style="width:auto;display:flex;align-items:center;gap:8px;margin:8px 0;"><input type="checkbox" data-mn-active="${i}" ${n.active!==false?'checked':''} style="width:auto"> Active (eligible for round-robin)</label>
-      <div class="row">
-        <button class="btn ok sm" data-mn-save="${i}" style="flex:1">${n._new||!n.id?'Add':'Save'}</button>
-        ${n.id?`<button class="btn danger sm" data-mn-del="${i}">Delete</button>`:''}
-      </div>
-    </div>`).join('');
-  box.querySelectorAll('[data-mn-save]').forEach(btn=>btn.addEventListener('click', async()=>{
-    const i = +btn.dataset.mnSave;
-    const n = _manualNumbers[i];
-    const payload = {
-      id: n.id||undefined,
-      network: box.querySelector(`[data-mn-network="${i}"]`).value,
-      number: box.querySelector(`[data-mn-number="${i}"]`).value.trim(),
-      holderName: box.querySelector(`[data-mn-holder="${i}"]`).value.trim(),
-      active: box.querySelector(`[data-mn-active="${i}"]`).checked,
-      order: +box.querySelector(`[data-mn-order="${i}"]`).value || 0,
-    };
-    btn.disabled = true; const prevText = btn.textContent; btn.textContent = '…';
-    const d = await api('/admin/manual-numbers/save', payload);
-    if (d.status !== 'success') { btn.disabled = false; btn.textContent = prevText; return toast(d.message||'Failed', 'err'); }
-    toast('Payment number saved', 'ok');
-    const mnr = await api('/admin/manual-numbers/list', {});
-    // Only the picked country's collection numbers -- a Ugandan MTN line is
-  // not somewhere a Kenyan member can send money, and the server assigns
-  // them per country too (see assignManualNumberAndCreateDeposit).
-  _manualNumbers = (mnr.numbers||[]).filter(n => String(n.regionKey || 'ug') === adminOneRegion());
-    renderManualNumbersEditor();
-  }));
-  box.querySelectorAll('[data-mn-del]').forEach(btn=>btn.addEventListener('click', async()=>{
-    const i = +btn.dataset.mnDel;
-    const n = _manualNumbers[i];
-    // subagent-audit-caught: this used to describe the pre-fix behavior --
-    // /admin/manual-numbers/delete now refuses (409) outright if a live
-    // pending deposit is still assigned to this number, rather than deleting
-    // it "unaffected". Corrected so the dialog matches what actually happens.
-    if (!confirm(`Delete ${n.holderName||toLocalPhoneDisplay(n.number, n.regionKey)}? It will stop being handed out to new deposits right away. If a member currently has a live pending order on it, the delete will be refused until that order resolves (within 15 minutes).`)) return;
-    btn.disabled = true;
-    const d = await api('/admin/manual-numbers/delete', { id: n.id });
-    if (d.status !== 'success') { btn.disabled = false; return toast(d.message||'Failed', 'err'); }
-    _manualNumbers.splice(i, 1);
-    toast('Payment number deleted', 'ok');
-    renderManualNumbersEditor();
   }));
 }
 
@@ -4175,16 +3665,12 @@ const ADMIN_LANG_ROWS = [
   ['This account has no referrer. If you later learn who invited them, attach it here -- their upline gets team credit, and if this member already made their first purchase, commission on it is paid now. Works once only; an account that already has a referrer can\'t be changed here.', 'Akaawunti kano terina yaakuyita. Bw\'oluvannyuma omanya ani eyamuyita, mugatte wano -- oyo amuyita afuna ebibalirwa by\'ekibiina, era singa omuntu ono yamaze okugula omulundi ogusooka, ekitundu kyakyo kisasulwa kati. Kikola omulundi gumu gwokka; akaawunti akalina dda eyaakuyita tekakyusibwa wano.', 'Akaunti hii haina mwalikaji. Ukija kujua baadaye ni nani aliyemwalika, mwambatanishe hapa -- mstari wake wa juu hupata sifa ya timu, na ikiwa mwanachama huyu tayari alinunua mara ya kwanza, kamisheni yake hulipwa sasa. Hufanya kazi mara moja tu; akaunti ambayo tayari ina mwalikaji haiwezi kubadilishwa hapa.', 'Ce compte n\'a pas de parrain. Si vous apprenez plus tard qui l\'a invité, rattachez-le ici -- son parrain reçoit le crédit d\'équipe, et si ce membre a déjà fait son premier achat, la commission dessus est versée maintenant. Ne fonctionne qu\'une fois ; un compte qui a déjà un parrain ne peut pas être modifié ici.', 'Iyi konti nta wayitumiye ifite. Nurangiza kumenya uwamutumiye, umuhuze hano -- uwamutumiye abona inyungu z\'itsinda, kandi niba uyu munyamuryango yamaze kugura bwa mbere, komisiyo yabyo yishyurwa nonaha. Bikora rimwe gusa; konti isanzwe ifite uwayitumiye ntishobora guhindurwa hano.', 'Akaunti egi tiine owaayeeta. Ku oraamanye bwanyima ou yaamweta, mugambise hanu -- ou yaamweta naatunga ebibarwa by\'ekibiina, kandi ku omuntu ogu yaaba yaagwire omurundi gw\'okubanza, ekicweka kyakyo nikishashurwa hati. Nikikora omurundi gumwe gwonka; akaunti eine owaayeeta tekirikubaasa kuhindurwa hanu.'],
   ['What you upload here is the picture shared links show, on every address. Remove it and they go back to the card built into the app. Two delays to expect, neither a fault: a fresh share can keep showing the previous picture for up to five minutes, and WhatsApp and Facebook remember the old picture for a link that has already been shared — they keep the preview they first fetched. Sharing the link with anything after it — for example ?x=2 on the end — forces them to fetch it again.', 'Ky\'oteeka wano kye kifaananyi amakubo agagabanibwa kye galaga, ku ndagiriro zonna. Kiggyeewo galiddayo ku kaadi eri mu app. Waliwo okulwawo kubiri okusuubirwa, era tekuli nsobi: okugabana okupya kuyinza okusigala nga kulaga ekifaananyi eky\'edda okumala eddakiika ttaano, era WhatsApp ne Facebook bajjukira ekifaananyi eky\'edda ku kkubo eryamala okugabanibwa — bakuuma kye baasooka okufuna. Okugabana ekkubo n\'akantu akakugoberera — ng\'ekyokulabirako ?x=2 ku nkomerero — kibawaliriza okuddamu okukifuna.', 'Unachopakia hapa ndiyo picha ambayo viungo vinavyoshirikiwa huonyesha, kwenye kila anwani. Iondoe navyo hurudi kwenye kadi iliyojengwa ndani ya programu. Kuna ucheleweshaji wa aina mbili wa kutarajia, hakuna kati yake ni hitilafu: kushiriki kupya kunaweza kuendelea kuonyesha picha ya awali kwa hadi dakika tano, na WhatsApp na Facebook hukumbuka picha ya zamani kwa kiungo kilichokwisha shirikiwa — huhifadhi hakikisho walilochukua kwanza. Kushiriki kiungo na kitu chochote baada yake — mfano ?x=2 mwishoni — huwalazimisha kukichukua tena.', 'Ce que vous téléversez ici est l\'image que montrent les liens partagés, sur toutes les adresses. Retirez-la et ils reviennent à la carte intégrée à l\'application. Deux délais à prévoir, aucun n\'est une panne : un nouveau partage peut continuer à montrer l\'image précédente pendant jusqu\'à cinq minutes, et WhatsApp et Facebook se souviennent de l\'ancienne image pour un lien déjà partagé — ils gardent l\'aperçu qu\'ils ont récupéré en premier. Partager le lien avec quelque chose après — par exemple ?x=2 à la fin — les oblige à le récupérer de nouveau.', 'Icyo ushyizeho hano ni ishusho imirongo isangirwa yerekana, kuri buri aderesi. Uyikureho isubira ku ikarita yubatswe muri porogaramu. Hari gutinda kubiri byo kwitega, nta na kimwe ari ikibazo: gusangira gushya gushobora gukomeza kwerekana ishusho ya mbere kugeza ku iminota itanu, kandi WhatsApp na Facebook bibuka ishusho ya kera ku murongo wamaze gusangirwa — babika icyo babonye bwa mbere. Gusangira umurongo hiyongereyeho ikintu — urugero ?x=2 ku mpera — bibahatira kongera kubifata.', 'Eki orikuta hanu n\'ekishushani emihanda erikugabanwa ei erikworeka, aha ndagiriro zoona. Kiihaho reero egaruke aha kaadi eri omu puroguramu. Hariho okuguma kubiri okw\'okwetegyereza, kandi tikuri kishobi: okugabana okusya nikubaasa kuguma nikworeka ekishushani ekya ira okuhitsya edakiika ishaanu, kandi WhatsApp na Facebook nibaijuka ekishushani ekya ira aha muhanda ogwamazire kugabanwa — nibakuuma eki baabandize kutunga. Okugabana omuhanda n\'ekintu ekigukuratira — nk\'eky\'okureeberaho ?x=2 aha muheru — nikibahatsya kugarukamu kukitunga.'],
   ['While enabled and this time is still in the future, every user (new or existing) sees the countdown instead of the login/app -- it turns off on its own once the time passes, or uncheck it here to open early.', 'Nga kikola era ng\'ekiseera kino kikyali mu maaso, buli muntu (omuggya oba ow\'edda) alaba okubala okudda emabega mu kifo ky\'okuyingira/app -- kizikira kyokka ng\'ekiseera kiyiseeko, oba kiggyeko wano okuggulawo amangu.', 'Ikiwa imewashwa na wakati huu bado uko mbele, kila mtumiaji (mpya au aliyepo) huona hesabu ya kurudi nyuma badala ya kuingia au programu -- huzimika yenyewe wakati unapopita, au uondoe alama hapa ili kufungua mapema.', 'Tant que c\'est activé et que cette heure est encore à venir, chaque utilisateur (nouveau ou existant) voit le compte à rebours à la place de la connexion ou de l\'application -- il se désactive tout seul une fois l\'heure passée, ou décochez ici pour ouvrir plus tôt.', 'Igihe bikoresha kandi iki gihe kikiri imbere, buri ukoresha (mushya cyangwa usanzweho) abona kubara manuka aho kwinjira cyangwa porogaramu -- bihagarara byonyine iyo igihe gishize, cyangwa ukureho akamenyetso hano kugira ngo ufungure hakiri kare.', 'Ku erikuba erikukora kandi obu obwire obu bukiri omu maisho, buri murikukoresa (omusya nari orikubaho) naareeba okubara okugaruka enyima omu mwanya gw\'okutaaha nari puroguramu -- nikyezimya ku obwire burikuhwa, nari oihemu akamanyiso hanu kugira ngo oigure kare.'],
-  ['Withdrawals are separate from the toggles above -- payouts still use exactly one method at a time, set below. On Manual, no automatic gateway is in the payout path: you send each cash-out yourself from an admin phone and then tap Mark as paid on the Withdrawals tab to record it. Auto-approve is ignored whenever payouts are manual, since nothing should be marked paid without a person actually sending the money.', 'Okuggyamu ssente kwawukana ku bikyusibwa waggulu -- okusasula kukozesa engeri emu yokka mu kiseera, nga eteekeddwa wansi. Ku Manual, tewali mulyango gwekolera mu kkubo ly\'okusasula: buli kuggyamu osindika ggwe kennyini okuva ku ssimu y\'omukulembeze n\'oluvannyuma onyige Laga nga kisasuddwa ku ttabu lya Okuggyamu okukiwandiika. Okukkiriza okwekolera tekussibwako mmere buli lwe okusasula kuba kwa ngalo, kubanga tewali kirina kulagibwa nga kisasuddwa nga tewali muntu asindise ssente.', 'Utoaji ni tofauti na vishikizo vilivyo hapo juu -- malipo bado hutumia njia moja tu kwa wakati, iliyowekwa hapa chini. Kwenye Manual, hakuna lango la kiotomatiki kwenye njia ya malipo: unatuma kila utoaji wewe mwenyewe kutoka simu ya msimamizi kisha unagusa Weka alama kuwa imelipwa kwenye kichupo cha Utoaji ili kurekodi. Kuidhinisha kiotomatiki hupuuzwa kila malipo yanapokuwa ya mkono, kwa sababu hakuna kinachopaswa kuwekwa alama kuwa kimelipwa bila mtu kutuma pesa kweli.', 'Les retraits sont indépendants des interrupteurs ci-dessus -- les versements utilisent toujours exactement une seule méthode à la fois, réglée ci-dessous. En Manuel, aucune passerelle automatique n\'est dans le chemin de versement : vous envoyez chaque retrait vous-même depuis un téléphone d\'administrateur puis touchez Marquer comme payé dans l\'onglet Retraits pour l\'enregistrer. L\'approbation automatique est ignorée dès que les versements sont manuels, car rien ne doit être marqué payé sans qu\'une personne ait réellement envoyé l\'argent.', 'Kubikuza bitandukanye n\'utubuto two haruguru -- kwishyura gukoresha uburyo bumwe gusa icyarimwe, bushyizweho hasi. Kuri Manual, nta irembo ryikora riri mu nzira yo kwishyura: wowe ubwawe wohereza buri kubikuza uvuye kuri telefoni y\'ubuyobozi hanyuma ugakanda Shyiraho ko byishyuwe ku gice cy\'Ukubikuza kugira ngo ubyandike. Kwemeza byikora ntibyitabwaho igihe cyose kwishyura ari ukw\'intoki, kuko nta kigomba gushyirwaho ko cyishyuwe umuntu atohereje amafaranga koko.', 'Okwihamu sente nikwahukana n\'ebirikuhindurwa haiguru -- okushashura nikukoresa omuringo gumwe gwonka aha mwanya, ogutairweho ahansi. Aha Manual, tihariho muryango gurikwekorera omu muhanda gw\'okushashura: iwe omwene notuma buri kwihamu kuruga aha simu y\'omwebembezi reero okakanda Manyisa ngu kishashwiirwe aha kacweka k\'Okwihamu kugira ngo okihandiike. Okwikiriza kwenka tikurikutwarwaho obwiraaboona okushashura kuri okw\'engaro, ahakuba tihariho ekishemereire kumanyisibwa ngu kishashwiirwe omuntu atatumire sente buzima.'],
   ['You (the owner) always sign in with the master admin key. It\'s never given to anyone below. Create a separate username + password for each other person who needs access.', 'Ggwe (nannyini yo) bulijjo oyingira n\'ekisumuluzo ekikulu eky\'obukulembeze. Tekiweebwa muntu yenna ali wansi. Kolera buli muntu omulala ayetaaga okuyingira erinnya n\'ekisumuluzo ebyayo.', 'Wewe (mmiliki) huingia daima kwa ufunguo mkuu wa msimamizi. Hautolewi kamwe kwa mtu yeyote aliye chini. Tengeneza jina la mtumiaji na nenosiri tofauti kwa kila mtu mwingine anayehitaji kuingia.', 'Vous (le propriétaire) vous connectez toujours avec la clé administrateur principale. Elle n\'est jamais donnée à quelqu\'un en dessous. Créez un nom d\'utilisateur et un mot de passe distincts pour chaque autre personne ayant besoin d\'un accès.', 'Wowe (nyir\'ubwite) buri gihe winjira ukoresheje urufunguzo rukuru rw\'ubuyobozi. Ntiruhabwa na rimwe umuntu uri hasi. Korera buri wundi muntu ukeneye kwinjira izina n\'ijambobanga bye.', 'Iwe (nyineyo) obutoosha notaaha n\'ekishumuruzo ekikuru eky\'obwebembezi. Tikirikuheebwa muntu weena ori ahansi. Korera buri muntu ondiijo orikwetenga kutaaha eiziina n\'ekishumuruzo ebye.'],
   ['Your root domain and www are not closed. "The root domain does not serve the app" can only recognise them once this setting names your real domain, so until then they serve the app like any other address.', 'Root domain yo ne www tebiggaddwa. "The root domain does not serve the app" esobola okubimanya lwa ekiteeso kino nga kiwadde erinnya lya domain yo ey\'amazima, kale okutuusa olwo biweereza app nga endagiriro endala zonna.', 'Kikoa chako cha msingi na www havijafungwa. "The root domain does not serve the app" inaweza kuvitambua tu pale mpangilio huu unapotaja kikoa chako halisi, kwa hivyo hadi wakati huo huhudumia programu kama anwani nyingine yoyote.', 'Votre domaine racine et www ne sont pas fermés. "The root domain does not serve the app" ne peut les reconnaître qu\'une fois que ce réglage nomme votre vrai domaine, donc jusque-là ils servent l\'application comme n\'importe quelle autre adresse.', 'Izina ryawe ry\'urufatiro na www ntibyafunzwe. "The root domain does not serve the app" ishobora kubimenya gusa iyo iri genamiterere ryanditse izina ryawe nyaryo, bityo kugeza icyo gihe bitanga porogaramu nk\'aderesi iyo ari yo yose.', 'Root domain yaawe na www tibikingirwe. "The root domain does not serve the app" nebaasa kubimanya kwonka obu okuta oku kurikweta eiziina ryaawe eriyo buzima, n\'ahabw\'ekyo okuhitsya obwo nibiheereza puroguramu nk\'endagiriro yoona endiijo.'],
-  ['Every deposit attempt, all time -- automatic (MarzPay or LipaPay) or manual (admin numbers, SMS-matched). Needs Review covers a manual order the SMS matcher couldn\'t safely resolve on its own (ambiguous match, sender mismatch, or a member-pasted confirmation) -- approve it once you\'ve verified the money genuinely landed, or reject it if it didn\'t.', 'Buli kugezaako okuteekamu ssente, okuva olubereberye -- okwekolera (MarzPay oba LipaPay) oba okw\'engalo (nnamba za bakulembeze, nga zigattiddwa ne SMS). Kyetaaga Okukeberwa kitwala okusaba okw\'engalo SMS kw\'etasobodde kumaliriza bulungi yokka (okukwatagana okutaliimu bukakafu, omusindisi atakwatagana, oba obukakafu obuteekeddwa omuntu) -- kkiriza ng\'omaze okukakasa nti ssente zatuuse ddala, oba gaana singa tezaatuuka.', 'Kila jaribio la kuweka pesa, tangu mwanzo -- kiotomatiki (MarzPay au LipaPay) au kwa mkono (namba za msimamizi, zilizolinganishwa na SMS). Inahitaji Ukaguzi hushughulikia oda ya mkono ambayo kilinganishi cha SMS hakikuweza kuimaliza salama chenyewe (ulinganifu usio dhahiri, mtumaji asiyelingana, au uthibitisho uliobandikwa na mwanachama) -- iidhinishe pale utakapothibitisha kuwa pesa ziliwasili kweli, au ikatae kama hazikufika.', 'Chaque tentative de dépôt, depuis toujours -- automatique (MarzPay ou LipaPay) ou manuelle (numéros d\'administrateur, rapprochés par SMS). À vérifier couvre une commande manuelle que le rapprochement SMS n\'a pas pu résoudre seul en toute sécurité (correspondance ambiguë, expéditeur différent, ou confirmation collée par le membre) -- approuvez-la une fois que vous avez vérifié que l\'argent est bien arrivé, ou refusez-la sinon.', 'Buri gerageza ryo gushyiramo amafaranga, kuva kera -- byikora (MarzPay cyangwa LipaPay) cyangwa n\'intoki (nimero z\'ubuyobozi, zihuzwa na SMS). Bikeneye Igenzura bireba ubusabe bwo n\'intoki uhuza SMS utashoboye kurangiza wenyine mu buryo bwizewe (guhuza kudasobanutse, uwohereje udahuye, cyangwa icyemezo cyakomekwe n\'umunyamuryango) -- bwemere numara kugenzura ko amafaranga yageze koko, cyangwa ubwange niba atageze.', 'Buri kugyezaho okuta sente, kuruga ira -- okwenka (MarzPay nari LipaPay) nari okw\'engaro (namba z\'abebembezi, nizihuzibwa na SMS). Nikyetenga Kureebwa nikitwara okushaba okw\'engaro oku ekihuza SMS kitabaasize kumaliriza kwonka buzima (okuhuza okutamanyikire, orikutuma otarikuhikaana, nari okuhamya okwatairweho omuntu) -- kwikirize obu oraabe omazire kuhamya ngu sente zaahika buzima, nari okwange ku zitaahikire.'],
   ['Leave this ON. The very first account is let through automatically no matter what — with nobody registered yet there is no code in existence to type — and the rule starts applying the moment that first member exists. Only switch it OFF if you ever need to sign someone up with no upline, and switch it back on afterwards.', 'Kino kirekere nga KIKOLA. Akaawunti akasooka kakkirizibwa okuyita awatali kusoomooza — nga tewali yenna yeewandiisa, tewali koodi eriwo ey\'okuwandiika — era etteeka litandika okukola amangu nga omuntu ow\'olubereberye abaddewo. Kizikize kyokka bw\'oba weetaaga okuwandiisa omuntu atalina amuyita, era oluvannyuma okizzeeko.', 'Acha hii IKIWA IMEWASHWA. Akaunti ya kwanza kabisa huruhusiwa kupita bila masharti — kwa kuwa hakuna aliyejisajili bado, hakuna msimbo uliopo wa kuandika — na sheria huanza kutumika mara tu mwanachama huyo wa kwanza anapokuwepo. Izime tu ikiwa utahitaji kumsajili mtu asiye na mwalikaji, kisha uirudishe baadaye.', 'Laissez ceci ACTIVÉ. Le tout premier compte passe automatiquement quoi qu\'il arrive — personne n\'étant encore inscrit, aucun code n\'existe à saisir — et la règle commence à s\'appliquer dès que ce premier membre existe. Ne le désactivez que si vous devez un jour inscrire quelqu\'un sans parrain, puis réactivez-le ensuite.', 'Reka ibi BIKORESHE. Konti ya mbere y\'ibanze yemererwa kunyura uko byagenda kose — nta muntu urimo kwiyandikisha, nta kode iriho yo kwandika — kandi amategeko atangira gukurikizwa ako kanya uwo munyamuryango wa mbere abonetse. Bizimye gusa niba ukeneye kwandikisha umuntu udafite uwamutumiye, hanyuma ubisubizeho.', 'Reka eki KIRIKUKORA. Akaunti ey\'okubanza neekirizibwa kuraba kwonka — obu tihariho owiiyandiisize, tihariho koodi eriho ey\'okuhandiika — kandi ekiragiro nikitandika kukora ahonaaho omuntu w\'okubanza ku arikubaho. Kizimye kwonka ku oraabe noyetenga kwandiisa omuntu otaine owaamweta, reero bwanyima okigarure.'],
   ['1 device currently registered for push alerts.', 'Ekyuma 1 kati kyewandiisizza okufuna obubaka.', 'Kifaa 1 kimesajiliwa kwa sasa kupokea arifa.', '1 appareil actuellement enregistré pour les alertes.', 'Igikoresho 1 cyiyandikishije ubu kugira ngo cyakire ubutumwa.', 'Ekyoma 1 hati kye-yandiisize kutunga obutumwa.'],
-  ['Whether recharges and cash-outs run through MarzPay or are handled by hand is set under Manual payments below. Either way, a cash-out waits as Pending until an admin acts on it in the Withdrawals tab.', 'Oba okuteekamu ssente n\'okuziggyamu biyita mu MarzPay oba bikolebwa n\'engalo kiteekebwa wansi mu Manual payments. Mu ngeri yonna, okuggyamu kulinda nga Kulindiriddwa okutuusa omukulembeze lw\'akukolako ku ttabu lya Okuggyamu.', 'Kama kuweka na kutoa pesa hupitia MarzPay au hushughulikiwa kwa mkono huwekwa chini kwenye Manual payments. Kwa vyovyote vile, utoaji husubiri kama Unasubiri hadi msimamizi atakaposhughulikia kwenye kichupo cha Utoaji.', 'Le fait que les recharges et les retraits passent par MarzPay ou soient traités à la main se règle sous Manual payments ci-dessous. Dans les deux cas, un retrait attend En attente jusqu\'à ce qu\'un administrateur s\'en occupe dans l\'onglet Retraits.', 'Kumenya niba kongeramo no kubikuza binyura kuri MarzPay cyangwa bikorwa n\'intoki bishyirwaho hasi muri Manual payments. Uko byaba biri kose, kubikuza bitegereza nk\'Ubutegereje kugeza umuyobozi abikozeho ku gice cy\'Ukubikuza.', 'Kworeka ku okuta sente n\'okuzihamu birikuraba omu MarzPay nari bikakorwa n\'engaro nikitebekwa ahansi omu Manual payments. Omu muringo gwoona, okwihamu nikutegyereza nka Kurikutegyerezibwa okuhitsya omwebembezi ku araakukoreho aha kacweka k\'Okwihamu.'],
   ['An animated GIF shown beside the profile icon at the top of the app\'s Account tab. Transparency is kept. Uploaded exactly as-is so the animation survives — every other image slot here is re-compressed, which would flatten a GIF to a single still frame. Keep it small: it loads on every member\'s phone, so aim for well under 400 KB (a 300×220 GIF of about 94 KB is ideal).', 'GIF etambula eraga ku mabbali g\'akafaananyi k\'omuntu waggulu ku ttabu lya Akaawunti. Obwereere bukuumibwa. Eteekebwa nga bw\'eri okusobola okukuuma okutambula — buli kifo ky\'ebifaananyi ekirala wano kinyigirizibwa, ekyandifudde GIF ekifaananyi kimu ekiyimiridde. Gikuume ntono: ekkakkanyizibwa ku ssimu ya buli muntu, kale gezaako wansi wa 400 KB (GIF eya 300×220 eya 94 KB esinga obulungi).', 'GIF inayosogea inayoonyeshwa kando ya aikoni ya wasifu juu ya kichupo cha Akaunti. Uwazi huhifadhiwa. Hupakiwa kama ilivyo ili uhuishaji uendelee — kila nafasi nyingine ya picha hapa hubanwa upya, jambo ambalo lingeifanya GIF kuwa fremu moja tuli. Iweke ndogo: hupakuliwa kwenye simu ya kila mwanachama, kwa hivyo lenga chini ya 400 KB (GIF ya 300×220 ya takriban 94 KB ndiyo bora).', 'Un GIF animé affiché à côté de l\'icône de profil en haut de l\'onglet Compte de l\'application. La transparence est conservée. Téléversé tel quel pour que l\'animation survive — tous les autres emplacements d\'image ici sont recompressés, ce qui réduirait un GIF à une seule image fixe. Gardez-le petit : il se charge sur le téléphone de chaque membre, visez donc bien en dessous de 400 Ko (un GIF 300×220 d\'environ 94 Ko est idéal).', 'GIF inyeganyega igaragara iruhande rw\'agashushondanga k\'umwirondoro hejuru ku gice cya Konti cya porogaramu. Ububonerane burabikwa. Ishyirwaho uko iri kugira ngo inyeganyega idapfa — ahandi hose h\'amashusho hano hongera guhindurwa hato, bigatuma GIF iba ishusho imwe ihagaze. Igire nto: imanurwa kuri telefoni ya buri munyamuryango, bityo ugerageze munsi ya 400 KB (GIF ya 300×220 ya hafi 94 KB ni yo nziza).', 'GIF erikugyenda erikureeberwa aha rubaju rw\'akashushani k\'omuntu haiguru aha kacweka ka Akaunti. Obwereere nibukuumwa. Neetebekwa nk\'oku eri kugira ngo okugyenda kutafa — omwanya gwoona ogundi gw\'ebishushani hanu nigugarukamu kunyigwa, ekiraakuhindwire GIF ekishushani kimwe ekyemiriire. Gikuume enkye: neeihurwa aha nyabarugo ya buri muntu, n\'ahabw\'ekyo geezaho ahansi ya 400 KB (GIF ya 300×220 eya nka 94 KB niyo nungi.)'],
   ['Each country has its own subdomain, currency, dialling code and number shape. Its rates and its product prices are edited on the Settings and Products tabs with that country picked at the top. A member belongs to the country they signed up on, for good: they always see that country\'s currency and prices, even if they open another country\'s address. + 5 mints five short addresses at once. That is what Settings → Move arrivals to another address needs: it sends each new visitor on to a different one of this country\'s addresses, and with only one address there is nowhere to send them.', 'Buli ggwanga lirina subdomain yaalyo, ssente zaalyo, koodi y\'okukuba n\'engeri ya nnamba. Emiwendo gyalyo n\'ebbeeyi z\'ebyamaguzi bikyusibwa ku ttabu lya Settings ne Products ng\'eggwanga eryo lirondeddwa waggulu. Omuntu aba wa ggwanga lye yeewandiisizzaako, emirembe gyonna: bulijjo alaba ssente n\'ebbeeyi z\'eggwanga eryo, ne bw\'aggula endagiriro y\'eggwanga eddala. + 5 ekola endagiriro ttaano empi omulundi gumu. Ekyo kye kyetaagisa mu Settings → Move arrivals to another address: kisindika buli mugenyi omuggya ku ndagiriro ya ggwanga lino endala, ate nga tewali ndagiriro ndala tewali gy\'ayinza kusindikibwa.', 'Kila nchi ina kikoa chake kidogo, sarafu yake, msimbo wa kupiga simu na umbo la namba. Viwango vyake na bei za bidhaa zake huhaririwa kwenye vichupo vya Settings na Products nchi hiyo ikiwa imechaguliwa hapo juu. Mwanachama ni wa nchi aliyojisajili, milele: huona daima sarafu na bei za nchi hiyo, hata akifungua anwani ya nchi nyingine. + 5 hutengeneza anwani fupi tano kwa mara moja. Ndicho kinachohitajika na Settings → Move arrivals to another address: hupeleka kila mgeni mpya kwenye anwani nyingine ya nchi hii, na kwa anwani moja tu hakuna pa kumpeleka.', 'Chaque pays a son propre sous-domaine, sa devise, son indicatif et sa forme de numéro. Ses taux et les prix de ses produits se modifient dans les onglets Settings et Products avec ce pays sélectionné en haut. Un membre appartient au pays où il s\'est inscrit, définitivement : il voit toujours la devise et les prix de ce pays, même s\'il ouvre l\'adresse d\'un autre pays. + 5 crée cinq adresses courtes d\'un coup. C\'est ce dont Settings → Move arrivals to another address a besoin : il envoie chaque nouveau visiteur vers une autre adresse de ce pays, et avec une seule adresse il n\'y a nulle part où l\'envoyer.', 'Buri gihugu gifite urubuga rwacyo rwungirije, ifaranga ryacyo, kode yo guhamagara n\'isura ya nimero. Ibipimo byacyo n\'ibiciro by\'ibicuruzwa byacyo bihindurirwa ku bice bya Settings na Products icyo gihugu gitoranyijwe haruguru. Umunyamuryango ni uw\'igihugu yiyandikishijemo, burundu: ahora abona ifaranga n\'ibiciro by\'icyo gihugu, n\'iyo yafungura aderesi y\'ikindi gihugu. + 5 ikora aderesi ngufi eshanu icyarimwe. Ni byo Settings → Move arrivals to another address ikeneye: yohereza buri mushyitsi mushya ku yindi aderesi y\'iki gihugu, kandi iyo hari aderesi imwe gusa nta ho yoherezwa.', 'Buri ihanga riine subdomain yaaryo, sente zaaryo, koodi y\'okuteera n\'enshusha ya namba. Emiihendo yaaryo n\'ebiihendo by\'ebyamaguzi byaryo nibihindurirwa aha bicweka bya Settings na Products eihanga eryo riracwiirwemu haiguru. Omuntu n\'ow\'eihanga eri yeeyandiisizemu, ebiro byoona: obutoosha naareeba sente n\'ebiihendo by\'eihanga eryo, n\'obu yaakwigura endagiriro y\'eihanga erindi. + 5 neekora endagiriro ishaanu enguufu omurundi gumwe. Ekyo nikyo Settings → Move arrivals to another address erikwetenga: neetuma buri mugyenyi omusya aha ndagiriro endiijo y\'eihanga eri, kandi ku hakubaho endagiriro emwe yonka tihariho ei arikubaasa kutumwa.'],
-  ['Manual payments', 'Okusasula n\'engalo', 'Malipo ya mkono', 'Paiements manuels', 'Kwishyura n\'intoki', 'Okushashura n\'engaro'],
   ['The platform\'s name. Changing it renames it everywhere inside the app — the Home wordmark, the profile badge, the loading and sign-in screens, About, Get the app, the browser tab, and the wording on admin credits from now on. Members see it the next time they open the app. Two places keep the old name until the frontend is re-uploaded: the name Android shows under the installed icon, and the title on a shared link — both are read out of files the phone downloads once, not from these settings. Up to 24 characters.', 'Erinnya ly\'ekitongole. Okulikyusa kukyusa erinnya buli wantu mu app — akabonero ka Home, akapapula k\'omuntu, olupapula olw\'okutegeka n\'olw\'okuyingira, Ebikwata Ku Ffe, Funa app, ttabu lya bbulawuza, n\'ebigambo ku ssente ezongerwa bakulembeze okuva kati. Abantu baliraba omulundi oguddako lwe bajja okuggula app. Ebifo bibiri bisigala n\'erinnya ery\'edda okutuusa ng\'ebweru bwa app bizzeemu okuteekebwa: erinnya Android ly\'eraga wansi w\'akafaananyi, n\'omutwe ku kkubo erigabanibwa — byombi bisomebwa okuva mu fayiro essimu z\'ekkakkanya omulundi gumu, si okuva mu biteeso bino. Okutuuka ku nnukuta 24.', 'Jina la jukwaa. Kulibadilisha hulibadilisha kila mahali ndani ya programu — nembo ya Nyumbani, beji ya wasifu, skrini za kupakia na kuingia, Kutuhusu, Pata programu, kichupo cha kivinjari, na maneno kwenye salio zinazoongezwa na msimamizi kuanzia sasa. Wanachama huliona wakati mwingine watakapofungua programu. Sehemu mbili hubaki na jina la zamani hadi sehemu ya mbele itakapopakiwa upya: jina Android inaloonyesha chini ya aikoni iliyosakinishwa, na kichwa kwenye kiungo kilichoshirikiwa — vyote husomwa kutoka faili ambazo simu hupakua mara moja, si kutoka mipangilio hii. Hadi herufi 24.', 'Le nom de la plateforme. Le changer le renomme partout dans l\'application — le logotype de l\'Accueil, le badge du profil, les écrans de chargement et de connexion, À propos, Obtenir l\'application, l\'onglet du navigateur, et le libellé des crédits administrateur à partir de maintenant. Les membres le voient à la prochaine ouverture de l\'application. Deux endroits gardent l\'ancien nom jusqu\'au prochain téléversement du frontend : le nom qu\'Android affiche sous l\'icône installée, et le titre d\'un lien partagé — les deux sont lus dans des fichiers que le téléphone télécharge une fois, pas depuis ces réglages. Jusqu\'à 24 caractères.', 'Izina ry\'urubuga. Kurihindura birihindura hose imbere muri porogaramu — ikirango cya Ahabanza, akarango k\'umwirondoro, amapaji yo gupakira no kwinjira, Ibyerekeye, Kubona porogaramu, igice cy\'umushakisha, n\'amagambo ku mafaranga ubuyobozi bwongera kuva ubu. Abanyamuryango barirebera ubutaha bafunguye porogaramu. Ahantu habiri hagumana izina rya kera kugeza igice cy\'imbere cyongeye gushyirwaho: izina Android yerekana munsi y\'agashushondanga kashyizweho, n\'umutwe ku murongo wasangiwe — byombi bisomwa muri dosiye telefoni imanura rimwe, atari muri aya magenamiterere. Kugeza ku nyuguti 24.', 'Eiziina ry\'ekitongore. Okurihindura nikihindura eiziina hoona omunda ya puroguramu — akamanyiso ka Home, akapapura k\'omuntu, orupapura rw\'okutebeka n\'orw\'okutaaha, Ebirikutukwataho, Tunga puroguramu, akacweka ka buraawuza, n\'ebigambo aha sente ezirikwongyerwa abebembezi kuruga hati. Abantu nibaza kurireeba omurundi ogurikwija ku barikwigura puroguramu. Ebifo bibiri nibisigara n\'eiziina rya ira okuhitsya obu aha rubaju rw\'omu maisho harigaruka kutaho: eiziina Android eri kworeka ahansi y\'akashushani akatairweho, n\'omutwe aha muhanda ogurikugabanwa — byombi nibishomwa kuruga omu mafaira agu esimu erikwihura omurundi gumwe, ti kuruga omu ntebeka ezi. Okuhitsya aha buhandiiko 24.'],
   ['Times are 24-hour, in the selected country\'s own local time. The window may run past midnight — set 18:00 to 17:00 and cash-out is open all day except between 17:00 and 18:00. Members always see exactly these hours, and the server refuses a request outside them, not just the app.', 'Ebiseera bya ssaawa 24, mu budde bw\'eggwanga eriroNdeddwa. Ekiseera kiyinza okuyita mu ttumbi — teeka 18:00 okutuuka 17:00 n\'okuggyamu ssente kuggulwa olunaku lwonna okuggyako wakati wa 17:00 ne 18:00. Abantu bulijjo balaba essaawa zino nga bwe ziri, era sseva egaana okusaba okuli ebweru waazo, si app yokka.', 'Nyakati ni za saa 24, kwa saa za nchi iliyochaguliwa. Dirisha linaweza kupita usiku wa manane — weka 18:00 hadi 17:00 na utoaji hufunguka siku nzima isipokuwa kati ya 17:00 na 18:00. Wanachama huona daima saa hizi hasa, na seva hukataa ombi lililo nje yake, si programu tu.', 'Les heures sont au format 24 heures, dans l\'heure locale du pays sélectionné. La fenêtre peut passer minuit — réglez 18:00 à 17:00 et le retrait est ouvert toute la journée sauf entre 17:00 et 18:00. Les membres voient toujours exactement ces heures, et le serveur refuse une demande en dehors, pas seulement l\'application.', 'Amasaha ni ay\'amasaha 24, mu gihe cy\'igihugu cyatoranyijwe. Idirishya rishobora kurenga saa sita z\'ijoro — shyira 18:00 kugeza 17:00 maze kubikuza bigafungurwa umunsi wose usibye hagati ya 17:00 na 18:00. Abanyamuryango bahora babona neza aya masaha, kandi seriveri yanga ubusabe buri hanze yayo, atari porogaramu gusa.', 'Obwire n\'obw\'eshaaha 24, omu bwire bw\'eihanga eryacwiirwemu. Obwire nibubaasa kuraba omu kiro — ta 18:00 okuhika 17:00 reero okwihamu sente kwigurwe eizooba ryoona kureka ahagati ya 17:00 na 18:00. Abantu obutoosha nibareeba eshaaha ezi nk\'oku ziri, kandi seeva neeyanga okushaba okuri aheeru yaazo, ti puroguramu yonka.'],
   ['Show a picture on shared links', 'Laga ekifaananyi ku nnyiriri ezigabanyizibwa', 'Onyesha picha kwenye viungo vinavyoshirikiwa', 'Afficher une image sur les liens partagés', 'Erekana ifoto ku mirongo isangiwe', 'Yoreka ekishushani aha mihanda egabanwa'],
@@ -4332,7 +3818,6 @@ const ADMIN_LANG_ROWS = [
   ['Download screen background', 'Ekifaananyi eky\'emabega ku lupapula lw\'okudaunloodinga', 'Mandhari ya skrini ya kupakua', 'Fond de l\'écran de téléchargement', 'Mbuganyuma y\'urupapuro rwo kumanura', 'Ekishushani ky\'enyima aha rupapura rw\'okuteekyera'],
   ['Profile animation', 'Ekifaananyi ekitambula ku profayiro', 'Uhuishaji wa wasifu', 'Animation du profil', 'Ishusho inyeganyega ku mwirondoro', 'Ekishushani ekirikugyenda aha profairo'],
   ['Link preview', 'Ekifaananyi ky\'ekinywanyizo', 'Muhtasari wa kiungo', 'Aperçu du lien', 'Incamake y\'umurongo', 'Ekishushani ky\'omukwate'],
-  ['Manual payment screen images', 'Ebifaananyi by\'olupapula lw\'okusasula n\'emikono', 'Picha za skrini ya malipo ya mkono', 'Images de l\'écran de paiement manuel', 'Amashusho y\'urupapuro rwo kwishyura intoki', 'Ebishushani by\'orupapura rw\'okushashura n\'emikono'],
   ['Login & Sign Up screen', 'Olupapula lw\'okuyingira n\'okwewandiisa', 'Skrini ya kuingia na kujisajili', 'Écran de connexion et d\'inscription', 'Urupapuro rwo kwinjira no kwiyandikisha', 'Orupapura rw\'okutaaha n\'okwehandiisa'],
   ['2. The form card (behind the fields)', '2. Kaadi y\'ebibuuzo (emabega w\'ebifo ebijjuzibwa)', '2. Kadi ya fomu (nyuma ya sehemu za kuandika)', '2. La carte du formulaire (derrière les champs)', '2. Ikarita y\'ifishi (inyuma y\'imyanya yuzuzwa)', '2. Ekaadi y\'ebibuuzo (enyima y\'ebyanya ebirikwijuzibwa)'],
   ['Opacity (0–100%)', 'Obuzibu bw\'ekifaananyi (0–100%)', 'Uzito wa rangi (0–100%)', 'Opacité (0–100 %)', 'Ubwijime bw\'ishusho (0–100%)', 'Obuzibu bw\'ekishushani (0–100%)'],
@@ -4425,13 +3910,11 @@ const ADMIN_LANG_ROWS = [
   ['Could not read the PesaJet summary', 'Tekisobose kusoma bufunze bwa PesaJet', 'Haikuweza kusoma muhtasari wa PesaJet', 'Impossible de lire le récapitulatif PesaJet', 'Ntibyashobotse gusoma incamake ya PesaJet', 'Tikirikubaasa kusoma enkomeko ya PesaJet'],
   ['Each browser/installed-app registers itself when you tap "Notify" up top -- a device can occasionally end up registered twice (e.g. after a browser update rotates its token), which shows up as the same alert arriving more than once on one phone.', 'Buli bbulawuza oba app eyateekebwawo yeewandiisa bw\'okuba nga onyiga "Manyisa" waggulu -- oluusi ekyuma kiyinza okwewandiisa emirundi ebiri (ng\'ekyokulabirako, bbulawuza bw\'efuna enkyukakyuka), ekiraga ng\'obubaka bwe bumu butuuka emirundi mingi ku ssimu emu.', 'Kila kivinjari au programu iliyosakinishwa hujisajili unapogusa "Arifa" hapo juu -- wakati mwingine kifaa kinaweza kujisajili mara mbili (mfano baada ya kivinjari kusasishwa na tokeni kubadilika), jambo linaloonekana kama arifa ile ile kufika zaidi ya mara moja kwenye simu moja.', 'Chaque navigateur ou application installée s\'enregistre lorsque vous touchez "Notifier" en haut -- un appareil peut parfois se retrouver enregistré deux fois (par exemple après une mise à jour du navigateur qui change son jeton), ce qui se voit quand la même alerte arrive plusieurs fois sur un seul téléphone.', 'Buri mushakisha cyangwa porogaramu yashyizweho yiyandikisha iyo ukanze "Menyesha" haruguru -- rimwe na rimwe igikoresho gishobora kwiyandikisha kabiri (urugero nyuma y\'uko umushakisha uvugururwa ugahindura ikimenyetso cyacyo), bikagaragara nk\'ubutumwa bumwe bugera kuri telefoni imwe inshuro nyinshi.', 'Buri buraawuza nari puroguramu eyataireho neeyandiisa waaba nokanda "Manyisa" haiguru -- obumwe ekyoma nikibaasa kwe-yandiisa emirundi ebiri (nk\'oku buraawuza erikuhinduka), ekirikworeka obutumwa bumwe nibuhika emirundi mingi aha nyabarugo emwe.'],
   ['A daily free spin for every member, plus extra spins earned by buying products. Winnings are credited straight to the wallet and show under the Turntable tab of Balance Record.', 'Okukyusa kwa buli lunaku okw\'obwereere eri buli muntu, n\'okukyusa okulala okufunibwa nga bagula ebyamaguzi. Ssente ezifunibwa ziteekebwa butereevu mu nsawo era zirabika ku ttabu lya Kanyoolera mu Kyapa ky\'Ssente.', 'Mzunguko wa bure kila siku kwa kila mwanachama, pamoja na mizunguko ya ziada inayopatikana kwa kununua bidhaa. Ushindi huwekwa moja kwa moja kwenye pochi na huonekana chini ya kichupo cha Gurudumu kwenye Rekodi ya Salio.', 'Un tour gratuit par jour pour chaque membre, plus des tours supplémentaires gagnés en achetant des produits. Les gains sont crédités directement au portefeuille et apparaissent sous l\'onglet Roue du Relevé de solde.', 'Uruziga rw\'ubuntu buri munsi kuri buri munyamuryango, hiyongeraho izindi nzunguruka zibonwa mu kugura ibicuruzwa. Ibyatsindiwe bishyirwa ako kanya mu ikofi kandi bigaragara mu gice cy\'Uruziga rw\'Inyandiko y\'Amafaranga.', 'Okuzunguka kw\'obusa buri izooba ahari buri mwanamuryango, hamwe n\'okuzunguka okundi okurikutungwa omu kugura ebyamaguzi. Sente ezitungirwe nizita omu nsaho ahonaaho kandi nizireeberwa omu kacweka ka Kanyoolera omu Kyapa kya Sente.'],
-  ['A member is assigned one of these round-robin the moment Manual is active above -- give each one a real holder name, it\'s shown to the member so they know who they\'re sending to.', 'Omuntu aweebwa emu ku zino nga bakwatagana bwe bati amangu ddala nga Manual eri nga ekola waggulu -- buli emu giwe erinnya lya nannyini yo ery\'amazima, kubanga liraga omuntu asindika asobole okumanya gw\'asindikira.', 'Mwanachama hupewa mojawapo ya hizi kwa zamu mara tu Manual inapowashwa hapo juu -- kila moja ipe jina halisi la mmiliki, kwa sababu mwanachama huliona ili ajue anamtumia nani.', 'Un membre se voit attribuer l\'un de ces numéros à tour de rôle dès que Manuel est actif ci-dessus -- donnez à chacun un vrai nom de titulaire, il est montré au membre pour qu\'il sache à qui il envoie.', 'Umunyamuryango ahabwa kimwe muri ibi ku buryo bukurikirana ako kanya iyo Manual ikoresheje haruguru -- buri kimwe ugihe izina nyaryo rya nyiracyo, kuko umunyamuryango arirebera amenye uwo yoherereza.', 'Omuntu naaheebwa emwe aha ezi nk\'oku zirikukuratana obu Manual erikukora haiguru -- buri emwe ogihe eiziina rya nyineyo eriyo buzima, ahakuba omuntu naaryereeba amanye ou arikutumira.'],
   ['A request above the max amount is skipped and left Pending for you to approve by hand. It does not block smaller requests behind it in the queue. Set to 0 to auto-approve every amount.', 'Okusaba okusukka ku muwendo ogusinga obunene kubuukibwa ne kulekebwa nga Kulindiriddwa osobole okukukkiriza n\'engalo. Tekuziyiza kusaba okutono okuli emabega waakwo mu lunyiriri. Teeka ku 0 okukkiriza buli muwendo mu bwengula.', 'Ombi linalozidi kiasi cha juu huachwa na kubaki Linasubiri ili uliidhinishe kwa mkono. Halizuii maombi madogo yaliyo nyuma yake kwenye foleni. Weka 0 ili kuidhinisha kila kiasi kiotomatiki.', 'Une demande supérieure au montant maximum est ignorée et laissée En attente pour que vous l\'approuviez à la main. Elle ne bloque pas les demandes plus petites derrière elle dans la file. Mettez 0 pour approuver automatiquement tout montant.', 'Ubusabe burenze umubare ntarengwa burasimburwa bugasigara ku Butegereje kugira ngo ubwemeze n\'intoki. Ntibubuza ubusabe buto buri inyuma yabwo ku murongo. Shyira 0 kugira ngo buri mubare wemezwe wenyine.', 'Okushaba okurikukira omuhendo ogurikukira kubaasa nikubuukwa kikasigara nka Kirikutegyerezibwa kugira ngo okyikirize n\'engaro. Tikirikuzibira okushaba okukye okuri enyima yaakyo omu murongo. Ta aha 0 kugira ngo buri muhendo gwikirizibwe gwenka.'],
   ['A YouTube link will not work. The app would fetch YouTube\'s web page, not a video, so the banner would sit blank — and a YouTube player cannot be silenced, untapped or made to autoplay reliably. Download the clip as MP4 and upload it here instead.', 'Ekkubo lya YouTube terikola. App yandinzeeko olupapula lwa YouTube, si vidiyo, kale akabaawo kandisigadde nga kalimu bbwereere — ate YouTube tesobola kusirisibwa, kulekebwa nga tekakwatibwa, oba okukola yokka bulijjo. Kkakkanya vidiyo nga MP4 ogiteeke wano.', 'Kiungo cha YouTube hakitafanya kazi. Programu ingepakua ukurasa wa wavuti wa YouTube, si video, kwa hivyo bango lingebaki tupu — na kicheza cha YouTube hakiwezi kunyamazishwa, kuzuiwa kuguswa, wala kuchezeshwa chenyewe kwa uhakika. Pakua klipu kama MP4 kisha uipakie hapa badala yake.', 'Un lien YouTube ne fonctionnera pas. L\'application chargerait la page web de YouTube, pas une vidéo, donc la bannière resterait vide — et un lecteur YouTube ne peut pas être mis en sourdine, rendu intouchable ni lancé automatiquement de façon fiable. Téléchargez le clip en MP4 et déposez-le ici à la place.', 'Umurongo wa YouTube ntuzakora. Porogaramu yaza gufata urupapuro rwa YouTube, atari videwo, bityo ikirango kikaguma ubusa — kandi igikinisho cya YouTube ntigishobora guceceka, kudakandwa, cyangwa gutangira cyonyine mu buryo bwizewe. Manura videwo nka MP4 uyishyire hano ahubwo.', 'Omuhanda gwa YouTube tigurikukora. Puroguramu yakugyendiire orupapura rwa YouTube, ti vidiyo, n\'ahabw\'ekyo ekirango kyakusigaire kiri busha — kandi ekizaanisa kya YouTube tikirikubaasa kusirisibwa, kutakwatwa, nari kwetandika kyonka buzima. Ihura vidiyo nka MP4 ogite hanu omu mwanya gw\'ekyo.'],
   ['Addresses that must never serve the app, on top of the root domain. Your Render and EdgeOne addresses are permanently exempt, so a mistake here cannot lock you out of this panel.', 'Endagiriro ezitateekwa kuweereza app, okwongera ku root domain. Endagiriro zo eza Render ne EdgeOne tezikwatibwa n\'akatono, kale ensobi wano teyinza kukuggalirawo bweru w\'ekifo kino.', 'Anwani ambazo hazipaswi kamwe kuhudumia programu, zaidi ya kikoa cha msingi. Anwani zako za Render na EdgeOne zimesamehewa kabisa, kwa hivyo kosa hapa haliwezi kukufungia nje ya paneli hii.', 'Adresses qui ne doivent jamais servir l\'application, en plus du domaine racine. Vos adresses Render et EdgeOne en sont exemptées de façon permanente, donc une erreur ici ne peut pas vous enfermer dehors de ce panneau.', 'Aderesi zitagomba na rimwe gutanga porogaramu, hiyongereye ku izina ry\'urufatiro. Aderesi zawe za Render na EdgeOne zisonewe burundu, bityo ikosa hano ntirishobora kugukumira kuri iyi paneli.', 'Endagiriro ezitashemereire kuheereza puroguramu, hamwe na root domain. Endagiriro zaawe eza Render na EdgeOne tizirikukwatwa, n\'ahabw\'ekyo ekishobi hanu tikirikubaasa kukuzibira kutaaha omu kacweka aka.'],
   ['Both thumbnails sit on a checkerboard, so you can see straight away whether the background really came off. Only background touching the EDGE of the picture is removed — black inside the artwork, an outline or dark lettering, is left alone. Untick the box to upload a logo exactly as it is.', 'Ebifaananyi byombi ebitono biteekebwa ku kibaawo eky\'ebibbo, osobole okulaba amangu oba emabega lyagenda ddala. Emabega erikwata ku MABBALI g\'ekifaananyi lyokka lye liggyibwako — enzirugavu eri munda mu kifaananyi, olukoloboze oba ennukuta enzirugavu, tebikwatibwako. Ggyako akabokisi okuteeka ekifaananyi nga bwe kiri.', 'Picha zote mbili ndogo huwekwa kwenye ubao wa cheki, ili uone mara moja kama mandharinyuma yaliondoka kweli. Ni mandharinyuma yanayogusa PEMBEZONI mwa picha pekee yanayoondolewa — weusi ulio ndani ya mchoro, mstari au herufi nyeusi, huachwa. Ondoa alama kwenye kisanduku ili kupakia nembo kama ilivyo.', 'Les deux vignettes reposent sur un damier, pour que vous voyiez tout de suite si le fond est vraiment parti. Seul le fond qui touche le BORD de l\'image est retiré — le noir à l\'intérieur du dessin, un contour ou des lettres sombres, est laissé tel quel. Décochez la case pour téléverser un logo exactement tel qu\'il est.', 'Amashusho yombi mato ashyirwa ku kibaho gifite utubariro, kugira ngo ubone ako kanya niba inyuma koko yavuyeho. Gusa inyuma ikora ku MPERA y\'ishusho ni yo ikurwaho — umukara uri imbere mu gishushanyo, umurongo cyangwa inyuguti zijimye, bisigara uko biri. Kuraho akamenyetso kugira ngo ushyire ikirango uko kimeze.', 'Ebishushani byombi ebikye nibitebekwa aha kibaaho eky\'ebibaati, kugira ngo oreebe ahonaaho yaaba enyima ekagyendaho buzima. Ni enyima erikukwata aha MPERA y\'ekishushani yonka erikwihwaho — omukara oguri omunda y\'ekishushani, orurongo nari ebihandiiko ebikwatsiire, nibisigara. Ihaho akabokisi kugira ngo oteeho ekirango nk\'oku kiri.'],
   ['Build the About page as an ordered list of blocks. Add as many text blocks and images as you like, in any order (an image doesn\'t need to follow every paragraph, and you can skip images entirely). Members see each block animate in as they scroll down.', 'Zimba olupapula lwa Ebikwata Ku Ffe ng\'olukalala lw\'ebitundu olutegekeddwa. Yongerako ebitundu by\'ebiwandiiko n\'ebifaananyi nga bw\'oyagala, mu nteekateeka yonna (ekifaananyi tekyetaagisa kugoberera buli katundu, era osobola obutateekamu bifaananyi n\'akamu). Abantu balaba buli katundu nga kajja nga baserengeta.', 'Jenga ukurasa wa Kutuhusu kama orodha ya vipande iliyopangwa. Ongeza vipande vya maandishi na picha kadri utakavyo, kwa mpangilio wowote (picha si lazima ifuate kila aya, na unaweza kuacha picha kabisa). Wanachama huona kila kipande kikijitokeza wanaposogeza chini.', 'Construisez la page À propos comme une liste ordonnée de blocs. Ajoutez autant de blocs de texte et d\'images que vous voulez, dans n\'importe quel ordre (une image n\'a pas besoin de suivre chaque paragraphe, et vous pouvez ne mettre aucune image). Les membres voient chaque bloc apparaître en faisant défiler.', 'Ubaka urupapuro rwa Ibyerekeye nk\'urutonde rutondekanyije rw\'ibice. Ongeraho ibice by\'inyandiko n\'amashusho uko ushaka, mu buryo ubwo ari bwo bwose (ishusho ntigomba gukurikira buri gika, kandi ushobora kutayishyiramo na gato). Abanyamuryango babona buri gice kigaragara mu gihe bamanuka.', 'Ombeka orupapura rwa Ebirikutukwataho nk\'orutonde rw\'ebicweka orutebekanisiibwe. Ongyeraho ebicweka by\'ebihandiiko n\'ebishushani nk\'oku orikwenda, omu ntebekanisa yoona (ekishushani tikirikwetenga kukuratira buri kacweka, kandi nobaasa kutata bishushani). Abantu nibareeba buri kacweka nikaija ku barikwikiriza ahansi.'],
-  ['By default payouts follow PAY A\'s own automatic gateway above. Pin them here if you want the two directions to differ, for example manual recharges with PesaJet payouts, or the reverse.', 'Mu butonde, okusasula kugoberera omulyango gwa PAY A ogwekolera gwokka waggulu. Gukwatirire wano bw\'oba oyagala amakubo gombi okwawukana, ng\'ekyokulabirako okuteekamu ssente n\'engalo n\'okusasula okuyita mu PesaJet, oba ekinaakyo.', 'Kwa kawaida malipo hufuata lango la kiotomatiki la PAY A hapo juu. Yabandike hapa ikiwa unataka pande hizo mbili zitofautiane, mfano kuweka pesa kwa mkono na malipo kupitia PesaJet, au kinyume chake.', 'Par défaut, les versements suivent la passerelle automatique de PAY A ci-dessus. Fixez-les ici si vous voulez que les deux sens diffèrent, par exemple des recharges manuelles avec des versements PesaJet, ou l\'inverse.', 'Mu buryo busanzwe, kwishyura bikurikira irembo ryikora rya PAY A haruguru. Bihambire hano niba ushaka ko impande zombi zitandukana, urugero kongeramo amafaranga n\'intoki hamwe no kwishyura binyuze kuri PesaJet, cyangwa ibinyuranye.', 'Omu muringo ogusangwa, okushashura nikukuratira omuryango gwa PAY A ogurikwekorera haiguru. Gukwatirire hanu ku orikwenda emihanda yombi kwahukana, nk\'eky\'okureeberaho okuta sente n\'engaro hamwe n\'okushashura kurabire aha PesaJet, nari ekinaakyo.'],
   ['Each claim rolls its own random reward between min and max (down to the cent) -- one person might get 123.39, another 234.89. Set min and max the same for a fixed reward instead. Leave expiry blank for a code that never expires.', 'Buli kukwata kufuna empeera yaakwo ey\'okulonda wakati wa min ne max (okutuuka ku ssente entono) -- omuntu omu ayinza okufuna 123.39, omulala 234.89. Teeka min ne max okuba omuwendo gwe gumu okufuna empeera etakyuka. Leka ekiseera eky\'okukoma nga kyereere ku koodi etakoma.', 'Kila dai hujichagulia zawadi yake kwa nasibu kati ya kiwango cha chini na cha juu (hadi senti) -- mtu mmoja anaweza kupata 123.39, mwingine 234.89. Weka kiwango cha chini na cha juu sawa ili kupata zawadi isiyobadilika. Acha tarehe ya mwisho wazi kwa msimbo usioisha.', 'Chaque réclamation tire sa propre récompense au hasard entre le minimum et le maximum (au centime près) -- une personne peut recevoir 123,39, une autre 234,89. Mettez le minimum et le maximum identiques pour une récompense fixe. Laissez l\'expiration vide pour un code qui n\'expire jamais.', 'Buri gusaba bifata igihembo cyabyo ku buryo butunguranye hagati y\'umubare muto n\'umunini (kugeza ku isantime) -- umuntu umwe ashobora kubona 123,39, undi 234,89. Shyira umubare muto n\'umunini bingana kugira ngo igihembo gihame. Reka itariki yo kurangira ubusa kugira ngo kode itarangira.', 'Buri kushaba nikutunga empeera yaakwo ey\'okucwamu ahagati ya min na max (okuhika aha sente enkye) -- omuntu omwe naabaasa kutunga 123.39, ondiijo 234.89. Ta min na max kuba emwe kugira ngo empeera ehame. Reka obwire bw\'okuhweraho buri busha ahari koodi etarikuhwaho.'],
   ['Each member gets one free spin per day, resetting at midnight (EAT). The win is a random amount between these two. Set them to the SAME number for a fixed amount every time.', 'Buli muntu afuna okukyusa kumu okw\'obwereere buli lunaku, nga kuzzibwawo mu ttumbi (EAT). Ekiwangulwa muwendo gwa kulonda wakati w\'ebino byombi. Bitereeze ku muwendo GWE GUMU okufuna omuwendo ogutakyuka buli mulundi.', 'Kila mwanachama hupata mzunguko mmoja wa bure kwa siku, unaoanza upya usiku wa manane (EAT). Ushindi ni kiasi cha nasibu kati ya hivi viwili. Viweke kwenye namba ILE ILE ili kupata kiasi kisichobadilika kila mara.', 'Chaque membre reçoit un tour gratuit par jour, remis à zéro à minuit (EAT). Le gain est un montant tiré au hasard entre ces deux valeurs. Mettez-les au MÊME nombre pour un montant fixe à chaque fois.', 'Buri munyamuryango ahabwa uruziga rumwe rw\'ubuntu ku munsi, rusubira ku busa mu gicuku (EAT). Igihembo ni umubare utunguranye hagati y\'iyi mibare ibiri. Uyishyire ku mubare UMWE kugira ngo igihembo gihore kimwe.', 'Buri muntu naatunga okuzunguka kumwe okw\'obusa buri izooba, nikugarukamu omu kiro (EAT). Eki arikutunga n\'omuhendo gw\'okucwamu ahagati y\'ebi byombi. Bite aha muhendo OGWO GWONKA kugira ngo omuhendo gube gumwe buri mwanya.'],
   ['Every country\'s short address is built from this — g26e becomes g26e.<base domain>. Set the short names per country on the Countries tab.', 'Endagiriro ennyimpi eya buli ggwanga ezimbibwa okuva ku eno — g26e efuuka g26e.<base domain>. Teeka amannya amampi buli ggwanga ku ttabu lya Amawanga.', 'Anwani fupi ya kila nchi hujengwa kutoka hapa — g26e inakuwa g26e.<base domain>. Weka majina mafupi kwa kila nchi kwenye kichupo cha Nchi.', 'L\'adresse courte de chaque pays est construite à partir de ceci — g26e devient g26e.<base domain>. Définissez les noms courts par pays dans l\'onglet Pays.', 'Aderesi ngufi ya buri gihugu yubakwa kuri iyi — g26e iba g26e.<base domain>. Shyiraho amazina magufi kuri buri gihugu ku gice cy\'Ibihugu.', 'Endagiriro enguufu ya buri ihanga neyombekwa kuruga aha egi — g26e neehinduka g26e.<base domain>. Ta amaziina amaguufu aha buri ihanga omu kacweka k\'Amahanga.'],
@@ -4441,11 +3924,8 @@ const ADMIN_LANG_ROWS = [
   ['Paste a web address to find out which country it shows, and why. Use this whenever a subdomain behaves oddly — wrong currency, a correct password refused, or a referral code rejected.', 'Teeka endagiriro y\'omukutu okumanya ggwanga ki ly\'eraga, n\'ensonga lwaki. Kozesa kino buli lwe subdomain bw\'ekola bubi — ssente ez\'ekyamu, ekisumuluzo ekituufu okugaanidwa, oba koodi y\'okuyita okugaanidwa.', 'Bandika anwani ya wavuti ili kujua ni nchi gani inaonyesha, na kwa nini. Tumia hii kila mara kikoa kidogo kinapofanya vibaya — sarafu isiyo sahihi, nenosiri sahihi kukataliwa, au msimbo wa mwaliko kukataliwa.', 'Collez une adresse web pour savoir quel pays elle affiche, et pourquoi. Utilisez ceci chaque fois qu\'un sous-domaine se comporte bizarrement — mauvaise devise, mot de passe correct refusé, ou code de parrainage rejeté.', 'Komeka aderesi ya interineti kugira ngo umenye igihugu igaragaza, n\'impamvu. Koresha ibi igihe cyose urubuga rwungirije rukora nabi — ifaranga ritari ryo, ijambobanga ryiza ryanzwe, cyangwa kode yo gutumira yanzwe.', 'Ta endagiriro y\'omutandaao kugira ngo omanye eihanga eri kworeka, n\'ahabw\'enki. Koresa eki obwiraaboona subdomain neekora kubi — sente ezitari zo, ekishumuruzo ekihikire kyangirwe, nari koodi y\'okweta yaangirwe.'],
   ['Paste any link (e.g. a WhatsApp group invite, https://chat.whatsapp.com/...) directly into the message -- it becomes tappable text automatically, right where you typed it.', 'Teeka ekkubo lyonna (ng\'ekyokulabirako okuyita mu ggwanika lya WhatsApp, https://chat.whatsapp.com/...) butereevu mu bubaka -- lifuuka ebiwandiiko ebikwatibwako bwokka, mu kifo we walitadde.', 'Bandika kiungo chochote (mfano mwaliko wa kikundi cha WhatsApp, https://chat.whatsapp.com/...) moja kwa moja kwenye ujumbe -- huwa maandishi yanayogusika chenyewe, pale pale ulipoandika.', 'Collez n\'importe quel lien (par exemple une invitation à un groupe WhatsApp, https://chat.whatsapp.com/...) directement dans le message -- il devient automatiquement un texte cliquable, là où vous l\'avez tapé.', 'Komeka umurongo uwo ari wo wose (urugero ubutumire bw\'itsinda rya WhatsApp, https://chat.whatsapp.com/...) mu butumwa -- uhita uba inyandiko ikandwa, aho wanditse.', 'Ta omuhanda gwoona (nk\'eky\'okureeberaho okweta omu kibiina kya WhatsApp, https://chat.whatsapp.com/...) omu butumwa -- niguhinduka ebihandiiko ebirikukwatwaho gwonka, aho oguteire.'],
   ['Phones that already installed the app keep the old icon. Android copies the icon onto the home screen at install time and does not go back for it. To see a new icon on a phone that already has the app, remove it and install it again. New installs get the new icon straight away.', 'Essimu ezaateekawo dda app zisigala n\'akafaananyi ak\'edda. Android ekoppa akafaananyi n\'akateeka ku lupapula olusooka nga app eteekebwawo, era teddayo kukanoonya. Okulaba akafaananyi akapya ku ssimu erina dda app, ggyawo app ogiteekewo nate. Ezitandikawo obuggya zifuna akafaananyi akapya amangu.', 'Simu ambazo tayari zimesakinisha programu hubaki na aikoni ya zamani. Android hunakili aikoni kwenye skrini ya nyumbani wakati wa usakinishaji na hairudi kuichukua tena. Ili kuona aikoni mpya kwenye simu iliyo na programu tayari, iondoe kisha isakinishe upya. Usakinishaji mpya hupata aikoni mpya mara moja.', 'Les téléphones qui ont déjà installé l\'application gardent l\'ancienne icône. Android copie l\'icône sur l\'écran d\'accueil au moment de l\'installation et ne revient jamais la chercher. Pour voir une nouvelle icône sur un téléphone qui a déjà l\'application, désinstallez-la puis réinstallez-la. Les nouvelles installations reçoivent tout de suite la nouvelle icône.', 'Telefoni zimaze gushyiraho porogaramu zigumana agashushondanga ka kera. Android ikoporora agashushondanga kuri ecran y\'ibanze igihe cyo gushyiraho kandi ntisubira kukazana. Kugira ngo ubone agashushondanga gashya kuri telefoni isanzwe ifite porogaramu, uyikureho hanyuma uyisubizeho. Abashya bahita babona agashushondanga gashya.', 'Enyabarugo ezaataireho puroguramu nizisigara n\'akashushani aka ira. Android neekopa akashushani ekakata aha rupapura orw\'omuka obu puroguramu erikutairweho kandi tegarukayo kukashaka. Kugira ngo oreebe akashushani akasya aha nyabarugo eyine puroguramu, gyiihaho oigarukyemu. Ezirikutandika obusya nizitunga akashushani akasya ahonaaho.'],
-  ['Shown on the manual-deposit code screen once the member picks that network. Use {{number}} and {{amount}} anywhere in the steps -- both are replaced with that member\'s own real account number and order amount. Leave a network blank to hide the section for it.', 'Kiraga ku lupapula lwa koodi ey\'okuteekamu ssente n\'engalo ng\'omuntu amaze okulonda netiwaka eyo. Kozesa {{number}} ne {{amount}} wonna mu ntambula -- byombi biddizibwa nnamba ya akawunti y\'omuntu oyo ne ssente z\'asaba. Leka netiwaka nga yereere okukweka ekitundu kyayo.', 'Huonyeshwa kwenye skrini ya msimbo wa amana ya mkono mara tu mwanachama anapochagua mtandao huo. Tumia {{number}} na {{amount}} popote kwenye hatua -- vyote hubadilishwa kuwa namba halisi ya akaunti ya mwanachama huyo na kiasi cha oda yake. Acha mtandao wazi ili kuficha sehemu yake.', 'Affiché sur l\'écran du code de dépôt manuel dès que le membre choisit ce réseau. Utilisez {{number}} et {{amount}} n\'importe où dans les étapes -- les deux sont remplacés par le vrai numéro de compte de ce membre et le montant de sa commande. Laissez un réseau vide pour masquer sa section.', 'Bigaragara ku ipaji rya kode yo gushyiramo amafaranga n\'intoki iyo umunyamuryango ahisemo urwo rusobe. Koresha {{number}} na {{amount}} ahantu hose mu ntambwe -- byombi bisimburwa na nimero nyayo ya konti y\'uwo munyamuryango n\'umubare w\'ubusabe bwe. Reka urusobe ubusa kugira ngo uhishe igice cyarwo.', 'Nikireeberwa aha rupapura rwa koodi y\'okuta sente n\'engaro obu omuntu arikucwamu neetiweeki egyo. Koresa {{number}} na {{amount}} hoona omu ntambura -- byombi nibigaruzibwamu namba ya akaunti y\'omuntu ogwo n\'omuhendo gw\'ebi arikushaba. Reka neetiweeki eri busha kugira ngo oshereke akacweka kaayo.'],
   ['Only if you put the file in the same upload as the app — type its name (for example banner.mp4), or paste a full https:// link to a video file. Saving here replaces an uploaded video, and uploading replaces this.', 'Kyokka bw\'oba oteeka fayiro mu kuteeka kwe kumu n\'app — wandiika erinnya lyayo (ng\'ekyokulabirako banner.mp4), oba oteeka ekkubo ekijjuvu erya https:// eridda ku fayiro ya vidiyo. Okutereka wano kiddira mu kifo kya vidiyo eyateekebwa, ate okuteeka vidiyo kiddira mu kifo kya kino.', 'Ni tu ikiwa umeweka faili katika upakiaji ule ule wa programu — andika jina lake (mfano banner.mp4), au bandika kiungo kamili cha https:// cha faili ya video. Kuhifadhi hapa hubadilisha video iliyopakiwa, na kupakia hubadilisha hii.', 'Seulement si vous mettez le fichier dans le même téléversement que l\'application — tapez son nom (par exemple banner.mp4), ou collez un lien https:// complet vers un fichier vidéo. Enregistrer ici remplace une vidéo téléversée, et téléverser remplace ceci.', 'Gusa niba washyize dosiye mu bwoherezwa bumwe na porogaramu — andika izina ryayo (urugero banner.mp4), cyangwa ukomeke umurongo wuzuye wa https:// werekeza kuri dosiye ya videwo. Kubika hano bisimbura videwo yashyizweho, no gushyiraho bisimbura ibi.', 'Kwonka ku oraate eifaira omu kuta kumwe na puroguramu — handiika eiziina ryayo (nk\'eky\'okureeberaho banner.mp4), nari ota omuhanda ogwijwire ogwa https:// ogurikuza aha ifaira ya vidiyo. Okubika hanu nikitwara omwanya gwa vidiyo eyatairweho, kandi okuta vidiyo nikitwara omwanya gw\'eki.'],
   ['MP4 (H.264), up to 4 MB. That cap is about your members, not the database: the clip downloads onto every phone that opens the app. A few silent seconds is what belongs here. Uploaded once, it is then served from its own cached address, so a member downloads it one time and replays it from their phone after that.', 'MP4 (H.264), okutuuka ku 4 MB. Ekkomo eryo likwata ku bantu bo, si ku ttereka: vidiyo ekkakkanyizibwa ku buli ssimu eyiggula app. Obudde obutono obutaliimu maloboozi bwe busaanira wano. Bw\'emala okuteekebwa, eweerezebwa okuva ku ndagiriro yaayo, kale omuntu agikkakkanya omulundi gumu n\'oluvannyuma agizanyisa okuva ku ssimu ye.', 'MP4 (H.264), hadi 4 MB. Kikomo hicho kinahusu wanachama wako, si hifadhidata: klipu hupakuliwa kwenye kila simu inayofungua programu. Sekunde chache zisizo na sauti ndizo zinazofaa hapa. Ikishapakiwa mara moja, hutolewa kutoka anwani yake iliyohifadhiwa, kwa hivyo mwanachama huipakua mara moja kisha huicheza tena kutoka simu yake.', 'MP4 (H.264), jusqu\'à 4 Mo. Cette limite concerne vos membres, pas la base de données : le clip se télécharge sur chaque téléphone qui ouvre l\'application. Quelques secondes sans son, voilà ce qui a sa place ici. Une fois téléversé, il est servi depuis sa propre adresse mise en cache, donc un membre le télécharge une seule fois et le rejoue ensuite depuis son téléphone.', 'MP4 (H.264), kugeza kuri 4 MB. Uwo mupaka ureba abanyamuryango bawe, si ububikoshingiro: agace ka videwo kamanurwa kuri buri telefoni ifungura porogaramu. Amasegonda macye adafite ijwi ni yo akwiriye hano. Iyo yamaze gushyirwaho, itangwa iva kuri aderesi yayo bwite, bityo umunyamuryango ayimanura rimwe akongera kuyireba ava kuri telefoni ye.', 'MP4 (H.264), okuhika aha 4 MB. Ekikomo ekyo nikikwata aha bantu baawe, ti aha bubiiko: vidiyo neeihurwa aha buri nyabarugo erikwigura puroguramu. Obwire obukye obutaine maraka nibwo bushemereire hanu. Ku erikuba etairweho, neeheebwa kuruga aha ndagiriro yaayo, n\'ahabw\'ekyo omuntu naagyihura omurundi gumwe reero akagizaanisa kuruga aha nyabarugo ye.'],
-  ['Members now see up to 2 payment options on the Recharge screen, labelled neutrally "PAY A" and "PAY B" (no "manual"/"automatic" wording is ever shown to them) -- enable either one alone, or both at once so the member picks. PAY A is the automatic gateway (MarzPay, LipaPay or PesaJet, chosen below) -- instant, no admin numbers needed, and no network to select either: the gateway detects it from the phone number. PAY B is manual -- assigns the member one of the numbers below to send money to by hand, matched to their order by your phone\'s SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).', 'Abantu kati balaba engeri 2 ez\'okusasula ku lupapula lw\'okuteekamu ssente, nga ziyitibwa "PAY A" ne "PAY B" (tebalaba bigambo bya "n\'engalo" oba "bwokka") -- ssobozesa emu yokka, oba zombi omuntu alonde. PAY A gwe mulyango ogwekolera (MarzPay, LipaPay oba PesaJet, ezirondebwa wansi) -- gwa mangu, tegwetaaga nnamba za bakulembeze, era tewali netiwaka ya kulonda: omulyango gugizuula okuva ku nnamba y\'essimu. PAY B gwa ngalo -- guwa omuntu emu ku nnamba eziri wansi asobole okusindika ssente n\'engalo, nga zikwatagana n\'okusaba kwe okuyita mu SMS forwarder y\'essimu yo (oba omuntu bw\'ateeka obubaka bwe obukakasa singa forwarder elwawo).', 'Wanachama sasa huona hadi njia 2 za malipo kwenye skrini ya Kuweka Pesa, zikiitwa "PAY A" na "PAY B" (hawaonyeshwi kamwe maneno "kwa mkono"/"kiotomatiki") -- washa moja pekee, au zote mbili ili mwanachama achague. PAY A ni lango la kiotomatiki (MarzPay, LipaPay au PesaJet, lililochaguliwa hapa chini) -- la papo hapo, halihitaji namba za msimamizi, wala hakuna mtandao wa kuchagua: lango hulitambua kutoka namba ya simu. PAY B ni la mkono -- humpa mwanachama mojawapo ya namba zilizo hapa chini ili atume pesa kwa mkono, zikilinganishwa na oda yake na kisambazaji cha SMS cha simu yako (au kwa mwanachama kubandika ujumbe wake wa uthibitisho ikiwa kisambazaji ni cha polepole).', 'Les membres voient maintenant jusqu\'à 2 options de paiement sur l\'écran de Recharge, étiquetées neutrement "PAY A" et "PAY B" (aucune mention de "manuel" ou "automatique" ne leur est jamais montrée) -- activez l\'une seule, ou les deux à la fois pour que le membre choisisse. PAY A est la passerelle automatique (MarzPay, LipaPay ou PesaJet, choisie ci-dessous) -- instantanée, sans numéros d\'administrateur, et sans réseau à sélectionner : la passerelle le détecte depuis le numéro de téléphone. PAY B est manuel -- il attribue au membre l\'un des numéros ci-dessous pour envoyer l\'argent à la main, rapproché de sa commande par le transfert SMS de votre téléphone (ou par le membre qui colle son propre message de confirmation si le transfert est lent).', 'Abanyamuryango ubu babona uburyo bwo kwishyura bugera kuri 2 ku ipaji ryo Kongeramo, bwitwa "PAY A" na "PAY B" (nta jambo "n\'intoki" cyangwa "byikora" bigeze bibereka) -- fungura bumwe gusa, cyangwa bwombi kugira ngo umunyamuryango ahitemo. PAY A ni irembo ryikora (MarzPay, LipaPay cyangwa PesaJet, ryatoranyijwe hasi) -- ryihuta, ntirisaba nimero z\'ubuyobozi, kandi nta rusobe rwo guhitamo: irembo rurubona kuri nimero ya telefoni. PAY B ni ubwo n\'intoki -- buha umunyamuryango imwe muri nimero zikurikira kugira ngo yohereze amafaranga n\'intoki, bihuzwa n\'ubusabe bwe n\'icyoherezabutumwa cya telefoni yawe (cyangwa umunyamuryango akomeka ubutumwa bwe bwemeza igihe icyoherezabutumwa gitinze).', 'Abantu hati nibareeba emiringo 2 y\'okushashura aha rupapura rw\'Okuta Sente, nerwetwa "PAY A" na "PAY B" (tibarikureeberwa ebigambo "n\'engaro" nari "kyenka") -- igurira emwe yonka, nari yombi kugira ngo omuntu acwemu. PAY A n\'omuryango ogurikwekorera (MarzPay, LipaPay nari PesaJet, egirikucwamu ahansi) -- gwa mbago, tigurikwetenga namba z\'abebembezi, kandi tihariho neetiweeki y\'okucwamu: omuryango nigugishanga kuruga aha namba y\'esimu. PAY B n\'ogw\'engaro -- niguha omuntu emwe aha namba eziri ahansi kugira ngo atume sente n\'engaro, nizihuzibwa n\'ebi arikushaba n\'ekitumi kya SMS eky\'esimu yaawe (nari omuntu yaata obutumwa bwe oburikuhamya ku ekitumi kirikuguma).'],
-  ['Payments are set to Manual, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap Mark as paid. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.', 'Okusasula kuteekeddwa ku Manual, kale okusasula tekuyita mu mulyango gwonna ogwekolera. Sindika ssente ggwe kennyini okuva ku ssimu y\'omukulembeze ey\'ssente ez\'oku ssimu okudda ku nnamba eri ku lunyiriri, oluvannyuma onyige Laga nga kisasuddwa. Okulaga olunyiriri nga lusasuddwa kuwandiika bwawandiisi okusasula kwe wamaze okukola, tekusindika kintu kyonna. Okukkiriza okwekolera tekussibwako mmere nga eno ekola.', 'Malipo yamewekwa kuwa ya Mkono, kwa hivyo malipo hayapiti kwenye lango lolote la kiotomatiki. Tuma pesa wewe mwenyewe kutoka simu ya pesa ya msimamizi kwenda namba ya lengo iliyo kwenye safu, kisha gusa Weka alama kuwa imelipwa. Kuweka alama kwenye safu hurekodi tu malipo uliyokwisha fanya, hakutumi chochote. Kuidhinisha kiotomatiki hupuuzwa wakati hali hii imewashwa.', 'Les paiements sont réglés sur Manuel, donc les versements ne passent par aucune passerelle automatique. Envoyez l\'argent vous-même depuis un téléphone mobile money d\'administrateur vers le numéro de destination indiqué sur la ligne, puis touchez Marquer comme payé. Marquer une ligne comme payée ne fait qu\'enregistrer un paiement que vous avez déjà effectué, cela n\'envoie jamais rien. L\'approbation automatique est ignorée tant que ce mode est actif.', 'Kwishyura byashyizwe kuri Manual, bityo kwishyura ntibinyura mu irembo iryo ari ryo ryose ryikora. Ohereza amafaranga ubwawe uvuye kuri telefoni y\'ubuyobozi y\'amafaranga ujya kuri nimero igaragara ku murongo, hanyuma ukande Shyiraho ko byishyuwe. Gushyiraho ko umurongo wishyuwe byandika gusa kwishyura wamaze gukora, ntibyohereza ikintu na kimwe. Kwemeza byikora ntibyitabwaho igihe ubu buryo bukoresha.', 'Okushashura kutairwe aha Manual, n\'ahabw\'ekyo okushashura tikurikurabira omu muryango gwoona ogurikwekorera. Tuma sente iwe omwene kuruga aha simu y\'omwebembezi ey\'esente z\'aha simu okuza aha namba eri aha murongo, reero okande Manyisa ngu kishashwiirwe. Okumanyisa omurongo ngu gushashwiirwe nikihandiika kwonka okushashura oku waaba omazire kukora, tikirikutuma kintu. Okwikiriza kwenka tikurikutwarwaho ku ogu murikukora.'],
   ['Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested, even a single request always waits the full interval, it\'s never approved instantly) before the server approves and sends it. It checks every few seconds, and every request that\'s old enough at that moment is approved and sent back-to-back in the same pass, not spaced apart from each other. No tap needed per request. It reuses the exact same send logic as the approve button on the Withdrawals tab (whichever provider that currently sends through), so it can never double-pay a request or act on one that isn\'t still genuinely pending.', 'Kikolebwa sseva: nga kikola, buli kusaba okuggyamu ssente kusooka kulinda ekiseera ekiri wansi (okubalirwa okuva lwe kusabiddwa, ne bwe kuba kumu kulinda ekiseera kyonna, tekukkirizibwa mangu) sseva nga tennakukkiriza n\'okukusindika. Ekebera buli sekonda ntono, era buli kusaba okumaze ekiseera ekimala mu kaseera ako kukkirizibwa ne kusindikibwa kumpi na kunnaakwo mu mulundi gwe gumu, si nga kwawukanyiziddwa. Tewali kunyiga kwetaagisa ku buli kusaba. Kikozesa enkola y\'okusindika y\'emu n\'eya bbaatani ey\'okukkiriza ku ttabu lya Okuggyamu (ne provider gw\'ekozesa mu kiseera ekyo), kale tekiyinza kusasula mulundi gwa kubiri oba okukola ku kusaba okutakyali mu kulindirira.', 'Inaendeshwa na seva: ikiwa imewashwa, kila ombi la utoaji linalowasili kwanza husubiri muda ulio hapa chini (unaohesabiwa tangu ombi lilipowekwa, hata ombi moja husubiri muda wote, halikubaliwi papo hapo) kabla seva haijaidhinisha na kulituma. Hukagua kila sekunde chache, na kila ombi lililokomaa wakati huo huidhinishwa na kutumwa mfululizo katika pasi ile ile, si kwa kutenganishwa. Hakuna kugusa kunakohitajika kwa kila ombi. Hutumia mantiki ile ile ya kutuma kama kitufe cha kuidhinisha kwenye kichupo cha Utoaji (mtoa huduma yeyote anayetumika wakati huo), kwa hivyo haiwezi kamwe kulipa ombi mara mbili au kushughulikia lile ambalo halisubiri kweli.', 'Piloté par le serveur : lorsqu\'il est actif, chaque demande de retrait entrante attend d\'abord l\'intervalle ci-dessous (compté depuis le moment de la demande ; même une demande isolée attend toujours l\'intervalle complet, elle n\'est jamais approuvée instantanément) avant que le serveur ne l\'approuve et ne l\'envoie. Il vérifie toutes les quelques secondes, et chaque demande assez ancienne à ce moment-là est approuvée et envoyée à la suite dans le même passage, sans être espacée. Aucun appui nécessaire par demande. Il réutilise exactement la même logique d\'envoi que le bouton d\'approbation de l\'onglet Retraits (quel que soit le prestataire qui envoie actuellement), il ne peut donc jamais payer deux fois une demande ni agir sur une demande qui n\'est plus réellement en attente.', 'Biyoborwa na seriveri: iyo bikoresha, buri busabe bwo kubikuza buhageze butegereza mbere igihe kiri hasi (kibarwa uhereye igihe bwasabwe; n\'ubusabe bumwe buhora butegereza igihe cyose, ntibwemezwa ako kanya) mbere y\'uko seriveri ibwemeza ikanabwohereza. Igenzura buri masegonda macye, kandi buri busabe bwakuze icyo gihe bwemezwa bukoherezwa bukurikiranye muri iyo nzira imwe, atari mu buryo butandukanyije. Nta gukanda bikenewe kuri buri busabe. Ikoresha uburyo bwo kohereza bumwe n\'ubwa buto bwo kwemeza bwo ku gice cy\'Ukubikuza (uwo ari we wese utanga serivisi icyo gihe), bityo ntibishobora kwishyura ubusabe kabiri cyangwa gukora ku bwo butakiri ku butegereje koko.', 'Nikikorwa seeva: ku erikuba erikukora, buri kushaba okwihamu sente kurikwija nikubanza kutegyereza obwire oburi ahansi (nibubarwa kuruga obu kwashabirwe; n\'okushaba kumwe nikutegyereza obwire bwoona, tikurikwikirizibwa ahonaaho) seeva etakakwikiriize n\'okukutuma. Neekyebera buri sekonda nkye, kandi buri kushaba okumazire obwire obuhikire aha kaanya ako nikwikirizibwa kikatumwa nikukuratana omu muringo gumwe, ti nikwahukanisibwa. Tihariho kukanda okurikwetengwa aha buri kushaba. Nikikoresa omuringo gw\'okutuma ogwo gumwe nk\'ogwa akabatuni k\'okwikiriza aha kacweka k\'Okwihamu (ou arikuheereza aha kaanya ako), n\'ahabw\'ekyo tikirikubaasa kushashura okushaba emirundi ebiri nari kukora aha okutakiri omu kutegyerezibwa buzima.'],
   ['Shown centered over Home every time a member opens or returns to it. Dark background, matching the Home activity ticker. The optional image (if set) shows above the message and scrolls together with it if the dialog\'s content runs long. The OK button opens Telegram group above (falls back to the channel link if group is blank) and closes the dialog; the X in the corner just closes it.', 'Kiraga wakati ku Home buli lwe omuntu aggula oba adda ku yo. Emabega eddugavu, nga lifaanagana n\'olukalala lw\'ebikolebwa ku Home. Ekifaananyi ekiyinza okuteekebwa (bwe kiba kiriwo) kiraga waggulu w\'obubaka era kiseerera nakyo singa ebiri mu kabokisi biba biwanvu. Bbaatani ya OK egguka ggwanika lya Telegram eriri waggulu (bw\'eba nga terimu, egguka ekkubo ly\'omukutu) era eggalawo akabokisi; X eri ku nsonda ekaggalawo kyokka.', 'Huonyeshwa katikati juu ya Nyumbani kila mara mwanachama anapofungua au kurudi. Mandharinyuma meusi, yanayolingana na mstari wa shughuli wa Nyumbani. Picha ya hiari (ikiwekwa) huonyeshwa juu ya ujumbe na husogea pamoja nao ikiwa maudhui ya kisanduku ni marefu. Kitufe cha SAWA hufungua kikundi cha Telegram hapo juu (hurudi kwenye kiungo cha chaneli ikiwa kikundi ni tupu) na hufunga kisanduku; X iliyo pembeni huifunga tu.', 'Affiché centré par-dessus l\'Accueil chaque fois qu\'un membre l\'ouvre ou y revient. Fond sombre, assorti au bandeau d\'activité de l\'Accueil. L\'image facultative (si elle est définie) apparaît au-dessus du message et défile avec lui si le contenu de la boîte est long. Le bouton OK ouvre le groupe Telegram ci-dessus (et revient au lien du canal si le groupe est vide) puis ferme la boîte ; le X dans le coin ne fait que la fermer.', 'Bigaragara hagati hejuru ya Ahabanza buri gihe umunyamuryango afunguye cyangwa agarutseho. Inyuma yijimye, ihuye n\'umurongo w\'ibikorwa wo Ahabanza. Ishusho itari itegeko (niba yashyizweho) igaragara hejuru y\'ubutumwa kandi inyerera hamwe na bwo iyo ibiri mu kazu ari byinshi. Buto ya OK ifungura itsinda rya Telegram riri haruguru (igasubira ku murongo w\'umuyoboro iyo itsinda risa) hanyuma igafunga akazu; X iri ku mpera ihita ikafunga gusa.', 'Nikireeberwa ahagati aha Home buri obu omuntu arikwigura nari kugarukaho. Enyima ekwatsiire, erikushushana n\'orurongo rw\'ebirikukorwa aha Home. Ekishushani ekirikubaasa kutairweho (ku kiraabe kiriho) nikireeberwa haiguru y\'obutumwa kandi nikigyenda nabwo ku ebiri omu kabokisi biraabe biri bireingwa. Akabatuni ka OK nikigura ekibiina kya Telegram ekiri haiguru (kikagaruka aha muhanda gw\'omuhanda ku ekibiina kiraabe kiri busha) reero kikakinga akabokisi; X eri aha nsonda neekinga kwonka.'],
   ['Set per product, not here — open Products, edit a product, and use its "Turntable spins from this product" section to set how many spins it earns and what each can win. That way every product can pay differently.', 'Kiteekebwa ku buli kyamaguzi, si wano — ggulawo Ebyamaguzi, kyusa ekyamaguzi, era okozese ekitundu kyakyo ekya "Turntable spins from this product" okuteeka okukyusa kwe kiwa n\'ekyo buli kumu kwe kuyinza okuwangula. Mu ngeri eyo buli kyamaguzi kisobola okusasula mu ngeri yaakyo.', 'Huwekwa kwa kila bidhaa, si hapa — fungua Bidhaa, hariri bidhaa, kisha tumia sehemu yake ya "Turntable spins from this product" kuweka mizunguko inayopatikana na kila mmoja anaweza kushinda kiasi gani. Kwa njia hiyo kila bidhaa inaweza kulipa tofauti.', 'À régler par produit, pas ici — ouvrez Produits, modifiez un produit, et utilisez sa section "Turntable spins from this product" pour définir combien de tours il rapporte et ce que chacun peut gagner. Ainsi chaque produit peut payer différemment.', 'Bishyirwaho kuri buri gicuruzwa, atari hano — fungura Ibicuruzwa, uhindure igicuruzwa, hanyuma ukoreshe igice cyacyo cya "Turntable spins from this product" kugira ngo ushyireho inzunguruka gitanga n\'ibyo buri imwe ishobora gutsindira. Muri ubwo buryo buri gicuruzwa gishobora kwishyura ukundi.', 'Nikitebekwa aha buri kyamaguzi, ti hanu — igura Ebyamaguzi, ohindure ekyamaguzi, reero okoreese akacweka kaakyo aka "Turntable spins from this product" kugira ngo ote okuzunguka oku kirikuha n\'eki buri kumwe kurikubaasa kutunga. Omu muringo ogwo buri kyamaguzi nikibaasa kushashura kwahukanye.'],
