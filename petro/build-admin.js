@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * build-admin.js — secure the Chipz admin panel.
+ * build-admin.js — secure the Petro admin panel.
  * Source: admin-src/index.html
  * Output: admin/index.html
  *
@@ -252,7 +252,7 @@ if (typeof DecompressionStream === 'undefined') {
   var show=function(){
     var m=document.createElement('div');
     m.style.cssText='position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:#111111;color:#fff;font-family:sans-serif;font-size:15px;line-height:1.5';
-    m.textContent='This browser is too old to run Chipz Admin. Please update your browser (or open this link in Chrome) and try again.';
+    m.textContent='This browser is too old to run Petro Admin. Please update your browser (or open this link in Chrome) and try again.';
     document.body.appendChild(m);
   };
   if (document.body) show(); else document.addEventListener('DOMContentLoaded', show);
@@ -276,4 +276,4 @@ outHtml = outHtml.replace('<head>', '<head>\n' + guardTag);
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(OUT_HTML, outHtml);
 log('admin/index.html  :', fs.statSync(OUT_HTML).size, 'bytes — deployed artifact written');
-log('\nDone. EdgeOne can publish the admin/ output.');
+log('\nDone. Deploy the generated admin/ output.');
