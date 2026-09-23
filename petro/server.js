@@ -2059,22 +2059,26 @@ async function uniqueRef(letter) {
 // Reward numbers are Snow-scaled defaults (flat per-referral / flat % of
 // team deposits, same shape as space8's proven ladder) — not yet confirmed
 // by the owner; flag before treating these as final.
+// Task Center rewards are earned from deposits, never from a referral's
+// investment. A Level 1 member becomes active only after their deposit has
+// genuinely credited their account. Each listed task remains claimable once.
 const TEAM_MILESTONES = [
-  { target: 2, reward: 2000 }, { target: 5, reward: 5000 }, { target: 10, reward: 10000 },
-  { target: 25, reward: 25000 }, { target: 50, reward: 50000 }, { target: 100, reward: 100000 },
-  { target: 200, reward: 200000 }, { target: 500, reward: 500000 }, { target: 1000, reward: 1000000 },
-  { target: 2000, reward: 2000000 }, { target: 5000, reward: 5000000 },
+  { target: 5, reward: 5000 }, { target: 15, reward: 10000 },
+  { target: 20, reward: 25000 }, { target: 35, reward: 30000 },
+  { target: 50, reward: 55000 }, { target: 100, reward: 75000 },
 ];
 const TEAM_DEPOSIT_MILESTONES = [
-  { target: 100000, reward: 2500 }, { target: 500000, reward: 12500 }, { target: 1000000, reward: 25000 },
-  { target: 5000000, reward: 125000 }, { target: 10000000, reward: 250000 }, { target: 25000000, reward: 625000 },
-  { target: 50000000, reward: 1250000 }, { target: 100000000, reward: 2500000 }, { target: 200000000, reward: 5000000 },
-  { target: 500000000, reward: 12500000 }, { target: 1000000000, reward: 25000000 },
+  { target: 250000, reward: 5000 }, { target: 500000, reward: 10000 },
+  { target: 750000, reward: 20000 }, { target: 1000000, reward: 35000 },
+  { target: 1500000, reward: 50000 }, { target: 2000000, reward: 50000 },
 ];
 async function activeL1Count(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
   let n = 0;
-  snap.forEach(d => { const v = d.data(); if (v.status !== 'banned' && (v.totalInvested || 0) > 0) n += 1; });
+  snap.forEach(d => {
+    const v = d.data();
+    if (v.status !== 'banned' && finiteMoney(v.totalDeposited) > 0) n += 1;
+  });
   return n;
 }
 
