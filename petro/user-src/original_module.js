@@ -2804,21 +2804,6 @@ function startLiveRefresh(){
   _liveDelay = livePollMs();
   scheduleLive(_liveGen, _liveDelay);
 }
-var _pageEnterTimer = null;
-function playPageEnter(){
-  const host = $('pageHost');
-  if (!host) return;
-  if (_pageEnterTimer) { clearTimeout(_pageEnterTimer); _pageEnterTimer = null; }
-  host.classList.remove('petro-page-enter');
-  // Force only this small host to reflow so a second tab tap replays the
-  // entrance rather than leaving the finished animation class in place.
-  void host.offsetWidth;
-  host.classList.add('petro-page-enter');
-  _pageEnterTimer = setTimeout(() => {
-    host.classList.remove('petro-page-enter');
-    _pageEnterTimer = null;
-  }, 360);
-}
 // Coming back to the app refreshes it at once. Without this the member stares
 // at whatever was on screen when they left until the next tick, which is the
 // single most visible way a polled app feels stale.
@@ -2906,10 +2891,6 @@ window.showPage = async function(name){
   else if (name === 'assets') await renderAssets();
   else if (name === 'network') await renderNetwork();
   else if (name === 'account') await renderAccount();
-  // The owner asked for an appear motion when entering a page (for example
-  // Team/Network).  This runs once per real navigation, after its renderer
-  // has put content in #pageHost, never on a normal live-data repaint.
-  playPageEnter();
   startLiveRefresh();
 };
 // Announcement dialog REMOVED entirely (owner: "remove announcement
@@ -3168,29 +3149,52 @@ function tryAutoplayHomeBanner(){
   ['touchend', 'click'].forEach(ev =>
     document.addEventListener(ev, kick, { passive: true }));
 }
-// Whether the wallet balance figure is masked -- a per-device convenience
-// (the eye icon in the mockup's Total Wallet Balance card), not account
-// data, so it lives in localStorage the same way "Remember me" and the
-// saved region do, not in STATE.account.
-var _balanceHidden = (function(){ try { return localStorage.getItem('petroBalHidden') === '1'; } catch (_) { return false; } })();
-function maskedBalanceText(){ return 'UGX ••••••'; }
-window.toggleBalanceVisibility = function(){
-  _balanceHidden = !_balanceHidden;
-  try { localStorage.setItem('petroBalHidden', _balanceHidden ? '1' : '0'); } catch (_) {}
-  // Direct DOM update, not a full paintHome() repaint -- a repaint would
-  // also restart the banner carousel's timer and any in-flight animation
-  // for what is otherwise a one-line text/icon swap.
-  const amt = document.getElementById('homeWalletBalance');
-  if (amt) amt.textContent = _balanceHidden ? maskedBalanceText() : fmtUGX(Number((STATE.account || {}).walletBalance) || 0);
-  const eye = document.getElementById('homeBalEyeBtn');
-  if (eye) eye.innerHTML = _balanceHidden ? ICONS.eyeOff : ICONS.eyeOpen;
-};
+function homeActivityRowsHtml(){
+  const rows = Array.isArray(STATE.activityFeed) ? STATE.activityFeed.slice(0, 5) : [];
+  if (!rows.length) return '<div class="home-activity-empty">Recent platform activity will appear here.</div>';
+  const items = rows.map(row => {
+    const action = row.action === 'withdraw' ? 'withdrew' : 'deposited';
+    const phone = esc(String(row.phone || '256 **** --'));
+    const amount = esc(fmtUGX(Math.max(0, Number(row.amount) || 0)));
+    return '<div class="home-activity-row"><b>' + phone + '</b><span>has ' + action + '</span><strong class="mono">' + amount + '</strong></div>';
+  }).join('');
+  // Two identical groups let the CSS ticker loop without a visible jump.
+  return '<div class="home-activity-set">' + items + '</div><div class="home-activity-set" aria-hidden="true">' + items + '</div>';
+}
+function homeActivityCardHtml(){
+  return '<section class="home-activity-card" aria-label="Recent platform activity">' +
+    '<div class="home-activity-title">Platform Activity</div>' +
+    '<div class="home-activity-window"><div class="home-activity-track" id="homeActivityRows">' + homeActivityRowsHtml() + '</div></div>' +
+  '</section>';
+}
+var _homeActivityRequest = null;
+var _homeActivityFetchedAt = 0;
+var _homeActivityTimer = null;
+async function refreshHomeActivityFeed(force){
+  if (_homeActivityRequest) return _homeActivityRequest;
+  if (!force && Date.now() - _homeActivityFetchedAt < 30000) return;
+  _homeActivityRequest = api('/public/activity-feed').then(r => {
+    if (r && r.status === 'success' && Array.isArray(r.activities)) {
+      STATE.activityFeed = r.activities;
+      _homeActivityFetchedAt = Date.now();
+      const host = $('homeActivityRows');
+      if (host) host.innerHTML = homeActivityRowsHtml();
+    }
+  }).catch(() => {}).finally(() => { _homeActivityRequest = null; });
+  return _homeActivityRequest;
+}
+function startHomeActivityRefresh(){
+  if (_homeActivityTimer) return;
+  _homeActivityTimer = setInterval(() => {
+    if (STATE.page === 'home') refreshHomeActivityFeed(true);
+  }, 60000);
+}
 function paintHome(){
   const a = STATE.account || {};
   const st = STATE.settings || {};
   const unread = (STATE.messages || []).filter(m => !m.read).length;
   const bal = Number(a.walletBalance) || 0;
-  const balText = _balanceHidden ? maskedBalanceText() : fmtUGX(bal);
+  const balText = fmtUGX(bal);
   // Owner's mockup: logo + tagline header, a 3-stat/wallet block and an
   // inline Daily Check-in card all live on Home now (previously the balance
   // lived on Account only, and Daily Check-in was sheet-only). The
@@ -3214,11 +3218,9 @@ ${homeBannerBlockHtml(st)}
 <div class="wallet-bal-card">
   <div class="wbc-row1">
     <span class="wbc-lbl">Total Wallet Balance</span>
-    <button class="wbc-eye" id="homeBalEyeBtn" onclick="toggleBalanceVisibility()" aria-label="Show or hide balance">${_balanceHidden ? ICONS.eyeOff : ICONS.eyeOpen}</button>
   </div>
   <div class="wbc-row2">
     <span class="mono wbc-amt" id="homeWalletBalance">${esc(balText)}</span>
-    <button class="wbc-details" onclick="showPage('account')">View Details ${ICONS.chevronRight}</button>
   </div>
 </div>
 <div class="home-stat-row">
@@ -3234,6 +3236,7 @@ ${homeBannerBlockHtml(st)}
   </div>
   <button class="cic-btn" onclick="openCheckinSheet()">Check In</button>
 </div>
+${homeActivityCardHtml()}
 ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.homeFooterBanner)}" alt="" onerror="this.remove()">` : ''}
 <div style="height:8px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
@@ -3242,6 +3245,8 @@ ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.hom
   adoptPreloadedBannerVideo();
   tryAutoplayHomeBanner();
   startHomeCarousel();
+  startHomeActivityRefresh();
+  refreshHomeActivityFeed();
 }
 // THE single place this app works out what a product pays. /public/products
 // already sends resolved expectedReturn/cycle/dailyPayout figures computed
@@ -3435,7 +3440,7 @@ function paintAssets(){
   <button class="at ${_assetsTab === 'all' ? 'on' : ''}" onclick="switchAssetsTab('all')">All Assets</button>
   <button class="at ${_assetsTab === 'mine' ? 'on' : ''}" onclick="switchAssetsTab('mine')">My Assets</button>
 </div>
-<div id="assetsBody" style="padding:0 18px;">
+<div id="assetsBody" style="padding:0 10px;">
   ${_assetsTab === 'all'
     ? (products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">No assets yet.</div>')
     : '<div id="myAssetsInner"></div>'}
@@ -3964,10 +3969,10 @@ function acctRowHtml(svgIcon, colorClass, title, sub, onclick){
     ${ICONS.chevronRight}
   </button>`;
 }
-function acctGridCardHtml(iconName, title, sub, onclick){
+function acctGridCardHtml(iconName, title, onclick){
   return '<button class="acct-grid-card" onclick="' + onclick + '">' +
     '<span class="acct-grid-icon">' + suppliedMemberIcon(iconName) + '</span>' +
-    '<span class="txt"><span class="t1">' + title + '</span><span class="t2">' + sub + '</span></span>' +
+    '<span class="txt"><span class="t1">' + title + '</span></span>' +
   '</button>';
 }
 function settingRowHtml(icon, title, sub, onclick){
@@ -4016,7 +4021,7 @@ window.openSecuritySettingsSheet = function(){
 async function renderAccount(){
   const a = STATE.account || {};
   const html = `
-<div class="account-page" style="padding:0 18px;">
+<div class="account-page" style="padding:0 10px;">
   <div class="member-page-title">Profile</div>
   <div class="acct-card"${STATE.profileCard ? ` style="--acct-card-image:url('${esc(STATE.profileCard)}')"` : ''}>
     <div class="acct-avatar">${ICONS.peopleGroup}</div>
@@ -4025,12 +4030,12 @@ async function renderAccount(){
     </div>
   </div>
   <div class="account-action-grid">
-    ${acctGridCardHtml('accountWallet', 'Payout Wallet', 'Link payout number', 'openWalletSheet()')}
-    ${acctGridCardHtml('accountStatement', 'Transaction Statement', 'Income and transactions', "openTransactionStatement('income')")}
-    ${acctGridCardHtml('accountGift', 'Gift Codes', 'Redeem a gift code', 'openChestSheet()')}
-    ${acctGridCardHtml('accountSecurity', 'Security Settings', 'Change login password', 'openSecuritySettingsSheet()')}
-    ${acctGridCardHtml('support', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
-    ${acctGridCardHtml('accountAbout', 'About Us', 'Platform information', 'openAboutSheet()')}
+    ${acctGridCardHtml('accountWallet', 'Payout Wallet', 'openWalletSheet()')}
+    ${acctGridCardHtml('accountStatement', 'Transaction Statement', "openTransactionStatement('income')")}
+    ${acctGridCardHtml('accountGift', 'Gift Codes', 'openChestSheet()')}
+    ${acctGridCardHtml('accountSecurity', 'Security Settings', 'openSecuritySettingsSheet()')}
+    ${acctGridCardHtml('support', 'Customer Support', 'openCustomerService()')}
+    ${acctGridCardHtml('accountAbout', 'About Us', 'openAboutSheet()')}
   </div>
   <button class="logout-btn-v2" onclick="doLogout()">${ICONS.logoutArrow} Log Out</button>
   <div style="height:20px;"></div>
