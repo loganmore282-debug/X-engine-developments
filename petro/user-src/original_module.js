@@ -3932,12 +3932,11 @@ window.openSecuritySettingsSheet = function(){
     ${acctRowHtml(ICONS.lock, 'ar-red', 'Login Password', 'Change your sign-in password', 'openChangeLoginPasswordSheet()')}
   </div>`);
 };
-// Rebuilt to the owner's Account mockup -- a red header (logo/tagline/
-// bell/settings-gear, same .home-topbar-v2 Home uses), a profile card over
-// an admin-uploadable refinery photo (new 'profilecard' image slot, same
-// PETRO_IMAGE_SLOTS mechanism as logo/authhero/etc.), a 3-stat row, and a
-// plain white row list with coloured-circle SVG icons replacing the old
-// settings list's coloured squares + Petro raster PNGs.
+// Rebuilt to the owner's Account mockup -- a profile card over an
+// admin-uploadable refinery photo (new 'profilecard' image slot, same
+// PETRO_IMAGE_SLOTS mechanism as logo/authhero/etc.) and a plain row list
+// with coloured-circle SVG icons replacing the old settings list's coloured
+// squares + Petro raster PNGs.
 //
 // Deliberately NOT built into this round: a per-member profile PHOTO upload
 // (the mockup's camera badge) and phone-number editing (the mockup's pencil
@@ -3959,11 +3958,6 @@ async function renderAccount(){
     <div class="acct-idbox">
       <div class="acct-phone-row">${esc(formatPhoneDisplay(a.phone))}</div>
     </div>
-  </div>
-  <div class="home-stat-row" style="padding:0;margin:14px 0 16px;">
-    <div class="home-stat"><span class="hs-ic hs-red">${ICONS.layers}</span><div class="hs-lbl">Wallet Balance</div><div class="mono hs-val" id="acctWallet">${esc(fmtUGX(Number(a.walletBalance) || 0))}</div></div>
-    <div class="home-stat"><span class="hs-ic hs-red">${ICONS.trendUp}</span><div class="hs-lbl">Total Earnings</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
-    <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
   </div>
   <div class="acct-row-list">
     ${acctRowHtml(ICONS.docLg, 'ar-red', 'Transaction Statement', 'Income, deposits and withdrawals', "openTransactionStatement('income')")}

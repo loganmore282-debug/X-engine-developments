@@ -2220,13 +2220,10 @@ body.sheet-open .sheet-bg{bottom:0;}
 .wit-bal,.wit-amt,.wit-instr{border-color:rgba(255,255,255,.20)!important;}
 
 
-/* ── Account cleanup + stable signed-in wallpaper ──────────────────────
-   Remove the three summary tiles from Profile and keep the refinery image
-   locked to a single oversized fixed layer. Oversizing with negative inset
+/* ── Stable signed-in wallpaper ─────────────────────────────────────────
+   Keep the refinery image locked to a single oversized fixed layer. Oversizing with negative inset
    avoids mobile Chrome's visual-viewport resize/stretch from exposing or
    rescaling the wallpaper during a hard scroll. */
-.account-page .home-stat-row{display:none!important;}
-
 html,body,#app{
   overscroll-behavior-y:none;
 }
