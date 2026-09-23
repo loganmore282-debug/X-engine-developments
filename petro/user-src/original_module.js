@@ -3289,7 +3289,7 @@ function productCardHtml(p){
 function productCtaHtml(p){
   const open = p.isOpen !== false && !p.comingSoon;
   if (open) {
-    return `<button class="primary-button p-cta" onclick="openInvestConfirm('${esc(p.key)}',this)">Buy Now</button>`;
+    return `<button class="primary-button p-cta" onclick="openInvestConfirm('${esc(p.key)}',this)">Invest Now</button>`;
   }
   const at = Number(p.opensAt) || 0;
   if (!at || p.openMode === 'soon' || p.comingSoon) {
@@ -3359,7 +3359,7 @@ window.openChannelLink = function(){
 // and its open/soon/countdown states, so nothing about how a purchase
 // actually works changed, only how the row looks.
 //
-var _assetsTab = 'all';
+var _assetsTab = 'mine';
 window.switchAssetsTab = function(tab){
   _assetsTab = tab;
   paintAssets();
@@ -3388,10 +3388,10 @@ function assetRowHtml(p){
     <div class="asset-body">
       <div class="asset-name">${esc(p.name)}</div>
       <div class="asset-stats">
-        <span>Price <b class="mono">${fmtUGX(Number(p.price) || 0)}</b></span>
-        <span>Duration <b>${cycle} Days</b></span>
-        <span>Daily Cashback <b class="mono">${fmtUGX(daily)}</b></span>
-        <span>Total Return <b class="mono">${fmtUGX(expected)}</b></span>
+        <span>Cost <b class="mono">${fmtUGX(Number(p.price) || 0)}</b></span>
+        <span>Term <b>${cycle} Days</b></span>
+        <span>Daily Yield <b class="mono">${fmtUGX(daily)}</b></span>
+        <span>Expected Return <b class="mono">${fmtUGX(expected)}</b></span>
       </div>
       ${productCtaHtml(p)}
     </div>
@@ -3400,15 +3400,15 @@ function assetRowHtml(p){
 function paintAssets(){
   const products = STATE.products || [];
   const html = `
-<div class="member-page-title">My Assets</div>
+<div class="member-page-title">Assets</div>
 <div class="assets-tabs">
-  <button class="at ${_assetsTab === 'all' ? 'on' : ''}" onclick="switchAssetsTab('all')">All Assets</button>
   <button class="at ${_assetsTab === 'mine' ? 'on' : ''}" onclick="switchAssetsTab('mine')">My Assets</button>
+  <button class="at ${_assetsTab === 'all' ? 'on' : ''}" onclick="switchAssetsTab('all')">Assets</button>
 </div>
 <div id="assetsBody" style="padding:0 10px;">
-  ${_assetsTab === 'all'
-    ? (products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">No assets yet.</div>')
-    : '<div id="myAssetsInner"></div>'}
+  ${_assetsTab === 'mine'
+    ? '<div id="myAssetsInner"></div>'
+    : (products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">No assets yet.</div>')}
 </div>
 <div style="height:20px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
@@ -3781,10 +3781,66 @@ function paintNetwork(){
     </div>
   </div>
   </section>
+
+  <section class="net-section">
+    <div class="net-section-title">Task Center</div>
+    <button onclick="openTaskCenter()" style="width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;padding:14px 0;border:0;background:transparent;font-family:inherit;color:var(--snow-ink);">
+      <span><b style="display:block;font-size:15px;">Claim team rewards</b><small style="display:block;color:var(--snow-muted);font-size:11px;margin-top:4px;">Complete deposit-based referral and team goals</small></span>
+      <span style="color:var(--snow-wine);font-weight:800;font-size:18px;">›</span>
+    </button>
+  </section>
 </div>
 <div style="height:20px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
+
+function taskCenterGroupHtml(t, type, title, progress, milestones){
+  const cards = (milestones || []).filter(m => m.type === type).map(m => {
+    const targetText = type === 'deposit' ? fmtUGX(Number(m.target) || 0) : String(m.target);
+    const currentText = type === 'deposit' ? fmtUGX(Number(progress) || 0) : String(Number(progress) || 0);
+    const label = type === 'deposit' ? 'Team deposit' : 'Level 1 active referrals';
+    const remaining = Math.max(0, Number(m.target) - Number(progress || 0));
+    const action = m.claimed
+      ? '<button disabled style="border:0;border-radius:999px;padding:8px 12px;background:var(--snow-neutral-soft);color:var(--snow-muted);font:700 12px inherit;">Claimed</button>'
+      : m.achieved
+        ? `<button onclick="claimTaskCenterReward('${type}',${Number(m.target)},this)" style="border:0;border-radius:999px;padding:8px 14px;background:var(--snow-wine);color:#fff;font:700 12px inherit;">Claim</button>`
+        : `<span style="font-size:11px;color:var(--snow-muted);">${type === 'deposit' ? fmtUGX(remaining) : remaining} to go</span>`;
+    return `<div style="padding:13px 0;border-bottom:1px solid var(--snow-border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div><b style="display:block;color:var(--snow-ink);font-size:13px;">${label}: ${targetText}</b><small style="display:block;margin-top:4px;color:var(--snow-muted);font-size:11px;">Progress ${currentText} / ${targetText} · Reward ${fmtUGX(Number(m.reward)||0)}</small></div>
+        ${action}
+      </div>
+    </div>`;
+  }).join('');
+  return `<section style="margin-top:18px;"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin-bottom:4px;">${title}</div>${cards || '<div class="list-empty">No tasks available.</div>'}</section>`;
+}
+function taskCenterHtml(t){
+  const l1 = Number(t.l1ActiveCount) || 0;
+  const deposits = Number(t.teamDeposits) || 0;
+  return `<div class="reveal-in"><p style="margin:0;color:var(--snow-muted);font-size:12px;line-height:1.5;">Referral rewards unlock after a Level 1 referral deposits. Each completed task can be claimed once.</p>
+    ${taskCenterGroupHtml(t, 'count', 'Level 1 active referrals', l1, t.milestones)}
+    ${taskCenterGroupHtml(t, 'deposit', 'Team deposits', deposits, t.milestones)}
+  </div>`;
+}
+window.openTaskCenter = function(){
+  openSheet('Task Center', taskCenterHtml(STATE.teamStats || {}));
+};
+window.claimTaskCenterReward = async function(type, target, btn){
+  if (btn && btn.disabled) return;
+  const prior = btn && btn.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+  const r = await api('/team/milestone/claim', { method:'POST', body:JSON.stringify({ type, target }) });
+  if (r.status !== 'success') {
+    if (btn) { btn.disabled = false; btn.textContent = prior || 'Claim'; }
+    notify(r.message || 'Could not claim that reward');
+    return;
+  }
+  const fresh = await api('/team/stats');
+  if (fresh.status === 'success') STATE.teamStats = fresh;
+  openTaskCenter();
+  notify(r.message || 'Reward added to your wallet');
+};
+
 window.openAllReferralsSheet = function(){
   openSheet('All Referrals', `
 <div class="lv-switcher" style="margin-bottom:14px;">
@@ -5645,47 +5701,44 @@ async function refreshAfterWithdraw(){
 // The button is disabled while the request is in flight -- with no dialog in
 // the way, a double tap would otherwise fire two purchases, and /invest/create
 // has no client-side retry guard of its own.
-window.openInvestConfirm = async function(tierKey, btn){
+window.openInvestConfirm = function(tierKey, btn){
   const p = (STATE.products||[]).find(x => x.key === tierKey);
-  if (!p) return;
-  const label = btn && btn.textContent;
-  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = 'Purchasing…'; }
-  const r = await post('/invest/create', { tierKey });
-  if (btn) { btn.disabled = false; btn.textContent = label || 'Buy Now'; }
-  if (r.status !== 'success') {
-    // Not enough money is not really an error to read and dismiss -- it is a
-    // signal to go and top up, so the app says so and takes them there.
-    // Matched on the server's code, with a fallback to the old "Need X, have
-    // Y" message shape so this still works against a backend that has not
-    // been redeployed yet.
-    const short = r.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(r.message || ''));
-    if (short) {
-      notify('Insufficient balance, redirecting to deposit…', () => openDepositSheet());
-      // "Redirecting" has to actually redirect, whether or not they tap OK.
-      // closeNotify() clears the callback, so whichever happens first wins
-      // and Deposit can never open twice.
-      setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
+  if (!p || (btn && btn.disabled)) return;
+  const fig = planFigures(p);
+  $('confirmSheet').innerHTML = `
+    <h3>Confirm Investment</h3>
+    <p class="confirm-sub">Review this asset before investing.</p>
+    <div class="confirm-row"><span>Asset</span><b class="mono">${esc(p.name || 'Asset')}</b></div>
+    <div class="confirm-row"><span>Cost</span><b class="mono">${fmtUGX(Number(p.price) || 0)}</b></div>
+    <div class="confirm-row"><span>Term</span><b>${fig.cycle} Days</b></div>
+    <div class="confirm-row"><span>Daily Yield</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
+    <div class="confirm-row"><span>Expected Return</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
+    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Invest Now</button>
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
+  const actionBtn = $('confirmActionBtn');
+  actionBtn.onclick = async () => {
+    if (actionBtn.disabled) return;
+    actionBtn.disabled = true; actionBtn.textContent = 'Investing…';
+    const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey }) });
+    if (result.status !== 'success') {
+      actionBtn.disabled = false; actionBtn.textContent = 'Invest Now';
+      const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
+      if (short) {
+        closeConfirm();
+        notify('Insufficient balance, redirecting to deposit…', () => openDepositSheet());
+        setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
+        return;
+      }
+      notify(result.message || 'Could not complete investment');
       return;
     }
-    return notify(r.message || 'Could not complete purchase');
-  }
-  // Owner: "l want when one buys a product he is immediately redirected to my
-  // products page to see his products, l nolonger need those ugly notifys that
-  // bought product 1, l need what we are using with this [warning dialog]."
-  //
-  // So: the tab switches first, then the acknowledgement lands on top of it.
-  // That ordering matters -- My Products starts its own fetch immediately and
-  // is painting the new plan while the dialog is still being read, so
-  // dismissing it reveals a finished screen rather than a loading one.
-  // The toast is gone: it was the server's "Bought Product-1 for UGX 30,000"
-  // sentence in a small transient pill, which is what he is describing.
-  // Was showPage('products') -- the old My Products tab, no longer on the
-  // bottom nav. Lands on the new Assets screen's My Assets tab instead, so
-  // a purchase doesn't drop the member onto a page they can no longer find
-  // their way back to from the nav bar.
-  _assetsTab = 'mine';
-  showPage('assets');
-  notify(`${p.name} is now running. You will find it under My Assets.`);
+    closeConfirm();
+    _assetsTab = 'mine';
+    showPage('assets');
+    notify(`${p.name} is now running. You will find it under My Assets.`);
+  };
+  $('confirmBg').classList.add('show');
+  lockBodyScroll();
 };
 // Plain yes/no confirm, no PIN -- used where an action doesn't move money
 // (e.g. removing a saved withdrawal account, see deleteWithdrawalAccount()).
