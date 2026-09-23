@@ -299,19 +299,19 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .navitem.active::before{opacity:1;transform:translateX(-50%) scaleX(1);}
 .navitem .nav-ic,.navitem .lbl{position:relative;z-index:1;}
 .navitem .nav-ic{display:flex;align-items:center;justify-content:center;width:31px;height:31px;color:var(--snow-muted);transition:color .16s ease,transform .16s ease;}
-.navitem .nav-ic svg{width:23px;height:23px;transition:transform .16s ease,opacity .16s ease;}
+.navitem .nav-ic svg,.navitem .nav-ic .supplied-icon{width:23px;height:23px;transition:transform .16s ease,opacity .16s ease;}
 .navitem .lbl{font-size:10px;font-weight:600;white-space:nowrap;transition:color .16s ease;}
 .navitem.active{color:var(--snow-wine);}
 .navitem.active .nav-ic{color:var(--snow-wine);transform:translateY(-1px);}
 .navitem.active .lbl{font-weight:700;color:var(--snow-wine);}
-.navitem.nav-tap .nav-ic svg{animation:navTapSignal .18s ease-out;}
+.navitem.nav-tap .nav-ic svg,.navitem.nav-tap .nav-ic .supplied-icon{animation:navTapSignal .18s ease-out;}
 @keyframes navTapSignal{
   0%{transform:translateY(0);opacity:1;}
   45%{transform:translateY(1px);opacity:.62;}
   100%{transform:translateY(0);opacity:1;}}
 @media (prefers-reduced-motion:reduce){
   .navitem::before,.navitem .nav-ic,.navitem .nav-ic svg,.navitem .lbl{transition:none;}
-  .navitem.nav-tap .nav-ic svg{animation:none;}}
+  .navitem.nav-tap .nav-ic svg,.navitem.nav-tap .nav-ic .supplied-icon{animation:none;}}
 
 
 
@@ -639,6 +639,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .home-action .badge{width:56px;height:56px;border-radius:50%;background:var(--petro-grad);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px -10px rgba(227,6,19,.55);}
 .home-action .badge svg{width:22px;height:22px;}
 .home-action .badge img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 6px 8px rgba(30,10,5,.28));}
+.supplied-icon{display:block;background:currentColor;-webkit-mask:var(--supplied-icon) center/contain no-repeat;mask:var(--supplied-icon) center/contain no-repeat;}
+.home-action .badge .supplied-icon{width:26px;height:26px;}
 .home-action .lbl{font-size:12px;font-weight:600;}
 /* ── Home top bar v2 (logo + tagline + Notifications/Support) ──
    Was a solid Corporate Red band on every screen that reuses this class
