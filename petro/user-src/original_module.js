@@ -3782,48 +3782,46 @@ function paintNetwork(){
   </div>
   </section>
 
-  <section class="net-section">
-    <div class="net-section-title">Task Center</div>
-    <button onclick="openTaskCenter()" style="width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;padding:14px 0;border:0;background:transparent;font-family:inherit;color:var(--snow-ink);">
-      <span><b style="display:block;font-size:15px;">Claim team rewards</b><small style="display:block;color:var(--snow-muted);font-size:11px;margin-top:4px;">Complete deposit-based referral and team goals</small></span>
-      <span style="color:var(--snow-wine);font-weight:800;font-size:18px;">›</span>
-    </button>
-  </section>
+  ${taskCenterHtml(t)}
 </div>
 <div style="height:20px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
 
-function taskCenterGroupHtml(t, type, title, progress, milestones){
-  const cards = (milestones || []).filter(m => m.type === type).map(m => {
-    const targetText = type === 'deposit' ? fmtUGX(Number(m.target) || 0) : String(m.target);
-    const currentText = type === 'deposit' ? fmtUGX(Number(progress) || 0) : String(Number(progress) || 0);
-    const label = type === 'deposit' ? 'Team deposit' : 'Level 1 active referrals';
-    const remaining = Math.max(0, Number(m.target) - Number(progress || 0));
-    const action = m.claimed
-      ? '<button disabled style="border:0;border-radius:999px;padding:8px 12px;background:var(--snow-neutral-soft);color:var(--snow-muted);font:700 12px inherit;">Claimed</button>'
+function taskCenterCardsHtml(type, progress, milestones){
+  const isDeposit = type === 'deposit';
+  return (milestones || []).filter(m => m.type === type).map(m => {
+    const target = Number(m.target) || 0;
+    const current = Number(progress) || 0;
+    const targetText = isDeposit ? fmtUGX(target) : String(target);
+    const currentText = isDeposit ? fmtUGX(current) : String(current);
+    const label = isDeposit ? 'Team deposit' : 'Level 1 active referrals';
+    const button = m.claimed
+      ? '<button class="secondary-button" disabled style="min-width:88px;padding:10px 12px;opacity:.72;">Claimed</button>'
       : m.achieved
-        ? `<button onclick="claimTaskCenterReward('${type}',${Number(m.target)},this)" style="border:0;border-radius:999px;padding:8px 14px;background:var(--snow-wine);color:#fff;font:700 12px inherit;">Claim</button>`
-        : `<span style="font-size:11px;color:var(--snow-muted);">${type === 'deposit' ? fmtUGX(remaining) : remaining} to go</span>`;
-    return `<div style="padding:13px 0;border-bottom:1px solid var(--snow-border);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <div><b style="display:block;color:var(--snow-ink);font-size:13px;">${label}: ${targetText}</b><small style="display:block;margin-top:4px;color:var(--snow-muted);font-size:11px;">Progress ${currentText} / ${targetText} · Reward ${fmtUGX(Number(m.reward)||0)}</small></div>
-        ${action}
-      </div>
-    </div>`;
+        ? `<button class="primary-button" onclick="claimTaskCenterReward('${type}',${target},this)" style="min-width:88px;padding:10px 12px;">Claim</button>`
+        : '<button class="secondary-button" disabled style="min-width:88px;padding:10px 12px;opacity:.62;">Claim</button>';
+    return `<article class="task-center-card">
+      <div class="task-card-top"><span class="task-card-kind">${label}</span><b class="mono task-card-reward">${fmtUGX(Number(m.reward) || 0)}</b></div>
+      <div class="task-card-target">${targetText}</div>
+      <div class="task-card-bottom"><span class="task-card-progress">Progress: ${currentText} / ${targetText}</span>${button}</div>
+    </article>`;
   }).join('');
-  return `<section style="margin-top:18px;"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin-bottom:4px;">${title}</div>${cards || '<div class="list-empty">No tasks available.</div>'}</section>`;
 }
 function taskCenterHtml(t){
   const l1 = Number(t.l1ActiveCount) || 0;
   const deposits = Number(t.teamDeposits) || 0;
-  return `<div class="reveal-in"><p style="margin:0;color:var(--snow-muted);font-size:12px;line-height:1.5;">Referral rewards unlock after a Level 1 referral deposits. Each completed task can be claimed once.</p>
-    ${taskCenterGroupHtml(t, 'count', 'Level 1 active referrals', l1, t.milestones)}
-    ${taskCenterGroupHtml(t, 'deposit', 'Team deposits', deposits, t.milestones)}
-  </div>`;
+  return `<section id="taskCenter" class="task-center">
+    <div class="task-center-heading"><div><div class="net-section-title">Task Center</div><b>Earn from team progress</b></div></div>
+    <p class="task-center-note">Referral tasks unlock only after your direct Level 1 referral makes a deposit. Every completed task is claimable once.</p>
+    <div class="task-category"><div class="task-category-title">Referral tasks</div><div class="task-center-grid">${taskCenterCardsHtml('count', l1, t.milestones)}</div></div>
+    <div class="task-category"><div class="task-category-title">Deposit tasks</div><div class="task-center-grid">${taskCenterCardsHtml('deposit', deposits, t.milestones)}</div></div>
+  </section>
+`;
 }
 window.openTaskCenter = function(){
-  openSheet('Task Center', taskCenterHtml(STATE.teamStats || {}));
+  const el = $('taskCenter');
+  if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
 };
 window.claimTaskCenterReward = async function(type, target, btn){
   if (btn && btn.disabled) return;
@@ -3837,7 +3835,7 @@ window.claimTaskCenterReward = async function(type, target, btn){
   }
   const fresh = await api('/team/stats');
   if (fresh.status === 'success') STATE.teamStats = fresh;
-  openTaskCenter();
+  if (STATE.page === 'network') paintNetwork();
   notify(r.message || 'Reward added to your wallet');
 };
 
