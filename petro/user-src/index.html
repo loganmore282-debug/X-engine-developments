@@ -720,6 +720,13 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .ar-ic.ar-red{background:var(--snow-wine-soft);color:var(--snow-wine);}
 .ar-ic.ar-gold{background:var(--snow-wave-on-wine);color:var(--petro-gold);}
 .ar-ic.ar-dark{background:var(--snow-neutral-soft);color:var(--snow-ink);}
+.account-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:18px 0;}
+.acct-grid-card{min-width:0;min-height:128px;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:11px;padding:15px 14px;border:none;border-radius:var(--r-card);background:var(--snow-surface);box-shadow:var(--sh-card);text-align:left;font-family:inherit;color:var(--snow-ink);}
+.acct-grid-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--snow-wine-soft);color:var(--snow-wine);flex-shrink:0;}
+.acct-grid-icon .supplied-icon{width:23px;height:23px;}
+.acct-grid-card .txt{min-width:0;}
+.acct-grid-card .t1{display:block;font-size:13px;line-height:1.18;font-weight:800;}
+.acct-grid-card .t2{display:block;margin-top:4px;font-size:10.5px;line-height:1.35;color:var(--snow-muted);font-weight:500;}
 .logout-btn-v2{width:100%;height:52px;border-radius:var(--r-pill);border:none;background:var(--snow-wine-soft);color:var(--snow-wine);font-family:inherit;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .logout-btn-v2 svg{width:18px;height:18px;}
 /* ── Network: compact Petro view ──
@@ -1794,6 +1801,7 @@ body.sheet-open .sheet-bg{bottom:0;}
 .checkin-card,
 .acct-card,
 .acct-row,
+.acct-grid-card,
 .asset-row,
 .p-card,
 .stat-tile{
@@ -1812,6 +1820,7 @@ body.sheet-open .sheet-bg{bottom:0;}
 .cic-sub,
 .acct-id-row,
 .acct-row .t2,
+.acct-grid-card .t2,
 .asset-stats span,
 .mar-date,
 .mar-values span,
@@ -1830,6 +1839,8 @@ body.sheet-open .sheet-bg{bottom:0;}
 .acct-phone-row,
 .acct-row,
 .acct-row .t1,
+.acct-grid-card,
+.acct-grid-card .t1,
 .asset-name,
 .asset-stats b,
 .mar-name,
