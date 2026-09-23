@@ -2100,6 +2100,7 @@ async function renderProducts(){
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
   $('content').innerHTML = `
     ${ADMIN_REGIONS.length > 1 ? `<p class="muted" style="margin:0 0 12px;font-size:12px">Prices, payouts and the opening schedule are saved for <b>${esc(regionByKeyAdmin(adminOneRegion()).name)}</b> &mdash; the country in the switch at the top. Names, photos and order are shared by every country.</p>` : ''}
+    <p class="muted" style="margin:0 0 12px;font-size:12px">Set each asset's member-facing name, photo and display position however you want. The stable key is only the internal reference that keeps existing purchases attached to that asset.</p>
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Assets (${list.length})${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
       <button class="btn sm ghost" id="syncProdPricing" title="Updates price/cycle/expectedReturn on any saved asset back to the current code defaults -- leaves images, active/coming-soon, and order untouched">Sync pricing to defaults</button>
       <button class="btn sm ghost" id="fixLegacyKeys" title="A now-fixed bug could turn saving product-1 into a SEPARATE product1 -- this finds and merges any it made">Fix duplicate keys</button>
@@ -2150,8 +2151,9 @@ function editProduct(p, order){
   p = p || {};
   openModal(`
     <h3>${p.key?'Edit asset':'New asset'}</h3>
-    <label>Name</label><input id="pLabel" value="${esc(p.name||p.label||'')}" placeholder="e.g. Ferrero Rocher">
-    <label>Key (slug, lowercase, leave blank to auto)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="blackhole">
+    <label>Member-facing asset name</label><input id="pLabel" value="${esc(p.name||p.label||'')}" placeholder="e.g. Daqing Refinery">
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see this name. It is independent from the stable key below.</p>
+    <label>Stable key (internal; preserve for existing assets)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="daqing-refinery">
     <div class="row">
       <div><label>Price (${adminCur()})</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="500000"></div>
       <div><label>Multiplier (&times;)</label><input id="pMult" type="number" step="0.1" min="0" value="${p.multiplier!=null?p.multiplier:''}" placeholder="3"></div>
@@ -2162,7 +2164,7 @@ function editProduct(p, order){
     </div>
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
     <div class="row">
-      <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
+      <div><label>Display position (lower appears first)</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
     </div>
     <label>Asset image <span class="muted" style="font-weight:400">— saved at ${PRODUCT_IMG_W} × ${PRODUCT_IMG_H} px (4:3)</span></label>
     <div class="img-picker">
