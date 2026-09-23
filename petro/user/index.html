@@ -2426,7 +2426,7 @@ html,body,#app{
 @media (prefers-reduced-motion:reduce){.home-activity-track{animation:none;}}
 
 </style>
-</head>
+<style data-petro-task-center-cards-live>#taskCenterInline{padding-bottom:8px}</style></head>
 <body>
 
 <div id="loadingScreen">
@@ -3077,26 +3077,30 @@ document.head.appendChild(s);
   }
   function taskCards(type,progress,all){
     return (all||[]).filter(function(m){return m.type===type;}).map(function(m){
-      var target=Number(m.target)||0, reward=Number(m.reward)||0, isMoney=type==='deposit', targetText=isMoney?money(target):target, current=isMoney?money(progress):progress, left=Math.max(0,target-progress);
-      var action=m.claimed?'<button disabled style="border:0;border-radius:999px;padding:8px 12px;background:var(--snow-neutral-soft);color:var(--snow-muted);font:700 12px inherit;">Claimed</button>'
-        :m.achieved?'<button onclick="claimTaskCenterReward(\''+type+'\','+target+',this)" style="border:0;border-radius:999px;padding:8px 14px;background:var(--snow-wine);color:#fff;font:700 12px inherit;">Claim</button>'
-        :'<span style="font-size:11px;color:var(--snow-muted);">'+(isMoney?money(left):left)+' to go</span>';
-      return '<div style="padding:13px 0;border-bottom:1px solid var(--snow-border);"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;"><div><b style="display:block;color:var(--snow-ink);font-size:13px;">'+(isMoney?'Team deposit':'Level 1 active referrals')+': '+targetText+'</b><small style="display:block;margin-top:4px;color:var(--snow-muted);font-size:11px;">Progress '+current+' / '+targetText+' · Reward '+money(reward)+'</small></div>'+action+'</div></div>';
+      var target=Number(m.target)||0,reward=Number(m.reward)||0,isMoney=type==='deposit',targetText=isMoney?money(target):String(target),currentText=isMoney?money(progress):String(Number(progress)||0);
+      var action=m.claimed?'<button disabled style="min-width:88px;height:38px;border:0;border-radius:999px;background:var(--snow-neutral-soft);color:var(--snow-muted);font:700 12px inherit;">Claimed</button>'
+        :m.achieved?'<button onclick="claimTaskCenterReward(\''+type+'\','+target+',this)" style="min-width:88px;height:38px;border:0;border-radius:999px;background:var(--snow-wine);color:#fff;font:700 12px inherit;">Claim</button>'
+        :'<button disabled style="min-width:88px;height:38px;border:0;border-radius:999px;background:var(--snow-neutral-soft);color:var(--snow-muted);font:700 12px inherit;opacity:.7;">Claim</button>';
+      return '<article style="padding:14px;border:1px solid var(--snow-border);border-radius:var(--r-card);background:var(--snow-surface);box-shadow:var(--sh-card);">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span style="color:var(--snow-muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;">'+(isMoney?'Team deposit':'Level 1 active referrals')+'</span><b class="mono" style="color:var(--snow-wine);font-size:14px;">'+money(reward)+'</b></div>'
+        +'<div style="color:var(--snow-ink);font-size:20px;font-weight:800;margin:9px 0 14px;">'+targetText+'</div>'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;"><span style="color:var(--snow-muted);font-size:11px;font-weight:650;">Progress: '+currentText+' / '+targetText+'</span>'+action+'</div></article>';
     }).join('');
   }
-  function taskBody(){
+  function taskCenterInlineHtml(){
     var t=(window.STATE&&window.STATE.teamStats)||{},l1=Number(t.l1ActiveCount)||0,dep=Number(t.teamDeposits)||0;
-    return '<div class="reveal-in"><p style="margin:0;color:var(--snow-muted);font-size:12px;line-height:1.5;">Referral rewards unlock after a Level 1 referral deposits. Each completed task can be claimed once.</p>'
-      +'<section style="margin-top:18px;"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin-bottom:4px;">Level 1 active referrals</div>'+taskCards('count',l1,t.milestones)+'</section>'
-      +'<section style="margin-top:18px;"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin-bottom:4px;">Team deposits</div>'+taskCards('deposit',dep,t.milestones)+'</section></div>';
+    return '<div class="net-section-title">Task Center</div><b style="display:block;color:var(--snow-ink);font-size:17px;margin-bottom:8px;">Earn from team progress</b>'
+      +'<p style="margin:0 0 18px;color:var(--snow-muted);font-size:12px;line-height:1.55;">Referral tasks unlock only after your direct Level 1 referral makes a deposit. Every completed task is claimable once.</p>'
+      +'<section style="margin-top:22px;"><div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--snow-wine);margin:0 0 10px;">Referral tasks</div><div style="display:grid;grid-template-columns:1fr;gap:10px;">'+taskCards('count',l1,t.milestones)+'</div></section>'
+      +'<section style="margin-top:22px;"><div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--snow-wine);margin:0 0 10px;">Deposit tasks</div><div style="display:grid;grid-template-columns:1fr;gap:10px;">'+taskCards('deposit',dep,t.milestones)+'</div></section>';
   }
-  function addTaskCenter(){
+  function renderTaskCenter(){
     var host=document.querySelector('.net-simple');
-    if(!host||document.getElementById('taskCenterEntry'))return;
-    var section=document.createElement('section');
-    section.id='taskCenterEntry';section.className='net-section';
-    section.innerHTML='<div class="net-section-title">Task Center</div><button onclick="openTaskCenter()" style="width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;padding:14px 0;border:0;background:transparent;font-family:inherit;color:var(--snow-ink);"><span><b style="display:block;font-size:15px;">Claim team rewards</b><small style="display:block;color:var(--snow-muted);font-size:11px;margin-top:4px;">Complete deposit-based referral and team goals</small></span><span style="color:var(--snow-wine);font-weight:800;font-size:18px;">›</span></button>';
-    host.appendChild(section);
+    if(!host)return;
+    var legacy=document.getElementById('taskCenterEntry');if(legacy)legacy.remove();
+    var section=document.getElementById('taskCenterInline');
+    if(!section){section=document.createElement('section');section.id='taskCenterInline';section.className='net-section';section.style.paddingTop='20px';host.appendChild(section);}
+    section.innerHTML=taskCenterInlineHtml();
   }
   function install(){
     if(typeof window.api!=='function'||!window.STATE||typeof window.openInvestConfirm!=='function')return false;
@@ -3105,14 +3109,14 @@ document.head.appendChild(s);
       window.__petroInvestConfirmWrapped=true;
       window.openInvestConfirm=function(key,btn){return openAssetConfirm(key,btn);};
     }
-    window.openTaskCenter=function(){if(window.openSheet)window.openSheet('Task Center',taskBody());};
+    window.openTaskCenter=function(){var el=document.getElementById('taskCenterInline');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});};
     window.claimTaskCenterReward=async function(type,target,btn){
       if(btn&&btn.disabled)return;
       var prior=btn&&btn.textContent;if(btn){btn.disabled=true;btn.textContent='Claiming…';}
       var r=await window.api('/team/milestone/claim',{method:'POST',body:JSON.stringify({type:type,target:target})});
       if(!r||r.status!=='success'){if(btn){btn.disabled=false;btn.textContent=prior||'Claim';}if(window.notify)window.notify((r&&r.message)||'Could not claim that reward');return;}
       var fresh=await window.api('/team/stats');if(fresh&&fresh.status==='success')window.STATE.teamStats=fresh;
-      window.openTaskCenter();if(window.notify)window.notify(r.message||'Reward added to your wallet');
+      renderTaskCenter();if(window.notify)window.notify(r.message||'Reward added to your wallet');
     };
     if(typeof window.showPage==='function'&&!window.__petroAssetsTaskWrapped){
       window.__petroAssetsTaskWrapped=true;
@@ -3120,12 +3124,12 @@ document.head.appendChild(s);
       window.showPage=async function(name){
         var out=await originalShow.apply(this,arguments);
         if(name==='assets'||name==='products'){if(typeof window.switchAssetsTab==='function')window.switchAssetsTab('mine');setTimeout(patchAssets,0);}
-        if(name==='network')setTimeout(addTaskCenter,0);
+        if(name==='network')setTimeout(renderTaskCenter,0);
         return out;
       };
     }
-    patchAssets();addTaskCenter();
-    new MutationObserver(function(){patchAssets();addTaskCenter();}).observe(document.documentElement,{childList:true,subtree:true});
+    patchAssets();renderTaskCenter();
+    new MutationObserver(function(){patchAssets();renderTaskCenter();}).observe(document.documentElement,{childList:true,subtree:true});
     return true;
   }
   if(!install()){var tries=0,t=setInterval(function(){tries++;if(install()||tries>500)clearInterval(t);},20);}
