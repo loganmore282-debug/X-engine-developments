@@ -3023,5 +3023,113 @@ document.head.appendChild(s);
 </script>
 <style data-petro-remove-activity>.home-activity-card{display:none!important}</style>
 <script data-petro-remove-activity>(function(){function removeActivity(){document.querySelectorAll('.home-activity-card').forEach(function(el){el.remove();});}removeActivity();new MutationObserver(removeActivity).observe(document.documentElement,{childList:true,subtree:true});})();</script>
+<script data-petro-task-center-hotfix>
+(function(){
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function money(v){var cur=(window.REGION&&window.REGION.currency)||'UGX';return cur+' '+(Number(v)||0).toLocaleString('en-US');}
+  function figures(p){var price=Number(p&&p.price)||0,days=Number(p&&p.duration)||Number(p&&p.cycle)||7,total=Number(p&&p.totalReturn)||Number(p&&p.expectedReturn)||price*3,daily=Number(p&&p.dailyCashback)||Math.round((total-price)/days);return {price:price,days:days,total:total,daily:daily};}
+  function openAssetConfirm(key,btn){
+    var S=window.STATE||{}, p=(S.products||[]).filter(function(x){return x.key===key;})[0];
+    if(!p||!window.api)return;
+    var f=figures(p), box=document.getElementById('confirmSheet'), bg=document.getElementById('confirmBg');
+    if(!box||!bg)return;
+    box.innerHTML='<h3>Confirm Investment</h3><p class="confirm-sub">Review this asset before investing.</p>'
+      +'<div class="confirm-row"><span>Asset</span><b class="mono">'+esc(p.name||'Asset')+'</b></div>'
+      +'<div class="confirm-row"><span>Cost</span><b class="mono">'+money(f.price)+'</b></div>'
+      +'<div class="confirm-row"><span>Term</span><b>'+f.days+' Days</b></div>'
+      +'<div class="confirm-row"><span>Daily Yield</span><b class="mono">'+money(f.daily)+'</b></div>'
+      +'<div class="confirm-row"><span>Expected Return</span><b class="mono">'+money(f.total)+'</b></div>'
+      +'<button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Invest Now</button>'
+      +'<button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>';
+    var action=document.getElementById('confirmActionBtn');
+    action.onclick=async function(){
+      if(action.disabled)return;
+      action.disabled=true;action.textContent='Investing…';
+      var res=await window.api('/invest/create',{method:'POST',body:JSON.stringify({tierKey:key})});
+      if(!res||res.status!=='success'){
+        action.disabled=false;action.textContent='Invest Now';
+        if(window.notify)window.notify((res&&res.message)||'Could not complete investment');
+        return;
+      }
+      if(window.closeConfirm)window.closeConfirm();
+      if(window.STATE)window.STATE.investments=null;
+      if(typeof window.showPage==='function')window.showPage('assets');
+      if(window.notify)window.notify((p.name||'Asset')+' is now running. You will find it under My Assets.');
+    };
+    bg.classList.add('show');
+    if(window.lockBodyScroll)window.lockBodyScroll();
+  }
+  function patchAssets(){
+    var title=document.querySelector('.member-page-title');
+    if(title&&title.textContent.trim()==='My Assets')title.textContent='Assets';
+    var tabs=document.querySelector('.assets-tabs');
+    if(tabs){
+      var buttons=tabs.querySelectorAll('.at');
+      if(buttons.length>=2){
+        var a=buttons[0],b=buttons[1];
+        if(/all assets/i.test(a.textContent)){tabs.insertBefore(b,a);b.textContent='My Assets';a.textContent='Assets';}
+      }
+    }
+    document.querySelectorAll('.asset-stats span').forEach(function(el){
+      el.innerHTML=el.innerHTML.replace(/^Price\b/,'Cost').replace(/^Duration\b/,'Term').replace(/^Daily Cashback\b/,'Daily Yield').replace(/^Total Return\b/,'Expected Return');
+    });
+    document.querySelectorAll('.p-cta').forEach(function(el){if(el.textContent.trim()==='Buy Now')el.textContent='Invest Now';});
+  }
+  function taskCards(type,progress,all){
+    return (all||[]).filter(function(m){return m.type===type;}).map(function(m){
+      var target=Number(m.target)||0, reward=Number(m.reward)||0, isMoney=type==='deposit', targetText=isMoney?money(target):target, current=isMoney?money(progress):progress, left=Math.max(0,target-progress);
+      var action=m.claimed?'<button disabled style="border:0;border-radius:999px;padding:8px 12px;background:var(--snow-neutral-soft);color:var(--snow-muted);font:700 12px inherit;">Claimed</button>'
+        :m.achieved?'<button onclick="claimTaskCenterReward(\''+type+'\','+target+',this)" style="border:0;border-radius:999px;padding:8px 14px;background:var(--snow-wine);color:#fff;font:700 12px inherit;">Claim</button>'
+        :'<span style="font-size:11px;color:var(--snow-muted);">'+(isMoney?money(left):left)+' to go</span>';
+      return '<div style="padding:13px 0;border-bottom:1px solid var(--snow-border);"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;"><div><b style="display:block;color:var(--snow-ink);font-size:13px;">'+(isMoney?'Team deposit':'Level 1 active referrals')+': '+targetText+'</b><small style="display:block;margin-top:4px;color:var(--snow-muted);font-size:11px;">Progress '+current+' / '+targetText+' · Reward '+money(reward)+'</small></div>'+action+'</div></div>';
+    }).join('');
+  }
+  function taskBody(){
+    var t=(window.STATE&&window.STATE.teamStats)||{},l1=Number(t.l1ActiveCount)||0,dep=Number(t.teamDeposits)||0;
+    return '<div class="reveal-in"><p style="margin:0;color:var(--snow-muted);font-size:12px;line-height:1.5;">Referral rewards unlock after a Level 1 referral deposits. Each completed task can be claimed once.</p>'
+      +'<section style="margin-top:18px;"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin-bottom:4px;">Level 1 active referrals</div>'+taskCards('count',l1,t.milestones)+'</section>'
+      +'<section style="margin-top:18px;"><div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin-bottom:4px;">Team deposits</div>'+taskCards('deposit',dep,t.milestones)+'</section></div>';
+  }
+  function addTaskCenter(){
+    var host=document.querySelector('.net-simple');
+    if(!host||document.getElementById('taskCenterEntry'))return;
+    var section=document.createElement('section');
+    section.id='taskCenterEntry';section.className='net-section';
+    section.innerHTML='<div class="net-section-title">Task Center</div><button onclick="openTaskCenter()" style="width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;padding:14px 0;border:0;background:transparent;font-family:inherit;color:var(--snow-ink);"><span><b style="display:block;font-size:15px;">Claim team rewards</b><small style="display:block;color:var(--snow-muted);font-size:11px;margin-top:4px;">Complete deposit-based referral and team goals</small></span><span style="color:var(--snow-wine);font-weight:800;font-size:18px;">›</span></button>';
+    host.appendChild(section);
+  }
+  function install(){
+    if(typeof window.api!=='function'||!window.STATE)return false;
+    var originalInvest=window.openInvestConfirm;
+    if(typeof originalInvest==='function'&&!window.__petroInvestConfirmWrapped){
+      window.__petroInvestConfirmWrapped=true;
+      window.openInvestConfirm=function(key,btn){return openAssetConfirm(key,btn);};
+    }
+    window.openTaskCenter=function(){if(window.openSheet)window.openSheet('Task Center',taskBody());};
+    window.claimTaskCenterReward=async function(type,target,btn){
+      if(btn&&btn.disabled)return;
+      var prior=btn&&btn.textContent;if(btn){btn.disabled=true;btn.textContent='Claiming…';}
+      var r=await window.api('/team/milestone/claim',{method:'POST',body:JSON.stringify({type:type,target:target})});
+      if(!r||r.status!=='success'){if(btn){btn.disabled=false;btn.textContent=prior||'Claim';}if(window.notify)window.notify((r&&r.message)||'Could not claim that reward');return;}
+      var fresh=await window.api('/team/stats');if(fresh&&fresh.status==='success')window.STATE.teamStats=fresh;
+      window.openTaskCenter();if(window.notify)window.notify(r.message||'Reward added to your wallet');
+    };
+    if(typeof window.showPage==='function'&&!window.__petroAssetsTaskWrapped){
+      window.__petroAssetsTaskWrapped=true;
+      var originalShow=window.showPage;
+      window.showPage=async function(name){
+        var out=await originalShow.apply(this,arguments);
+        if(name==='assets'||name==='products'){if(typeof window.switchAssetsTab==='function')window.switchAssetsTab('mine');setTimeout(patchAssets,0);}
+        if(name==='network')setTimeout(addTaskCenter,0);
+        return out;
+      };
+    }
+    patchAssets();addTaskCenter();
+    new MutationObserver(function(){patchAssets();addTaskCenter();}).observe(document.documentElement,{childList:true,subtree:true});
+    return true;
+  }
+  if(!install()){var tries=0,t=setInterval(function(){tries++;if(install()||tries>500)clearInterval(t);},20);}
+})();
+</script>
 </body>
 </html>
