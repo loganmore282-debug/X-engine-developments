@@ -775,17 +775,16 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .mar-foot{display:flex;justify-content:space-between;gap:12px;margin-top:7px;font-size:10.5px;color:var(--snow-muted);}
 .mar-foot span:last-child{text-align:right;}
 .my-assets-empty{padding:70px 0;text-align:center;color:var(--snow-muted);font-size:13px;}
-.asset-row{display:flex;gap:12px;background:var(--snow-surface);border-radius:var(--r-card);padding:14px;margin-bottom:12px;box-shadow:var(--sh-card);}
-.asset-thumb{width:64px;height:64px;border-radius:var(--r-ctl);overflow:hidden;flex-shrink:0;background:var(--snow-neutral-soft);}
+.asset-row{display:flex;gap:16px;background:var(--snow-surface);border-radius:var(--r-card);padding:18px;margin-bottom:14px;box-shadow:var(--sh-card);}
+.asset-thumb{width:78px;height:78px;border-radius:var(--r-ctl);overflow:hidden;flex-shrink:0;background:var(--snow-neutral-soft);}
 .asset-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
 .ar-glyph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:var(--snow-muted);}
 .asset-body{flex:1;min-width:0;}
-.asset-name{font-size:14.5px;font-weight:800;color:var(--snow-ink);margin-bottom:6px;}
-.asset-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin-bottom:10px;}
-.asset-stats span{font-size:10.5px;color:var(--snow-muted);font-weight:600;display:flex;align-items:center;gap:4px;}
-.asset-stats span svg{width:12px;height:12px;flex-shrink:0;}
+.asset-name{font-size:16px;font-weight:800;color:var(--snow-ink);margin-bottom:8px;}
+.asset-stats{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px;margin-bottom:13px;}
+.asset-stats span{font-size:11px;color:var(--snow-muted);font-weight:600;display:flex;align-items:baseline;gap:4px;}
 .asset-stats b{color:var(--snow-ink);font-weight:800;margin-left:2px;}
-.asset-row .p-cta{width:100%;height:38px;padding:0;font-size:13px;margin:0;}
+.asset-row .p-cta{width:100%;height:44px;padding:0;font-size:14px;margin:0;}
 .page-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 18px 12px;}
 .page-head h2{margin:0;font-size:23px;font-weight:400;letter-spacing:.02em;}
 .page-head span{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
@@ -1005,9 +1004,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 /* ── Payout Wallet hero ──
    Withdrawal gets one deliberate surface: the linked mobile-money wallet.
    The phone number is the hero value; everything around it stays secondary. */
-.wallet-card{position:relative;border-radius:22px;padding:20px 20px 18px;color:#fff;overflow:hidden;margin:0 0 10px;background:var(--snow-ink);border:0;box-shadow:0 18px 38px -28px rgba(37,38,43,.9);}
-.wallet-card::before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,var(--snow-wine),var(--petro-gold));}
-.wallet-card::after{content:'';position:absolute;right:-46px;bottom:-70px;width:150px;height:150px;border-radius:50%;border:20px solid rgba(245,160,0,.08);pointer-events:none;}
+.wallet-card{position:relative;border-radius:var(--r-card);padding:20px;color:#fff;overflow:hidden;margin:0 0 10px;background:rgba(20,12,8,.58);border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 28px -18px rgba(0,0,0,.7);}
 .wallet-card .row1{position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
 .wallet-ident{display:flex;align-items:center;gap:10px;min-width:0;}
 .wallet-card .wc-mark{width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.09);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -1276,11 +1273,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 .msg-detail .content{font-size:14px;line-height:1.75;color:var(--snow-ink);font-weight:500;white-space:pre-line;}
 
 /* ── Change Login / Trade Password (ChangeLoginPassword.dc.html, ChangePassword.dc.html) ── */
-.pw-note{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.6;margin:0 0 22px;}
-.pw-head{display:flex;align-items:center;gap:9px;margin:0 0 10px;}
-.pw-head .bar{width:4px;height:16px;border-radius:var(--r-pill);background:var(--petro-grad);flex-shrink:0;}
-.pw-head span{font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--snow-muted);}
-.pw-field{background:var(--snow-surface);border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:52px;display:flex;align-items:center;padding:0 16px;margin-bottom:20px;gap:10px;}
+.pw-note{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.6;margin:0 0 24px;}
+.pw-label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--snow-muted);margin:0 0 7px;}
+.pw-field{background:transparent;border:0;border-bottom:1.5px solid var(--snow-border);border-radius:0;height:56px;display:flex;align-items:center;padding:0 2px;margin:0 0 24px;gap:10px;}
+.pw-field:focus-within{border-bottom-color:var(--snow-wine);}
 .pw-field input{border:0;outline:0;background:transparent;font-size:15px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .pw-field.pin input{letter-spacing:.2em;}
 .pw-field.pin input::placeholder{letter-spacing:normal;}
@@ -2227,6 +2223,30 @@ body.sheet-open .sheet-bg{bottom:0;}
 .wit-bal .lbl,.wit-fee,.wit-instr ol,.form-hint{color:rgba(255,255,255,.68)!important;}
 .wit-bal .val,.wit-amt span,.wit-amt input,.wit-instr h3{color:#fff!important;}
 .wit-bal,.wit-amt,.wit-instr{border-color:rgba(255,255,255,.20)!important;}
+
+/* Keep simple task pages on the refinery environment rather than putting a
+   second, empty glass card around their real content. */
+.sheet-body:has(.pw-form),
+.sheet-body:has(.wallet-minimal),
+.sheet-body:has(.checkin-panel){
+  margin:0 auto 26px;
+  padding:22px 20px 40px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+}
+.pw-form{padding:4px 0 6px;}
+.sheet-body .pw-note,.sheet-body .pw-label{color:rgba(255,255,255,.68);}
+.sheet-body .pw-field{border-bottom-color:rgba(255,255,255,.22);}
+.sheet-body .pw-field:focus-within{border-bottom-color:#ff3340;}
+.sheet-body .pw-field input{color:#fff;}
+.sheet-body .pw-field input::placeholder{color:rgba(255,255,255,.48);}
+.sheet-body .pw-field svg{opacity:.72;}
+.wallet-minimal{padding:0;}
+.wallet-plain-row{padding:18px 2px 20px;align-items:flex-start;}
 
 
 /* ── Stable signed-in wallpaper ─────────────────────────────────────────

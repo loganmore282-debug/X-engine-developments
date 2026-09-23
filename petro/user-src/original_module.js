@@ -3368,10 +3368,10 @@ function assetRowHtml(p){
     <div class="asset-body">
       <div class="asset-name">${esc(p.name)}</div>
       <div class="asset-stats">
-        <span>${ICONS.coinsStack} Price <b class="mono">${fmtUGX(Number(p.price) || 0)}</b></span>
-        <span>${ICONS.arrowDownCircle} Duration <b>${cycle} Days</b></span>
-        <span>${ICONS.trendUp} Daily Cashback <b class="mono">${fmtUGX(daily)}</b></span>
-        <span>${ICONS.trophy} Total Return <b class="mono">${fmtUGX(expected)}</b></span>
+        <span>Price <b class="mono">${fmtUGX(Number(p.price) || 0)}</b></span>
+        <span>Duration <b>${cycle} Days</b></span>
+        <span>Daily Cashback <b class="mono">${fmtUGX(daily)}</b></span>
+        <span>Total Return <b class="mono">${fmtUGX(expected)}</b></span>
       </div>
       ${productCtaHtml(p)}
     </div>
@@ -4468,13 +4468,13 @@ function pwFieldHtml(id, placeholder, pin){
   return `<div class="pw-field${pin ? ' pin' : ''}">${pwLockSvg()}<input id="${id}" type="password" placeholder="${placeholder}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
 }
 window.openChangeLoginPasswordSheet = function(){
-  openSheet('Login Password', `<div class="reveal-in" style="padding-top:22px;">
+  openSheet('Login Password', `<div class="pw-form reveal-in">
     <p class="pw-note">Your login password is used to sign in to your ${esc(brandName())} account.</p>
-    <div class="pw-head"><span class="bar"></span><span>Old Login Password</span></div>
+    <label class="pw-label" for="lpOld">Current password</label>
     ${pwFieldHtml('lpOld', 'Enter old password')}
-    <div class="pw-head"><span class="bar"></span><span>New Login Password</span></div>
+    <label class="pw-label" for="lpNew">New password</label>
     ${pwFieldHtml('lpNew', 'Enter new password')}
-    <div class="pw-head"><span class="bar"></span><span>Confirm New Password</span></div>
+    <label class="pw-label" for="lpNew2">Confirm new password</label>
     ${pwFieldHtml('lpNew2', 'Re-enter new password')}
     <button class="primary-button" id="lpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitLoginPasswordChange()">SAVE LOGIN PASSWORD</button>
   </div>`);
