@@ -1062,6 +1062,7 @@ var ICONS = {
   arrowDownTray: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19.5h16"/></svg>',
   peoplePlus: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg>',
   giftBox: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9.5" width="18" height="10.5" rx="1.6"/><path d="M3 13.5h18"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.6 0-4-.7-4-3 0-1.5 1.2-2.5 2.5-2.5C12.2 4 12 7 12 9.5Z"/><path d="M12 9.5c1.6 0 4-.7 4-3 0-1.5-1.2-2.5-2.5-2.5C11.8 4 12 7 12 9.5Z"/></svg>',
+  checkinCalendar: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="1.4" y="2.5" width="21.2" height="20" rx="3.1" stroke="currentColor" stroke-width="2.6"/><path d="M7.3 1v3.2m9.4-3.2v3.2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M8.3 9.1h2.8v2.8H8.3zm4.3 0h2.8v2.8h-2.8zm4.3 0h2.8v2.8h-2.8zM4 13.6h2.8v2.8H4zm4.3 0h2.8v2.8H8.3zm8.6 0h2.8v2.8h-2.8zM4 17.9h2.8v2.8H4zm4.3 0h2.8v2.8H8.3zm4.3 0h2.8v2.8h-2.8z" fill="currentColor"/><path d="m12.5 14.9 1.2 1.2 2.7-3.2" stroke="currentColor" stroke-width="2.1" stroke-linecap="square" stroke-linejoin="miter"/></svg>',
   coinsStack: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v5c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 11v5c0 1.66 3.13 3 7 3s7-1.34 7-3v-5"/></svg>',
   arrowDownCircle: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v7"/><path d="M8.7 11.2 12 14.5l3.3-3.3"/></svg>',
   arrowUpCircle: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-7"/><path d="M8.7 12.8 12 9.5l3.3 3.3"/></svg>',
@@ -3207,7 +3208,7 @@ ${homeBannerBlockHtml(st)}
   <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Withdrawals</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
 </div>
 <div class="checkin-card">
-  <span class="cic-gift">${ICONS.giftBox}</span>
+  <span class="cic-gift">${ICONS.checkinCalendar}</span>
   <div class="cic-text">
     <div class="cic-title">Daily Check-in</div>
     <div class="cic-sub">Check in daily to receive rewards and grow your earnings!</div>
