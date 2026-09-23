@@ -1935,11 +1935,11 @@ async function boot(){
   // The server caches completed activity; this is deliberately not generated
   // client-side so the ticker never invents financial events.
   const pSettings = api('/public/settings'), pProducts = api('/public/products');
-  const pBanner = api('/public/banner'), pActivity = api('/public/activity-feed');
+  const pBanner = api('/public/banner');
   _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/petro-images') ])
     .then(([ai, ci]) => { applyBootArtwork(ai, ci); })
     .catch(() => {});
-  const [s, p, b, activity] = await Promise.all([ pSettings, pProducts, pBanner, pActivity ]);
+  const [s, p, b] = await Promise.all([ pSettings, pProducts, pBanner ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   // The region that owns this hostname, so the landing screen, Sign Up and
   // the product list already read in the right currency before anybody has
@@ -1962,9 +1962,6 @@ async function boot(){
   applyBrandName();
   applyInnerBackgroundSettings();
   STATE.products = p.status === 'success' ? p.products : [];
-  STATE.activityFeed = (activity.status === 'success' && Array.isArray(activity.activities))
-    ? activity.activities : [];
-  _homeActivityFetchedAt = STATE.activityFeed.length ? Date.now() : 0;
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
   // Optional admin-set banner video (Home.dc.html's "ADMIN VIDEO BANNER").
   // Two sources, and an uploaded file always wins over a typed link:
@@ -2103,7 +2100,7 @@ function applyAuthTagline(){
   el.style.display = tag ? '' : 'none';
 }
 // Bounds how long the loading screen will wait on boot() -- a slow/stuck
-// settings or activity-feed call must never strand a member on the spinner
+// settings call must never strand a member on the spinner
 // forever; past this cap the app proceeds with whatever boot() has (or
 // hasn't) filled in yet, same as before this change.
 function withTimeout(promise, ms){
@@ -3160,47 +3157,6 @@ function tryAutoplayHomeBanner(){
   ['touchend', 'click'].forEach(ev =>
     document.addEventListener(ev, kick, { passive: true }));
 }
-function homeActivityRowsHtml(){
-  const rows = Array.isArray(STATE.activityFeed) ? STATE.activityFeed.slice(0, 5) : [];
-  if (!rows.length) return '<div class="home-activity-empty">No completed platform activity yet.</div>';
-  const items = rows.map(row => {
-    const action = row.action === 'withdraw' ? 'withdrew' : 'deposited';
-    const phone = esc(String(row.phone || '256 **** --'));
-    const amount = esc(fmtUGX(Math.max(0, Number(row.amount) || 0)));
-    return '<div class="home-activity-row"><b>' + phone + '</b><span>has ' + action + '</span><strong class="mono">' + amount + '</strong></div>';
-  }).join('');
-  // Two identical groups let the CSS ticker loop without a visible jump.
-  return '<div class="home-activity-set">' + items + '</div><div class="home-activity-set" aria-hidden="true">' + items + '</div>';
-}
-function homeActivityCardHtml(){
-  const hasRows = Array.isArray(STATE.activityFeed) && STATE.activityFeed.length;
-  return '<section class="home-activity-card' + (hasRows ? '' : ' is-empty') + '" aria-label="Recent platform activity">' +
-    '<div class="home-activity-title">Platform Activity</div>' +
-    '<div class="home-activity-window"><div class="home-activity-track" id="homeActivityRows">' + homeActivityRowsHtml() + '</div></div>' +
-  '</section>';
-}
-var _homeActivityRequest = null;
-var _homeActivityFetchedAt = 0;
-var _homeActivityTimer = null;
-async function refreshHomeActivityFeed(force){
-  if (_homeActivityRequest) return _homeActivityRequest;
-  if (!force && Date.now() - _homeActivityFetchedAt < 30000) return;
-  _homeActivityRequest = api('/public/activity-feed').then(r => {
-    if (r && r.status === 'success' && Array.isArray(r.activities)) {
-      STATE.activityFeed = r.activities;
-      _homeActivityFetchedAt = Date.now();
-      const host = $('homeActivityRows');
-      if (host) host.innerHTML = homeActivityRowsHtml();
-    }
-  }).catch(() => {}).finally(() => { _homeActivityRequest = null; });
-  return _homeActivityRequest;
-}
-function startHomeActivityRefresh(){
-  if (_homeActivityTimer) return;
-  _homeActivityTimer = setInterval(() => {
-    if (STATE.page === 'home') refreshHomeActivityFeed(true);
-  }, 60000);
-}
 function paintHome(){
   const a = STATE.account || {};
   const st = STATE.settings || {};
@@ -3248,7 +3204,6 @@ ${homeBannerBlockHtml(st)}
   </div>
   <button class="cic-btn" onclick="openCheckinSheet()">Check In</button>
 </div>
-${homeActivityCardHtml()}
 ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.homeFooterBanner)}" alt="" onerror="this.remove()">` : ''}
 <div style="height:8px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
@@ -3257,8 +3212,6 @@ ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.hom
   adoptPreloadedBannerVideo();
   tryAutoplayHomeBanner();
   startHomeCarousel();
-  startHomeActivityRefresh();
-  refreshHomeActivityFeed();
 }
 // THE single place this app works out what a product pays. /public/products
 // already sends resolved expectedReturn/cycle/dailyPayout figures computed
