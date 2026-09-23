@@ -2804,6 +2804,21 @@ function startLiveRefresh(){
   _liveDelay = livePollMs();
   scheduleLive(_liveGen, _liveDelay);
 }
+var _pageEnterTimer = null;
+function playPageEnter(){
+  const host = $('pageHost');
+  if (!host) return;
+  if (_pageEnterTimer) { clearTimeout(_pageEnterTimer); _pageEnterTimer = null; }
+  host.classList.remove('petro-page-enter');
+  // Force only this small host to reflow so a second tab tap replays the
+  // entrance rather than leaving the finished animation class in place.
+  void host.offsetWidth;
+  host.classList.add('petro-page-enter');
+  _pageEnterTimer = setTimeout(() => {
+    host.classList.remove('petro-page-enter');
+    _pageEnterTimer = null;
+  }, 360);
+}
 // Coming back to the app refreshes it at once. Without this the member stares
 // at whatever was on screen when they left until the next tick, which is the
 // single most visible way a polled app feels stale.
@@ -2891,6 +2906,10 @@ window.showPage = async function(name){
   else if (name === 'assets') await renderAssets();
   else if (name === 'network') await renderNetwork();
   else if (name === 'account') await renderAccount();
+  // The owner asked for an appear motion when entering a page (for example
+  // Team/Network).  This runs once per real navigation, after its renderer
+  // has put content in #pageHost, never on a normal live-data repaint.
+  playPageEnter();
   startLiveRefresh();
 };
 // Announcement dialog REMOVED entirely (owner: "remove announcement
@@ -3999,7 +4018,7 @@ async function renderAccount(){
   const html = `
 <div class="account-page" style="padding:0 18px;">
   <div class="member-page-title">Profile</div>
-  <div class="acct-card"${STATE.profileCard ? ` style="background-image:linear-gradient(100deg,rgba(255,255,255,.08),rgba(20,12,8,.30)),url('${esc(STATE.profileCard)}')"` : ''}>
+  <div class="acct-card"${STATE.profileCard ? ` style="--acct-card-image:url('${esc(STATE.profileCard)}')"` : ''}>
     <div class="acct-avatar">${ICONS.peopleGroup}</div>
     <div class="acct-idbox">
       <div class="acct-phone-row">${esc(formatPhoneDisplay(a.phone))}</div>
