@@ -5669,15 +5669,36 @@ function openSimpleConfirm(title, body, onConfirm){
     <p class="confirm-sub" style="margin:0 0 14px;">${esc(body)}</p>
     <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;">Confirm</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
-  $('confirmActionBtn').onclick = async () => {
-    $('confirmActionBtn').disabled = true; $('confirmActionBtn').textContent = 'Working…';
-    const ok = await onConfirm();
-    $('confirmActionBtn').disabled = false; $('confirmActionBtn').textContent = 'Confirm';
-    if (ok) closeConfirm();
+  const actionBtn = $('confirmActionBtn');
+  actionBtn.onclick = async () => {
+    if (actionBtn.disabled) return;
+    actionBtn.disabled = true; actionBtn.textContent = 'Working…';
+    try {
+      const ok = await onConfirm();
+      if (ok) { closeConfirm(); return; }
+    } catch (_) {
+      notify('Could not complete that action. Please try again.');
+    } finally {
+      // A successful action closes the dialog. Only restore this exact button
+      // if this same dialog is still open (a new dialog may already exist).
+      if ($('confirmBg').classList.contains('show') && $('confirmActionBtn') === actionBtn) {
+        actionBtn.disabled = false;
+        actionBtn.textContent = 'Confirm';
+      }
+    }
   };
   $('confirmBg').classList.add('show');
   lockBodyScroll();
 }
+
+// The Cancel button and backdrop both call this by name from inline markup.
+// It must be a window property; a missing global here leaves confirmBg up and
+// keeps the document's scroll lock active, which traps the member on screen.
+window.closeConfirm = function(){
+  $('confirmBg').classList.remove('show');
+  $('confirmSheet').innerHTML = '';
+  if (!isAnyOverlayOpen()) unlockBodyScroll();
+};
 
 // ── PWA: install prompt + service worker auto-update ──
 window.addEventListener('beforeinstallprompt', (e) => {
