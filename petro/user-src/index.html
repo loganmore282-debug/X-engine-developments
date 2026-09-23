@@ -705,7 +705,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
 /* Coloured-circle row icons -- three tones, cycled per row to match the
    mockup (it alternates red/gold/dark rather than using one colour for
    every row, which is what made the old .setting-row squares read as flat). */
-.acct-row-list{display:flex;flex-direction:column;gap:10px;margin:0 0 16px;}
+.profile-section{margin:18px 0 0;}
+.profile-section-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin:0 2px 8px;}
+.acct-row-list{display:flex;flex-direction:column;gap:10px;margin:0;}
 .acct-row{display:flex;align-items:center;gap:13px;background:var(--snow-surface);border:none;border-radius:var(--r-card);padding:13px 14px;box-shadow:var(--sh-card);width:100%;text-align:left;font-family:inherit;color:var(--snow-ink);}
 .acct-row .txt{flex:1;min-width:0;}
 .acct-row .t1{display:block;font-size:14px;font-weight:800;}
@@ -723,26 +725,30 @@ html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
    cards, an earnings card, three commission cards, a trophy card and recent
    referrals. The owner explicitly rejected that density. Keep only the facts
    and actions needed on this screen. */
-.net-simple{padding:14px 18px 0;}
-.net-invite-line{display:flex;align-items:center;gap:12px;padding:15px 0;border-bottom:1px solid var(--snow-border);}
+.net-simple{padding:0 18px;}
+.net-section{padding:16px 0;}
+.net-section+.net-section{border-top:1px solid var(--snow-border);}
+.net-section-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin-bottom:6px;}
+.net-invite-line{display:flex;align-items:center;gap:12px;padding:10px 0;}
 .net-invite-line>div{flex:1;min-width:0;}
 .net-invite-line span{display:block;font-size:11px;color:var(--snow-muted);font-weight:550;margin-bottom:4px;}
 .net-invite-line b{display:block;font-size:16px;color:var(--snow-ink);font-weight:700;}
 .net-invite-line .net-link{font-size:12px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--snow-ink);}
 .net-invite-line button{width:34px;height:34px;border:0;background:transparent;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
 .net-invite-line button svg{width:18px;height:18px;}
-.net-levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:22px 0;border-top:1px solid var(--snow-border);border-bottom:1px solid var(--snow-border);}
+.net-levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0;}
 .net-levels>div{text-align:center;padding:16px 8px;position:relative;}
 .net-levels>div+div::before{content:'';position:absolute;left:0;top:14px;bottom:14px;width:1px;background:var(--snow-border);}
 .net-levels b{display:block;font-size:23px;color:var(--snow-ink);font-weight:700;}
 .net-levels span{display:block;font-size:11px;color:var(--snow-muted);margin-top:3px;}
 .net-levels small{display:block;font-size:12px;color:var(--snow-wine);font-weight:700;margin-top:5px;}
-.net-earn-simple{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0 16px;}
+.net-earn-simple{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0;}
 .net-earn-simple>div:first-child{min-width:0;}
 .net-earn-simple span{display:block;font-size:11px;color:var(--snow-muted);margin-bottom:4px;}
 .net-earn-simple b{display:block;font-size:24px;color:var(--snow-ink);font-weight:700;}
 .net-earn-actions{display:flex;align-items:center;gap:8px;}
 .net-earn-actions button{border:0;background:transparent;color:var(--snow-wine);font-family:inherit;font-weight:700;font-size:12px;padding:8px;}
+.net-earn-actions button:last-child{background:var(--snow-wine);color:#fff;border-radius:var(--r-pill);padding:9px 13px;}
 .net-earn-actions button svg{width:18px;height:18px;display:block;}
 
 /* ── Assets ── */
@@ -1867,6 +1873,9 @@ body.sheet-open .sheet-bg{bottom:0;}
 .net-levels{border-top-color:rgba(255,255,255,.14);border-bottom-color:rgba(255,255,255,.14);}
 .net-levels>div+div::before{background:rgba(255,255,255,.14);}
 .net-invite-line button,.net-earn-actions button{color:#ff3340;}
+.profile-section-title,.net-section-title{color:rgba(255,255,255,.56);}
+.net-section+.net-section{border-top-color:rgba(255,255,255,.14);}
+.net-earn-actions button:last-child{background:#e30613;color:#fff;}
 
 .logout-btn-v2{
   background:rgba(20,12,8,.46);

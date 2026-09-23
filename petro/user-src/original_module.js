@@ -3727,6 +3727,8 @@ function paintNetwork(){
   const html = `
 <div class="member-page-title">Network</div>
 <div class="net-simple">
+  <section class="net-section net-invite-section">
+    <div class="net-section-title">Invite</div>
   <div class="net-invite-line">
     <div><span>Invitation code</span><b class="mono">${esc(code || '—')}</b></div>
     <button data-copy-group="net" onclick="copyText('${esc(code)}')" aria-label="Copy invitation code">${ICONS.copy}</button>
@@ -3735,13 +3737,19 @@ function paintNetwork(){
     <div><span>Invitation link</span><b class="net-link">${esc(link || '—')}</b></div>
     <button data-copy-group="net" onclick="copyText('${esc(link)}')" aria-label="Copy invitation link">${ICONS.copy}</button>
   </div>
+  </section>
 
+  <section class="net-section">
+    <div class="net-section-title">Team</div>
   <div class="net-levels">
     <div><b class="mono">${(t.team && t.team.l1) || 0}</b><span>Level 1</span><small>${rates.l1 != null ? rates.l1 : 27}%</small></div>
     <div><b class="mono">${(t.team && t.team.l2) || 0}</b><span>Level 2</span><small>${rates.l2 != null ? rates.l2 : 2}%</small></div>
     <div><b class="mono">${(t.team && t.team.l3) || 0}</b><span>Level 3</span><small>${rates.l3 != null ? rates.l3 : 1}%</small></div>
   </div>
+  </section>
 
+  <section class="net-section net-earn-section">
+    <div class="net-section-title">Earnings</div>
   <div class="net-earn-simple">
     <div>
       <span>Referral earnings</span>
@@ -3752,6 +3760,7 @@ function paintNetwork(){
       <button onclick="openAllReferralsSheet()">View team</button>
     </div>
   </div>
+  </section>
 </div>
 <div style="height:20px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
@@ -3959,14 +3968,22 @@ async function renderAccount(){
       <div class="acct-phone-row">${esc(formatPhoneDisplay(a.phone))}</div>
     </div>
   </div>
-  <div class="acct-row-list">
-    ${acctRowHtml(ICONS.docLg, 'ar-red', 'Transaction Statement', 'Income, deposits and withdrawals', "openTransactionStatement('income')")}
-    ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
-    ${acctRowHtml(ICONS.walletLg, 'ar-red', 'Payout Wallet', 'Link your mobile money payout number', 'openWalletSheet()')}
-    ${acctRowHtml(ICONS.shieldCheck, 'ar-red', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
-    ${acctRowHtml(ICONS.headset, 'ar-red', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
-    ${acctRowHtml(ICONS.infoCircle, 'ar-red', 'About Us', 'Platform information and terms', 'openAboutSheet()')}
-  </div>
+  <section class="profile-section">
+    <div class="profile-section-title">Wallet &amp; activity</div>
+    <div class="acct-row-list">
+      ${acctRowHtml(ICONS.walletLg, 'ar-red', 'Payout Wallet', 'Link your mobile money payout number', 'openWalletSheet()')}
+      ${acctRowHtml(ICONS.docLg, 'ar-red', 'Transaction Statement', 'Income, deposits and withdrawals', "openTransactionStatement('income')")}
+      ${acctRowHtml(ICONS.giftSmall, 'ar-red', 'Gift Codes', 'Redeem gift codes', 'openChestSheet()')}
+    </div>
+  </section>
+  <section class="profile-section">
+    <div class="profile-section-title">Security &amp; support</div>
+    <div class="acct-row-list">
+      ${acctRowHtml(ICONS.shieldCheck, 'ar-red', 'Security Settings', 'Change password, manage security', 'openSecuritySettingsSheet()')}
+      ${acctRowHtml(ICONS.headset, 'ar-red', 'Customer Support', 'Get help anytime', 'openCustomerService()')}
+      ${acctRowHtml(ICONS.infoCircle, 'ar-red', 'About Us', 'Platform information and terms', 'openAboutSheet()')}
+    </div>
+  </section>
   <button class="logout-btn-v2" onclick="doLogout()">${ICONS.logoutArrow} Log Out</button>
   <div style="height:20px;"></div>
 </div>`;
@@ -5842,4 +5859,3 @@ startI18nObserver();
 applyRegionLanguages();
 var _entryPromise = maybeRotateEntry();
 var _bootPromise = boot();
-
