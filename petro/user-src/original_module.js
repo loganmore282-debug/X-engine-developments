@@ -1931,13 +1931,15 @@ window.doLogout = async function(){
 // instead of opening blank.
 var _artPromise = null;
 async function boot(){
-  // Fired together. Only the first four are awaited.
+  // Fired together so Home receives its first activity rows before it paints.
+  // The server caches completed activity; this is deliberately not generated
+  // client-side so the ticker never invents financial events.
   const pSettings = api('/public/settings'), pProducts = api('/public/products');
-  const pBanner = api('/public/banner');
+  const pBanner = api('/public/banner'), pActivity = api('/public/activity-feed');
   _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/petro-images') ])
     .then(([ai, ci]) => { applyBootArtwork(ai, ci); })
     .catch(() => {});
-  const [s, p, b] = await Promise.all([ pSettings, pProducts, pBanner ]);
+  const [s, p, b, activity] = await Promise.all([ pSettings, pProducts, pBanner, pActivity ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   // The region that owns this hostname, so the landing screen, Sign Up and
   // the product list already read in the right currency before anybody has
@@ -1960,6 +1962,9 @@ async function boot(){
   applyBrandName();
   applyInnerBackgroundSettings();
   STATE.products = p.status === 'success' ? p.products : [];
+  STATE.activityFeed = (activity.status === 'success' && Array.isArray(activity.activities))
+    ? activity.activities : [];
+  _homeActivityFetchedAt = STATE.activityFeed.length ? Date.now() : 0;
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
   // Optional admin-set banner video (Home.dc.html's "ADMIN VIDEO BANNER").
   // Two sources, and an uploaded file always wins over a typed link:
