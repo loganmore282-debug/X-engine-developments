@@ -996,6 +996,8 @@ function fmtUGX(n){
   const hasCents = Math.round(v*100)%100 !== 0;
   return cur() + ' ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
 }
+// Keep investment and payout amounts on the same cents-aware formatter.
+function fmtUGXCents(n){ return fmtUGX(n); }
 // subagent-audit-caught: the deposit/withdraw amount fields have no
 // oninput sanitizer, and every amount the app itself shows (quick-amount
 // chips, "min UGX 30,000" hints) is comma-formatted via fmtUGX() -- so a
@@ -2878,8 +2880,8 @@ window.showPage = async function(name){
   // entry, so including it would retire someone else's.
   const spent = (detailOpen ? 1 : 0) + (sheetOpen ? 1 : 0);
   if (spent) history.go(-spent);
-  if (name === 'products') { _assetsTab = 'mine'; name = 'assets'; }
-  else if (name === 'catalog') { _assetsTab = 'all'; name = 'assets'; }
+  if (name === 'products') name = 'home';
+  else if (name === 'catalog') name = 'assets';
   else if (name === 'team' || name === 'referral') { name = 'network'; }
   STATE.page = name;
   updateNavIcons();
@@ -2922,11 +2924,19 @@ function maybeShowAnnouncement(){}
 // down and restart the ticker/chest-swing animations every few seconds.
 async function renderHome(){
   const hadCache = !!STATE.account;
+  const hadInvestments = Array.isArray(STATE.investments);
   if (hadCache) paintHome();
   const [accR, invR] = await Promise.all([ api('/account'), api('/investments') ]);
   if (accR.status === 'success') STATE.account = accR.account;
+  if (invR.status === 'success' && Array.isArray(invR.investments)) {
+    STATE.investments = invR.investments;
+    _investmentsLoadFailed = false;
+  } else if (!hadInvestments) {
+    _investmentsLoadFailed = true;
+  }
   if (STATE.page !== 'home') return; // navigated away while awaiting
   if (hadCache) patchHomeBalances(); else paintHome();
+  paintMyAssetsInner();
   // The envelope button's unread dot. Fetched once per Home entry, AFTER
   // the paint (never blocking it) and patched in place via
   // updateMessageBadge() so it can't tear down the ticker/chest animation.
@@ -3204,6 +3214,10 @@ ${homeBannerBlockHtml(st)}
   </div>
   <button class="cic-btn" onclick="openCheckinSheet()">Check In</button>
 </div>
+<section class="home-my-assets" aria-label="My Assets">
+  <h2>My Assets</h2>
+  <div id="myAssetsInner">${myAssetsInnerHtml()}</div>
+</section>
 ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.homeFooterBanner)}" alt="" onerror="this.remove()">` : ''}
 <div style="height:8px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
@@ -3337,7 +3351,7 @@ async function refreshCatalogNow(){
   const r = await api('/public/products');
   if (r.status === 'success') {
     STATE.products = r.products;
-    if (STATE.page === 'assets' && _assetsTab === 'all') paintAssets();
+    if (STATE.page === 'assets') paintAssets();
   }
 }
 // Opens whichever community channel the admin configured. Kept separate
@@ -3359,20 +3373,15 @@ window.openChannelLink = function(){
 // and its open/soon/countdown states, so nothing about how a purchase
 // actually works changed, only how the row looks.
 //
-var _assetsTab = 'mine';
 window.switchAssetsTab = function(tab){
-  _assetsTab = tab;
-  paintAssets();
+  showPage(tab === 'mine' ? 'home' : 'assets');
 };
 async function renderAssets(){
   const hadProducts = (STATE.products || []).length > 0;
-  const hadInvestments = Array.isArray(STATE.investments);
-  if (hadProducts || hadInvestments) paintAssets();
+  if (hadProducts) paintAssets();
   else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
-  const [pr, ir] = await Promise.all([api('/public/products'), api('/investments')]);
+  const pr = await api('/public/products');
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
-  if (ir.status === 'success') { STATE.investments = ir.investments; _investmentsLoadFailed = false; }
-  else if (!hadInvestments) { STATE.investments = []; _investmentsLoadFailed = true; }
   if (STATE.page !== 'assets') return; // navigated away while awaiting
   paintAssets();
 }
@@ -3401,19 +3410,12 @@ function paintAssets(){
   const products = STATE.products || [];
   const html = `
 <div class="member-page-title">Assets</div>
-<div class="assets-tabs">
-  <button class="at ${_assetsTab === 'mine' ? 'on' : ''}" onclick="switchAssetsTab('mine')">My Assets</button>
-  <button class="at ${_assetsTab === 'all' ? 'on' : ''}" onclick="switchAssetsTab('all')">Assets</button>
-</div>
 <div id="assetsBody" style="padding:0 10px;">
-  ${_assetsTab === 'mine'
-    ? '<div id="myAssetsInner"></div>'
-    : (products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">No assets yet.</div>')}
+  ${products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">No assets yet.</div>'}
 </div>
 <div style="height:20px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-  if (_assetsTab === 'all') startProductCountdowns();
-  else paintMyAssetsInner();
+  startProductCountdowns();
 }
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
@@ -3563,10 +3565,10 @@ function myAssetRowHtml(inv){
 }
 function myAssetsInnerHtml(){
   const investments = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured');
-  if (!STATE.investments && _investmentsLoadFailed) {
+  if (!Array.isArray(STATE.investments) && _investmentsLoadFailed) {
     return '<div class="my-assets-empty">Could not load your assets.</div>';
   }
-  if (!investments.length) return '<div class="my-assets-empty">No assets yet.</div>';
+  if (!investments.length) return '<div class="my-assets-empty">No investments yet. Browse Assets to get started.</div>';
   return '<div class="my-assets-list">' + investments.map(myAssetRowHtml).join('') + '</div>';
 }
 function paintMyAssetsInner(){
@@ -4018,14 +4020,8 @@ function settingRowHtml(icon, title, sub, onclick){
     <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"></path></svg>
   </button>`;
 }
-// New mockup's single "Security Settings" row opens a small menu -- just the
-// Login Password sheet now. Trade Password/PIN was removed app-wide per
-// owner instruction ("remove trade passwords... all stuff I never
-// mentioned"); openChangeTradePasswordSheet() is left defined but unreached.
 window.openSecuritySettingsSheet = function(){
-  openSheet('Security Settings', `<div class="acct-row-list" style="margin:0;">
-    ${acctRowHtml(ICONS.lock, 'ar-red', 'Login Password', 'Change your sign-in password', 'openChangeLoginPasswordSheet()')}
-  </div>`);
+  openChangeLoginPasswordSheet();
 };
 // Rebuilt to the owner's Account mockup -- a profile card over an
 // admin-uploadable refinery photo (new 'profilecard' image slot, same
@@ -4062,7 +4058,7 @@ async function renderAccount(){
     ${acctListCardHtml('accountWallet', 'Payout Wallet', 'openWalletSheet()')}
     ${acctListCardHtml('accountStatement', 'Transaction Statement', "openTransactionStatement('income')")}
     ${acctListCardHtml('accountGift', 'Gift Codes', 'openChestSheet()')}
-    ${acctListCardHtml('accountSecurity', 'Security Settings', 'openSecuritySettingsSheet()')}
+    ${acctListCardHtml('accountSecurity', 'Security Settings', 'openChangeLoginPasswordSheet()')}
     ${acctListCardHtml('support', 'Customer Support', 'openCustomerService()')}
     ${acctListCardHtml('accountAbout', 'About Us', 'openAboutSheet()')}
   </div>
@@ -4550,14 +4546,16 @@ function pwFieldHtml(id, placeholder, pin){
   return `<div class="pw-field${pin ? ' pin' : ''}">${pwLockSvg()}<input id="${id}" type="password" placeholder="${placeholder}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
 }
 window.openChangeLoginPasswordSheet = function(){
-  openSheet('Login Password', `<div class="pw-form reveal-in">
-    <p class="pw-note">Your login password is used to sign in to your ${esc(brandName())} account.</p>
+  openSheet('Security Settings', `<div class="pw-form reveal-in">
+    <div class="pw-form-heading"><span class="pw-heading-icon">${pwLockSvg()}</span><div><h3>Change login password</h3><p>Protect your ${esc(brandName())} account with a new password.</p></div></div>
+    <div class="pw-form-fields">
     <label class="pw-label" for="lpOld">Current password</label>
     ${pwFieldHtml('lpOld', 'Enter old password')}
     <label class="pw-label" for="lpNew">New password</label>
     ${pwFieldHtml('lpNew', 'Enter new password')}
     <label class="pw-label" for="lpNew2">Confirm new password</label>
     ${pwFieldHtml('lpNew2', 'Re-enter new password')}
+    </div>
     <button class="primary-button" id="lpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitLoginPasswordChange()">SAVE LOGIN PASSWORD</button>
   </div>`);
 };
@@ -5731,9 +5729,8 @@ window.openInvestConfirm = function(tierKey, btn){
       return;
     }
     closeConfirm();
-    _assetsTab = 'mine';
-    showPage('assets');
-    notify(`${p.name} is now running. You will find it under My Assets.`);
+    showPage('home');
+    notify(`${p.name} is now running. See it in My Assets below Daily Check-in.`);
   };
   $('confirmBg').classList.add('show');
   lockBodyScroll();
