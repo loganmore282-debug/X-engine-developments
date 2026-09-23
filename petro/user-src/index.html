@@ -1911,7 +1911,7 @@ body.sheet-open .sheet-bg{bottom:0;}
   z-index:-1;
   pointer-events:none;
   background:
-    linear-gradient(180deg,rgba(12,7,4,.48) 0%,rgba(12,7,4,.62) 48%,rgba(12,7,4,.74) 100%),
+    linear-gradient(180deg,rgba(12,7,4,.34) 0%,rgba(12,7,4,.46) 48%,rgba(12,7,4,.56) 100%),
     var(--auth-hero-img);
   background-size:cover,cover;
   background-position:center center,center center;
@@ -2380,6 +2380,23 @@ html,body,#app{
 .account-page .acct-card{min-height:144px;padding:24px 20px;}
 .account-page .acct-avatar{width:64px;height:64px;}
 
+/* Account is a clear vertical action menu: no cramped matrix and no helper
+   descriptions competing with the action names. */
+.account-money-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0;}
+.account-money-action{height:58px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(227,6,19,.90);color:#fff;font:800 14px/1 inherit;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 12px 24px -16px rgba(227,6,19,.85);}
+.account-money-action .supplied-icon{width:27px;height:27px;}
+.account-action-list{display:flex;flex-direction:column;gap:9px;margin:0 0 16px;}
+.acct-list-card{width:100%;min-height:68px;padding:12px 14px;border:1px solid rgba(255,255,255,.20);border-radius:17px;background:rgba(58,36,21,.58);color:#fff;display:flex;align-items:center;gap:14px;text-align:left;font-family:inherit;box-shadow:0 12px 28px -20px rgba(0,0,0,.72);}
+.acct-list-icon{width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex:0 0 40px;color:#fff;}
+.acct-list-icon .supplied-icon{width:34px;height:34px;}
+.acct-list-label{min-width:0;flex:1;font-size:15px;font-weight:800;line-height:1.18;}
+.acct-list-card>svg{width:18px;height:18px;color:rgba(255,255,255,.64);flex:0 0 auto;}
+.account-page .logout-btn-v2{background:rgba(58,36,21,.56);border-color:rgba(255,255,255,.20);}
+
+/* Raise the glass slightly above the dark refinery wallpaper for a cleaner,
+   brighter signed-in surface without changing the Petro colour system. */
+.home-stat,.checkin-card,.acct-card,.acct-row,.acct-grid-card,.asset-row,.p-card,.stat-tile{background:rgba(58,36,21,.50);border-color:rgba(255,255,255,.20);}
+
 /* Asset figures no longer compete with a too-small card. */
 #assetsBody{padding-left:10px!important;padding-right:10px!important;}
 .asset-body{min-height:212px;padding:16px 14px 15px;display:flex;flex-direction:column;}
@@ -2400,6 +2417,10 @@ html,body,#app{
 .home-activity-row b{color:#fff;font-weight:800;}
 .home-activity-row strong{margin-left:auto;color:#fff;font-size:12px;font-weight:800;}
 .home-activity-empty{height:155px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.62);font-size:12px;text-align:center;}
+.home-activity-card.is-empty{padding-bottom:14px;}
+.home-activity-card.is-empty .home-activity-window{height:46px;mask-image:none;}
+.home-activity-card.is-empty .home-activity-track{animation:none;}
+.home-activity-card.is-empty .home-activity-empty{height:46px;justify-content:flex-start;color:rgba(255,255,255,.70);}
 @keyframes petroActivityFlow{to{transform:translateY(-50%);}}
 @media (prefers-reduced-motion:reduce){.home-activity-track{animation:none;}}
 
