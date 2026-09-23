@@ -2332,19 +2332,23 @@ html,body,#app{
 .account-page .acct-card>*{position:relative;z-index:1;}
 .account-page .acct-avatar,
 .account-page .acct-grid-icon{
-  background:rgba(255,255,255,.10)!important;
+  background:transparent!important;
   color:rgba(255,255,255,.94)!important;
-  border:1px solid rgba(255,255,255,.20);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 7px 16px -12px rgba(0,0,0,.90);
+  border:0;
+  box-shadow:none;
 }
-.account-page .acct-avatar svg{width:28px;height:28px;}
-.account-page .acct-grid-icon .supplied-icon{width:28px;height:28px;}
+.account-page .acct-avatar svg{width:34px;height:34px;}
+.account-page .acct-grid-icon .supplied-icon{width:42px;height:42px;}
 
-/* Product photos occupy the entire first grid track.  They are not separate
-   thumbnail cards, so an uploaded square now reaches both the top and bottom
-   edge of its asset card. */
-.asset-row{align-items:stretch;}
+/* Give each asset enough room for a name, figures and CTA.  Its photo owns
+   the entire left track rather than sitting inside a smaller thumbnail box. */
+.asset-row{
+  grid-template-columns:128px minmax(0,1fr);
+  align-items:stretch;
+  margin-bottom:12px;
+}
 .asset-thumb{
+  width:auto;
   height:auto;
   min-height:100%;
   align-self:stretch;
@@ -2353,14 +2357,51 @@ html,body,#app{
 .asset-thumb>img,
 .asset-thumb>.ar-glyph{position:absolute;inset:0;width:100%;height:100%;}
 
-/* This is intentionally limited to real tab/page navigation.  It does not
-   restore the former animation on every component, sheet or live refresh. */
-@keyframes petroPageEnter{
-  from{opacity:0;transform:translate3d(0,10px,0);}
-  to{opacity:1;transform:translate3d(0,0,0);}
-}
-#pageHost.petro-page-enter>*{animation:petroPageEnter .30s cubic-bezier(.22,1,.36,1) both;}
-@media (prefers-reduced-motion:reduce){#pageHost.petro-page-enter>*{animation:none;}}
+/* Member surfaces sit closer to the screen edge without touching it. */
+.member-page-title{padding:16px 10px 10px;}
+.home-banner{margin-left:10px;margin-right:10px;}
+.home-actions{padding-left:10px;padding-right:10px;margin-bottom:14px;}
+.assets-tabs{padding-left:10px;padding-right:10px;margin-bottom:12px;}
+.wallet-bal-card{margin:0 10px 14px;padding:18px;}
+.home-stat-row{gap:8px;padding:0 10px;margin-bottom:14px;}
+.home-stat{min-height:126px;padding:13px 7px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;}
+.hs-lbl{min-height:28px;display:flex;align-items:flex-start;justify-content:center;}
+.hs-val{font-size:12.5px;line-height:1.2;word-break:break-word;}
+.checkin-card{margin:0 10px 14px;padding:15px 14px;}
+.home-footer-banner{width:calc(100% - 20px);margin:0 10px 14px;}
+
+/* A three-column account grid needs large symbols but concise labels. */
+.account-page{padding-left:10px!important;padding-right:10px!important;}
+.account-action-grid{gap:9px;margin:12px 0 16px;}
+.acct-grid-card{min-height:128px;padding:14px 10px;gap:11px;border-radius:17px;}
+.acct-grid-icon{width:50px;height:50px;border-radius:0;}
+.acct-grid-card .t1{font-size:12px;line-height:1.2;}
+.acct-grid-card .t2{display:none;}
+.account-page .acct-card{min-height:144px;padding:24px 20px;}
+.account-page .acct-avatar{width:64px;height:64px;}
+
+/* Asset figures no longer compete with a too-small card. */
+#assetsBody{padding-left:10px!important;padding-right:10px!important;}
+.asset-body{min-height:212px;padding:16px 14px 15px;display:flex;flex-direction:column;}
+.asset-name{font-size:16px;line-height:1.24;margin-bottom:11px;}
+.asset-stats{gap:10px 12px;margin-bottom:14px;flex:1;align-content:start;}
+.asset-stats span{display:block;font-size:10.5px;line-height:1.15;}
+.asset-stats b{display:block;font-size:13px;line-height:1.2;margin:3px 0 0;white-space:nowrap;}
+.asset-row .p-cta{height:44px;font-size:14px;}
+
+/* Real global activity: five rows continually move upward inside this card.
+   This is the only intentional continuous movement on Home. */
+.home-activity-card{margin:0 10px 14px;padding:15px 14px 12px;border-radius:var(--r-card);background:rgba(20,12,8,.46);border:1px solid rgba(255,255,255,.14);box-shadow:var(--sh-card);overflow:hidden;}
+.home-activity-title{font-size:14px;font-weight:800;color:rgba(255,255,255,.96);margin-bottom:8px;}
+.home-activity-window{height:155px;overflow:hidden;mask-image:linear-gradient(to bottom,transparent 0,black 10px,black calc(100% - 10px),transparent 100%);}
+.home-activity-track{display:flex;flex-direction:column;will-change:transform;animation:petroActivityFlow 18s linear infinite;}
+.home-activity-set{display:flex;flex-direction:column;}
+.home-activity-row{height:31px;display:flex;align-items:center;gap:5px;color:rgba(255,255,255,.74);font-size:11.5px;line-height:1;white-space:nowrap;}
+.home-activity-row b{color:#fff;font-weight:800;}
+.home-activity-row strong{margin-left:auto;color:#fff;font-size:12px;font-weight:800;}
+.home-activity-empty{height:155px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.62);font-size:12px;text-align:center;}
+@keyframes petroActivityFlow{to{transform:translateY(-50%);}}
+@media (prefers-reduced-motion:reduce){.home-activity-track{animation:none;}}
 
 </style>
 </head>
