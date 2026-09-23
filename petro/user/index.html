@@ -3099,7 +3099,7 @@ document.head.appendChild(s);
     host.appendChild(section);
   }
   function install(){
-    if(typeof window.api!=='function'||!window.STATE)return false;
+    if(typeof window.api!=='function'||!window.STATE||typeof window.openInvestConfirm!=='function')return false;
     var originalInvest=window.openInvestConfirm;
     if(typeof originalInvest==='function'&&!window.__petroInvestConfirmWrapped){
       window.__petroInvestConfirmWrapped=true;
