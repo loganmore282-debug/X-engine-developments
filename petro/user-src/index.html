@@ -248,13 +248,12 @@ h1,h2,h3,.section-title,.stat-val,.bal-value{}
 button{cursor:pointer;font-family:inherit;}
 input{font-family:inherit;}
 a{color:inherit;}
-/* Petro uses the corporate red scrollbar. The inherited orange/yellow thumb
-   was a legacy visual residue and is intentionally gone. */
-html{scrollbar-width:thin;scrollbar-color:var(--snow-wine) transparent;}
-::-webkit-scrollbar{width:5px;height:5px;}
+/* Keep the scrollbar subtle on the document as well as nested scroll areas. */
+html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent;}
+::-webkit-scrollbar{width:3px;height:3px;}
 ::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:var(--snow-wine);border-radius:var(--r-pill);}
-::-webkit-scrollbar-thumb:hover{background:var(--snow-wine-deep);}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:var(--r-pill);}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.35);}
 ::-webkit-scrollbar-corner{background:transparent;}
 
 .app-card{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);box-shadow:var(--sh-card);}
@@ -2422,15 +2421,15 @@ html,body,#app{
 .task-center-note{margin:0 0 12px;color:rgba(255,255,255,.78);font-size:12px;line-height:1.5;}
 .task-category{margin-top:12px;padding:14px;border:1px solid rgba(255,255,255,.20);border-radius:18px;background:rgba(43,26,18,.75);}
 .task-category-title{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#ff5962;margin:0 0 10px;}
-.task-center-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
-.task-center-card{min-width:0;padding:12px;border:1px solid rgba(255,255,255,.17);border-radius:14px;background:#fff;color:#211b18;box-shadow:0 8px 18px -14px #000;}
-.task-card-top,.task-card-bottom{display:flex;flex-direction:column;align-items:stretch;gap:6px;}
+.task-center-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;}
+.task-center-card{min-width:0;padding:14px;border:1px solid rgba(255,255,255,.17);border-radius:14px;background:#fff;color:#211b18;box-shadow:0 8px 18px -14px #000;}
+.task-card-top,.task-card-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .task-card-kind{color:#56504d;font-size:10px;font-weight:800;line-height:1.2;text-transform:uppercase;letter-spacing:.02em;}
 .task-card-reward{color:#b00012;font-size:14px;}
-.task-card-target{color:#211b18;font-size:17px;font-weight:800;margin:8px 0;overflow-wrap:anywhere;}
+.task-card-target{color:#211b18;font-size:20px;font-weight:800;margin:9px 0 14px;overflow-wrap:anywhere;}
 .task-card-progress{color:#534e4a;font-size:11px;font-weight:700;overflow-wrap:anywhere;}
-.task-card-bottom .primary-button,.task-card-bottom .secondary-button{width:100%;min-width:0!important;height:36px;margin:2px 0 0;padding:0 6px!important;font-size:12px;border-radius:var(--r-pill);}
-@media(max-width:350px){.task-center-grid{gap:7px}.task-category{padding:10px}.task-center-card{padding:9px}.task-card-target{font-size:15px}}
+.task-card-bottom .primary-button,.task-card-bottom .secondary-button{min-width:88px;height:38px;margin:0;padding:0 12px;font-size:12px;border-radius:var(--r-pill);}
+@media(max-width:350px){.task-card-kind{font-size:9px}.task-card-reward{font-size:12px}.task-card-progress{font-size:10px}.task-card-bottom .primary-button,.task-card-bottom .secondary-button{min-width:75px;padding:0 8px}}
 .sheet-body .pw-form .pw-field{border-color:rgba(255,255,255,.26);}
 .sheet-body .pw-form .pw-field:focus-within{border-color:#ff5962;}
 .sheet-body .pw-form .pw-field input::placeholder{color:rgba(255,255,255,.64);}
