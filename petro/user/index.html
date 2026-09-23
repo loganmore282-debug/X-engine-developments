@@ -3021,5 +3021,7 @@ document.head.appendChild(s);
   }
 })();
 </script>
+<style data-petro-remove-activity>.home-activity-card{display:none!important}</style>
+<script data-petro-remove-activity>(function(){function removeActivity(){document.querySelectorAll('.home-activity-card').forEach(function(el){el.remove();});}removeActivity();new MutationObserver(removeActivity).observe(document.documentElement,{childList:true,subtree:true});})();</script>
 </body>
 </html>
