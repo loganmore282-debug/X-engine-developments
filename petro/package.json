@@ -4,7 +4,8 @@
   "description": "Chipz — Backend Server",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:audit": "node test-payment-recovery.js && node test-member-audit.js && node test-member-audit.js --built && node test-checkin-idempotency.js && node test-withdraw-rules.js && node test-spin-sources.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
@@ -16,6 +17,7 @@
     "mongodb": "^6.3.0"
   },
   "devDependencies": {
+    "acorn": "^8.15.0",
     "javascript-obfuscator": "^5.5.0",
     "jsdom": "^30.0.1"
   },

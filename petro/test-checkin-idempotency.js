@@ -149,10 +149,13 @@ function build(state) {
     const { db, FieldValue, crypto, console, withLock, verifyAuth, getSettings,
             nowStr, eatDayKey, eatNextMidnight, tsMillis, logSecurityEvent, Date_now } = sandbox;
     const Date = globalThis.Date;
+    const tzOffMs = () => 180 * 60000;
     // Pin "now" without touching the real clock.
     const _origNow = Date.now;
     Date.now = Date_now;
     ${fnSource('computeCheckinStreak')}
+    ${fnSource('statementStamp')}
+    ${fnSource('newStatementId')}
     let checkinHandler;
     const app = { post: (p, h) => { if (p === '/checkin') checkinHandler = h; }, get: () => {} };
     ${grab("app.post('/checkin'", '// TURNTABLE (daily spin wheel)')}

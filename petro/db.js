@@ -94,6 +94,7 @@ async function ensureIndexes() {
     // commissionBanBlocked too (Round 80's ban-starvation fix), not covered
     // by the plain commissionPending+createdAt index above.
     ['investments',     { commissionPending: 1, commissionBanBlocked: 1, createdAt: 1 }],
+    ['pendingDeposits', { commissionPending: 1, walletCredited: 1, commissionBanBlocked: 1, createdAt: 1 }],
     ['investments',     { userId: 1, createdAt: -1 }],
     ['transactions',    { userId: 1 }],
     ['transactions',    { withdrawalId: 1 }],

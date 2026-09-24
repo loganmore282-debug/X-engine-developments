@@ -998,6 +998,29 @@ function fmtUGX(n){
 }
 // Keep investment and payout amounts on the same cents-aware formatter.
 function fmtUGXCents(n){ return fmtUGX(n); }
+function fmtUGX2(n){
+  return cur() + ' ' + (Number(n) || 0).toLocaleString('en-UG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+const _numberAnimations = new WeakMap();
+function countBetweenEl(el, from, to, format, duration){
+  if (!el) return;
+  const previous = _numberAnimations.get(el);
+  if (previous) cancelAnimationFrame(previous);
+  const start = Number(from) || 0, end = Number(to) || 0;
+  if (!duration || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    el.textContent = format(end); return;
+  }
+  let began;
+  const tick = now => {
+    if (!el.isConnected) { _numberAnimations.delete(el); return; }
+    if (began == null) began = now;
+    const progress = Math.min(1, (now - began) / duration);
+    el.textContent = format(start + (end - start) * (1 - Math.pow(1 - progress, 3)));
+    if (progress < 1) _numberAnimations.set(el, requestAnimationFrame(tick));
+    else _numberAnimations.delete(el);
+  };
+  _numberAnimations.set(el, requestAnimationFrame(tick));
+}
 // subagent-audit-caught: the deposit/withdraw amount fields have no
 // oninput sanitizer, and every amount the app itself shows (quick-amount
 // chips, "min UGX 30,000" hints) is comma-formatted via fmtUGX() -- so a
@@ -1377,17 +1400,42 @@ async function api(path, opts){
   // default.
   const headers = Object.assign({}, opts.headers || {});
   if (opts.body != null && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-  if (window.fbAuth && window.fbAuth.currentUser) {
-    try { headers['Authorization'] = 'Bearer ' + (await window.fbAuth.currentUser.getIdToken()); } catch (_) {}
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) abort();
+    else opts.signal.addEventListener('abort', abort, { once: true });
   }
-  let resp;
+  const timeout = setTimeout(abort, 45000);
+  let data, tokenAbort;
   try {
-    resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
+    if (window.fbAuth && window.fbAuth.currentUser) {
+      try {
+        const token = await Promise.race([
+          window.fbAuth.currentUser.getIdToken(),
+          new Promise((_, reject) => {
+            tokenAbort = () => reject(new Error('Authentication request timed out'));
+            if (controller.signal.aborted) tokenAbort();
+            else controller.signal.addEventListener('abort', tokenAbort, { once: true });
+          })
+        ]);
+        headers['Authorization'] = 'Bearer ' + token;
+      } catch (e) { if (controller.signal.aborted) throw e; }
+      finally { if (tokenAbort) controller.signal.removeEventListener('abort', tokenAbort); }
+    }
+    if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
+    const resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers, signal: controller.signal }));
+    data = await resp.json();
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
   } catch (e) {
-    return { status: 'error', message: 'Network error. Check your connection.' };
+    if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
+    return { status: 'error', message: controller.signal.aborted
+      ? 'Request timed out. Check Transaction Statement before trying a payment again.'
+      : 'Could not reach the server. Check your connection and try again.' };
+  } finally {
+    clearTimeout(timeout);
+    if (opts.signal) opts.signal.removeEventListener('abort', abort);
   }
-  let data;
-  try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response from server' }; }
   // Owner: "l didn't want root domain to work." The server answers every
   // request from a parked address -- the bare domain, its www. form, or
   // anything the admin has retired -- with this code. Handled HERE, in the
@@ -2535,7 +2583,7 @@ async function refreshAppDataInBackground(uid){
     if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
     if (txR.status === 'success') { STATE.transactions = txR.transactions; STATE.transactionsTruncated = !!txR.truncated; }
     saveCachedState(uid);
-    if (STATE.page === 'home') patchHomeBalances();
+    if (STATE.page === 'home') { patchHomeBalances(); paintMyAssetsInner(); }
   } catch (_) {}
 }
 
@@ -2786,7 +2834,14 @@ async function liveRefreshVisible(){
     return ok;
   }
 
-  if (STATE.page === 'assets') {
+  if (STATE.page === 'home' && !sheet) {
+    const r = await api('/investments');
+    if (r.status === 'success' && Array.isArray(r.investments)) {
+      STATE.investments = r.investments;
+      _investmentsLoadFailed = false;
+      if (!_openSheetTitle && STATE.page === 'home' && liveChanged('investments', r.investments)) paintMyAssetsInner();
+    } else ok = false;
+  } else if (STATE.page === 'assets') {
     const [pr, ir] = await Promise.all([api('/public/products'), api('/investments')]);
     if (pr.status === 'success') STATE.products = pr.products; else ok = false;
     if (ir.status === 'success') {
@@ -3203,9 +3258,9 @@ ${homeBannerBlockHtml(st)}
   </div>
 </div>
 <div class="home-stat-row">
-  <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.coinsStack}</span><div class="hs-lbl">Cumulative Earnings</div><div class="mono hs-val hs-gold-txt">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val hs-red-txt">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Withdrawals</div><div class="mono hs-val">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.coinsStack}</span><div class="hs-lbl">Cumulative Earnings</div><div class="mono hs-val hs-gold-txt" id="homeTotalEarned">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val hs-red-txt" id="homeTotalDeposited">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Withdrawals</div><div class="mono hs-val" id="homeTotalWithdrawn">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
 </div>
 <div class="checkin-card">
   <span class="cic-gift">${ICONS.checkinCalendar}</span>
@@ -3227,6 +3282,13 @@ ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.hom
   adoptPreloadedBannerVideo();
   tryAutoplayHomeBanner();
   startHomeCarousel();
+}
+function patchHomeBalances(){
+  const account = STATE.account || {};
+  for (const [id, key] of [['homeWalletBalance','walletBalance'], ['homeTotalEarned','totalEarned'], ['homeTotalDeposited','totalDeposited'], ['homeTotalWithdrawn','totalWithdrawn']]) {
+    const el = $(id);
+    if (el) el.textContent = fmtUGX(account[key]);
+  }
 }
 // THE single place this app works out what a product pays. /public/products
 // already sends resolved expectedReturn/cycle/dailyPayout figures computed
@@ -4115,29 +4177,13 @@ function maskedTail(phone){
   return d ? '****' + d.slice(-4) : '****';
 }
 function walletCardHtml(w){
-  const linked = !!(w && w.phone);
   const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : 'Mobile Money';
-  const displayPhone = linked ? formatPhoneDisplay(w.phone) : 'No payout number linked';
-  const holder = w && w.holder ? esc(String(w.holder).toUpperCase()) : 'Not yet linked';
-  return `
-  <div class="wallet-card">
-    <div class="row1">
-      <div class="wallet-ident">
-        <span class="wc-mark" aria-hidden="true">${ICONS.walletLg}</span>
-        <div>
-          <div class="wallet-kicker">Payout Wallet</div>
-          <div class="provider">${esc(provider)}</div>
-        </div>
-      </div>
-      <span class="wallet-status ${linked ? '' : 'empty'}">${linked ? 'Linked' : 'Not linked'}</span>
-    </div>
-    <div class="wallet-number-label">Mobile money number</div>
-    <div class="num">${esc(displayPhone)}</div>
+  return `<div class="wallet-card"><div class="wallet-kicker">Payout Wallet</div>
+    <div class="num"${w ? '' : ' style="font-size:18px"'}>${w ? esc(walletLocalPhone(w.phone)) : 'No payout wallet linked'}</div>
     <div class="wallet-meta">
-      <div class="meta-item"><span>Account holder</span><b>${holder}</b></div>
-      <div class="meta-item"><span>Network</span><b>${esc(provider)}</b></div>
-    </div>
-  </div>`;
+      ${w ? `<div class="meta-item"><span>Account holder</span><b>${esc(String(w.holder || '').toUpperCase())}</b></div>` : ''}
+      <div class="meta-item"><span>Network</span><b>${w ? esc(provider) : '—'}</b></div>
+    </div></div>`;
 }
 function walletLocalPhone(phone){
   let d = String(phone || '').replace(/\D/g, '');
@@ -4893,7 +4939,7 @@ window.openInfoSheet = function(kind){
   if (kind === 'help') return openHelpSheet();
   const s = STATE.settings || {};
   const map = {
-    rules: ['Rules & Terms', s.rulesText || 'Minimum recharge ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + (s.withdrawFeePct||15) + '% fee applies. Referral commission is paid once, on the first product each member you invited buys: Level 1 ' + (s.commL1||27) + '%, Level 2 ' + (s.commL2||2) + '%, Level 3 ' + (s.commL3||1) + '%.'],
+    rules: ['Rules & Terms', s.rulesText || 'Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed deposit: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.'],
   };
   const [title, body] = map[kind] || ['Info', ''];
   openSheet(title, `<div class="reveal-in"><p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p></div>`);
@@ -5148,14 +5194,12 @@ function openDepositFormSheet(){
 
     <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Deposit</button>
 
-    <div class="dep-instr">
-      <div class="ih"><span>Deposit Instructions</span></div>
-      <div class="ln"></div>
-      <ol>
-        <li>Recharge time: 7*24 hours.</li>
-        <li>If deposit is not received, please contact TG customer service.</li>
-        <li>Minimum deposit amount: ${fmtUGX(s.minDeposit)}</li>
-        <li>Please do not save old account recharge.</li>
+    <div class="dep-instr deposit-guide">
+      <h3>How to add funds</h3>
+      <ol class="deposit-steps">
+        <li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
+        <li><b>Approve on your phone</b><span>Tap Confirm Deposit, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
+        <li><b>Follow the payment status</b><span>Wait for confirmation. If money leaves your phone but the balance has not updated, use Verify and keep the transaction reference for Customer Support.</span></li>
       </ol>
     </div>
   </div>`);
@@ -5399,6 +5443,8 @@ function setDepositStatusUnknown(){
   setDepButtons(true, true);
 }
 window.submitDeposit = async function(){
+  const submitBtn = $('depSubmitBtn');
+  if (!submitBtn || submitBtn.disabled || !$('depAmount') || !$('depPhone')) return;
   const amount = parseMoneyInput($('depAmount').value);
   // Owner: "why when one didn't put number, it just continues to poll ... l
   // tried to leave not putting number and clicked confirm deposit but it
@@ -5416,7 +5462,7 @@ window.submitDeposit = async function(){
   const phone = cleanPhone($('depPhone').value);
   if (!amount || amount <= 0) return notify('Enter a valid amount');
   if (!phone) return notify('Enter the mobile money number to charge.');
-  $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Sending request…';
+  submitBtn.disabled = true; submitBtn.textContent = 'Sending request…';
   // Owner: "after confirm deposit a loader saying Redirecting to payment."
   // Up while the request is genuinely in flight and down again on EVERY exit
   // from here -- hence the finally, not a line after the await. A rejected
@@ -5435,14 +5481,15 @@ window.submitDeposit = async function(){
     // failed attempt, and the label it was restoring belonged to a screen
     // that no longer exists, so a member whose recharge failed was left
     // looking at a button that had silently renamed itself.
-    $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Confirm Deposit';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Deposit';
   }
+  if (r && r.stale) return;
   if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start recharge');
   // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
-  await refreshTransactionsCache();
-  closeSheet({ fromAction: true });
+  refreshTransactionsCache().catch(() => {});
+  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
   openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
 };
@@ -5496,18 +5543,19 @@ async function pollDepositStatus(depositId){
 // STATE.bankAccounts current for the NEXT time this sheet opens.
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
-  const hadCache = Array.isArray(STATE.bankAccounts);
-  if (!hadCache) STATE.bankAccounts = [];
   openSheet('Withdraw', '');
   // Paint the actual withdrawal page immediately. Waiting for /bank/list
   // left a transparent-looking empty sheet over Home on a cold open.
   paintWithdrawSheet(s);
+  const amountField = $('witAmount');
   const r = await api('/bank/list');
-  if (r.status === 'success') STATE.bankAccounts = r.accounts;
-  // Only repaint after the first fetch when this sheet is still open and the
-  // member has not started typing into the amount field.
-  if (!hadCache && _openSheetTitle === 'Withdraw' && !document.activeElement?.matches?.('#witAmount')) {
-    paintWithdrawSheet(s);
+  if (_openSheetTitle !== 'Withdraw' || $('witAmount') !== amountField) return;
+  if (r.status === 'success' && Array.isArray(r.accounts)) {
+    STATE.bankAccounts = r.accounts;
+    const wallet = currentWallet();
+    $('witWallet').innerHTML = walletCardHtml(wallet);
+    $('witBindBtn').textContent = wallet ? 'Change Wallet' : 'Bind Wallet';
+    $('witSubmitBtn').disabled = !wallet || _withdrawSubmitting;
   }
 };
 // ── The cash-out window, client side ────────────────────────────────────
@@ -5558,10 +5606,10 @@ function withdrawHoursLine(s){
 function paintWithdrawSheet(s){
   const balance = (STATE.account && STATE.account.walletBalance) || 0;
   const w = (STATE.bankAccounts || [])[0] || null;
-  const fee = s.withdrawFeePct || 15;
+  const fee = withdrawalFeePct(s);
   $('sheetBody').innerHTML = `<div class="reveal-in" style="padding-top:18px;">
-    ${walletCardHtml(w)}
-    <button class="btn-bind" type="button" onclick="openWalletSheet()">${w ? 'Change Wallet' : 'Bind Wallet'}</button>
+    <div id="witWallet">${walletCardHtml(w)}</div>
+    <button id="witBindBtn" class="btn-bind" type="button" onclick="openWalletSheet()">${w ? 'Change Wallet' : 'Bind Wallet'}</button>
 
     <div class="wit-bal">
       <div class="lbl">Available Balance</div>
@@ -5575,27 +5623,29 @@ function paintWithdrawSheet(s){
     <div class="wit-fee">Fee: ${fee}%</div>
     <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
 
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${w?'':'disabled'} onclick="submitWithdraw()">Confirm Withdraw</button>
+    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${w && !_withdrawSubmitting ? '' : 'disabled'} onclick="submitWithdraw()">Confirm Withdraw</button>
 
-    <div class="wit-instr">
-      <h3>Withdrawal Instructions</h3>
-      <div class="ln"></div>
-      <ol>
-        <li>Fee: ${fee}%.</li>
-        <li>Withdrawal amounts should be between ${Number(s.minWithdraw||0).toLocaleString('en-US')} and ${Number(s.maxWithdraw||1000000).toLocaleString('en-US')}.</li>
-        ${Number(s.withdrawMultiple) > 0 ? `<li>Amounts must be a multiple of ${Number(s.withdrawMultiple).toLocaleString('en-US')} &mdash; for example ${[1,2,5,6].map(n=>(n*Number(s.withdrawMultiple)).toLocaleString('en-US')).join(', ')}.</li>` : ''}
-        <li>One cash-out at a time &mdash; once it is paid you can request the next.${Number(s.maxWithdrawalsPerDay) > 0 ? ` Up to ${Number(s.maxWithdrawalsPerDay)} per day.` : ''}</li>
-        <li>${withdrawHoursLine(s)}</li>
-      </ol>
+    <div class="wit-instr withdrawal-guide">
+      <h3>Before you cash out</h3>
+      <dl>
+        <div><dt>Receiving account</dt><dd>Check the name and mobile money number above. Your payout goes to this linked wallet.</dd></div>
+        <div><dt>Amount to request</dt><dd>Minimum ${fmtUGX(s.minWithdraw)}${Number(s.maxWithdraw) > 0 ? `; maximum ${fmtUGX(s.maxWithdraw)}` : ''}. Review the fee and the amount you will receive before confirming.${Number(s.withdrawMultiple) > 0 ? ` Use a multiple of ${fmtUGX(s.withdrawMultiple)}.` : ''}</dd></div>
+        <div><dt>Availability</dt><dd>${withdrawHoursLine(s)}${Number(s.maxWithdrawalsPerDay) > 0 ? ` Up to ${Number(s.maxWithdrawalsPerDay)} requests per day.` : ''}</dd></div>
+        <div><dt>After submitting</dt><dd>Follow the payout in Transaction Statement → Withdrawals. Wait for a pending request to finish before submitting another.</dd></div>
+      </dl>
     </div>
   </div>`;
+}
+function withdrawalFeePct(s){
+  const value = Number(s && s.withdrawFeePct);
+  return s && s.withdrawFeePct != null && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 15;
 }
 window.syncWithdrawReceiveAmt = function(){
   const el = $('witReceiveAmt');
   if (!el) return;
   const s = STATE.settings || {};
   const amount = parseMoneyInput($('witAmount').value);
-  const fee = Math.round(amount * (s.withdrawFeePct||15) / 100);
+  const fee = Math.round(amount * withdrawalFeePct(s) / 100);
   const net = Math.max(0, amount - fee);
   el.textContent = fmtUGX(net);
   // Hidden until there is an amount, so the resting screen shows just
@@ -5625,7 +5675,10 @@ async function refreshTransactionsCache(){
   const r = await api('/transactions');
   if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
 }
+var _withdrawSubmitting = false;
 window.submitWithdraw = async function(){
+  const submitBtn = $('witSubmitBtn');
+  if (!submitBtn || submitBtn.disabled || _withdrawSubmitting || !$('witAmount')) return;
   const amount = parseMoneyInput($('witAmount').value);
   // Petro binds exactly ONE wallet, so there is no account picker to read --
   // the withdrawal always goes to the bound wallet the screen is showing.
@@ -5644,9 +5697,17 @@ window.submitWithdraw = async function(){
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open)
     return notify(`Cash-out is open from ${win.from} to ${win.to}. Please come back then.`);
-  $('witSubmitBtn').disabled = true; $('witSubmitBtn').textContent = 'Submitting…';
-  const r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone });
-  $('witSubmitBtn').disabled = false; $('witSubmitBtn').textContent = 'Confirm Withdraw';
+  _withdrawSubmitting = true;
+  submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
+  let r;
+  try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone }); }
+  finally {
+    _withdrawSubmitting = false;
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Withdraw';
+    const current = $('witSubmitBtn');
+    if (current && current !== submitBtn) current.disabled = !currentWallet();
+  }
+  if (r.stale) return;
   if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
   // Owner: "why when l withdrawal the value still remains???"
   // Because nothing here refreshed it. The SERVER debits immediately --
@@ -5664,7 +5725,7 @@ window.submitWithdraw = async function(){
   // `net` comes from the server, which is the authority on the fee it actually
   // charged; the client-side sum is the fallback for a backend that has not
   // redeployed yet.
-  const pct = Number((STATE.settings || {}).withdrawFeePct) || 0;
+  const pct = withdrawalFeePct(STATE.settings || {});
   const net = Number.isFinite(Number(r.net)) && r.net !== null
     ? Number(r.net) : amount - Math.round(amount * pct / 100);
   // Owner: "when one requests withdrawal then he is forwarded to records of
@@ -5675,7 +5736,7 @@ window.submitWithdraw = async function(){
   notify(`Cash-out of ${fmtUGXCents(amount)} is processing. You will receive `
     + `${fmtUGXCents(net)} after the ${pct}% charge.`,
     () => openBalanceRecordSheet('withdraw'));
-  closeSheet({ fromAction: true });
+  if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
 };
 // The catch-up after a cash-out, off the path between the server saying yes and

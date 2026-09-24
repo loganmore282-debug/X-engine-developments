@@ -11,7 +11,7 @@
  * fine and fail in production.
  *
  * What it pins, and why each one matters:
- *   1. connect-src follows CHIPZ_API_ORIGIN. This is the one value that
+ *   1. connect-src follows PETRO_API_ORIGIN. This is the one value that
  *      changes when the backend moves, and getting it wrong is silent -- the
  *      browser blocks every API call and the app shows its own "Network
  *      error" against a perfectly healthy server.
@@ -53,7 +53,7 @@ function get(port, p, headers = {}, method = 'GET') {
 function start(which, port) {
   return new Promise((resolve, reject) => {
     const p = spawn(process.execPath, [path.join(HERE, 'static-server.js'), which], {
-      env: Object.assign({}, process.env, { PORT: String(port), CHIPZ_API_ORIGIN: API }),
+      env: Object.assign({}, process.env, { PORT: String(port), PETRO_API_ORIGIN: API }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
@@ -74,7 +74,7 @@ function start(which, port) {
     ck(home.status === 200, 'the app is served');
     const csp = home.headers['content-security-policy'] || '';
     ck(csp.includes(`connect-src 'self' ${API} `),
-       'connect-src names the backend from CHIPZ_API_ORIGIN, not a baked-in host');
+       'connect-src names the backend from PETRO_API_ORIGIN, not a baked-in host');
     ck(!csp.includes('onrender.com'),
        '  and carries no leftover origin of its own');
     ck(csp.includes("script-src 'self' 'unsafe-inline'") && !csp.includes('unsafe-eval'),

@@ -230,9 +230,13 @@ function build(state, opts = {}) {
             nowStr, eatDayKey, eatNextMidnight, MAX_MONEY_AMOUNT,
             MAX_SPINS_PER_PURCHASE } = sandbox;
     const round2 = n => Math.round(n * 100) / 100;
+    const tsMillis = n => Number(n) || 0;
+    const tzOffMs = () => 180 * 60000;
     const finiteMoney = n => { const x = Number(n); return Number.isFinite(x) ? x : 0; };
     const SPIN_SLICES = ${serverConst('SPIN_SLICES')};
     ${fnSource('spinWheelSlices')}
+    ${fnSource('statementStamp')}
+    ${fnSource('newStatementId')}
     ${fnSource('rollSpinSlice')}
     ${fnSource('rollSpinReward')}
     ${fnSource('spinBandOf')}

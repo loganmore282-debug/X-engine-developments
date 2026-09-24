@@ -18,6 +18,7 @@
  * `from <= now && now < to` reads it as never open.
  */
 const fs = require('fs');
+const crypto = require('node:crypto');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 
 let bad = 0;
@@ -170,7 +171,7 @@ function run(state, body) {
     },
   });
   const sandbox = {
-    console,
+    console, crypto,
     verifyAuth: async () => 'u1',
     withLock: (_k, fn) => fn(),
     getSettings: async () => state.settings,
@@ -214,12 +215,16 @@ function run(state, body) {
     } },
   };
   const fn = new Function('sandbox', `
-    const { console, verifyAuth, withLock, getSettings, pinCheck, cleanPhone,
+    const { console, crypto, verifyAuth, withLock, getSettings, pinCheck, cleanPhone,
             uniqueRef, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
             sendWithdrawalSmsAlert, NETWORK_NAMES, MAX_MONEY_AMOUNT,
             _witRequestInFlight, _userBeingDeleted, FieldValue, db,
             withdrawWindowState, currentRegionKey, DEFAULT_REGION_KEY } = sandbox;
     let handler;
+    const tsMillis = n => Number(n) || 0;
+    const tzOffMs = () => 180 * 60000;
+    ${fnSource('statementStamp')}
+    ${fnSource('newStatementId')}
     const app = { post: (p, h) => { if (p === '/withdraw/request') handler = h; } };
     ${grab("app.post('/withdraw/request'", '// `refunded` MUST be the real')}
     return handler;

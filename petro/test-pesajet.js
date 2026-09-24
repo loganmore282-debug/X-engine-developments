@@ -322,8 +322,8 @@ async function finish() {
   const norm = new Function(strip(fnSource('normalizeProviderValue')) +
     '\nreturn normalizeProviderValue;')();
   ck(norm('pesajet') === 'pesajet', "normalizeProviderValue keeps 'pesajet'");
-  ck(norm('marzpay') === 'marzpay' && norm('lipapay') === 'lipapay' &&
-     norm('manual') === 'manual', 'and the three it already knew');
+  ck(norm('marzpay') === 'marzpay' && norm('lipapay') === 'marzpay' &&
+     norm('manual') === 'manual', 'retired LipaPay falls back to MarzPay; manual payout selection is preserved');
   ck(norm('automatic') === 'marzpay' && norm('nonsense') === 'marzpay' &&
      norm(undefined) === 'marzpay',
      "an unknown value still falls back to MarzPay, never to 'manual'");
@@ -378,9 +378,9 @@ async function finish() {
      'but a Kenyan payout falls back to manual rather than reaching PesaJet');
 
   // The enums, or the admin can never save the choice.
-  ck(/'depositMethod' in updates && !\['marzpay', 'lipapay', 'pesajet'\]/.test(S),
+  ck(/'depositMethod' in updates && !\['marzpay', 'pesajet'\]/.test(S),
      'depositMethod accepts pesajet at /admin/settings/update');
-  ck(/'withdrawMethod' in updates && !\['follow', 'marzpay', 'lipapay', 'pesajet', 'manual'\]/.test(S),
+  ck(/'withdrawMethod' in updates && !\['follow', 'marzpay', 'pesajet', 'manual'\]/.test(S),
      'and so does withdrawMethod');
 
   // Webhooks arrive with no Origin. Without the exemption the host guard
@@ -410,7 +410,7 @@ async function finish() {
   // quietly cover for it, so nothing would ever look wrong.
   ck(!src.includes('/deposit/pesajet/callback') && !src.includes('/withdraw/pesajet/callback'),
      'there are no per-direction PesaJet callbacks (the dashboard takes one URL)');
-  const hook = routeSlice("app.post('/pesajet/webhook'", "app.post('/withdraw/lipapay/callback'");
+  const hook = routeSlice("app.post('/pesajet/webhook'", "app.post('/bank/save'");
   ck(hook.includes('pesajetVerifyWebhook'), 'the one webhook verifies the signature');
   ck(/mismatch[\s\S]*?401/.test(hook), '  and answers 401 to a forged one');
   ck(hook.includes('req.rawBody'),
@@ -429,7 +429,7 @@ async function finish() {
      "  the 200 is sent BEFORE the re-read -- PesaJet requires it within 30 seconds");
   // The raw body has to actually be captured, or the dashboard's own digest
   // can never match.
-  ck(/RAW_BODY_ROUTES = new Set\(\['\/pesajet\/webhook'\]\)/.test(src),
+  ck(/RAW_BODY_ROUTES = new Set\(\[[^\]]*'\/pesajet\/webhook'/.test(src),
      'the webhook path is in RAW_BODY_ROUTES');
   ck(/verify: keepRawBody/.test(src) && /req\.rawBody = buf/.test(src),
      'and the parser keeps the raw buffer for it');
@@ -458,7 +458,9 @@ async function finish() {
   // reverted to pending, acceptance is not completion.
   {
     const i = S.indexOf("if (withdrawProvider(settNow) === 'pesajet')");
-    const body = S.slice(i, S.indexOf("if (withdrawProvider(settNow) === 'lipapay')", i));
+    const nextGateway = S.indexOf('const sendingMarker = crypto.randomUUID();', i);
+    if (i < 0 || nextGateway < i) throw new Error('PesaJet payout boundaries missing');
+    const body = S.slice(i, nextGateway);
     ck(i > 0, 'processWithdrawalCore has a PesaJet branch');
     const iMark = body.indexOf("pesajetRef: sendingMarker");
     const iCall = body.indexOf('pesajetDisburse');
@@ -475,7 +477,9 @@ async function finish() {
   // The deposit branch: busy must not fail the deposit.
   {
     const i = S.indexOf("if (provider === 'pesajet')");
-    const body = S.slice(i, S.indexOf("if (provider === 'lipapay')", i));
+    const nextGateway = S.indexOf('let mpData;', i);
+    if (i < 0 || nextGateway < i) throw new Error('PesaJet deposit boundaries missing');
+    const body = S.slice(i, nextGateway);
     ck(i > 0, '/deposit/marzpay has a PesaJet branch');
     ck(/if \(!pj\.providerDown\) await markDepositFailed/.test(body),
        'a BUSY gateway leaves the deposit pending; only a real refusal fails it');
@@ -892,7 +896,7 @@ async function finish() {
 
   // ── the admin panel can actually pick it ────────────────────────────────
   console.log('\n— the admin panel —');
-  ck(/function normalizeProv\(v\)\{ return \(v==='lipapay'\|\|v==='pesajet'\|\|v==='manual'\)/.test(adminSrc),
+  ck(/function normalizeProv\(v\)\{ return \(v==='pesajet'\|\|v==='manual'\)/.test(adminSrc),
      "the panel's own normalizeProv knows 'pesajet' (it mirrors the server's)");
   ck(/pesajet:'PesaJet'/.test(adminSrc), 'and labels it PesaJet');
   ck(/name="depGateway"[^>]*value="pesajet"/.test(adminSrc), 'PAY A can be set to PesaJet');

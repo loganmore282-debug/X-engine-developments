@@ -3098,11 +3098,11 @@ async function settleAllForUser(userId) {
   for (const doc of snap.docs) { await settleInvestmentIfDue(doc).catch(e => console.error('Settle error:', e.message)); }
 }
 
-// ── REFERRAL COMMISSION (L1/L2/L3, first-purchase-only) ──
-// Idempotent per (investmentId, level) via commissionPaidLevels on the
-// investment doc; each level is CLAIMED before its wallet credit so a crash
-// mid-loop can only ever under-pay (visible, fixable by hand), never repeat
-// a payment on the next reconciler tick.
+// ── REFERRAL COMMISSION (L1/L2/L3, first confirmed deposit) ──
+// New accounts qualify on their first credited deposit. Legacy pending
+// investment commissions retain their original entitlement at changeover.
+// Each wallet credit and its idempotency token are written atomically;
+// ledger and source markers are repaired on retry without paying twice.
 // Returns whether this call actually paid a NEW level (false for a no-op
 // re-check, e.g. everything already paid, buyer/level ineligible, or no
 // referrer at all) -- callers that report "commission credited" to an
@@ -3115,18 +3115,37 @@ async function settleAllForUser(userId) {
 async function creditReferralCommission(investmentId, buyerId, amount) {
   return withUserRegion(buyerId, () => _payReferralCommissionNow(investmentId, buyerId, amount));
 }
-async function _payReferralCommissionNow(investmentId, buyerId, amount) {
-  return withLock('comm:' + investmentId, async () => {
+async function creditDepositReferralCommission(depositId, buyerId) {
+  return withUserRegion(buyerId, () => _payReferralCommissionNow(depositId, buyerId, 0, 'deposit'));
+}
+async function _payReferralCommissionNow(investmentId, buyerId, amount, basis = 'investment') {
+  const isDeposit = basis === 'deposit';
+  // Keep commission linkage separate from the depositor's own ledger row.
+  // Deposit status repair queries depositId and must never rewrite rewards.
+  const sourceField = isDeposit ? 'referralDepositId' : 'investmentId';
+  const eventKey = (isDeposit ? 'deposit:' : '') + investmentId;
+  return withLock('comm:' + eventKey, async () => {
     let paidAny = false;
-    const invRef = db.collection('investments').doc(investmentId);
+    const invRef = db.collection(isDeposit ? 'pendingDeposits' : 'investments').doc(investmentId);
     const invSnap = await invRef.get();
     if (!invSnap.exists) return paidAny;
-    if (invSnap.data().isFirstInvestment !== true) { await invRef.update({ commissionPending: false }); return paidAny; }
+    const source = invSnap.data();
+    if (isDeposit) {
+      // Only new deposit-based events participate. Historic deposits are not
+      // retroactively paid, and provider success alone is not a wallet credit.
+      if (source.commissionBasis !== 'deposit' || !source.walletCredited || !depositFullyCredited(source)) return false;
+      amount = finiteMoney(source.amount);
+    } else if (source.commissionBasis === 'deposit' || source.isFirstInvestment !== true) {
+      await invRef.update({ commissionPending: false }); return paidAny;
+    }
     const paidLevels = invSnap.data().commissionPaidLevels || [];
 
     const sett = await getSettings();
     const buyerSnap = await db.collection('users').doc(buyerId).get();
     if (!buyerSnap.exists) { await invRef.update({ commissionPending: false }); return paidAny; }
+    if (isDeposit && buyerSnap.data().firstReferralDepositId !== investmentId) {
+      await invRef.update({ commissionPending: false }); return false;
+    }
     // Codex-caught real bug: banning the BUYER used to close commissionPending
     // permanently too, exactly the same class of bug the chain-level ban check
     // below was fixed for (Round 79) -- a buyer ban is a temporary block on
@@ -3183,10 +3202,10 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount) {
       // same atomic user-document update. If anything after this line fails,
       // a retry sees the token and repairs history/metadata without crediting
       // the wallet twice; if this update itself fails, nothing was claimed.
-      const commissionKey = investmentId + ':' + i;
+      const commissionKey = eventKey + ':' + i;
       const payeeRef = db.collection('users').doc(id);
       const applied = await withLock('bal:' + id, () => payeeRef.updateIf(
-        { creditedCommissionKeys: { $ne: commissionKey } },
+        { creditedCommissionKeys: { $ne: commissionKey }, status: { $ne: 'banned' } },
         {
           walletBalance: FieldValue.increment(reward),
           teamCommission: FieldValue.increment(reward),
@@ -3194,19 +3213,27 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount) {
           creditedCommissionKeys: FieldValue.arrayUnion(commissionKey),
         }
       ));
+      if (!applied) {
+        const check = await payeeRef.get();
+        if (!check.exists) continue;
+        if (!(check.data().creditedCommissionKeys || []).includes(commissionKey)) {
+          if (check.data().status === 'banned') { anyLevelBlockedByBan = true; continue; }
+          throw new Error('Referral credit could not be verified');
+        }
+      }
       // History is idempotent too. A retry after the wallet landed but this
       // insert failed must fill the missing row, not append a duplicate.
       const priorCommissionTx = await db.collection('transactions')
         .where('userId', '==', id)
         .where('type', '==', 'commission')
-        .where('investmentId', '==', investmentId)
+        .where(sourceField, '==', investmentId)
         .where('commissionLevel', '==', i)
         .limit(1).get();
       if (priorCommissionTx.empty) {
-        const commissionTxId = `commission:${investmentId}:${i}:${id}`;
+        const commissionTxId = `commission:${eventKey}:${i}:${id}`;
         await db.collection('transactions').doc(commissionTxId).createIfAbsent({
           userId: id, statementId: newStatementId(), type: 'commission', description: `Level ${i + 1} reward`,
-          amount: reward, status: 'success', date, time, investmentId, commissionLevel: i,
+          amount: reward, status: 'success', date, time, [sourceField]: investmentId, commissionLevel: i,
           createdAt: FieldValue.serverTimestamp()
         });
       }
@@ -3324,40 +3351,54 @@ app.post('/team/milestone/claim', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const target = Number(req.body.target);
+  if (!['count', 'deposit'].includes(req.body.type)) return res.status(400).json({ status: 'error', message: 'Unknown task category' });
   const isDeposit = req.body.type === 'deposit';
   const table = isDeposit ? TEAM_DEPOSIT_MILESTONES : TEAM_MILESTONES;
   const m = table.find(x => x.target === target);
   if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
   try {
+    const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
+    const profile = await db.collection('users').doc(userId).get();
+    if (!profile.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (profile.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const repairClaim = !!profile.data()[claimFlag];
     const progress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
-    if (progress < m.target) {
+    if (!repairClaim && progress < m.target) {
       const need = isDeposit ? fmtMoney(m.target) : m.target;
       const have = isDeposit ? fmtMoney(progress) : progress;
       return res.status(400).json({ status: 'error', message: `You need ${need} to claim this, you have ${have}.` });
     }
-    const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
-    let done = false, stillShort = false;
+    let done = false, stillShort = false, alreadyClaimed = false;
     await withLock('milestoneclaim:' + userId + ':' + claimFlag, async () => {
       const liveProgress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
-      if (liveProgress < m.target) { stillShort = true; return; }
-      // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
-      await withLock('bal:' + userId, () => db.runTransaction(async t => {
+      if (!repairClaim && liveProgress < m.target) { stillShort = true; return; }
+      await withLock('bal:' + userId, async () => {
         const uRef = db.collection('users').doc(userId);
-        const fresh = await t.get(uRef);
-        if (!fresh.exists || fresh.data()[claimFlag] || fresh.data().status === 'banned') return;
+        const fresh = await uRef.get();
+        if (!fresh.exists || fresh.data().status === 'banned') return;
+        alreadyClaimed = !!fresh.data()[claimFlag];
+        // Credit and claim token must land in the same atomic user update.
+        // A retry after a ledger failure repairs the row without paying twice.
+        if (!fresh.data()[claimFlag]) {
+          const applied = await uRef.updateIf({ [claimFlag]: { $ne: true }, status: { $ne: 'banned' } }, {
+            walletBalance: FieldValue.increment(m.reward), totalEarned: FieldValue.increment(m.reward), [claimFlag]: true
+          });
+          if (!applied) return;
+        }
         const { date, time } = nowStr();
-        t.update(uRef, { walletBalance: FieldValue.increment(m.reward), totalEarned: FieldValue.increment(m.reward), [claimFlag]: true });
-        t.set(db.collection('transactions').doc(), {
-          userId, statementId: newStatementId(), type: 'team_reward',
-          description: isDeposit ? `Task Center: whole team deposits ${fmtMoney(m.target)}` : `Task Center: ${m.target} active referrals`,
-          amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-        });
+        const prior = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').where('milestone', '==', m.target).limit(1).get();
+        if (prior.empty) await db.collection('transactions').doc(`team-reward:${userId}:${req.body.type}:${m.target}`).createIfAbsent({
+            userId, statementId: newStatementId(), type: 'team_reward',
+            description: isDeposit ? `Task Center: whole team deposits ${fmtMoney(m.target)}` : `Task Center: ${m.target} active referrals`,
+            amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+          });
         done = true;
-      }));
+      });
     });
     if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now. Please try again.' });
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
-    res.json({ status: 'success', amount: m.reward, message: `${fmtMoney(m.reward)} added to your wallet` });
+    res.json({ status: 'success', amount: m.reward, alreadyClaimed,
+      message: alreadyClaimed ? 'This reward was already claimed. Its transaction record is complete.' : `${fmtMoney(m.reward)} added to your wallet` });
   } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
 });
 
@@ -4894,7 +4935,7 @@ app.post('/invest/create', async (req, res) => {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
           status: 'active', dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-          isFirstInvestment, commissionPaidLevels: [], commissionPending: isFirstInvestment === true,
+          isFirstInvestment, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         await db.collection('transactions').add({
@@ -4916,8 +4957,7 @@ app.post('/invest/create', async (req, res) => {
         throw createErr;
       }
     });
-    creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('Commission error:', e.message));
-    // Fire-and-forget, exactly like the commission above: a turntable spin is
+    // Referral commission belongs to the first confirmed deposit. A spin is
     // a bonus, and failing to grant one must never fail a purchase the member
     // has already paid for.
     grantTurntableSpins(userId, liveTier, invId);
@@ -5033,6 +5073,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
     await depRef.set({
       userId, phone, network, amount: amt, ref, marzReference, status: 'initiating', provider,
+      commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
       // Which country's money this is, stamped once so the admin lists can
       // label the figure correctly without a user lookup per row.
       regionKey: currentRegionKey(),
@@ -5177,7 +5218,12 @@ function depositFullyCredited(d) { return d.status === 'matched' && !d.needsManu
 // description stamped on the member's ledger row carries the amount, so it
 // is written in the DEPOSITOR's currency.
 async function creditDeposit(depDoc) {
-  return withUserRegion(depDoc && depDoc.data() && depDoc.data().userId, () => _creditDepositNow(depDoc));
+  const userId = depDoc && depDoc.data() && depDoc.data().userId;
+  return withUserRegion(userId, async () => {
+    const credited = await _creditDepositNow(depDoc);
+    if (credited) await creditDepositReferralCommission(depDoc.id, userId).catch(e => console.error('Deposit commission error:', e.message));
+    return credited;
+  });
 }
 async function _creditDepositNow(depDoc) {
   const dep = depDoc.data();
@@ -5200,7 +5246,7 @@ async function _creditDepositNow(depDoc) {
       // retrying a stuck credit -- status is 'matched' already, re-setting
       // creditedAt would misreport when this deposit actually completed.
       if (!retryingStuckCredit) {
-        await depDoc.ref.update({ status: 'matched', creditedAt: FieldValue.serverTimestamp() });
+        await depDoc.ref.update({ status: 'matched', needsManualCredit: true, creditedAt: FieldValue.serverTimestamp() });
       }
       // subagent-audit-caught CRITICAL bug: `retryingStuckCredit` only ever
       // gated the status-flip above, never the wallet increment itself --
@@ -5227,13 +5273,25 @@ async function _creditDepositNow(depDoc) {
           // operation -- there is no window where one half landed without
           // the other. `applied:false` means this exact credit already
           // happened (a safe, idempotent retry), not an error.
-          const applied = await withLock('bal:' + depUserId, () => db.collection('users').doc(depUserId).updateIf(
-            { creditedDepositIds: { $ne: depDoc.id } },
-            {
-              walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount),
-              creditedDepositIds: FieldValue.arrayUnion(depDoc.id),
+          const applied = await withLock('bal:' + depUserId, async () => {
+            const userRef = db.collection('users').doc(depUserId);
+            const user = await userRef.get();
+            const referral = {};
+            if (fd.commissionBasis === 'deposit' && user.exists && finiteMoney(user.data().totalDeposited) === 0 && !user.data().firstReferralDepositId) {
+              // Preserve existing first-investment commissions across the
+              // changeover. Buying a new asset never creates a second bonus.
+              const legacy = await db.collection('investments').where('userId', '==', depUserId).where('isFirstInvestment', '==', true).get();
+              const alreadyQualified = legacy.docs.some(d => {
+                const inv = d.data();
+                return inv.commissionBasis !== 'deposit' && (inv.commissionPending === true || (inv.commissionPaidLevels || []).length > 0);
+              });
+              if (!alreadyQualified) referral.firstReferralDepositId = depDoc.id;
             }
-          ));
+            return userRef.updateIf({ creditedDepositIds: { $ne: depDoc.id } }, {
+              walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount),
+              creditedDepositIds: FieldValue.arrayUnion(depDoc.id), ...referral,
+            });
+          });
           if (!applied) {
             // Codex-caught real bug (2nd money-flow audit): updateIf()
             // returning false means EITHER "already applied" (the idempotency
@@ -5255,7 +5313,7 @@ async function _creditDepositNow(depDoc) {
             }
             console.warn(`Deposit ${depDoc.id} wallet credit already applied (idempotent retry) -- skipped re-incrementing.`);
           }
-          await depDoc.ref.update({ walletCredited: true }).catch(() => {});
+          await depDoc.ref.update({ walletCredited: true });
         } catch (creditErr) {
           await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
           console.error(`DEPOSIT CREDIT FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, creditErr.message);
@@ -8649,10 +8707,18 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
     // already credited would still tell the owner "commission credited."
     // Uses the function's own real return value now.
     let commissionTriggered = false;
-    const invSnap = await db.collection('investments').where('userId', '==', userId).where('isFirstInvestment', '==', true).limit(1).get();
-    if (!invSnap.empty) {
-      const inv = invSnap.docs[0];
-      commissionTriggered = await creditReferralCommission(inv.id, userId, inv.data().amount);
+    const commissionUser = await db.collection('users').doc(userId).get();
+    const firstDepositId = commissionUser.exists && commissionUser.data().firstReferralDepositId;
+    if (firstDepositId) {
+      const depositRef = db.collection('pendingDeposits').doc(firstDepositId);
+      await depositRef.update({ commissionPending: true });
+      commissionTriggered = await creditDepositReferralCommission(firstDepositId, userId);
+    } else {
+      const invSnap = await db.collection('investments').where('userId', '==', userId).where('isFirstInvestment', '==', true).limit(1).get();
+      if (!invSnap.empty && invSnap.docs[0].data().commissionBasis !== 'deposit') {
+        const inv = invSnap.docs[0];
+        commissionTriggered = await creditReferralCommission(inv.id, userId, inv.data().amount);
+      }
     }
     logAdminAction(req, 'referrer_attached', { userId, referralCode: code, referrerId, commissionTriggered });
     res.json({ status: 'success', commissionTriggered });
@@ -10196,6 +10262,10 @@ async function reconcileCommissions() {
       const inv = doc.data();
       await creditReferralCommission(doc.id, inv.userId, inv.amount).catch(e => console.error('Reconcile commission error:', e.message));
     }
+    const deposits = await db.collection('pendingDeposits').where('commissionPending', '==', true).where('walletCredited', '==', true).where('commissionBanBlocked', '!=', true).orderBy('createdAt', 'asc').limit(500).get();
+    for (const doc of deposits.docs) {
+      await creditDepositReferralCommission(doc.id, doc.data().userId).catch(e => console.error('Reconcile deposit commission error:', e.message));
+    }
   } catch (e) { console.error('Reconcile commissions error:', e.message); }
 }
 // Slow-lane counterpart to reconcileCommissions() above -- specifically
@@ -10211,6 +10281,10 @@ async function reconcileBlockedCommissions() {
     for (const doc of snap.docs) {
       const inv = doc.data();
       await creditReferralCommission(doc.id, inv.userId, inv.amount).catch(e => console.error('Reconcile blocked commission error:', e.message));
+    }
+    const deposits = await db.collection('pendingDeposits').where('commissionPending', '==', true).where('walletCredited', '==', true).where('commissionBanBlocked', '==', true).limit(2000).get();
+    for (const doc of deposits.docs) {
+      await creditDepositReferralCommission(doc.id, doc.data().userId).catch(e => console.error('Reconcile blocked deposit commission error:', e.message));
     }
   } catch (e) { console.error('Reconcile blocked commissions error:', e.message); }
 }
