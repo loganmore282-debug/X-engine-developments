@@ -142,85 +142,7 @@ async function ambiguousPayouts() {
   assert.equal(controlDb.rows.withdrawals.w.status,'sending');
   console.log('F1 CONTROL: thrown transport failure correctly retains sending.');
 
-  const lipaDb = makeDb(paymentSeed());
-  const {c:lipa} = context(lipaDb,{withdrawProvider:() => 'lipapay'});
-  vm.runInContext(section('async function _lipaParse(', 'async function _lipaPost('),lipa);
-  lipa.lipaDisburse = () => lipa._lipaParse({ok:false,status:502,json:async() => {throw new SyntaxError('HTML');}});
-  loadProcess(lipa);
-  await lipa._processWithdrawalNow('w','test');
-  assert.equal(lipaDb.rows.withdrawals.w.status,'sending');
-  assert.equal(lipaDb.rows.withdrawals.w.lipaOutTradeNo,'w');
-  console.log('PASS F1: ambiguous LipaPay response retains identifier and blocks resend.');
-}
-async function earlyCallback() {
-  const db = makeDb(paymentSeed());
-  const {c,routes} = context(db,{
-    withdrawProvider:() => 'lipapay',
-    lipaOrderQuery:async() => ({Data:{PayStatus:1}})
-  });
-  vm.runInContext(section('const LIPA_PAY_STATUS', 'function lipaUserMsg('),c);
-  loadProcess(c);
-  vm.runInContext(section("app.post('/withdraw/lipapay/callback'", "app.post('/bank/save'"),c);
-  c.lipaDisburse = async() => {
-    await routes.get('/withdraw/lipapay/callback')({body:{OutTradeNo:'w'}},response());
-    assert.equal(db.rows.withdrawals.w.status,'processed');
-    assert.equal(db.rows.users.u.totalWithdrawn,8500);
-    return {Succeeded:true,Data:{TransactionId:'provider-tx'}};
-  };
-  await c._processWithdrawalNow('w','test');
-  assert.equal(db.rows.withdrawals.w.status,'processed');
-  assert.equal(db.rows.users.u.totalWithdrawn,8500);
-  assert.equal(db.rows.transactions.tx.status,'success');
-  console.log('PASS F2: early verified callback stays completed and counted once.');
-}
-async function starvation() {
-  for (const blockers of [49,50]) {
-    const withdrawals={};
-    for(let i=0;i<blockers;i++) withdrawals['old'+i]={status:'pending',regionKey:'ke',amount:10000,createdAt:new Date(1000+i)};
-    withdrawals.eligible={status:'pending',regionKey:'ug',amount:10000,createdAt:new Date(2000)};
-    const db=makeDb({withdrawals}), processed=[];
-    const {c}=context(db,{
-      getSettings:async() => ({autoApproveWithdrawalsEnabled:true,autoApproveIntervalSec:10,autoApproveMaxAmount:0}),
-      DEFAULT_REGION_KEY:'ug',tsMillis:t => +t,
-      processWithdrawalCore:async(id) => {processed.push(id);db.rows.withdrawals[id].status='processed';}
-    });
-    vm.runInContext(section('async function _autoApproveTickForRegion(', "app.get('/admin/payments/sync'"),c);
-    for(let i=0;i<3;i++) await c._autoApproveTickForRegion('ug');
-    assert.equal(processed.length,1);
-    console.log(`PASS F3: eligible withdrawal progresses past ${blockers} other-region rows.`);
-  }
-}
-async function regionReadFailure() {
-  for(const fail of [false,true]) {
-    const regionCtx=new AsyncLocalStorage();
-    const ug={key:'ug',currency:'UGX'},ke={key:'ke',currency:'KES'};
-    const db=makeDb({users:{u:{regionKey:'ke',walletBalance:50000,totalInvested:0,status:'active'}},investments:{},transactions:{}});
-    let middleware;
-    const {c,routes}=context(db,{
-      _regionCtx:regionCtx,_userRegionCache:new Map(),USER_REGION_TTL:600000,DEFAULT_REGION_KEY:'ug',
-      defaultRegion:()=>ug,regionByKey:k=>k==='ke'?ke:ug,regionForHost:()=>ug,
-      getRegions:async()=>[ug,ke],requestHost:()=> 'ug.example',hostIsParked:()=>false,
-      verifyAuth:async()=> 'u',currentRegionKey:()=>regionCtx.getStore().region.key,
-      getProductByKey:async()=>({key:'p',name:'Fixture product',price:regionCtx.getStore().region.key==='ke'?40000:20000,cycle:10,active:true}),
-      getSettings:async()=>({cycleDays:10}),productExpectedReturn:p=>p.price*2,productOpenState:()=>({open:true}),
-      nowStr:()=>({date:'2026-09-17',time:'12:00'}),creditReferralCommission:async()=>{},grantTurntableSpins:()=>{}
-    });
-    c.app.use=fn=>{middleware=fn;};
-    vm.runInContext(section('async function userRegionKey(', 'function forgetUserRegion('),c);
-    vm.runInContext(section('app.use(async (req, res, next) => {\n  let region', '// ── THE ROOT DOMAIN'),c);
-    vm.runInContext(section("app.post('/invest/create'", "app.get('/investments'"),c);
-    if(fail) db.failNextUserRead();
-    const req={headers:{authorization:'Bearer test'},body:{tierKey:'p'}},res=response();
-    let requestDone;
-    await middleware(req,res,()=>{requestDone=routes.get('/invest/create')(req,res);});
-    await requestDone;
-    assert.equal(res.body.status,fail?'error':'success');
-    assert.equal(res.code,fail?503:200);
-    assert.equal(db.rows.users.u.walletBalance,fail?50000:10000);
-    const inv=Object.values(db.rows.investments)[0];
-    assert.equal(inv?.amount,fail?undefined:40000);
-    console.log(`PASS F4: region read failure=${fail}; correct price or no purchase.`);
-  }
+
 }
 async function repairPendingDeposit() {
   const db=makeDb({
@@ -251,18 +173,15 @@ async function repairPendingDeposit() {
 async function additionalControls() {
   // Normal accepted and definitive refused requests remain usable; ambiguous
   // parsed HTTP failures and unrecognized envelopes never invite a resend.
-  for (const provider of ['marzpay','lipapay']) {
+  for (const provider of ['marzpay']) {
     for (const kind of ['success','refusal','busy','unknown']) {
       const db=makeDb(paymentSeed());
       const {c}=context(db,{withdrawProvider:()=>provider});
       vm.runInContext(section('async function _marzParse(', 'async function marzCollect('),c);
-      vm.runInContext(section('async function _lipaParse(', 'async function _lipaPost('),c);
       const status=kind==='busy'?503:kind==='refusal'?400:200;
-      const body=kind==='unknown'?{}:provider==='marzpay'
-        ? {status:kind==='success'?'success':'error',data:{transaction:{uuid:'tx'}}}
-        : {Succeeded:kind==='success',Data:{TransactionId:'tx'}};
-      const parsed=()=>c[provider==='marzpay'?'_marzParse':'_lipaParse']({ok:status===200,status,json:async()=>structuredClone(body)});
-      c.marzSendMoney=parsed;c.lipaDisburse=parsed;
+      const body=kind==='unknown'?{}:{status:kind==='success'?'success':'error',data:{transaction:{uuid:'tx'}}};
+      const parsed=()=>c._marzParse({ok:status===200,status,json:async()=>structuredClone(body)});
+      c.marzSendMoney=parsed;
       loadProcess(c);
       await c._processWithdrawalNow('w','test');
       assert.equal(db.rows.withdrawals.w.status,kind==='success'?'processing':kind==='refusal'?'pending':'sending');
@@ -277,8 +196,8 @@ async function additionalControls() {
   const {c}=context(db,{DEFAULT_REGION_KEY:'ug',tsMillis:t=>+t,
     getSettings:async()=>({autoApproveWithdrawalsEnabled:true,autoApproveMaxAmount:10000}),
     processWithdrawalCore:async id=>{processed.push(id);}});
-  vm.runInContext(section('async function _autoApproveTickForRegion(', "app.get('/admin/payments/sync'"),c);
-  await c._autoApproveTickForRegion('ug');
+  vm.runInContext(section('async function autoApproveWithdrawalsTick(', "app.get('/admin/payments/sync'"),c);
+  await c.autoApproveWithdrawalsTick();
   assert.deepEqual(processed,['legacy']);
   vm.runInContext(section('function walletLedgerAmount(', "app.post('/admin/user/repair-wallet'"),c);
   c.finiteMoney=n=>Number(n)||0;
@@ -296,14 +215,13 @@ async function additionalControls() {
   vm.runInContext(section('async function processWithdrawalCore(', 'async function _processWithdrawalNow('),region);
   assert.equal((await region.processWithdrawalCore('w','test')).code,200);
   assert.equal(ran,true);ran=false;
-  region.withUserRegion=async()=>{throw new Error('region unavailable');};
-  assert.equal((await region.processWithdrawalCore('w','test')).code,503);
-  assert.equal(ran,false);
+  assert.equal((await region.processWithdrawalCore('w','test')).code,200);
+  assert.equal(ran,true);ran=false;
   assert.equal((await region.processWithdrawalCore('missing','test')).code,404);
-  console.log('PASS controls: normal payments, clean refusals, busy replies, legacy regions, caps, and reserved withdrawal debits.');
+  console.log('PASS controls: normal payments, clean refusals, busy replies, legacy Uganda rows, caps, and reserved withdrawal debits.');
 }
 (async()=>{
-  await ambiguousPayouts(); await earlyCallback(); await starvation(); await regionReadFailure();
+  await ambiguousPayouts();
   await repairPendingDeposit(); await additionalControls();
-  console.log('All five audit regressions passed offline.');
+  console.log('Payment audit regressions passed offline.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

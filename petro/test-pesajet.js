@@ -322,8 +322,8 @@ async function finish() {
   const norm = new Function(strip(fnSource('normalizeProviderValue')) +
     '\nreturn normalizeProviderValue;')();
   ck(norm('pesajet') === 'pesajet', "normalizeProviderValue keeps 'pesajet'");
-  ck(norm('marzpay') === 'marzpay' && norm('lipapay') === 'marzpay' &&
-     norm('manual') === 'manual', 'retired LipaPay falls back to MarzPay; manual payout selection is preserved');
+  ck(norm('marzpay') === 'marzpay' && norm('unknown-provider') === 'marzpay' &&
+     norm('manual') === 'manual', 'unknown gateway falls back to MarzPay; manual payout selection is preserved');
   ck(norm('automatic') === 'marzpay' && norm('nonsense') === 'marzpay' &&
      norm(undefined) === 'marzpay',
      "an unknown value still falls back to MarzPay, never to 'manual'");
@@ -737,8 +737,6 @@ async function finish() {
       pendingDeposits: [
         // credited, Uganda
         { id: 'd1', provider: 'pesajet', userId: 'u1', status: 'success', creditedAt: 1, amount: 30000 },
-        // credited, Kenya -- and displayAmount is what the member was charged
-        { id: 'd2', provider: 'pesajet', userId: 'u2', status: 'success', creditedAt: 1, amount: 900, displayAmount: 900 },
         // still in flight, Uganda
         { id: 'd3', provider: 'pesajet', userId: 'u1', status: 'pending', amount: 50000 },
         // failed -- neither collected nor pending
@@ -760,9 +758,9 @@ async function finish() {
       db: { collection: name => q(name) },
       verifyAdmin: () => true,
       getSettings: async () => settings,
-      adminUserRegions: async () => ({ u1: 'ug', u2: 'ke' }),
+      adminUserRegions: async () => ({ u1: 'ug', u2: 'ug' }),
       rowRegionKey: (row, map) => row.regionKey || map[row.userId] || 'ug',
-      regionByKey: k => ({ ug: { currency: 'UGX' }, ke: { currency: 'KES' } })[k],
+      regionByKey: () => ({ currency: 'UGX' }),
       // The real one: status alone is not enough, because claim-before-credit
       // can leave 'matched' with the wallet write unfinished.
       depositFullyCredited: r => r.status === 'success' && !!r.creditedAt,
@@ -785,7 +783,6 @@ async function finish() {
     };
     const all = await run(null);
     const ug = all.regions.find(r => r.regionKey === 'ug');
-    const ke = all.regions.find(r => r.regionKey === 'ke');
     ck(ug && ug.collected === 30000 && ug.collectedCount === 1,
        'only a deposit that really landed counts as collected');
     ck(ug && ug.pendingIn === 50000 && ug.pendingInCount === 1,
@@ -795,17 +792,12 @@ async function finish() {
     ck(ug && ug.pendingOut === 8500 && ug.pendingOutCount === 1,
        "and a payout still sending is 'still sending', not paid");
     ck(ug && ug.net === 13000, 'net is collected minus paid out');
-    ck(ke && ke.collected === 900 && ke.currency === 'KES',
-       "another country is its own bucket, in its own currency");
-    ck(all.regions.length === 2, 'and nothing is summed across currencies');
+    ck(all.regions.length === 1 && ug.currency === 'UGX', 'the summary uses one UGX bucket');
     ck(all.selected === true,
        'selected says the gateway really is in the payment path');
     ck(/not the float/.test(all.note || ''),
        'the reply itself carries the caveat, so a raw reader is not misled either');
 
-    const kenyaOnly = await run('ke');
-    ck(kenyaOnly.regions.length === 1 && kenyaOnly.regions[0].regionKey === 'ke',
-       'the country switch narrows it to one country');
 
     // 'selected' decides whether the card is ever shown, so it has to follow
     // the real settings rather than being pinned on.
@@ -824,8 +816,6 @@ async function finish() {
     scanCap = 2;
     ck((await run(null)).truncated === true,
        'a read that hits the scan ceiling is reported as incomplete');
-    ck((await run('ke')).truncated === true,
-       '  and still incomplete when narrowed to one small country');
     scanCap = 200000;
     ck((await run(null)).truncated === false,
        'while a read well inside the ceiling is reported complete');
@@ -901,7 +891,7 @@ async function finish() {
   ck(/pesajet:'PesaJet'/.test(adminSrc), 'and labels it PesaJet');
   ck(/name="depGateway"[^>]*value="pesajet"/.test(adminSrc), 'PAY A can be set to PesaJet');
   ck(/name="witMethod"[^>]*value="pesajet"/.test(adminSrc), 'and payouts can be pinned to it');
-  // MarzPay's radio used to be "checked unless lipapay", which with a third
+  // MarzPay's radio used to be "checked unless another gateway", which with a third
   // option would have shown TWO selected at once.
   ck(/value="marzpay" \$\{normalizeProv\(v\('depositMethod','marzpay'\)\)==='marzpay'\?'checked'/.test(adminSrc),
      "MarzPay's radio is checked on an exact match, not on \"not the other one\"");

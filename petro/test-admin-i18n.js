@@ -195,7 +195,7 @@ for (const id of ['langSwitch', 'langLogin']) {
   ck(tag && /data-no-i18n/.test(tag[0]),
      `${id}'s own options are data-no-i18n -- "Kiswahili" reads the same in every language`);
 }
-ck(/const ADMIN_LANG_KEY = 'chipz_admin_lang'/.test(adminSrc),
+ck(/const ADMIN_LANG_KEY = 'petro_admin_lang'/.test(adminSrc),
    'the choice is remembered on the device under its own key');
 ck(!/localStorage\.getItem\(ADMIN_LANG_KEY\)[\s\S]{0,40}chipz_lang/.test(adminSrc) &&
    !adminSrc.includes("'chipz_lang'"),

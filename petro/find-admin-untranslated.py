@@ -165,7 +165,7 @@ FIXTURE_WORDS = {
     'Chipz', 'Chipz Admin', 'CHIPZ', 'MTN', 'Airtel', 'MTN Mobile Money', 'Airtel Money',
     'English', 'Luganda', 'Kiswahili', 'Français', 'Ikinyarwanda', 'Runyankore',
     'Uganda', 'Kenya', 'UGX', 'KES', 'owner', 'staff', 'jane', 'John Doe',
-    'Product-1', 'Product-2', 'Product-12', 'MarzPay', 'LipaPay', 'PesaJet', 'Render',
+    'Product-1', 'Product-2', 'Product-12', 'MarzPay', 'PesaJet', 'Render',
     'WhatsApp', 'Facebook', 'Telegram', 'Android', 'Chrome', 'iOS', 'Safari',
     'Mongo', 'MongoDB', 'Atlas', 'Firebase', 'EdgeOne', 'ug', 'ke', 'www', 'TXT',
     'Chipz MTN 1', 'CHIPZ wordmark', 'Welcome to Chipz', 'Welcome to Chipz!',

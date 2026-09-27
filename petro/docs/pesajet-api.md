@@ -13,7 +13,7 @@
 
 SDK repo: `https://github.com/pesajet/pesajet-pay-demo` (`sdks/nodejs`).
 Chipz has no need of either package — `server.js` calls the REST API directly,
-as it does for MarzPay and LipaPay.
+as it does for MarzPay and retired gateway.
 
 **Where the two disagreed, and what it cost.** The SDK's error type is FLAT;
 the docs show the error NESTED under `error`. Chipz read it the flat way, so a
@@ -175,7 +175,7 @@ the re-read is what decides, so a signing scheme that turns out to be a third
 thing again cannot cost money.
 
 **There is no `callbackUrl` / `notifyUrl` field in the create payload.** Unlike
-MarzPay and LipaPay, the webhook URL is *not* passed per request — it is
+MarzPay and retired gateway, the webhook URL is *not* passed per request — it is
 configured once in the PesaJet dashboard. The owner has to set it there.
 
 ## Errors

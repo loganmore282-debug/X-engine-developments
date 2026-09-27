@@ -17,7 +17,7 @@ about DNS records, payment gateways and money settings, and an admin acting on
 a mistranslated one can misconfigure the platform. Every correction is one
 cell, and nothing else moves.
 
-Product names, brand names (MarzPay, LipaPay, PesaJet, Render, EdgeOne,
+Product names, brand names (MarzPay, retired gateway, PesaJet, Render, EdgeOne,
 YouTube, Android), file formats and dimensions are left as they are.
 
 [english, lg, sw, fr, rw, nyn]

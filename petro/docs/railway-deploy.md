@@ -135,9 +135,7 @@ set it.
 | `MARZPAY_KEY` | MarzPay wallet, base64 of `api_key:api_secret` |
 | `PESAJET_API_KEY` | PesaJet, the `pk_…` key |
 | `PESAJET_WEBHOOK_SECRET` | PesaJet, the `whsec_…` secret |
-| `LIPAPAY_MCHID`, `LIPAPAY_PRIVATE_KEY`, `LIPAPAY_SANDBOX` | LipaPay |
 | `MARZSMS_KEY` | admin text alerts on a new withdrawal (optional; skipped silently if unset) |
-| `QUOTAGUARDSTATIC_URL` | only if a provider needs a fixed egress IP (LipaPay is why this exists) |
 
 **Manual deposits:**
 
@@ -151,7 +149,7 @@ set it.
 once a custom domain is live, so payment callbacks point at the domain rather
 than the `up.railway.app` address.
 
-Why it matters: `PUBLIC_URL` is what MarzPay and LipaPay are told to call back
+Why it matters: `PUBLIC_URL` is what MarzPay are told to call back
 on. If it is empty the callback URL is simply **omitted** — the deposit is
 still created and the prompt still reaches the phone, so the only symptom is
 money taking minutes (the reconciler's next sweep) instead of seconds.
@@ -232,7 +230,7 @@ backend.
    `https://<chipz-server domain>/pesajet/webhook`. There is only one field, and
    the old one points at Render. Their *Test endpoint* button is a safe check —
    a `ping` is answered 200 and touches no money.
-4. **MarzPay / LipaPay dashboards** — any callback or IP allowlist entries
+4. **MarzPay dashboards** — any callback or IP allowlist entries
    naming the Render host.
 
 Also worth doing, not urgent:

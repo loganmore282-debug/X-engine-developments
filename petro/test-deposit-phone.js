@@ -94,8 +94,8 @@ check(!!depositSenderPhone({ amount: 20000 }, '', ['phone']).error,
   'and refuses when there is no field AND no account number either');
 
 console.log('\n— the routes actually use it —');
-check((src.match(/depositSenderPhone\(req\.body/g) || []).length === 2,
-  'both deposit routes resolve the number through the one helper');
+check((src.match(/depositSenderPhone\(req\.body/g) || []).length === 1,
+  'the active deposit route resolves the number through the one helper');
 check(!/cleanPhone\(req\.body\.phone \|\| uSnap/.test(src) &&
       !/cleanPhone\(req\.body\.senderPhone \|\| req\.body\.phone \|\| uSnap/.test(src),
   'and neither still uses the || chain that swallowed an empty field');
