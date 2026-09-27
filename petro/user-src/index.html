@@ -2451,34 +2451,6 @@ html,body,#app{
 .sheet-body .pw-form .pw-field:focus-within{border-color:#ff5962;}
 .sheet-body .pw-form .pw-field input::placeholder{color:rgba(255,255,255,.64);}
 </style>
-<style data-petro-fixed-wallpaper-and-motion>
-/* Keep one refinery image attached to the viewport. The fixed pseudo-layer
-   above is the only signed-in wallpaper; these older backgrounds scrolled
-   with the content or covered that layer on secondary pages. */
-#app{background-image:none!important;}
-.sheet-bg.show{background:transparent!important;}
-.sheet-bg.show::after{display:none!important;}
-
-/* Small, consistent press and keyboard feedback on the main actions. */
-#pageHost :is(.primary-button,.secondary-button,.home-action,.account-money-action,.acct-list-card,.asset-row .p-cta){
-  transition:transform .16s ease,box-shadow .18s ease,filter .18s ease,opacity .18s ease;
-  -webkit-tap-highlight-color:transparent;
-}
-#pageHost :is(.primary-button,.secondary-button,.home-action,.account-money-action,.acct-list-card,.asset-row .p-cta):active:not(:disabled){
-  transform:scale(.975);
-  filter:brightness(1.08);
-}
-#pageHost :is(button,a,[role="button"]):focus-visible{
-  outline:2px solid #ffc247;
-  outline-offset:3px;
-}
-#pageHost .home-action .badge{transition:transform .18s ease,box-shadow .18s ease;}
-#pageHost .home-action:active .badge{transform:scale(.93);box-shadow:0 4px 12px -6px rgba(227,6,19,.8);}
-@media(prefers-reduced-motion:reduce){
-  #pageHost :is(.primary-button,.secondary-button,.home-action,.account-money-action,.acct-list-card,.asset-row .p-cta),
-  #pageHost .home-action .badge{transition:none!important;}
-}
-</style>
 </head>
 <body>
 

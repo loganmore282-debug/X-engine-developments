@@ -2934,14 +2934,7 @@ window.showPage = async function(name){
   else if (name === 'network') await renderNetwork();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
-  animatePageEntry();
 };
-function animatePageEntry(){
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const host = $('pageHost');
-  if (!host || typeof host.animate !== 'function') return;
-  host.animate([{opacity:.84},{opacity:1}], {duration:190, easing:'ease-out'});
-}
 // Announcement dialog REMOVED entirely (owner: "remove announcement
 // everywhere") -- the pop-up that used to fire on every Home visit, Home's
 // own inline "Latest Announcement" row, and the admin panel's "Home
