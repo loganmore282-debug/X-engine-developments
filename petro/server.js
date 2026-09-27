@@ -959,7 +959,7 @@ async function getHelpBanner() {
 // new one; see CLAUDE.md's "Design system" section.
 // profilecard is the Account screen's refinery-photo header background
 // (owner's mockup) -- same reused mechanism as every slot before it.
-const PETRO_IMAGE_SLOTS = ['logo', 'profilegif', 'downloadbg', 'authhero', 'authcard', 'banner2', 'banner3', 'homefooter', 'profilecard'];
+const PETRO_IMAGE_SLOTS = ['logo', 'profilegif', 'downloadbg', 'authhero', 'authcard', 'banner2', 'banner3', 'homefooter', 'profilecard', 'checkinbanner'];
 const _petroImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getPetroImage(slot) {
@@ -3407,12 +3407,12 @@ app.get('/public/announcement-image', async (req, res) => {
 // Petro artwork needed by the current member surfaces, fetched together.
 app.get('/public/petro-images', async (req, res) => {
   try {
-    const [logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard] = await Promise.all([
+    const [logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
       getPetroImage('logo'), getPetroImage('profilegif'), getPetroImage('downloadbg'),
       getPetroImage('authhero'), getPetroImage('authcard'), getPetroImage('banner2'),
-      getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'),
+      getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'), getPetroImage('checkinbanner'),
     ]);
-    publicJson(req, res, { status: 'success', logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard, checkinbanner }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -6502,12 +6502,12 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/petro-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard] = await Promise.all([
+    const [logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
       getPetroImage('logo'), getPetroImage('profilegif'), getPetroImage('downloadbg'),
       getPetroImage('authhero'), getPetroImage('authcard'), getPetroImage('banner2'),
-      getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'),
+      getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'), getPetroImage('checkinbanner'),
     ]);
-    res.json({ status: 'success', logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard });
+    res.json({ status: 'success', logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard, checkinbanner });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/petro-image/set', async (req, res) => {
