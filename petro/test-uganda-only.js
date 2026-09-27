@@ -22,6 +22,12 @@ function source(name) {
   const ug = { key: 'ug', currency: 'UGX', dialCode: '256' };
   const currentRegion = new Function('DEFAULT_REGION', `${source('currentRegion')}; return currentRegion;`)(ug);
   assert.deepEqual(currentRegion(), ug);
+  const regionUsesBareLocal = new Function('DEFAULT_REGION', `
+    const currentRegion = () => DEFAULT_REGION;
+    ${source('regionUsesBareLocal')}
+    return regionUsesBareLocal;
+  `)(ug);
+  assert.equal(regionUsesBareLocal(), true, 'Uganda account login keeps the existing bare-local auth address');
   assert.doesNotMatch(server, /app\.(?:post|get)\('\/admin\/regions(?:\/|')/);
   assert.doesNotMatch(server, /db\.collection\('regions'\)/);
   assert.doesNotMatch(panel, /id="regionSwitch"|\/admin\/regions/);

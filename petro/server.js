@@ -1375,7 +1375,7 @@ function localDigits(raw, region) {
 // its id is.
 function regionUsesBareLocal(region) {
   const r = region || currentRegion();
-  const founding = defaultRegion();
+  const founding = DEFAULT_REGION;
   return String(r.dialCode || '') === String(founding.dialCode || '');
 }
 function phoneToEmail(phone, region) {
