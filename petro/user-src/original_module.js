@@ -2014,6 +2014,7 @@ function applyBootArtwork(ai, ci){
   // Same reasoning once more for the two Petro-only slots: the Referral
   // page banner and the brand logo on the Account profile card.
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
+  syncBrandLogoImages();
   // Home's lower banner (the one carrying the Go spin button).
   // The animated brand mark. It is the profile logo on Account AND the thing
   // that fills the dead strip between Home's spin banner and the bottom nav
@@ -2047,11 +2048,38 @@ function applyBootArtwork(ai, ci){
   STATE.authCardImage = (ci.status === 'success' && ci.authcard) ? ci.authcard : null;
   applyAuthTagline();
   applyAuthBackgrounds();
-  // Repaint what is actually on screen. Home is the one first screen that
-  // shows any of this (the spin banner and the profile GIF), and it is the
-  // page the app opens on -- every other consumer renders on open and reads
-  // STATE then, so it needs nothing here.
+  // Repaint Home for the banner and animated profile artwork. The brand-logo
+  // nodes are patched in place above; other art consumers render on open.
   try { if (STATE.page === 'home' && $('app') && $('app').style.display !== 'none') paintHome(); } catch (_) {}
+}
+// The brand logo is fetched with the other large artwork in the background,
+// so Home or Account may already be visible when it arrives. Patch only the
+// two logo elements in place instead of rebuilding a page just for its logo.
+function syncBrandLogoImages(){
+  const logo = STATE.brandLogo || '';
+  const home = document.getElementById('homeBrandLogo');
+  if (home) {
+    if (logo) {
+      if (home.getAttribute('src') !== logo) home.src = logo;
+      home.style.display = 'block';
+    } else {
+      home.removeAttribute('src');
+      home.style.display = 'none';
+    }
+  }
+  const account = document.getElementById('accountBrandLogo');
+  const fallback = document.getElementById('accountBrandFallback');
+  if (account) {
+    if (logo) {
+      if (account.getAttribute('src') !== logo) account.src = logo;
+      account.style.display = 'block';
+      if (fallback) fallback.style.display = 'none';
+    } else {
+      account.removeAttribute('src');
+      account.style.display = 'none';
+      if (fallback) fallback.style.display = 'flex';
+    }
+  }
 }
 function applyNumberFont(){
   // Defaults to the app's own face, not the old serif. This line was the
@@ -3210,7 +3238,7 @@ function paintHome(){
   // lived on Account only, and Daily Check-in was sheet-only). The
   // Home now renders only the surfaces that belong to Petro's current design.
   let html = `
-<div class="home-brand-title">${esc(brandName())}</div>
+<div class="home-brand-title"><img id="homeBrandLogo" class="home-brand-logo" alt=""${STATE.brandLogo ? ` src="${esc(STATE.brandLogo)}"` : ''} style="display:${STATE.brandLogo ? 'block' : 'none'}" onerror="this.style.display='none'"><span>${esc(brandName())}</span></div>
 ${homeBannerBlockHtml(st)}
 <div class="home-actions">
   <button class="home-action" onclick="openDepositSheet()">
@@ -4039,7 +4067,10 @@ async function renderAccount(){
 <div class="account-page" style="padding:0 10px;">
   <div class="member-page-title">Profile</div>
   <div class="acct-card"${STATE.profileCard ? ` style="--acct-card-image:url('${esc(STATE.profileCard)}')"` : ''}>
-    <div class="acct-avatar">${ICONS.peopleGroup}</div>
+    <div class="acct-avatar">
+      <span id="accountBrandFallback" class="acct-avatar-fallback" style="display:${STATE.brandLogo ? 'none' : 'flex'}">${ICONS.peopleGroup}</span>
+      <img id="accountBrandLogo" class="acct-avatar-logo" alt=""${STATE.brandLogo ? ` src="${esc(STATE.brandLogo)}"` : ''} style="display:${STATE.brandLogo ? 'block' : 'none'}" onerror="this.style.display='none';var f=document.getElementById('accountBrandFallback');if(f)f.style.display='flex'">
+    </div>
     <div class="acct-idbox">
       <div class="acct-phone-row">${esc(formatPhoneDisplay(a.phone))}</div>
     </div>

@@ -694,11 +694,14 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .cic-sub{font-size:11.5px;color:var(--snow-muted);font-weight:500;line-height:1.35;margin-top:2px;}
 .cic-btn{flex-shrink:0;background:var(--petro-grad);color:#fff;border:none;font-family:inherit;font-weight:700;font-size:13px;padding:10px 18px;border-radius:var(--r-pill);}
 .home-footer-banner{display:block;width:calc(100% - 36px);margin:0 18px 16px;border-radius:var(--r-card);object-fit:cover;}
-.home-brand-title{margin:13px 10px 9px;color:var(--snow-ink);font-size:21px;line-height:1.2;font-weight:800;letter-spacing:.01em;}
+.home-brand-title{display:flex;align-items:center;gap:8px;margin:13px 10px 9px;color:var(--snow-ink);font-size:21px;line-height:1.2;font-weight:800;letter-spacing:.01em;}
+.home-brand-logo{width:30px;height:30px;object-fit:contain;display:block;flex:0 0 auto;}
 /* ── Account screen (owner's mockup) ── */
 .acct-card{position:relative;border-radius:var(--r-card);padding:16px;display:flex;align-items:center;gap:14px;background:var(--snow-surface);background-size:cover;background-position:center;box-shadow:var(--sh-card);overflow:hidden;}
 .acct-avatar{width:56px;height:56px;border-radius:50%;background:var(--snow-neutral-soft);color:var(--snow-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .acct-avatar svg{width:26px;height:26px;}
+.acct-avatar-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
+.acct-avatar-logo{width:100%;height:100%;object-fit:contain;display:block;}
 .acct-idbox{min-width:0;}
 .acct-phone-row{font-size:16px;font-weight:800;color:var(--snow-ink);}
 .acct-id-row{font-size:12.5px;color:var(--snow-muted);font-weight:600;margin-top:4px;display:flex;align-items:center;gap:6px;}
