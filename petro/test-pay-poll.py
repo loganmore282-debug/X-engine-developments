@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
-"""The recharge poll screen: a page in the app's colours, not a dark modal.
+"""Petro authentication headers and the full-screen recharge poll.
 
-Owner: "l nolonger need those old poll designs, l want new poll designs ie
-when one taps deposit, it should open a new page for polling, so for polling
-it should show the other 4 triangles rotating, just like those which we placed
-on running product, so it will be enlarged and loading. l nolonger need those
-dark things, use app color and theme not dark, also for success use exactly
-that and failed use that, use exactly rather than guess. however still nav
-icons should exist on the poll payment page."
+Current owner request: keep recharge polling in a Petro-branded full-screen
+page, hide the bottom navigation there, and replace the payment provider's
+old animation with the app's own motion style.
 
-Five things, and the ones that matter are checked from RENDERED pixels or
-rendered geometry rather than from class names:
+The relevant behavior is checked from rendered pixels or geometry, not only
+from class names:
 
   - the page is LIGHT. Sampled off a screenshot, because "not dark" is a
     property of what reaches the screen, and a stray inherited rule could
     darken it while every declared value still looked right.
-  - the NAV is visible AND hittable underneath it (elementFromPoint, not
-    just "is it on screen") -- the old modal covered the whole viewport.
-  - the polling mark is the orbiting chips, ENLARGED, and actually moving.
-  - success and failure show the owner's own two images.
+  - auth login/signup show the uploaded brand logo and useful welcome copy.
+  - the NAV stays hidden until the full-screen poll is closed.
+  - the new Petro progress mark is enlarged and actually moving.
+  - success and failure retain their correct inline status marks.
 """
 import asyncio, json, os, sys, functools, threading, http.server, socketserver
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +42,7 @@ ROUTES = {
       {"key": "p2", "name": "Product-2", "price": 90000, "cycle": 150, "expectedReturn": 270000},
       {"key": "p3", "name": "Product-3", "price": 270000, "cycle": 150, "expectedReturn": 810000}]},
   "/public/banner": {"status": "success", "image": None, "video": None},
+  "/public/petro-images": {"status": "success", "logo": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="},
 }
 FB_APP = "export const initializeApp=()=>({});export const getApps=()=>[];"
 FB_AUTH = """
@@ -91,6 +88,31 @@ async def main():
         await page.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="load")
         await page.wait_for_timeout(2600)
         await page.evaluate("closeAnnounce && closeAnnounce()")
+
+        print("— auth branding and entry points —")
+        await page.evaluate("""()=>{document.getElementById('app').style.display='none';
+          document.getElementById('authScreen').style.display='block'; showAuthTab('login');}""")
+        auth = await page.evaluate("""()=>{const img=document.getElementById('loginBrandLogo');
+          return {title:document.querySelector('#loginPane .auth-intro h1')?.textContent.trim(),
+            subtitle:document.querySelector('#loginPane .auth-intro p')?.textContent.trim(),
+            logo:img?.getAttribute('src'), fallback:getComputedStyle(document.getElementById('loginBrandFallback')).display};}""")
+        ck(auth['title'] == 'Welcome back', "login greets returning members (%s)" % auth)
+        ck('continue' in auth['subtitle'].lower(), "login explains what to do next")
+        ck(auth['logo'] and auth['fallback'] == 'none', "the uploaded logo appears centered on login")
+        await page.locator('#loginPane .af-btn-outline').click()
+        reg = await page.evaluate("""()=>{const img=document.getElementById('registerBrandLogo');
+          return {shown:getComputedStyle(document.getElementById('registerPane')).display!=='none',
+            title:document.querySelector('#registerPane .auth-intro h1')?.textContent.trim(),
+            subtitle:document.querySelector('#registerPane .auth-intro p')?.textContent.trim(),
+            logo:img?.getAttribute('src'), fallback:getComputedStyle(document.getElementById('registerBrandFallback')).display};}""")
+        ck(reg['shown'] and reg['title'] == 'Create your Petro account', "the create-account button opens registration (%s)" % reg)
+        ck('get started' in reg['subtitle'].lower(), "registration has concise welcome copy")
+        ck(reg['logo'] and reg['fallback'] == 'none', "the uploaded logo appears centered on registration")
+        await page.locator('#registerPane .af-switch a').click()
+        ck(await page.evaluate("()=>getComputedStyle(document.getElementById('loginPane')).display!=='none'"),
+           "the registration Log In link returns to login")
+        await page.evaluate("""()=>{document.getElementById('authScreen').style.display='none';
+          document.getElementById('app').style.display='';}""")
 
         print("— the deposit form, measured against his mockup —")
         await page.evaluate("openDepositSheet()")
@@ -245,57 +267,59 @@ async def main():
         lum = sum(sum(p)/3 for p in px)/len(px)
         ck(lum > 200, "the page is light, not the old dark sheet (mean luminance %.0f)" % lum)
 
-        # The nav must still be there AND be hittable -- the old modal was
-        # inset:0 and swallowed it. elementFromPoint, because "on screen" is
-        # not the same as "reachable".
+        # The polling page is a full-screen task view: its controls remain
+        # reachable, but the app's tab bar stays out of the way until Close.
         nav = await page.evaluate("""()=>{const n=document.querySelector('.bottom-nav');
-          if(!n) return null; const b=n.getBoundingClientRect();
-          const t=document.elementFromPoint(b.x+b.width/2, b.y+b.height/2);
           const bg=document.getElementById('depStatusBg').getBoundingClientRect();
-          return {navTop:+b.top.toFixed(1), pageBottom:+bg.bottom.toFixed(1),
-                  hit:!!(t&&t.closest('.bottom-nav')), onScreen:b.bottom<=innerHeight+1};}""")
-        ck(bool(nav) and nav['hit'] and nav['onScreen'],
-           "the nav icons are still there and tappable while polling (%s)" % nav)
-        ck(abs(nav['pageBottom'] - nav['navTop']) <= 1.5,
-           "the poll page stops at the bar rather than covering it (%.0f vs %.0f)"
-           % (nav['pageBottom'], nav['navTop']))
+          return {display:getComputedStyle(n).display, pageBottom:+bg.bottom.toFixed(1),
+                  screenBottom:innerHeight, state:document.body.classList.contains('deposit-status-open')};}""")
+        ck(nav and nav['display'] == 'none' and nav['state'],
+           "the tab bar is hidden while the payment poll is open (%s)" % nav)
+        ck(nav and abs(nav['pageBottom'] - nav['screenBottom']) <= 1.5,
+           "the poll page fills the screen behind its own controls (%s)" % nav)
 
-        # The orbiting chips, enlarged, and really turning.
-        spin = await page.evaluate("""()=>{const s=document.querySelector('#depStatusIcon .pspin');
+        # The Petro progress rings are separate from both the old provider
+        # artwork and the small product-row loader.
+        spin = await page.evaluate("""()=>{const s=document.querySelector('#depStatusIcon .dep-poll-loader');
           if(!s) return null; const b=s.getBoundingClientRect();
-          const o=s.querySelector('.pspin-orbit');
-          return {w:+b.width.toFixed(1), chips:s.querySelectorAll('.pspin-chip').length,
-                  core:!!s.querySelector('.pspin-core'),
-                  anim:getComputedStyle(o).animationName};}""")
-        ck(bool(spin) and spin['chips'] == 3 and spin['core'],
-           "the polling mark is the orbiting-chips mark from the plan rows (%s)" % spin)
+          const arcs=[...s.querySelectorAll('.dep-poll-arc')];
+          return {w:+b.width.toFixed(1), arcs:arcs.length, drop:!!s.querySelector('.dep-poll-drop'),
+                  anim:arcs.map(a=>getComputedStyle(a).animationName)};}""")
+        ck(bool(spin) and spin['arcs'] == 3 and spin['drop'],
+           "the poll uses the new branded progress rings (%s)" % spin)
         ck(bool(spin) and spin['w'] >= 120,
-           "and it is enlarged, not the 32px plan-row size (%.0fpx)" % (spin or {}).get('w', 0))
+           "the payment mark is large enough to read (%s)" % spin)
         # Sampled over real frames: a keyframe name proves nothing if the
         # animation never runs.
-        frames = await page.evaluate("""async ()=>{const o=document.querySelector('#depStatusIcon .pspin-orbit');
+        frames = await page.evaluate("""async ()=>{const o=document.querySelector('#depStatusIcon .dep-poll-arc-one');
           const seen=[]; for(let i=0;i<12;i++){seen.push(getComputedStyle(o).transform);
             await new Promise(r=>setTimeout(r,60));} return seen;}""")
         ck(len(set(frames)) > 3,
-           "and it is actually rotating (%d distinct transforms over 12 samples)" % len(set(frames)))
+           "the branded poll mark actually moves (%d distinct frames)" % len(set(frames)))
 
         print("\n— resolved —")
         await page.evaluate("setDepositStatusSuccess()")
         await page.wait_for_timeout(400)
         got = await page.evaluate("()=>document.getElementById('depStatusIcon').innerHTML")
-        ck('/pay-success.png' in got, "success shows the owner's green tick (%r)" % got[:60])
+        ck('<svg' in got and 'var(--snow-green)' in got, "success shows its green tick (%r)" % got[:80])
         ok = await page.evaluate("""()=>{const i=document.querySelector('#depStatusIcon img');
-          return i && i.complete && i.naturalWidth>0;}""")
-        ck(ok, "and that image really loads (not a broken src)")
+          return !i && !!document.querySelector('#depStatusIcon svg path');}""")
+        ck(ok, "and the tick is inline SVG, not a broken image")
 
         await page.evaluate("setDepositStatusFailed('Missing or invalid API credentials.')")
         await page.wait_for_timeout(400)
         got = await page.evaluate("()=>document.getElementById('depStatusIcon').innerHTML")
-        ck('/pay-failed.png' in got, "failure shows the owner's red cross (%r)" % got[:60])
+        ck('<svg' in got and 'var(--snow-wine)' in got, "failure shows its red cross (%r)" % got[:80])
         ok = await page.evaluate("""()=>{const i=document.querySelector('#depStatusIcon img');
-          return i && i.complete && i.naturalWidth>0;}""")
-        ck(ok, "and that image really loads too")
+          return !i && !!document.querySelector('#depStatusIcon svg path');}""")
+        ck(ok, "and the cross is inline SVG, not a broken image")
         await page.screenshot(path=f"{OUT}/failed.png")
+
+        await page.evaluate("closeDepositStatusModal()")
+        restored = await page.evaluate("""()=>({display:getComputedStyle(document.querySelector('.bottom-nav')).display,
+          state:document.body.classList.contains('deposit-status-open')})""")
+        ck(restored['display'] != 'none' and not restored['state'],
+           "closing the poll restores the normal tab bar (%s)" % restored)
 
         # The Close button only appears once the poll has settled -- unchanged
         # behaviour, checked because the restyle rewrote this markup.

@@ -2053,8 +2053,8 @@ function applyBootArtwork(ai, ci){
   try { if (STATE.page === 'home' && $('app') && $('app').style.display !== 'none') paintHome(); } catch (_) {}
 }
 // The brand logo is fetched with the other large artwork in the background,
-// so Home or Account may already be visible when it arrives. Patch only the
-// two logo elements in place instead of rebuilding a page just for its logo.
+// so Auth, Home, or Account may already be visible when it arrives. Patch the
+// image elements in place instead of rebuilding a page just for its logo.
 function syncBrandLogoImages(){
   const logo = STATE.brandLogo || '';
   const home = document.getElementById('homeBrandLogo');
@@ -2080,6 +2080,18 @@ function syncBrandLogoImages(){
       if (fallback) fallback.style.display = 'flex';
     }
   }
+  document.querySelectorAll('[data-auth-brand-logo]').forEach(img => {
+    const fallback = document.getElementById(img.getAttribute('data-auth-fallback'));
+    if (logo) {
+      if (img.getAttribute('src') !== logo) img.src = logo;
+      img.style.display = 'block';
+      if (fallback) fallback.style.display = 'none';
+    } else {
+      img.removeAttribute('src');
+      img.style.display = 'none';
+      if (fallback) fallback.style.display = 'flex';
+    }
+  });
 }
 function applyNumberFont(){
   // Defaults to the app's own face, not the old serif. This line was the
@@ -2900,15 +2912,9 @@ window.showPage = async function(name){
   // Owner: "when in this message and you tap nav icons, the message screen
   // still persists to go away unless you click on X mark."
   //
-  // The recharge status page (.pay-page) is the THIRD, and it was missing
-  // here -- owner: "why the nav icons don't work when on payment page, they
-  // should work suitably." The comment this replaces claimed the deposit
-  // result was `inset:0` and therefore unreachable, and that was true when it
-  // was a dark modal; the round that turned it into a themed page gave it
-  // `bottom:var(--nav-h)` specifically SO the bar stays visible and tappable,
-  // and nothing added it to this teardown. So the tap landed, the page behind
-  // changed, and the payment page stayed on top of it -- the app looked
-  // frozen, exactly as the message detail did before it was fixed here.
+  // The recharge status page (.pay-page) is a full-screen task state with
+  // the bottom nav hidden while it is open. Keep its teardown here anyway so
+  // any programmatic tab change also dismisses the overlay cleanly.
   //
   // Unlike the other two it owns NO history entry (openDepositStatusModal
   // does not pushState), so it must not be counted in `spent` below --
@@ -2919,10 +2925,8 @@ window.showPage = async function(name){
   // in flight at the provider, pollDepositStatus() keeps running and still
   // refreshes Records when it settles.
   //
-  // Every remaining overlay (notify, confirm, chest win, announcement, manual
-  // pay) is `inset:0` and covers the bar, so a nav tap cannot reach them and
-  // none of them belong here. If a new overlay is ever given a
-  // `bottom:var(--nav-h)` inset, it belongs in this teardown too.
+  // Other overlays cover the full viewport too, so a tab change cannot be
+  // triggered from underneath them.
   //
   // Both overlays own a history entry, and they must be unwound with ONE
   // history call: two history.back()s in a single tick is the exact race this
@@ -2934,7 +2938,11 @@ window.showPage = async function(name){
   const sheetOpen = !!document.querySelector('.sheet-bg.show');
   const payOpen = !!($('depStatusBg') && $('depStatusBg').classList.contains('show'));
   if (detailOpen) $('msgDetailBg').classList.remove('show');
-  if (payOpen) { $('depStatusBg').classList.remove('show'); unlockBodyScroll(); }
+  if (payOpen) {
+    $('depStatusBg').classList.remove('show');
+    document.body.classList.remove('deposit-status-open');
+    unlockBodyScroll();
+  }
   if (sheetOpen && typeof closeSheet === 'function') closeSheet({ navigating: true, keepHistory: true });
   // payOpen is deliberately absent from this count -- it pushes no history
   // entry, so including it would retire someone else's.
@@ -3523,6 +3531,19 @@ function fmtDay(value){
 var PLAN_SPIN = '<span class="pspin" aria-hidden="true">'
   + '<span class="pspin-orbit"><i class="pspin-chip"></i><i class="pspin-chip"></i><i class="pspin-chip"></i></span>'
   + '<span class="pspin-glow"></span><span class="pspin-core"></span></span>';
+// Payment polling has its own branded mark so the provider's legacy artwork
+// can never leak onto this page. Keep the motion self-contained in CSS and
+// leave the product-row PLAN_SPIN unchanged.
+var DEPOSIT_POLL_SPIN = '<svg class="dep-poll-loader" viewBox="0 0 120 120" role="img" aria-label="Processing payment">'
+  + '<circle class="dep-poll-track" cx="60" cy="60" r="50"/>'
+  + '<circle class="dep-poll-arc dep-poll-arc-one" cx="60" cy="60" r="50"/>'
+  + '<circle class="dep-poll-track" cx="60" cy="60" r="40"/>'
+  + '<circle class="dep-poll-arc dep-poll-arc-two" cx="60" cy="60" r="40"/>'
+  + '<circle class="dep-poll-track" cx="60" cy="60" r="30"/>'
+  + '<circle class="dep-poll-arc dep-poll-arc-three" cx="60" cy="60" r="30"/>'
+  + '<path class="dep-poll-drop" d="M60 41c-6.1 9-14 17.2-14 25.8a14 14 0 0 0 28 0C74 58.2 66.1 50 60 41Z"/>'
+  + '<path class="dep-poll-highlight" d="M54.5 66.2c.5 3.7 2.7 5.8 6.4 6.2-1.3 1.7-3.2 2.6-5.2 2.3-3.4-.6-5.5-3.6-5.1-7 .2-1.6 1.2-3.2 2.8-4.7.2 1.1.6 2.2 1.1 3.2Z"/>'
+  + '</svg>';
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band and the row can never disagree.
 function planStats(inv){
@@ -5215,14 +5236,17 @@ function showDepRedirect(on){
   if (!el) return;
   el.classList.toggle('show', !!on);
   el.setAttribute('aria-hidden', on ? 'false' : 'true');
+  document.body.classList.toggle('deposit-redirect-open', !!on);
 }
 window.openDepositStatusModal = function(amount, phone, network){
   setDepositStatusPending(amount, phone, network);
   $('depStatusBg').classList.add('show');
+  document.body.classList.add('deposit-status-open');
   lockBodyScroll();
 };
 window.closeDepositStatusModal = function(){
   $('depStatusBg').classList.remove('show');
+  document.body.classList.remove('deposit-status-open');
   unlockBodyScroll();
   // Subagent-audit-caught real bug: submitDeposit()/pollDepositStatus()/
   // pollManualDepositStatus() all close the Recharge/Payment sheet
@@ -5316,11 +5340,8 @@ window.verifyDepositNow = async function(){
 };
 function setDepositStatusPending(amount, phone, network){
   $('depStatusIcon').className = 'dep-status-icon';
-  // The same orbiting-chips mark the ongoing plans carry, enlarged by CSS
-  // (.dep-status-icon .pspin sets --s). Owner: "it should show the other 4
-  // triangles rotating, just like those which we placed on running product."
-  // Reusing PLAN_SPIN rather than a copy means one mark, one set of keyframes.
-  $('depStatusIcon').innerHTML = PLAN_SPIN;
+  // Dedicated Petro rings replace the payment provider's old loader artwork.
+  $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
   $('depStatusTitle').textContent = 'Processing your recharge';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
@@ -5401,7 +5422,7 @@ function setDepositStatusFailed(msg){
 }
 function setDepositStatusUnknown(){
   $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = PLAN_SPIN;
+  $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
   $('depStatusTitle').textContent = 'Still waiting for the provider';
   $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
     + 'If it goes through, your balance updates on its own. Tap Verify to check again, '

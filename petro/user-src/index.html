@@ -1452,11 +1452,9 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    by .auth-screen-v2 below. Left in place, unreferenced, same as this
    session's other supersessions (nothing else in the app still uses them). */
 
-/* ── Auth v2: the owner's exact mockup -- ONE continuous full-bleed photo
-   (admin-uploadable, still the "authhero" slot/--auth-hero-img var, applied
-   here via the #authHeroBg/.auth-bg rules above) with dark glass pill fields
-   floating directly on it. No hero/card split, no wordmark, no dial-code
-   chip, no "remember me" -- single screen, exactly the fields shown. */
+/* ── Auth v2: ONE continuous full-bleed photo (admin-uploadable in the
+   existing "authhero" slot) with a centered brand mark and short welcome
+   message above the existing glass fields. */
 .auth-screen-v2{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:var(--petro-grad);}
 @supports (min-height:100dvh){.auth-screen-v2{min-height:100dvh;}}
 .auth-screen-v2::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
@@ -1474,6 +1472,14 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    unaffected. */
 .auth-scroll-v2{position:relative;z-index:2;flex:1;overflow-y:auto;display:flex;flex-direction:column;justify-content:center;
   padding:24px 22px calc(30px + env(safe-area-inset-bottom));}
+.auth-intro{text-align:center;color:#fff;margin:0 auto 24px;max-width:320px;}
+.auth-brand-mark{width:82px;height:82px;margin:0 auto 13px;display:flex;align-items:center;justify-content:center;}
+.auth-brand-logo{display:block;max-width:122px;max-height:78px;width:auto;height:auto;object-fit:contain;filter:drop-shadow(0 4px 12px rgba(0,0,0,.28));}
+.auth-brand-fallback{width:66px;height:66px;border-radius:20px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(145deg,var(--petro-orange),var(--snow-wine));color:#fff;font-size:31px;font-weight:800;
+  box-shadow:0 7px 22px rgba(0,0,0,.28);}
+.auth-intro h1{margin:0 0 6px;color:#fff;font-size:25px;line-height:1.2;font-weight:800;letter-spacing:-.02em;}
+.auth-intro p{margin:0;color:rgba(255,255,255,.8);font-size:13.5px;line-height:1.5;font-weight:500;}
 .af-v2{display:flex;align-items:center;gap:10px;background:rgba(20,12,8,.44);border:1.5px solid rgba(255,255,255,.18);
   border-radius:var(--r-ctl);padding:0 16px;height:54px;margin-bottom:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .af-v2 input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:#fff;}
@@ -1628,30 +1634,12 @@ body.sheet-open .sheet-bg{bottom:0;}
 .chest-modal img{width:96px;height:auto;display:block;margin:0 auto 10px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.28));}
 .chest-modal h3{margin:0 0 6px;font-size:18px;font-weight:700;}
 .chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
-/* Deposit live-status modal (Recharge) -- reuses .chest-modal-bg/.chest-modal
-   for the same dark/centered/thin dialog convention as every other pop-up.
-   3 states toggled via #depStatusIcon's class: pending (spinner, reuses the
-   loading screen's own @keyframes sp), success (green check), failed (red
-   x) -- SVG only, per the house no-emoji rule. */
-/* The recharge poll is a PAGE in the app's own colours, not a dark modal.
-   Owner: "l nolonger need those old poll designs ... when one taps deposit,
-   it should open a new page for polling, so for polling it should show the
-   other 4 triangles rotating, just like those which we placed on running
-   product, so it will be enlarged ... l nolonger need those dark things, use
-   app color and theme not dark ... however still nav icons should exist on
-   the poll payment page."
-
-   It keeps its own classes rather than restyling .chest-modal-bg/.chest-modal:
-   those are SHARED with the gift-code win modal, and recolouring them here
-   would silently redesign the chest too.
-
-   `bottom:var(--nav-h)` is the app's own convention for "leave the bottom bar
-   alone" (.sheet-bg and .msg-detail-bg both use it), which is what keeps the
-   nav icons visible and tappable while a payment is being polled. */
-/* The in-flight loader between Confirm and the poll page. Sits ABOVE the
-   sheet (z-index 320 against .sheet-bg's 200) and, like the poll page, stops
-   at the bottom bar rather than covering it. */
-.dep-redirect{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
+/* Deposit poll and its brief handoff are dedicated full-screen states. They
+   use the app's light paper surface and brand-colored motion, with no bottom
+   navigation behind them. */
+body.deposit-redirect-open .bottom-nav,
+body.deposit-status-open .bottom-nav{display:none;}
+.dep-redirect{position:fixed;left:0;right:0;top:0;bottom:0;
   background:rgba(251,241,232,.86);z-index:320;display:none;
   align-items:center;justify-content:center;}
 .dep-redirect.show{display:flex;}
@@ -1665,7 +1653,7 @@ body.sheet-open .sheet-bg{bottom:0;}
    + title) pinned at the top, and .pay-body takes the remaining height and
    centres the card inside THAT. Centring the card in the whole page instead
    would push it visibly below centre by half the header's height. */
-.pay-page{position:fixed;left:0;right:0;top:0;bottom:var(--nav-h);
+.pay-page{position:fixed;left:0;right:0;top:0;bottom:0;
   background:var(--snow-canvas);z-index:310;display:none;
   flex-direction:column;overflow-y:auto;transform:translateZ(0);will-change:transform;}
 .pay-page.show{display:flex;}
@@ -1696,6 +1684,17 @@ body.sheet-open .sheet-bg{bottom:0;}
 .dep-status-icon{width:150px;height:150px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;}
 .dep-status-icon .pspin{--s:150px;}
 .dep-status-icon>svg{width:116px;height:116px;display:block;}
+.dep-status-icon>svg.dep-poll-loader{width:150px;height:150px;overflow:visible;}
+.dep-poll-track{fill:none;stroke:var(--snow-border);stroke-width:2;opacity:.7;}
+.dep-poll-arc{fill:none;stroke-linecap:round;stroke-width:4;transform-box:fill-box;transform-origin:center;}
+.dep-poll-arc-one{stroke:var(--snow-wine);stroke-dasharray:76 232;animation:depPollRotate 1.35s linear infinite;}
+.dep-poll-arc-two{stroke:var(--petro-orange);stroke-dasharray:58 187;animation:depPollRotate 1.9s linear infinite reverse;}
+.dep-poll-arc-three{stroke:var(--snow-green);stroke-dasharray:42 140;animation:depPollRotate 2.35s linear infinite;}
+.dep-poll-drop{fill:var(--snow-wine);filter:drop-shadow(0 3px 5px rgba(227,6,19,.25));transform-origin:center;animation:depPollBreathe 1.4s ease-in-out infinite;}
+.dep-poll-highlight{fill:rgba(255,255,255,.78);}
+@keyframes depPollRotate{to{transform:rotate(360deg);}}
+@keyframes depPollBreathe{0%,100%{transform:scale(.94);opacity:.88;}50%{transform:scale(1.06);opacity:1;}}
+@media (prefers-reduced-motion:reduce){.dep-poll-arc-one,.dep-poll-arc-two,.dep-poll-arc-three,.dep-poll-drop{animation:none;}}
 
 /* The orbiting-chips mark while a list is being fetched. Owner, on the Team
    downline: "add the other loader of 'Loading...' while Loading users on team
@@ -2596,6 +2595,14 @@ html,body,#app{
     </button>
     <div class="auth-scroll-v2">
       <div id="loginPane">
+        <div class="auth-intro">
+          <div class="auth-brand-mark">
+            <img class="auth-brand-logo" id="loginBrandLogo" data-auth-brand-logo data-auth-fallback="loginBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('loginBrandFallback');if(f)f.style.display='flex'">
+            <span class="auth-brand-fallback" id="loginBrandFallback" aria-hidden="true">P</span>
+          </div>
+          <h1>Welcome back</h1>
+          <p>Log in to your Petro account to continue.</p>
+        </div>
         <div class="af-v2">
           <span class="af-prefix" id="loginDial">+256</span>
           <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
@@ -2626,6 +2633,14 @@ html,body,#app{
            server.js's completeRegistrationCore()/withdraw/request for the
            matching backend removal. -->
       <div id="registerPane" style="display:none;">
+        <div class="auth-intro">
+          <div class="auth-brand-mark">
+            <img class="auth-brand-logo" id="registerBrandLogo" data-auth-brand-logo data-auth-fallback="registerBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('registerBrandFallback');if(f)f.style.display='flex'">
+            <span class="auth-brand-fallback" id="registerBrandFallback" aria-hidden="true">P</span>
+          </div>
+          <h1>Create your Petro account</h1>
+          <p>Create your account to get started.</p>
+        </div>
         <div class="af-v2">
           <span class="af-prefix" id="regDial">+256</span>
           <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
@@ -2662,6 +2677,14 @@ html,body,#app{
            screen specifically, but the same "one screen, exactly the
            fields needed" treatment applies for consistency. -->
       <div id="forgotPane" style="display:none;">
+        <div class="auth-intro">
+          <div class="auth-brand-mark">
+            <img class="auth-brand-logo" id="forgotBrandLogo" data-auth-brand-logo data-auth-fallback="forgotBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('forgotBrandFallback');if(f)f.style.display='flex'">
+            <span class="auth-brand-fallback" id="forgotBrandFallback" aria-hidden="true">P</span>
+          </div>
+          <h1>Reset your password</h1>
+          <p>Follow the steps below to regain access to your account.</p>
+        </div>
         <div class="af-v2">
           <span class="af-prefix" id="forgotDial">+256</span>
           <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
