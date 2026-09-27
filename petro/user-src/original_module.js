@@ -1253,6 +1253,7 @@ function applyBrandName(){
   const known = brandNameKnown();
   if (!known) return;   // nothing to say yet; leave the blanks blank
   document.querySelectorAll('[data-brandmark]').forEach(el => { el.innerHTML = brandWordmarkHtml(); });
+  document.querySelectorAll('.home-brand-title').forEach(el => { el.textContent = known; });
   try { document.title = known; } catch (_) {}
   // Remember it for the next launch. This is the whole fix for "on start up
   // loader it was still saying petro": the loading screen paints long before
@@ -3206,6 +3207,7 @@ function paintHome(){
   // lived on Account only, and Daily Check-in was sheet-only). The
   // Home now renders only the surfaces that belong to Petro's current design.
   let html = `
+<div class="home-brand-title">${esc(brandName())}</div>
 ${homeBannerBlockHtml(st)}
 <div class="home-actions">
   <button class="home-action" onclick="openDepositSheet()">
