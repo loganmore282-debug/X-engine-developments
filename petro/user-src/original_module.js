@@ -510,7 +510,8 @@ var LANG_PATTERNS = [
   // here: only the words translate, and whatever {0} captured -- an
   // amount, a percentage, a time, a product name -- is copied across
   // verbatim.
-  ['Check-in successful. {0} added to your wallet', 'Okukyalira kugenze bulungi. {0} zeeyongedde mu nsawo yo', 'Kuhudhuria kumefanikiwa. {0} zimeongezwa kwenye pochi yako', 'Pointage réussi. {0} ajoutés à votre portefeuille', 'Kwiyandikisha byagenze neza. {0} yongewe ku mufuka wawe', 'Okwoleka kugyenzire gye. {0} zeeyongyeire omu nsaho yaawe'],
+  ['Check-in successful ✓', 'Okukyalira kugenze bulungi ✓', 'Kuhudhuria kumefanikiwa ✓', 'Pointage réussi ✓', 'Kwiyandikisha byagenze neza ✓', 'Okwoleka kugyenzire gye ✓'],
+  ['Registration successful ✓', 'Okwewandiisa kugenze bulungi ✓', 'Usajili umefanikiwa ✓', 'Inscription réussie ✓', 'Kwiyandikisha byagenze neza ✓', 'Okuhandiikwa kwagenze gye ✓'],
   ['Cash-out must be a multiple of {0}. Try {1} or {2}.', 'Okuggyamu kulina kuba kwa {0}. Gezaako {1} oba {2}.', 'Kutoa pesa lazima kiwe kizidishi cha {0}. Jaribu {1} au {2}.', 'Le retrait doit être un multiple de {0}. Essayez {1} ou {2}.', 'Kubikuza bigomba kuba umubare ushobora kugabanywa na {0}. Gerageza {1} cyangwa {2}.', 'Okwihamu kushemereire kuba kwa {0}. Gyezaho {1} nari {2}.'],
   ['Cash-out is open from {0} to {1}. Please come back then.', 'Okuggyamu ssente kuggulwa okuva ku {0} okutuuka {1}. Ddamu okomewo mu budde obwo.', 'Kutoa pesa kunapatikana kuanzia {0} hadi {1}. Tafadhali rudi wakati huo.', 'Le retrait est ouvert de {0} à {1}. Merci de revenir à ce moment-là.', 'Kubikuza bifungura kuva {0} kugeza {1}. Ongera ugaruke icyo gihe.', 'Okwihamu sente nikwigurwa kuruga aha {0} kuhika {1}. Ogaruke omu bwire obu.'],
   ['Cash-out of {0} is processing. You will receive {1} after the {2}% charge.', 'Okuggyamu {0} kukolebwako. Ojja kufuna {1} oluvannyuma lw\'ossente z\'obuweereza eza {2}%.', 'Kutoa {0} kunashughulikiwa. Utapokea {1} baada ya ada ya {2}%.', 'Le retrait de {0} est en cours. Vous recevrez {1} après les frais de {2} %.', 'Kubikuza {0} birimo gutunganywa. Uzabona {1} nyuma y\'amafaranga ya serivisi ya {2}%.', 'Okwihamu {0} nikukorwaho. Noija kutunga {1} bwanyima ya sente z\'obuheereza eza {2}%.'],
@@ -2433,6 +2434,7 @@ async function registerCurrentUser(pin, phone, otpTicket){
   return reg;
 }
 async function bootFromNetwork(uid){
+  const signupFlow = !!window._pendingRegOtpTicket;
   let r;
   // subagent-audit-caught: a brand-new registration always paid for a
   // GUARANTEED-to-fail /account call first (the profile doc genuinely
@@ -2512,6 +2514,7 @@ async function bootFromNetwork(uid){
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
+  if (signupFlow) notify(t('Registration successful ✓'));
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
   // and costs no round trip. Tiny (a few hostnames), un-awaited, and a
@@ -2931,7 +2934,14 @@ window.showPage = async function(name){
   else if (name === 'network') await renderNetwork();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
+  animatePageEntry();
 };
+function animatePageEntry(){
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const host = $('pageHost');
+  if (!host || typeof host.animate !== 'function') return;
+  host.animate([{opacity:.84},{opacity:1}], {duration:190, easing:'ease-out'});
+}
 // Announcement dialog REMOVED entirely (owner: "remove announcement
 // everywhere") -- the pop-up that used to fire on every Home visit, Home's
 // own inline "Latest Announcement" row, and the admin panel's "Home
@@ -5064,7 +5074,7 @@ window.submitCheckin = async function(){
     btn.disabled = false; btn.textContent = label;
     return notify(r.message || 'Could not check in');
   }
-  notify(`Check-in successful. ${fmtUGX(r.bonus)} added to your wallet`);
+  notify(t('Check-in successful ✓'));
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
   // Same stale-Records fix Round 72 applied to deposit/withdraw --
