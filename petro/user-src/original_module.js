@@ -1771,9 +1771,11 @@ window.doRegister = async function(){
     return regError('A referral code is required to sign up. Ask the person who invited you for theirs.');
   regError('');
   setBtnLoading('regBtn', true, 'Register', 'Verifying code…');
-  const v = await post('/auth/otp/verify', { otpId: window._regOtp.otpId, code });
-  if (v.status !== 'success') { setBtnLoading('regBtn', false, 'Register'); return regError(v.message || 'Incorrect verification code.'); }
-  window._regOtp.ticket = v.ticket;
+  if (!window._regOtp.ticket) {
+    const v = await post('/auth/otp/verify', { otpId: window._regOtp.otpId, code });
+    if (v.status !== 'success') { setBtnLoading('regBtn', false, 'Register'); return regError(v.message || 'Incorrect verification code.'); }
+    window._regOtp.ticket = v.ticket;
+  }
   setBtnLoading('regBtn', true, 'Register', 'Creating your account…');
   STATE.refCode = referral;
   window._pendingRegPin = '';
@@ -1812,8 +1814,11 @@ window.doRegister = async function(){
     if (e && e.code === 'auth/email-already-in-use') {
       const retryEmail = phoneToEmail(phone);
       try {
+        const sameUid = STATE.user && STATE.user.email === retryEmail ? STATE.user.uid : null;
         await window.fbSignIn(retryEmail, pass);
         storeCredentialIfPossible(retryEmail, pass);
+        if (sameUid && STATE.user && STATE.user.uid === sameUid)
+          await bootFromNetwork(sameUid);
         return;
       } catch (_) { /* wrong password -- fall through to the real error */ }
     }
@@ -2476,20 +2481,21 @@ async function bootFromNetwork(uid){
   // already known to fail. Captured into locals and cleared immediately so
   // a later re-login in the same tab session (no page reload) never
   // wrongly takes this shortcut again.
-  if (window._pendingRegPin) {
+  if (window._pendingRegOtpTicket) {
     const pin = window._pendingRegPin, phone = window._pendingRegPhone, otpTicket = window._pendingRegOtpTicket;
-    window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
     const reg = await registerCurrentUser(pin, phone, otpTicket);
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       $('loadingScreen').style.display = 'none';
       notify(reg.message || 'Could not complete registration');
-      await window.fbSignOut();
+      $('authScreen').style.display = '';
+      setBtnLoading('regBtn', false, 'Register');
       return;
     }
+    window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
     r = await api('/account');
   } else {
     r = await api('/account');
-    if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.message === 'User not found')) {
+    if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.code === 'REGISTRATION_REQUIRED' || r.message === 'User not found')) {
       // Ghost account (Firebase user exists, our profile never finished in
       // an earlier session -- e.g. a crash/reload between account creation
       // and /register finishing) -- self-heal the same way.
@@ -2497,7 +2503,8 @@ async function bootFromNetwork(uid){
       if (reg.status !== 'success' && reg.status !== 'already_done') {
         $('loadingScreen').style.display = 'none';
         notify(reg.message || 'Could not complete registration');
-        await window.fbSignOut();
+        $('authScreen').style.display = '';
+        setBtnLoading('regBtn', false, 'Register');
         return;
       }
       r = await api('/account');

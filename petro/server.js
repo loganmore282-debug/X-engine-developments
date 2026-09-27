@@ -91,7 +91,7 @@ app.use('/admin/', async (req, _res, next) => {
 // 60/min per-user cap rather than only the 400/min global one.
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/bank/delete',
  '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
- '/team/milestone/claim', '/checkin', '/turntable/spin']
+ '/team/milestone/claim', '/checkin', '/turntable/spin', '/auth/otp/send', '/auth/otp/verify', '/auth/reset/confirm']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -2165,10 +2165,17 @@ async function verifyAuthWithEmail(req) {
 // their own profile with a phone number unrelated to the account they
 // actually signed up with.
 function phoneFromVerifiedEmail(email, bodyPhone) {
-  if (!email) return cleanPhone(bodyPhone || '') || String(bodyPhone || '').trim();
-  const derived = cleanPhone(String(email).split('@')[0]);
-  if (derived) return derived;
-  return null;
+  const address = String(email || '').toLowerCase();
+  const derived = cleanPhone(address.split('@')[0]);
+  if (!derived) return null;
+  const allowed = [phoneToEmail(derived)];
+  if (regionUsesBareLocal()) allowed.push(derived.replace(/\D/g, '') + '@petro-platform.com');
+  return allowed.includes(address) ? derived : null;
+}
+function paymentAmount(value) {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value))) return NaN;
+  const amount = Number(value);
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : NaN;
 }
 function safeEqual(a, b) {
   const bufA = Buffer.from(String(a || ''));
@@ -2596,16 +2603,24 @@ async function otpCheckAndBumpDailyLimit(phone, purpose) {
 // requests racing on the same ticket cannot both succeed (see updateIf's
 // own comment in db.js -- the identical pattern this file already uses for
 // creditedDepositIds/refundedWithdrawalIds).
-async function consumeOtpTicket(ticket, phone, purpose) {
-  if (!ticket) return false;
+async function consumeOtpTicket(ticket, phone, purpose, registrationUserId) {
+  if (!ticket || !phone) return false;
   const snap = await db.collection('otpCodes').where('ticket', '==', ticket).limit(1).get();
   if (snap.empty) return false;
-  const doc = snap.docs[0];
-  const o = doc.data();
-  if (o.phone !== phone || o.purpose !== purpose) return false;
-  if (o.consumedAt) return false;
-  if (Date.now() > tsMillis(o.ticketExpiresAt)) return false;
-  return doc.ref.updateIf({ consumedAt: null }, { consumedAt: FieldValue.serverTimestamp() });
+  const ref = snap.docs[0].ref;
+  return withLock('otp:' + ref.id, async () => {
+    const fresh = await ref.get();
+    if (!fresh.exists) return false;
+    const o = fresh.data(), now = Date.now();
+    if (o.ticket !== ticket || !o.verified || o.phone !== phone || o.purpose !== purpose || !(tsMillis(o.ticketExpiresAt) > now)) return false;
+    // A failed referral validation may retry only this same registration.
+    // Reset and payout tickets remain strictly single-use.
+    if (o.consumedAt) return purpose === 'register' && !!registrationUserId && o.registrationUserId === registrationUserId;
+    return ref.updateIf({ ticket, consumedAt: null, verified: true, ticketExpiresAt: { $gt: new Date(now) } }, {
+      consumedAt: FieldValue.serverTimestamp(),
+      ...(purpose === 'register' && registrationUserId ? { registrationUserId } : {})
+    });
+  });
 }
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
@@ -3166,17 +3181,23 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount, basis = 
     if (!l1Id) { await invRef.update({ commissionPending: false }); return paidAny; }
     const rates = [sett.commL1, sett.commL2, sett.commL3];
     const l1Snap = await db.collection('users').doc(l1Id).get();
-    let chain = [{ id: l1Id, snap: l1Snap }];
+    let chain = l1Id !== buyerId ? [{ id: l1Id, snap: l1Snap }] : [];
     const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
-    if (l2Id && l2Id !== l1Id) {
+    if (chain.length && l2Id && l2Id !== l1Id && l2Id !== buyerId) {
       const l2Snap = await db.collection('users').doc(l2Id).get();
       chain.push({ id: l2Id, snap: l2Snap });
       const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
-      if (l3Id && l3Id !== l2Id && l3Id !== l1Id) {
+      if (l3Id && l3Id !== l2Id && l3Id !== l1Id && l3Id !== buyerId) {
         const l3Snap = await db.collection('users').doc(l3Id).get();
         chain.push({ id: l3Id, snap: l3Snap });
       }
     }
+    let plan = source.commissionPlan;
+    if (!Array.isArray(plan)) {
+      plan = chain.map(({id}, i) => ({ id, reward: Math.max(0, Math.round(amount * (Number(rates[i]) || 0) / 100)) }));
+      await invRef.update({ commissionPlan: plan });
+    }
+    chain = await Promise.all(plan.map(async item => ({ id: item.id, snap: await db.collection('users').doc(item.id).get() })));
     const { date, time } = nowStr();
     let anyLevelBlockedByBan = false;
     for (let i = 0; i < chain.length; i++) {
@@ -3190,12 +3211,11 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount, basis = 
       // left to actually pay at that level regardless of ban status. A
       // zero-rate level is permanently resolved (nothing owed) no matter
       // what the account's status is -- check that first.
-      const pct = Number(rates[i]) || 0;
-      if (pct <= 0) continue;
+      if (id === buyerId || chain.slice(0, i).some(parent => parent.id === id)) continue;
       // A referrer banned at this exact instant is a TEMPORARY block, not a
       // permanent forfeiture -- see the anyLevelBlockedByBan comment below.
       if (snap.data().status === 'banned') { anyLevelBlockedByBan = true; continue; }
-      const reward = Math.round(amount * pct / 100);
+      const reward = Number(plan[i].reward) || 0;
       if (reward <= 0) continue;
       // A level is not considered paid merely because we STARTED paying it.
       // Put a durable idempotency token beside the wallet increment in the
@@ -4006,6 +4026,7 @@ app.post('/account/create-profile', async (req, res) => {
   if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = auth.uid;
   const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
+  if (!phone) return res.status(400).json({ status: 'error', message: 'Sign in with your Petro phone account.' });
   try {
     // Locked on the same 'reg:'+userId key as registration itself -- an
     // unconditional .set() here without the lock (the old behaviour) could
@@ -4073,6 +4094,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       await userRef.set(defaultProfileDoc(phone));
       userSnap = await userRef.get();
     }
+    if (userSnap.data().status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
     if (userSnap.data().registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userSnap.data().referralCode || null } };
 
@@ -4194,7 +4216,9 @@ app.post('/auth/otp/send', async (req, res) => {
     } else {
       phone = cleanPhone(req.body.phone || '');
       if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
-      const existing = await db.collection('users').where('phone', '==', phone).limit(1).get();
+      const existing = purpose === 'reset'
+        ? await db.collection('users').where('phone', '==', phone).where('registrationDone', '==', true).limit(1).get()
+        : await db.collection('users').where('phone', '==', phone).limit(1).get();
       // 'register' checks registrationDone specifically, not just any row --
       // a Mongo profile can exist with registrationDone:false from an earlier
       // attempt that crashed between Firebase account creation and finishing
@@ -4203,7 +4227,7 @@ app.post('/auth/otp/send', async (req, res) => {
       // simply retrying their own incomplete signup.
       if (purpose === 'register' && existing.docs.some(d => d.data().registrationDone))
         return res.status(400).json({ status: 'error', message: 'An account with this phone number already exists.' });
-      if (purpose === 'reset' && existing.empty)
+      if (purpose === 'reset' && !existing.docs.some(d => d.data().registrationDone))
         return res.status(400).json({ status: 'error', message: 'No account found with this phone number.' });
     }
     if (!MARZSMS_KEY) return res.status(503).json({ status: 'error', message: 'SMS verification is not available right now. Try again later.' });
@@ -4232,25 +4256,26 @@ app.post('/auth/otp/verify', async (req, res) => {
   try {
     const otpId = String(req.body.otpId || '');
     const code = String(req.body.code || '').trim();
-    if (!otpId || !code) return res.status(400).json({ status: 'error', message: 'Missing verification code' });
-    const ref = db.collection('otpCodes').doc(otpId);
-    const snap = await ref.get();
-    if (!snap.exists) return res.status(400).json({ status: 'error', message: 'Invalid or expired code. Request a new one.' });
-    const o = snap.data();
-    if (o.consumedAt) return res.status(400).json({ status: 'error', message: 'This code has already been used.' });
-    if (Date.now() > tsMillis(o.expiresAt)) return res.status(400).json({ status: 'error', message: 'This code has expired. Request a new one.' });
-    if ((o.attempts || 0) >= OTP_MAX_ATTEMPTS) return res.status(429).json({ status: 'error', message: 'Too many incorrect attempts. Request a new code.' });
-    if (!scryptVerify(code, o.codeHash)) {
-      await ref.update({ attempts: FieldValue.increment(1) });
-      return res.status(400).json({ status: 'error', message: 'Incorrect code.' });
-    }
-    // Re-verifying an already-verified code (a double-tap, a resent
-    // response) just re-issues a fresh ticket rather than erroring -- the
-    // code itself was already proven correct once, refusing here would only
-    // punish a harmless retry.
-    const ticket = crypto.randomUUID();
-    await ref.update({ verified: true, ticket, ticketExpiresAt: new Date(Date.now() + OTP_TICKET_EXPIRES_MS) });
-    res.json({ status: 'success', ticket, expiresInSec: OTP_TICKET_EXPIRES_MS / 1000 });
+    if (!otpId || otpId.length > 100 || !/^\d{6}$/.test(code)) return res.status(400).json({ status: 'error', message: 'Enter the 6-digit verification code.' });
+    await withLock('otp:' + otpId, async () => {
+      const ref = db.collection('otpCodes').doc(otpId);
+      const snap = await ref.get();
+      if (!snap.exists) return res.status(400).json({ status: 'error', message: 'Invalid or expired code. Request a new one.' });
+      const o = snap.data(), now = Date.now();
+      if (o.consumedAt) return res.status(400).json({ status: 'error', message: 'This code has already been used.' });
+      if (!(tsMillis(o.expiresAt) > now)) return res.status(400).json({ status: 'error', message: 'This code has expired. Request a new one.' });
+      if ((o.attempts || 0) >= OTP_MAX_ATTEMPTS) return res.status(429).json({ status: 'error', message: 'Too many incorrect attempts. Request a new code.' });
+      // Reserve an attempt atomically before checking the hash.
+      const attempted = await ref.updateIf({ consumedAt: null, attempts: { $lt: OTP_MAX_ATTEMPTS } }, { attempts: FieldValue.increment(1) });
+      if (!attempted) return res.status(429).json({ status: 'error', message: 'Code unavailable. Request a new code.' });
+      if (!scryptVerify(code, o.codeHash)) return res.status(400).json({ status: 'error', message: 'Incorrect code.' });
+      if (o.verified && o.ticket && tsMillis(o.ticketExpiresAt) > now)
+        return res.json({ status: 'success', ticket: o.ticket, expiresInSec: Math.ceil((tsMillis(o.ticketExpiresAt) - now) / 1000) });
+      const ticket = crypto.randomUUID();
+      const stored = await ref.updateIf({ consumedAt: null, ticket: o.ticket || null }, { verified: true, ticket, ticketExpiresAt: new Date(now + OTP_TICKET_EXPIRES_MS) });
+      if (!stored) return res.status(409).json({ status: 'error', message: 'Verification changed. Please try again.' });
+      res.json({ status: 'success', ticket, expiresInSec: OTP_TICKET_EXPIRES_MS / 1000 });
+    });
   } catch (e) {
     console.error('OTP verify error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not verify the code right now' });
@@ -4269,7 +4294,7 @@ app.post('/auth/reset/confirm', async (req, res) => {
     if (newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters.' });
     const ticketOk = await consumeOtpTicket(String(req.body.ticket || ''), phone, 'reset');
     if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
-    const uSnap = await db.collection('users').where('phone', '==', phone).limit(1).get();
+    const uSnap = await db.collection('users').where('phone', '==', phone).where('registrationDone', '==', true).limit(1).get();
     if (uSnap.empty) return res.status(404).json({ status: 'error', message: 'No account found with this phone number.' });
     const userId = uSnap.docs[0].id;
     await admin.auth().updateUser(userId, { password: newPassword });
@@ -4295,7 +4320,7 @@ app.post('/register', async (req, res) => {
     // already succeeded.
     const already = await db.collection('users').doc(userId).get();
     if (!already.exists || !already.data().registrationDone) {
-      const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), phone, 'register');
+      const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), phone, 'register', userId);
       if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
     }
     const result = await completeRegistrationCore(userId, req.body.referralCode, req.body.pin, phone);
@@ -4321,6 +4346,7 @@ app.get('/account', async (req, res) => {
     if (!preSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
     if (preSnap.data().status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (preSnap.data().registrationDone === false) return res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Please finish signing up and verify your phone.' });
     await settleAllForUser(uid);
     const snap = await db.collection('users').doc(uid).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
@@ -5003,7 +5029,7 @@ const _depCreateDebounce = new Map();
 app.post('/deposit/marzpay', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const amt = parseInt(req.body.amount, 10);
+  const amt = paymentAmount(req.body.amount);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
   try {
@@ -5011,6 +5037,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before depositing.' });
     const provider = depositAutomaticProvider(sett);
     // The gateway has to be able to reach THIS country's phone numbers. Every
     // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
@@ -5523,6 +5550,33 @@ async function pinCheck(userId, pin) {
     return { ok: true };
   });
 }
+// Caller holds bal:<userId>. A restart can finish a charged request, but
+// must never charge an unconfirmed request on the member's behalf.
+async function finishWithdrawalCreation(witRef, userId) {
+  const snap = await witRef.get();
+  if (!snap.exists || snap.data().status !== 'creating') return;
+  const w = snap.data();
+  const user = await db.collection('users').doc(userId).get();
+  if (!user.exists) throw new Error('Withdrawal owner is unavailable');
+  if (!(user.data().debitedWithdrawalIds || []).includes(witRef.id)) {
+    await witRef.updateIf({ status: 'creating' }, { status: 'declined', failureReason: 'Request was not charged. No payout was sent.' });
+    return;
+  }
+  await db.collection('transactions').doc('withdrawal:' + witRef.id).createIfAbsent({
+    userId, statementId: newStatementId(), type: 'withdraw', description: `Withdrawal: Processing (${fmtMoney(w.amount)})`,
+    amount: -w.amount, displayAmount: -w.amount, status: 'pending', date: w.date, time: w.time, ref: w.ref,
+    withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
+  });
+  await witRef.updateIf({ status: 'creating' }, { status: 'pending' });
+}
+async function reconcileWithdrawalCreations() {
+  const snap = await db.collection('withdrawals').where('status', '==', 'creating').orderBy('createdAt', 'asc').limit(100).get();
+  for (const doc of snap.docs) {
+    const userId = doc.data().userId;
+    try { await withUserRegion(userId, () => withLock('bal:' + userId, () => finishWithdrawalCreation(doc.ref, userId))); }
+    catch (e) { console.error('Withdrawal creation recovery failed:', doc.id, e.message); }
+  }
+}
 app.post('/withdraw/request', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -5531,8 +5585,9 @@ app.post('/withdraw/request', async (req, res) => {
   if (_userBeingDeleted.has(userId))
     return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
   _witRequestInFlight.add(userId);
+  let witId;
   try {
-    const amt = parseInt(req.body.amount, 10);
+    const amt = paymentAmount(req.body.amount);
     if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
     if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
     const rawNetwork = String(req.body.network || '').trim();
@@ -5576,20 +5631,21 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: "That withdrawal account isn't saved to your profile. Bind it first, then try again." });
     const holder = boundSnap.docs[0].data().holder;
 
-    const fee = Math.round(amt * sett.withdrawFeePct / 100);
+    const feePct = Number(sett.withdrawFeePct);
+    if (!Number.isFinite(feePct) || feePct < 0 || feePct >= 100) throw new Error('Withdrawal fees are unavailable. Contact support.');
+    if (Number(sett.maxWithdraw) > 0 && amt > Number(sett.maxWithdraw)) throw new Error(`Maximum cash-out is ${fmtMoney(sett.maxWithdraw)}`);
+    const fee = Math.round(amt * feePct / 100);
     const net = amt - fee;
+    if (net <= 0) throw new Error('Withdrawal amount is too small after fees.');
     const ref = await uniqueRef('S');
-    let witId;
-    // NOT db.runTransaction -- see /invest/create's own comment on why: no
-    // real rollback exists here anyway, so awaiting each write directly lets
-    // this catch a failure after the debit and refund it exactly, instead of
-    // silently leaving the member charged with no withdrawal request to show
-    // for it.
+    // This adapter has no real multi-document rollback. Persist the request
+    // first, then charge once with a durable token that recovery can inspect.
     await withLock('bal:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
       const fresh = await uRef.get();
       if (!fresh.exists) throw new Error('User not found');
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
+      if (fresh.data().registrationDone === false) throw new Error('Finish signing up before withdrawing.');
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
         throw new Error('Purchase at least one plan before you can cash out.');
       const bal = fresh.data().walletBalance || 0;
@@ -5607,7 +5663,7 @@ app.post('/withdraw/request', async (req, res) => {
       // 'rejected' are finished and must not block anything, or a member's
       // first ever cash-out would be their last.
       const openSnap = await db.collection('withdrawals')
-        .where('userId', '==', userId).where('status', 'in', ['pending', 'sending', 'processing'])
+        .where('userId', '==', userId).where('status', 'in', ['creating', 'pending', 'sending', 'processing'])
         .limit(1).get();
       if (!openSnap.empty) {
         const w = openSnap.docs[0].data();
@@ -5624,44 +5680,22 @@ app.post('/withdraw/request', async (req, res) => {
       }
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
-      await uRef.update({ walletBalance: FieldValue.increment(-amt) });
       const { date, time } = nowStr();
-      try {
-        await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref, status: 'pending', regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp() });
-        // Owner: "instead of putting many words make it simple, no need to
-        // put name, need only withdrawal, status, amount" -- dropped the
-        // holder name, network, and fee breakdown that used to be spelled
-        // out here (still recorded on the withdrawal doc itself, just not
-        // repeated in this one-line ledger description).
-        await db.collection('transactions').add({
-          // displayAmount mirrors the deposit-side fix (see /deposit/marzpay's
-          // own comment): finalizeWithdrawalTransactionRecord() zeroes
-          // `amount` once a decline's refund is confirmed, to keep the
-          // walletBalance/totalDeposited integrity math honest -- but that
-          // used to also make Records' amount column show "+UGX 0" for a
-          // refunded withdrawal instead of what was actually attempted.
-          userId, statementId: newStatementId(), type: 'withdraw', description: `Withdrawal: Processing (${fmtMoney(amt)})`,
-          amount: -amt, displayAmount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
-        });
-      } catch (createErr) {
-        // Codex-caught real bug: same shape as the investment path above --
-        // witRef.set() can succeed while transactions.add() throws, leaving
-        // a status:'pending' withdrawal doc behind even after the refund
-        // below restores the wallet. Left alone, admin approval or the
-        // auto-approve/reconcile tick would still see it as a real pending
-        // withdrawal and pay it out via MarzPay on top of the refund.
-        await witRef.delete().catch(delErr => {
-          console.error(`MONEY-SAFETY: withdrawal ${witRef.id} ledger-row write failed AND the withdrawal doc itself could not be deleted -- a refunded-but-still-payable withdrawal may be left behind for user ${userId}. Manual fix required.`, delErr.message);
-        });
-        await uRef.update({ walletBalance: FieldValue.increment(amt) }).catch(compErr => {
-          console.error(`MONEY-SAFETY: withdrawal ${witRef.id} creation failed AFTER debiting user ${userId} ${amt}, and the compensating refund ALSO failed -- wallet is short by ${amt}. Manual fix required.`, compErr.message);
-        });
-        throw createErr;
-      }
+      // Persist a non-payable recovery record before the debit. The debit and
+      // its token are one atomic user update; ledger failures never refund a
+      // request that an administrator could still send.
+      await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref,
+        status: 'creating', regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp() });
+      const debited = await uRef.updateIf({ walletBalance: { $gte: amt }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, {
+        walletBalance: FieldValue.increment(-amt), debitedWithdrawalIds: FieldValue.arrayUnion(witId)
+      });
+      if (!debited) throw new Error('Your balance or account status changed. Please refresh and try again.');
+      await finishWithdrawalCreation(witRef, userId);
     });
     sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested, processing now' });
   } catch (e) {
+    if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your withdrawal request is being checked. Check Transaction Statement before submitting again.' });
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   } finally { _witRequestInFlight.delete(userId); }
 });
@@ -5921,7 +5955,8 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       // retry of the same withdrawal is de-duplicated by PesaJet rather than
       // by anything in here.
       const sendingMarker = withdrawalId;
-      await witRef.update({ status: 'sending', sendingReference: sendingMarker, pesajetRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+      const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, pesajetRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
       const pj = await pesajetDisburse({
         amount: wit.net, phone: wit.phone, network: wit.network,
         reference: sendingMarker, description: 'Withdrawal',
@@ -5934,7 +5969,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       if (!pj.ok) {
         // A clean refusal -- PesaJet answered and said no, so nothing was
         // sent and the row is safe to hand back to Pending.
-        await witRef.update({ status: 'pending', sendingReference: null, pesajetRef: null, pesajetTxId: null, sendingBy: null, sendingAt: null }).catch(() => {});
+        await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, pesajetRef: null, pesajetTxId: null, sendingBy: null, sendingAt: null }).catch(() => {});
         return { code: 400, body: { status: 'error', message: pesajetUserMsg(pj, 'PesaJet could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
       }
       const tx = pj.data?.data || pj.data || {};
@@ -5974,7 +6009,8 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     // is set at deposit CREATION, before ever calling MarzPay) -- writing it
     // here, before the call, means it's always persisted regardless of
     // whether any later write in this function fails.
-    await witRef.update({ status: 'sending', sendingReference: sendingMarker, marzReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+    const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, marzReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+    if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
 
     let mpData, ambiguous = false;
     try {
@@ -5995,7 +6031,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
-      await witRef.update({ status: 'pending', sendingReference: null, marzReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
+      await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, marzReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
       return { code: 400, body: { status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
     }
     const sandbox = mpData.status === 'sandbox';
@@ -10164,6 +10200,7 @@ async function reconcilePendingDeposits() {
 async function reconcilePendingWithdrawals() {
   let settled = 0;
   try {
+    await reconcileWithdrawalCreations();
     // Codex-caught real bug (2nd money-flow audit): same starvation risk as
     // reconcilePendingDeposits() above -- see its own comment for the full
     // reasoning. A `processing` row with no marzTxUuid was never

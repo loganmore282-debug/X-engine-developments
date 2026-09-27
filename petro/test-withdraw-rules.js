@@ -151,10 +151,11 @@ function run(state, body) {
   // cash-out look refused.
   let code = 200, replied = null;
   const res = { status(c) { code = c; return res; }, json(j) { replied = j; return res; } };
-  const inc = Symbol('inc');
+  const inc = Symbol('inc'), union = Symbol('union');
   const applyInc = (doc, patch) => {
     for (const [k, v] of Object.entries(patch)) {
       if (v && typeof v === 'object' && v[inc] != null) doc[k] = (Number(doc[k]) || 0) + v[inc];
+      else if (v && typeof v === 'object' && v[union] != null) doc[k] = [...new Set([...(doc[k] || []), v[union]])];
       else doc[k] = v;
     }
   };
@@ -191,7 +192,8 @@ function run(state, body) {
     MAX_MONEY_AMOUNT: 100000000,
     _witRequestInFlight: new Set(),
     _userBeingDeleted: new Set(),
-    FieldValue: { increment: n => ({ [inc]: n }), serverTimestamp: () => 1 },
+    FieldValue: { increment: n => ({ [inc]: n }), arrayUnion: n => ({ [union]: n }), serverTimestamp: () => 1 },
+    withUserRegion: (_u, fn) => fn(),
     // The REAL window function, bound to this case's instant. Overriding
     // Date inside the sandbox was the first attempt and it did nothing: the
     // handler calls Date.now() directly, so every window case was judged
@@ -203,15 +205,26 @@ function run(state, body) {
       if (name === 'users') return { doc: () => ({
         get: async () => ({ exists: true, data: () => ({ ...state.user }) }),
         update: async p => applyInc(state.user, p),
+        updateIf: async (condition, patch) => {
+          if (state.user.walletBalance < condition.walletBalance.$gte || state.user.status === 'banned' ||
+              (state.user.debitedWithdrawalIds || []).includes(condition.debitedWithdrawalIds.$ne)) return false;
+          applyInc(state.user, patch); return true;
+        },
       }) };
       if (name === 'bankAccounts') return chain(state.banks);
       if (name === 'withdrawals') return {
         ...chain(state.wits),
-        doc: () => { const id = 'w' + (++state.seq); return {
-          id, set: async d => { state.wits.push({ id, ...d }); },
+        doc: id => { id = id || 'w' + (++state.seq); return {
+          id, get: async () => { const row = state.wits.find(w => w.id === id); return { exists: !!row, data: () => ({ ...row }) }; },
+          set: async d => { state.wits.push({ id, ...d }); },
+          updateIf: async (filter, patch) => { const row = state.wits.find(w => w.id === id);
+            if (!row || row.status !== filter.status) return false; applyInc(row, patch); return true; },
           delete: async () => { state.wits = state.wits.filter(w => w.id !== id); } }; },
       };
-      return { ...chain([]), add: async d => { state.tx.push(d); return { id: 't1' }; } };
+      return { ...chain([]), doc: id => ({ createIfAbsent: async d => {
+        if (state.failLedger) throw new Error('ledger unavailable');
+        if (!state.tx.some(t => t.id === id)) state.tx.push({ id, ...d });
+      } }), add: async d => { state.tx.push(d); return { id: 't1' }; } };
     } },
   };
   const fn = new Function('sandbox', `
@@ -219,16 +232,20 @@ function run(state, body) {
             uniqueRef, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
             sendWithdrawalSmsAlert, NETWORK_NAMES, MAX_MONEY_AMOUNT,
             _witRequestInFlight, _userBeingDeleted, FieldValue, db,
-            withdrawWindowState, currentRegionKey, DEFAULT_REGION_KEY } = sandbox;
+            withdrawWindowState, currentRegionKey, DEFAULT_REGION_KEY, withUserRegion } = sandbox;
     let handler;
     const tsMillis = n => Number(n) || 0;
     const tzOffMs = () => 180 * 60000;
     ${fnSource('statementStamp')}
     ${fnSource('newStatementId')}
+    ${fnSource('paymentAmount')}
+    ${fnSource('finishWithdrawalCreation')}
+    sandbox.recover = id => finishWithdrawalCreation(db.collection('withdrawals').doc(id), 'u1');
     const app = { post: (p, h) => { if (p === '/withdraw/request') handler = h; } };
     ${grab("app.post('/withdraw/request'", '// `refunded` MUST be the real')}
     return handler;
   `)(sandbox);
+  state.recover = sandbox.recover;
   return fn({ body, headers: {} }, res).then(() => ({ code, replied }));
 }
 
@@ -250,6 +267,21 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   ck(r.code === 200, `a first cash-out is accepted (${r.code} ${r.replied && r.replied.message})`);
   ck(st.wits.length === 1, `and recorded (${st.wits.length})`);
   ck(st.user.walletBalance === 90000, `wallet debited once (${st.user.walletBalance})`);
+
+  st = fresh(); st.failLedger = true;
+  r = await run(st, REQ);
+  ck(r.code === 503 && r.replied.code === 'WITHDRAWAL_RECOVERY_PENDING', 'ledger outage returns a recovery notice');
+  ck(st.user.walletBalance === 90000 && st.wits[0].status === 'creating', 'charged request stays non-payable during outage');
+  r = await run(st, REQ);
+  ck(r.code === 400 && st.user.walletBalance === 90000, 'retry cannot debit while recovery is pending');
+  st.failLedger = false;
+  await st.recover(st.wits[0].id);
+  await st.recover(st.wits[0].id);
+  ck(st.wits[0].status === 'pending' && st.tx.length === 1 && st.user.walletBalance === 90000,
+     'recovery creates one ledger row without a second debit');
+  st = fresh();
+  r = await run(st, { ...REQ, amount: '10000garbage' });
+  ck(r.code === 400 && st.user.walletBalance === 100000, 'malformed amount cannot reach the wallet');
 
   for (const status of ['pending', 'sending', 'processing']) {
     st = fresh({ wits: [{ id: 'w0', userId: 'u1', status, amount: 20000 }] });
