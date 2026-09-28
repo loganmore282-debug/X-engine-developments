@@ -315,6 +315,20 @@ var LANG_ROWS = [
   ['Open treasure chest', 'Ggulawo essanduku ly\'obugagga', 'Fungua sanduku la hazina', 'Ouvrir le coffre au tr\u00e9sor', 'Fungura agasanduku k\'ubutunzi', 'Igura esanduuku y\'obugaiga'],
   ['Processing your recharge', 'Tukola ku ssente zo', 'Tunashughulikia malipo yako', 'Traitement de votre recharge', 'Turimo gutunganya ubwishyu bwawe', 'Nitukora aha sente zaawe'],
   ['Redirecting to payment\u2026', 'Tukutwala ku kusasula\u2026', 'Inakupeleka kwenye malipo\u2026', 'Redirection vers le paiement\u2026', 'Turimo kukujyana mu kwishyura\u2026', 'Nituukutwara aha kushashura\u2026'],
+  // Owner asked directly why the deposit-status screen "only changes small
+  // things" under a non-English language -- these three status titles are
+  // the reason: the screen was rewritten (numbered steps, new copy) without
+  // these ever being added here, so every status past the first one has
+  // been silently falling back to English regardless of language. Luganda/
+  // Kinyarwanda/Runyankole left blank on the two rows below where the
+  // nuance was not certain enough to commit, same policy this table
+  // already states at its own top -- built from vocabulary already vetted
+  // elsewhere in this table ('Confirmed'/'kakasibwa' family, 'Failed'/
+  // 'not confirmed yet'), not guessed fresh, but still needs a native read
+  // before launch like the rest of this table's Bantu columns do.
+  ['Payment confirmed', 'Okusasula Kukakasiddwa', 'Malipo Yamethibitishwa', 'Paiement confirm\u00e9', 'Kwishyura Byemejwe', 'Okushashura Kwahamiziibwe'],
+  ['Payment not completed', 'Okusasula Tekuwedde', 'Malipo Hayajakamilika', 'Paiement non termin\u00e9', 'Kwishyura Ntibyarangiye', 'Okushashura Tikwahikire'],
+  ['Still waiting for the provider', '', 'Bado tunasubiri jibu', "Toujours en attente d'une r\u00e9ponse", '', ''],
   ['Remaining to Earn', 'Ebisigadde Okufuna', 'Kilichobaki Kupata', 'Reste \u00e0 gagner', 'Bisigaye kubona', 'Ebisigaire Okutunga'],
   ['SAVE LOGIN PASSWORD', 'TEREKA EKISUMULUZO KY\'OKUYINGIRA', 'HIFADHI NENOSIRI LA KUINGIA', 'ENREGISTRER LE MOT DE PASSE', 'BIKA IJAMBOBANGA RYO KWINJIRA', 'BIIKA EKISUMURUZO KY\'OKUTAAHA'],
   ['SAVE TRADE PASSWORD', 'TEREKA EKISUMULUZO KY\'OKUSUUBULA', 'HIFADHI NENOSIRI LA MALIPO', 'ENREGISTRER LE MOT DE PASSE DE TRANSACTION', 'BIKA IJAMBOBANGA RY\'UBUCURUZI', 'BIIKA EKISUMURUZO KY\'OKUSHUUBURA'],
@@ -506,6 +520,12 @@ var LANG_PATTERNS = [
   ['Phone number must start with 0 and be {0} digits', 'Ennamba ya ssimu erina kutandika ne 0 n’eba ya nnamba {0}', 'Namba ya simu inapaswa kuanza na 0 na kuwa tarakimu {0}', 'Le numéro de téléphone doit commencer par 0 et compter {0} chiffres', 'Nimero ya telefone igomba gutangira na 0 kandi ibe imibare {0}', 'Enamba ya esimu ishemereire kutandika na 0 kandi kuba ya namba {0}'],
   ['Your payment number ({0})', 'Ennamba yo ey’okusasula ({0})', 'Namba yako ya malipo ({0})', 'Votre numéro de paiement ({0})', 'Nimero yawe yo kwishyura ({0})', 'Enamba yaawe y’okushashura ({0})'],
   ['Support hours: {0}', 'Ebiseera by’obuyambi: {0}', 'Saa za msaada: {0}', "Heures d'assistance : {0}", 'Amasaha ya serivisi: {0}', 'Obwire bw’obuhwezi: {0}'],
+  // The deposit-status screen's own step 1 (a live amount + phone number in
+  // one sentence) -- same "translate the words, copy {0}/{1} verbatim" rule
+  // as every other template here. French/Swahili only for now; see the
+  // LANG_ROWS comment above this same screen's status titles for why the
+  // three Bantu columns are left blank rather than guessed on this one.
+  ['A payment request for {0} has been sent to {1}.', '', 'Ombi la malipo la {0} limetumwa kwa {1}.', 'Une demande de paiement de {0} a été envoyée à {1}.', '', ''],
   // Popup messages carrying a figure. Same rule as every template
   // here: only the words translate, and whatever {0} captured -- an
   // amount, a percentage, a time, a product name -- is copied across
@@ -3672,7 +3692,7 @@ function teamLoadingHtml(){ return '<div class="list-loading">' + MINI_RING_LOAD
 // while its own ancestor isn't display:none, and #loadingScreen usually is.
 var MINI_RING_LOADER = '<svg class="mini-ring-loader" viewBox="0 0 120 120" aria-hidden="true">'
   + '<defs><linearGradient id="miniRingGrad" x1="24" y1="104" x2="96" y2="16" gradientUnits="userSpaceOnUse">'
-  + '<stop offset="0%" stop-color="#ff3b44"/><stop offset="55%" stop-color="#e30613"/><stop offset="100%" stop-color="#6b4cff"/>'
+  + '<stop offset="0%" stop-color="#ff3b44"/><stop offset="55%" stop-color="#e30613"/><stop offset="100%" stop-color="#ffb000"/>'
   + '</linearGradient></defs>'
   + '<circle class="ring-arc ring-arc-1" cx="60" cy="60" r="52" pathLength="100"/>'
   + '<circle class="ring-arc ring-arc-2" cx="60" cy="60" r="45" pathLength="100"/>'
