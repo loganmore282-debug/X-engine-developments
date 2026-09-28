@@ -2931,3 +2931,93 @@ machinery is new:**
 - `node -c` clean on both rounds of changes; `build-core.js`/
   `build-admin.js` both round-trip OK. `user/sw.js` bumped `v183` →
   `v184`, `admin/sw.js` bumped `v43` → `v44`.
+
+## 2026-09-28 (follow-up 8) — Mobile-money status screen: Verify button removed, success screen redesigned with an auto-redirect countdown; PWA-reload gotcha found on `pm2 reload`; a real card-gateway 404 traced to MarzPay/Pegasus's own side
+
+**A second live-testing round on the VPS, after wiring `MARZPAY_KEY`,
+`TRONGRID_API_KEY` and `PUBLIC_URL` in one at a time.** Each of those
+three `secrets.local.js` additions had been applied with `pm2 reload
+petro-server` (by process NAME) -- which does NOT actually re-read the
+file. PM2 caches whatever environment a process started with; reloading
+by name just restarts it with that same stale cached environment. Only
+reloading THROUGH the ecosystem file itself, with `--update-env`
+(`pm2 reload ecosystem.config.js --update-env`, run from `deploy/`),
+forces it to re-run `require('./secrets.local.js')` fresh and actually
+push the new values in. All three additions looked like they'd worked
+(clean restart, no crash in the logs) right up until a real test deposit
+still hit "Missing or invalid API credentials" -- the process restarting
+cleanly proves nothing about which env vars it restarted WITH. One
+`--update-env` reload through the file fixed all three at once. **Any
+future secrets.local.js change on this VPS must reload this way, not
+by process name**, or it will look successful and silently not apply.
+
+**Once genuinely live**: a real mobile-money deposit correctly sent a
+push prompt to the owner's phone (confirms `MARZPAY_KEY` was the real,
+sole blocker all along -- the card/USDT code from the last two rounds
+needed nothing further). A real card-payment attempt got as far as a
+genuine MarzPay `redirect_url`, landed on Pegasus's own hosted card
+gateway (MarzPay's underlying card processor), and hit a 404 there --
+`/LivePaymentsCardGateway/pegasusgateway.aspx` not found on
+`pegasus.co.ug`. That confirms this app's own side of the card flow is
+working correctly end to end (real credentials, real API call, real
+redirect) -- the failure is on MarzPay/Pegasus's own infrastructure
+(their Card Payments subscription/service not fully provisioned, or a
+broken path on their gateway), not something fixable in this codebase.
+Left as a known external blocker for the owner to raise with MarzPay
+support, not "fixed" here.
+
+**Mobile-money deposit status screen, owner feedback from watching a
+real test deposit:**
+- *"remove verify button, so this is automatic verification"* -- the
+  autopoll (`pollDepositStatus()`) was already checking on its own the
+  whole time; the manual Verify button next to it was a second way to
+  do the same thing, not a needed one. `setDepositStatusPending()` and
+  `setDepositStatusUnknown()` both now call `setDepButtons(false, ...)`
+  -- Verify never shows again, in either state. The button and
+  `verifyDepositNow()` are left in the markup/module (same "leave
+  dormant code, remove only the reachable entry point" precedent this
+  file has followed before), just never displayed.
+- *"on payment success it says congratulations, payment has been
+  received (added to your wallet), redirecting back home in 5 seconds
+  or you can say so back the button should be available"* --
+  `setDepositStatusSuccess()` rewritten: title is now "Congratulations!
+  🎉", body reads "Payment received — `<amount>` has been added to your
+  wallet.", and a countdown line ("Returning to Home in 5…4…3…") ticks
+  down via `setInterval`. The Close button is relabelled "Back to Home"
+  and shown IMMEDIATELY (not gated behind the countdown), so a member
+  who doesn't want to wait can leave right away -- exactly the "or you
+  can say so back the button should be available" alternative asked
+  for. At 0 the countdown fires the identical `closeDepositStatusModal()`
+  the button itself calls. Tapping Close manually clears the interval
+  (`_depSuccessRedirectTimer`) so it can never fire a moment later
+  against an already-closed modal. `setDepositStatusFailed()`/
+  `setDepositStatusUnknown()` both explicitly reset the Close button's
+  label back to plain "Close" -- otherwise a member who saw one
+  successful deposit's "Back to Home" label earlier in the same session
+  would see that same label on an unrelated LATER failed/pending one,
+  since the button element is reused across attempts without a fresh
+  page load in between. Verified the whole sequence in headless
+  Chromium against the real built bundle: pending shows neither button;
+  success shows the new copy/countdown/immediate Close; the countdown
+  actually decrements and auto-closes the modal at 5s when left alone;
+  manually closing early cancels the timer with no stray reopen even
+  after waiting past the original 5s window; and a failed/unknown state
+  reached AFTER a prior success correctly shows plain "Close", not a
+  leftover "Back to Home".
+- *"check down bro on poll animation, it shows things of other
+  screens"* -- couldn't fully pin down the exact mechanism from the
+  screenshot alone (`.pay-page`'s own `::before` wallpaper layer and the
+  element itself both already use viewport-relative `position:fixed`,
+  which should be robust to the same mobile-browser-chrome-resize class
+  of bug the wallpaper itself had two rounds ago). Applied one cheap,
+  safe hardening regardless of the exact cause: `.pay-page`'s own
+  `background` changed from `transparent` (relying ENTIRELY on the
+  `::before` pseudo-element painting over it) to a solid `#1d130f` (the
+  same base canvas color `#app` itself uses) -- so the element can never
+  be genuinely see-through to whatever sits behind it, whatever the
+  reason the wallpaper layer might not be fully covering it. Flagged,
+  not claimed fixed -- ask the owner for another screenshot (ideally
+  full-screen, scrolled to show the exact spot) if it's still visible
+  after this ships, rather than guessing further blind.
+- `node -c` clean, `build-core.js` round-trip OK. `user/sw.js` bumped
+  `v184` → `v185`.

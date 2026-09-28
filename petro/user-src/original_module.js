@@ -5536,6 +5536,11 @@ window.openDepositStatusModal = function(amount, phone, network){
   lockBodyScroll();
 };
 window.closeDepositStatusModal = function(){
+  // Cancels the success screen's own auto-redirect countdown if the member
+  // taps Close/Back before it fires on its own -- otherwise the timer would
+  // still be alive and try to close (or navigate) a modal that is already
+  // closed, moments later.
+  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
   $('depStatusBg').classList.remove('show');
   document.body.classList.remove('deposit-status-open');
   unlockBodyScroll();
@@ -5675,29 +5680,53 @@ function setDepositStatusPending(amount, phone, network){
     // and without this a member is left staring at step 2 with nothing to do.
     + '<p class="pay-note">If the prompt does not come up, dial ' + esc(ussd)
     + ' on that phone to find and approve the pending payment yourself.</p>';
-  setDepButtons(true, false);
+  // Owner: "remove verify button, so this is automatic verification" -- the
+  // autopoll (pollDepositStatus() below) already checks on its own; a manual
+  // Verify tap next to it was a second way to do the same thing, not a
+  // needed one. Neither button shows while pending now -- purely automatic,
+  // nothing for the member to do but wait.
+  setDepButtons(false, false);
 }
+var _depSuccessRedirectTimer = null;
 function setDepositStatusSuccess(){
   $('depStatusIcon').className = 'dep-status-icon success';
   // The owner's own artwork, cut out of the images he supplied.
   $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-green-soft)" stroke="var(--snow-green)" stroke-width="4"/><path d="M36 61l15 15 34-36" stroke="var(--snow-green)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  $('depStatusTitle').textContent = 'Payment confirmed';
+  // Owner: "let me think that on payment success it says congratulations
+  // payment has been received {added to your wallet} redirecting back home
+  // in 5 seconds or you can say so back the button should be available."
+  $('depStatusTitle').textContent = 'Congratulations! 🎉';
   // Names the actual figure when it is known (it always is on the automatic
   // path, since the pending state set it moments earlier) and falls back to
   // wording that reads properly without one -- the manual-deposit path lands
   // here from handleManualDepositStatusResult() without ever showing pending.
-  // brandName(), not the literal: the app's name is admin-settable, and these
-  // three sentences were the last hardcoded ones left in the module. They
-  // survived test-no-snow-branding.js's scan for exactly that only because an
-  // OLD comment two hundred lines up wrote the USSD codes as "*165#/*185#" --
-  // that "/*" opened a block comment as far as the test's comment stripper
-  // was concerned, and the strip then swallowed every line down to the next
-  // "*/", these included. Rewording that comment revealed them.
-  $('depStatusBody').innerHTML = '<p>' + (_depPendingAmount
-    ? esc(fmtUGX(_depPendingAmount)) + ' has been added to your ' + esc(brandName()) + ' balance.'
-    : 'Your recharge has been added to your ' + esc(brandName()) + ' balance.')
-    + ' You can see it any time under Transaction Statement.</p>';
+  // brandName(), not the literal: the app's name is admin-settable.
+  const amountLine = _depPendingAmount
+    ? 'Payment received — ' + esc(fmtUGX(_depPendingAmount)) + ' has been added to your wallet.'
+    : 'Payment received — your recharge has been added to your ' + esc(brandName()) + ' wallet.';
+  $('depStatusBody').innerHTML = '<p>' + amountLine + '</p><p class="pay-note" id="depRedirectCountdown"></p>';
+  // Close doubles as "Back to Home" here -- available immediately so a
+  // member who does not want to wait the 5 seconds out can leave right
+  // away, exactly as asked ("or you can say so back the button should be
+  // available"). The countdown auto-fires the identical action if they
+  // don't tap it first.
+  const c = $('depStatusCloseBtn');
+  if (c) c.textContent = 'Back to Home';
   setDepButtons(false, true);
+  let secondsLeft = 5;
+  const tick = () => {
+    const el = $('depRedirectCountdown');
+    if (el) el.textContent = 'Returning to Home in ' + secondsLeft + '…';
+    if (secondsLeft <= 0) {
+      if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
+      closeDepositStatusModal();
+      return;
+    }
+    secondsLeft--;
+  };
+  if (_depSuccessRedirectTimer) clearInterval(_depSuccessRedirectTimer);
+  tick();
+  _depSuccessRedirectTimer = setInterval(tick, 1000);
 }
 function setDepositStatusFailed(msg){
   $('depStatusIcon').className = 'dep-status-icon failed';
@@ -5709,6 +5738,10 @@ function setDepositStatusFailed(msg){
   // guess about someone else's money.
   $('depStatusBody').innerHTML = '<p>' + esc(msg
     || 'This recharge did not go through, so your ' + brandName() + ' balance has not changed. You can start it again whenever you are ready.') + '</p>';
+  // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
+  // button means plain Close here, on a modal a later deposit attempt can
+  // reuse without a fresh page load in between.
+  const cf = $('depStatusCloseBtn'); if (cf) cf.textContent = 'Close';
   setDepButtons(false, true);
 }
 function setDepositStatusUnknown(){
@@ -5716,11 +5749,14 @@ function setDepositStatusUnknown(){
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
   $('depStatusTitle').textContent = 'Still waiting for the provider';
   $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
-    + 'If it goes through, your balance updates on its own. Tap Verify to check again, '
-    + 'or look under Transaction Statement later.</p>';
-  // Both buttons: the payment is genuinely unresolved, so Verify must stay,
-  // and the member also needs a way off this screen.
-  setDepButtons(true, true);
+    + 'If it goes through, your balance updates on its own automatically -- '
+    + 'or look under Transaction Statement later to check.</p>';
+  const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Close';
+  // Verify removed here too (see setDepositStatusPending's own comment) --
+  // this is the same automatic wait, just past the autopoll's own 60s
+  // budget. Close is the only control: a way off the screen, not a way to
+  // ask again by hand.
+  setDepButtons(false, true);
 }
 window.submitDeposit = async function(){
   const submitBtn = $('depSubmitBtn');
