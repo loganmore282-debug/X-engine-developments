@@ -1708,21 +1708,34 @@ body.deposit-status-open .bottom-nav{display:none;}
    solid #1d130f fallback above -- isolation:isolate on .pay-page puts this
    ::before INSIDE its own stacking context, where it paints above the
    element's own background regardless of z-index:-1, so the fallback
-   color was never actually visible; the photo was. Matched now to
-   .dep-redirect's own treatment (the sibling "redirecting to payment"
-   overlay a member sees moments earlier in the same flow) instead of
-   inventing a third pattern: no photo at all, a solid dark backdrop with
-   a real CSS blur, so the whole page genuinely reads as blurred rather
-   than showing the refinery image sharply. */
+   color was never actually visible; the photo was.
+
+   First fix dropped the photo entirely for a flat rgba backdrop -- wrong
+   in a different way, per the owner's very next round: ".pay-card sits on
+   this via its own backdrop-filter:blur(9px) (the exact "in-built blur"
+   mechanism the Home stat cards use, background:rgba(20,12,8,.46) +
+   blur(9px) -- see .home-stat), and a flat rgba backdrop gives that
+   blur nothing real to blur, so the card lost the frosted-glass depth it
+   has everywhere else. Kept here instead: the photo stays, blurred with a
+   real CSS filter (not backdrop-filter -- there is nothing BEHIND this
+   fixed, full-viewport ::before for backdrop-filter to blur; filter blurs
+   its own rendered content, including its own background-image). inset
+   is overscanned past the viewport edge so the blur radius never reveals
+   a blank strip at the boundary -- a standard trick for filter:blur() on
+   an edge-to-edge layer. */
 .pay-page::before{
   content:'';
   position:fixed;
-  inset:0;
+  inset:-40px;
   z-index:-1;
   pointer-events:none;
-  background:rgba(12,7,4,.82);
-  -webkit-backdrop-filter:blur(18px);
-  backdrop-filter:blur(18px);
+  background:
+    linear-gradient(180deg,rgba(12,7,4,.58) 0%,rgba(12,7,4,.72) 100%),
+    var(--auth-hero-img);
+  background-size:cover,cover;
+  background-position:center center,center center;
+  background-repeat:no-repeat,no-repeat;
+  filter:blur(16px);
 }
 .pay-page.show{display:flex;}
 .pay-body{flex:1;display:flex;align-items:center;justify-content:center;padding:26px;}
@@ -2977,7 +2990,6 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
 <div class="pay-page" id="depStatusBg">
   <div class="sheet-head pay-head">
     <button class="back" onclick="closeDepositStatusModal()" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#25262b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-    <h2 id="depStatusHeadTitle">Recharge</h2>
   </div>
   <div class="pay-body">
     <div class="pay-card">

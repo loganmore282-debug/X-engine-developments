@@ -1372,15 +1372,16 @@ var STATE = { user: null, account: null, settings: null, products: null, investm
 // A session ends on real inactivity, even when background polls still succeed.
 try { window._suppressAutofillLogin = sessionStorage.getItem('petro_relogin_required') === '1'; } catch (_) {}
 var _memberSession = window.createPetroIdleSession('petro_member_session', function(){
-  window._suppressAutofillLogin = true;
   window._triedAutoSignIn = true;
-  try { sessionStorage.setItem('petro_relogin_required', '1'); } catch (_) {}
   document.querySelectorAll('.sheet-bg.show,.modal-bg.show,.pay-page.show,#msgDetailBg.show').forEach(el => el.classList.remove('show'));
   unlockBodyScroll();
   $('loadingScreen').style.display = 'none';
   $('app').style.display = 'none';
   $('authScreen').style.display = '';
-  window.doLogout().catch(() => {});
+  // {auto:true} -- see doLogout()'s own comment on why an idle timeout must
+  // NOT permanently disable Chrome's autofill-then-submit convenience the
+  // way a deliberate "Log Out" tap does.
+  window.doLogout({ auto: true }).catch(() => {});
 }, () => post('/auth/session/activity', {}));
 var _apiPending = new Map();
 function api(path, opts){
@@ -1888,7 +1889,22 @@ window.doForgotSubmit = async function(){
   $('loginPassword').value = '';
   showAuthTab('login');
 };
-window.doLogout = async function(){
+window.doLogout = async function(opts){
+  // {auto:true} marks an AUTOMATIC sign-out (the idle-session timeout
+  // above) rather than the member tapping Log Out themselves. Owner: "auto
+  // login when Google details are put, it fails to login automatically, so
+  // l have to press button, why" -- traced to this function: every logout,
+  // idle-triggered or not, was permanently setting the SAME
+  // petro_relogin_required flag that blocks Chrome's autofill-then-submit
+  // convenience (see the big comment lower down) for the rest of the tab's
+  // life. That is exactly right for a DELIBERATE "log me out" ("l don't
+  // want to use that very account" -- the original owner quote this was
+  // built for), but an idle timeout is not the member choosing to leave;
+  // it is a security measure they didn't ask for, and permanently adding
+  // "now also retype your password every single time for the rest of this
+  // tab" on top of it is friction nobody asked for. Only an explicit call
+  // sets the persistent suppression now.
+  const auto = !!(opts && opts.auto);
   // Revoke the captured session without delaying the UI sign-out. The normal
   // api() epoch guard would intentionally cancel this call during logout.
   const leavingUser = window.fbAuth && window.fbAuth.currentUser;
@@ -1897,7 +1913,7 @@ window.doLogout = async function(){
   })).catch(() => {});
   _memberSession.clear();
   window._triedAutoSignIn = true;
-  try { sessionStorage.setItem('petro_relogin_required', '1'); } catch (_) {}
+  if (!auto) { try { sessionStorage.setItem('petro_relogin_required', '1'); } catch (_) {} }
   stopLiveRefresh();
   // Defense in depth alongside the _openSheetTitle fix on the checkin
   // countdown's own tick: a sign-out that happens to land while Daily
@@ -1932,8 +1948,17 @@ window.doLogout = async function(){
   // no amount of refilling should sign anyone in without a tap. Logging back
   // into the same account still takes one tap on Login, with the fields
   // already filled.
-  window._suppressAutofillLogin = true;
-  window._autofillLoginTried = true;
+  //
+  // An AUTOMATIC (idle-timeout) sign-out skips both of these: the member
+  // is still right there and did not choose to leave, so Chrome refilling
+  // the fields and auto-submitting straight back in is a legitimate,
+  // still-interactive re-authentication (the member still had to pick the
+  // credential in Chrome's own picker), not the silent bypass this guard
+  // exists to stop.
+  if (!auto) {
+    window._suppressAutofillLogin = true;
+    window._autofillLoginTried = true;
+  }
   await window.fbSignOut();
   // Cleared AFTER the sign-out, so the auth screen is on its way in. Chrome
   // may refill them again and that is fine -- filled fields are only a
@@ -3338,7 +3363,7 @@ ${homeBannerBlockHtml(st)}
   <button class="home-action" onclick="openWithdrawSheet()">
     <span class="badge">${suppliedMemberIcon('withdraw')}</span><span class="lbl">Withdraw</span>
   </button>
-  <button class="home-action" onclick="openChannelLink()">
+  <button class="home-action" onclick="navigatePage('network')">
     <span class="badge">${suppliedMemberIcon('invite')}</span><span class="lbl">Invite</span>
   </button>
   <button class="home-action" onclick="openCustomerService()">

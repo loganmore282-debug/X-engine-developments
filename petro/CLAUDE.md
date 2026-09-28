@@ -3611,3 +3611,135 @@ live sandbox (no test credentials in this session) -- that needs a
 real end-to-end check by the owner once deployed, same caveat this
 file already carries for the USDT/card rails at launch. `user/sw.js`
 bumped `v189` → `v190`.
+
+## Follow-up 13 — real auto-login root cause found, poll-screen blur mechanism, Invite button
+
+Owner, testing the previous round live: *"So did it redeploy or l have
+to run some more command?"* (answered: the auto-deploy webhook covers
+it, nothing manual needed), then a follow-up round with 4 screenshots:
+*"Bro we need to change referral and gift codes... Also on bank
+payout..."* [from the prior message] then, this round: *"Bro,l don't
+need recharge headers, and bro and return the card colour as it was
+which withstands blur,see those cards on home,they have good in built
+blur,use that same mechanism also referral button shows channel link
+that is totally a mess bro, it should take someone to referral page
+not channel link, also l was testing addition of bank, why does that
+happen?,also auto login when Google details are put, it fails to login
+automatically, so l have to press button, why"*
+
+- **"I don't need recharge headers"** — the deposit/withdraw polling
+  screen (`.pay-page`) had a static `<h2 id="depStatusHeadTitle">Recharge</h2>`
+  in its own header bar, on top of the CARD underneath ALSO announcing
+  "Processing your recharge"/"Congratulations!"/etc. -- genuinely
+  redundant, and never touched by any JS (grepped: zero references to
+  `depStatusHeadTitle` outside its own declaration). Removed the `<h2>`
+  entirely; the header bar is now just the back chevron, matching what
+  was actually asked.
+
+- **"Return the card colour... which withstands blur... use that same
+  mechanism"** — this round's OWN previous fix (follow-up 12, the
+  refinery-photo-showing-through bug) over-corrected: `.pay-card`
+  already had the exact same `background:rgba(20,12,8,.46);
+  backdrop-filter:blur(9px)` "in-built blur" mechanism the Home stat
+  cards use (`.home-stat` -- both share the same rule block), and
+  always had. What follow-up 12 changed was `.pay-page::before` (the
+  full-page layer BEHIND the card) from the refinery photo to a flat,
+  near-opaque `rgba(12,7,4,.82)` block -- which left `.pay-card`'s own
+  `backdrop-filter` with nothing real to blur, so the card lost its
+  frosted-glass depth and looked flat/wrong, distinct from every other
+  card in the app. Fixed properly this time: the photo is back in
+  `.pay-page::before`, blurred with a real `filter:blur(16px)` (not
+  `backdrop-filter` -- there is nothing BEHIND this fixed, full-
+  viewport layer for backdrop-filter to blur; `filter` blurs the
+  element's own rendered content, including its own background-image),
+  `inset:-40px` overscanned past the viewport edge so the blur radius
+  never reveals a blank strip at the boundary. `.pay-card` sitting on
+  top now has real blurred-photo texture to apply its OWN blur against
+  again, exactly like Home's cards do against Home's own background.
+
+- **"Referral button shows channel link that is totally a mess... it
+  should take someone to referral page"** — real bug, not a design
+  complaint: Home's "Invite" tile (invite icon, "Invite" label) called
+  `openChannelLink()`, a function for an entirely different, admin-
+  configured Telegram-group link feature (kept deliberately separate
+  from Help Centre already) -- unrelated to referrals, and empty by
+  default ("No channel link is set yet."), which is exactly the error
+  the owner saw. Changed the tile's `onclick` to `navigatePage('network')`
+  -- the same call the bottom nav's own Network tab uses -- so "Invite"
+  now actually opens the Network/Referral page, where the real
+  invitation code and link live. `openChannelLink()` itself left in
+  place (dormant, not deleted) per this file's own standing precedent
+  for a removed entry point.
+
+- **"I was testing addition of bank, why does that happen?"**
+  (screenshot: picking ABSA Bank, entering an account number and
+  holder name, tapping Submit, getting "UNABLE TO COMPLETE
+  COMMUNICATION") -- investigated, not a code bug found. `/bank/save`'s
+  new validation path (follow-up 12) only has two failure shapes: a
+  caught network exception (own message: "Could not reach the bank
+  verification service...", not what was shown) or MarzPay's own
+  `message`/`error` field relayed verbatim via `marzUserMsg()` when
+  their `/bank-transfer/validate` call itself completed but reported
+  failure. The exact phrase shown reads like a raw response straight
+  from a banking switch (a real "could not reach [this bank]'s own
+  systems just now" condition), not a generic/templated string this
+  codebase would have written -- meaning the request very likely DID
+  reach MarzPay, and MarzPay's OWN attempt to reach ABSA's systems
+  failed at that moment, or the specific account number entered while
+  testing wasn't a real ABSA account. Could not confirm further without
+  live MarzPay credentials (not available in this session). Owner:
+  worth retrying with a real account number and, if it persists across
+  every bank tried (not just ABSA), checking whether MarzPay's Bank
+  Transfer product is fully active/subscribed on the account yet --
+  `getSupportedBanks()` already correctly returning bank NAMES (per the
+  earlier screenshots) means the `/bank-transfer/banks` call itself is
+  working, so a subscription gap would show up specifically at
+  validate/create time, exactly like this.
+
+- **"Auto login when Google details are put, it fails to login
+  automatically, so l have to press button, why"** -- real bug,
+  root-caused and fixed, not a browser limitation. This app already
+  has real, working auto-submit-on-autofill logic (the
+  `:-webkit-autofill` CSS/`animationstart` trick, `maybeAutoSubmit()`
+  -- built in an earlier round specifically for Chrome's native "Use
+  saved password?" picker, which fills the visible fields but fires no
+  ordinary input event). The gate that decides whether it's ALLOWED to
+  fire (`window._suppressAutofillLogin`, backed by a
+  `sessionStorage['petro_relogin_required']` flag that survives page
+  reloads within the same tab) was written for exactly one case:
+  a DELIBERATE "Log Out" tap should permanently stop Chrome from
+  silently walking the member back into an account they explicitly
+  chose to leave, for the rest of that tab's life. Follow-up 12's own
+  concurrent merge (the session-policy work, `createPetroIdleSession`)
+  added a SECOND caller of the same `doLogout()` -- an automatic 15-
+  minute-idle timeout -- which triggered the exact same permanent
+  suppression. An idle timeout is not the member choosing to leave; once
+  it had fired even once in a tab's lifetime (trivially likely during
+  the heavy manual testing this round describes), autofill-then-submit
+  was silently disabled for that entire browser tab going forward,
+  forcing a manual Login tap every single time after -- exactly the
+  report. `doLogout(opts)` now takes an `{auto:true}` flag: the idle-
+  session callback passes it and no longer sets the permanent
+  suppression itself either (it previously set the flag directly,
+  redundantly, before even calling doLogout()); an explicit "Log Out"
+  tap still calls it with no arguments and keeps the original,
+  unchanged permanent-suppression behavior. `preventSilentAccess()`
+  (the OTHER, fully-silent Credential Management API route) is left
+  unconditional for both cases on purpose -- that is the real "must
+  re-authenticate after being idle" security boundary the timeout
+  feature exists for, and Chrome's own autofill picker still requires
+  an active tap to select a credential, so re-allowing autofill-then-
+  submit after an idle timeout does not bypass it. Verified in headless
+  Chromium: `doLogout()` (no args) still sets both the in-memory flag
+  and the persisted sessionStorage marker exactly as before; `doLogout({auto:true})`
+  sets neither.
+
+`node -c` clean, `build-core.js` round-trip OK. Verified live in
+headless Chromium: both `doLogout()` call shapes produce the intended,
+different suppression outcomes (see above). The header removal and
+Invite-button rewire were verified by direct source inspection (both
+are simple, low-risk markup/attribute edits: one element deletion, one
+onclick swap to a call already used identically elsewhere in the same
+file) rather than a full rendered screenshot, given this sandbox's
+Firebase-login limitation already noted in earlier follow-ups.
+`user/sw.js` bumped `v190` → `v191`.
