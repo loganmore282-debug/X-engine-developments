@@ -470,7 +470,7 @@ var LANG_ROWS = [
   ['That is not your current login password.', 'Ekyo si kisumuluzo kyo kya kati eky\'okuyingira.', 'Hilo si nenosiri lako la sasa la kuingia.', 'Ce n\'est pas votre mot de passe de connexion actuel.', 'Iryo si ijambobanga ryawe rigezweho ryo kwinjira.', 'Ekyo tikisumuruzo kyaawe kya hati eky\'okutaaha.'],
   ['That key did not open the chest.', 'Ekisumuluzo ekyo tekiggudde ssanduku.', 'Ufunguo huo haukufungua sanduku.', 'Cette clé n\'a pas ouvert le coffre.', 'Urwo rufunguzo ntirwafunguye agasanduku.', 'Ekishumuruzo ekyo tikyigwire esanduuku.'],
   ['The spin could not be completed.', 'Okuzungusa tekusobose kuggwa.', 'Mzungusho haukukamilika.', 'Le tour n\'a pas pu être terminé.', 'Ukuzunguza ntikwashoboye kurangira.', 'Okuzengurutsa tikibaasiikire kuhika.'],
-  ['That referral code is invalid -- continuing without it.', 'Koodi y\'okuyita eyo si ntuufu -- tugenda mu maaso nga tetugikozesa.', 'Msimbo huo wa mwaliko si sahihi -- tunaendelea bila huo.', 'Ce code de parrainage est invalide -- nous continuons sans lui.', 'Iyo kode yo gutumira ntiyemewe -- turakomeza tutayikoresheje.', 'Koodi y\'okweta egyo tehikire -- nitugyenda omu maisho tutarikugikozesa.'],
+  ['That referral code is invalid. Continuing without it.', 'Koodi y\'okuyita eyo si ntuufu. Tugenda mu maaso nga tetugikozesa.', 'Msimbo huo wa mwaliko si sahihi. Tunaendelea bila huo.', 'Ce code de parrainage est invalide. Nous continuons sans lui.', 'Iyo kode yo gutumira ntiyemewe. Turakomeza tutayikoresheje.', 'Koodi y\'okweta egyo tehikire. Nitugyenda omu maisho tutarikugikozesa.'],
   ['Not confirmed yet. Paste the payment message below and submit it.', 'Tekinnakakasibwa. Teeka obubaka bw\'okusasula wammanga obusindike.', 'Bado haijathibitishwa. Bandika ujumbe wa malipo hapa chini na uwasilishe.', 'Pas encore confirmé. Collez le message de paiement ci-dessous et envoyez-le.', 'Ntibirasuzumwa. Shyiramo ubutumwa bwo kwishyura hasi maze ubwohereze.', 'Tikirahamibwa. Ota obutumwa bw\'okushashura ahansi kandi obutume.'],
   ['Submitted', 'Kisindikiddwa', 'Imewasilishwa', 'Envoyé', 'Byoherejwe', 'Kitumirwe'],
   ['The payment request timed out before it was approved on the phone. Nothing was taken. Start a new recharge to try again.', 'Okusaba okusasula kwaggwaako nga tekukkirizibbwa ku ssimu. Tewali ssente eziggiddwa. Tandika okuteekamu ssente okuppya.', 'Ombi la malipo limeisha muda kabla ya kuidhinishwa kwenye simu. Hakuna pesa iliyochukuliwa. Anza kuweka pesa tena.', "La demande de paiement a expiré avant d'être approuvée sur le téléphone. Rien n'a été prélevé. Lancez une nouvelle recharge.", 'Icyifuzo cyo kwishyura cyarangiye mbere yuko cyemezwa kuri telefone. Nta mafaranga yafashwe. Tangira kubitsa bushya.', 'Okushaba okushashura kukahwa kitakaikirizibwa aha simu. Tihariho sente ezihiirwe. Tandika kuteeramu sente burundi.'],
@@ -2530,7 +2530,7 @@ async function registerCurrentUser(pin, phone, otpTicket){
   // doRegister()'s email-already-in-use branch, which signs them in and
   // finishes this same registration with the corrected code.
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
-    notify(reg.message || 'That referral code is invalid. Continuing without it.');
+    notify(reg.message || t('That referral code is invalid. Continuing without it.'));
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '', otpTicket: otpTicket || '' });
   }
@@ -3009,6 +3009,22 @@ window.showPage = async function(name){
     $('depStatusBg').classList.remove('show');
     document.body.classList.remove('deposit-status-open');
     unlockBodyScroll();
+  }
+  // Owner: "some notifies take long to go away even when you've clicked in
+  // another category, it still keep showing." notify()'s own 3.6s timer only
+  // ever gets reset by ANOTHER notify() call -- switching tabs never touched
+  // it, so a toast that fired moments before a tab tap rode out its full
+  // remaining time floating over whatever screen the member had already
+  // moved on to. Torn down here alongside the other overlays this same
+  // function already tears down on a tab change. Deliberately NOT routed
+  // through closeNotify(): that fires the pending onClose callback (e.g. the
+  // insufficient-balance toast's "send them to Deposit"), and a member
+  // tapping a different tab is not acknowledging the toast -- it must not
+  // ALSO force a navigation neither the toast nor the tap asked for.
+  if ($('notifyBg') && $('notifyBg').classList.contains('show')) {
+    if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
+    $('notifyBg').classList.remove('show');
+    _notifyOnClose = null;
   }
   if (sheetOpen && typeof closeSheet === 'function') closeSheet({ navigating: true, keepHistory: true });
   // payOpen is deliberately absent from this count -- it pushes no history
@@ -4208,6 +4224,18 @@ window.openWalletSheet = async function(){
   _walletEditing = hadCache ? !(STATE.bankAccounts || []).length : false;
   openSheet('Wallet', hadCache ? '' : '<div class="list-empty">Loading&hellip;</div>');
   if (hadCache) renderWalletSheet();
+  // Fetched alongside the bound-wallet list, not awaited together with it --
+  // a slow/failed bank list must never hold up showing the existing wallet
+  // (or the empty-state add form); it only widens the provider picker once
+  // it lands. Cached on STATE for the lifetime of the tab, same as
+  // products/settings -- this rarely changes and re-fetching on every
+  // sheet open buys nothing.
+  if (!Array.isArray(STATE.supportedBanks)) {
+    api('/bank/supported-banks').then(br => {
+      STATE.supportedBanks = br.status === 'success' && Array.isArray(br.banks) ? br.banks : [];
+      if (_openSheetTitle === 'Wallet' && _walletEditing) renderWalletSheet();
+    }).catch(() => { STATE.supportedBanks = STATE.supportedBanks || []; });
+  }
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!hadCache) STATE.bankAccounts = [];
@@ -4223,6 +4251,12 @@ window.openWalletSheet = async function(){
   }
 };
 function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
+// The only two mobile-money names this app has ever offered -- anything
+// else in a `network` field is a bank name, validated as real (against
+// MarzPay's own live list) at the moment it was bound. No client-side list
+// membership check needed to tell the two apart; this one distinction is
+// definitional, not a lookup.
+function isMobileMoneyNetwork(network){ return network === 'MTN Mobile Money' || network === 'Airtel Money'; }
 function maskedTail(phone){
   const d = String(phone || '').replace(/\D/g, '');
   return d ? '****' + d.slice(-4) : '****';
@@ -4230,7 +4264,7 @@ function maskedTail(phone){
 function walletCardHtml(w){
   const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : 'Mobile Money';
   return `<div class="wallet-card"><div class="wallet-kicker">Payout Wallet</div>
-    <div class="num"${w ? '' : ' style="font-size:18px"'}>${w ? esc(walletLocalPhone(w.phone)) : 'No payout wallet linked'}</div>
+    <div class="num"${w ? '' : ' style="font-size:18px"'}>${w ? esc(walletDestDisplay(w)) : 'No payout wallet linked'}</div>
     <div class="wallet-meta">
       ${w ? `<div class="meta-item"><span>Account holder</span><b>${esc(String(w.holder || '').toUpperCase())}</b></div>` : ''}
       <div class="meta-item"><span>Network</span><b>${w ? esc(provider) : '—'}</b></div>
@@ -4243,13 +4277,23 @@ function walletLocalPhone(phone){
   d = d.replace(/^0+/, '');
   return d ? '0' + d : '';
 }
+// walletLocalPhone() strips everything but digits and forces a leading
+// national-trunk zero back on -- correct for a mobile money number, but it
+// would mangle a genuine bank account number (which is not read as "a
+// phone number missing its leading 0"). A bound bank account's `phone`
+// field already holds exactly what the member entered and MarzPay
+// validated, unaltered -- shown as-is.
+function walletDestDisplay(w){
+  if (!w) return '';
+  return isMobileMoneyNetwork(w.network) ? walletLocalPhone(w.phone) : String(w.phone || '');
+}
 function walletPlainRowHtml(w){
   if (!w) return '';
   const network = String(w.network || 'Mobile Money').replace(/\s*(Mobile )?Money$/i, '') || 'Mobile Money';
   return `
   <div class="wallet-plain-row">
     <div class="wallet-plain-copy">
-      <div class="wallet-plain-number mono">${esc(walletLocalPhone(w.phone))}</div>
+      <div class="wallet-plain-number mono">${esc(walletDestDisplay(w))}</div>
       <div class="wallet-plain-name">${esc(String(w.holder || '').toUpperCase())}</div>
       <div class="wallet-plain-network">${esc(network)}</div>
     </div>
@@ -4258,23 +4302,33 @@ function walletPlainRowHtml(w){
 }
 function renderWalletSheet(){
   const w = currentWallet();
-  const providers = ['MTN Mobile Money', 'Airtel Money'];
+  // Owner: "add all supported banks so withdrawals will also be processed
+  // through banks... mtn and airtel will also be there." Banks are appended
+  // after the two mobile-money options, not in place of them -- fetched
+  // live by openWalletSheet() and cached on STATE.supportedBanks; empty
+  // until that lands (or if MarzPay's bank-transfer product isn't
+  // reachable/subscribed), in which case the picker just shows the two
+  // mobile-money options exactly as it always has.
+  const providers = ['MTN Mobile Money', 'Airtel Money', ...(STATE.supportedBanks || [])];
   if (w && !_walletEditing) {
     $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + walletPlainRowHtml(w) + '</div>';
     return;
   }
+  const editingBank = w && !isMobileMoneyNetwork(w.network);
   $('sheetBody').innerHTML = `<div class="wallet-minimal reveal-in">
     <div class="wallet-add-form" id="walFormGroup">
       <div class="prov-pick" id="walProviderPick">
         <div class="wallet-line-field prov-input" onclick="toggleProviderList()">
-          <input id="walProvider" type="text" readonly placeholder="Select network" value="${w && w.network ? esc(w.network) : ''}">
+          <input id="walProvider" type="text" readonly placeholder="Select network or bank" value="${w && w.network ? esc(w.network) : ''}">
           <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </div>
         <div class="prov-list" id="walProviderList">
           ${providers.map(p => `<button type="button" class="prov-opt${w && w.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
         </div>
       </div>
-      <div class="wallet-line-field"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="Phone number" value="${w ? esc(walletLocalPhone(w.phone)) : ''}" oninput="sanitizePhoneInput(this)"></div>
+      <div class="wallet-line-field">
+        <input id="walPhone" type="${editingBank ? 'text' : 'tel'}" inputmode="${editingBank ? 'text' : 'numeric'}" autocomplete="${editingBank ? 'off' : 'tel'}" enterkeyhint="next" placeholder="${editingBank ? 'Account number' : 'Phone number'}" value="${w ? esc(walletDestDisplay(w)) : ''}" oninput="handleWalDestInput(this)">
+      </div>
       <div class="wallet-line-field"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" placeholder="Account holder name" value="${w ? esc(w.holder || '') : ''}"></div>
       <button class="primary-button wallet-save" id="walSaveBtn" onclick="submitWallet()">Save</button>
     </div>
@@ -4299,12 +4353,40 @@ window.toggleProviderList = function(){
 };
 window.pickProvider = function(name){
   const inp = $('walProvider');
+  const prevValue = inp ? inp.value : '';
   if (inp) inp.value = name;
   const box = $('walProviderPick');
   if (box) box.classList.remove('open');
   document.querySelectorAll('#walProviderList .prov-opt').forEach(b => {
     b.classList.toggle('on', b.textContent.trim() === name);
   });
+  const nowBank = !isMobileMoneyNetwork(name);
+  const dest = $('walPhone');
+  if (dest) {
+    dest.type = nowBank ? 'text' : 'tel';
+    dest.inputMode = nowBank ? 'text' : 'numeric';
+    dest.autocomplete = nowBank ? 'off' : 'tel';
+    dest.placeholder = nowBank ? 'Account number' : 'Phone number';
+    // Crossing the mobile-money/bank boundary means whatever was already
+    // typed can never be valid for the new type (a phone number is not a
+    // bank account number, and vice versa) -- cleared so a member cannot
+    // accidentally submit one as the other. Switching within the same type
+    // (MTN <-> Airtel, or one bank <-> another) leaves it alone, unchanged
+    // from how this already worked before banks existed here.
+    const wasBank = prevValue ? !isMobileMoneyNetwork(prevValue) : nowBank;
+    if (wasBank !== nowBank) dest.value = '';
+  }
+};
+// The one oninput handler for #walPhone regardless of what is currently
+// selected -- checks the CURRENT provider each keystroke rather than
+// needing pickProvider() to swap handlers. Mobile money still gets the
+// digit-only, region-length-capped treatment sanitizePhoneInput() already
+// did; a bank account number gets neither (owner: "some bank account
+// exceed character limit so no capping of characters please") -- just
+// trimmed of accidental whitespace, everything else passed through as typed.
+window.handleWalDestInput = function(el){
+  if (isMobileMoneyNetwork(($('walProvider') || {}).value)) { sanitizePhoneInput(el); return; }
+  if (/\s/.test(el.value)) el.value = el.value.replace(/\s+/g, '');
 };
 // Tapping anywhere else closes it, the way a real picker behaves. Bound once
 // on the document rather than per-render so repainting the panel cannot leave
@@ -4329,7 +4411,16 @@ window.submitWallet = async function(){
   const phone = $('walPhone').value;
   const holder = $('walHolder').value.trim();
   if (!network) return notify('Select your wallet provider.');
-  if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
+  // Mobile money keeps its own digit-count check; a bank account number is
+  // never phone-shaped, so it only needs to be present and a plausible
+  // length -- never capped tighter than that (see handleWalDestInput()'s
+  // own comment for why), the server does the real validation against
+  // MarzPay before this is ever saved.
+  if (isMobileMoneyNetwork(network)) {
+    if (String(phone).replace(/\D/g, '').length < 9) return notify('Enter a valid wallet account number.');
+  } else if (String(phone).trim().length < 4) {
+    return notify('Enter a valid bank account number.');
+  }
   if (!holder) return notify('Enter the account holder name.');
   const btn = $('walSaveBtn');
   if (!(STATE.settings || {}).bankOtpRequired) {
@@ -4771,15 +4862,16 @@ window.openChestSheet = function(){
     <h2>Redeem Gift Code</h2>
     <p class="sub">Enter a valid gift code to add its reward to your balance.</p>
     <div style="width:100%;">
-      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter gift code" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
+      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter gift code" maxlength="14" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
       <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:16px;letter-spacing:.06em;" onclick="submitChestKey()">REDEEM CODE</button>
     </div>
   </div>`);
 };
 window.submitChestKey = async function(){
-  // Codes are issued uppercase-only, so normalise here as well as in the
-  // field: a paste does not always fire the input handler on every browser.
-  const raw = ($('chestKey').value || '').trim().toUpperCase();
+  // No case-forcing here -- /redeem matches case-insensitively via
+  // codeLower now, so whatever case the member typed or pasted reaches
+  // the server unchanged and still resolves to the same code.
+  const raw = ($('chestKey').value || '').trim();
   // Owner named these two exactly: "so on 'please enter the treasure chest
   // key', 'wrong treasure chest password'."
   if (!raw) return notify('Please enter a gift code');
@@ -6141,7 +6233,7 @@ function paintWithdrawSheet(s){
     <div class="wit-instr withdrawal-guide">
       <h3>Before you cash out</h3>
       <dl>
-        <div><dt>Receiving account</dt><dd>Check the name and mobile money number above. Your payout goes to this linked wallet.</dd></div>
+        <div><dt>Receiving account</dt><dd>Check the name and ${w && !isMobileMoneyNetwork(w.network) ? 'bank account number' : 'mobile money number'} above. Your payout goes to this linked wallet.</dd></div>
         <div><dt>Amount to request</dt><dd>Minimum ${fmtUGX(s.minWithdraw)}${Number(s.maxWithdraw) > 0 ? `; maximum ${fmtUGX(s.maxWithdraw)}` : ''}. Review the fee and the amount you will receive before confirming.${Number(s.withdrawMultiple) > 0 ? ` Use a multiple of ${fmtUGX(s.withdrawMultiple)}.` : ''}</dd></div>
         <div><dt>Availability</dt><dd>${withdrawHoursLine(s)}${Number(s.maxWithdrawalsPerDay) > 0 ? ` Up to ${Number(s.maxWithdrawalsPerDay)} requests per day.` : ''}</dd></div>
         <div><dt>After submitting</dt><dd>Follow the payout in Transaction Statement → Withdrawals. Wait for a pending request to finish before submitting another.</dd></div>

@@ -1069,7 +1069,11 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .prov-pick .prov-input input{cursor:pointer;}
 .prov-caret{color:var(--snow-muted);flex-shrink:0;transition:transform .15s;}
 .prov-pick.open .prov-caret{transform:rotate(180deg);}
-.prov-list{display:none;position:absolute;left:0;right:0;top:58px;z-index:5;background:var(--snow-surface);border:1px solid var(--snow-border);overflow:hidden;box-shadow:0 14px 28px -14px rgba(30,10,5,.35);}
+/* max-height+overflow-y:auto added once this list could hold ~25+ banks on
+   top of the original 2 mobile-money rows -- overflow:hidden alone (fine
+   when there were only ever 2 rows) would silently clip every bank past
+   whatever fit on screen, with no way to scroll down and tap one. */
+.prov-list{display:none;position:absolute;left:0;right:0;top:58px;z-index:5;background:var(--snow-surface);border:1px solid var(--snow-border);max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 14px 28px -14px rgba(30,10,5,.35);}
 .prov-pick.open .prov-list{display:block;}
 .prov-opt{display:block;width:100%;text-align:left;background:var(--snow-surface);border:0;border-bottom:1px solid var(--snow-border);padding:14px 12px;font-family:inherit;font-size:14px;color:var(--snow-ink);cursor:pointer;}
 .prov-opt:last-child{border-bottom:0;}
@@ -1698,18 +1702,27 @@ body.deposit-status-open .bottom-nav{display:none;}
   background:#1d130f;z-index:310;display:none;
   flex-direction:column;overflow-y:auto;transform:translateZ(0);will-change:transform;
   isolation:isolate;}
+/* Owner: "change the payment polling screen the background image should
+   not show up there so full page should be like blurred." The refinery
+   photo (var(--auth-hero-img)) was still painting here underneath the
+   solid #1d130f fallback above -- isolation:isolate on .pay-page puts this
+   ::before INSIDE its own stacking context, where it paints above the
+   element's own background regardless of z-index:-1, so the fallback
+   color was never actually visible; the photo was. Matched now to
+   .dep-redirect's own treatment (the sibling "redirecting to payment"
+   overlay a member sees moments earlier in the same flow) instead of
+   inventing a third pattern: no photo at all, a solid dark backdrop with
+   a real CSS blur, so the whole page genuinely reads as blurred rather
+   than showing the refinery image sharply. */
 .pay-page::before{
   content:'';
   position:fixed;
   inset:0;
   z-index:-1;
   pointer-events:none;
-  background:
-    linear-gradient(180deg,rgba(12,7,4,.54) 0%,rgba(12,7,4,.68) 100%),
-    var(--auth-hero-img);
-  background-size:cover,cover;
-  background-position:center center,center center;
-  background-repeat:no-repeat,no-repeat;
+  background:rgba(12,7,4,.82);
+  -webkit-backdrop-filter:blur(18px);
+  backdrop-filter:blur(18px);
 }
 .pay-page.show{display:flex;}
 .pay-body{flex:1;display:flex;align-items:center;justify-content:center;padding:26px;}

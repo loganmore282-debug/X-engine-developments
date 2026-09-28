@@ -119,6 +119,11 @@ async function ensureIndexes() {
     // pendingDeposits already got in Round 104 for the identical
     // starvation-avoidance fix on the deposit side.
     ['withdrawals',     { status: 1, marzTxUuid: 1, createdAt: 1 }],
+    // Bank transfer payout rail -- reconcilePendingWithdrawals()'s bank-
+    // transfer sweep query shape (status + isBankTransfer + marzReference
+    // + createdAt), same starvation-avoiding compound-index pattern as the
+    // send-money one immediately above.
+    ['withdrawals',     { status: 1, isBankTransfer: 1, marzReference: 1, createdAt: 1 }],
     ['pendingDeposits', { userId: 1 }],
     ['pendingDeposits', { marzReference: 1 }],
     ['pendingDeposits', { status: 1 }],

@@ -3418,3 +3418,196 @@ agrees on one backend origin (`http://179.198.197.114:3000`) — this
 round touched zero of the places that constant actually lives, only the
 prose around it, so no rebuild-breaking drift was introduced.
 `user/sw.js` bumped `v188` → `v189`, `admin/sw.js` bumped `v44` → `v45`.
+
+## Follow-up 12 — bank withdrawals, fixed-length codes, notify-persists bug, poll-screen blur
+
+Owner, one large message plus a clarifying exchange on code format:
+*"we need to change referral and gift codes... make sure fixed
+character. Also on bank payout we shall add all supported banks so
+withdrawals will also be processed through banks... where there is
+select network, it should be select bank, so mtn and airtel will also
+be there. so some bank account exceed character limit so no capping of
+characters please, and also some notifies take long to go away...
+Also there is a time which buttons can't even respond... also bro
+change the payment polling screen the background image should not
+show up there so full page should be like blurred."* Asked to clarify
+the code format via two screenshots of different styles; the owner
+picked **referral = 8 chars, no dashes** and **gift = 12 chars, 3 dash
+groups** (gift code's existing shape, kept).
+
+- **Referral/gift code format** — `REFERRAL_LENGTH` 5→8, referral codes
+  are now one flat block with no length-escalation fallback on
+  collision (31^8 ≈ 852 billion codes is wide enough that the old
+  5→6→7 escalation is no longer needed at all — "fixed character" is
+  now a real guarantee, not a starting point). Both alphabets switched
+  uppercase→lowercase (kept the same unambiguous no-i/l/o/0/1 set,
+  just lowercased — the reference screenshots mixed in a few 0/o
+  characters, read as a casing/length/grouping style to copy, not a
+  request to widen the alphabet and reintroduce the exact ambiguity
+  this file has guarded against every previous format change).
+  `/redeem`'s gift-code lookup was hand-rolled case-guessing (exact
+  match, then an uppercased fallback) that assumed the canonical stored
+  case was uppercase — now matches via `codeLower` throughout (already
+  the field the promoCodes unique index enforces on), which is correct
+  for old- and new-format codes alike without guessing. Removed the
+  client's forced `toUpperCase()` on the gift-code input to match.
+  Found and fixed a second, unrelated stray `--` this same sweep missed
+  last round: an i18n table row (6 languages) for the referral-invalid
+  toast that the actual `notify()` call site never even passed through
+  `t()` — wrapped it in `t()` now (a real, if minor, pre-existing
+  translation bug) and reworded all 6 language entries to drop the dash.
+
+- **Bank withdrawals** — a full third payout rail alongside mobile-money
+  send-money and PesaJet, via MarzPay's Bank Transfer product,
+  built to the same safety bar as the existing rails (write the
+  outbound marker before ever calling out, a network error is always
+  ambiguous and never reverts to 'pending', acceptance is not
+  completion):
+  - `marzBankTransfer()`/`marzValidateBankAccount()`/
+    `marzGetBankTransferStatus()`/`getSupportedBanks()` added to the
+    MarzPay helper block, mirroring `marzSendMoney()`'s own shape.
+    `getSupportedBanks()` proxies MarzPay's own live `/bank-transfer/
+    banks` list (10-min cache) rather than hardcoding one — their docs
+    are explicit that bank codes "must match exactly," and this project
+    has no reliable source for all ~25 of them.
+  - `/bank/supported-banks` (new) serves that list to the wallet-bind
+    picker. `/bank/save` now accepts a bank name in place of MTN/Airtel:
+    validates the account via MarzPay's own `/bank-transfer/validate`
+    before ever saving it (catches a typo'd account number immediately,
+    not at withdrawal time), and skips `cleanPhone()`'s phone-shape
+    enforcement for a bank account number entirely — a loose
+    present/plausible-length/alphanumeric check instead, no cap tighter
+    than a real account number could need.
+  - `_processWithdrawalNow()` gained an `isBankNetwork()` branch, checked
+    BEFORE the PesaJet/MarzPay split (bank transfer is MarzPay-only,
+    same "always this one gateway" reasoning as card deposits staying on
+    MarzPay even when `depositMethod` is `'pesajet'`). One real
+    difference from send-money: `/bank-transfer`'s create call takes NO
+    client-supplied reference at all (unlike collect/send-money), so
+    there is nothing of our own to pre-write as an idempotency/lookup
+    key before calling out — only whatever reference MarzPay hands back
+    in the response, captured the instant it exists.
+  - Resolution is **polled, not webhook-driven** — MarzPay's own docs
+    describe this product's result as "poll ... OR use webhooks," not
+    webhook-only like collections/disbursements, and there is no
+    confirmed documentation of this specific product's webhook payload
+    shape (unlike `collection.completed`/`disbursement.completed`,
+    both fully specified). Guessing at an unverified webhook shape
+    risked silently never firing on a real payload; `reconcilePendingWithdrawals()`
+    gained a bank-transfer sweep (`status:processing,
+    isBankTransfer:true, marzReference:>''`) that polls
+    `GET /bank-transfer/{reference}` instead, independently correct
+    regardless of whether a webhook is even configured. `/admin/withdraw/verify`
+    and the member's own `/withdraw/marzpay/status` poll both gained a
+    matching `isBankTransfer` branch so every existing verification
+    surface covers the new rail, not just the happy path.
+  - New compound index `withdrawals{status:1,isBankTransfer:1,
+    marzReference:1,createdAt:1}` for that sweep query, same
+    starvation-avoiding shape as the existing send-money one right
+    above it in `db.js`.
+  - Client: `openWalletSheet()` fetches `/bank/supported-banks` once per
+    tab (cached on `STATE.supportedBanks`, never blocks showing the
+    existing bound wallet or empty-state form). `renderWalletSheet()`'s
+    provider picker is now MTN/Airtel **plus** every bank name.
+    `pickProvider()` swaps the destination field between phone mode
+    (digit-only, region-length-capped, via the pre-existing
+    `sanitizePhoneInput()`) and account-number mode (free text, no
+    cap at all — "some bank account exceed character limit so no
+    capping of characters please") the instant a different type of
+    network is picked, and clears the field when crossing that
+    boundary (a phone number is never a valid bank account number or
+    vice versa) but leaves it alone switching within the same type
+    (MTN↔Airtel, or one bank↔another), matching how this already
+    behaved before banks existed here. `walletDestDisplay()` added
+    since `walletLocalPhone()` (strips non-digits, forces a leading
+    national-trunk 0 back on) would have mangled a genuine bank account
+    number on every screen that shows the bound wallet. Found and fixed
+    a real, separate bug while building this: `.prov-list`'s CSS had
+    `overflow:hidden` with no `max-height` — harmless with only 2 rows,
+    but would have silently clipped most of a ~25-bank list with no way
+    to scroll down and tap one; added `max-height:260px;overflow-y:auto`.
+  - No new admin-settable enable/disable toggle for this rail, on
+    purpose: `getSupportedBanks()` naturally self-gates already — if
+    the owner's MarzPay account has no active Bank Transfer
+    subscription, the live bank list comes back empty, the picker shows
+    only MTN/Airtel exactly as it always has, and the feature is
+    invisible rather than visibly broken. Nothing to configure before
+    it either works or safely does nothing.
+  - **Not attempted, flagged rather than guessed at**: the admin
+    panel's own withdrawal-row confirm-dialog copy ("Send this payout
+    through {PROVIDER_LABEL}...") and the manual-payout confirm text
+    ("...from an admin phone...") are both worded for mobile money and
+    read slightly imprecise for a bank row -- cosmetic only (the real
+    routing in `_processWithdrawalNow()` is correct regardless of what
+    the dialog says, and the bank name is shown right in the row), left
+    alone rather than touched under an already very large round.
+
+- **"Some notifies take long to go away even when you've clicked
+  another category"** — real, confirmed gap, not a guess:
+  `showPage()` already deliberately tears down every OTHER overlay
+  (message detail, the deposit-status page, open sheets) on a tab
+  change, with a long comment explaining exactly why each one has to
+  be — but never touched `notify()`'s own toast. A toast that fired
+  moments before a tab tap rode out the rest of its own 3.6s timer
+  floating over whatever screen the member had already moved to,
+  reading as "stuck." Added to the same teardown block, but
+  deliberately NOT routed through `closeNotify()`: that fires the
+  toast's pending `onClose` callback (e.g. the insufficient-balance
+  toast's "send them to Deposit"), and tapping a different tab is not
+  an acknowledgement of the toast — it must not ALSO force a
+  navigation neither the toast nor the tap asked for. Confirmed
+  `.notify-bg` was never the cause of the SEPARATE "buttons don't
+  respond" report while investigating this — it is deliberately
+  `pointer-events:none` on the backdrop (only the small card itself is
+  tappable), so it was never capable of blocking taps elsewhere on
+  screen in the first place.
+
+- **"Buttons don't respond, I can tap 3+ times"** — investigated, not
+  resolved. Checked the most likely causes and ruled each out with
+  real evidence rather than assumption: every "Confirm"-style button
+  reviewed (`openSimpleConfirm()`, the invest/withdraw/deposit submit
+  buttons) already disables itself synchronously on tap with no async
+  gap before the disable takes effect, so a double/triple tap should
+  already be swallowed correctly rather than double-submitting or
+  hanging; `.notify-bg` is non-blocking by design (see above);
+  `#loadingScreen` only ever shows once at boot/login, never toggled
+  per-action; the handful of global `document`/`window` event
+  listeners in the file (banner-autoplay retry hooks, the live-refresh
+  visibility listener, the provider-picker outside-tap closer) are all
+  correctly guarded to bind exactly once, not per-render, so this
+  isn't a growing pile of duplicate handlers each doing real work.
+  Nothing else pointed at a specific line to fix. Left unfixed rather
+  than shipping a speculative change with no confirmed cause -- most
+  likely explanation given everything checked out clean is a slow
+  backend response with too subtle a loading indicator to read as "the
+  tap registered," but that is a guess, not a finding. Need from the
+  owner to actually close this: which screen/button specifically, and
+  whether it correlates with anything (just reopened the app, poor
+  signal, a specific action) -- that turns "sometimes buttons don't
+  work" into something checkable.
+
+- **Payment polling screen background** — real bug, not a design
+  opinion: `.pay-page::before` was still painting the refinery photo
+  underneath the page's own solid `#1d130f` fallback background.
+  `isolation:isolate` on `.pay-page` puts that `::before` INSIDE its
+  own stacking context, where it paints above the element's own
+  background regardless of its `z-index:-1` -- so the fallback color
+  was never actually reachable, the photo was. Matched to
+  `.dep-redirect`'s own already-correct treatment (the sibling
+  "redirecting to payment" overlay a member sees moments earlier in
+  the exact same flow) instead of inventing a third pattern: no photo
+  at all, `rgba(12,7,4,.82)` + a real `backdrop-filter:blur(18px)`, so
+  the page now genuinely reads as blurred rather than showing the
+  photo sharply.
+
+`node -c` clean on every touched `.js` file, `build-core.js` round-trip
+OK. Verified live in headless Chromium against the real built bundle:
+picking a bank switches the destination field to free-text/no-cap mode
+and a 15-character account number survives untouched; switching back
+to MTN clears the stale value, restores digit-only/length-capped mode,
+and a fresh phone number sanitizes exactly as before. Did not verify
+the actual MarzPay bank-transfer send/poll/validate calls against a
+live sandbox (no test credentials in this session) -- that needs a
+real end-to-end check by the owner once deployed, same caveat this
+file already carries for the USDT/card rails at launch. `user/sw.js`
+bumped `v189` → `v190`.

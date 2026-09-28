@@ -1497,22 +1497,33 @@ function finiteMoney(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-// Owner, 2026-09-28: "change the format of referral codes and format of
-// giftcodes use other ways" -- both formats below are new again. The
-// unambiguous, uppercase-only alphabet itself is kept (no I/l/O/0/1 -- a
-// code read off a screenshot must never require guessing O from 0, an
-// owner requirement that has held across every previous format change),
-// only the SHAPE each code takes is different this time.
+// Owner, 2026-09-28 (second round the same day, this time with two
+// reference screenshots of the exact target shapes): referral codes are
+// now one flat 8-character block with no dashes (e.g. "mrxwpqr3"); gift
+// codes keep their existing 3-groups-of-4 dash shape (e.g.
+// "5sr3-4ao5-zi3g") but lowercase now instead of uppercase. Both
+// alphabets stay the unambiguous set (no i/l/o/0/1) -- just lowercased,
+// not widened to include them -- because a code read off a screenshot
+// must never require guessing between o and 0, the same requirement
+// that has held across every previous format change; the reference
+// screenshots (which happened to mix in a few 0s/o's, being generic
+// examples rather than hand-picked for this) were read as a length/
+// case/grouping style to copy, not a request to drop that guarantee.
 //
-// Gift codes are now segmented into three dash-separated groups of 4
-// (XXXX-XXXX-XXXX, 12 random characters total, same as before -- only
-// contiguous vs. segmented changed, not the entropy) -- the same
-// readability convention product keys and gift-card codes commonly use,
-// easier to read aloud or copy correctly than one 12-character block.
+// "make sure fixed character" -- every referral code generated from now
+// on is EXACTLY 8 characters, full stop, never longer. The alphabet is
+// wide enough on its own (31 characters ^ 8 places is ~852 billion) that
+// the old escalate-past-collision fallback (5 -> 6 -> 7 characters) is
+// no longer needed at all -- length is now a guarantee, not a starting
+// point that can grow.
+//
 // /redeem already accepted dashes in its input regex before this round
-// (`[A-Za-z0-9-]+`), and now also tolerates a member typing the same code
-// WITHOUT the dashes -- see /redeem's own fallback below.
-const GIFTCODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+// (`[A-Za-z0-9-]+`), and tolerates a member typing a gift code WITHOUT
+// the dashes too -- see /redeem's own fallback below, now rewritten to
+// match case-insensitively via codeLower regardless of which case a
+// given code happens to be stored in (old uppercase ones and new
+// lowercase ones alike).
+const GIFTCODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
 const GIFTCODE_GROUP_LEN = 4;
 const GIFTCODE_GROUPS = 3;
 const GIFTCODE_LENGTH = GIFTCODE_GROUP_LEN * GIFTCODE_GROUPS; // 12 meaningful characters, unchanged
@@ -1522,18 +1533,12 @@ function genGiftCode() {
   for (let i = 0; i < GIFTCODE_LENGTH; i += GIFTCODE_GROUP_LEN) groups.push(raw.slice(i, i + GIFTCODE_GROUP_LEN));
   return groups.join('-');
 }
-// Referral codes are now uppercase-only (dropped the mixed-case alphabet
-// the previous format used) -- a referral code is shared out loud, over a
-// phone call or a voice note, far more often than a gift code ever is, and
-// "was that a capital G or lowercase g" is a real friction point mixed
-// case adds that a gift code (almost always copy-pasted, never read aloud)
-// does not have. Length bumped 4 -> 5 to keep the code space comfortably
-// larger despite dropping lowercase: 30 characters over 5 places is
-// 24,300,000 codes, versus the previous 54^4 = 8,503,056.
-// Every already-issued code keeps working untouched -- nothing is
-// migrated, this only changes what NEWLY generated codes look like.
-const REFERRAL_CHARS = GIFTCODE_CHARS; // same unambiguous uppercase alphabet, not a new one
-const REFERRAL_LENGTH = 5;
+// One flat block, no dashes -- the previous round's own reasoning for
+// referral codes (spoken aloud more often than typed) still holds; a
+// dash in a code someone is reading out over a phone call is one more
+// thing to mishear ("dash" vs "hyphen" vs a pause). 8 characters, always.
+const REFERRAL_CHARS = GIFTCODE_CHARS; // same unambiguous alphabet, now lowercase, not a new one
+const REFERRAL_LENGTH = 8;
 function randFromAlphabet(alphabet, n) {
   let s = '';
   for (let i = 0; i < n; i++) s += alphabet[crypto.randomInt(alphabet.length)];
@@ -1581,20 +1586,14 @@ async function generateUniqueReferralCode(userId) {
       await db.collection('users').doc(userId).update({ referralCode: code, referralCodeLower: codeLower });
       return code;
     };
-    for (let attempt = 0; attempt < 25; attempt++) {
+    // No length-escalation fallback -- "make sure fixed character" means
+    // every referral code is 8 characters, always. The space is wide
+    // enough (31^8, ~852 billion) that 50 collisions in a row would mean
+    // something is actually broken, not that the space is crowded; that
+    // case throws rather than silently handing out a longer code.
+    for (let attempt = 0; attempt < 50; attempt++) {
       const claimed = await tryClaim(randCode(REFERRAL_LENGTH));
       if (claimed) return claimed;
-    }
-    // Safety valve, not the normal path. 25 collisions in a row at 5
-    // characters means the 24.3M space is genuinely crowded, and at that
-    // point a 6- then 7-character code is far better than refusing to let
-    // somebody register. Length is not what identifies a referral code
-    // anywhere in this file, so a longer one is handled identically.
-    for (const len of [6, 7]) {
-      for (let attempt = 0; attempt < 25; attempt++) {
-        const claimed = await tryClaim(randCode(len));
-        if (claimed) return claimed;
-      }
     }
     throw new Error('Could not generate a unique referral code');
   });
@@ -2103,6 +2102,102 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
   });
   return _marzParse(resp);
 }
+// ── BANK TRANSFER (MarzPay) ── a payout rail alongside mobile-money
+// send-money, always via MarzPay regardless of withdrawProvider() (the
+// same "always this one gateway" reasoning as card deposits, which stay
+// on MarzPay even when depositMethod is 'pesajet' -- bank transfer is a
+// MarzPay-only product). Unlike marzMoneyBody() above, there is no
+// `country`/`currency` field at all -- the docs show none for this
+// endpoint (Uganda-primary today) -- and no client-supplied `reference`
+// either: MarzPay generates its own and hands it back in the response, so
+// (unlike collect/send, where OUR pre-generated reference is what lets a
+// network-error retry be matched up later) there is nothing to pre-write
+// before calling out. A network error here is exactly as ambiguous as the
+// send-money one and handled the same way by the caller: never assume
+// nothing was sent.
+async function marzBankTransfer({ amount, bankName, accountNumber, accountName, description }) {
+  const payload = { amount: Number(amount), description: description || 'Withdrawal', bank_name: bankName, bank_account_number: accountNumber };
+  if (accountName) payload.bank_account_name = accountName;
+  const resp = await fetch(`${MARZPAY_BASE}/bank-transfer`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return _marzParse(resp);
+}
+// Validates a recipient account BEFORE it is saved as a withdrawal
+// destination -- MarzPay's own docs recommend this ("avoids failed
+// transfers and refunds... returns the account holder name"). Called from
+// /bank/save, not at withdrawal time -- catching a typo'd account number
+// the moment it is entered is far better than finding out only once real
+// money is already being sent.
+async function marzValidateBankAccount(bankName, accountNumber) {
+  const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/validate`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bank_name: bankName, account_number: accountNumber })
+  });
+  return _marzParse(resp);
+}
+function _marzExtractBankTransfer(d) {
+  // GET /bank-transfer/{reference}'s own response key is
+  // bank_transfer_request (named differently from the CREATE response's
+  // bank_transfer -- the docs call this out explicitly), so both are
+  // tried rather than assuming one.
+  const bt = d?.data?.bank_transfer_request || d?.data?.bank_transfer || d?.data || d || {};
+  return { status: String(bt.status || d?.status || '').toLowerCase() };
+}
+async function marzGetBankTransferStatus(reference) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/${reference}`, {
+        signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+      });
+      const d = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        console.error(`marzGetBankTransferStatus(${reference}) attempt ${attempt}: HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
+        lastErr = new Error(`HTTP ${resp.status}`);
+      } else {
+        return _marzExtractBankTransfer(d).status;
+      }
+    } catch (e) { lastErr = e; console.error(`marzGetBankTransferStatus(${reference}) attempt ${attempt} failed:`, e.message); }
+    if (attempt < 2) await new Promise(r => setTimeout(r, 350));
+  }
+  console.error(`marzGetBankTransferStatus(${reference}): gave up after 2 attempts, last error:`, lastErr && lastErr.message);
+  return '';
+}
+// Cached (10 min -- this changes rarely, no reason to hit MarzPay on every
+// wallet-bind screen open), populated from MarzPay's own live list rather
+// than hardcoded here: bank codes "must match exactly for the provider to
+// accept the transfer" per their own docs, and this project has no
+// reliable source for all ~25 of them, only the 6 shown as examples on the
+// docs page. A stale/incomplete hardcoded list would silently reject real
+// banks or, worse, send a transfer under the wrong code.
+let _bankListCache = null, _bankListCacheTs = 0;
+const BANK_LIST_CACHE_MS = 10 * 60 * 1000;
+async function getSupportedBanks() {
+  if (_bankListCache && Date.now() - _bankListCacheTs < BANK_LIST_CACHE_MS) return _bankListCache;
+  try {
+    const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/banks`, {
+      signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+    });
+    const d = await resp.json().catch(() => ({}));
+    if (resp.ok && d.status === 'success' && Array.isArray(d.data?.banks)) {
+      _bankListCache = d.data.banks.map(b => ({ code: String(b.code || ''), name: String(b.name || '') })).filter(b => b.code && b.name);
+      _bankListCacheTs = Date.now();
+    }
+  } catch (e) { console.error('getSupportedBanks failed:', e.message); }
+  return _bankListCache || [];
+}
+// A withdrawal account's `network` is only ever one of NETWORK_NAMES
+// (mobile money, checked at /bank/save time) or a bank name that
+// getSupportedBanks() had ALREADY confirmed real at that same save time --
+// so classifying a bound account at withdrawal time needs no live MarzPay
+// call at all, only this. Keeps the payout-processing path from taking on
+// a MarzPay dependency just to decide which of its own two endpoints to
+// call.
+function isBankNetwork(network) { return !NETWORK_NAMES.has(String(network || '')); }
 // Owner: "let us put on dashboard so as it checks marzpy available
 // balance." GET /balance -- confirmed against MarzPay's own official
 // JS SDK (marzpay-js on npm, published by MarzPay's own maintainer),
@@ -5526,8 +5621,13 @@ app.post('/withdraw/request', async (req, res) => {
     if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
     if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
     const rawNetwork = String(req.body.network || '').trim();
-    if (!NETWORK_NAMES.has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
-    const destValue = cleanPhone(req.body.phone || '');
+    if (!rawNetwork) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
+    // cleanPhone() only applies to mobile money -- it enforces this
+    // region's phone SHAPE, which a bank account number is not. The bound-
+    // account lookup right below (boundSnap) is the real gate either way:
+    // a value that doesn't match a real saved bankAccounts doc is refused
+    // there regardless of which branch validated its shape here.
+    const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(req.body.phone || '') : String(req.body.phone || '').replace(/\s+/g, '').trim();
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
     // The cash-out window, enforced HERE and not only shown in the app.
@@ -5872,6 +5972,74 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       };
     }
 
+    if (isBankNetwork(wit.network)) {
+      // Bank transfer payout -- always MarzPay, never PesaJet (bank
+      // transfer is not a PesaJet product), so this branch runs regardless
+      // of withdrawProvider()'s own setting. Same "write the marker before
+      // ever calling out, a network error is ambiguous, acceptance is not
+      // completion" shape as the MarzPay send-money branch below, with one
+      // real difference: /bank-transfer takes no client-supplied reference
+      // at all (unlike collect/send-money), so unlike those two there is
+      // nothing of our own to pre-write as the lookup key for a later
+      // webhook or reconciler tick -- only whatever reference MarzPay
+      // itself hands back in the response, captured the instant it exists.
+      const sendingMarker = crypto.randomUUID();
+      const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
+
+      let mpData, ambiguous = false;
+      try {
+        mpData = await marzBankTransfer({ amount: wit.net, bankName: wit.network, accountNumber: wit.phone, accountName: wit.holder, description: 'Withdrawal' });
+      } catch (netErr) {
+        // Ambiguous, exactly like the MarzPay send-money branch's own
+        // comment on this: never revert to 'pending' here, that would
+        // invite a retry that could double-pay. Leave it at 'sending' for
+        // the admin to check on MarzPay's own dashboard.
+        console.error('MarzPay bank transfer network error (ambiguous, NOT reverting to pending):', netErr.message);
+        ambiguous = true;
+        mpData = { status: 'error', providerDown: true, message: netErr.message };
+      }
+      if (ambiguous || mpData.providerDown) {
+        return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request. We cannot confirm whether this bank transfer was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
+      }
+      if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
+        await witRef.updateIf({ status: 'sending', sendingReference: sendingMarker }, { status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
+        return { code: 400, body: { status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this bank transfer right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
+      }
+      const sandbox = mpData.status === 'sandbox';
+      // MarzPay's own reference (the create response's data.bank_transfer.
+      // reference/transaction_uuid, same value under both keys per the
+      // docs) is what GET /bank-transfer/{reference} and the reconciler
+      // both need -- stored into the SAME marzReference field the other
+      // two payout rails already use, so every downstream reader
+      // (/admin/withdraw/verify, reconcilePendingWithdrawals) needs no
+      // bank-specific field to look for.
+      const bankRef = mpData.data?.bank_transfer?.reference || mpData.data?.bank_transfer?.transaction_uuid || null;
+      const updateFields = { status: sandbox ? 'processed' : 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), marzReference: bankRef || sendingMarker, isBankTransfer: true };
+      await withLock('bal:' + wit.userId, async () => {
+        await witRef.update({ marzReference: bankRef || sendingMarker, isBankTransfer: true });
+        const claimed = await witRef.updateIf({ status: 'sending' }, updateFields);
+        if (!claimed) return;
+        try {
+          await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
+        } catch (twErr) {
+          console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER bank withdrawal ${withdrawalId} was marked sent — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
+        }
+      });
+      if (sandbox) await finalizeWithdrawalTransactionRecord(withdrawalId, 'processed');
+      else {
+        try {
+          const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+          if (!txSnap.empty) await txSnap.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' });
+        } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+      }
+      return {
+        code: 200,
+        body: { status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtMoney(wit.net)} to ${wit.network} ${wit.phone}` : `Sending ${fmtMoney(wit.net)} to ${wit.network} ${wit.phone}` },
+        meta: { amount: wit.net, dest: wit.phone, userId: wit.userId }
+      };
+    }
+
     if (withdrawProvider(settNow) === 'pesajet') {
       // PesaJet payout. The three rules that matter are:
       //   * the outbound identifier is written BEFORE the provider is ever
@@ -6062,6 +6230,26 @@ app.post('/admin/withdraw/verify', async (req, res) => {
       else pjMessage = `PesaJet reports status: ${t.status || 'unknown'}.`;
       return res.json({ status: 'success', ourStatus: w.status, marzStatus: t.status || 'unknown', message: pjMessage });
     }
+    // Bank transfer -- neither marzTxUuid nor a PesaJet reference is ever
+    // set on this rail (see the branch in _processWithdrawalNow); it has
+    // its own reference, stored in the SAME marzReference field the other
+    // two rails use, checked against MarzPay's own bank-transfer status
+    // endpoint rather than the send-money one below.
+    if (w.isBankTransfer) {
+      if (!w.marzReference) {
+        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This bank transfer never reached MarzPay (no gateway reference). Nothing was sent.' });
+      }
+      const btStatus = await marzGetBankTransferStatus(w.marzReference);
+      const sent = SUCCESS_STATUSES.has(btStatus);
+      const failed = FAILED_STATUSES.has(btStatus);
+      let btMessage;
+      if (!btStatus) btMessage = `A send attempt WAS made (reference: ${w.marzReference}) but MarzPay did not respond just now -- this does NOT mean nothing was sent. Try Verify again in a moment.`;
+      else if (sent && w.status !== 'processed') btMessage = `MarzPay says this bank transfer was SENT, but our record is "${w.status}". Check the recipient bank account before doing anything else.`;
+      else if (sent) btMessage = 'MarzPay confirms the bank transfer was SENT and our record already shows it processed.';
+      else if (failed) btMessage = `MarzPay says this bank transfer FAILED (status: ${btStatus}).`;
+      else btMessage = `MarzPay reports status: ${btStatus || 'unknown'}. Not finished, not failed.`;
+      return res.json({ status: 'success', ourStatus: w.status, marzStatus: btStatus || 'unknown', message: btMessage });
+    }
     if (!w.marzTxUuid) {
       // Codex-caught real bug (2nd money-flow audit): this used to claim
       // "nothing was sent" from a bare missing marzTxUuid alone -- but
@@ -6105,6 +6293,30 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
       return res.status(404).json({ status: 'error', message: 'Cash-out not found' });
     const wit = witSnap.data();
     if (wit.status !== 'processing') return res.json({ status: 'success', state: wit.status });
+    // Bank transfer branch, checked against marzReference/the bank-transfer
+    // status endpoint instead of marzTxUuid/send-money -- see the same
+    // branch in /admin/withdraw/verify above for the full reasoning.
+    if (wit.isBankTransfer) {
+      if (!wit.marzReference) return res.json({ status: 'success', state: 'processing' });
+      const btStatus = await marzGetBankTransferStatus(wit.marzReference);
+      if (SUCCESS_STATUSES.has(btStatus)) {
+        if (await markWithdrawalProcessed(witSnap.ref, userId)) {
+          await finalizeWithdrawalTransactionRecord(witSnap.id, 'processed');
+          return res.json({ status: 'success', state: 'processed' });
+        }
+        const nowSnap = await witSnap.ref.get();
+        return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
+      }
+      if (FAILED_STATUSES.has(btStatus)) {
+        // Same discarded-`declined` guard as the send-money branch right
+        // below -- a concurrent check (reconciler, another poll) may have
+        // already won the decline race; only finalize with what actually happened.
+        const { declined, refunded } = await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the bank', ['processing']);
+        if (declined) await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined', refunded);
+        return res.json({ status: 'success', state: 'declined' });
+      }
+      return res.json({ status: 'success', state: 'processing' });
+    }
     if (!wit.marzTxUuid) return res.json({ status: 'success', state: 'processing' });
     const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
     if (SUCCESS_STATUSES.has(marzStatus)) {
@@ -6306,36 +6518,89 @@ app.post('/pesajet/webhook', async (req, res) => {
   }
 });
 // ═══════════════════════════════════════════
-// WITHDRAWAL ACCOUNTS (mobile money only)
+// WITHDRAWAL ACCOUNTS (mobile money + bank)
 // ═══════════════════════════════════════════
+// Public bank list for the wallet-bind picker (owner: "add all supported
+// banks so withdrawals will also be processed through banks... where there
+// is select network, it should be select bank, so mtn and airtel will also
+// be there"). Requires auth (same as every other /bank/* route) even
+// though the list itself isn't secret -- no reason to expose a MarzPay
+// proxy to an unauthenticated caller.
+app.get('/bank/supported-banks', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const banks = await getSupportedBanks();
+  res.json({ status: 'success', banks: banks.map(b => b.name) });
+});
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const holder = stripHtml(req.body.holder);
   const rawNetwork = String(req.body.network || '').trim();
-  if (!holder || !NETWORK_NAMES.has(rawNetwork)) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
-  const phone = cleanPhone(req.body.phone || '');
-  if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
+  if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
+  const isMobileMoney = NETWORK_NAMES.has(rawNetwork);
+  // Owner: "so some bank account exceed character limit so no capping of
+  // characters please" -- cleanPhone() enforces this region's phone SHAPE
+  // (exact digit count, dial code), which is correct for MTN/Airtel but
+  // would reject or truncate a genuine bank account number. Banks get their
+  // own, deliberately loose check instead: present, plausible length,
+  // digits/letters only (some banks' account numbers aren't purely
+  // numeric) -- no upper cap tighter than what a real account number could
+  // need.
+  let destValue;
+  if (isMobileMoney) {
+    destValue = cleanPhone(req.body.phone || '');
+    if (!destValue) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
+  } else {
+    destValue = String(req.body.phone || req.body.accountNumber || '').replace(/\s+/g, '').trim();
+    if (!/^[A-Za-z0-9]{4,34}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number' });
+    // Validated against the SAME live/cached list #bank/supported-banks
+    // serves -- a bank name the picker never offered has no business
+    // reaching MarzPay's own bank-transfer create call, where an unknown
+    // code is what its docs describe as UNSUPPORTED/UNKNOWN BANK.
+    const banks = await getSupportedBanks();
+    if (!banks.some(b => b.name === rawNetwork)) return res.status(400).json({ status: 'error', message: 'That bank is not currently supported. Pick one from the list.' });
+  }
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     // OTP proves it's really the account holder adding this payout
     // destination -- sent to THEIR OWN phone on file (resolved by
-    // /auth/otp/send's 'bank' purpose), not to `phone` above, which is the
-    // new account being added and could belong to someone else entirely
-    // (a family member's mobile money, for instance). Optional now, per
-    // the owner -- off by default (see DEFAULT_SETTINGS.bankOtpRequired).
+    // /auth/otp/send's 'bank' purpose), not to `destValue` above, which is
+    // the new account being added and could belong to someone else
+    // entirely (a family member's mobile money, for instance). Optional
+    // now, per the owner -- off by default (see DEFAULT_SETTINGS.bankOtpRequired).
     if ((await getSettings()).bankOtpRequired) {
       const ownPhone = cleanPhone((uSnap.exists && uSnap.data().phone) || '');
       const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), ownPhone, 'bank');
       if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify with the code sent to your phone first.' });
     }
+    // MarzPay's own recommended step, done here rather than only at
+    // withdrawal time: catches a mistyped account number the moment it is
+    // entered, with the member still looking at the form, instead of only
+    // once a real payout is being sent. Also cross-checks/fills the
+    // account holder name the same way -- if MarzPay's own validation
+    // returns one and the member left the name field close to it, prefer
+    // the verified name; a real mismatch is left to the member's own
+    // entry rather than silently overwritten, since a shared/company
+    // account can legitimately have a different registered name.
+    let verifiedHolder = holder;
+    if (!isMobileMoney) {
+      let v;
+      try { v = await marzValidateBankAccount(rawNetwork, destValue); }
+      catch (netErr) { return res.status(500).json({ status: 'error', message: 'Could not reach the bank verification service. Please try again.' }); }
+      if (v.providerDown) return res.status(500).json({ status: 'error', message: 'Could not verify this account right now. Please try again in a moment.' });
+      if (v.status !== 'success' || !v.data?.valid) {
+        return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Account could not be validated. Please check the account number and bank.') });
+      }
+      if (v.data?.account_name) verifiedHolder = String(v.data.account_name).trim() || holder;
+    }
     // Saving/removing a payout destination here doesn't move any money by
     // itself -- see /withdraw/request for the actual money-moving path.
     const dup = await withLock('bank-save:' + userId, async () => {
-      const dupSnap = await db.collection('bankAccounts').where('userId', '==', userId).where('phone', '==', phone).limit(1).get();
+      const dupSnap = await db.collection('bankAccounts').where('userId', '==', userId).where('phone', '==', destValue).limit(1).get();
       if (!dupSnap.empty) return true;
-      await db.collection('bankAccounts').add({ userId, holder, network: rawNetwork, phone, createdAt: FieldValue.serverTimestamp() });
+      await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, createdAt: FieldValue.serverTimestamp() });
       return false;
     });
     if (dup) return res.status(400).json({ status: 'error', message: 'This account is already saved as a withdrawal account.' });
@@ -6402,46 +6667,39 @@ app.post('/account/transaction-pin/change', async (req, res) => {
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  // Strictly case-sensitive — a code only ever matches itself as issued.
   const raw = String(req.body.code || '').trim().slice(0, 32);
   if (!raw || !/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Enter a gift code' });
   try {
     let result = null;
-    // Lock on the uppercased code, not the raw input: two members submitting
-    // the same code in different casing must serialise against each other,
-    // and after the fallback lookup above they can now both reach the same
-    // document. Uppercasing an old mixed-case code only ever widens the lock,
-    // which is the safe direction.
-    await withLock('redeem:' + raw.toUpperCase(), async () => {
+    // Lock on the lowercased code, not the raw input: two members submitting
+    // the same code in different casing must serialise against each other.
+    await withLock('redeem:' + raw.toLowerCase(), async () => {
       const userSnap = await db.collection('users').doc(userId).get();
       if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
       if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      // Exact match first, so a code already issued under the old mixed-case
-      // alphabet still matches only itself. Codes are uppercase-only now, so
-      // a member who types or pastes one in lowercase is not making a
-      // different code -- fall back to the uppercased form rather than
-      // telling them a real code is invalid.
-      let codeSnap = await db.collection('promoCodes').where('code', '==', raw).limit(1).get();
-      const upper = raw.toUpperCase();
-      if (codeSnap.empty && upper !== raw) {
-        codeSnap = await db.collection('promoCodes').where('code', '==', upper).limit(1).get();
-      }
-      // New gift codes are dash-segmented (XXXX-XXXX-XXXX) for readability,
-      // but a member who reads one off a screenshot and types it by hand
-      // may reasonably leave the dashes out, or put them somewhere else --
-      // the code itself, read as characters, is still exactly right. If
+      // Matched via codeLower (case-insensitive by construction, and
+      // already the field the promoCodes uniqueness index enforces on) --
+      // this reads correctly regardless of which case a given code
+      // happens to be STORED in, so a code issued under the old uppercase
+      // alphabet and one issued under the new lowercase alphabet are both
+      // found the same way, with no case-guessing needed.
+      const lower = raw.toLowerCase();
+      let codeSnap = await db.collection('promoCodes').where('codeLower', '==', lower).limit(1).get();
+      // A member who reads a code off a screenshot and types it by hand may
+      // reasonably leave the dashes out, or put them somewhere else -- the
+      // code itself, read as characters, is still exactly right. If
       // stripping non-alphanumerics leaves precisely GIFTCODE_LENGTH
       // characters, re-segment them into the canonical shape and try that
       // too, rather than telling a member holding a genuine code that it
       // is invalid over punctuation alone.
       if (codeSnap.empty) {
-        const stripped = upper.replace(/[^A-Z0-9]/g, '');
+        const stripped = lower.replace(/[^a-z0-9]/g, '');
         if (stripped.length === GIFTCODE_LENGTH) {
           const groups = [];
           for (let i = 0; i < GIFTCODE_LENGTH; i += GIFTCODE_GROUP_LEN) groups.push(stripped.slice(i, i + GIFTCODE_GROUP_LEN));
           const resegmented = groups.join('-');
-          if (resegmented !== raw && resegmented !== upper) {
-            codeSnap = await db.collection('promoCodes').where('code', '==', resegmented).limit(1).get();
+          if (resegmented !== lower) {
+            codeSnap = await db.collection('promoCodes').where('codeLower', '==', resegmented).limit(1).get();
           }
         }
       }
@@ -9853,6 +10111,34 @@ async function reconcilePendingWithdrawals() {
         if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
         settled++;
       }
+    }
+    // Bank transfers -- polled rather than webhook-driven. MarzPay's own
+    // docs describe this product's result as "poll GET /bank-transfer/
+    // {reference} OR use webhooks", not webhook-only like collections/
+    // disbursements, and this codebase has no confirmed documentation of
+    // the webhook payload SHAPE for this specific product (unlike
+    // collection.completed/disbursement.completed, both fully documented).
+    // Guessing at an unverified webhook shape risks silently never firing
+    // on a real payload; polling the same status endpoint the create
+    // response's own reference points at is simple and independently
+    // correct regardless of whether a webhook is even configured for it.
+    // isBankTransfer:true narrows this to exactly the rows the branch in
+    // _processWithdrawalNow above actually created.
+    const btSnap = await db.collection('withdrawals').where('status', '==', 'processing').where('isBankTransfer', '==', true).where('marzReference', '>', '').orderBy('createdAt', 'asc').limit(50).get();
+    for (const doc of btSnap.docs) {
+      const wit = doc.data();
+      if (!wit.marzReference) continue;
+      const btStatus = await marzGetBankTransferStatus(wit.marzReference);
+      if (SUCCESS_STATUSES.has(btStatus)) {
+        if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+        settled++;
+      } else if (FAILED_STATUSES.has(btStatus)) {
+        const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the bank', ['processing']);
+        if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+        settled++;
+      }
+      // '' (providerDown/inconclusive), 'pending', 'processing' -- genuinely
+      // not finished yet or the live check itself failed; next tick retries.
     }
   } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
   return settled;
