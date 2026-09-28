@@ -3872,3 +3872,62 @@ as "2.8 GB of 4.0 GB", `4d 8h` uptime, green "Healthy" dot); a mocked
 500 from `/admin/system-health` renders the fallback "couldn't reach
 it" message instead of crashing the tab. `admin/sw.js` bumped `v45` →
 `v46`.
+
+## Follow-up 16 — real database speed audit: missing `users.phone` index
+
+Owner, pointing back at the VPS-health-card reply: *"Just like the
+powerful first reply of your chat that is the way l want my vps to
+coordinate with database and user panels in very highest speed."*
+Read as: don't just measure speed, actually make it faster. Audited
+the request path end to end rather than guessing:
+
+- **Connection pool** (`db.js`'s `connectMongo`) — already tuned:
+  `maxPoolSize:50`, `minPoolSize:3` kept warm, `retryReads`/
+  `retryWrites` on. Nothing to change.
+- **`.where()` really does hit an index** — checked `Query.get()` in
+  `db.js`: it builds one native Mongo filter object and runs a single
+  server-side `find()`, not a fetch-then-filter-in-JS shim. That makes
+  `ensureIndexes()`'s spec list directly load-bearing for speed, not
+  just correctness.
+- **Found the real gap**: `db.collection('users').where('phone','==',...)`
+  runs in `/auth/otp/send` (both the `register` and `reset` purposes)
+  and `/auth/reset/confirm` — every signup attempt and every "forgot
+  password" flow — and `users` had NO index on `phone` at all (only
+  `referredBy`/`referralCode`/`referralCodeLower`/`usernameLower`/
+  `publicId`). Every one of those calls was a full collection scan,
+  and it gets slower as the member base grows, not staying flat. This
+  is exactly the "database access should be very fast" complaint,
+  concretely diagnosed rather than guessed at. Added
+  `['users', { phone: 1 }]` to the specs list.
+- **Checked and ruled out as already fine**: `verifyAuth()`/
+  `_decodeAuth()` caches the Firebase token verification once per
+  request (was already fixed in an earlier round to avoid a double
+  round-trip); `sessionPolicy.checkMember()`'s Mongo read is a
+  `.doc(id).get()` (`_id` lookup, auto-indexed, not a scan);
+  `bankAccounts` already had its `userId` index; `getSettings()` is
+  already cached in-process for 60s so hot paths don't hit the DB for
+  config on every request; the user-app's own `api()`/`apiRequest()`
+  already dedupes concurrent identical GETs AND strips
+  `Content-Type` from bodyless GETs specifically to avoid a CORS
+  preflight round trip (a `test-boot-speed.py`-measured fix from
+  before this session) — no redundant work found there worth touching
+  again.
+- **Deliberately NOT touched**: `deploy/ecosystem.config.js` runs
+  `petro-server` as a single `fork`-mode PM2 process on purpose — the
+  money-crediting locks (`withLock()`, see CLAUDE.md's "Money-safety
+  invariants") are in-process, single-writer locks. Raising
+  `instances` above 1 (or switching to `cluster` mode) would silently
+  reopen the exact double-credit race those locks exist to close,
+  since two processes would each hold their own lock table. That
+  would trade correctness for speed on money-crediting code — not on
+  the table without a real cross-process locking redesign first, and
+  not something to do unasked.
+
+`node -c db.js` clean. Verified by reading `ensureIndexes()`'s own
+background-build behavior (fires without blocking `connectMongo()`'s
+resolve, same as every other index here) — cannot build the actual
+index against the live Atlas cluster from this sandbox, but the new
+spec is syntactically and structurally identical to the existing
+single-field, non-unique specs right next to it (e.g. `{referredBy:1}`),
+which are already proven working in production. No sw.js bump — this
+round touched only `db.js`, nothing served to a browser.

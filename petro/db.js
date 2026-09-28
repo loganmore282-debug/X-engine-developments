@@ -81,6 +81,13 @@ async function connectMongo(uri) {
 // an already-large collection never delays startup.
 async function ensureIndexes() {
   const specs = [
+    // Every OTP send/verify for register, reset, and the phone-existence
+    // check inside each (server.js's /auth/otp/send, /auth/reset/confirm)
+    // filters users by phone with no other field ahead of it -- without this,
+    // each one of those was a full collection scan, on some of the hottest,
+    // most latency-sensitive requests in the whole app (owner: "database
+    // access... should be very fast").
+    ['users',           { phone: 1 }],
     ['users',           { referredBy: 1 }],
     ['users',           { referralCode: 1 }],
     ['users',           { referralCodeLower: 1 }],
