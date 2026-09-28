@@ -2364,3 +2364,130 @@ CDN; this one is deliberately different, generated entirely on the server):
   completion with zero uncaught errors and shows the expected `notify()`
   message when there's no session to authenticate with. `user/sw.js`
   bumped `petro-shell-v176` → `petro-shell-v177`.
+
+## 2026-09-28 (follow-up 3) — Statement icon size bug fixed properly, PDF polish, two confirmed-dead image slots removed
+
+Owner reviewed the round above and corrected one thing directly, then added
+several smaller asks in the same message. Quoted because the correction
+matters: *"you changed the size of svg and you made a different one, please
+use the svg codes which were existing and size but just make it proper it
+had a light white background."*
+
+**The icon fix from the round above was real but incomplete** -- it fixed
+the light-box background, but introduced a NEW bug in the process: routing
+`ICONS.receiptLg` through `suppliedMemberIcon('accountStatement')` as raw
+markup (bypassing the `.supplied-icon` `<span>`/mask wrapper entirely) meant
+it no longer picked up the SIZE CLASS every sibling icon gets from its
+context (`.acct-list-icon .supplied-icon{width:34px;height:34px}`) -- it
+rendered at a fixed 26px instead, visibly smaller than the icons next to it
+in the owner's own screenshot. Fixed properly this time: the SAME glyph is
+now encoded as an `image/svg+xml` base64 data URI and set as
+`SUPPLIED_MEMBER_ICON_ASSETS.accountStatement`'s value, going through the
+IDENTICAL raster/mask pathway every other supplied icon already uses --
+"use the svg codes which were existing and size," not a new delivery
+mechanism.
+
+**A second, real bug caught while fixing the first one, not shipped
+blind**: the SVG rendered nothing at all once routed through the mask --
+`getComputedStyle` confirmed the mask-image URL and background-color were
+both set correctly, but the icon was still invisible. Root cause: `<svg>`
+markup inserted inline via `innerHTML` (every other `ICONS.*` use in this
+file) doesn't need an `xmlns` attribute, because the HTML parser already
+knows it's looking at SVG content -- but an SVG referenced as an EXTERNAL
+image resource (a CSS `mask-image: url(data:image/svg+xml;base64,...)`,
+same as an `<img src>`) must be a well-formed, standalone XML document, and
+silently fails to parse into anything without the namespace declaration.
+Added `xmlns="http://www.w3.org/2000/svg"` to `ICONS.receiptLg` specifically
+(the only `ICONS.*` entry ever reused this way) and confirmed live in
+headless Chromium that it now renders, and at the identical 34px both it and
+a sibling icon compute to.
+
+**PDF statement polish**, all from the owner's own list:
+- **Profile logo added** -- the same admin-uploaded `'logo'` slot the app
+  already shows on Home/Account/Auth (`STATE.brandLogo`) is fetched
+  server-side (`getPetroImage('logo')`), decoded from its stored data: URI
+  into real bytes, and drawn top-left of the PDF header via `doc.image()`
+  -- one upload already covers the app AND the statement, nothing new to
+  manage. The header text shifts right only when a logo is actually set, so
+  a fresh deploy with none uploaded yet still looks intentional rather than
+  leaving a gap.
+- **"Account ID" removed** from the metadata block (the only place this
+  round's own audit found it actually shown to a member -- confirmed by
+  grep across user-src, not assumed).
+- **East African Time**, not UTC -- `eatNow()` (the exact same
+  region-wall-clock helper `server.js` already uses for every stored
+  transaction's own `date`/`time` fields) now backs the "Statement
+  generated" stamp too, so the generation timestamp and every row beneath
+  it read off the identical clock instead of two different ones.
+- **Footer changed** to "`<Brand>` — Clean Energy, Green Development",
+  replacing the earlier round's own "generated automatically" line, per the
+  owner's exact wording.
+- **Brand name confirmed already fully dynamic** in the PDF
+  (`sett.brandName`, read live from admin settings on every request) --
+  the one place that WASN'T dynamic was the client's own download
+  filename (`downloadStatementPdf()`'s `a.download`), hardcoded to
+  `'Petro-Statement.pdf'`. Fixed to `brandName() + '-Statement.pdf'`, the
+  same client-side brand getter every other screen already uses -- so a
+  future rename in Admin -> Settings now reaches the statement everywhere,
+  including the saved filename, not just the PDF's own header text.
+- **Verified**: rebuilt the exact route's drawing code standalone again
+  (same method as the round above -- a real mock logo image, 26+
+  transactions, rendered to PNG via PyMuPDF) and visually confirmed the
+  logo, missing Account ID row, EAT-stamped generation time, and new
+  footer text all render correctly together, not each checked in
+  isolation.
+
+**Two image slots removed outright, confirmed genuinely dead, not just
+unused-for-now** (owner: *"every idle code which has no function it is
+really doing should be removed"*):
+- **`profilegif`** -- an animated brand-mark gif slot. Its own consumers
+  (`homeGifHtml()`/`fitHomeGif()`) were already fully deleted in an earlier
+  round; all that was left was a `STATE.profileGif` assignment on every
+  single boot that nothing anywhere ever read again, plus a wasted Mongo
+  read behind it on every `/public/petro-images` and `/admin/petro-images`
+  call (both endpoints fetched all 10 slots every time, unconditionally).
+  Confirmed dead by grep before removing, not assumed: zero references
+  anywhere in `admin-src/index.html` (no upload row has existed for it in
+  several rounds) and zero remaining consumers in `user-src/`.
+- **`authcard`** -- the second half of the OLD two-part auth hero+card
+  layout, replaced by the single continuous photo backdrop two rounds ago.
+  Its own CSS comment already said so directly ("`#authCardBg`/
+  `--auth-card-*` are no longer referenced by this markup"). Removed
+  `STATE.authCardImage`, the dead `set('card', STATE.authCardImage, ...)`
+  call (writing CSS custom properties nothing reads), and the two
+  `#authCardBg`-targeting CSS rules that matched a element no longer in
+  the markup.
+- Both slots removed from `PETRO_IMAGE_SLOTS` and both `Promise.all([...])`
+  fetch blocks in `server.js` (`/public/petro-images`,
+  `/admin/petro-images`) -- an admin can no longer even attempt to set
+  either, not just "nothing currently reads the result."
+- **Deliberately NOT removed, flagged rather than assumed**: the Home
+  banner's own VIDEO capability (`STATE.homeBannerVideo`,
+  `/public/banner-video`, the admin's real "Home banner (+ video)" upload
+  row) is extensively wired, actively maintained (preload timing,
+  cache-busting, live-refresh swap-in-place) -- a real, working, currently
+  documented feature, not idle code with nothing behind it. The owner's
+  "video banner gifs... should be removed" could mean either "the dead gif
+  slot" (done above) or "stop offering video banners as a concept" (a much
+  larger removal touching Home's rendering path, live-refresh, and the
+  admin upload UI) -- left alone this round rather than guessed at, needs
+  the owner to say which was meant.
+- **Also deliberately NOT done**: a full codebase sweep for every other
+  piece of idle/dormant code. This file's own history already documents
+  plenty of it left in place on purpose (PLAN_SPIN's unused branches,
+  `openChangeTradePasswordSheet()`, `maybeShowAnnouncement()`'s no-op,
+  `TURNTABLE_TX_TYPES`, the whole language-picker engine as of two rounds
+  ago) under an explicit "leave dormant code as a safety margin, remove
+  only the reachable entry point" precedent -- this round only removed the
+  two slots above because they were independently confirmed dead by grep,
+  not as the start of a wider purge. A real full audit is its own,
+  separately-scoped piece of work.
+- **Verified**: `node -c` on both touched files, `node build-core.js`
+  round-trip OK. Re-ran the account-list-icon size check in headless
+  Chromium after the xmlns fix: `accountStatement` and `accountWallet`
+  (an existing, working sibling icon) both compute to the exact same
+  34px×34px, confirmed by `getComputedStyle`, not just assumed from the
+  CSS. `user/sw.js` bumped `petro-shell-v177` → `petro-shell-v178`
+  (`admin/sw.js` NOT bumped -- `admin-src/index.html` was not touched this
+  round, and a stray obfuscation-noise-only rebuild of `admin/index.html`
+  was reverted rather than shipped for zero real change).

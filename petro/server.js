@@ -960,7 +960,19 @@ async function getHelpBanner() {
 // new one; see CLAUDE.md's "Design system" section.
 // profilecard is the Account screen's refinery-photo header background
 // (owner's mockup) -- same reused mechanism as every slot before it.
-const PETRO_IMAGE_SLOTS = ['logo', 'profilegif', 'downloadbg', 'authhero', 'authcard', 'banner2', 'banner3', 'homefooter', 'profilecard', 'checkinbanner'];
+//
+// 'profilegif' and 'authcard' REMOVED (owner: "every idle code which has no
+// function it is really doing should be removed") -- both were confirmed
+// genuinely dead, not just unused-for-now: neither has had an admin upload
+// row for several rounds (grep of admin-src/index.html: zero hits for
+// either), 'profilegif's own consumers (homeGifHtml()/fitHomeGif()) were
+// already deleted entirely in an earlier round, leaving only a pointless
+// STATE.profileGif assignment nothing ever read, and 'authcard's own target
+// element (#authCardBg) was removed from the markup when the auth screen
+// went single-photo -- its own CSS comment already said so. Removing the
+// slots here means an admin can no longer even try to set them, not just
+// that nothing currently reads the result.
+const PETRO_IMAGE_SLOTS = ['logo', 'downloadbg', 'authhero', 'banner2', 'banner3', 'homefooter', 'profilecard', 'checkinbanner'];
 const _petroImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getPetroImage(slot) {
@@ -3408,12 +3420,12 @@ app.get('/public/announcement-image', async (req, res) => {
 // Petro artwork needed by the current member surfaces, fetched together.
 app.get('/public/petro-images', async (req, res) => {
   try {
-    const [logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
-      getPetroImage('logo'), getPetroImage('profilegif'), getPetroImage('downloadbg'),
-      getPetroImage('authhero'), getPetroImage('authcard'), getPetroImage('banner2'),
+    const [logo, downloadbg, authhero, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
+      getPetroImage('logo'), getPetroImage('downloadbg'),
+      getPetroImage('authhero'), getPetroImage('banner2'),
       getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'), getPetroImage('checkinbanner'),
     ]);
-    publicJson(req, res, { status: 'success', logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard, checkinbanner }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, downloadbg, authhero, banner2, banner3, homefooter, profilecard, checkinbanner }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -6140,6 +6152,18 @@ app.get('/statement/pdf', async (req, res) => {
     const STATEMENT_TX_LIMIT = 2000; // same cap as GET /transactions above
     const snap = await db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(STATEMENT_TX_LIMIT).get();
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
+    // Same admin-uploaded 'logo' slot the app itself shows on Home/Account/
+    // Auth (STATE.brandLogo) -- so uploading a logo once already covers the
+    // PDF too, no separate upload needed. Stored as a data: URI (same shape
+    // an <img src> takes client-side); pdfkit's doc.image() wants real
+    // bytes, so it's decoded here rather than trusting doc.image() to
+    // understand a data: URI string across every pdfkit version.
+    const logoDataUri = await getPetroImage('logo');
+    let logoBuf = null;
+    if (logoDataUri) {
+      const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(logoDataUri);
+      if (m) { try { logoBuf = Buffer.from(m[1], 'base64'); } catch (_) { logoBuf = null; } }
+    }
 
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     const chunks = [];
@@ -6158,8 +6182,15 @@ app.get('/statement/pdf', async (req, res) => {
     function drawHeader() {
       doc.rect(0, 0, PAGE_W, 92).fill(RED);
       doc.rect(0, 88, PAGE_W, 4).fill(GOLD);
-      doc.fillColor('#fff').font('Helvetica-Bold').fontSize(22).text(brand.toUpperCase(), 40, 28);
-      doc.font('Helvetica').fontSize(11).text('Financial Statement', 40, 56);
+      // Same admin-uploaded logo the app shows everywhere else -- text
+      // shifts right to make room for it only when one is actually set, so
+      // a fresh deploy with no logo uploaded yet still looks intentional.
+      let textX = 40;
+      if (logoBuf) {
+        try { doc.image(logoBuf, 40, 22, { fit: [48, 48] }); textX = 98; } catch (_) { textX = 40; }
+      }
+      doc.fillColor('#fff').font('Helvetica-Bold').fontSize(22).text(brand.toUpperCase(), textX, 28);
+      doc.font('Helvetica').fontSize(11).text('Financial Statement', textX, 56);
       doc.fillColor(INK);
     }
     function drawColumnHeads(y) {
@@ -6174,13 +6205,22 @@ app.get('/statement/pdf', async (req, res) => {
     drawHeader();
     let y = 112;
     doc.font('Helvetica-Bold').fontSize(10).fillColor(INK);
+    // Owner: "remove stuffs for account ids everywhere" -- Account ID
+    // dropped. "Statement should be EAST AFRICAN TIME" -- eatNow() is the
+    // same region-wall-clock helper every stored transaction date/time on
+    // this statement was already written against (see its own comment
+    // above), so the generated-at stamp now uses the identical clock as
+    // every row beneath it instead of a separate UTC one.
+    const genAt = eatNow();
+    const padGen = n => String(n).padStart(2, '0');
+    const generatedStr = genAt.getUTCFullYear() + '-' + padGen(genAt.getUTCMonth() + 1) + '-' + padGen(genAt.getUTCDate())
+      + ' ' + padGen(genAt.getUTCHours()) + ':' + padGen(genAt.getUTCMinutes()) + ':' + padGen(genAt.getUTCSeconds()) + ' EAT';
     const meta = [
       ['Account holder', u.phone || '-'],
-      ['Account ID', u.publicId || uid.slice(0, 10)],
       ['Wallet balance', fmtMoney(u.walletBalance || 0, currency)],
       ['Total deposited', fmtMoney(u.totalDeposited || 0, currency)],
       ['Total withdrawn', fmtMoney(u.totalWithdrawn || 0, currency)],
-      ['Statement generated', new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC'],
+      ['Statement generated', generatedStr],
     ];
     meta.forEach(([label, value]) => {
       doc.font('Helvetica-Bold').fontSize(9).fillColor(MUTED).text(label + ':', 40, y, { continued: false });
@@ -6232,12 +6272,12 @@ app.get('/statement/pdf', async (req, res) => {
       y += 16;
     });
     doc.font('Helvetica').fontSize(8).fillColor(MUTED)
-      .text(brand + ' — this statement was generated automatically and reflects your account at the time above.', 40, doc.page.height - 50, { width: PAGE_W - 80 });
+      .text(brand + ' — Clean Energy, Green Development', 40, doc.page.height - 50, { width: PAGE_W - 80 });
 
     doc.end();
     await done;
     const buffer = Buffer.concat(chunks);
-    const filename = 'Statement-' + (u.publicId || uid.slice(0, 8)) + '.pdf';
+    const filename = brand + '-Statement-' + genAt.getUTCFullYear() + padGen(genAt.getUTCMonth() + 1) + padGen(genAt.getUTCDate()) + '.pdf';
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', 'attachment; filename="' + filename.replace(/[^A-Za-z0-9_.-]/g, '') + '"');
     res.send(buffer);
@@ -6667,12 +6707,12 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/petro-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
-      getPetroImage('logo'), getPetroImage('profilegif'), getPetroImage('downloadbg'),
-      getPetroImage('authhero'), getPetroImage('authcard'), getPetroImage('banner2'),
+    const [logo, downloadbg, authhero, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
+      getPetroImage('logo'), getPetroImage('downloadbg'),
+      getPetroImage('authhero'), getPetroImage('banner2'),
       getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'), getPetroImage('checkinbanner'),
     ]);
-    res.json({ status: 'success', logo, profilegif, downloadbg, authhero, authcard, banner2, banner3, homefooter, profilecard, checkinbanner });
+    res.json({ status: 'success', logo, downloadbg, authhero, banner2, banner3, homefooter, profilecard, checkinbanner });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/petro-image/set', async (req, res) => {
