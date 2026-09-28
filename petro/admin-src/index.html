@@ -1711,7 +1711,7 @@ async function renderDeposits(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — the automatic gateway (MarzPay or PesaJet) and USDT TRC20. A stuck automatic deposit can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain when a TronGrid key is configured (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for one still Awaiting Review.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — the automatic gateway (MarzPay or PesaJet), MarzPay card payments, and USDT TRC20. A stuck automatic or card deposit can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain when a TronGrid key is configured (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for one still Awaiting Review.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' deposits only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
@@ -1734,6 +1734,7 @@ function drawDeps(){
   $('depRows').innerHTML = list.length?list.map(d=>{
     const isManual = d.method==='manual';
     const isUsdt = d.method==='usdt';
+    const isCard = d.method==='card';
     const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed' || d.status==='review' || d.status==='awaiting_verification';
     const code = d.referralCode;
     // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
@@ -1754,6 +1755,8 @@ function drawDeps(){
       : d.autoDeclined ? ' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>' : '';
     const methodLabel = isUsdt
       ? `USDT (TRC20)${usdtBadge}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>`
+      : isCard
+      ? 'Card (MarzPay)'
       : isManual
       // data-no-i18n: the network and the collection number are DATA, and the
       // cell flattens to "Manualmtn · 0770000001", which is not a sentence in
@@ -3055,6 +3058,14 @@ async function renderSettings(){
       <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto deposit settings</button>
     </div>
 
+    <h2 class="sec">Card deposits (MarzPay)</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">A fourth deposit rail, through MarzPay's own card gateway -- always MarzPay regardless of which gateway is picked for mobile money above. A member is sent to MarzPay's hosted card page to pay, then returns to the app; the deposit resolves the same way a mobile-money one does (webhook + this app's own live re-check), no separate review needed. Requires an active Card Payments subscription on your MarzPay business account -- without one, MarzPay will refuse every attempt even with this switched on.</p>
+      <div class="switch-row"><span><b>Enable card deposits</b> <span class="muted">(shows the option in the app)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sCardEnabled" ${s.cardDepositEnabled?'checked':''} style="width:auto"></label></div>
+      <button class="btn block" id="saveCard" style="margin-top:10px">Save card deposit setting</button>
+    </div>
+
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
@@ -3099,6 +3110,10 @@ async function renderSettings(){
       usdtWalletAddress:$('sUsdtAddr').value.trim(), usdtRate:Number($('sUsdtRate').value)||0 };
     const d = await api('/admin/settings/update', { settings: upd });
     toast(d.status==='success' ? 'Crypto deposit settings saved' : (d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveCard').addEventListener('click', async()=>{
+    const d = await api('/admin/settings/update', { settings: { cardDepositEnabled:$('sCardEnabled').checked } });
+    toast(d.status==='success' ? 'Card deposit setting saved' : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveRates').addEventListener('click', async()=>{
     const upd = {

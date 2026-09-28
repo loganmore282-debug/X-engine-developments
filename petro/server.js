@@ -672,6 +672,15 @@ const DEFAULT_SETTINGS = {
   // Off by default; the app only shows the option once an owner turns it
   // on with a real wallet address and rate set.
   usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0,
+  // ── CARD DEPOSIT (MarzPay) ── a fourth deposit rail. Uses the SAME
+  // MarzPay account/API key as mobile money above regardless of which
+  // gateway (MarzPay or PesaJet) is picked for mobile-money deposits --
+  // card payments are a MarzPay-only product, so this always goes through
+  // MarzPay even when depositMethod is 'pesajet'. Off by default: the
+  // owner's MarzPay business needs an active Card Payments subscription
+  // before this can work at all (MarzPay refuses with SERVICE_NOT_SUBSCRIBED
+  // otherwise), so it must not turn itself on.
+  cardDepositEnabled: false,
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
 // user-src/original_module.js (the client-side fallback-stack lookup) and
@@ -2065,6 +2074,26 @@ function marzNoMarket(region) {
 async function marzCollect({ amount, phone, reference, description, callbackUrl, region }) {
   const payload = marzMoneyBody({ amount, phone, reference, description, region });
   if (!payload) return marzNoMarket(region);
+  if (callbackUrl) payload.callback_url = callbackUrl;
+  const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return _marzParse(resp);
+}
+// Card collection -- a different shape from marzMoneyBody() above: no
+// phone_number at all (the docs are explicit: "Do not send phone_number
+// for card payments"), and `method: 'card'` is what actually selects the
+// card gateway instead of a mobile-money push prompt. Funds land in a
+// SEPARATE card wallet on MarzPay's side (card_balance, not the main
+// balance) -- nothing in this app cares about that distinction, since a
+// member's own wallet credit here is always driven by our own
+// creditDeposit(), never by which MarzPay wallet the money sits in.
+async function marzCollectCard({ amount, reference, description, callbackUrl, region }) {
+  const market = marzMarket(region);
+  if (!market) return marzNoMarket(region);
+  const payload = { amount: Number(amount), method: 'card', country: market.code, reference, description: description || 'Card payment' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
     method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
@@ -5276,6 +5305,111 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not check payment status' });
   }
 });
+// ── CARD DEPOSIT (MarzPay) ──
+// A fourth deposit rail. The member never leaves the app for mobile money
+// (a push prompt lands on their phone) -- for a card, they leave to
+// MarzPay's own hosted card-gateway page (`redirect_url`) and come back.
+// Nothing about crediting is new here: this reuses the exact same
+// pendingDeposits row shape, the exact same creditDeposit()/
+// markDepositFailed(), and even the exact same /deposit/marzpay/status
+// poll route and reconcilePendingDeposits() sweep as mobile money -- both
+// are already keyed only on `marzTxUuid`/`marzReference`, never on HOW the
+// row was created, so a card row is invisible to them by nothing more than
+// coincidence of shape, not a special case anyone had to add.
+const _cardSubmitDebounce = new Map();
+// MarzPay's own stated range for card collections, independent of this
+// platform's admin-set minDeposit -- enforced as a floor/ceiling regardless
+// of what the admin has minDeposit set to, since a card charge below/above
+// this is refused at the gateway either way; better to say so up front.
+const CARD_MIN_UGX = 500, CARD_MAX_UGX = 10_000_000;
+app.post('/deposit/card/submit', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const amt = paymentAmount(req.body.amount);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT || amt > CARD_MAX_UGX) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(CARD_MAX_UGX)}).` });
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before depositing.' });
+    if (!sett.cardDepositEnabled) return res.status(400).json({ status: 'error', message: 'Card payments are not available right now.' });
+    const min = Math.max(Number(sett.minDeposit) || 0, CARD_MIN_UGX);
+    if (amt < min) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(min)}` });
+
+    const lastSub = _cardSubmitDebounce.get(userId) || 0;
+    if (Date.now() - lastSub < 7000)
+      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+    _cardSubmitDebounce.set(userId, Date.now());
+
+    const ref = await uniqueRef('C');
+    const marzReference = crypto.randomUUID();
+    const { date, time } = nowStr();
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId, method: 'card', amount: amt, ref, marzReference, status: 'initiating', provider: 'marzpay',
+      commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
+      regionKey: currentRegionKey(),
+      date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    let mpData;
+    try {
+      mpData = await marzCollectCard({
+        amount: amt, reference: marzReference, description: 'Card payment',
+        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
+      });
+    } catch (netErr) {
+      console.error('MarzPay card collect network error (ref ' + ref + '):', netErr.message);
+      await markDepositFailed(depRef, userId, 'Could not reach the card payment gateway. Please try again.');
+      return res.status(500).json({ status: 'error', message: 'Could not start the card payment. Please try again.' });
+    }
+    if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
+      console.error('MarzPay card collect rejected:', JSON.stringify(mpData));
+      await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the card payment'));
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the card payment') });
+    }
+    const redirectUrl = mpData.data?.redirect_url;
+    const txUuid = mpData.data?.transaction?.uuid;
+    if (!redirectUrl) {
+      console.error('MarzPay card collect: no redirect_url in response', JSON.stringify(mpData));
+      await markDepositFailed(depRef, userId, 'Card payment could not be started. Please try again.');
+      return res.status(500).json({ status: 'error', message: 'Card payment could not be started. Please try again.' });
+    }
+    // Same "capture our own uuid" step MoMo's collect does -- this is what
+    // lets the webhook (and the reconciler, and the status poll) trust a
+    // matching uuid outright instead of only ever accepting one the webhook
+    // itself supplies (see /deposit/callback's own comment on that exploit).
+    if (txUuid) await depRef.update({ marzTxUuid: txUuid, status: 'pending' }).catch(() => {});
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, redirectUrl });
+  } catch (e) {
+    console.error('Card deposit submit error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not start the card payment. Please try again.' });
+  }
+});
+// Browser-return leg for the card gateway. MarzPay's own docs describe
+// `callback_url` as doing double duty for a card collection -- the same URL
+// the CUSTOMER's browser lands back on after paying, and the URL MarzPay
+// POSTs the real server-to-server result to (handled by the POST handler
+// of this exact path, just below, completely unchanged for this feature).
+// A GET here is always the browser leg, never the webhook (MarzPay's own
+// webhook POST never hits this branch), so this is purely cosmetic --
+// crediting the deposit never depends on a member's browser successfully
+// making it back here. Deliberately NOT redirecting to a separate frontend
+// origin: the VPS has no domain yet (still a bare IP -- see CLAUDE.md), so
+// hardcoding one here would break the moment that changes. The app itself
+// resumes checking the real result on its own (see doCardDeposit()'s own
+// localStorage-based resume, user-src) whether or not this page is ever
+// even seen.
+app.get('/deposit/callback', (req, res) => {
+  res.set('Content-Type', 'text/html; charset=utf-8').send(
+    '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Payment received</title><style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#1d130f;color:#fff;' +
+    'display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center;box-sizing:border-box}' +
+    'div{max-width:340px}h1{font-size:18px;margin:0 0 8px}p{color:rgba(255,255,255,.7);font-size:14px;line-height:1.5}</style></head>' +
+    '<body><div><h1>Payment received</h1><p>You can close this page and return to the app. Your balance will update automatically once the payment is confirmed.</p></div></body></html>'
+  );
+});
 // MarzPay webhook. Never trusts the claimed status alone — crediting only
 // ever happens after an independent live re-check confirms it, and a uuid
 // this endpoint didn't itself capture is only trusted once that check's own
@@ -6988,7 +7122,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // near this), not a business one -- same reasoning as withdrawMultiple.
   usdtRate: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes

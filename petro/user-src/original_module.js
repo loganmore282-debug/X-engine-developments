@@ -2429,6 +2429,10 @@ function clearCachedState(){
   try { localStorage.removeItem(CACHED_STATE_KEY); } catch (_) {}
 }
 async function enterApp(){
+  // Fire-and-forget, both branches below: a card deposit the member never
+  // returned to the app to see resolved (they closed the tab, lost signal,
+  // whatever) picks back up here on the NEXT open, however long that is.
+  resumePendingCardDeposit();
   const uid = STATE.user && STATE.user.uid;
   const cached = loadCachedState(uid);
   if (!cached) return bootFromNetwork(uid);
@@ -5246,16 +5250,28 @@ window.selectDepMethod = function(m){
   if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.dm === m));
   $('depMmPanel').style.display = (m === 'mm') ? 'block' : 'none';
   $('depUsdtPanel').style.display = (m === 'usdt') ? 'block' : 'none';
+  $('depCardPanel').style.display = (m === 'card') ? 'block' : 'none';
 };
 function openDepositFormSheet(){
   const s = STATE.settings || {};
   const usdtOn = s.usdtEnabled === true;
+  const cardOn = s.cardDepositEnabled === true;
   _depMethod = 'mm';
+  // Tab row is built from whichever rails are actually on -- Mobile Money
+  // is always first/default and always present; USDT and Card each add
+  // their own tab only when the admin has enabled them, so a fresh deploy
+  // with neither on shows no tab row at all (byte-for-byte the same single
+  // Mobile Money form this sheet always was, same as before either rail
+  // existed).
+  const methodTabs = [['mm', 'Mobile Money']];
+  if (usdtOn) methodTabs.push(['usdt', 'USDT (TRC20)']);
+  if (cardOn) methodTabs.push(['card', 'Card']);
+  const tabsHtml = methodTabs.length > 1
+    ? `<div class="statement-tabs" id="depMethodRow" style="grid-template-columns:repeat(${methodTabs.length},minmax(0,1fr));margin-bottom:18px;">
+      ${methodTabs.map(([k, l]) => `<button type="button" data-dm="${k}" class="${k === 'mm' ? 'on' : ''}" onclick="selectDepMethod('${k}')">${l}</button>`).join('')}
+    </div>` : '';
   openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">
-    ${usdtOn ? `<div class="statement-tabs" id="depMethodRow" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:18px;">
-      <button type="button" data-dm="mm" class="on" onclick="selectDepMethod('mm')">Mobile Money</button>
-      <button type="button" data-dm="usdt" onclick="selectDepMethod('usdt')">USDT (TRC20)</button>
-    </div>` : ''}
+    ${tabsHtml}
     <div id="depMmPanel">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
     <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
@@ -5308,7 +5324,88 @@ function openDepositFormSheet(){
         </ol>
       </div>
     </div>
+
+    <div id="depCardPanel" style="display:none;">
+      <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
+      <div class="dep-amt"><input id="cardAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncCardQuickAmt()"></div>
+      <div class="dep-chips" id="cardChips">${depositChipsHtml(s)}</div>
+
+      <button class="primary-button" id="cardGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doCardDeposit()">Pay with Card</button>
+
+      <div class="dep-instr deposit-guide">
+        <h3>How card payments work</h3>
+        <ol class="deposit-steps">
+          <li><b>Enter your amount</b><span>At least ${fmtUGX(s.minDeposit)}.</span></li>
+          <li><b>Pay on the secure card page</b><span>Tap Pay with Card and enter your card details on MarzPay's own payment page.</span></li>
+          <li><b>Return to the app</b><span>Your balance updates automatically once the payment is confirmed.</span></li>
+        </ol>
+      </div>
+    </div>
   </div>`);
+}
+var _cardChosenAmount = 0;
+window.syncCardQuickAmt = function(){
+  const val = parseMoneyInput(($('cardAmount') || {}).value);
+  _cardChosenAmount = val;
+  const chips = $('cardChips');
+  if (chips) chips.querySelectorAll('.dep-chip').forEach(btn => btn.classList.toggle('sel', Number(btn.dataset.amt) === val));
+};
+// Owner: cards go through MarzPay's own hosted gateway, so this leaves the
+// app entirely (window.location.href, a full navigation -- there is no
+// modal/iframe checkout to stay inside). Unlike Mobile Money, the app
+// itself is gone from memory the instant that navigation happens, so
+// _depActiveDepositId-style in-memory tracking (the pattern the Mobile
+// Money status modal uses) cannot survive it -- the pending deposit id has
+// to be written somewhere that outlives a full page reload. localStorage
+// is that place; resumePendingCardDeposit() (called from enterApp() on
+// every app open) is what picks it back up once the member returns from
+// MarzPay's page, however many minutes or app-relaunches later that is.
+var CARD_DEPOSIT_STORAGE_KEY = 'petro_pending_card_deposit';
+window.doCardDeposit = async function(){
+  const btn = $('cardGoBtn');
+  if (!btn || btn.disabled) return;
+  const amount = parseMoneyInput(($('cardAmount') || {}).value);
+  if (!amount || amount <= 0) return notify('Enter the amount you want to add');
+  const s = STATE.settings || {};
+  if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Starting…';
+  const r = await post('/deposit/card/submit', { amount: amount });
+  if (r.status !== 'success' || !r.redirectUrl) {
+    btn.disabled = false; btn.textContent = label;
+    return notify(r.message || 'Could not start the card payment');
+  }
+  try { localStorage.setItem(CARD_DEPOSIT_STORAGE_KEY, r.depositId); } catch (e) {}
+  location.href = r.redirectUrl;
+};
+// Called once per app open (see enterApp()). Fire-and-forget: nothing else
+// on screen depends on this resolving, and a member with no pending card
+// payment (the overwhelming common case) pays for one harmless, near-instant
+// localStorage read and nothing more.
+async function resumePendingCardDeposit(){
+  let depositId;
+  try { depositId = localStorage.getItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) { return; }
+  if (!depositId) return;
+  try {
+    // Same status route Mobile Money already polls -- it resolves purely
+    // off dep.marzTxUuid/dep.status, never anything MoMo-specific, so a
+    // card deposit's own row is invisible to it by nothing more than
+    // coincidence of shape, not a special case that had to be added.
+    const r = await post('/deposit/marzpay/status', { depositId: depositId });
+    if (r.status === 'success' && r.state === 'matched') {
+      try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
+      notify('Card payment completed! Credited to your balance.');
+      await refreshTransactionsCache();
+      if (STATE.page === 'home') renderHome();
+    } else if (r.status === 'success' && r.state === 'failed') {
+      try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
+      notify(r.message || 'The card payment did not complete.');
+    }
+    // Still pending: leave the key in place. The background reconciler and
+    // this same check on the NEXT app open will keep trying until it
+    // resolves -- never declared failed just because it has not resolved
+    // by this particular check.
+  } catch (e) {}
 }
 function updateUsdtConversion(){
   const s = STATE.settings || {};

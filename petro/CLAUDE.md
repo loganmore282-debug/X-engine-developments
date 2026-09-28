@@ -2821,3 +2821,113 @@ assuming.
 shipping this**: the owner's separate ask for MarzPay CARD payments as a
 fourth rail -- waiting on documentation the owner said they'd send
 separately; this round only covers the USDT/crypto rail.
+
+## 2026-09-28 (follow-up 7) — MARZPAY_KEY was never set on the VPS (real deposits were failing); MarzPay card payments added as a fourth deposit rail
+
+**Real production bug found and fixed, not part of the plan.** Scrolling
+`pm2 logs petro-server` while adding the TronGrid key above (owner's own
+Termux session) turned up `MarzPay collect-money rejected: "Missing or
+invalid API credentials"`, repeated from 2026-09-27 through the moment it
+was found -- `MARZPAY_KEY` (`server.js`: `process.env.MARZPAY_KEY`, sent
+as `Authorization: Basic ${MARZPAY_KEY}` on every collect-money call) was
+never set in `secrets.local.js` on the VPS. Every real mobile-money
+deposit attempt on the live app had been failing at the gateway itself
+the whole time the VPS has been up. Fixed the same way as the TronGrid
+key: owner pulled the ready-to-use base64 `key:secret` string straight
+from the MarzPay dashboard and added it via the same one-shot `node -e`
+pattern, then `pm2 reload petro-server`. Confirmed via the resulting
+`pm2 logs` tail: clean restart, no further rejections. **Lesson for next
+time a payment gateway "isn't working": check `pm2 logs` for the actual
+rejection reason before assuming it's an app bug** -- this one was a
+missing credential, not a code defect, and the code itself was already
+correct.
+
+**MarzPay card payments — a fourth deposit rail**, owner: *"we shall use
+MarzPay cards payment, so even if payment for mobile money is on
+pesajet, cards payment on MarzPay will do as another 3 payment method"*
+(their own count; USDT crypto above made it four in the end). Owner
+supplied MarzPay's own `marzpay-integration` skill doc and its Card
+Payments + Webhooks pages directly.
+
+**How it actually works, and why almost none of the money-crediting
+machinery is new:**
+- Same `POST /collect-money` mobile money already calls, `method: 'card'`
+  instead of `phone_number` -- MarzPay returns a `redirect_url` to its own
+  hosted card-gateway page, not a push prompt. The member's browser leaves
+  the app entirely to pay there, unlike mobile money.
+- MarzPay's own docs describe `callback_url` as doing double duty for
+  card specifically: the URL the CUSTOMER'S browser lands back on after
+  paying, AND the URL the real server-to-server result gets POSTed to
+  (same as mobile money's per-request `callback_url`). Split cleanly by
+  HTTP method on the exact same path (`/deposit/callback`): the existing
+  `POST` handler (the real webhook -- unchanged, not touched this round)
+  handles the money; a new `GET` handler serves a small static "you can
+  return to the app" page for the browser leg. A `GET` never carries the
+  real webhook (MarzPay's own webhook is always a `POST`), so crediting
+  never depends on a member's browser making it back there at all.
+- **Everything that actually moves money is 100% reused, unmodified**:
+  `creditDeposit()`/`markDepositFailed()` (money-safety core), the
+  existing `POST /deposit/callback` webhook (already keyed purely on
+  `marzReference`/`marzTxUuid`, never on HOW a `pendingDeposits` row was
+  created), `POST /deposit/marzpay/status` (the client poll -- read
+  fully before reuse, confirmed it never assumes a phone number or
+  MoMo-specific field), and `reconcilePendingDeposits()`'s own 30s sweep
+  (`where('marzTxUuid','>','')`, provider-agnostic by construction). A
+  card `pendingDeposits` row is invisible to all four by nothing more
+  than coincidence of shape (`marzReference`/`marzTxUuid`/`status`
+  matching mobile money's exact convention) -- none of them needed a
+  single line changed to pick up card deposits. Verified this by reading
+  every one of the four in full before reusing rather than assuming.
+- New, card-specific: `marzCollectCard()` (no `phone_number`, `method:
+  'card'`), `POST /deposit/card/submit` (creates the row, calls MarzPay,
+  returns `redirectUrl` to the client), the `GET /deposit/callback`
+  return page, `cardDepositEnabled` setting (off by default -- MarzPay
+  refuses with `SERVICE_NOT_SUBSCRIBED` until the owner's business has an
+  active Card Payments subscription, so this must never turn itself on),
+  `CARD_MIN_UGX`/`CARD_MAX_UGX` (500/10,000,000, MarzPay's own stated
+  range, enforced as a floor/ceiling independent of the admin's own
+  `minDeposit`). Ref prefix `'C'`, distinct from MoMo's `'S'` and USDT's
+  `'U'`.
+- **The PWA-reload problem, and how it's solved.** A full-page navigation
+  to MarzPay's hosted page and back reloads the whole app from scratch --
+  any in-memory JS (the pending deposit id) is gone. Persisted to
+  `localStorage` (`petro_pending_card_deposit`) right before the
+  navigation; `resumePendingCardDeposit()` (called from `enterApp()`,
+  fire-and-forget, on every app open) checks for it and resumes polling
+  the same `/deposit/marzpay/status` mobile money already uses -- clears
+  the key on `matched`/`failed`, leaves it in place while still pending
+  (the background reconciler and the next app open keep trying). Verified
+  in headless Chromium with a blocked-network navigation (real
+  `location.href` assignment, confirmed the browser actually attempts to
+  leave the page) that the id survives into a fresh page load of the same
+  origin, and that `resumePendingCardDeposit()` correctly clears the key
+  on a matched result and preserves it on a still-pending one.
+- **Deposit sheet**: method tabs are now built dynamically from whichever
+  rails are actually on (`Mobile Money` always; `USDT` and `Card` each
+  add their own tab only when enabled) -- zero tabs shown (today's exact
+  original single-form sheet) with both off, up to three. Verified all
+  four combinations (0/1/2 extra tabs, and switching between them) live
+  in headless Chromium against the real built bundle.
+- **Admin panel**: new "Card deposits (MarzPay)" settings panel (a single
+  enable toggle -- no wallet address or rate needed, MarzPay hosts the
+  whole payment page). Deposits tab: `methodLabel` gained a `'Card
+  (MarzPay)'` branch; Force-credit already covered card's `stuck`
+  states (`initiating`/`pending`/`failed`) with no changes needed, since
+  card never introduces a new status value the way USDT's
+  `awaiting_verification` did.
+- **Not yet configured, flagged rather than assumed**: whether
+  `PUBLIC_URL` is actually set in `secrets.local.js` on the VPS. Without
+  it, `callbackUrl` is omitted from both the mobile-money AND card
+  collect-money calls (matches the existing, already-accepted MoMo
+  behavior: `PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined`)
+  -- MoMo still resolves fine either way (the reconciler and the
+  member's own poll cover for a missing webhook), but a card payment
+  gains real value from it: without a `callback_url`, MarzPay's hosted
+  page may have nowhere to send the member's browser back to after they
+  pay. Given the VPS has no real domain yet (bare IP only, see
+  "Hosting" above), the honest interim value is `http://<VPS-IP>:3000`
+  -- set `PUBLIC_URL` in `secrets.local.js` to that (or the real domain,
+  once one exists) if it is not already there.
+- `node -c` clean on both rounds of changes; `build-core.js`/
+  `build-admin.js` both round-trip OK. `user/sw.js` bumped `v183` →
+  `v184`, `admin/sw.js` bumped `v43` → `v44`.
