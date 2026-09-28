@@ -1370,8 +1370,32 @@ var STATE = { user: null, account: null, settings: null, products: null, investm
 // window.notify, and a top-level function of either name would shadow it for
 // every unqualified call in this file.
 
+// A session ends on real inactivity, even when background polls still succeed.
+try { window._suppressAutofillLogin = sessionStorage.getItem('petro_relogin_required') === '1'; } catch (_) {}
+var _memberSession = window.createPetroIdleSession('petro_member_session', function(){
+  window._suppressAutofillLogin = true;
+  window._triedAutoSignIn = true;
+  try { sessionStorage.setItem('petro_relogin_required', '1'); } catch (_) {}
+  document.querySelectorAll('.sheet-bg.show,.modal-bg.show,.pay-page.show,#msgDetailBg.show').forEach(el => el.classList.remove('show'));
+  unlockBodyScroll();
+  $('loadingScreen').style.display = 'none';
+  $('app').style.display = 'none';
+  $('authScreen').style.display = '';
+  window.doLogout().catch(() => {});
+}, () => post('/auth/session/activity', {}));
+var _apiPending = new Map();
+function api(path, opts){
+  opts = opts || {};
+  // Share only concurrent reads. Payments and all other writes always run once
+  // per explicit call, and reads are never cached across account changes.
+  if (opts.body || opts.signal || (opts.method && opts.method !== 'GET')) return apiRequest(path, opts);
+  const key = STATE.authEpoch + ':' + path;
+  if (_apiPending.has(key)) return _apiPending.get(key);
+  const pending = apiRequest(path, opts).finally(() => { if (_apiPending.get(key) === pending) _apiPending.delete(key); });
+  _apiPending.set(key, pending); return pending;
+}
 // ── API ──
-async function api(path, opts){
+async function apiRequest(path, opts){
   opts = opts || {};
   // Captured before the network round-trip, checked after -- if a logout or
   // a different user's login happened while this request was in flight (see
@@ -1385,6 +1409,7 @@ async function api(path, opts){
   // below), so gating them here would discard that legitimate boot data
   // every single page load.
   const isPublicCall = path.indexOf('/public/') === 0;
+  if (!isPublicCall && STATE.user && path !== '/auth/session/logout' && !_memberSession.check()) return { status:'error', message:'Session expired. Log in again.' };
   const startEpoch = STATE.authEpoch;
   // ── Content-Type ONLY WHEN THERE IS A BODY ──
   // MEASURED (test-boot-speed.py, against a real cross-origin server):
@@ -1431,6 +1456,7 @@ async function api(path, opts){
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
     const resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers, signal: controller.signal }));
     data = await resp.json();
+    if (resp.status === 401 && !isPublicCall && STATE.authEpoch === startEpoch && STATE.user) _memberSession.expire();
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
   } catch (e) {
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
@@ -1864,6 +1890,15 @@ window.doForgotSubmit = async function(){
   showAuthTab('login');
 };
 window.doLogout = async function(){
+  // Revoke the captured session without delaying the UI sign-out. The normal
+  // api() epoch guard would intentionally cancel this call during logout.
+  const leavingUser = window.fbAuth && window.fbAuth.currentUser;
+  if (leavingUser) leavingUser.getIdToken().then(token => fetch(API_BASE + '/auth/session/logout', {
+    method:'POST', headers:{Authorization:'Bearer ' + token}, signal:AbortSignal.timeout(5000)
+  })).catch(() => {});
+  _memberSession.clear();
+  window._triedAutoSignIn = true;
+  try { sessionStorage.setItem('petro_relogin_required', '1'); } catch (_) {}
   stopLiveRefresh();
   // Defense in depth alongside the _openSheetTitle fix on the checkin
   // countdown's own tick: a sign-out that happens to land while Daily
@@ -2337,16 +2372,23 @@ window.addEventListener('snow-auth', async (ev) => {
   // having run first.
   STATE.authEpoch++;
   STATE.user = user;
+  if (user) {
+    try {
+      const token = await user.getIdTokenResult();
+      if (STATE.user !== user) return;
+      const started = Number(token.claims.auth_time) * 1000;
+      if (!_memberSession.begin(user.uid + ':' + started, started, false)) return;
+      try { sessionStorage.removeItem('petro_relogin_required'); } catch (_) {}
+    } catch (_) { _memberSession.expire(); await window.fbSignOut(); return; }
+  } else { _memberSession.clear(); clearCachedState(); }
   if (await maybeShowOpeningGate()) return;
   if (!user) {
     // Only worth trying once, on the very first "nobody's signed in" we see
     // this page load (a real boot) -- not after an in-session doLogout(),
     // which already called preventSilentAccess() specifically so this
     // wouldn't immediately hand the same member right back in.
-    if (!window._triedAutoSignIn) {
-      window._triedAutoSignIn = true;
-      if (await tryAutoSignIn()) return; // fbSignIn() re-fires snow-auth with the real user; loading screen stays up meanwhile
-    }
+    // Returning to login never silently reuses a stored password.
+    window._triedAutoSignIn = true;
     $('loadingScreen').style.display = 'none';
     $('app').style.display = 'none';
     $('authScreen').style.display = '';
@@ -2376,10 +2418,11 @@ window.addEventListener('snow-auth', async (ev) => {
 // nothing to paint from yet, so it still goes through the one real,
 // unavoidable network round trip (bootFromNetwork, unchanged from before).
 var CACHED_STATE_KEY = 'snow_state_cache';
+try { localStorage.removeItem(CACHED_STATE_KEY); } catch (_) {}
 function loadCachedState(uid){
   if (!uid) return null;
   try {
-    const raw = localStorage.getItem(CACHED_STATE_KEY);
+    const raw = sessionStorage.getItem(CACHED_STATE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     // Never trust a snapshot saved for a DIFFERENT account -- a shared
@@ -2418,15 +2461,15 @@ function _cachedStateBlob(uid, withImages){
 }
 function saveCachedState(uid){
   try {
-    localStorage.setItem(CACHED_STATE_KEY, _cachedStateBlob(uid, true));
+    sessionStorage.setItem(CACHED_STATE_KEY, _cachedStateBlob(uid, true));
     return;
   } catch (_) {
-    try { localStorage.setItem(CACHED_STATE_KEY, _cachedStateBlob(uid, false)); } catch (_2) {}
+    try { sessionStorage.setItem(CACHED_STATE_KEY, _cachedStateBlob(uid, false)); } catch (_2) {}
     return;
   }
 }
 function clearCachedState(){
-  try { localStorage.removeItem(CACHED_STATE_KEY); } catch (_) {}
+  try { sessionStorage.removeItem(CACHED_STATE_KEY); } catch (_) {}
 }
 async function enterApp(){
   // Fire-and-forget, both branches below: a card deposit the member never
@@ -2913,6 +2956,10 @@ function startLiveRefresh(){
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && _liveTimer) { _liveDelay = livePollMs(); scheduleLive(_liveGen, 0); }
 });
+window.navigatePage = function(name){
+  if (STATE.page === name && !document.querySelector('.sheet-bg.show,#msgDetailBg.show,#depStatusBg.show')) return;
+  return showPage(name);
+};
 window.showPage = async function(name){
   // The bottom bar now stays visible over sheets (Deposit, Withdraw, Wallet
   // and the rest), so a tab can be tapped while one is open. Close it first,
@@ -3474,13 +3521,14 @@ window.switchAssetsTab = function(tab){
   showPage(tab === 'mine' ? 'home' : 'assets');
 };
 async function renderAssets(){
+  const previousProducts = JSON.stringify(STATE.products);
   const hadProducts = (STATE.products || []).length > 0;
   if (hadProducts) paintAssets();
   else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
   const pr = await api('/public/products');
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
   if (STATE.page !== 'assets') return; // navigated away while awaiting
-  paintAssets();
+  if (!hadProducts || previousProducts !== JSON.stringify(STATE.products)) paintAssets();
 }
 function assetRowHtml(p){
   const { expected, cycle, daily } = planFigures(p);

@@ -72,7 +72,7 @@ async function main(){
   w.openChangeLoginPasswordSheet();
   payment.resolve({status:'success',net:5000});await first;
   assert(d.querySelector('#lpOld'),'late withdrawal response must not close another form');
-  w.openDepositSheet();assert.equal(d.querySelectorAll('.deposit-steps li').length,3);
+  w.openDepositSheet();assert.equal(d.querySelectorAll('#depMmPanel .deposit-steps li').length,3);
   assert.match(d.querySelector('.deposit-guide').textContent,/15,000/);
   d.querySelector('#depAmount').value='15000';d.querySelector('#depPhone').value='0771234567';
   const deposit=deferred();posts=0;w.post=()=>{posts++;return deposit.promise};

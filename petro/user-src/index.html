@@ -2523,6 +2523,53 @@ html,body,#app{overscroll-behavior-y:none;}
 .sheet-body .pw-form .pw-field:focus-within{border-color:#ff5962;}
 .sheet-body .pw-form .pw-field input::placeholder{color:rgba(255,255,255,.64);}
 </style>
+<script data-petro-idle>
+// Real interaction renews activity; polling, focus, and visibility never do.
+window.createPetroIdleSession = function(key, onExpire, onActivity){
+  var IDLE = 15 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
+  var state = null, lastPulse = 0, lastSave = 0, timer = null;
+  function save(force){
+    if (!state || (!force && Date.now() - lastSave < 1000)) return;
+    lastSave = Date.now();
+    try { sessionStorage.setItem(key, JSON.stringify(state)); } catch (_) {}
+  }
+  function clear(){ state = null; lastSave = 0; clearInterval(timer); timer = null; try { sessionStorage.removeItem(key); } catch (_) {} }
+  function expire(){ if (!state) return false; clear(); onExpire(); return false; }
+  function check(){
+    if (!state) return false;
+    var now = Date.now();
+    if (!Number.isFinite(state.started) || !Number.isFinite(state.last) || state.last > now || now < state.started || now - state.last >= IDLE || now - state.started >= MAX) return expire();
+    return true;
+  }
+  function pulse(){
+    if (!check() || !onActivity || Date.now() - lastPulse < 30000) return;
+    lastPulse = Date.now();
+    Promise.resolve(onActivity()).catch(function(){});
+  }
+  function activity(e){
+    if (document.hidden || !e.isTrusted || !check()) return;
+    state.last = Date.now(); save(); pulse();
+  }
+  ['pointerdown','keydown','wheel','touchmove'].forEach(function(name){
+    document.addEventListener(name, activity, {passive:true});
+  });
+  document.addEventListener('visibilitychange', function(){ if (check() && document.hidden) save(true); });
+  window.addEventListener('pagehide', function(){ if (check()) save(true); });
+  window.addEventListener('pageshow', check);
+  return {
+    begin: function(identity, started, fresh){
+      clearInterval(timer);
+      var saved = null;
+      try { saved = JSON.parse(sessionStorage.getItem(key)); } catch (_) {}
+      state = !fresh && saved && saved.identity === identity ? saved :
+        {identity:identity, started:started, last:started};
+      if (!check()) return false;
+      save(true); timer = setInterval(check, 1000); lastPulse = 0; pulse(); return true;
+    },
+    check:check, clear:clear, expire:expire
+  };
+};
+</script>
 </head>
 <body>
 
@@ -2831,10 +2878,10 @@ html,body,#app{overscroll-behavior-y:none;}
        from here any more; 'assets'/'network' are the two new consolidated
        pages (renderAssets()/renderNetwork()) that absorb them. -->
   <div class="bottom-nav">
-    <button class="navitem" data-nav="home" onclick="showPage('home')"><span class="nav-ic"></span><div class="lbl">Home</div></button>
-    <button class="navitem" data-nav="assets" onclick="showPage('assets')"><span class="nav-ic"></span><div class="lbl">Assets</div></button>
-    <button class="navitem" data-nav="network" onclick="showPage('network')"><span class="nav-ic"></span><div class="lbl">Network</div></button>
-    <button class="navitem" data-nav="account" onclick="showPage('account')"><span class="nav-ic"></span><div class="lbl">Account</div></button>
+    <button class="navitem" data-nav="home" onclick="navigatePage('home')"><span class="nav-ic"></span><div class="lbl">Home</div></button>
+    <button class="navitem" data-nav="assets" onclick="navigatePage('assets')"><span class="nav-ic"></span><div class="lbl">Assets</div></button>
+    <button class="navitem" data-nav="network" onclick="navigatePage('network')"><span class="nav-ic"></span><div class="lbl">Network</div></button>
+    <button class="navitem" data-nav="account" onclick="navigatePage('account')"><span class="nav-ic"></span><div class="lbl">Account</div></button>
   </div>
 </div>
 
@@ -2936,7 +2983,7 @@ html,body,#app{overscroll-behavior-y:none;}
   import { initializeApp, getApps }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut,
-           updatePassword, reauthenticateWithCredential, EmailAuthProvider }
+           updatePassword, reauthenticateWithCredential, EmailAuthProvider, setPersistence, browserSessionPersistence }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const firebaseConfig = {
@@ -2955,6 +3002,7 @@ html,body,#app{overscroll-behavior-y:none;}
   };
   const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   const auth = getAuth(app);
+  await setPersistence(auth, browserSessionPersistence);
 
   window.fbCreateUser = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
   window.fbSignIn     = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
