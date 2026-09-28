@@ -3021,3 +3021,105 @@ real test deposit:**
   after this ships, rather than guessing further blind.
 - `node -c` clean, `build-core.js` round-trip OK. `user/sw.js` bumped
   `v184` → `v185`.
+
+## Follow-up 9 (confetti + poll audit + minDeposit + default phone + live instructions)
+
+Owner, one message, five asks: *"l also need high quality confetti
+sparklings bursting and dropping down allover the page on payment
+success on all methods you need to ensure payment poll please and
+configured Minimum deposit should be ensured, also let the registered
+number also appear as a default deposit number for mobile money, also
+make sure that instructions fetch configured values please ie minimum
+deposit, withdrawal amount, withdraw number, also bro on usdt
+payments."* Sent with a reference PNG of colourful confetti pieces.
+
+- **Confetti** — new `fireConfetti()` in `user-src/original_module.js`,
+  plain `<canvas>`, zero dependencies (matches this codebase's own
+  standing rule). A fixed, full-viewport, `pointer-events:none` overlay
+  so it never blocks a tap underneath. Two particle sets under one
+  gravity sim: ~140 pieces already falling from above the top edge
+  ("dropping down allover the page") plus a ~70-piece burst fired
+  upward from bottom-center ("bursting"), so the burst arcs over and
+  joins the rain before both fade out together over ~4.2s. Petro's own
+  palette (amber/red/gold/green/blue/white), not generic party colours.
+  Respects `prefers-reduced-motion` (skips entirely), self-removes the
+  canvas and its resize listener when the animation ends, and tears
+  down any still-running instance before starting a new one (a rapid
+  second success restarts clean rather than layering two loops). Wired
+  into all three rails' actual success paths, not just one shared
+  place, since USDT never uses the deposit-status modal at all:
+  `setDepositStatusSuccess()` (covers Mobile Money AND Card, which
+  share this one modal), `doUsdtDeposit()`'s in-app `matched` branch,
+  `pollUsdtDepositStatus()`'s polled `matched` branch, and
+  `resumePendingCardDeposit()`'s `matched` branch (see below — this one
+  needed a bigger fix than just adding the call). Verified live in
+  headless Chromium against the real built bundle: canvas appears on
+  `fireConfetti()`, confetti visibly rains + bursts mid-animation
+  (screenshot confirmed), and the canvas cleans itself up afterward with
+  no leftover DOM node or listener.
+
+- **Payment poll audit** — went through all three rails looking for
+  real gaps, not just re-confirming what already worked:
+  - Mobile Money's `pollDepositStatus()` (24 attempts, ~60s budget,
+    single-flight via `depositStatusCheck()`, correctly abandons a
+    superseded poll if the member starts a second deposit mid-poll) —
+    already solid, nothing changed.
+  - USDT's `pollUsdtDepositStatus()` (6 attempts × 5s) — already solid,
+    nothing changed beyond the confetti call above.
+  - **Card had a real gap**: `resumePendingCardDeposit()` was a
+    single check-and-forget on app boot, not a poll. If the MarzPay
+    webhook hadn't landed in the exact instant the member reopened the
+    app after paying on the hosted card gateway, they'd see nothing at
+    all until the NEXT full app restart — no retry in between, unlike
+    every other rail. Rewritten to poll on the same shape/cadence as
+    USDT's own poll (6 attempts × 5s via `setInterval`), clearing on a
+    resolved `matched`/`failed` state and giving up quietly after ~30s
+    (still leaves the localStorage key in place for the next app open
+    and the server's own `reconcilePendingDeposits()` sweep, exactly as
+    before — never declared failed just because this one window didn't
+    resolve it).
+  - Withdrawals don't poll anywhere in this app (admin-approved /
+    auto-approved server-side, surfaced via Transaction Statement, not
+    a gateway callback a client needs to chase) — confirmed there's
+    nothing to audit there; the owner's "ensure payment poll" reads
+    as deposits, grouped with the minDeposit ask right next to it.
+
+- **minDeposit enforcement** — Card and USDT already checked this
+  client-side before hitting the network; Mobile Money's
+  `submitDeposit()` didn't, so a below-minimum MoMo deposit round-
+  tripped to the server before the member found out. Added the same
+  check Card/USDT already had, right after the existing amount>0 check.
+
+- **Registered number as default deposit phone** — `depPhone`'s `value`
+  now pre-fills from `localDigits((STATE.account || {}).phone) || ''`
+  (the same parser `phoneToEmail()` already uses, so a stored number
+  that doesn't match this region's shape just falls back to blank
+  rather than shoving something malformed into the field). This
+  explicitly REVERSES an earlier, deliberate round's choice to leave
+  the field blank — the owner's latest instruction is unambiguous, and
+  it's a pre-fill, not a lock: the field stays fully editable, since a
+  deposit can genuinely come from a different mobile-money number than
+  the one the account registered with.
+
+- **Instructions pulling live configured values** — Withdraw's own
+  instructions already pulled `minWithdraw`/`maxWithdraw`/
+  `withdrawMultiple`/opening-hours from live settings and pointed at
+  the member's own bound wallet for the "withdraw number" (nothing to
+  fix there). Deposit side had two stale spots, both fixed: Mobile
+  Money's step 3 still said "use Verify" — misleading since follow-up 8
+  removed that button — reworded to "Wait for confirmation -- this
+  checks itself automatically. If money leaves your phone but the
+  balance has not updated, keep the transaction reference and contact
+  Customer Support." USDT's step 1 didn't mention the minimum at all —
+  now reads "Minimum `<minDeposit>` (about `<X>` USDT), on the TRC20
+  (Tron) network only, to the address above." (USDT-amount conversion
+  only shown when `usdtRate` is actually set, so it never divides by
+  zero or prints a bogus figure on a fresh deploy).
+
+`node -c` clean, `build-core.js` round-trip OK, confetti verified live
+in headless Chromium against the real built bundle (screenshot-
+confirmed rendering, clean teardown). The default-phone pre-fill and
+minDeposit check were verified by direct code reading against the same
+already-proven pattern Card/USDT use (not separately driven through a
+live login in this round — a full Firebase-auth session isn't
+reachable from this sandbox). `user/sw.js` bumped `v185` → `v186`.

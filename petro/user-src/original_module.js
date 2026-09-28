@@ -5257,6 +5257,17 @@ function openDepositFormSheet(){
   const usdtOn = s.usdtEnabled === true;
   const cardOn = s.cardDepositEnabled === true;
   _depMethod = 'mm';
+  // Owner: "let the registered number also appear as a default deposit
+  // number for mobile money" -- pre-filled, not locked: a deposit can
+  // genuinely come from a different mobile-money number than the one the
+  // account was registered with (a past round deliberately left this
+  // field blank for exactly that reason), so this is a starting point the
+  // member can still edit, not a forced value. localDigits() is the same
+  // parser phoneToEmail() uses -- it returns null for a stored phone that
+  // doesn't match this region's expected shape, so a malformed or
+  // legacy-format number never gets shoved into the field as if it were
+  // valid.
+  const defaultPhone = localDigits((STATE.account || {}).phone) || '';
   // Tab row is built from whichever rails are actually on -- Mobile Money
   // is always first/default and always present; USDT and Card each add
   // their own tab only when the admin has enabled them, so a fresh deploy
@@ -5280,7 +5291,7 @@ function openDepositFormSheet(){
     <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
     <div class="dep-phone">
       <span class="prefix">${esc(dialPlus())}</span>
-      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (${esc(phoneHintBody())})" oninput="sanitizePhoneInput(this)">
+      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (${esc(phoneHintBody())})" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
     </div>
     <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>
 
@@ -5291,7 +5302,7 @@ function openDepositFormSheet(){
       <ol class="deposit-steps">
         <li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
         <li><b>Approve on your phone</b><span>Tap Confirm Deposit, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
-        <li><b>Follow the payment status</b><span>Wait for confirmation. If money leaves your phone but the balance has not updated, use Verify and keep the transaction reference for Customer Support.</span></li>
+        <li><b>Follow the payment status</b><span>Wait for confirmation -- this checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.</span></li>
       </ol>
     </div>
     </div>
@@ -5318,9 +5329,9 @@ function openDepositFormSheet(){
       <div class="dep-instr deposit-guide">
         <h3>How USDT deposits work</h3>
         <ol class="deposit-steps">
-          <li><b>Send the exact amount</b><span>Send USDT on the TRC20 (Tron) network only, to the address above.</span></li>
+          <li><b>Send the exact amount</b><span>Minimum ${fmtUGX(s.minDeposit)}${Number(s.usdtRate) > 0 ? ` (about ${(Number(s.minDeposit) / Number(s.usdtRate)).toFixed(2)} USDT)` : ''}, on the TRC20 (Tron) network only, to the address above.</span></li>
           <li><b>Paste the transaction hash</b><span>Copy the TXID from your wallet app and paste it here, then tap Submit.</span></li>
-          <li><b>Wait for verification</b><span>Most payments confirm within a minute. If yours is still pending, reopen Transaction Statement later to check.</span></li>
+          <li><b>Wait for verification</b><span>Most payments confirm within a minute, automatically. If yours is still pending, reopen Transaction Statement later to check.</span></li>
         </ol>
       </div>
     </div>
@@ -5386,26 +5397,44 @@ async function resumePendingCardDeposit(){
   let depositId;
   try { depositId = localStorage.getItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) { return; }
   if (!depositId) return;
-  try {
-    // Same status route Mobile Money already polls -- it resolves purely
-    // off dep.marzTxUuid/dep.status, never anything MoMo-specific, so a
-    // card deposit's own row is invisible to it by nothing more than
-    // coincidence of shape, not a special case that had to be added.
-    const r = await post('/deposit/marzpay/status', { depositId: depositId });
-    if (r.status === 'success' && r.state === 'matched') {
-      try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-      notify('Card payment completed! Credited to your balance.');
-      await refreshTransactionsCache();
-      if (STATE.page === 'home') renderHome();
-    } else if (r.status === 'success' && r.state === 'failed') {
-      try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-      notify(r.message || 'The card payment did not complete.');
-    }
-    // Still pending: leave the key in place. The background reconciler and
-    // this same check on the NEXT app open will keep trying until it
-    // resolves -- never declared failed just because it has not resolved
-    // by this particular check.
-  } catch (e) {}
+  // Used to be a single check-and-forget: if the webhook had not landed in
+  // the exact instant the member reopened the app, they saw nothing until
+  // the NEXT full app open. Poll for a short window instead, same shape and
+  // cadence as pollUsdtDepositStatus() -- a webhook landing a few seconds
+  // late (the common case; it is a real network round trip on MarzPay's
+  // side) now still surfaces here instead of silently waiting for a restart.
+  var attempts = 0;
+  var timer = setInterval(async function(){
+    attempts++;
+    try {
+      // Same status route Mobile Money already polls -- it resolves purely
+      // off dep.marzTxUuid/dep.status, never anything MoMo-specific, so a
+      // card deposit's own row is invisible to it by nothing more than
+      // coincidence of shape, not a special case that had to be added.
+      const r = await post('/deposit/marzpay/status', { depositId: depositId });
+      if (r.status === 'success' && r.state === 'matched') {
+        clearInterval(timer);
+        try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
+        fireConfetti();
+        notify('Card payment completed! Credited to your balance.');
+        await refreshTransactionsCache();
+        if (STATE.page === 'home') renderHome();
+        return;
+      }
+      if (r.status === 'success' && r.state === 'failed') {
+        clearInterval(timer);
+        try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
+        notify(r.message || 'The card payment did not complete.');
+        return;
+      }
+    } catch (e) {}
+    // Still pending after 6 tries (~30s): leave the key in place. The next
+    // full app open re-runs this same check, and the server-side
+    // reconcilePendingDeposits() sweep keeps retrying independently of
+    // whether the member is even looking at the app -- never declared
+    // failed just because it has not resolved within this one window.
+    if (attempts >= 6) clearInterval(timer);
+  }, 5000);
 }
 function updateUsdtConversion(){
   const s = STATE.settings || {};
@@ -5448,6 +5477,7 @@ window.doUsdtDeposit = async function(){
   }
 
   if (r.state === 'matched') {
+    fireConfetti();
     notify('Payment completed! Credited to your balance.');
     closeSheet({ fromAction: true });
     await refreshTransactionsCache();
@@ -5471,6 +5501,7 @@ function pollUsdtDepositStatus(depositId){
     const r = await post('/deposit/usdt/status', { depositId: depositId });
     if (r.status === 'success' && r.state === 'matched') {
       clearInterval(_usdtPollTimer); _usdtPollTimer = null;
+      fireConfetti();
       notify('Payment completed! Credited to your balance.');
       await refreshTransactionsCache();
       if (STATE.page === 'home') renderHome();
@@ -5687,8 +5718,106 @@ function setDepositStatusPending(amount, phone, network){
   // nothing for the member to do but wait.
   setDepButtons(false, false);
 }
+// ── CONFETTI ── owner: "high quality confetti sparklings bursting and
+// dropping down allover the page on payment success on all methods."
+// One shared function, called from every deposit rail's own success path
+// (setDepositStatusSuccess() below covers Mobile Money + Card, which share
+// this one modal; doUsdtDeposit()/pollUsdtDepositStatus() call it directly
+// for USDT, which never uses this modal at all).
+//
+// Plain canvas, zero dependencies -- matches this codebase's own standing
+// preference (see static-server.js's own "ZERO DEPENDENCIES on purpose"
+// note) over pulling in a confetti library for one animation. A fixed,
+// full-viewport, pointer-events:none canvas overlay so it never blocks a
+// tap on the Close/Back button underneath it. Two particle sets for the
+// "bursting AND dropping down all over" brief: an upward burst from
+// bottom-center (the "bursting" half) plus a wide rain of pieces already
+// falling from above the top edge (the "dropping down allover the page"
+// half), both under the same gravity so the burst pieces arc over and
+// join the rain by the time they fade out. Respects prefers-reduced-motion
+// -- skipped entirely for anyone who has that on, same as this app's
+// existing spinners already do.
+function fireConfetti(){
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let canvas = document.getElementById('confettiCanvas');
+    if (canvas) canvas.remove(); // a rapid second success (rare, but possible) restarts cleanly rather than layering two loops
+    canvas = document.createElement('canvas');
+    canvas.id = 'confettiCanvas';
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.style.cssText = 'position:fixed;inset:0;z-index:99999;pointer-events:none;';
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { canvas.remove(); return; }
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let W = window.innerWidth, H = window.innerHeight;
+    function resize(){
+      W = window.innerWidth; H = window.innerHeight;
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+    // Amber/red/gold, plus white -- Petro's own palette, not generic
+    // party colours, so this still looks like it belongs to the app.
+    const COLORS = ['#e30613', '#f5a000', '#ffb000', '#1a7a3e', '#2f6fd6', '#ffffff'];
+    const particles = [];
+    function makePiece(x, y, vx, vy, burst){
+      return {
+        x, y, vx, vy, burst,
+        w: 5 + Math.random() * 6, h: 8 + Math.random() * 9,
+        color: COLORS[(Math.random() * COLORS.length) | 0],
+        rot: Math.random() * Math.PI * 2, vrot: (Math.random() - 0.5) * 0.35,
+        shape: Math.random() < 0.45 ? 'circle' : 'rect',
+      };
+    }
+    // The rain: falling from above the visible top edge, spread across the
+    // full width -- "dropping down allover the page".
+    for (let i = 0; i < 140; i++) {
+      particles.push(makePiece(
+        Math.random() * W, -20 - Math.random() * H * 0.6,
+        (Math.random() - 0.5) * 1.6, 2 + Math.random() * 2.5, false
+      ));
+    }
+    // The burst: fired upward/outward from bottom-center -- "bursting".
+    for (let i = 0; i < 70; i++) {
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+      const speed = 7 + Math.random() * 9;
+      particles.push(makePiece(
+        W / 2 + (Math.random() - 0.5) * 100, H * 0.72,
+        Math.cos(angle) * speed, Math.sin(angle) * speed, true
+      ));
+    }
+    const GRAVITY = 0.16, DURATION = 4200, start = performance.now();
+    function frame(now){
+      const elapsed = now - start;
+      ctx.clearRect(0, 0, W, H);
+      const fade = Math.max(0, 1 - elapsed / DURATION);
+      for (const p of particles) {
+        p.vy += GRAVITY * (p.burst ? 0.55 : 0.3);
+        if (p.burst) p.vx *= 0.985;
+        p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+        if (p.y - 20 > H) continue; // off the bottom -- skip drawing, still fades on schedule with the rest
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = p.color;
+        if (p.shape === 'rect') ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        else { ctx.beginPath(); ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
+      }
+      if (elapsed < DURATION) requestAnimationFrame(frame);
+      else { window.removeEventListener('resize', resize); canvas.remove(); }
+    }
+    requestAnimationFrame(frame);
+  } catch (e) {}
+}
+window.fireConfetti = fireConfetti;
 var _depSuccessRedirectTimer = null;
 function setDepositStatusSuccess(){
+  fireConfetti();
   $('depStatusIcon').className = 'dep-status-icon success';
   // The owner's own artwork, cut out of the images he supplied.
   $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-green-soft)" stroke="var(--snow-green)" stroke-width="4"/><path d="M36 61l15 15 34-36" stroke="var(--snow-green)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -5777,6 +5906,14 @@ window.submitDeposit = async function(){
   // here and what is accepted there cannot drift apart.
   const phone = cleanPhone($('depPhone').value);
   if (!amount || amount <= 0) return notify('Enter a valid amount');
+  // Card (doCardDeposit()) and USDT (doUsdtDeposit()) both already check
+  // this client-side before ever hitting the network; Mobile Money was the
+  // one rail still relying entirely on the server's own rejection, which
+  // meant a below-minimum amount round-tripped to the server and back
+  // before the member found out, instead of failing instantly like the
+  // other two.
+  const s = STATE.settings || {};
+  if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
   if (!phone) return notify('Enter the mobile money number to charge.');
   submitBtn.disabled = true; submitBtn.textContent = 'Sending request…';
   // Owner: "after confirm deposit a loader saying Redirecting to payment."
