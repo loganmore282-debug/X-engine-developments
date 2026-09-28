@@ -995,9 +995,6 @@ function fmtUGX(n){
 }
 // Keep investment and payout amounts on the same cents-aware formatter.
 function fmtUGXCents(n){ return fmtUGX(n); }
-function fmtUGX2(n){
-  return cur() + ' ' + (Number(n) || 0).toLocaleString('en-UG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 const _numberAnimations = new WeakMap();
 function countBetweenEl(el, from, to, format, duration){
   if (!el) return;
@@ -4958,12 +4955,12 @@ async function refreshAfterWin(){
 // win itself -- counting up from zero would animate the member's whole
 // savings, which says nothing about what they just won.
 var _chestWinBalFrom = 0;
-function chestWinBalFmt(v){ return 'New Balance: ' + fmtUGX2(v); }
+function chestWinBalFmt(v){ return 'New Balance: ' + fmtUGX(v); }
 function showChestWin(reward, balanceBefore, balanceAfter, source){
   const ghost = $('chestWinGhost');
   if (ghost) ghost.innerHTML = source === 'spin' ? ICONS.wheel : ICONS.giftBox;
   _chestWinBalFrom = Number(balanceBefore) || 0;
-  $('chestWinAmount').textContent = fmtUGX2(reward);
+  $('chestWinAmount').textContent = fmtUGX(reward);
   $('chestWinBg').classList.add('show');
   // Counted only once the card is actually showing: an element inside a
   // display:none layer has no frames to animate over, and the count would be
@@ -6225,11 +6222,11 @@ function paintWithdrawSheet(s){
 
     <div class="wit-bal">
       <div class="lbl">Available Balance</div>
-      <div class="val">${fmtUGX2(balance)}</div>
+      <div class="val">${fmtUGX(balance)}</div>
     </div>
     <div class="wit-amt">
       <span>${esc(cur())}</span>
-      <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="syncWithdrawReceiveAmt()">
+      <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minWithdraw) || 0}" oninput="syncWithdrawReceiveAmt()">
     </div>
 
     <div class="wit-fee">Fee: ${fee}%</div>

@@ -4044,3 +4044,72 @@ screenshot of the pay-page header shows a bold, clearly visible
 circular outline around the white chevron -- matching the reference
 image, not the first pass's too-subtle line. `user/sw.js` bumped
 `v193` → `v194`.
+
+## Follow-up 19 — gift-code rewards are whole shillings again, decimals purged from display
+
+Owner: *"remove decimal places even if in gift codes, stop it from
+generating rewards with decimals let it be whole number only."* A
+direct reversal: an earlier round (see `fmtMoney`'s own comment in
+`server.js`) added cent-precision specifically to gift-code rewards
+on the owner's own explicit request at the time ("introduce decimal
+places in account balance or earnings, so in treasure codes there are
+also decimals"). This undoes that feature end to end, not just the
+display.
+
+**Generation** (`server.js`) -- added `roundWhole()` next to `round2()`
+and switched every gift-code reward computation to it:
+- `/admin/promocodes/generate`: admin-entered `minReward`/`maxReward`
+  now round to whole shillings, not cents.
+- `/redeem`'s roll: was `crypto.randomInt(minCents, maxCents+1)/100`
+  (e.g. landing on 123.39); now `crypto.randomInt(minReward,
+  maxReward+1)` directly on whole-shilling bounds -- structurally
+  cannot produce a fraction. Verified the actual roll logic in
+  isolation (2000 draws, all-integer, all in-range, plus the
+  min===max fixed-reward edge case) before touching the real route.
+- The rare "lost roll, resume from persisted" fallback path also
+  switched to `roundWhole()`.
+- Left `round2()` itself alone -- still correctly used by the spin
+  wheel/turntable, wallet-repair diff, and payment-summary reporting,
+  none of which this request touched.
+
+**Display** (`user-src/original_module.js`) -- found the SAME decimal
+leak on the Withdraw screen in the owner's own screenshot ("AVAILABLE
+BALANCE UGX 40,171.00", amount field placeholder "0.00"): both were
+using `fmtUGX2()`, a formatter that force-shows 2 decimals on ANY
+number, unlike `fmtUGX()`/`fmtMoney()` which only show decimals when a
+value genuinely has cents. Since the request was "let it be whole
+number only," not just "stop generating decimal gift codes," fixed
+every `fmtUGX2()` call site (all 3: Withdraw's Available Balance, and
+the shared chest-win celebration screen's reward + live-counting new-
+balance display, used for both gift codes and spin-wheel wins) to
+`fmtUGX()`, and deleted `fmtUGX2()` itself once it had zero remaining
+callers rather than leaving a dead, decimal-forcing function sitting
+in the file for someone to accidentally reach for again. Also swapped
+the Withdraw amount input's raw `"0.00"` placeholder for
+`s.minWithdraw` (a live setting, whole number), matching how the
+Deposit/Card amount inputs already source their own placeholder.
+
+**Admin UI** (`admin-src/index.html`): the gift-code generator's Min/
+Max reward inputs were `step="0.01" min="0.01" placeholder="100.00"`
+-- switched to whole-number `step="1" min="1" placeholder="100"`, and
+the button handler now `Math.round()`s the parsed values before
+building the confirmation label, so an admin typing a decimal by hand
+doesn't even see one echoed back before the (authoritative,
+server-side) rounding applies.
+
+Root-caused via `node -c`, then discovered mid-round that
+`user-src/index.html`'s `data-nx-core` script tag is EMPTY until
+`build-core.js` fills it -- serving the raw source directly (as
+several earlier rounds' "live verification" did) never actually runs
+the app's JS at all, so `STATE`/`fmtUGX`/etc. were undefined for the
+wrong reason. Rebuilt and re-verified against the real `user/`
+(built) bundle instead, same pattern already established for the
+admin panel: `fmtUGX(40171)` → `"UGX 40,171"` (no decimal),
+`fmtUGX(40171.5)` → `"UGX 40,171.50"` (still correct for a genuinely
+fractional legacy value), `fmtUGX2` → `undefined` (confirmed removed),
+a real `paintWithdrawSheet()` call renders `"UGX 40,171"` and
+placeholder `"8000"`, and `showChestWin(300, ...)` renders `"UGX
+300"` -- plus a screenshot matching the owner's own screenshot,
+decimal-free. `build-core.js`/`build-admin.js` both "round-trip OK".
+`user/sw.js` bumped `v194` → `v195`, `admin/sw.js` bumped `v46` →
+`v47`.
