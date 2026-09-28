@@ -3812,3 +3812,63 @@ verified by direct code reading (mirrors the same retry-on-transient-
 failure shape already proven correct and tested elsewhere in this file,
 e.g. `_marzFetchTxStatus`) rather than a live MarzPay call, which this
 sandbox cannot make. `user/sw.js` bumped `v191` → `v192`.
+
+## Follow-up 15 — live VPS health card in the admin panel's Analytics tab
+
+Owner: *"Make investment admin panel when l can see vps healthy or
+speed,in analytics so it will be live"*, then clarifying: *"I meant in
+admin panel"* (not the member app).
+
+- **New route, `GET /admin/system-health`** (`server.js`, admin-gated
+  via `verifyAdmin`, right after `/admin/analytics/abuse` — this is
+  operational detail, not the kind of thing to leave unauthenticated
+  like the existing public `/health`). Returns, per call: `uptimeSec`
+  (`process.uptime()`), `cpuCount` + `loadAvg` (`os.loadavg()`, 1/5/15
+  min), memory (`os.totalmem()`/`os.freemem()`/`memUsedPct`, plus the
+  process's own `rssBytes`/`heapUsedBytes`), `eventLoopLagMs`, and
+  `db:{up,pingMs}` (timed around the existing `pingDb()`).
+- **Event-loop lag** is the one metric that didn't already exist
+  anywhere: a `setInterval(...,1000).unref()` records how much LATE its
+  own 1s tick actually fires (`_eventLoopLagMs`), which is the real
+  proxy for "how fast will the next tap's callback actually run" that
+  the owner keeps asking about — raw CPU/RAM numbers don't show a GC
+  pause or a slow synchronous handler blocking the loop, this does.
+  `.unref()`'d so the timer itself can never keep the process alive.
+- **"So it will be live"** — deliberately did NOT add a second, faster
+  poll loop. `renderAnalytics()`'s existing 30s live-refresh tick
+  (`RENDERERS.analytics`, already running whenever the Analytics tab is
+  open and the panel isn't mid-interaction) now also fetches
+  `/admin/system-health` in the same `Promise.all` as the rest of that
+  tab's data, so the health card refreshes on the same live cadence as
+  everything else there — one polling mechanism, not two competing
+  ones.
+- **Admin panel UI** (`admin-src/index.html`, `renderAnalytics()`): new
+  "VPS health" `.panel-card` at the very top of the tab (above
+  "Tomorrow's estimate"), using the existing `.cards`/`.stat` tile
+  convention so it matches the rest of the panel with no new CSS.
+  Shows: a status dot + label (Healthy / Under load / Degraded, derived
+  from DB up + load-per-core + event-loop lag thresholds), database
+  ping in ms, callback/event-loop lag in ms, 1-minute CPU load
+  (normalized by core count) and the raw 5/15-minute loads, memory used
+  as both a percentage and a plain "X GB of Y GB" (via a small local
+  `fmtBytes()`), and server process uptime (`fmtUptime()`, "4d 8h"
+  style — no abbreviated money units are involved here, this is a
+  duration, so it stays exempt from the "no k/M" rule). If the request
+  itself fails (VPS mid-restart, network blip) the card renders a plain
+  "couldn't reach it, retrying on the next refresh" message instead of
+  throwing and breaking the rest of the Analytics tab.
+- Owner-only data (the abuse-analytics tables) stayed gated on
+  `isOwner` exactly as before; the new health card is NOT owner-gated
+  on the client (staff admins can see it too), matching `verifyAdmin`
+  server-side.
+
+`node --check` on the extracted admin script: clean. `build-admin.js`:
+"round-trip OK". Verified live in headless Chromium — loaded the real
+`admin-src/index.html` with the backend calls intercepted and mocked
+(can't reach the real VPS from this sandbox), called `renderAnalytics(false)`
+directly, and confirmed: the healthy-VPS mock renders the full card
+correctly (`12 ms` DB ping, `3 ms` lag, `0.32` 1-min load, `70%` memory
+as "2.8 GB of 4.0 GB", `4d 8h` uptime, green "Healthy" dot); a mocked
+500 from `/admin/system-health` renders the fallback "couldn't reach
+it" message instead of crashing the tab. `admin/sw.js` bumped `v45` →
+`v46`.

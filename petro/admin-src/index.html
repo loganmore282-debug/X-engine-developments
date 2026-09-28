@@ -1252,9 +1252,10 @@ async function renderAnalytics(silent){
   // Suspicious-activity data is owner-only end to end (server refuses it to
   // staff outright) -- only even requested when the session is the owner's,
   // so a staff session never sees the request in its own network tab either.
-  const [a, ab] = await Promise.all([
+  const [a, ab, sh] = await Promise.all([
     api('/admin/analytics', { days:_anPeriod }),
     isOwner ? api('/admin/analytics/abuse', { days:_anPeriod }) : Promise.resolve(null),
+    api('/admin/system-health'),
   ]);
   if(staleTab('analytics')) return;
   if(a.status!=='success'){ if(!silent) $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
@@ -1314,8 +1315,43 @@ async function renderAnalytics(silent){
     <div class="table-scroll" style="max-height:280px"><table><thead><tr><th>When</th><th>Staff</th><th>Action</th><th>User</th><th>Amount</th></tr></thead>
     <tbody>${sa.timeline.map(t=>`<tr><td>${fdate(t.at)}</td><td>${esc(t.actor)}</td><td style="color:${t.action==='approved'?'var(--ok)':'var(--danger)'}">${t.action==='approved'?'Approved':'Declined'}</td><td>${esc(t.phone||'')}</td><td>${ugx(t.amount)}</td></tr>`).join('')}</tbody></table></div></div>`
     : `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals</h2><p class="muted" style="margin:0">No withdrawals approved or declined in this period yet.</p></div>`;
+  // ── VPS health card ── owner: "Make investment admin panel when l can see
+  // vps healthy or speed, in analytics so it will be live". Fed by
+  // /admin/system-health, refreshed on the same 30s live tick as the rest
+  // of this tab -- a real-time dashboard product, not a manual "check now"
+  // button. Renders a best-effort "couldn't reach it" row instead of
+  // crashing the whole Analytics tab if the request itself failed (the
+  // server was mid-restart, network blip) -- infra hiccups on the metrics
+  // themselves shouldn't take down the page reporting on infra hiccups.
+  const fmtBytes = n => { n = Number(n) || 0; const gb = n / (1024 ** 3); return gb >= 1 ? gb.toFixed(1) + ' GB' : (n / (1024 ** 2)).toFixed(0) + ' MB'; };
+  const fmtUptime = sec => { sec = Math.max(0, Number(sec) || 0); const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`; if (h > 0) return `${h}h ${m}m`; return `${m}m`; };
+  const healthCard = (sh && sh.status === 'success') ? (() => {
+    const dbUp = !!(sh.db && sh.db.up);
+    const loadPerCore = sh.cpuCount ? (sh.loadAvg[0] / sh.cpuCount) : sh.loadAvg[0];
+    const lagOk = sh.eventLoopLagMs < 100, lagWarn = sh.eventLoopLagMs < 400;
+    const loadOk = loadPerCore < 0.7, loadWarn = loadPerCore < 1;
+    const healthy = dbUp && loadOk && lagOk;
+    const degraded = !healthy && dbUp && loadWarn && lagWarn;
+    const dotColor = healthy ? 'var(--ok)' : degraded ? 'var(--gold)' : 'var(--danger)';
+    const label = healthy ? 'Healthy' : degraded ? 'Under load' : 'Degraded';
+    return `<div class="panel-card">
+      <div class="row" style="align-items:center;margin-top:0"><h2 class="sec" style="flex:1;margin:0">VPS health</h2>
+        <span style="display:flex;align-items:center;gap:6px;font-weight:700;color:${dotColor}"><i style="width:8px;height:8px;border-radius:50%;background:${dotColor};display:inline-block"></i>${label}</span></div>
+      <p class="muted" style="margin-top:0">Live, updates automatically -- no need to refresh the page.</p>
+      <div class="cards">
+        <div class="stat"><div class="n" style="color:${dbUp?'var(--ok)':'var(--danger)'}">${dbUp ? sh.db.pingMs + ' ms' : 'Down'}</div><div class="l">Database ping</div></div>
+        <div class="stat"><div class="n" style="color:${lagOk?'var(--ok)':lagWarn?'var(--gold)':'var(--danger)'}">${sh.eventLoopLagMs} ms</div><div class="l">Callback lag (responsiveness)</div></div>
+        <div class="stat"><div class="n" style="color:${loadOk?'var(--ok)':loadWarn?'var(--gold)':'var(--danger)'}">${sh.loadAvg[0].toFixed(2)}</div><div class="l">CPU load, 1 min (${sh.cpuCount} core${sh.cpuCount===1?'':'s'})</div></div>
+        <div class="stat"><div class="n" style="color:${sh.memUsedPct<80?'var(--ok)':sh.memUsedPct<93?'var(--gold)':'var(--danger)'}">${sh.memUsedPct}%</div><div class="l">Memory used (${fmtBytes(sh.memTotalBytes-sh.memFreeBytes)} of ${fmtBytes(sh.memTotalBytes)})</div></div>
+        <div class="stat"><div class="n">${sh.loadAvg[1].toFixed(2)} / ${sh.loadAvg[2].toFixed(2)}</div><div class="l">CPU load, 5 / 15 min</div></div>
+        <div class="stat"><div class="n">${fmtUptime(sh.uptimeSec)}</div><div class="l">Server process uptime</div></div>
+      </div>
+    </div>`;
+  })() : `<div class="panel-card"><h2 class="sec" style="margin-top:0">VPS health</h2><p class="muted" style="margin:0">Couldn't reach the health check just now. Retrying on the next refresh.</p></div>`;
   $('content').innerHTML=`
     <div class="row" style="align-items:center;margin-bottom:6px"><h2 class="sec" style="flex:1;margin:0">Analytics</h2></div>
+    ${healthCard}
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Tomorrow's estimate</h2>

@@ -5,6 +5,7 @@ const cors        = require('cors');
 const crypto      = require('crypto');
 const fs          = require('fs');
 const path        = require('path');
+const os          = require('os'); // used by /admin/system-health below
 const helmet      = require('helmet');
 const compression = require('compression');
 const rateLimit   = require('express-rate-limit');
@@ -9688,6 +9689,54 @@ app.post('/admin/analytics/abuse', async (req, res) => {
       repeatedFailedDeposits, repeatedInsufficientWithdrawals, repeatedCheckinAlreadyClaimed, giftcodeGuessing
     });
   } catch (e) { console.error('Abuse analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }
+});
+// ── EVENT-LOOP LAG (feeds /admin/system-health below) ──
+// A cheap, continuous responsiveness probe: a 1s timer that measures how
+// much LATE it actually fired. Near-zero on a healthy process; climbs when
+// the event loop is busy or blocked (GC pause, a slow sync call, a runaway
+// handler) -- exactly the "does this feel slow" signal raw CPU/RAM numbers
+// alone can't show, and the thing that actually predicts whether a member's
+// tap will get a fast callback (owner: "callback speed should be very very
+// fast", "everything can get processed in milliseconds"). .unref() so this
+// timer never keeps the process alive by itself.
+let _eventLoopLagMs = 0;
+(function trackEventLoopLag() {
+  let last = Date.now();
+  setInterval(() => {
+    const now = Date.now();
+    _eventLoopLagMs = Math.max(0, now - last - 1000);
+    last = now;
+  }, 1000).unref();
+})();
+// Live VPS health for the admin panel's Analytics tab (owner: "Make
+// investment admin panel when l can see vps healthy or speed, in analytics
+// so it will be live"). Deliberately admin-gated, not public like /health
+// above -- process memory/load numbers are operational detail, not
+// something to expose unauthenticated. Polled by the SAME 30s live-refresh
+// tick renderAnalytics() already runs on, so "live" here means the same
+// cadence as the rest of that tab, not a separate faster timer.
+app.get('/admin/system-health', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const dbStart = Date.now();
+    const dbUp = await pingDb();
+    const dbPingMs = Date.now() - dbStart;
+    const memTotal = os.totalmem(), memFree = os.freemem();
+    const mem = process.memoryUsage();
+    res.json({
+      status: 'success',
+      uptimeSec: Math.floor(process.uptime()),
+      cpuCount: os.cpus().length,
+      loadAvg: os.loadavg(), // [1m, 5m, 15m]
+      memTotalBytes: memTotal,
+      memFreeBytes: memFree,
+      memUsedPct: Math.round(((memTotal - memFree) / memTotal) * 100),
+      rssBytes: mem.rss,
+      heapUsedBytes: mem.heapUsed,
+      eventLoopLagMs: _eventLoopLagMs,
+      db: { up: dbUp, pingMs: dbPingMs },
+    });
+  } catch (e) { console.error('System health error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Cross-checks every one of a user's own stored running totals --
 // walletBalance, totalDeposited, totalEarned, totalInvested -- against what
