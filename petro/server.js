@@ -1,3 +1,4 @@
+const sessionPolicy = require('./session-policy');
 const express     = require('express');
 const admin       = require('firebase-admin');
 const cors        = require('cors');
@@ -92,8 +93,8 @@ app.use('/admin/', adminLimiter);
 app.use('/admin/', async (req, _res, next) => {
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   if (header && !(ADMIN_KEY && safeEqual(header, ADMIN_KEY))) {
-    try { req.adminUser = await resolveSession(header); }
-    catch (e) { console.error('Admin session resolve error:', e.message); }
+    try { req.adminUser = await resolveSession(header, req.path === '/session/activity'); }
+    catch (e) { console.error('Admin session resolve error:', e.message); return _res.status(503).json({ status:'error', message:'Session service unavailable. Try again.' }); }
   }
   next();
 });
@@ -1732,6 +1733,7 @@ async function _decodeAuth(req) {
   if (header.startsWith('Bearer ')) {
     try { decoded = await admin.auth().verifyIdToken(header.slice(7), true); } // checkRevoked
     catch (_) { decoded = null; }
+    if (decoded && !(await sessionPolicy.checkMember(db, decoded, req.path === '/auth/session/activity'))) decoded = null;
   }
   if (req) { try { req._authDecoded = decoded; } catch (_) {} }
   return decoded;
@@ -1848,7 +1850,7 @@ function logAdminAction(req, action, meta) {
 // logging in issues a random, short-lived session token (adminSessions)
 // instead of resending a password on every request, so deactivating or
 // resetting one account revokes only that person's access.
-const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h — forces periodic re-login
+const ADMIN_SESSION_TTL_MS = sessionPolicy.MAX_MS; // 8h maximum, plus 15 minute idle expiry
 // Used by /admin/login to run scryptVerify against SOMETHING even when the
 // username doesn't exist, so that path costs the same as a real wrong-
 // password attempt instead of returning near-instantly (timing side-channel).
@@ -1856,17 +1858,20 @@ const DUMMY_PASSWORD_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
 async function createSession(username, role) {
   const token = crypto.randomBytes(32).toString('hex');
   await db.collection('adminSessions').doc(token).set({
-    username, role, createdAt: FieldValue.serverTimestamp(),
+    username, role, createdAt: FieldValue.serverTimestamp(), lastActiveAt: new Date(),
     expiresAt: new Date(Date.now() + ADMIN_SESSION_TTL_MS)
   });
   return token;
 }
-async function resolveSession(token) {
+async function resolveSession(token, touch = false) {
   if (!token) return null;
   const snap = await db.collection('adminSessions').doc(token).get();
   if (!snap.exists) return null;
   const s = snap.data();
-  if (tsMillis(s.expiresAt) < Date.now()) { db.collection('adminSessions').doc(token).delete().catch(() => {}); return null; }
+  if (!sessionPolicy.validSession(s)) return null;
+  if (touch && !(await db.collection('adminSessions').doc(token).updateIf({
+    expiresAt: { $gt: new Date() }, lastActiveAt: { $gt: new Date(Date.now() - sessionPolicy.IDLE_MS) }
+  }, { lastActiveAt: new Date() }))) return null;
   if (s.role !== 'owner') {
     const uSnap = await db.collection('adminUsers').doc(s.username).get();
     if (!uSnap.exists || uSnap.data().active === false) return null;
@@ -2903,6 +2908,13 @@ async function _payReferralCommissionNow(investmentId, buyerId, amount, basis = 
 // ═══════════════════════════════════════════
 // TEAM
 // ═══════════════════════════════════════════
+// Validate member sessions once before protected routes. A DB outage is 503,
+// not a false expired-session response that signs out an active member.
+app.use(async (req, res, next) => {
+  if (!req.headers.authorization || req.path.startsWith('/admin/') || req.path.startsWith('/public/') || GUARD_EXEMPT.has(req.path)) return next();
+  try { await _decodeAuth(req); next(); }
+  catch (_) { res.status(503).json({ status:'error', message:'Session service unavailable. Try again.' }); }
+});
 app.get('/team/members', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -6915,7 +6927,10 @@ app.post('/admin/check-key', async (req, res) => {
   // Gift Codes/Admins/Activity Log/Integrity Audit, plus everything just
   // moved to verifyOwner()) silently treated the real owner as unprivileged
   // staff.
-  res.json({ status: 'success', token: ADMIN_KEY, username: 'owner', role: 'owner' });
+  try {
+    const token = await createSession('owner', 'owner');
+    res.json({ status: 'success', token, username: 'owner', role: 'owner' });
+  } catch (_) { res.status(503).json({ status: 'error', message: 'Could not start session. Try again.' }); }
 });
 // Staff login — issues a session token instead of resending a password.
 // Costs the SAME as a real wrong-password attempt for a nonexistent/
@@ -6944,6 +6959,19 @@ app.post('/admin/login', async (req, res) => {
     db.collection('adminUsers').doc(username).update({ lastLoginAt: FieldValue.serverTimestamp() }).catch(() => {});
     res.json({ status: 'success', token, username, role });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not log in right now' }); }
+});
+app.post('/auth/session/activity', async (req, res) => {
+  if (!(await verifyAuth(req))) return res.status(401).json({ status: 'error', message: 'Session expired. Log in again.' });
+  res.json({ status: 'success' });
+});
+app.post('/auth/session/logout', async (req, res) => {
+  const decoded = await _decodeAuth(req);
+  if (decoded) await db.collection('memberSessions').doc(sessionPolicy.memberKey(decoded)).update({ revoked: true });
+  res.json({ status: 'success' });
+});
+app.post('/admin/session/activity', (req, res) => {
+  if (!req.adminUser) return res.status(401).json({ status: 'error', message: 'Session expired. Sign in again.' });
+  res.json({ status: 'success' });
 });
 app.post('/admin/logout', async (req, res) => {
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
