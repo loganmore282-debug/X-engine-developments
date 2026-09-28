@@ -218,6 +218,7 @@ const guardObf = JavaScriptObfuscator.obfuscate(guardSrc, {
   stringArrayThreshold: 0.75,
   stringArrayEncoding: ['base64'],
   selfDefending: false,
+  disableConsoleOutput: true,
 }).getObfuscatedCode();
 const guardTag = `<script data-nx-guard>${guardObf}</script>`;
 
@@ -231,6 +232,7 @@ const obf = JavaScriptObfuscator.obfuscate(wrapped, {
   stringArrayEncoding: ['base64'],
   controlFlowFlattening: false,
   selfDefending: false,
+  disableConsoleOutput: true,
 }).getObfuscatedCode();
 fs.writeFileSync('/tmp/_snow_admin_obf_check.js', obf);
 execSync('node --check /tmp/_snow_admin_obf_check.js');
