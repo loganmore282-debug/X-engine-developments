@@ -21,10 +21,10 @@
      build-core.js ships the whole app as one inline <script> (s.textContent =
      code), which no hash can cover because the content changes every build.
 
-     'unsafe-eval' is deliberately ABSENT, and there is one expected, harmless
-     CSP violation on every load because of it. build-core.js / build-admin.js
-     set `disableConsoleOutput: true`, and javascript-obfuscator implements
-     that with a global-object helper shaped like
+     'unsafe-eval' is deliberately ABSENT. The member build keeps
+     `disableConsoleOutput: true`; the admin build leaves console output
+     enabled for diagnostics. The member obfuscator's console-suppression
+     helper can use a global-object lookup shaped like
          try { g = Function('return this')(); } catch (e) { g = window; }
      Function() is eval, so the browser blocks it and reports a violation --
      then the catch assigns `window`, which is the same object it was reaching
