@@ -2681,6 +2681,26 @@ place, none of them the actual cause).
   confirmed correct interleaved chronological order and the
   `Downloaded by <phone>` / `Statement downloaded` description fallback).
 
+**Correction, same day, by a concurrent session (commit `f2abb13`,
+"Fix mobile wallpaper sizing and scroll-edge gesture reversal"):** the
+touchmove guard above had a real bug -- it tracked `dy` from a fixed
+`startY` captured once at `touchstart`, so reversing direction mid-gesture
+(pull past the top edge, correctly blocked, then pull back the other way)
+did not correctly un-block within that same continuous touch. Fixed by
+tracking `lastY` instead (updated every `touchmove`, so `dy` is the
+delta since the last frame, not since the gesture began), plus an
+`e.cancelable` guard before `preventDefault()` and `touchend`/
+`touchcancel` listeners resetting `blocking`. That same commit also
+replaced the negative-inset oversized-layer wallpaper sizing with a
+`--wallpaper-height` custom property (`100lvh` where supported, a JS
+`window.innerHeight` fallback that deliberately ignores height-only
+resize events -- address bar/keyboard -- and only recalculates on a real
+width change) applied to both `#app::before` and `.sheet-bg.show::after`
+together. Owner confirmed fixed after this landed. Left as-is rather than
+reverted or re-explained at length here -- this note exists so the
+"Fixed the wallpaper shake" claim two paragraphs up is read against the
+code that actually shipped, not the first draft of it.
+
 ## 2026-09-28 (follow-up 6) — USDT (TRC20) crypto deposits: a third deposit rail alongside MarzPay/PesaJet
 
 Owner: *"let's put other payment methods on deposits, look at choco mcc,

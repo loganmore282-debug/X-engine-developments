@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'petro-shell-v181';
+const CACHE = 'petro-shell-v183';
 const VENDOR_CACHE = 'petro-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
@@ -154,3 +154,4 @@ self.addEventListener('fetch', e => {
     }).catch(() => cached))
   );
 });
+
