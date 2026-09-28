@@ -3174,3 +3174,97 @@ via injected-markup + `cssRules` enumeration in headless Chromium
 against the real built bundle rather than a full login (no reachable
 backend from this sandbox) — a real-device check after deploy is still
 worthwhile. `user/sw.js` bumped `v186` → `v187`.
+
+## Follow-up 11 (Card quick-amount tap dead, chip styling, stray "--", perf check)
+
+Owner, with two screenshots (Card tab, USDT tab): *"bro l can't tap a
+quick amount in cards ,why???????,also another thing let the amounts
+be buttons not being just underline, stop using hyphen ,check all the
+code ,l don't need hyphen please. also make sure that callbacks, are
+very faster and database acces ie read and write is also very fast
+even loading should be very fast since we are using a powerful vps"*
+
+- **Card quick-amount tap did nothing — real bug, found and fixed.**
+  `depositChipsHtml(s)` is shared by Mobile Money's `#depChips` and
+  Card's `#cardChips`, but every chip it generated called
+  `onclick="pickDepositAmount(${a})"` unconditionally, and
+  `pickDepositAmount()` was hardcoded to always write into `#depAmount`
+  (Mobile Money's own field) and refresh `#depChips`'s `.sel` state.
+  Tapping a Card quick amount therefore silently updated the OTHER,
+  hidden field and did nothing visible on the Card tab -- exactly the
+  bug reported. `depositChipsHtml(s, inputId)` and
+  `pickDepositAmount(amt, inputId)` are now both parameterized by which
+  field/chip-group they target (`'depAmount'` or `'cardAmount'`), and
+  the two call sites (`#depChips`/`#cardChips`) each pass their own id.
+  `_cardChosenAmount` (already declared, previously unused for the
+  chips' own selected-state check) is now what `depositChipsHtml`
+  reads for Card's highlight, so switching tabs no longer cross-
+  contaminates which chip shows selected. Verified in headless
+  Chromium by invoking the real `pickDepositAmount()` against injected
+  chip markup for both panels: tapping Card's chip sets `cardAmount`
+  only (leaves `depAmount` untouched, marks the Card chip `.sel`, not
+  the MoMo one) and vice versa.
+
+- **Quick-amount chips restyled from underline text to real pill
+  buttons.** `.dep-chip` was deliberately flat before (`border:0`,
+  `border-bottom:2px solid transparent`, text-only, no fill) -- a past
+  round's mockup-matching choice, not a bug, but the owner now
+  explicitly wants buttons. Rewrote `.dep-chip`/`.dep-chips` in
+  `user-src/index.html`: `border-radius:999px`, a visible outline,
+  9px/16px padding, filled wine-red background + white text when
+  `.sel`. Added `.sheet-body .dep-chip{color:#fff}` to the sheet's own
+  dark-context override list (same pattern as `.dep-amt input`/
+  `.dep-phone input` right above it) since the base `--snow-ink` token
+  is near-black, meant for a white card -- same class of bug as Follow-
+  up 10's wallet-field fix, caught before shipping this time. Verified
+  via `getComputedStyle` on injected markup: `border-radius:999px`,
+  selected chip `background:rgb(227,6,19)` (the wine accent) with white
+  text, unselected chip text `rgb(255,255,255)` (visible, not near-black).
+
+- **Stray literal "--" in user-facing copy.** Swept `user-src/
+  original_module.js` for ` -- ` occurring in actual UI strings (not
+  code comments, which use "--" as this codebase's own established
+  comment-dash convention throughout and were left alone -- the owner's
+  complaint was about what renders on screen, and the app's existing,
+  deliberate em-dash usage elsewhere in UI copy, e.g. the PWA-install
+  hint strings and empty-value "—" placeholders, is a different,
+  intentional character and was NOT touched). Found and fixed exactly
+  two real hits: the referral-code-invalid toast ("continuing without
+  it" -- now two sentences) and the Mobile Money instructions' step 3
+  (added in Follow-up 9, "checks itself automatically" -- also now two
+  sentences). Scoped to the member-facing app only; server.js's admin-
+  facing error messages (reject/repair/upload-validation routes) still
+  use "--" in a few places -- flagged, not touched, since those are
+  seen only inside the admin panel, not the screens the owner
+  screenshotted.
+
+- **Performance ask** ("callbacks very fast, DB read/write very fast,
+  loading very fast, powerful VPS") -- checked rather than assumed.
+  `db.js`'s `ensureIndexes()` already carries ~30 compound/unique
+  indexes with per-index reasoning tied to specific hot queries (dated
+  "Round 104"/"Round 106" comments), a tuned connection pool
+  (`maxPoolSize:50`, `minPoolSize:3`, retryReads/retryWrites),
+  `/deposit/callback` already `res.json()`s success back to the webhook
+  sender as its very FIRST line before touching the database at all,
+  and the client's own `bootFromNetwork()`/`enterApp()` already do an
+  instant cache-hit paint plus a fully parallel `Promise.all()`
+  prefetch of every tab's data, each with its own dated comment tied to
+  a past exact complaint about slow loading. This is not new work
+  needed now -- it is the product of several already-completed
+  performance rounds. Checked the two routes THIS session actually
+  added (`/deposit/card/submit`, `/deposit/marzpay/status`'s card
+  branch) against that same bar and found nothing sub-par: parallel
+  user+settings fetch, direct by-id lookups, no redundant round trips,
+  the only per-poll network call is the live MarzPay re-check a status
+  poll cannot skip without becoming unsafe. Did not make speculative
+  performance changes on top of an already this-carefully-tuned system
+  without a concrete slow spot to point at -- that risks a real
+  regression in exchange for no measurable gain. Told the owner this
+  plainly and asked which SCREEN or ACTION actually feels slow in
+  practice, to profile that exact path next round instead of guessing
+  across the whole app again.
+
+`node -c` clean, `build-core.js` round-trip OK. Chip routing/styling
+verified live in headless Chromium (see above); the two dash rewrites
+are plain string edits, no behavior to verify beyond the syntax check.
+`user/sw.js` bumped `v187` → `v188`.

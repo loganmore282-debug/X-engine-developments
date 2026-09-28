@@ -1090,9 +1090,9 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .dep-amt{height:64px;display:flex;align-items:center;padding:0 2px;margin-bottom:8px;background:transparent;border:0;border-bottom:1.6px solid var(--snow-border);border-radius:0;}
 .dep-amt:focus-within{border-bottom-color:var(--snow-wine);}
 .dep-amt input{border:0;outline:0;background:transparent;font-size:30px;font-weight:650;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;font-variant-numeric:tabular-nums;}
-.dep-chips{display:flex;flex-wrap:wrap;gap:0 18px;margin:0 0 30px;border-bottom:1px solid var(--line-soft);padding:0 0 14px;}
-.dep-chip{flex:0 0 auto;text-align:left;padding:8px 0 6px;border-radius:0;font-weight:550;font-size:12.5px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--snow-muted);font-family:inherit;box-shadow:none;}
-.dep-chip.sel{background:transparent;color:var(--snow-wine);border-bottom-color:var(--snow-wine);box-shadow:none;font-weight:700;}
+.dep-chips{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 30px;}
+.dep-chip{flex:0 0 auto;text-align:center;padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;border:1.5px solid var(--snow-border);background:transparent;color:var(--snow-ink);font-family:inherit;box-shadow:none;transition:background .15s,border-color .15s,color .15s;}
+.dep-chip.sel{background:var(--snow-wine);color:#fff;border-color:var(--snow-wine);box-shadow:none;font-weight:700;}
 .dep-phone{display:flex;align-items:center;height:58px;border-radius:0;overflow:visible;border:0;border-bottom:1.6px solid var(--snow-border);margin-bottom:8px;background:transparent;}
 .dep-phone:focus-within{border-bottom-color:var(--snow-wine);}
 .dep-phone .prefix{background:transparent;color:var(--snow-ink);font-weight:700;display:flex;align-items:center;padding:0 12px 0 0;font-size:15px;flex-shrink:0;border-right:1px solid var(--snow-border);}
@@ -2031,6 +2031,7 @@ body.deposit-status-open .bottom-nav{display:none;}
 .sheet-body .dep-amt input,
 .sheet-body .dep-phone input,
 .sheet-body .dep-phone .prefix,
+.sheet-body .dep-chip,
 .sheet-body .wit-bal .val,
 .sheet-body .wit-amt input,
 .sheet-body .wit-pw input,

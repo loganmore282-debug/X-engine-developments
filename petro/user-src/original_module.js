@@ -2488,7 +2488,7 @@ async function registerCurrentUser(pin, phone, otpTicket){
   // doRegister()'s email-already-in-use branch, which signs them in and
   // finishes this same registration with the corrected code.
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
-    notify(reg.message || 'That referral code is invalid -- continuing without it.');
+    notify(reg.message || 'That referral code is invalid. Continuing without it.');
     STATE.refCode = '';
     reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '', otpTicket: otpTicket || '' });
   }
@@ -5286,7 +5286,7 @@ function openDepositFormSheet(){
     <div id="depMmPanel">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
     <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
-    <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
+    <div class="dep-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
 
     <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
     <div class="dep-phone">
@@ -5302,7 +5302,7 @@ function openDepositFormSheet(){
       <ol class="deposit-steps">
         <li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
         <li><b>Approve on your phone</b><span>Tap Confirm Deposit, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
-        <li><b>Follow the payment status</b><span>Wait for confirmation -- this checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.</span></li>
+        <li><b>Follow the payment status</b><span>Wait for confirmation. This checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.</span></li>
       </ol>
     </div>
     </div>
@@ -5339,7 +5339,7 @@ function openDepositFormSheet(){
     <div id="depCardPanel" style="display:none;">
       <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
       <div class="dep-amt"><input id="cardAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncCardQuickAmt()"></div>
-      <div class="dep-chips" id="cardChips">${depositChipsHtml(s)}</div>
+      <div class="dep-chips" id="cardChips">${depositChipsHtml(s, 'cardAmount')}</div>
 
       <button class="primary-button" id="cardGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doCardDeposit()">Pay with Card</button>
 
@@ -5518,21 +5518,34 @@ function pollUsdtDepositStatus(depositId){
 
 // The chip values still come from the live product prices (owner: "juck put
 // quick amounts basing on products prices"), so they stay correct when
-// products are repriced -- only the chip's LOOK follows the mockup now.
-function depositChipsHtml(s){
+// products are repriced, only the chip's LOOK follows the mockup now.
+//
+// inputId picks which panel these chips belong to: Mobile Money's #depChips
+// feeds #depAmount, Card's #cardChips feeds #cardAmount. A tap used to
+// always write into #depAmount regardless of which panel was actually
+// open, so tapping a quick amount on the Card tab silently updated the
+// OTHER, hidden field and did nothing visible on screen. Each chip now
+// carries its own target, and _chosenAmountFor()/pickDepositAmount() below
+// route to the right field/chip-group instead of assuming Mobile Money.
+function depositChipsHtml(s, inputId){
   const amounts = Array.from(new Set((STATE.products || [])
     .map(p => Number(p.price) || 0)
     .filter(p => p >= (Number(s.minDeposit) || 0))))
     .sort((a, b) => a - b)
     .slice(0, 5);
+  const chosen = _chosenAmountFor(inputId);
   return amounts.map(a =>
-    `<button type="button" class="dep-chip${a === _depChosenAmount ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a})">${Number(a).toLocaleString('en-US')}</button>`
+    `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${Number(a).toLocaleString('en-US')}</button>`
   ).join('');
 }
-
-window.pickDepositAmount = function(amt){
-  $('depAmount').value = amt;
-  syncDepositQuickAmt();
+function _chosenAmountFor(inputId){
+  return inputId === 'cardAmount' ? _cardChosenAmount : _depChosenAmount;
+}
+window.pickDepositAmount = function(amt, inputId){
+  const el = $(inputId || 'depAmount');
+  if (el) el.value = amt;
+  if (inputId === 'cardAmount') syncCardQuickAmt();
+  else syncDepositQuickAmt();
 };
 function syncDepositQuickAmt(){
   // Deposit.dc.html's own chip grid (#depChips/.dep-chip) is the only chip
