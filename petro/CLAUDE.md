@@ -29,10 +29,22 @@ signed off — it is the mechanical fork, not the product.
   fix below — a real bug, not a design choice) or Petro's use case
   structurally requires it (e.g. a new payment gateway) — never to "improve"
   something along the way.
-- **Hosting is a Hostinger VPS, KVM1 plan** — not Railway, not Render. A real
-  server under direct SSH control, not a PaaS with git-triggered autoDeploy.
-  See "Hosting: Hostinger VPS (KVM1)" below for the pipeline this implies
-  (process manager, reverse proxy/TLS, scripted deploy).
+- **Hosting is a Hostinger VPS, KVM1 plan — not Railway, not Render, not
+  EdgeOne, not anything else.** A real server under direct SSH control, not
+  a PaaS with git-triggered autoDeploy or a separate static host. See
+  "Hosting: Hostinger VPS (KVM1)" below for the pipeline this implies
+  (process manager, reverse proxy/TLS, scripted deploy). Follow-up 11
+  (2026-09-28) is the owner catching a session end a reply with "usual
+  EdgeOne zip upload, no Railway redeploy needed" — those instructions are
+  Voltra's (a DIFFERENT app in this same repo, under `voltra/`), not
+  Petro's, and had leaked in by mistake. **Never end a Petro round with
+  Railway/EdgeOne/Render deploy instructions of any kind.** The real,
+  ONLY next step after a Petro build is: `bash deploy/deploy.sh` (or the
+  manual rsync + `pm2 reload` + `nginx -t && systemctl reload nginx` it
+  wraps) against this VPS. If in doubt which app's rules apply, check
+  which directory you are editing in — `petro/` is this file; `voltra/`
+  has its own, separate CLAUDE.md with its own separate (EdgeOne+Railway)
+  pipeline that must never be quoted here.
 - **Firebase for auth.** A real Firebase project must be created for Petro —
   the deliberately-broken `REPLACE_WITH_PETRO_...` placeholders in both
   `-src/index.html` files exist so nobody's Petro sign-in can land in
@@ -3268,3 +3280,141 @@ even loading should be very fast since we are using a powerful vps"*
 verified live in headless Chromium (see above); the two dash rewrites
 are plain string edits, no behavior to verify beyond the syntax check.
 `user/sw.js` bumped `v187` → `v188`.
+
+## Follow-up 11.5 — Railway/EdgeOne fully removed, not just "harmless to leave"
+
+Owner, after this same session's reply ended with EdgeOne/Railway deploy
+instructions that belong to Voltra, not Petro: *"how many times will l
+say that everything is on our vps,please clean up things of railway and
+EdgeOne, everything is on our hostinger vps"*, then, mid-investigation:
+*"l said clean your memory stop thinking about railway or EdgeOne, our
+work is on our vps."*
+
+A prior round (the original Chipz→Petro fork audit) already removed
+`railway.json`/`railway.app.json`/`railway.admin.json`/`render.yaml` and
+called the remaining `CORS_ALLOWED_SUFFIXES` entries (`.edgeone.*`,
+`.onrender.com`, `.up.railway.app`, `.railway.app`) "unused on a VPS but
+harmless, not broken." The owner's instruction this round is that
+"harmless to leave" is not good enough — actually remove it. Done:
+
+- **`server.js`**: `CORS_ALLOWED_SUFFIXES` emptied to `[]` (was 7 PaaS
+  suffixes) — the mechanism stays (still used by `isInfraHost`/the CORS
+  origin check, and kept as a place to add a real suffix back through if
+  this ever moves off a single fixed VPS again), just nothing populates
+  it anymore. `PUBLIC_URL`'s fallback chain dropped `RENDER_EXTERNAL_URL`/
+  `RAILWAY_PUBLIC_DOMAIN` (platform-injected env vars that only exist on
+  those PaaS's own runtimes — dead on a VPS, where `PUBLIC_URL` is always
+  set explicitly in `secrets.local.js`). Rewrote every comment that
+  explained CORS/CORP/PUBLIC_URL in terms of "the frontend is on EdgeOne,
+  the backend is on Render" — that architecture does not exist anymore;
+  api./app./admin.PETRO_DOMAIN are one VPS behind nginx now.
+- **`admin-src/index.html`**: the CSP-explainer comment ("this page does
+  not only ship from Render... also deployed to EdgeOne") rewritten to
+  describe the real reason the meta CSP exists (defense in depth against
+  a header-less serving path, e.g. local testing) rather than a second
+  real host that no longer exists. The Allowed-domains field's own
+  on-screen help text ("Render/EdgeOne addresses are always allowed")
+  was actively wrong (those suffixes are gone) — now names the real
+  built-ins (`petro-platform.com` + this VPS's own address). A SEPARATE
+  admin setting's help text (parked-host exemption, all 6 languages)
+  had the same wrong claim — reworded to "your own server address" in
+  each language rather than naming a specific former platform.
+- **`user-src/index.html`**: same CSP-explainer rewrite.
+- **`user-src/original_module.js`**: the file's own header comment
+  ("Render web service... Tencent EdgeOne Pages... cross-origin") was
+  describing a two-host architecture that stopped being true the moment
+  hosting moved to the VPS — `API_BASE`'s actual VALUE was already
+  correct (`http://179.198.197.114:3000`), only the comment above it lied
+  about why.
+- **`build-admin.js`**: header claimed "EdgeOne runs this file on every
+  deployment" — false; nothing auto-runs it, the owner runs it by hand
+  before every VPS deploy per the Build & deploy pipeline section.
+- **`docs/railway-deploy.md`** (279 lines, a full Railway three-service
+  deploy guide) — deleted outright. Zero remaining value once hosting is
+  one fixed VPS; keeping it around as "just docs" is exactly the kind of
+  thing that gets pasted back in by mistake later.
+- **`set-backend-url.js`**: its own `--check`/error-message example URL
+  was still a Railway `*.up.railway.app` address — changed to
+  `https://api.petro-platform.com`. Its historical prose explaining WHY
+  the script has such a paranoid verification sweep ("found by the
+  Render → Railway move pointing at a dead host") was left alone —
+  accurate past-tense history justifying present-day code, not a current
+  operational claim.
+- **Tests — found genuinely broken by this cleanup, not just cosmetically
+  stale, and fixed for real rather than left to bit-rot**:
+  - `test-cors-origins.js` pulls the REAL `CORS_ALLOWED_ORIGINS`/
+    `CORS_ALLOWED_SUFFIXES` out of `server.js` and evaluates them — every
+    one of its old `.edgeone.*`/`.onrender.com`/`.up.railway.app` "should
+    be allowed" cases would now silently start FAILING the moment
+    `CORS_ALLOWED_SUFFIXES` went empty. Rewritten around the real current
+    origin set (`petro-platform.com`, `www.`, the VPS's own
+    `179.198.197.114:8080`, `localhost`/`127.0.0.1`), keeping the same
+    positive/negative/spoofing-attempt shape, plus explicit negative
+    cases proving the old PaaS suffixes are now correctly REFUSED. Ran it
+    against the real `server.js` — all pass.
+  - `test-allowed-origins.js`'s "admin list can only ADD, never take
+    away" lockout-guarantee section asserted `chipz-admin.onrender.com`/
+    `chipz-app.onrender.com`/`chipz-admin.edgeone.dev` were always
+    reachable regardless of the admin's custom-domain list — also reads
+    the real suffixes from `server.js`, also would have started failing.
+    Rewritten to assert the real built-in origins stay reachable instead.
+    Ran it — all pass.
+  - `test-regions.js`: several sections use their OWN standalone mock
+    copy of `CORS_ALLOWED_SUFFIXES`/`isInfraHost` (not extracted from
+    server.js) to test unrelated region/parked-host/entry-rotation logic
+    in isolation, using `onrender.com`/`edgeone.app` hostnames purely as
+    illustrative stand-ins for "a platform-hosted address the owner
+    administers from." Emptied the mock suffix list to match production
+    and swapped every illustrative example over to the VPS's own bare
+    IP (`179.198.197.114`) — which the real `isInfraHost` already
+    recognizes unconditionally via its own IP-literal regex, independent
+    of any suffix list, so this is the actually-correct "infra host"
+    example now, not just a renamed placeholder. **Could not confirm
+    these specific edits pass**: this test file fails immediately on an
+    unrelated, PRE-EXISTING bug (`Error: no such function: normalizeRegion`,
+    confirmed via `git stash` to predate this entire session) — flagged
+    below, not fixed, since fixing it is a separate job from this one.
+  - Left `test-service-account.js`/`test-brand-assets.js`'s own
+    Railway/Render mentions alone — accurate past-tense change-log
+    entries ("found during the Render → Railway migration"), not
+    currently-misleading operational claims.
+  - Left `static-server.js`/`test-static-server.js` alone — genuinely
+    still in use as the documented source of truth nginx's own security
+    headers were "ported line-for-line from" (see
+    `deploy/nginx-petro.conf.template`'s own comment), not dead Railway
+    infrastructure.
+  - Left `test-security-hardening.js`'s own `onrender|railway|edgeone`
+    regex alone — that is the ANTIBODY, not the disease: a generic
+    scanner that would have caught every hardcoded-old-host mistake this
+    round fixed, still worth keeping for whatever the next migration is.
+
+**Found, NOT fixed, flagged for a separate round**: `test-security-
+hardening.js` and `test-regions.js` were BOTH already broken before this
+round started (confirmed via `git stash`, not something this round
+caused). `test-security-hardening.js` reads `render.yaml` and
+`.github/workflows/chipz-tests.yml`/`.github/dependabot.yml` directly —
+none of these files exist in this repo at all; this whole test appears
+to be carried over from the Chipz fork essentially unedited (it still
+says `chipz-app`/`chipz-admin`/`chipz-server`, checks a CI workflow this
+repo has no `.github/` directory for) and needs a real port to the VPS +
+nginx + (no CI configured yet) reality, not a find-and-replace. That is
+meaningfully bigger than today's ask and was left alone rather than
+guessed at. `test-regions.js` fails at its very first line
+(`normalizeRegion` not found by the source-extraction helper it uses) —
+likely a function renamed in `server.js` at some point without this test
+being updated. Worth a dedicated round; not attempted here since neither
+failure has anything to do with Railway/EdgeOne specifically, and
+guessing at a fix for code this test-infrastructure-heavy without being
+able to run it and see green is how a "cleanup" round quietly introduces
+a real regression.
+
+`node -c` clean on every touched `.js` file. `build-core.js`/
+`build-admin.js` both round-trip OK, and the rebuilt `user/index.html`/
+`admin/index.html` were grepped afterward — zero remaining "railway"/
+"edgeone" mentions in either shipped artifact. `test-cors-origins.js`
+and `test-allowed-origins.js` both re-run against the real `server.js`
+and pass in full. `set-backend-url.js --check` confirms every file still
+agrees on one backend origin (`http://179.198.197.114:3000`) — this
+round touched zero of the places that constant actually lives, only the
+prose around it, so no rebuild-breaking drift was introduced.
+`user/sw.js` bumped `v188` → `v189`, `admin/sw.js` bumped `v44` → `v45`.

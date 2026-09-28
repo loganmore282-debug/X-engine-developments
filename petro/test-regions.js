@@ -74,7 +74,7 @@ const api = new Function('normalizeAllowedHost', `
   let _regionHosts = [];
   let _corsExtraHosts = [];
   let _mainAllowedHosts = [];
-  const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.edgeone.dev', '.onrender.com', '.pages.dev'];
+  const CORS_ALLOWED_SUFFIXES = []; // empty on a single fixed VPS -- see server.js's own comment on this constant
   const setHostPolicy = o => { if (o.baseDomain !== undefined) _baseDomain = o.baseDomain;
     if (o.blockRootDomain !== undefined) _blockRootDomain = o.blockRootDomain;
     if (o.parkedHosts !== undefined) _parkedHosts = o.parkedHosts;
@@ -169,7 +169,7 @@ api.setRegions([UG, KE]);
 ck(api.regionForHost('sfhd.chipz-platform.com').key === 'ke', 'the Kenyan subdomain is Kenya');
 ck(api.regionForHost('https://sfhd.chipz-platform.com/app').key === 'ke', 'with a scheme and a path too');
 ck(api.regionForHost('SFHD.chipz-platform.com:443').key === 'ke', 'and in any case, with a port');
-ck(api.regionForHost('chipz-app.onrender.com').key === 'ug', 'an address no country claims falls back to the founding one');
+ck(api.regionForHost('unclaimed.example.com').key === 'ug', 'an address no country claims falls back to the founding one');
 ck(api.regionForHost('').key === 'ug', 'as does no address at all');
 {
   const shut = Object.assign({}, KE, { active: false });
@@ -609,11 +609,11 @@ console.log('\n— one country at a time, on every admin screen —');
     'which really saves it');
   ck(warnFor('app.ownersite.example', 'ownersite.example', withLabel) === '',
     'and says nothing when the base domain IS the domain in use');
-  // A panel hosted on Render or EdgeOne says nothing about where the
+  // A panel hosted on a bare server IP says nothing about where the
   // MEMBERS' site lives, so its own hostname must not trigger the MISMATCH
   // warning. (The placeholder warning below is a different thing and does
   // fire there, deliberately.)
-  for (const h of ['chipz-admin.onrender.com', 'chipz.edgeone.app', 'localhost', '127.0.0.1'])
+  for (const h of ['179.198.197.114', 'localhost', '127.0.0.1'])
     ck(warnFor(h, 'ownersite.example', withLabel) === '', `  nor when the panel itself is on ${h}`);
   ck(/No base domain is set/.test(warnFor('panel.example.com', '', withLabel)),
     'and an unset base domain is called out on its own terms');
@@ -631,19 +631,19 @@ console.log('\n— one country at a time, on every admin screen —');
   // domain. Rewritten rather than dropped, with the history here, because an
   // assertion that pins the current shape defends a bug as loyally as a
   // feature.
-  const placeholder = warnFor('chipz-admin.onrender.com', 'chipz-platform.com', withLabel);
+  const placeholder = warnFor('179.198.197.114', 'chipz-platform.com', withLabel);
   ck(placeholder !== '',
-    'the placeholder base domain is called out even on a Render-hosted panel, where the panel\'s own hostname says nothing about the members\' domain');
+    'the placeholder base domain is called out even on a bare-IP-hosted panel, where the panel\'s own hostname says nothing about the members\' domain');
   ck(/www/.test(placeholder),
     'and it says www is among what stays open, which is the symptom that does not otherwise announce itself');
   ck(/short name/i.test(placeholder) || /Short addresses/.test(placeholder),
     'and that short addresses match no country, which is the other one');
   ck(!/useThisDomainBtn/.test(placeholder),
-    'with NO one-tap fix offered there -- the panel is on onrender.com, and filling that in as the members\' domain would be a guess, and a wrong one');
+    'with NO one-tap fix offered there -- the panel is on a bare IP, and filling that in as the members\' domain would be a guess, and a wrong one');
   const placeholderOnOwn = warnFor('panel.ownersite.example', 'chipz-platform.com', withLabel);
   ck(/useThisDomainBtn/.test(placeholderOnOwn),
     'but the one-tap fix IS offered when the panel is on a domain worth suggesting');
-  ck(warnFor('chipz-admin.onrender.com', 'ownersite.example', []) === '',
+  ck(warnFor('179.198.197.114', 'ownersite.example', []) === '',
     'and a platform that HAS set its base domain is left alone');
 }
 
@@ -965,7 +965,7 @@ console.log('\n— short addresses per country (g26e, shy) —');
   `)({
     corsHostAllowed: api.corsHostAllowed,
     CORS_ALLOWED_ORIGINS: new Set(['https://chipz-platform.com']),
-    CORS_ALLOWED_SUFFIXES: ['.onrender.com', '.edgeone.app'],
+    CORS_ALLOWED_SUFFIXES: [],
     out: {},
   });
   api.setMainAllowed(['ownersite.example']);
@@ -974,7 +974,7 @@ console.log('\n— short addresses per country (g26e, shy) —');
   ck(decide('https://ownersite.example') === true, 'and the domain it hangs off');
   ck(decide('https://ownersite.example.evil.test') === false,
     'and the middleware itself refuses a lookalike');
-  ck(decide('https://chipz-app.onrender.com') === true, 'the platform host still works');
+  ck(decide('http://localhost:3000') === true, 'local dev still works');
   ck(decide(undefined) === true,
     'and a request with no Origin at all is allowed -- that is the payment webhooks, which must never be blocked by a domain rule');
   api.setMainAllowed([]);
@@ -1031,11 +1031,10 @@ console.log('\n— the root domain does not serve the app —');
   ck(api.hostIsParked('g26e.chipz-platform.com') === false, 'a country’s own short address still works');
   // The owner administers and tests from these. strictRegionHosts would
   // otherwise lock him out of the panel the setting is turned off in.
-  for (const h of ['chipz-app.onrender.com', 'chipz-admin.onrender.com', 'x.edgeone.app', 'localhost', '127.0.0.1'])
+  for (const h of ['179.198.197.114', 'localhost', '127.0.0.1'])
     ck(api.hostIsParked(h) === false, `the platform’s own host ${h} is never refused`);
-  // A gateway webhook and Render's health check arrive with no Origin at
-  // all. Money that has already left a payer's account must never be lost
-  // to a domain rule.
+  // A gateway webhook arrives with no Origin at all. Money that has already
+  // left a payer's account must never be lost to a domain rule.
   ck(api.hostIsParked('') === false, 'a request with no address at all is never refused');
   {
     // Checked again with STRICT mode on, because that is the only setting
@@ -1056,7 +1055,7 @@ console.log('\n— the root domain does not serve the app —');
   api.setHostPolicy({ strictRegionHosts: true });
   ck(api.hostIsParked('zzz.chipz-platform.com') === true, 'and is refused once it is on');
   ck(api.hostIsParked('g26e.chipz-platform.com') === false, 'while a claimed one still works in strict mode');
-  ck(api.hostIsParked('chipz-app.onrender.com') === false, 'and the Render address still works in strict mode');
+  ck(api.hostIsParked('179.198.197.114') === false, 'and the bare server IP still works in strict mode');
   api.setHostPolicy({ strictRegionHosts: false });
 }
 
@@ -1186,7 +1185,7 @@ function entryHandler(opts) {
     let _baseDomain = deps.baseDomain;
     return ${handlerSource(bare, '/public/entry')};
   `)(Object.assign({
-    isInfraHost: h => ['localhost', '127.0.0.1'].includes(h) || /\.onrender\.com$/.test(h) || /\.edgeone\.app$/.test(h),
+    isInfraHost: h => ['localhost', '127.0.0.1'].includes(h) || /^\d{1,3}(\.\d{1,3}){3}$/.test(h),
     hostOnly: raw => String(raw || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, ''),
     requestHost: req => String((req.headers && (req.headers.origin || req.headers.host)) || '').toLowerCase(),
     ROTATE_ENTRY_MODES: ['off', 'visitors', 'always'],
@@ -1259,7 +1258,7 @@ async function askEntry(opts, req) {
     'a token the server cannot verify does not count as signed in');
 
   // The owner's own testing addresses.
-  for (const h of ['chipz-app.onrender.com', 'localhost', 'chipz.edgeone.app']) {
+  for (const h of ['179.198.197.114', 'localhost', '127.0.0.1']) {
     ck((await askEntry(base(ugPool, 'always'), { headers: { origin: h } })).rotate === false,
       `nobody is moved off ${h} -- that is the owner testing`);
   }

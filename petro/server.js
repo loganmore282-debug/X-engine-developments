@@ -142,15 +142,17 @@ const rawJsonParser = express.json({ limit: '64kb', verify: keepRawBody });
 app.use((req, res, next) => (RAW_BODY_ROUTES.has(req.path) ? rawJsonParser : HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 
-// Petro's frontend is hosted on Tencent EdgeOne Pages while this backend
-// runs elsewhere (Render), so the browser treats every API call as
-// cross-origin and the EdgeOne origin MUST be allowed here. Get this wrong
-// and the failure is deeply misleading: the `cors` middleware answers an
-// unlisted origin with NO CORS headers at all, the browser blocks the
-// response, and the app reports its own generic "Network error. Check your
-// connection." -- identical to a real connectivity problem, on a backend
-// that is actually up and healthy. Snow hit exactly this when its custom
-// domain went live and every /register call started failing.
+// Petro runs entirely on one Hostinger VPS -- backend (pm2, :3000) and both
+// static frontends (nginx, app./admin. subdomains) on the same box. The
+// browser still treats app./admin. as cross-origin from api. (different
+// subdomains are different origins), so their exact origins must be listed
+// here. Get this wrong and the failure is deeply misleading: the `cors`
+// middleware answers an unlisted origin with NO CORS headers at all, the
+// browser blocks the response, and the app reports its own generic "Network
+// error. Check your connection." -- identical to a real connectivity
+// problem, on a backend that is actually up and healthy. If a Petro screen
+// ever reports a network error while the server is fine, check this list
+// FIRST.
 //
 // Snow's own live domain (chn-snow2beer.com) was deliberately dropped from
 // this copy -- it has no business reaching Petro's database.
@@ -161,26 +163,13 @@ const CORS_ALLOWED_ORIGINS = new Set([
   // entry the member page loads but every API call to :3000 is blocked by CORS.
   'http://179.198.197.114:8080',
 ]);
-// Suffix-matched hosts. EdgeOne hands out *.edgeone.app, *.edgeone.site AND
-// *.edgeone.dev subdomains, and the project can be renamed or redeployed to
-// a new one, so matching the suffix avoids a dead app every time that
-// changes. Render's own *.onrender.com is here for the same reason.
-// .edgeone.dev was missing and the admin panel landed on exactly that
-// domain: the owner's login showed "Network error. Try again." on a backend
-// that was up and healthy -- the misleading failure this block's own comment
-// above warns about, hit for real a second time. If a Petro screen ever
-// reports a network error while the server is fine, check this list FIRST.
-// Platform hostnames the frontends can legitimately be served from. Railway
-// is in this list for the same reason Render is: the panels live on
-// <service>.up.railway.app, and a host missing from here is refused by CORS,
-// which the browser reports to the app as nothing at all -- this file's own
-// notes record that shape of outage twice, once for Snow's custom domain and
-// once for *.edgeone.dev.
-//
-// '.railway.app' as well as '.up.railway.app' because Railway has served
-// generated domains under both, and a suffix that stops matching after a
-// platform rename looks exactly like a dead server.
-const CORS_ALLOWED_SUFFIXES = ['.edgeone.app', '.edgeone.site', '.edgeone.dev', '.onrender.com', '.pages.dev', '.up.railway.app', '.railway.app'];
+// Suffix-matched hosts, for a platform that hands out subdomains under one
+// shared suffix (Vercel's *.vercel.app, Cloudflare Pages' *.pages.dev,
+// etc.) rather than a fixed origin -- not needed for Petro's own fixed VPS
+// domains, which live in CORS_ALLOWED_ORIGINS/_corsExtraHosts above/below
+// instead, but kept here (empty) as the mechanism to add one back through
+// if this ever moves off a single fixed VPS again.
+const CORS_ALLOWED_SUFFIXES = [];
 // Extra hostnames the owner adds from the admin panel (settings.allowedOrigins),
 // for custom domains that no built-in suffix covers. Kept as a plain
 // synchronous snapshot, refreshed by getSettings() whenever its own 60s cache
@@ -338,20 +327,15 @@ const { connectMongo, db, FieldValue, pingDb } = require('./db');
 const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
 // This server's own public address, which is what MarzPay is told to call
 // back on (PesaJet's webhook URL is dashboard-configured instead -- see the
-// PESAJET section below). An explicit PUBLIC_URL always wins; otherwise it
-// is taken from whichever host we are running on.
-//
-// RAILWAY_PUBLIC_DOMAIN is in this list because Render suspended the account
-// and the platform had to move. Railway does not set RENDER_EXTERNAL_URL, so
-// without it PUBLIC_URL would be empty and `callbackUrl`/`notifyUrl` would
-// simply be OMITTED from every payment request -- the deposit would still be
-// created, the prompt would still reach the phone, and nothing would ever
-// call back. The reconciler and the member's own poll would cover for it, so
-// the only symptom is money taking minutes instead of seconds to appear.
-// Railway gives a bare hostname, hence the https:// added below.
+// PESAJET section below). Set explicitly in secrets.local.js on the VPS --
+// unlike a PaaS, a plain VPS has no platform env var to fall back to, so if
+// this is ever unset, `callbackUrl`/`notifyUrl` is simply OMITTED from every
+// payment request. The deposit would still be created and the prompt would
+// still reach the phone, but nothing would ever call back -- the reconciler
+// and the member's own poll would cover for it, so the only symptom is money
+// taking minutes instead of seconds to appear.
 const PUBLIC_URL  = (() => {
-  let u = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL ||
-           process.env.RAILWAY_PUBLIC_DOMAIN || '').trim().replace(/\/$/, '');
+  let u = (process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
   if (u && !u.startsWith('http')) u = 'https://' + u;
   return u;
 })();
@@ -363,7 +347,7 @@ const MARZ_TIMEOUT = 20000;
 // Used for the OTP verification codes sent on registration, password reset,
 // and adding a withdrawal bank/mobile-money account -- see the "OTP" section
 // below. Same "base64(api_key:api_secret)" Basic-auth convention as the
-// wallet API. MARZSMS_KEY is unset until the owner supplies it (Railway/VPS
+// wallet API. MARZSMS_KEY is unset until the owner supplies it (a VPS
 // secret, never committed); every OTP send refuses cleanly until then.
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
@@ -832,7 +816,7 @@ async function getProductByKey(key) {
 // document, be re-sent in full on every cold boot of the app with no HTTP
 // caching, and inflate ~33% on the wire -- unaffordable on Ugandan mobile
 // data for a decorative banner. A URL also lets the owner drop `banner.mp4`
-// into the EdgeOne upload beside index.html and just type `banner.mp4`.
+// into the VPS's user/ folder beside index.html and just type `banner.mp4`.
 // The image doubles as the video's poster frame, so the banner still looks
 // right for the moment before the video paints (and for members whose
 // browser blocks autoplay).
@@ -919,10 +903,11 @@ function isYouTubeLink(url) {
 }
 const YOUTUBE_VIDEO_ERROR = 'A YouTube link cannot play in the banner -- the app would load YouTube\'s web page, not a video, so the banner would sit blank. It also could not autoplay silently or be made untappable. Upload the video file itself (Upload video, mp4 or webm, up to 4 MB) and it will run on its own with no controls.';
 // A banner video URL the browser will actually load, and that can't be used
-// to smuggle script into the page. Relative paths (the EdgeOne-upload case)
-// and https:// are allowed; plain http:// is rejected because the app itself
-// is served over https, so the browser would block it as mixed content and
-// the owner would see a silently empty banner with no explanation.
+// to smuggle script into the page. Relative paths (a file dropped straight
+// into the VPS's user/ folder) and https:// are allowed; plain http:// is
+// rejected because the app itself is served over https, so the browser
+// would block it as mixed content and the owner would see a silently empty
+// banner with no explanation.
 function sanitizeBannerVideoUrl(raw) {
   const url = String(raw == null ? '' : raw).trim();
   if (!url) return { video: null };
@@ -3357,18 +3342,15 @@ app.get('/public/banner-video', async (req, res) => {
     const etag = '"bv-' + v.version + '"';
     // THIS LINE IS WHY THE VIDEO SHOWS AT ALL. helmet sets
     // Cross-Origin-Resource-Policy: same-site globally (see the top of this
-    // file), and *.onrender.com subdomains are NOT same-site: onrender.com is
-    // on the Public Suffix List, so petro-app.onrender.com and
-    // petro-server.onrender.com are separate registrable domains. A <video>
-    // is a no-cors subresource load, so CORP applies to it -- and the browser
-    // dropped the response with ERR_BLOCKED_BY_RESPONSE.NotSameSite, silently:
-    // the owner uploaded a video and Home just showed the fallback hero.
-    //
-    // API calls were unaffected (CORP does not gate CORS-mode fetches), which
-    // is why this was the FIRST thing to break -- the banner video is the
-    // app's only cross-origin subresource. The global same-site default stays
-    // as it is; it is a real protection for the money endpoints. Only this
-    // route, which serves a public decorative clip and nothing else, opts out.
+    // file). On this VPS, api./app.PETRO_DOMAIN share one registrable domain
+    // and ARE same-site to each other -- but a <video> is a no-cors
+    // subresource load, so CORP still applies to it, and IP:port access
+    // (e.g. http://179.198.197.114:3000 called from :8080 during testing) is
+    // cross-site regardless of any real domain. Leaving this opt-out on this
+    // one route keeps the banner video working under either setup, at no
+    // real cost: it serves a public decorative clip and nothing else. The
+    // global same-site default stays as it is elsewhere; it is a real
+    // protection for the money endpoints.
     res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     // The client asks for ?v=<version>, so a new upload is a new URL and the
     // long cache below can never serve a stale clip.
@@ -3424,11 +3406,11 @@ function serveBrandAsset(slot) {
       const a = await getBrandAsset(slot);
       if (!a || !a.buf) return res.status(404).end();
       const etag = '"ba-' + slot + '-' + a.version + '"';
-      // The same trap the banner video hit, and for the same reason. helmet
-      // sets Cross-Origin-Resource-Policy: same-site globally; onrender.com
-      // is on the Public Suffix List, so petro-app and petro-server are
-      // different SITES; and a manifest icon is a no-cors subresource load,
-      // which CORP gates. Without this line the browser drops the icon
+      // The same trap the banner video hit, and for the same reason: a
+      // manifest icon is a no-cors subresource load, which the global
+      // same-site CORP default gates -- IP:port access during testing (see
+      // the banner-video route's own comment above) is cross-site regardless
+      // of the real domain. Without this line the browser drops the icon
       // silently -- API calls keep working, so nothing looks wrong except an
       // install prompt with no icon on it.
       res.set('Cross-Origin-Resource-Policy', 'cross-origin');

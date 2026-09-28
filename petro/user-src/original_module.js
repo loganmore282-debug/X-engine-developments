@@ -1,7 +1,6 @@
-// Petro backend (Render web service `petro-server`). The frontend is hosted
-// separately on Tencent EdgeOne Pages, so every call here is cross-origin --
-// this host must stay in server.js's CORS allowlist, and that allowlist must
-// keep matching *.edgeone.app / *.edgeone.site for the reverse direction.
+// Petro backend, on the same Hostinger VPS as this frontend (pm2, port 3000
+// behind nginx). api./app. are still different subdomains -- different
+// browser origins -- so this host must stay in server.js's CORS allowlist.
 var API_BASE = 'http://179.198.197.114:3000';
 
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }

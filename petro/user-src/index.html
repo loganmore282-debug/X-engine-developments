@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Petro</title>
-<!-- The SAME policy render.yaml sends as a header, carried in the file itself.
-     It is here because this page does not only ship from Render: the frontend
-     is also deployed to EdgeOne (see CLAUDE.md, and the .edgeone.* entries in
-     CORS_ALLOWED_SUFFIXES), and a host header cannot follow a file to another
-     host. A meta policy travels with index.html, so the app is covered
-     wherever it is uploaded.
+<!-- The SAME policy nginx sends as a header, carried in the file itself too.
+     A host header cannot follow a file to another host, so this meta tag is
+     what keeps the page covered even if it were ever served from somewhere
+     other than this VPS's own nginx (a local test server with no headers
+     configured, for instance) -- a document must satisfy BOTH, they
+     intersect rather than one overriding the other.
 
      What this actually buys, on a money app: script injected into this page
      cannot POST a member's balance, session token or Trade Password to a

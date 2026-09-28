@@ -12,34 +12,35 @@ const consts = src.slice(src.indexOf('const CORS_ALLOWED_ORIGINS'), src.indexOf(
 const cb = src.slice(src.indexOf('origin: (origin, cb) =>'), src.indexOf('}));', src.indexOf('origin: (origin, cb) =>')));
 const originFn = eval(`(() => { ${consts}\n return function(origin){ let out; const cb=(_e,v)=>{out=v;}; const f = { ${cb} }.origin; f(origin, cb); return out; }; })()`);
 
+// Petro runs entirely on one Hostinger VPS: backend (pm2, :3000) and both
+// static frontends (nginx, app./admin. subdomains) on the same box, so
+// CORS_ALLOWED_SUFFIXES is empty (no PaaS-generated platform subdomains to
+// suffix-match anymore -- see server.js's own comment on that constant).
+// Every real origin is therefore a plain, fixed entry in
+// CORS_ALLOWED_ORIGINS, plus localhost/127.0.0.1 for local dev, checked
+// unconditionally by the real code regardless of the suffix list.
 const cases = [
-  ['https://chipz-app.edgeone.app',        true,  'EdgeOne user panel'],
-  ['https://chipz-admin.edgeone.site',     true,  'EdgeOne admin panel'],
-  // The real one that broke: the owner's admin panel landed on .edgeone.dev,
-  // which was missing from the list, and the login reported "Network error"
-  // on a healthy backend.
-  ['https://chipz-admin.edgeone.dev',      true,  'EdgeOne admin panel on .edgeone.dev'],
-  ['https://chipz-app.edgeone.dev',        true,  'EdgeOne user panel on .edgeone.dev'],
-  ['https://edgeone.dev.evil.com',         false, 'suffix-spoofing attacker on .edgeone.dev'],
-  ['https://anything.pages.dev',           true,  'Cloudflare Pages'],
-  ['https://chipz-server.onrender.com',    true,  'Render'],
-  // Railway, after Render suspended the account. A platform host missing from
-  // the suffix list is refused by CORS, and the browser reports that to the
-  // app as nothing at all -- this project has already lost time to exactly
-  // that twice (Snow's custom domain, and .edgeone.dev).
-  ['https://chipz-app-production.up.railway.app',   true,  'Railway user panel'],
-  ['https://chipz-admin-production.up.railway.app', true,  'Railway admin panel'],
-  ['https://chipz.railway.app',                     true,  'Railway on the bare domain'],
-  ['https://up.railway.app.evil.test',              false, 'suffix-spoofing attacker on .up.railway.app'],
-  ['https://railway.app.evil.test',                 false, 'suffix-spoofing attacker on .railway.app'],
-  ['https://notrailway.app',                        false, 'a lookalike domain is not Railway'],
+  ['https://petro-platform.com',           true,  'the live app domain'],
+  ['https://www.petro-platform.com',       true,  'the live app domain, www'],
+  ['http://179.198.197.114:8080',          true,  'direct VPS frontend, port 8080'],
+  ['http://179.198.197.114:3000',          false, 'the VPS backend origin itself is not a frontend'],
   ['http://localhost:3000',                true,  'local dev'],
-  ['https://chipz-platform.com',           true,  'future custom domain'],
+  ['http://127.0.0.1:5173',                true,  'local dev, loopback IP'],
   [undefined,                              true,  'same-origin / no Origin header'],
-  ['https://chn-snow2beer.com',            false, "Snow's live site (must NOT reach Chipz)"],
+  ['https://chn-snow2beer.com',            false, "Snow's live site (must NOT reach Petro)"],
   ['https://evil-attacker.com',            false, 'random attacker'],
-  ['https://edgeone.app.evil.com',         false, 'suffix-spoofing attacker'],
-  ['https://notedgeone.app',               false, 'lookalike domain'],
+  ['https://petro-platform.com.evil.test', false, 'suffix-spoofing attacker on the real domain'],
+  ['https://notpetro-platform.com',        false, 'lookalike domain'],
+  // No PaaS platform suffix should match anything anymore -- these must all
+  // be refused now that CORS_ALLOWED_SUFFIXES is empty. If any of these
+  // start passing, something re-added a platform suffix that has no
+  // business being there on a single fixed VPS.
+  ['https://anything.pages.dev',                    false, 'Cloudflare Pages, no longer used'],
+  ['https://petro-server.onrender.com',             false, 'Render, no longer used'],
+  ['https://petro-app-production.up.railway.app',   false, 'Railway, no longer used'],
+  ['https://petro.railway.app',                     false, 'Railway bare domain, no longer used'],
+  ['https://petro-app.edgeone.app',                 false, 'EdgeOne, no longer used'],
+  ['https://petro-admin.edgeone.dev',               false, 'EdgeOne .dev, no longer used'],
 ];
 
 let failed = 0;
@@ -47,7 +48,7 @@ for (const [origin, expected, label] of cases) {
   const got = originFn(origin);
   const ok = got === expected;
   if (!ok) failed++;
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${String(origin).padEnd(38)} allowed=${String(got).padEnd(5)} ${label}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${String(origin).padEnd(42)} allowed=${String(got).padEnd(5)} ${label}`);
 }
 console.log(failed ? `\n${failed} FAILED` : '\nall CORS cases pass');
 process.exit(failed ? 1 : 0);

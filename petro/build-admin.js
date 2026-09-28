@@ -4,10 +4,11 @@
  * Source: admin-src/index.html
  * Output: admin/index.html
  *
- * EdgeOne runs this file on every deployment. Keep all browser-facing
- * admin hotfixes here deterministic and fail the build if an expected
- * source anchor disappears, rather than silently shipping an old/broken
- * notification bundle.
+ * Run by hand before every deploy to the VPS (see petro/CLAUDE.md, "Build
+ * & deploy pipeline"). Keep all browser-facing admin hotfixes here
+ * deterministic and fail the build if an expected source anchor
+ * disappears, rather than silently shipping an old/broken notification
+ * bundle.
  */
 const fs = require('fs');
 const path = require('path');
