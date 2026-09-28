@@ -8,6 +8,7 @@ const helmet      = require('helmet');
 const compression = require('compression');
 const rateLimit   = require('express-rate-limit');
 const { execFile } = require('child_process'); // used by the auto-deploy webhook, see /deploy/webhook below
+const PDFDocument = require('pdfkit'); // used by GET /statement/pdf below
 if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
 process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:', reason));
@@ -6080,6 +6081,170 @@ app.get('/transactions', async (req, res) => {
     const transactions = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     res.json({ status: 'success', transactions, truncated: transactions.length >= TX_LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your records' }); }
+});
+
+// ── DOWNLOAD STATEMENT (server-generated PDF) ──
+// Owner: "put a server side advanced feature called download statement, so
+// it downloads statement of the account as pdf very well organized
+// statement with all data... check how the statement looks you can check
+// the branch of voltrapower, it was downloading a good account statement so
+// do it." Voltra's own equivalent (original_module.js's downloadStatement)
+// builds the PDF client-side with jsPDF loaded from a CDN -- the owner
+// explicitly asked for this one server-side instead, so the PDF bytes are
+// generated here with `pdfkit` (pure JS, no native deps, no browser needed)
+// and streamed back as a real file download; the client only triggers the
+// request and saves the blob, per doDownloadStatement() in
+// user-src/original_module.js.
+//
+// Category labels/status text are a deliberate re-implementation of the
+// same logic the in-app Transaction Statement screen already uses
+// (statementDescription()/statementStatus() in original_module.js) --
+// duplicated on purpose, same "must match" precedent as phoneToEmail()
+// elsewhere in this file, so a PDF and the in-app screen never disagree
+// about what a given transaction type is called.
+function statementRowLabel(t, brand) {
+  const type = t.type;
+  if (type === 'deposit') return 'Deposit';
+  if (type === 'withdraw') return 'Withdrawal';
+  if (type === 'cashback') return 'Daily Income';
+  if (type === 'commission') return 'Referral Commission';
+  if (type === 'promocode') return 'Gift Code';
+  if (type === 'checkin') return 'Check-in Reward';
+  if (type === 'welcome_bonus') return 'Welcome Bonus';
+  if (type === 'team_reward') return 'Team Reward';
+  if (type === 'mission_salary') return 'Mission Salary';
+  if (type === 'mission_deposit_reward') return 'Mission Reward';
+  if (type === 'turntable' || type === 'spin' || type === 'spin_bonus') return 'Reward';
+  if (type === 'admin_credit') return brand + ' Credit';
+  if (type === 'admin_debit') return brand + ' Adjustment';
+  return 'Transaction';
+}
+function statementRowStatus(t) {
+  const raw = (String(t.status || '').toLowerCase() + ' ' + String(t.description || '').toLowerCase());
+  if (/fail|declin|reject|cancel|error/.test(raw)) return 'Failed';
+  if (/pend|process|await|initiating/.test(raw)) return 'Pending';
+  return 'Completed';
+}
+app.get('/statement/pdf', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    await settleAllForUser(uid);
+    const userSnap = await db.collection('users').doc(uid).get();
+    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const u = userSnap.data();
+    if (u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended.' });
+    const sett = await getSettings();
+    const brand = sett.brandName || 'Petro';
+    const currency = currentRegion().currency || 'UGX';
+    const STATEMENT_TX_LIMIT = 2000; // same cap as GET /transactions above
+    const snap = await db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(STATEMENT_TX_LIMIT).get();
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    const done = new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+    });
+
+    const PAGE_W = doc.page.width;
+    const RED = '#e30613', GOLD = '#f5a000', INK = '#25262b', MUTED = '#6b6d76';
+    const GREEN = '#1a7a3e', ROSE = '#b10510';
+    const COL = { id: 40, date: 150, desc: 235, status: 375, amt: 430 };
+    const AMT_W = PAGE_W - 40 - COL.amt;
+
+    function drawHeader() {
+      doc.rect(0, 0, PAGE_W, 92).fill(RED);
+      doc.rect(0, 88, PAGE_W, 4).fill(GOLD);
+      doc.fillColor('#fff').font('Helvetica-Bold').fontSize(22).text(brand.toUpperCase(), 40, 28);
+      doc.font('Helvetica').fontSize(11).text('Financial Statement', 40, 56);
+      doc.fillColor(INK);
+    }
+    function drawColumnHeads(y) {
+      doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED);
+      doc.text('REFERENCE', COL.id, y);
+      doc.text('DATE / TIME', COL.date, y);
+      doc.text('DESCRIPTION', COL.desc, y);
+      doc.text('STATUS', COL.status, y);
+      doc.text('AMOUNT', COL.amt, y, { width: AMT_W, align: 'right' });
+      doc.moveTo(40, y + 12).lineTo(PAGE_W - 40, y + 12).strokeColor('#dcdde0').lineWidth(0.5).stroke();
+    }
+    drawHeader();
+    let y = 112;
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(INK);
+    const meta = [
+      ['Account holder', u.phone || '-'],
+      ['Account ID', u.publicId || uid.slice(0, 10)],
+      ['Wallet balance', fmtMoney(u.walletBalance || 0, currency)],
+      ['Total deposited', fmtMoney(u.totalDeposited || 0, currency)],
+      ['Total withdrawn', fmtMoney(u.totalWithdrawn || 0, currency)],
+      ['Statement generated', new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC'],
+    ];
+    meta.forEach(([label, value]) => {
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(MUTED).text(label + ':', 40, y, { continued: false });
+      doc.font('Helvetica').fontSize(9).fillColor(INK).text(String(value), 175, y);
+      y += 15;
+    });
+    y += 8;
+    drawColumnHeads(y);
+    y += 20;
+
+    let totalIn = 0, totalOut = 0;
+    if (!rows.length) {
+      doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No transactions yet.', 40, y);
+      y += 16;
+    }
+    rows.forEach(t => {
+      if (y > doc.page.height - 90) {
+        doc.addPage();
+        y = 40;
+        drawColumnHeads(y);
+        y += 20;
+      }
+      const amt = Number(t.amount) || 0;
+      if (amt >= 0) totalIn += amt; else totalOut += -amt;
+      const label = statementRowLabel(t, brand);
+      const status = statementRowStatus(t);
+      const dateTime = (t.date || '') + (t.time ? ' ' + t.time : '');
+      doc.font('Helvetica').fontSize(7.5).fillColor(MUTED).text(String(t.statementId || t.id || '-').slice(0, 20), COL.id, y, { width: COL.date - COL.id - 6 });
+      doc.font('Helvetica').fontSize(8.5).fillColor(INK).text(dateTime, COL.date, y, { width: COL.desc - COL.date - 6 });
+      doc.font('Helvetica').fontSize(8.5).fillColor(INK).text(label.slice(0, 26), COL.desc, y, { width: COL.status - COL.desc - 6 });
+      doc.font('Helvetica').fontSize(8.5).fillColor(status === 'Failed' ? ROSE : status === 'Pending' ? GOLD : GREEN).text(status, COL.status, y, { width: COL.amt - COL.status - 6 });
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(amt >= 0 ? GREEN : ROSE)
+        .text((amt >= 0 ? '+' : '-') + fmtMoney(Math.abs(amt), currency), COL.amt, y, { width: AMT_W, align: 'right' });
+      y += 16;
+    });
+
+    if (y > doc.page.height - 120) { doc.addPage(); y = 40; }
+    y += 6;
+    doc.moveTo(40, y).lineTo(PAGE_W - 40, y).strokeColor('#dcdde0').lineWidth(0.5).stroke();
+    y += 14;
+    const summary = [
+      ['Total received', '+' + fmtMoney(totalIn, currency), GREEN],
+      ['Total paid out', '-' + fmtMoney(totalOut, currency), ROSE],
+      ['Current wallet balance', fmtMoney(u.walletBalance || 0, currency), INK],
+    ];
+    summary.forEach(([label, value, color]) => {
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text(label, 40, y);
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(color).text(value, COL.amt, y, { width: AMT_W, align: 'right' });
+      y += 16;
+    });
+    doc.font('Helvetica').fontSize(8).fillColor(MUTED)
+      .text(brand + ' — this statement was generated automatically and reflects your account at the time above.', 40, doc.page.height - 50, { width: PAGE_W - 80 });
+
+    doc.end();
+    await done;
+    const buffer = Buffer.concat(chunks);
+    const filename = 'Statement-' + (u.publicId || uid.slice(0, 8)) + '.pdf';
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'attachment; filename="' + filename.replace(/[^A-Za-z0-9_.-]/g, '') + '"');
+    res.send(buffer);
+  } catch (e) {
+    console.error('Statement PDF failed:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not generate your statement right now.' });
+  }
 });
 app.get('/deposits', async (req, res) => {
   const uid = await verifyAuth(req);

@@ -2266,3 +2266,101 @@ on a money app; or remove the switcher), the owner chose removal.
   now-missing elements, and the auth screen renders cleanly with no
   top-right button of any kind. `user/sw.js` bumped `petro-shell-v175` →
   `petro-shell-v176`.
+
+## 2026-09-28 (follow-up 2) — Transaction Statement icon fixed, server-generated PDF statement download built
+
+Owner, two asks in one message: fix the Transaction Statement row icon
+("it is having a light box frames background, this you can see it clearly")
+and build a real download-statement feature — *"put a server side advanced
+feature called download statement, so it downloads statement of the account
+as pdf very well organized statement with all data... check how the
+statement looks you can check the branch of voltrapower, it was downloading
+a good account statement so do it."*
+
+**Icon fix, root cause found by decoding the actual bytes, not guessed from
+the screenshot**: `SUPPLIED_MEMBER_ICON_ASSETS.accountStatement` was a
+72x72 raster PNG with its alpha channel ~255 (fully opaque) across almost
+the entire square — confirmed with a Python/Pillow histogram, not assumed.
+This icon system renders through a CSS mask
+(`.supplied-icon{background:currentColor;mask:var(--supplied-icon)...}`),
+which reads ONLY alpha, never RGB — so a fully-opaque square becomes one
+solid filled block regardless of what colors the pixels actually are,
+exactly the "light box" the owner is describing. The two icons that *were*
+already fixed this way (`CLEAN_ACCOUNT_ABOUT_ICON`/`CLEAN_NAV_CART_ICON`)
+turned out to still be raster PNGs too, just properly background-removed
+ones (mostly alpha=0) — meaning the established fix pattern for this file
+is "process the raster," not "convert to SVG." `accountStatement` broke
+that pattern instead: rather than re-processing a raster that was never
+cut out to begin with, it's now a real inline outline SVG
+(`ICONS.receiptLg`, same family/stroke-width as every other `*Lg` icon in
+this file), with `suppliedMemberIcon()` special-cased to return it directly
+rather than routing through the mask/`--supplied-icon` mechanism at all —
+same "route around it" pattern `accountAbout`/`navAssets` already use for
+their own special cases in that same function.
+
+**Download Statement, server-side per the owner's explicit instruction**
+(Voltra's own equivalent, read for reference — `voltra/original_module.js`'s
+`downloadStatement()` — builds its PDF **client-side** with jsPDF from a
+CDN; this one is deliberately different, generated entirely on the server):
+- **New dependency**: `pdfkit` (`^0.20.2`, pure JS, no native/browser
+  dependency) added to `package.json`/`package-lock.json`. Picked up
+  automatically by the existing auto-deploy webhook's `npm install
+  --omit=dev` step — no extra VPS action needed beyond the normal push.
+- **`GET /statement/pdf`** (`server.js`) — authenticated via the same
+  `verifyAuth()` every other member route uses. Settles any due cashback
+  first (`settleAllForUser()`, same as `GET /account`) so the wallet
+  balance and any freshly-due transaction are current. Queries the same
+  `transactions` collection the in-app Transaction Statement screen reads
+  (same 2000-row cap as `GET /transactions`), builds the PDF in memory with
+  `pdfkit`, and streams it back with `Content-Type: application/pdf` +
+  `Content-Disposition: attachment`. Category/status labels
+  (`statementRowLabel()`/`statementRowStatus()`) are a **deliberate
+  re-implementation** of the exact same logic the in-app screen's
+  `statementDescription()`/`statementStatus()` already use — duplicated on
+  purpose so a downloaded PDF and the in-app screen can never disagree
+  about what a transaction is called, same "must match in two places"
+  precedent `phoneToEmail()` already established in this file.
+- **Layout**: Corporate Red header band with a Golden Orange accent stripe,
+  account metadata (holder, account ID, wallet balance, total
+  deposited/withdrawn, generation timestamp), a REFERENCE/DATE-TIME/
+  DESCRIPTION/STATUS/AMOUNT table (statement IDs in the same `B2...` format
+  the app itself shows, status color-coded exactly like the in-app screen —
+  green/completed, gold/pending, red/failed), running totals (received,
+  paid out, current balance), a brand tagline footer, and real multi-page
+  pagination with the column headers repeating on every new page.
+- **Real bug caught by actually rendering the output, not just reading the
+  code**: the amount column's minus sign was written as the Unicode MINUS
+  SIGN character (U+2212), which is not in PDFKit's standard Helvetica
+  font's WinAnsi glyph table — it rendered as a stray `"` instead of a
+  minus, confirmed by generating a real PDF with mock data (45 transactions,
+  multiple types/statuses, enough rows to force a page break) and rendering
+  it to PNG with PyMuPDF for visual inspection, not trusted from the
+  drawing code alone. Fixed by using a plain ASCII hyphen instead, which
+  WinAnsi does support; re-rendered and confirmed both the minus sign and
+  the footer's em-dash (U+2014, which WinAnsi *does* support) render
+  correctly.
+- **Client side** (`user-src/original_module.js`/`index.html`): a red pill
+  "Download Statement" button (`ICONS.download`, top-right of the sheet,
+  above the Income/Deposits/Withdrawals tabs). `downloadStatementPdf()`
+  deliberately does NOT go through this file's own `api()`/`post()`
+  helpers — `api()` always calls `resp.json()` on the response (see its own
+  comment on why every other endpoint here answers JSON), which would throw
+  on a real binary PDF body. A raw `fetch()` attaches the same Bearer token
+  `api()` gets internally (`window.fbAuth.currentUser.getIdToken()`), reads
+  the response as a `blob()`, and triggers the browser's native save via a
+  temporary anchor with a `download` attribute — the object URL is revoked
+  30 seconds later rather than immediately, since some Android WebViews
+  hand the file off to the OS asynchronously after `.click()`.
+- **Verified**: `node -c` on both touched files, `node build-core.js`
+  (round-trip OK). The PDF generation itself was verified by literally
+  running it (a standalone copy of the exact drawing code, since this
+  sandbox has no live Mongo/Firebase to hit the real route through) against
+  45 mock transactions spanning every type/status this app has, rendering
+  the real output to PNG and inspecting it — not just reading the pdfkit
+  calls and assuming they're right, which is what let the minus-sign bug
+  get caught before shipping instead of after. The button and its
+  no-auth/error fallback path were verified in headless Chromium against
+  the actual built bundle: button renders, `downloadStatementPdf()` runs to
+  completion with zero uncaught errors and shows the expected `notify()`
+  message when there's no session to authenticate with. `user/sw.js`
+  bumped `petro-shell-v176` → `petro-shell-v177`.

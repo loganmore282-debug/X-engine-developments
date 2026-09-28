@@ -1127,6 +1127,19 @@ var ICONS = {
   user: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1536 1536" width="20" height="20"><circle cx="768" cy="448" r="256" fill="none" stroke="currentColor" stroke-width="128"/><path d="M256 1344 V1088 C256 1017.3 313.3 960 384 960 H1152 C1222.7 960 1280 1017.3 1280 1088 V1344" fill="none" stroke="currentColor" stroke-width="128" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   walletLg: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><path d="M15.5 14.5h2.5"/></svg>',
   docLg: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M14 3.5V8h4"/><path d="M9 12h6M9 15.5h6"/></svg>',
+  // Owner: "fix the svg of transaction statement, it is having a light box
+  // frames background". The supplied raster (SUPPLIED_MEMBER_ICON_ASSETS'
+  // old 'accountStatement' entry) was never actually background-removed --
+  // its alpha channel was ~255 (fully opaque) across nearly the whole 72x72
+  // square, confirmed by decoding it directly, not guessed from the
+  // screenshot. This icon set renders through a CSS mask
+  // (.supplied-icon{mask:var(--supplied-icon)...}), which only reads alpha,
+  // never RGB -- so a fully-opaque square becomes one solid filled block
+  // regardless of what the pixels' colors are, which is exactly the "light
+  // box" the owner is seeing. A clean plain outline glyph, same family as
+  // every other *Lg icon here, replaces it outright rather than attempting
+  // to re-process a raster that was never properly cut out.
+  receiptLg: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h10v14.3l-1.3-.9-1.4.9-1.3-.9-1.4.9-1.3-.9-1.4.9-1.3-.9-1.3.9V3.5Z"/><path d="M9 7.3h5M9 10h5"/><circle cx="16.3" cy="15.3" r="2.7"/><path d="M16.3 14v2.6M15 15.3h2.6"/></svg>',
   clock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12.5" r="8"/><path d="M12 8.5v4l3 2"/></svg>',
   copy: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 8.5V6A1.5 1.5 0 0 0 13.5 4.5H6A1.5 1.5 0 0 0 4.5 6v7.5A1.5 1.5 0 0 0 6 15h2.5"/></svg>',
   share: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="2.3"/><circle cx="6" cy="12" r="2.3"/><circle cx="18" cy="18" r="2.3"/><path d="M8.1 10.8 15.9 7.2M8.1 13.2l7.8 3.6"/></svg>',
@@ -1177,6 +1190,11 @@ var CLEAN_ACCOUNT_ABOUT_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAE
 // scales exactly like the other bottom-navigation icons.
 var CLEAN_NAV_CART_ICON = 'data:image/png;base64,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';
 function suppliedMemberIcon(name){
+  // accountStatement bypasses the raster/mask path entirely -- see the
+  // comment above ICONS.receiptLg for why (the supplied PNG was never
+  // background-removed, so it rendered as a solid block under the CSS
+  // mask this function normally uses for supplied icons).
+  if (name === 'accountStatement') return ICONS.receiptLg;
   const src = name === 'navAssets' ? CLEAN_NAV_CART_ICON
     : name === 'accountAbout' ? CLEAN_ACCOUNT_ABOUT_ICON
     : SUPPLIED_MEMBER_ICON_ASSETS[name];
@@ -4472,6 +4490,9 @@ window.openTransactionStatement = async function(cat){
   _statementCat = ['income','deposit','withdraw'].includes(cat) ? cat : 'income';
   const hadCache = Array.isArray(STATE.transactions);
   openSheet('Transaction Statement', `
+    <div class="statement-download-row">
+      <button type="button" class="statement-download-btn" id="statementDownloadBtn" onclick="downloadStatementPdf()">${ICONS.download}<span>Download Statement</span></button>
+    </div>
     <div class="statement-tabs" id="statementTabs">
       <button data-cat="income" class="${_statementCat==='income'?'on':''}" onclick="switchStatementCategory('income')">Income</button>
       <button data-cat="deposit" class="${_statementCat==='deposit'?'on':''}" onclick="switchStatementCategory('deposit')">Deposits</button>
@@ -4491,6 +4512,48 @@ window.openTransactionStatement = async function(cat){
     STATE.transactions = [];
   }
   if (_openSheetTitle === 'Transaction Statement') renderStatement();
+};
+// Owner: "put a server side advanced feature called download statement, so
+// it downloads statement of the account as pdf." The PDF itself is built
+// entirely server-side (GET /statement/pdf in server.js, via pdfkit) --
+// this function only fetches the bytes and hands them to the browser. It
+// deliberately does NOT go through api()/post(): those always call
+// resp.json() on the response (see api()'s own comment on why -- every
+// other endpoint in this app answers JSON), which would throw on a real
+// PDF body. A raw fetch() with the same Bearer-token attachment api()
+// does internally is used instead, and the response is read as a blob.
+window.downloadStatementPdf = async function(){
+  const btn = $('statementDownloadBtn');
+  if (btn && btn.classList.contains('busy')) return; // already in flight
+  if (btn) { btn.classList.add('busy'); }
+  try {
+    if (!(window.fbAuth && window.fbAuth.currentUser)) { notify('Please sign in again to download your statement.'); return; }
+    const token = await window.fbAuth.currentUser.getIdToken();
+    const resp = await fetch(API_BASE + '/statement/pdf', { headers: { Authorization: 'Bearer ' + token } });
+    if (!resp.ok) {
+      let msg = 'Could not generate your statement right now.';
+      try { const j = await resp.json(); if (j && j.message) msg = j.message; } catch(_){}
+      notify(msg);
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Petro-Statement.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Freed on a delay, not immediately: some browsers (notably older
+    // Android WebViews) start the download/open handoff asynchronously
+    // after click(), and revoking the URL too early can hand the file
+    // picker a dead reference.
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (e) {
+    notify('Could not reach the server. Check your connection and try again.');
+  } finally {
+    if (btn) btn.classList.remove('busy');
+  }
 };
 // Compatibility for post-withdraw flows and any stale call sites.
 window.openBalanceRecordSheet = function(tab){

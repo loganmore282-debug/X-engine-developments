@@ -1,7 +1,7 @@
 {
   "name": "petro-server",
   "version": "1.0.0",
-  "description": "Chipz \u2014 Backend Server",
+  "description": "Chipz — Backend Server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -14,7 +14,8 @@
     "express-rate-limit": "^7.4.0",
     "firebase-admin": "^12.0.0",
     "helmet": "^7.1.0",
-    "mongodb": "^6.3.0"
+    "mongodb": "^6.3.0",
+    "pdfkit": "^0.20.2"
   },
   "devDependencies": {
     "acorn": "^8.15.0",
