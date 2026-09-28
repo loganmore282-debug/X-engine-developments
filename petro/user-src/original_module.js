@@ -4758,7 +4758,7 @@ window.openChestSheet = function(){
     <h2>Redeem Gift Code</h2>
     <p class="sub">Enter a valid gift code to add its reward to your balance.</p>
     <div style="width:100%;">
-      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter gift code" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
+      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter gift code" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"></div>
       <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:16px;letter-spacing:.06em;" onclick="submitChestKey()">REDEEM CODE</button>
     </div>
   </div>`);

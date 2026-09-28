@@ -2491,3 +2491,104 @@ really doing should be removed"*):
   (`admin/sw.js` NOT bumped -- `admin-src/index.html` was not touched this
   round, and a stray obfuscation-noise-only rebuild of `admin/index.html`
   was reverted rather than shipped for zero real change).
+
+## 2026-09-28 (follow-up 4) — PDF document reference + human-readable timestamp + centered footer; referral/gift code formats redesigned again
+
+Owner: *"Let's put also document reference bro like l can put Ref:
+STMT-261777970567-20260901-EAE9H2 / Generated Sep 28, 2026 at 11:12 EAT ...
+That is my example reference, l am not saying to use that format so look
+for other format. And this word should be middle bottom not aside 'Petro
+— Clean Energy, Green Development'. And please change the format of
+referral codes and format of giftcodes use other ways."*
+
+**PDF statement (`GET /statement/pdf` in `server.js`), four changes:**
+- **Document reference added.** A `Reference:` row now leads the metadata
+  block, above `Account holder`. Deliberately does NOT copy the owner's
+  own example shape (a huge raw timestamp + date + random tail) -- instead
+  reuses the same unambiguous alphabet (`GIFTCODE_CHARS`, no I/l/O/0/1)
+  already used for gift/referral codes, formatted as `REF-XXX-XXX-XXX`
+  (three groups of three). Its 3-3-3 shape is intentionally distinct from
+  gift codes' 4-4-4 and referral codes' flat 5, so the three can't be
+  confused for each other. Generated fresh per download and not stored or
+  looked up anywhere -- it's a display label for that one PDF, not an
+  identifier, so no uniqueness check is needed.
+- **Timestamp reformatted.** `Statement generated: 2026-09-28 11:02:44
+  EAT` → `Generated: Sep 28, 2026 at 11:30 EAT` (month name, no leading
+  zeros on day/year, seconds dropped) -- matches the shape of the owner's
+  own example line, still built from the same `eatNow()` clock every
+  transaction row already uses, so the document and its rows never
+  disagree about what "now" was.
+- **Footer centered.** `Petro — Clean Energy, Green Development` at
+  `doc.page.height - 50` gained `align: 'center'` on its existing
+  full-width text box (was left-aligned by default) -- owner: *"this word
+  should be middle bottom not aside."*
+- Verified by rendering a full mock statement (26 transactions, mock logo,
+  same script pattern as prior rounds) to PDF with `pdfkit` directly (not
+  through the app, no DB needed) and to PNG via PyMuPDF -- confirmed
+  visually: `Reference: REF-U6X-UDV-GQQ`, `Generated: Sep 28, 2026 at
+  11:30 EAT`, and the footer centered under the table, all alongside the
+  still-working logo/no-Account-ID/EAT changes from the previous round.
+
+**Referral and gift code formats redesigned again (owner: "use other
+ways"), both in `server.js`:**
+- **Gift codes**: still 12 meaningful characters from the same
+  unambiguous alphabet, but now dash-segmented into three groups of four
+  --  `XXXX-XXXX-XXXX` (was one contiguous 12-character block) -- the
+  same readability convention product keys commonly use, easier to read
+  aloud or copy correctly than one long block. `/redeem`'s input regex
+  already allowed dashes before this round; it now ALSO tolerates a member
+  typing the same code without dashes (or with them elsewhere): if
+  stripping non-alphanumerics from the typed code leaves exactly 12
+  characters, it re-segments them into the canonical dashed form and
+  retries the lookup before giving up. Client `#chestKey` input's
+  `maxlength` bumped `12` → `14` to fit the two added dashes.
+- **Referral codes**: dropped the mixed-case alphabet, now uppercase-only
+  (same alphabet as gift codes) -- a referral code gets read aloud over a
+  phone call far more often than a gift code (almost always
+  copy-pasted) ever does, and "capital G or lowercase g?" is real friction
+  voice sharing has that copy-paste doesn't. Length bumped `4` → `5` to
+  keep the code space comfortably larger despite dropping lowercase
+  (30^5 = 24,300,000 vs. the old 54^4 = 8,503,056). The collision-retry
+  safety-valve escalation in `generateUniqueReferralCode()` updated to
+  match: `[5, 6]` → `[6, 7]` (its first step was redundant at the old
+  `[5, 6]` now that the base length is itself 5), comment text rewritten
+  to match.
+- Every already-issued code of either kind keeps working untouched --
+  nothing is migrated, only the shape of NEWLY generated codes changed.
+  `findUserByReferralCode()` and `/redeem`'s existing lookups are
+  case-insensitive fallbacks that don't assume a fixed length or alphabet,
+  so neither needed changes beyond the dash-tolerant re-segmentation above.
+- **A real bug caught before shipping, not user-reported**: while
+  rewriting `genGiftCode()`, grep turned up a SECOND, stale
+  `function genGiftCode() { return randFromAlphabet(GIFTCODE_CHARS,
+  GIFTCODE_LENGTH); }` declaration later in the file, left over from an
+  earlier round, right before `generateUniqueGiftCode()`. Because
+  JavaScript allows silent function redeclaration (the later one wins),
+  this stale duplicate would have completely overridden the new
+  dash-segmented generator, making the whole format change a silent no-op
+  with no error anywhere. Caught by `grep -n "function genGiftCode"
+  server.js` returning two line numbers before any test was run; the
+  duplicate was deleted. This is exactly the "grep every usage before
+  shipping" discipline this file has documented catching real bugs with
+  before (the icon special-case regression two rounds ago, several
+  Codex-caught referral-locking races) -- caught proactively this time,
+  not reported by anyone.
+- Verified in isolation with a standalone script (same alphabet/length
+  constants copied out, no DB needed): sample gift codes
+  (`699E-D35P-MFWS`, `B3HX-ZBBV-DYF3`, ...), sample referral codes
+  (`WSFM3`, `EAYWC`, ...), sample doc references (`REF-N7H-VRU-7SU`, ...),
+  and confirmed a generated gift code survives dash-stripping and
+  re-segmentation back to its exact original form (the same logic
+  `/redeem`'s fallback performs).
+- Checked `admin-src/` for any gift-code/referral-code length or format
+  assumption -- none found (admin never sets or validates a code's shape,
+  only displays it).
+- `node -c server.js` clean. `user-src/original_module.js` had no new
+  edits this round (only its already-built-but-unshipped changes from
+  follow-up 3 -- the icon fix, dynamic filename, `#chestKey` maxlength --
+  were sitting unbuilt); `node build-core.js` run now, round-trip OK.
+  `user/sw.js` bumped `petro-shell-v178` → `petro-shell-v179` (covers both
+  this round's `#chestKey` maxlength/filename carry-over and the PDF/code
+  changes below it in `server.js`, which don't need a client cache bump on
+  their own but ship in the same push). `admin/sw.js` not touched --
+  nothing admin-facing changed.

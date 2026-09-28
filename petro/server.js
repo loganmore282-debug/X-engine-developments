@@ -1496,29 +1496,43 @@ function finiteMoney(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-// Gift codes keep this original mixed-case alphabet, now at 8 characters
-// (was 5, owner request 2026-08-27). Still can't collide with a referral
-// code by construction — referral codes are 6 chars from a DIFFERENT
-// (uppercase-only) alphabet below, so length alone already told the two
-// apart and still does.
-// Owner 2026-09-07: "treasure chest codes are 12 character alphanumeric
-// random letters and numbers ie HDG27RHRFT64, NO PUTTING SMALL LETTERS."
-// So gift codes now use the SAME uppercase-only, unambiguous alphabet as
-// referral codes below (no I/l/O/0/1 -- a member reading a code off a
-// screenshot must not have to guess O from 0). Length still tells the two
-// kinds apart by construction: gift 12, referral 6.
+// Owner, 2026-09-28: "change the format of referral codes and format of
+// giftcodes use other ways" -- both formats below are new again. The
+// unambiguous, uppercase-only alphabet itself is kept (no I/l/O/0/1 -- a
+// code read off a screenshot must never require guessing O from 0, an
+// owner requirement that has held across every previous format change),
+// only the SHAPE each code takes is different this time.
+//
+// Gift codes are now segmented into three dash-separated groups of 4
+// (XXXX-XXXX-XXXX, 12 random characters total, same as before -- only
+// contiguous vs. segmented changed, not the entropy) -- the same
+// readability convention product keys and gift-card codes commonly use,
+// easier to read aloud or copy correctly than one 12-character block.
+// /redeem already accepted dashes in its input regex before this round
+// (`[A-Za-z0-9-]+`), and now also tolerates a member typing the same code
+// WITHOUT the dashes -- see /redeem's own fallback below.
 const GIFTCODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const GIFTCODE_LENGTH = 12;
-// Referral codes, changed 2026-09-07 (owner: "mixture of letters and numbers
-// only 4 characters ie Gy2f, 5GHqt"). Mixed case and digits, still with no
-// I/l/O/0/1 so a code read off a screenshot is never ambiguous. 54
-// characters over 4 places is 8,503,056 codes; the uniqueness check below is
-// what actually guarantees no repetition, the space only decides how often it
-// has to retry.
-// Every already-issued code keeps working untouched -- nothing is migrated,
-// this only changes what NEWLY generated codes look like.
-const REFERRAL_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; // no I/l/O/0/1
-const REFERRAL_LENGTH = 4;
+const GIFTCODE_GROUP_LEN = 4;
+const GIFTCODE_GROUPS = 3;
+const GIFTCODE_LENGTH = GIFTCODE_GROUP_LEN * GIFTCODE_GROUPS; // 12 meaningful characters, unchanged
+function genGiftCode() {
+  const raw = randFromAlphabet(GIFTCODE_CHARS, GIFTCODE_LENGTH);
+  const groups = [];
+  for (let i = 0; i < GIFTCODE_LENGTH; i += GIFTCODE_GROUP_LEN) groups.push(raw.slice(i, i + GIFTCODE_GROUP_LEN));
+  return groups.join('-');
+}
+// Referral codes are now uppercase-only (dropped the mixed-case alphabet
+// the previous format used) -- a referral code is shared out loud, over a
+// phone call or a voice note, far more often than a gift code ever is, and
+// "was that a capital G or lowercase g" is a real friction point mixed
+// case adds that a gift code (almost always copy-pasted, never read aloud)
+// does not have. Length bumped 4 -> 5 to keep the code space comfortably
+// larger despite dropping lowercase: 30 characters over 5 places is
+// 24,300,000 codes, versus the previous 54^4 = 8,503,056.
+// Every already-issued code keeps working untouched -- nothing is
+// migrated, this only changes what NEWLY generated codes look like.
+const REFERRAL_CHARS = GIFTCODE_CHARS; // same unambiguous uppercase alphabet, not a new one
+const REFERRAL_LENGTH = 5;
 function randFromAlphabet(alphabet, n) {
   let s = '';
   for (let i = 0; i < n; i++) s += alphabet[crypto.randomInt(alphabet.length)];
@@ -1541,7 +1555,6 @@ async function findUserByReferralCode(code) {
   const byLower = await db.collection('users').where('referralCodeLower', '==', lower).limit(1).get();
   return byLower.empty ? null : byLower.docs[0];
 }
-function genGiftCode() { return randFromAlphabet(GIFTCODE_CHARS, GIFTCODE_LENGTH); }
 async function generateUniqueGiftCode() {
   return withLock('giftcode-gen', async () => {
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -1571,12 +1584,12 @@ async function generateUniqueReferralCode(userId) {
       const claimed = await tryClaim(randCode(REFERRAL_LENGTH));
       if (claimed) return claimed;
     }
-    // Safety valve, not the normal path. 25 collisions in a row at 4
-    // characters means the 8.5M space is genuinely crowded, and at that point
-    // a 5- then 6-character code is far better than refusing to let somebody
-    // register. Length is not what identifies a referral code anywhere in
-    // this file, so a longer one is handled identically.
-    for (const len of [5, 6]) {
+    // Safety valve, not the normal path. 25 collisions in a row at 5
+    // characters means the 24.3M space is genuinely crowded, and at that
+    // point a 6- then 7-character code is far better than refusing to let
+    // somebody register. Length is not what identifies a referral code
+    // anywhere in this file, so a longer one is handled identically.
+    for (const len of [6, 7]) {
       for (let attempt = 0; attempt < 25; attempt++) {
         const claimed = await tryClaim(randCode(len));
         if (claimed) return claimed;
@@ -5927,6 +5940,25 @@ app.post('/redeem', async (req, res) => {
       if (codeSnap.empty && upper !== raw) {
         codeSnap = await db.collection('promoCodes').where('code', '==', upper).limit(1).get();
       }
+      // New gift codes are dash-segmented (XXXX-XXXX-XXXX) for readability,
+      // but a member who reads one off a screenshot and types it by hand
+      // may reasonably leave the dashes out, or put them somewhere else --
+      // the code itself, read as characters, is still exactly right. If
+      // stripping non-alphanumerics leaves precisely GIFTCODE_LENGTH
+      // characters, re-segment them into the canonical shape and try that
+      // too, rather than telling a member holding a genuine code that it
+      // is invalid over punctuation alone.
+      if (codeSnap.empty) {
+        const stripped = upper.replace(/[^A-Z0-9]/g, '');
+        if (stripped.length === GIFTCODE_LENGTH) {
+          const groups = [];
+          for (let i = 0; i < GIFTCODE_LENGTH; i += GIFTCODE_GROUP_LEN) groups.push(stripped.slice(i, i + GIFTCODE_GROUP_LEN));
+          const resegmented = groups.join('-');
+          if (resegmented !== raw && resegmented !== upper) {
+            codeSnap = await db.collection('promoCodes').where('code', '==', resegmented).limit(1).get();
+          }
+        }
+      }
       if (codeSnap.empty) {
         // A code that doesn't exist at all is the actual "guessing" signal --
         // an already-used or usage-capped code below is a REAL code, not a
@@ -6213,14 +6245,30 @@ app.get('/statement/pdf', async (req, res) => {
     // every row beneath it instead of a separate UTC one.
     const genAt = eatNow();
     const padGen = n => String(n).padStart(2, '0');
-    const generatedStr = genAt.getUTCFullYear() + '-' + padGen(genAt.getUTCMonth() + 1) + '-' + padGen(genAt.getUTCDate())
-      + ' ' + padGen(genAt.getUTCHours()) + ':' + padGen(genAt.getUTCMinutes()) + ':' + padGen(genAt.getUTCSeconds()) + ' EAT';
+    // Owner: "Generated Sep 28, 2026 at 11:12 EAT" -- month name, no
+    // leading zeros on day/year, seconds dropped. Same eatNow() clock as
+    // every row on the statement, just formatted for a human to read
+    // rather than sorted by a machine.
+    const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const generatedStr = MONTH_NAMES[genAt.getUTCMonth()] + ' ' + genAt.getUTCDate() + ', ' + genAt.getUTCFullYear()
+      + ' at ' + padGen(genAt.getUTCHours()) + ':' + padGen(genAt.getUTCMinutes()) + ' EAT';
+    // Owner: "put also document reference bro" -- a per-download reference
+    // distinct from each row's own statementId (the unrelated "B2<16
+    // digits>" ledger format below) and deliberately NOT shaped like the
+    // owner's own example (a giant raw timestamp + date + random tail).
+    // Three short groups from the same unambiguous alphabet already used
+    // for gift/referral codes -- easy to read aloud, and its 3-3-3 shape
+    // (vs. gift codes' 4-4-4 and referral codes' flat 5) keeps it from
+    // being mistaken for either. Purely a display label for this one PDF,
+    // not looked up anywhere, so no uniqueness check is needed.
+    const docRef = 'REF-' + randFromAlphabet(GIFTCODE_CHARS, 3) + '-' + randFromAlphabet(GIFTCODE_CHARS, 3) + '-' + randFromAlphabet(GIFTCODE_CHARS, 3);
     const meta = [
+      ['Reference', docRef],
       ['Account holder', u.phone || '-'],
       ['Wallet balance', fmtMoney(u.walletBalance || 0, currency)],
       ['Total deposited', fmtMoney(u.totalDeposited || 0, currency)],
       ['Total withdrawn', fmtMoney(u.totalWithdrawn || 0, currency)],
-      ['Statement generated', generatedStr],
+      ['Generated', generatedStr],
     ];
     meta.forEach(([label, value]) => {
       doc.font('Helvetica-Bold').fontSize(9).fillColor(MUTED).text(label + ':', 40, y, { continued: false });
@@ -6272,7 +6320,7 @@ app.get('/statement/pdf', async (req, res) => {
       y += 16;
     });
     doc.font('Helvetica').fontSize(8).fillColor(MUTED)
-      .text(brand + ' — Clean Energy, Green Development', 40, doc.page.height - 50, { width: PAGE_W - 80 });
+      .text(brand + ' — Clean Energy, Green Development', 40, doc.page.height - 50, { width: PAGE_W - 80, align: 'center' });
 
     doc.end();
     await done;
