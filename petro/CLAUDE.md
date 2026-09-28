@@ -2220,3 +2220,49 @@ small things."
   screen (forced open with the pending-state steps) confirms the dark glass
   card/wallpaper treatment with legible white/muted text, zero page errors.
   `user/sw.js` bumped `petro-shell-v174` → `petro-shell-v175`.
+
+## 2026-09-28 (follow-up) — Language switcher removed entirely, per owner's own choice
+
+Immediately after the round above, owner: *"language changing should
+stimulate google language translator, or else remove it."* Given a clean
+three-way choice (real Google Cloud Translation API — cost + new dependency;
+Google's free page-translate widget — no cost but known-unreliable and risky
+on a money app; or remove the switcher), the owner chose removal.
+
+- **The `.lang-btn` pill** (top-right on the auth hero, the entry point to
+  `openLangPicker()`) is deleted from `user-src/index.html`'s markup, along
+  with its CSS (`.lang-btn`, `.lang-btn:active`, `.auth-screen-v2 .lang-btn`)
+  — no element carries that class any more, so nothing was left half-alive.
+- **Deliberately NOT a deep rip-out**: `LANG_ROWS`/`LANG_PATTERNS`/
+  `translateTree()`/`t()`/`setLang()`/`openLangPicker()`/`closeLangPicker()`/
+  `paintLangButton()`/`applyRegionLanguages()`/`resolveLang()` are all left
+  exactly as they were, now simply unreachable — same "leave the machinery,
+  remove the entry point" precedent this file already has for Turntable,
+  subdomains, Trade Password, and others. `paintLangButton()`'s own
+  `$('langBtn')`/`$('langRow')` lookups are already null-safe, so removing
+  the markup does not crash it — confirmed live, not assumed (see
+  Verified below). Kept dormant rather than deleted in case a real
+  translation method (the Google Cloud API option, most likely) is chosen
+  later — resurrecting a working, already-built table is a re-add of one
+  button, not a rewrite.
+- **`DEFAULT_REGION.languages` in `server.js` was already `['en']`-only**
+  (see the Uganda-only retirement round above) — that already hid the old
+  button via `paintLangButton()`'s own existing "hidden when only one
+  language is allowed" rule, but only as long as that region config stays
+  set that way. Removing the markup on top of that makes the switcher gone
+  unconditionally, not dependent on a config value nobody is watching.
+- **Why the owner's screenshot still showed a working "Luganda" picker
+  right before this round**, despite `DEFAULT_REGION.languages` already
+  being English-only in the code: almost certainly the same class of stale-
+  deploy/stale-service-worker gap this project has hit more than once this
+  week (see the git-divergence and CSS-corruption incidents above) — the
+  live site had not caught up to the Uganda-only commit yet. Not
+  re-investigated further this round since the fix (an unconditional markup
+  removal) makes the question moot either way.
+- **Verified**: `node -c user-src/original_module.js`, `node build-core.js`
+  (round-trip OK). Rendered the built bundle in headless Chromium with the
+  auth screen forced visible: confirmed `#langBtn`/`.lang-btn` do not exist
+  anywhere in the DOM, `paintLangButton()` runs with zero errors against the
+  now-missing elements, and the auth screen renders cleanly with no
+  top-right button of any kind. `user/sw.js` bumped `petro-shell-v175` →
+  `petro-shell-v176`.

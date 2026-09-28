@@ -1407,17 +1407,28 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    this one comes later in the sheet, so it was winning and collapsing the
    backdrop to a 0x0 relatively-positioned span. It rendered as nothing at
    all, and every computed-style check still passed. */
-/* ── THE LANGUAGE BUTTON AND ITS PICKER ──
-   The button sits over the auth hero's top-right corner, above the backdrop
-   image (z-index 0) and the wordmark row's own layer. It is a glass pill
-   rather than a filled one: the hero behind it is either the brand gradient
-   or an owner-uploaded photo, and a solid chip on top of either reads as a
-   sticker. */
-.lang-btn{position:absolute;top:14px;right:14px;z-index:4;display:inline-flex;align-items:center;gap:6px;
-  padding:7px 11px;border:1px solid rgba(255,255,255,.42);border-radius:var(--r-pill);
-  background:rgba(20,10,5,.26);color:#fff;font:inherit;font-size:13px;font-weight:600;
-  letter-spacing:.01em;cursor:pointer;-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
-.lang-btn:active{transform:translateY(1px);}
+/* ── THE LANGUAGE PICKER SHEET ──
+   Owner: "language changing should stimulate google language translator, or
+   else remove it" -- the curated translation table only ever covers a
+   fraction of the app's text by design (see original_module.js's own long
+   comment above LANG_ROWS for why -- a wrong word on a money screen is worse
+   than an English one, so unreviewed strings deliberately fall back to
+   English rather than guess), which read as "changing language only changes
+   small things." Given the choice between a real translation API (cost +
+   new dependency), Google's free but unreliable page-translate widget, or
+   removing the switcher, the owner chose removal. The entry point -- the
+   `.lang-btn` pill that used to sit top-right on the auth hero -- is gone
+   from the markup above, and its CSS is gone with it (no element uses this
+   class any more, so keeping the rule would just be dead weight, not a
+   feature preserved for later). The picker SHEET below stays as dormant,
+   unreachable code (openLangPicker() has no caller left) -- same "leave the
+   machinery, remove the entry point" precedent as Turntable/subdomains/Trade
+   Password elsewhere in this file's history, in case real translation is
+   revisited later with an actual API. DEFAULT_REGION.languages is already
+   ['en']-only in server.js (see the Uganda-only retirement round above),
+   which is what made the button invisible everywhere paintLangButton() already
+   ran -- removing the markup on top of that makes it gone unconditionally,
+   not dependent on a region config staying correctly set. */
 .lang-sheet-bg{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center;
   background:rgba(20,10,5,.45);opacity:0;pointer-events:none;transition:opacity .2s ease;}
 .lang-sheet-bg.show{opacity:1;pointer-events:auto;}
@@ -1473,7 +1484,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 @supports (min-height:100dvh){.auth-screen-v2{min-height:100dvh;}}
 .auth-screen-v2::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
   background:linear-gradient(to bottom, rgba(12,7,4,.35) 0%, rgba(12,7,4,.55) 55%, rgba(12,7,4,.8) 100%);}
-.auth-screen-v2 .lang-btn{z-index:4;}
 /* Owner: "my tabs are boxed and these are round ... login is raised up" --
    fields/buttons were a full 999px pill; the mockup's are a boxed
    (rounded-RECTANGLE, --r-ctl) shape, same radius family every other
@@ -2626,17 +2636,6 @@ html,body,#app{
        now, not two). -->
   <div class="auth-screen-v2" id="authHero">
     <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
-    <!-- Owner: "on login page of every subdomain of any country, at top
-         right there is a button of language". Hidden by paintLangButton()
-         whenever the country allows only one language, so a single-language
-         country gains no furniture. data-no-i18n because the label is
-         already written in its own language and must never be put back
-         through the translation table. -->
-    <button type="button" class="lang-btn" id="langBtn" data-no-i18n style="display:none;" onclick="openLangPicker()" aria-label="Change language">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.8 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.8-3.8-9S9.5 5.7 12 3Z"/></svg>
-      <span id="langBtnLabel">English</span>
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
     <div class="auth-scroll-v2">
       <div id="loginPane">
         <div class="auth-intro">
