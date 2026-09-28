@@ -313,7 +313,6 @@ var LANG_ROWS = [
   ['Old Trade Password', 'Ekisumuluzo Ekikadde eky\'Okusuubula', 'Nenosiri la Zamani la Malipo', 'Ancien mot de passe de transaction', 'Ijambobanga rya kera ry\'ubucuruzi', 'Ekisumuruzo Ekikuru ky\'Okushuubura'],
   ['Open treasure chest', 'Ggulawo essanduku ly\'obugagga', 'Fungua sanduku la hazina', 'Ouvrir le coffre au tr\u00e9sor', 'Fungura agasanduku k\'ubutunzi', 'Igura esanduuku y\'obugaiga'],
   ['Processing your recharge', 'Tukola ku ssente zo', 'Tunashughulikia malipo yako', 'Traitement de votre recharge', 'Turimo gutunganya ubwishyu bwawe', 'Nitukora aha sente zaawe'],
-  ['Redirecting to payment\u2026', 'Tukutwala ku kusasula\u2026', 'Inakupeleka kwenye malipo\u2026', 'Redirection vers le paiement\u2026', 'Turimo kukujyana mu kwishyura\u2026', 'Nituukutwara aha kushashura\u2026'],
   // Owner asked directly why the deposit-status screen "only changes small
   // things" under a non-English language -- these three status titles are
   // the reason: the screen was rewritten (numbered steps, new copy) without
@@ -5727,16 +5726,6 @@ function syncDepositQuickAmt(){
 // (a real operation is in flight); the Close button only appears once
 // resolved (or once the poll gives up), matching the app's own established
 // pattern of only offering Close on a settled dialog state.
-// The between-state: Confirm has been tapped, the request is out, and the
-// poll page has nothing to show yet. Kept as its own tiny function so both
-// the raise and the lower are one call and cannot drift apart.
-function showDepRedirect(on){
-  const el = $('depRedirect');
-  if (!el) return;
-  el.classList.toggle('show', !!on);
-  el.setAttribute('aria-hidden', on ? 'false' : 'true');
-  document.body.classList.toggle('deposit-redirect-open', !!on);
-}
 window.openDepositStatusModal = function(amount, phone, network){
   setDepositStatusPending(amount, phone, network);
   $('depStatusBg').classList.add('show');
@@ -6093,12 +6082,6 @@ window.submitDeposit = async function(){
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
   if (!phone) return notify('Enter the mobile money number to charge.');
   submitBtn.disabled = true; submitBtn.textContent = 'Sending request…';
-  // Owner: "after confirm deposit a loader saying Redirecting to payment."
-  // Up while the request is genuinely in flight and down again on EVERY exit
-  // from here -- hence the finally, not a line after the await. A rejected
-  // recharge that left this covering the form would be a worse bug than the
-  // missing loader was.
-  showDepRedirect(true);
   let r;
   try {
     // No network field on this form (Round 145) -- the gateway detects it
@@ -6106,7 +6089,6 @@ window.submitDeposit = async function(){
     // optional here.
     r = await post('/deposit/marzpay', { amount, phone });
   } finally {
-    showDepRedirect(false);
     // 'Confirm Deposit', not 'Recharge' -- this restores the button after a
     // failed attempt, and the label it was restoring belonged to a screen
     // that no longer exists, so a member whose recharge failed was left

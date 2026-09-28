@@ -3931,3 +3931,80 @@ spec is syntactically and structurally identical to the existing
 single-field, non-unique specs right next to it (e.g. `{referredBy:1}`),
 which are already proven working in production. No sw.js bump — this
 round touched only `db.js`, nothing served to a browser.
+
+## Follow-up 17 — deposit-commission audit (no bug found) + redirect loader removed
+
+Owner: *"Make sure that commission is fired after deposit, another
+thing remove the stuff loader saying that redirecting to payment
+page."*
+
+**Commission-after-deposit audit** — read the whole pipeline rather
+than guessing:
+- `creditDeposit()` (server.js) fires `creditDepositReferralCommission()`
+  immediately after a wallet credit succeeds, for every deposit rail.
+  Confirmed every crediting call site in the file — MoMo poll/webhook,
+  Card, USDT, PesaJet, the SMS-forward fallback, `/admin/payments/sync`,
+  and admin force-credit — funnels through this ONE shared function
+  (its own comments already say so: "creditDeposit() every other
+  deposit path on this platform uses"). No bypass found anywhere that
+  credits `walletBalance`+`totalDeposited` without it.
+- Backed by two reconciler sweeps, both actually scheduled and
+  running (checked `setInterval` wiring, not just that the functions
+  exist): `reconcileCommissions()` runs every 30s (chained inside
+  `runReconciler()`), catching anything the live fire missed;
+  `reconcileBlockedCommissions()` runs every 5 minutes, specifically
+  for commissions stuck behind a referrer who was banned at the exact
+  instant their downline deposited — pays them the moment they're
+  unbanned instead of forfeiting the commission.
+- Every payout step is idempotent (`updateIf()` with a durable
+  `commissionKey` token beside the wallet increment, in one atomic
+  op) — a retry from either reconciler can never double-pay.
+- One thing that LOOKED like a bug and wasn't: `/admin/deposit` (a
+  manual owner wallet credit) also bumps `totalDeposited`, and the
+  deposit-commission eligibility check gates on
+  `totalDeposited === 0` (i.e. "this is genuinely their first ever
+  deposit"). So an admin credit issued before a member's first real
+  deposit does prevent that later real deposit from ever paying
+  their referrer's welcome commission. Traced this back to
+  `computeRealTotals()`'s own comment ("same admin_credit inclusion")
+  — `admin_credit` counting toward `totalDeposited` is a deliberate,
+  cross-checked invariant elsewhere in the codebase (integrity audit,
+  "Recalculate totals", top-depositors reporting all agree on it), and
+  gating the referral bonus on "no money has landed in this wallet
+  from any source yet" reads as an intentional anti-fraud choice (an
+  admin key crediting a wallet then having it "deposit" would
+  otherwise be a way to mint free referral commission) — consistent
+  with the deliberate ban/timing edge cases already hardened
+  elsewhere in this exact function. Left alone rather than "fixed"
+  into a behavior nobody asked for; flagged to the owner instead in
+  case it's actually costing a real referrer money in practice, in
+  which case it needs a product decision, not a guess.
+- **Conclusion: no live bug found.** The mechanism is correctly wired,
+  covers every rail, and has a working retry backstop. If a specific
+  referrer/deposit didn't pay out, that needs looking at those exact
+  database rows, not more theorizing — told the owner this plainly.
+
+**Redirecting-to-payment loader removed** — this was added two
+rounds ago on the owner's own explicit request ("after confirm
+deposit a loader saying Redirecting to payment"); this round reverses
+that. Removed end to end, not just hidden: the `#depRedirect`
+full-screen overlay markup (`user-src/index.html`), its CSS
+(`.dep-redirect`/`.dep-redirect.show`/`-inner`/`-ring`/`-text` and the
+reduced-motion override; left the `body.deposit-status-open
+.bottom-nav` rule it shared a selector with untouched), the
+`showDepRedirect()` function and its two call sites around the
+Mobile Money `/deposit/marzpay` POST (`user-src/original_module.js`),
+and the now-dead `'Redirecting to payment…'` row from the i18n table
+(it was never actually wired to `t()` from that static HTML text in
+the first place — a separate, pre-existing gap this cleanup made
+moot rather than worth fixing on its own). The Mobile Money submit
+button still goes straight from "Sending request…" to the existing
+deposit-status poll page with no intermediate full-screen state.
+
+`node -c` clean on both source files. `build-core.js`: "round-trip
+OK". Verified live in headless Chromium against the real
+`user-src/index.html` (not just the obfuscated build): `#depRedirect`
+absent from the DOM, `showDepRedirect` no longer a function, no
+`dep-redirect` selector left in any loaded stylesheet, no stray
+`deposit-redirect-open` body class, zero page errors. `user/sw.js`
+bumped `v192` → `v193`.

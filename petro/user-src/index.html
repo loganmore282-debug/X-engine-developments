@@ -1672,28 +1672,16 @@ body.sheet-open .sheet-bg{bottom:0;}
 /* Deposit poll and its brief handoff are dedicated full-screen states. They
    use the app's light paper surface and brand-colored motion, with no bottom
    navigation behind them. */
-body.deposit-redirect-open .bottom-nav,
 body.deposit-status-open .bottom-nav{display:none;}
 /* Owner: "the deposit poll screen is very ugly, showing a background white
    and the page is very not matching with current page." Real gap, not a
-   design opinion -- .pay-page/.dep-redirect are their own classes, so they
-   never picked up the refinery-wallpaper + dark-glass treatment .sheet-bg/
-   .sheet-head/.sheet-body got everywhere else. Their header already looked
-   right (it reuses .sheet-head verbatim), which is exactly what made the
-   plain white body underneath it read as broken rather than unfinished.
-   Matched here to the same pattern, not a new one: same ::before wallpaper
-   .sheet-bg uses, same glass-panel numbers .sheet-body uses. */
-.dep-redirect{position:fixed;left:0;right:0;top:0;bottom:0;
-  background:rgba(12,7,4,.72);z-index:320;display:none;
-  align-items:center;justify-content:center;
-  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
-.dep-redirect.show{display:flex;}
-.dep-redirect-inner{text-align:center;}
-.dep-redirect-ring{width:64px;height:64px;margin:0 auto 18px;border-radius:50%;
-  border:5px solid rgba(255,255,255,.25);border-top-color:var(--snow-wine);
-  animation:sp .8s linear infinite;}
-.dep-redirect-text{font-size:17px;font-weight:700;color:#fff;}
-@media (prefers-reduced-motion:reduce){.dep-redirect-ring{animation-duration:2.4s;}}
+   design opinion -- .pay-page is its own class, so it never picked up the
+   refinery-wallpaper + dark-glass treatment .sheet-bg/.sheet-head/.sheet-body
+   got everywhere else. Its header already looked right (it reuses
+   .sheet-head verbatim), which is exactly what made the plain white body
+   underneath it read as broken rather than unfinished. Matched here to the
+   same pattern, not a new one: same ::before wallpaper .sheet-bg uses, same
+   glass-panel numbers .sheet-body uses. */
 /* A column now, not a centred box: the page has a real header (back chevron
    + title) pinned at the top, and .pay-body takes the remaining height and
    centres the card inside THAT. Centring the card in the whole page instead
@@ -2981,23 +2969,6 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
     <div class="amt" id="chestWinAmount"></div>
     <div class="bal" id="chestWinBalance"></div>
     <button class="dark-button" style="width:100%;height:52px;padding:0;letter-spacing:.06em;" onclick="closeChestWin()">COLLECT</button>
-  </div>
-</div>
-
-<!-- Owner: "see critically after confirm deposit a loader saying Redirecting
-     to payment." Shown only while /deposit/marzpay is actually in flight, and
-     taken down by the same finally{} that re-enables the button, so it can
-     never be left covering the form after a failure.
-
-     His mockup dims the form to a dark wash; this uses a light scrim in the
-     app's own paper instead, because "l nolonger need those dark things, use
-     app color and theme not dark" was a standing instruction from the round
-     that rebuilt the poll screen, and a dark sheet here would contradict it
-     two screens apart. -->
-<div class="dep-redirect" id="depRedirect" aria-hidden="true">
-  <div class="dep-redirect-inner">
-    <div class="dep-redirect-ring"></div>
-    <div class="dep-redirect-text">Redirecting to payment…</div>
   </div>
 </div>
 
