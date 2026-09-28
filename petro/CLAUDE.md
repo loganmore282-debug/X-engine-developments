@@ -4008,3 +4008,39 @@ absent from the DOM, `showDepRedirect` no longer a function, no
 `dep-redirect` selector left in any loaded stylesheet, no stray
 `deposit-redirect-open` body class, zero page errors. `user/sw.js`
 bumped `v192` → `v193`.
+
+## Follow-up 18 — circular ring around the back chevron
+
+Owner: *"let the navigation arrow < have a circular circle around it."*
+Then, with a reference screenshot of a bold, clearly-drawn ring:
+*"I said arrow not loader l need arrow to have a ring"* -- the arrow
+button, not the redirect-loader spinner ring just removed in the
+round before this one; also correcting the first pass's ring, which
+read as too thin/faint to actually see.
+
+There is only one back-chevron button in the whole codebase --
+`.sheet-head .back` -- reused verbatim by every sheet (Wallet,
+Deposit, Withdraw, Check-in, Statement, Support, About, etc.) AND the
+pay-page header, so one CSS change covers all of them consistently
+rather than special-casing one screen. Settled on
+`border-radius:50%`, `2px solid rgba(255,255,255,.85)`, box grown
+30px → 32px to give the thicker ring room around the 24px chevron
+without crowding it -- a real, deliberate outline matching the
+reference's boldness, not a hint of one. Background stays
+transparent, not a filled disc: the header is always the dark glass
+backdrop in practice (a later, unconditional
+`.sheet-head{background:rgba(20,12,8,.64);backdrop-filter:blur(12px)}`
+rule overrides the earlier plain `--snow-surface` one everywhere, and
+the chevron's own stroke is already forced white against it), so a
+solid white chip behind the icon would fight that contrast rather
+than just framing it.
+
+`node -c` n/a (CSS-only in a plain `<script>`-free block).
+`build-core.js`: "round-trip OK". Verified live in headless Chromium
+against the real `user-src/index.html`: computed style on both
+`.sheet-head .back` instances (Wallet-style sheets and the pay-page)
+confirms `border-radius:50%`, `2px`, and the `.85` ring color, and a
+screenshot of the pay-page header shows a bold, clearly visible
+circular outline around the white chevron -- matching the reference
+image, not the first pass's too-subtle line. `user/sw.js` bumped
+`v193` → `v194`.

@@ -1623,7 +1623,15 @@ body.sheet-open .sheet-bg{bottom:0;}
    rule for separation. Red stays reserved for buttons, active states and
    real emphasis, not page furniture. */
 .sheet-head{display:flex;align-items:center;gap:12px;padding:18px 20px;position:sticky;top:0;background:var(--snow-surface);border-bottom:1px solid var(--snow-border);z-index:1;}
-.sheet-head .back{background:none;border:none;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+/* Owner: "let the navigation arrow < have a circular circle around it" --
+   the arrow itself, not any loader -- with a reference screenshot of a
+   bold, clearly-drawn ring (thick stroke, near-solid). A thin/faint ring
+   read as barely-there against the header's own dark glass (see the
+   unconditional .sheet-head override below, which is what every sheet
+   actually renders); this is a real, deliberate outline, not a hint of
+   one -- background stays transparent (a filled disc would fight the
+   chevron's own white-stroke contrast rather than just framing it). */
+.sheet-head .back{background:none;border:2px solid rgba(255,255,255,.85);border-radius:50%;width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .sheet-head h2{margin:0;flex:1;text-align:center;margin-right:30px;font-size:18px;font-weight:700;letter-spacing:.01em;color:var(--snow-ink);}
 .sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
 
