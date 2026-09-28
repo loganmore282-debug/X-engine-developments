@@ -1738,7 +1738,23 @@ body.deposit-status-open .bottom-nav{display:none;}
   filter:blur(16px);
 }
 .pay-page.show{display:flex;}
-.pay-body{flex:1;display:flex;align-items:center;justify-content:center;padding:26px;}
+/* Owner: "l told you to remove that stuff bro, l nolonger need that
+   header on payment polling page" -- removing the <h2> text (an earlier
+   round) still left the full .sheet-head BAR: padding, border-bottom,
+   solid background, the works, just with nothing written in it -- still
+   very much "that stuff." Stripped down to a floating, transparent back
+   button with no bar chrome at all, sitting directly over the blurred
+   backdrop like the rest of this page now does. Position stays sticky
+   (inherited from .sheet-head) so it stays reachable if the card's own
+   content ever needs to scroll. */
+.sheet-head.pay-head{background:transparent;border-bottom:0;box-shadow:none;padding:14px 16px 0;-webkit-backdrop-filter:none;backdrop-filter:none;}
+/* "The card should be raised up" -- .pay-body used to CENTER the card in
+   whatever height was left under the header bar; removing that bar's
+   own padding/height above freed up room, but centering in a now-taller
+   box does not by itself read as "raised" the way flex-start does.
+   Pushed toward the top instead, with just enough top padding that it
+   does not sit flush under the floating back button. */
+.pay-body{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:8px 26px 26px;}
 .pay-card{width:100%;max-width:340px;text-align:center;
   padding:28px 22px 26px;border-radius:var(--r-card);
   border:1px solid rgba(255,255,255,.14);
@@ -2192,14 +2208,21 @@ body.deposit-status-open .bottom-nav{display:none;}
 }
 .account-page>.member-page-title{padding-left:0;padding-right:0;}
 
-/* Thin, muted scrollbar across the signed-in app and secondary sheets. */
-#app,.sheet-bg,#pageHost{
+/* Thin, muted scrollbar across the signed-in app and secondary sheets.
+   .prov-list joined this set once it could hold ~25+ banks (see its own
+   max-height/overflow-y comment) -- without a visible thumb the list just
+   looked like it stopped at whatever fit on screen, with nothing hinting
+   there was more to scroll to. Owner: "l can't see scroll bar on banks,
+   one can think it's end, so put dull scroll bar like those existing in
+   app" -- same dull rgba(255,255,255,.20) thumb as everywhere else, not a
+   brighter one invented just for this list. */
+#app,.sheet-bg,#pageHost,.prov-list{
   scrollbar-width:thin;
   scrollbar-color:rgba(255,255,255,.20) transparent;
 }
-#app::-webkit-scrollbar,.sheet-bg::-webkit-scrollbar,#pageHost::-webkit-scrollbar{width:3px;height:3px;}
-#app::-webkit-scrollbar-track,.sheet-bg::-webkit-scrollbar-track,#pageHost::-webkit-scrollbar-track{background:transparent;}
-#app::-webkit-scrollbar-thumb,.sheet-bg::-webkit-scrollbar-thumb,#pageHost::-webkit-scrollbar-thumb{
+#app::-webkit-scrollbar,.sheet-bg::-webkit-scrollbar,#pageHost::-webkit-scrollbar,.prov-list::-webkit-scrollbar{width:3px;height:3px;}
+#app::-webkit-scrollbar-track,.sheet-bg::-webkit-scrollbar-track,#pageHost::-webkit-scrollbar-track,.prov-list::-webkit-scrollbar-track{background:transparent;}
+#app::-webkit-scrollbar-thumb,.sheet-bg::-webkit-scrollbar-thumb,#pageHost::-webkit-scrollbar-thumb,.prov-list::-webkit-scrollbar-thumb{
   background:rgba(255,255,255,.20);
   border-radius:999px;
 }

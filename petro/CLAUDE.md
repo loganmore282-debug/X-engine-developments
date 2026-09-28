@@ -3743,3 +3743,72 @@ onclick swap to a call already used identically elsewhere in the same
 file) rather than a full rendered screenshot, given this sandbox's
 Firebase-login limitation already noted in earlier follow-ups.
 `user/sw.js` bumped `v190` → `v191`.
+
+## Follow-up 14 — pay-page header actually removed, card raised, scrollbar visible, validation retry
+
+Owner, with two screenshots (the empty header bar circled, the bank
+picker cut off at Stanbic with no visible scrollbar): *"I told you to
+remove that stuff bro, l nolonger need that header on payment polling
+page,also the card should be raised up and bro l can't see scroll bar
+on banks,one can think it's end,so put dull scroll bar like those
+existing in app.make sure bro there is supernatural validation, call
+back speed should be very very fast bro,this is a powerful vps so
+everything can get processed in milliseconds"*
+
+- **Header not actually removed last round** — follow-up 13 deleted
+  the `<h2>Recharge</h2>` text but left the full `.sheet-head` BAR:
+  padding, `border-bottom`, and (via the shared dark-theme
+  `.sheet-head` rule) its own `background:rgba(20,12,8,.64)` +
+  `backdrop-filter:blur(12px)` — a visibly distinct blurred strip with
+  nothing written in it, still exactly "that stuff." Added
+  `.sheet-head.pay-head` (specificity beats the bare `.sheet-head`
+  rule) stripping background/border/shadow/backdrop-filter entirely —
+  the back button now floats directly on the same blurred backdrop as
+  the rest of the page, no separate bar at all.
+- **"The card should be raised up"** — `.pay-body` centered the card
+  vertically (`align-items:center`); changed to `align-items:flex-start`
+  with a small top padding, so it sits near the top of the page instead
+  of dead-center.
+- **"Can't see scroll bar on banks... put dull scroll bar like those
+  existing in app"** — `.prov-list` already scrolled correctly
+  (follow-up 12's `max-height:260px;overflow-y:auto` fix), just with an
+  invisible-by-default thumb on this OS/browser, reading as "the list
+  just stops." Joined `.prov-list` to the SAME shared thin/muted
+  scrollbar rule `#app`/`.sheet-bg`/`#pageHost` already use
+  (`rgba(255,255,255,.20)` thumb, transparent track) rather than
+  inventing a second scrollbar style. Verified live: `scrollbar-width:
+  thin`, the dull thumb color, and genuinely scrollable content
+  (359px of rows in a 258px box) all confirmed in headless Chromium.
+- **"Supernatural validation... callback speed very fast"** —
+  `marzValidateBankAccount()` was a single, un-retried attempt; the
+  exact "UNABLE TO COMPLETE COMMUNICATION" error hit while testing
+  reads like a bank switch's own transient "could not reach that
+  bank's systems just now" response, not a definitive answer about the
+  account. Added exactly one retry, gated narrowly: only fires for a
+  network exception or a response already flagged `providerDown` (or
+  containing "communicat..." in its own message) — a clean, definitive
+  rejection (`VALIDATION_FAILED`, `BANK_NOT_SUPPORTED`, a genuinely
+  nonexistent account) returns immediately with no retry, since
+  retrying it would fail identically and only add latency to an answer
+  that was already correct. This is the "supernatural validation" half
+  of the ask; on the "very fast" half, honestly: this call crosses the
+  network to MarzPay and, for a bank validation, potentially onward to
+  the bank's own switch — that round trip cannot be made millisecond-
+  fast by VPS power alone, no matter how powerful the box is, the same
+  way it can't for any external API call. What IS already fast and
+  stays that way: every webhook in this app acks the sender in its
+  first line before touching the database (see follow-up 9's own audit
+  of this), and every hot query this app makes has a matching compound
+  index (`db.js`'s `ensureIndexes()`). Told the owner this plainly
+  rather than promise something a network call physically cannot do.
+
+`node -c` clean, `build-core.js` round-trip OK. Verified all three CSS
+changes live in headless Chromium against the real built bundle:
+`.pay-head` computes to a fully transparent background, 0px border,
+`backdrop-filter:none`; `.pay-body` computes `align-items:flex-start`;
+`.prov-list` computes `scrollbar-width:thin` with the dull thumb color
+and is confirmed genuinely scrollable. The validation-retry logic was
+verified by direct code reading (mirrors the same retry-on-transient-
+failure shape already proven correct and tested elsewhere in this file,
+e.g. `_marzFetchTxStatus`) rather than a live MarzPay call, which this
+sandbox cannot make. `user/sw.js` bumped `v191` → `v192`.

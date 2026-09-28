@@ -2131,13 +2131,37 @@ async function marzBankTransfer({ amount, bankName, accountNumber, accountName, 
 // /bank/save, not at withdrawal time -- catching a typo'd account number
 // the moment it is entered is far better than finding out only once real
 // money is already being sent.
+//
+// Owner: "make sure bro there is supernatural validation" -- found while
+// testing: a real submit came back "UNABLE TO COMPLETE COMMUNICATION",
+// reading exactly like a bank switch's own transient "could not reach
+// that bank's systems just now" response, not a clean rejection. One
+// retry, but ONLY for a failure that actually looks transient (a network
+// exception, or anything _marzParse/the bank switch itself already
+// signals as provider trouble rather than a real answer about the
+// account) -- a clean, definitive rejection (VALIDATION_FAILED,
+// BANK_NOT_SUPPORTED, a genuinely nonexistent account) would fail the
+// exact same way again, so retrying it only adds latency to an answer
+// that was already correct. No retry at all on the common path (success,
+// or a clean rejection) -- the "callback speed very fast" half of the
+// same ask.
 async function marzValidateBankAccount(bankName, accountNumber) {
-  const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/validate`, {
-    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
-    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bank_name: bankName, account_number: accountNumber })
-  });
-  return _marzParse(resp);
+  const attempt = async () => {
+    try {
+      const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/validate`, {
+        method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+        headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bank_name: bankName, account_number: accountNumber })
+      });
+      return await _marzParse(resp);
+    } catch (netErr) {
+      return { status: 'error', providerDown: true, message: netErr.message };
+    }
+  };
+  let result = await attempt();
+  const transient = result.providerDown || /communicat/i.test(String(result.message || ''));
+  if (transient) result = await attempt();
+  return result;
 }
 function _marzExtractBankTransfer(d) {
   // GET /bank-transfer/{reference}'s own response key is
@@ -6586,9 +6610,10 @@ app.post('/bank/save', async (req, res) => {
     // account can legitimately have a different registered name.
     let verifiedHolder = holder;
     if (!isMobileMoney) {
-      let v;
-      try { v = await marzValidateBankAccount(rawNetwork, destValue); }
-      catch (netErr) { return res.status(500).json({ status: 'error', message: 'Could not reach the bank verification service. Please try again.' }); }
+      // marzValidateBankAccount() now handles its own network errors and
+      // one transient-failure retry internally (never throws) -- providerDown
+      // is the one signal to check for either case.
+      const v = await marzValidateBankAccount(rawNetwork, destValue);
       if (v.providerDown) return res.status(500).json({ status: 'error', message: 'Could not verify this account right now. Please try again in a moment.' });
       if (v.status !== 'success' || !v.data?.valid) {
         return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Account could not be validated. Please check the account number and bank.') });
