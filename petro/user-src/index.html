@@ -2334,6 +2334,18 @@ body.deposit-status-open .bottom-nav{display:none;}
 .sheet-body .pw-field svg{opacity:.72;}
 .wallet-minimal{padding:0;}
 .wallet-plain-row{padding:18px 2px 20px;align-items:flex-start;}
+/* .wallet-line-field's own colors (--snow-ink/--snow-border/--snow-muted)
+   are near-black/near-white, meant for a light card. The rule above strips
+   the wallet sheet's card entirely so the refinery photo shows straight
+   through -- same treatment .wit- and .pw-form already got white overrides
+   for, but the add-wallet-form fields (network/phone/account holder) never
+   did, so typed text rendered near-invisible dark-on-dark. The dropdown
+   list itself (.prov-list/.prov-opt) keeps its own white background/dark
+   text -- that pair is already legible on its own opaque surface. */
+.wallet-add-form .wallet-line-field{border-bottom-color:rgba(255,255,255,.22);}
+.wallet-add-form .wallet-line-field input{color:#fff;}
+.wallet-add-form .wallet-line-field input::placeholder{color:rgba(255,255,255,.55);}
+.wallet-add-form .prov-caret{color:rgba(255,255,255,.7);}
 
 
 /* The wallpaper's cover crop must not resize as mobile browser chrome

@@ -3123,3 +3123,54 @@ minDeposit check were verified by direct code reading against the same
 already-proven pattern Card/USDT use (not separately driven through a
 live login in this round — a full Firebase-auth session isn't
 reachable from this sandbox). `user/sw.js` bumped `v185` → `v186`.
+
+## Follow-up 10 (Wallet form text invisible on the refinery photo)
+
+Owner, with a screenshot of the "Bind Wallet" screen: *"also bro, some
+words are looking black when you write."*
+
+Root cause: `.wallet-line-field` (the network/phone/account-holder
+fields in `openWalletSheet()`'s add-wallet form) styles itself with
+`--snow-ink`/`--snow-border`/`--snow-muted` — near-black text, a
+near-white underline, all meant for a white card. A separate, deliberate
+rule (`.sheet-body:has(.wallet-minimal){background:transparent;...}`)
+strips this specific sheet's card entirely so the refinery wallpaper
+photo shows straight through behind it — Withdraw's fields (`.wit-*`)
+and the password-change form (`.pw-form`) already got white-text
+overrides for that same treatment, but the add-wallet form never did,
+so typed/placeholder text and the field's own underline rendered
+near-invisible against the dark photo. Added
+`.wallet-add-form .wallet-line-field`/`input`/`::placeholder`/
+`.prov-caret` overrides in `user-src/index.html` forcing white text,
+a visible light underline, and a visible caret — matching the pattern
+already used for `.wit-*`/`.pw-form`. Left `.prov-list`/`.prov-opt` (the
+network dropdown's own popup) untouched — that already sits on its own
+opaque white card, dark text on white is already legible there.
+
+**Caught and fixed a self-inflicted bug while verifying this**: the
+first version of this fix's own explanatory CSS comment accidentally
+contained the literal characters `*/` mid-sentence (writing
+`.wit-*/.pw-form` in prose), which closed the CSS comment early. The
+browser then treated the rest of the comment's English prose as
+malformed CSS, discarding tokens up to the next `}` — which silently
+ate the FIRST of the four new rules
+(`.wallet-add-form .wallet-line-field{border-bottom-color:...}`,
+the underline color) while its three neighbors parsed fine, since CSS
+error recovery is per-rule. Caught by enumerating
+`document.styleSheets[…].cssRules` in headless Chromium and diffing
+against the raw served text rather than trusting a computed-style
+check alone — the border-bottom-color came back as the OLD near-white
+value even though the correct rule text was visibly present in the
+HTML source, which is what surfaced the mis-closed comment. Reworded
+the comment to avoid the accidental `*/` and confirmed all four rules
+now parse and apply (`getComputedStyle` on injected field markup: text
+`rgb(255,255,255)`, placeholder `rgba(255,255,255,.55)`, underline
+`rgba(255,255,255,.22)`). Lesson for any future CSS comment in this
+file: never write `*/ ` as a literal substring in prose, even split
+across a word boundary like `wit-*` immediately followed by `/`.
+
+`node -c`/`build-core.js` unaffected (pure CSS, no JS touched). Verified
+via injected-markup + `cssRules` enumeration in headless Chromium
+against the real built bundle rather than a full login (no reachable
+backend from this sandbox) — a real-device check after deploy is still
+worthwhile. `user/sw.js` bumped `v186` → `v187`.
