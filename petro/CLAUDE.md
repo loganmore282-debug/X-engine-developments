@@ -2592,3 +2592,91 @@ ways"), both in `server.js`:**
   changes below it in `server.js`, which don't need a client cache bump on
   their own but ship in the same push). `admin/sw.js` not touched --
   nothing admin-facing changed.
+
+## 2026-09-28 (follow-up 5) — Fixed the wallpaper "shake" at scroll boundaries; downloaded statements now logged and listed in Admin under Transactions
+
+Owner (on the wallpaper shake, after asking him to clarify): *"when l am
+scrolling on products, the background image has a tendency of shaking or
+going away from position when l reach the end of the image on scroll...
+when you scroll hardly, the image feels like being forcefully separated
+from code and starts moving... l think the image should nolonger be
+responsive to touch of the system since it is background static."*
+Separately, same message: *"also bro the statement should be saved in
+admin panel under transactions so as l see the downloaded statements and
+their references."*
+
+**Wallpaper shake — real root cause identified, not just another CSS
+patch on top of the last five.** The owner's description (shakes
+specifically AT the top/bottom edge, worse on a hard/fast scroll) is
+textbook mobile rubber-band/overscroll-bounce: scrolling past the top or
+bottom of the page triggers the browser's own elastic bounce-back
+animation, and because the refinery backdrop (`#app::before`) is
+`position:fixed` (needed so it stays pinned as wallpaper while `#pageHost`
+content scrolls over it), that bounce visibly drags it along on some
+Android WebView/browser builds. `overscroll-behavior-y:none` (already on
+`html,body,#app` since the 2026-09-23 "stabilize Petro wallpaper" round)
+asks the browser not to do this, but isn't honoured consistently
+everywhere -- which is exactly why the shake was still happening five
+rounds of CSS-only mitigation later (oversized negative-inset backdrop,
+`translateZ(0)`, `100lvh`, `backface-visibility:hidden`, all still in
+place, none of them the actual cause).
+- **Fixed** with the standard belt-and-suspenders fix for this exact
+  failure mode: a `touchmove` listener (new IIFE in `user-src/index.html`'s
+  existing plain, non-obfuscated `<script>` block, not run through
+  `build-core.js`) that itself blocks the page from being dragged past its
+  own top/bottom edge, so there's nothing left for the browser to bounce.
+  Deliberately narrow, not a blanket "kill all scrolling" hammer:
+  - Only intercepts a touch that starts already at the top edge and is
+    dragged further down, or at the bottom edge dragged further up --
+    every other scroll gesture on the page is completely untouched.
+  - Skips entirely when the touch starts inside an element with its own
+    internal scroller (`hasOwnScroller()` walks up checking
+    `scrollHeight > clientHeight` + computed `overflow-y`), so it never
+    fights a sheet/page-overlay/modal's own scrolling -- every text input
+    in this app lives inside one of those, never directly on the bare
+    document, so there is no IME/keyboard interaction risk at all (the
+    thing that made the earlier "restructure the whole scroll model" idea
+    too risky to attempt blind).
+  - Verified in headless Chromium with real dispatched `TouchEvent`s (not
+    just read from the code): confirmed `preventDefault()` fires exactly
+    when at the top edge being pulled down, does NOT fire for an ordinary
+    mid-page drag, and does NOT fire for a touch that starts inside a
+    test element with its own `overflow-y:auto` scroller -- three
+    separate assertions, not one happy-path check. Zero page errors.
+
+**Downloaded statements now visible in Admin, under Transactions.**
+- `GET /statement/pdf` (`server.js`) now writes one row to a NEW
+  `statementDownloads` collection every time a member actually downloads
+  their PDF (`userId`, `phone`, `ref` -- the `REF-XXX-XXX-XXX` document
+  reference from the previous round -- `createdAt`). Deliberately its OWN
+  collection, not folded into the `transactions` money ledger: a
+  statement download is not a wallet movement, and mixing it in would
+  risk it silently getting summed into `totalIn`/`totalOut` or any other
+  money total somewhere down the line -- exactly the kind of money-safety
+  regression this file's own invariants section exists to prevent. The
+  write is wrapped so a logging failure can NEVER block the member's own
+  already-generated PDF from downloading.
+- New `POST /admin/statements/list` (admin-auth'd, same shape/cap
+  convention as `/admin/transactions/list`: honors the caller's `limit`,
+  clamped, with a `truncated` flag).
+- Admin's existing Transactions tab (`admin-src/index.html`) now fetches
+  both lists in parallel and merges them client-side, re-sorted by time
+  (`normalizeStatementRow()`/`sortByCreatedAtDesc()`), tagged
+  `type:'statement'` so it gets its own new "Statements" subtab and its
+  Amount column renders as `—` instead of a misleading `+UGX 0` (a
+  download has no amount). Description shows `Downloaded by <phone>` when
+  known. Rows are still clickable through to the user detail modal, same
+  as every other transaction row. `TX_LABELS` gained a `statement` entry.
+  Deliberately reused the SAME tab/table rather than a new one -- the
+  owner said "under transactions," not "a new tab."
+- `node build-admin.js` round-trip OK. `admin/sw.js` bumped
+  `petro-admin-shell-v41` → `v42` (admin-src actually changed this round,
+  unlike the reverted no-op two rounds ago).
+- `node build-core.js` round-trip OK (only `user-src/index.html`'s plain
+  script changed this round, not `original_module.js`, but the build was
+  still run since it's what copies that change into the deployed
+  `user/index.html`). `user/sw.js` bumped `petro-shell-v179` → `v180`.
+- Verified the new merge/sort/normalize logic in isolation with a
+  standalone Node script (mixed sample transaction + statement rows,
+  confirmed correct interleaved chronological order and the
+  `Downloaded by <phone>` / `Statement downloaded` description fallback).

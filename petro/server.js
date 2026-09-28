@@ -6326,6 +6326,19 @@ app.get('/statement/pdf', async (req, res) => {
     await done;
     const buffer = Buffer.concat(chunks);
     const filename = brand + '-Statement-' + genAt.getUTCFullYear() + padGen(genAt.getUTCMonth() + 1) + padGen(genAt.getUTCDate()) + '.pdf';
+    // Owner: "the statement should be saved in admin panel under
+    // transactions so as l see the downloaded statements and their
+    // references" -- a record of the download itself, separate from the
+    // `transactions` money ledger (it isn't a wallet movement and must
+    // never be summed into totalIn/totalOut or any other money figure).
+    // phone/ref denormalized onto the row at write time so the admin list
+    // below never needs a per-row user lookup. Never lets a logging
+    // failure block a member's own already-generated PDF.
+    try {
+      await db.collection('statementDownloads').add({
+        userId: uid, phone: u.phone || '', ref: docRef, createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch (logErr) { console.error('statementDownloads log failed:', logErr.message); }
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', 'attachment; filename="' + filename.replace(/[^A-Za-z0-9_.-]/g, '') + '"');
     res.send(buffer);
@@ -8444,6 +8457,24 @@ app.post('/admin/transactions/list', async (req, res) => {
     const want = adminRegionFilter(req);
     const transactions = scopeRowsToRegion(raw, want, want ? await adminUserRegions() : null);
     res.json({ status: 'success', transactions, truncated, regionKey: want || 'all' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Owner: "the statement should be saved in admin panel under transactions
+// so as l see the downloaded statements and their references" -- lists
+// `statementDownloads` rows (written by GET /statement/pdf above), same
+// shape/cap convention as /admin/transactions/list. Kept as its own
+// endpoint/collection rather than folded into `transactions` itself: a
+// statement download is not a wallet movement, and mixing it into the
+// money ledger would risk it getting summed into totalIn/totalOut
+// somewhere down the line.
+app.post('/admin/statements/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const requested = parseInt(req.body.limit, 10);
+    const LIST_LIMIT = Number.isFinite(requested) ? Math.min(5000, Math.max(50, requested)) : 300;
+    const snap = await db.collection('statementDownloads').orderBy('createdAt', 'desc').limit(LIST_LIMIT).get();
+    const statements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ status: 'success', statements, truncated: statements.length >= LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/referrals/list', async (req, res) => {
