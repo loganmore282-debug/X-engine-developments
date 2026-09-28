@@ -2680,3 +2680,124 @@ place, none of them the actual cause).
   standalone Node script (mixed sample transaction + statement rows,
   confirmed correct interleaved chronological order and the
   `Downloaded by <phone>` / `Statement downloaded` description fallback).
+
+## 2026-09-28 (follow-up 6) — USDT (TRC20) crypto deposits: a third deposit rail alongside MarzPay/PesaJet
+
+Owner: *"let's put other payment methods on deposits, look at choco mcc,
+had crypto check the branch... l want that way of deposit"* — after
+looking through `choco-mcc/` (a sibling fork on branch
+`claude/voltra-session-continue-mk95gw`, not this branch) for how it built
+a USDT deposit rail, ported the same real feature into Petro — adapted to
+Petro's own, considerably more hardened deposit/settings architecture
+rather than copied verbatim (ChocoMCC's version predates several
+money-safety audit rounds this codebase has already been through; Petro's
+own `creditDeposit()`/`markDepositFailed()` are the locked, claim-before-
+credit, concurrent-credit-safe versions, not ChocoMCC's simpler ones).
+
+**How it works, end to end:**
+- A member sends USDT to the admin's own TRC20 wallet address OUTSIDE the
+  app, then submits the transaction hash (TXID) in-app.
+- If `TRONGRID_API_KEY` is set (a free API key from trongrid.io -- the
+  owner already has one, named "Petro" on their dashboard, and knows NOT
+  to commit it: it goes only into `secrets.local.js` on the VPS, same as
+  every other secret), the server checks the real TRON blockchain right at
+  submission: right contract (the one official USDT TRC20 contract,
+  hardcoded, never admin-settable), right destination address, amount at
+  least what was claimed. A clean match auto-credits instantly through the
+  exact same `creditDeposit()` every other deposit path uses -- this never
+  adds a second way to move money, only a second way to decide to. A
+  transaction that's confirmed on-chain but plainly wrong (wrong token,
+  wrong address, short amount) auto-declines instantly too, through the
+  same `markDepositFailed()` every other deposit path uses.
+- Without a TronGrid key configured, every claim just waits as "Awaiting
+  Review" for the admin's own Approve (the existing Force-credit
+  button)/Reject (new) in the Deposits tab -- nothing forces automatic
+  mode on.
+- Handles TRON's three different address text encodings (base58 "T...",
+  TRON hex "41...", bare EVM-style "0x...") by decoding all of them down
+  to the same 20-byte core before comparing -- a naive string comparison
+  between a base58 address and TronGrid's hex-formatted event data would
+  never match, silently breaking auto-verification.
+- A TXID can only ever back one open-or-credited claim (prevents the same
+  real payment being submitted by multiple accounts, or resubmitted after
+  being credited, to farm repeat credits) -- but a previously-DECLINED
+  claim doesn't block a resubmission, so a member who mistyped the amount
+  can correct it against the same real transfer.
+- A 30s background reconciler (added to the existing `runReconciler()`
+  chain and `/admin/payments/sync`) retries anything still unresolved, and
+  gives up to Declined after 15 minutes unresolved -- every claim reaches
+  a definitive outcome on its own, never sits forever. A no-op entirely
+  when no TronGrid key is configured (pure-manual mode is untouched).
+
+**server.js**: `DEFAULT_SETTINGS.usdtEnabled/usdtWalletAddress/usdtRate`
+(off by default); `usdtEnabled` added to `SETTINGS_BOOLEAN_FIELDS`,
+`usdtRate` range-checked in `SETTINGS_CRITICAL_RANGES`; a new
+`usdtWalletAddress` validator in `/admin/settings/update` (must look like
+a real TRC20 address -- `T` + 33 base58 characters -- or be blank; refused
+outright rather than silently shown to every member as a place to send
+real money, on a typo). New `TRONGRID_BASE/API_KEY/TIMEOUT`,
+`USDT_TRC20_CONTRACT`, `base58Decode()`/`addrCore()`/`verifyUsdtTx()`,
+`resolveUsdtDeposit()` (the one function that decides a claim's fate,
+shared by the synchronous submit-time check, the client's status poll,
+and the reconciler sweep), `reconcileUsdtDeposits()`. New routes:
+`POST /deposit/usdt/submit`, `POST /deposit/usdt/status`,
+`POST /admin/deposit/usdt/reject` (owner-gated, mirrors the existing
+withdrawal-reject pattern). Pending-deposit rows use a new pre-credit
+status, `awaiting_verification` -- safe by construction, since
+`depositFullyCredited()` only ever checks for `'matched'`, never switches
+on the pre-credit value. Ledger rows carry the same
+`commissionBasis:'deposit'`/`commissionPending`/`commissionPaidLevels`
+fields the MarzPay path stamps, so referral commissions fire identically
+regardless of which rail a deposit came through. Ref prefix `'U'` (vs
+MarzPay's `'S'`), so the two are visually distinguishable in Records/
+admin without needing to check the `method` field.
+
+**admin-src/index.html**: new "Crypto deposits (USDT TRC20)" settings
+panel (enable toggle, wallet address, exchange rate, its own save button
+-- `/admin/settings/update` again, same as every other settings section).
+Deposits tab: `DEP_GROUPS.pending` now includes `awaiting_verification`
+(the existing `statusPill()` already had an `'awaiting_verification'` →
+"Awaiting Review" branch from some earlier lineage -- a lucky, confirming
+match, not something added this round); USDT rows show "USDT (TRC20)" +
+an Auto/Auto-declined badge + a direct Tronscan link to the TXID; a
+Reject button (owner-only, same gate as Force-credit) appears only for a
+USDT claim still genuinely open.
+
+**user-src/original_module.js**: the existing Deposit sheet
+(`openDepositFormSheet()`) gains a method-selector row (reusing the
+`.statement-tabs`/`.on` underline-tab style Transaction Statement already
+established, not a new tab component) -- Mobile Money / USDT (TRC20) --
+shown ONLY when `usdtEnabled` is on; with it off, the sheet renders
+exactly as before, byte-for-byte the same Mobile Money panel. The USDT
+panel: live UGX conversion as the amount is typed, the wallet address
+with a Copy button (routed through the existing `copyText()`/
+`writeClipboard()` helpers, not a new clipboard implementation), a TXID
+field, and its own submit flow. Deliberately NOT routed through the
+Mobile Money status modal (`openDepositStatusModal()` and friends) --
+that modal's copy (USSD fallback codes, "check your phone for the
+prompt") is written for a push-payment a member approves on their phone,
+which a crypto transfer they already sent before opening the form simply
+isn't. USDT gets its own light submit → toast → poll flow instead
+(mirrors ChocoMCC's own pattern), so the heavily-tuned, owner-worded
+MarzPay status modal is completely untouched.
+
+**Verified, not just read**: `node -c` on both touched files; `node
+build-core.js`/`build-admin.js` both round-trip OK. Full diff of the new
+`server.js` code re-read end to end for correctness (lock/claim-before-
+credit reuse, status-value safety, TXID dedupe logic) before shipping.
+Live headless-Chromium checks against the real built `user/index.html`
+(not just the source): confirmed the method tabs render and toggle panels
+correctly with `usdtEnabled:true`, confirmed the tabs DON'T render at all
+with `usdtEnabled:false` (default -- nothing changes for anyone until an
+admin turns it on), confirmed the live UGX conversion math, and confirmed
+the Copy button actually writes the real address to the clipboard (read
+back via `navigator.clipboard.readText()`). Isolated the merge-sort logic
+from a previous round's pattern to sanity-check the settings-boolean-
+field and critical-range wiring by reading every call site rather than
+assuming.
+
+`user/sw.js` bumped `v180` → `v181`, `admin/sw.js` bumped `v42` → `v43`
+(both source files changed this round). **Not yet done, and not blocking
+shipping this**: the owner's separate ask for MarzPay CARD payments as a
+fourth rail -- waiting on documentation the owner said they'd send
+separately; this round only covers the USDT/crypto rail.

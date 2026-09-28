@@ -5267,9 +5267,34 @@ window.openDepositSheet = function(){
   openDepositFormSheet();
 };
 var _depChosenAmount = 0;
+// USDT (TRC20) -- a third deposit rail alongside the automatic Mobile
+// Money flow above (completely untouched by any of this). Only shown when
+// the admin has usdtEnabled on, same "nothing changes for anyone until an
+// admin turns it on" pattern as every other optional rail in this app.
+// Deliberately its OWN simple submit->toast->refresh flow rather than
+// routed through the Mobile Money status modal above (openDepositStatusModal
+// et al.) -- that modal's copy (USSD fallback codes, "check your phone for
+// the prompt") is specific to a push-payment flow a member approves on
+// their phone, which a crypto transfer the member already sent before
+// ever opening this form simply isn't.
+var _depMethod = 'mm';
+window.selectDepMethod = function(m){
+  _depMethod = m;
+  const tabs = $('depMethodRow');
+  if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.dm === m));
+  $('depMmPanel').style.display = (m === 'mm') ? 'block' : 'none';
+  $('depUsdtPanel').style.display = (m === 'usdt') ? 'block' : 'none';
+};
 function openDepositFormSheet(){
   const s = STATE.settings || {};
+  const usdtOn = s.usdtEnabled === true;
+  _depMethod = 'mm';
   openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">
+    ${usdtOn ? `<div class="statement-tabs" id="depMethodRow" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:18px;">
+      <button type="button" data-dm="mm" class="on" onclick="selectDepMethod('mm')">Mobile Money</button>
+      <button type="button" data-dm="usdt" onclick="selectDepMethod('usdt')">USDT (TRC20)</button>
+    </div>` : ''}
+    <div id="depMmPanel">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
     <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
     <div class="dep-chips" id="depChips">${depositChipsHtml(s)}</div>
@@ -5291,7 +5316,114 @@ function openDepositFormSheet(){
         <li><b>Follow the payment status</b><span>Wait for confirmation. If money leaves your phone but the balance has not updated, use Verify and keep the transaction reference for Customer Support.</span></li>
       </ol>
     </div>
+    </div>
+
+    <div id="depUsdtPanel" style="display:none;">
+      <div class="dep-sec"><span class="bar"></span><span>Amount (USDT)</span></div>
+      <div class="dep-amt"><input id="usdtAmt" type="number" step="0.01" inputmode="decimal" placeholder="0" oninput="updateUsdtConversion()"></div>
+      <div class="dep-hint">1 USDT = ${fmtUGX(Number(s.usdtRate) || 0)} &middot; you will receive <b id="usdtUgxPreview">${fmtUGX(0)}</b></div>
+
+      <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Send to this address (TRC20 only)</span></div>
+      <div class="dep-phone" style="height:auto;padding:12px 0;">
+        <span id="usdtAddrDisplay" style="word-break:break-all;font-size:12.5px;flex:1;">${esc(s.usdtWalletAddress || '')}</span>
+        <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtAddress()">Copy</button>
+      </div>
+      <div class="dep-hint">TRC20 (Tron) network only &mdash; any other network permanently loses the funds.</div>
+
+      <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Transaction Hash (TXID)</span></div>
+      <div class="dep-phone">
+        <input id="usdtTxid" type="text" placeholder="Paste your transaction hash">
+      </div>
+
+      <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Submit USDT Payment</button>
+
+      <div class="dep-instr deposit-guide">
+        <h3>How USDT deposits work</h3>
+        <ol class="deposit-steps">
+          <li><b>Send the exact amount</b><span>Send USDT on the TRC20 (Tron) network only, to the address above.</span></li>
+          <li><b>Paste the transaction hash</b><span>Copy the TXID from your wallet app and paste it here, then tap Submit.</span></li>
+          <li><b>Wait for verification</b><span>Most payments confirm within a minute. If yours is still pending, reopen Transaction Statement later to check.</span></li>
+        </ol>
+      </div>
+    </div>
   </div>`);
+}
+function updateUsdtConversion(){
+  const s = STATE.settings || {};
+  const rate = Number(s.usdtRate) || 0;
+  const amt = parseFloat(($('usdtAmt') || {}).value) || 0;
+  const el = $('usdtUgxPreview');
+  if (el) el.textContent = fmtUGX(Math.round(amt * rate));
+}
+window.updateUsdtConversion = updateUsdtConversion;
+window.copyUsdtAddress = function(){
+  const el = $('usdtAddrDisplay');
+  const addr = el && el.textContent;
+  if (!addr) return;
+  copyText(addr);
+};
+window.doUsdtDeposit = async function(){
+  const s = STATE.settings || {};
+  const btn = $('usdtGoBtn');
+  if (!btn || btn.disabled) return;
+  const amtUsdt = parseFloat(($('usdtAmt') || {}).value);
+  const txid = ($('usdtTxid') || {}).value.trim();
+  if (!amtUsdt || amtUsdt <= 0) return notify('Enter the USDT amount you sent');
+  if (!txid) return notify('Enter the transaction hash (TXID)');
+  const amtUgx = Math.round(amtUsdt * (Number(s.usdtRate) || 0));
+  if (amtUgx < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
+  const label = btn.textContent;
+  // The server itself checks the transaction a few times before answering
+  // (see resolveUsdtDeposit server-side) -- this button legitimately takes
+  // a few seconds, which "Checking payment…" makes honest rather than just
+  // a generic spinner.
+  btn.disabled = true; btn.textContent = 'Checking payment…';
+  const r = await post('/deposit/usdt/submit', { amountUsdt: amtUsdt, txid: txid });
+  btn.disabled = false; btn.textContent = label;
+  if (r.status !== 'success') return notify(r.message || 'Could not submit your deposit');
+
+  if (r.state === 'rejected') {
+    // Fields stay exactly as typed -- the member can see what they entered
+    // and correct it (e.g. the right amount) rather than starting over.
+    return notify(r.message || 'Payment declined.');
+  }
+
+  if (r.state === 'matched') {
+    notify('Payment completed! Credited to your balance.');
+    closeSheet({ fromAction: true });
+    await refreshTransactionsCache();
+    if (STATE.page === 'home') renderHome();
+    return;
+  }
+  // Still verifying (rare -- the synchronous check above already resolves
+  // most real deposits) -- keep checking a while longer so a slightly
+  // slower confirmation still ends with a clear result. If it's somehow
+  // still open after this, the server keeps retrying on its own (up to 15
+  // minutes) regardless of whether anyone is watching.
+  notify(r.message || 'Submitted. Verifying on-chain…');
+  pollUsdtDepositStatus(r.depositId);
+};
+var _usdtPollTimer = null;
+function pollUsdtDepositStatus(depositId){
+  if (_usdtPollTimer) clearInterval(_usdtPollTimer);
+  var attempts = 0;
+  _usdtPollTimer = setInterval(async function(){
+    attempts++;
+    const r = await post('/deposit/usdt/status', { depositId: depositId });
+    if (r.status === 'success' && r.state === 'matched') {
+      clearInterval(_usdtPollTimer); _usdtPollTimer = null;
+      notify('Payment completed! Credited to your balance.');
+      await refreshTransactionsCache();
+      if (STATE.page === 'home') renderHome();
+      return;
+    }
+    if (r.status === 'success' && r.state === 'rejected') {
+      clearInterval(_usdtPollTimer); _usdtPollTimer = null;
+      notify(r.message || 'Payment declined.');
+      return;
+    }
+    if (attempts >= 6) { clearInterval(_usdtPollTimer); _usdtPollTimer = null; } // server keeps retrying regardless; stop bothering the member
+  }, 5000);
 }
 
 // The chip values still come from the live product prices (owner: "juck put
