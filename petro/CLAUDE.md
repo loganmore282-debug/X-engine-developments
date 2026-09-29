@@ -4722,3 +4722,149 @@ that fresh build before pushing. `user/sw.js` bumped `v212` → `v213`,
 `admin/sw.js` bumped `v51` → `v52` (both source files this round's own
 changes touched, on top of whichever version the concurrent session's
 commits had already reached).
+
+## Follow-up 28 -- Messages tab removed, video banner removed, announcement trigger moved to bottom-nav, Deposit/Withdraw renamed to Top Up/Cash Out everywhere, statement PDF speed fix
+
+Owner, one message, seven asks: *"There is also a tab in admin panel
+called messages, remove it, also video banner remove it, headers
+remove them, and l told you that the dialog should appear when one
+also clicks back to home ie from assets to home, from network to
+home, and account to home, so remove those existing of from
+withdrawal, from deposit to home, also change deposit to Top up and
+withdrawal to Cash out everywhere whether admin, transactions,
+statements, etc, also bro why when downloading statement it takes
+some seconds yet we are using a powerful vps, so improve speed of
+everything, so that it is perfect. Also improve smooth navigation."*
+
+- **Admin panel Messages tab removed.** Tab button, `'messages'` from
+  `VALID_TABS`/`LIVE_TABS`, and its entry in `switchTab()`'s `fn` map
+  and the `RENDERERS` map are gone. `renderMessages()` itself is left
+  defined but unreachable, same "leave the dormant code, remove only
+  the entry point" precedent this file has followed for Turntable,
+  subdomains, Trade Password, and others -- confirmed by grep that no
+  id/handler it touches (`messagesTab`, etc.) has a dangling reference
+  anywhere else.
+- **Video banner removed entirely** -- server (`getHomeBannerVideo()`,
+  `/public/banner-video`, `parseByteRange()`, `isYouTubeLink()`,
+  `sanitizeBannerVideoUrl()`, the `home-video` Mongo doc, the
+  `HUGE_JSON_ROUTES` entry for its upload route), client
+  (`STATE.homeBannerVideo`, `preloadBannerVideo()`/
+  `adoptPreloadedBannerVideo()`/`tryAutoplayHomeBanner()`, the up-to-4s
+  boot-time preload wait, the `.home-banner video` CSS), and admin (the
+  video-upload UI block, `bannerVideo`/`bannerVideoUploaded`,
+  `fileToRawDataUrl()`, 7 i18n rows). The boot-time preload wait was a
+  real, measurable cost to first paint -- removing it is a genuine
+  speed win toward the "improve speed of everything" ask, not just
+  cosmetic.
+- **"Headers remove them"** -- read in context (same sentence as video
+  banner removal, same section of code being edited) as the duplicate
+  `<h2 class="sec">Home banner</h2>` heading bug in admin-src's Home
+  banner panel-card, left over from the video-upload block that sat
+  between the two headings. Fixed by removing the stray duplicate,
+  confirmed by grep that only one "Home banner" heading remains.
+- **Announcement dialog trigger moved from sheet-close to bottom-nav
+  navigation** -- a real reversal of Follow-up 24's own explicit
+  mechanism (which reintroduced the dialog specifically firing on
+  Deposit/Withdraw/Wallet closing back to Home, "just like mechanism
+  of previous chipz"). This round's instruction supersedes that:
+  `maybeAnnounceAfterSheet()`/`ANNOUNCE_AFTER_SHEETS` are replaced with
+  `maybeAnnounceAfterHomeNav(prevPage)`, called from `showPage()`'s own
+  `'home'` branch with the page being left captured before `STATE.page`
+  is overwritten. Fires only when the previous page was `'assets'`,
+  `'network'`, or `'account'` (not on a sheet close, not on a page
+  reload or direct home-to-home tap) and no other overlay is already
+  open. Verified live in headless Chromium against the real built
+  bundle: Assets→Home and Network→Home both trigger it, Home→Home does
+  not, and `maybeAnnounceAfterSheet` no longer exists as a function at
+  all (confirms the old trigger is genuinely gone, not just unreachable).
+- **Deposit → Top Up, Withdrawal → Cash Out, renamed everywhere a
+  member or admin actually reads it** -- user app (action tiles, stat
+  labels, sheet titles, Task Center copy, statement descriptions,
+  confirm buttons, error toasts), admin panel (tab bar, Deposits/
+  Withdrawals section headings and tables, Dashboard/Analytics cards
+  and tooltips, user detail modal, Settings' Rates & limits card, the
+  Payments card's gateway radios and their prose, the Crypto/Card top
+  up panels, audit-log labels, the integrity-audit modal's field
+  labels, Transactions tab subtabs, the save-payment-method toast, and
+  the announcement-dialog help text -- rewritten, not just word-swapped,
+  to correctly describe the new Assets/Network/Account→Home trigger
+  instead of the old Deposit/Withdraw/Wallet one), and server.js
+  (the `/withdraw/request` UNBOUND_ACCOUNT/fee/amount-too-small error
+  messages a member can actually see, and the admin-facing withdrawal-
+  reject success toast). Internal identifiers deliberately left alone,
+  same convention as every previous renaming round in this file:
+  `data-tab="deposits"`/`"withdrawals"`, `depositMethod`/
+  `withdrawMethod`, `minDeposit`/`minWithdraw`/`withdrawFeePct`, route
+  paths (`/deposit/marzpay`, `/withdraw/request`), function names
+  (`openDepositSheet`, `submitWithdraw`), and `type==='deposit'`/
+  `'withdraw'` comparisons all stay exactly as they were. The
+  `ADMIN_LANG_ROWS` translation table's English-source rows for the
+  renamed strings (tab labels, "Withdrawal fee (%)", etc.) were
+  deliberately NOT updated -- same accepted tradeoff this file has
+  documented before: editing the English source without re-translating
+  the other 5 languages would desync the lookup, so those rows are now
+  simply orphaned (no longer match anything rendered) rather than
+  wrong-but-matched, and a non-English admin sees the new English text
+  fall back cleanly instead of a stale mistranslation. Needs a real
+  translation review, not a guess, same as every prior round's version
+  of this same note.
+- **A real regression caught and fixed before shipping, not
+  discovered later**: `openWithdrawSheet()` calls `openSheet('Cash
+  Out', '')` (renamed from `'Withdraw'`), but its own post-`/bank/list`
+  guard, `if (_openSheetTitle !== 'Withdraw' ...) return;`, was never
+  updated to match -- meaning after this round's rename, EVERY
+  Withdraw sheet open would have silently failed to populate the
+  payout-wallet card and bound-accounts list (the guard would always
+  see `_openSheetTitle === 'Cash Out'`, never equal to the old literal
+  `'Withdraw'`, and return early). Found by grepping every
+  `_openSheetTitle` comparison in the file (12 total) before shipping
+  the rename, not after a bug report -- all the others already matched
+  their sheet's new title. Fixed to compare against `'Cash Out'`.
+  Verified live in headless Chromium against the real built
+  `user/index.html`: before understanding this bug the wallet card
+  would have stayed empty; after the fix, opening Withdraw with a
+  mocked `/bank/list` response correctly populates `#witWallet`.
+- **Statement PDF download speed, root-caused, not guessed at.**
+  `GET /statement/pdf` was doing four independent reads -- the user
+  doc, `getSettings()`, the up-to-2000-row transactions query, and the
+  admin logo image -- as four sequential `await`s in a row, each
+  paying its own full round trip before the next one could even start.
+  None of the four depend on each other's result, only on
+  `settleAllForUser(uid)` having already run (which genuinely must go
+  first, since it can change the wallet total and add a fresh
+  transaction row) -- so the four are now a single `Promise.all()`,
+  cutting three round trips' worth of serial latency off every
+  download. Separately, the `statementDownloads` audit-log write (see
+  Follow-up 24's "Downloaded statements now visible in Admin" section)
+  was being `await`ed before the PDF was sent back -- a log write the
+  member's own download does not need to wait on, matching this same
+  route's own existing comment that a logging failure must never block
+  the download (it was already failure-tolerant, just not
+  latency-tolerant). Made fire-and-forget. `db.js`'s indexes were
+  checked first and are not the problem -- `{userId:1,createdAt:-1}`
+  on `transactions` already exists and backs this exact query.
+- **"Improve speed of everything" / "improve smooth navigation"** --
+  checked rather than guessed at further, consistent with this file's
+  own established discipline (see Follow-up 11's identical finding):
+  `showPage()`'s Assets/Network/Account renderers already paint from
+  cache synchronously before their own first network `await`, so the
+  tab switch itself is never blocked on a round trip; Follow-up 16
+  already audited and closed the one real missing index
+  (`users.phone`); Follow-up 9/11 already audited and closed the
+  deposit/withdraw polling and callback-ack-first paths. No second
+  concrete slow spot was found beyond the statement-PDF one above --
+  told honestly here rather than inventing a change with no measured
+  problem behind it, same posture Follow-up 11 already took and
+  explained to the owner.
+- **Verified**: `node -c user-src/original_module.js`, `node --check
+  server.js`, `node build-core.js` + `node build-admin.js` (both
+  round-trip OK). `npm run test:audit` passes in full (163 checks, 0
+  failures). Live in headless Chromium against the real built bundles:
+  the Deposit/Withdraw sheet-title and `_openSheetTitle` fix confirmed
+  end-to-end (see above); the admin Settings tab rendered directly
+  from `admin-src/index.html` (not the obfuscated build, same
+  precedent as Follow-up 24) confirms every renamed label present and
+  zero stray "Deposit"/"Withdrawal" text remaining, Messages tab gone
+  from the tab bar, zero page errors on either bundle. `user/sw.js`
+  bumped `v213` → `v214`, `admin/sw.js` bumped `v52` → `v53` (both
+  source files this round touched).

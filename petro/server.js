@@ -126,10 +126,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
 const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/petro-image/set', '/admin/app-icon/set']);
-// The banner video is capped at 4 MB of actual video, which is ~5.5 MB once
-// base64'd, so it needs the huge parser -- bigJsonParser's 4 MB limit would
-// reject a legal upload before the route's own, friendlier size check ran.
-const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-content/set', '/admin/banner/video-upload']);
+const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-content/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
 // this secret"). A digest over a re-serialised object is NOT the same bytes,
@@ -808,119 +805,21 @@ async function getProductByKey(key) {
 }
 // Single admin-configurable Home banner (per snow/CLAUDE.md Nav/IA). Kept
 // deliberately minimal compared to space8's many-slot system — Snow's
-// design has exactly one banner surface right now.
-// The Home banner carries an image AND an optional video (Home.dc.html shows
-// an "ADMIN VIDEO BANNER" with a play ring). The video is stored as a URL,
-// never as an uploaded blob: a base64 video would sit inside a single Mongo
-// document, be re-sent in full on every cold boot of the app with no HTTP
-// caching, and inflate ~33% on the wire -- unaffordable on Ugandan mobile
-// data for a decorative banner. A URL also lets the owner drop `banner.mp4`
-// into the VPS's user/ folder beside index.html and just type `banner.mp4`.
-// The image doubles as the video's poster frame, so the banner still looks
-// right for the moment before the video paints (and for members whose
-// browser blocks autoplay).
+// design has exactly one banner surface right now. Used to also carry an
+// optional video (Home.dc.html's "ADMIN VIDEO BANNER") -- removed entirely,
+// owner: "video banner remove it" -- along with the /public/banner-video
+// streaming route, the home-video Mongo doc, and the up-to-4s preload wait
+// it cost the client's loading screen on a first open after every upload.
 let _bannerCache = null, _bannerCacheTs = 0;
 async function getHomeBanner() {
   if (Date.now() - _bannerCacheTs < 60 * 1000 && _bannerCache !== null) return _bannerCache;
   try {
     const snap = await db.collection('banners').doc('home').get();
     const d = snap.exists ? snap.data() : {};
-    // videoVersion is set when a video FILE has been uploaded into the
-    // database (see getHomeBannerVideo below). The bytes never travel in
-    // this response -- only the marker -- so /public/banner stays the small,
-    // every-boot JSON it has always been; the client turns the marker into a
-    // URL pointing at /public/banner-video, which the browser then caches
-    // like any other media file.
-    _bannerCache = { image: d.image || null, video: d.video || null, videoVersion: d.videoVersion || null };
-  } catch (_) { _bannerCache = _bannerCache || { image: null, video: null, videoVersion: null }; }
+    _bannerCache = { image: d.image || null };
+  } catch (_) { _bannerCache = _bannerCache || { image: null }; }
   _bannerCacheTs = Date.now();
   return _bannerCache;
-}
-// The uploaded banner video itself, kept in its OWN document.
-//
-// Owner: "why can't we just upload video to database instead of url". This
-// is that -- but the bytes are deliberately kept out of every other payload:
-//   - Mongo caps a document at 16 MB, so the video cannot share the settings
-//     or banner doc without eventually breaking both.
-//   - /public/banner is fetched on EVERY app start. Inlining a few megabytes
-//     of base64 there would make every member re-download the whole clip
-//     every time they open the app, on Ugandan mobile data, before a single
-//     frame could show.
-// Served instead from /public/banner-video with an ETag and an immutable
-// cache header, so a phone downloads it once and replays it from cache, and
-// the video streams (range requests) rather than having to arrive whole.
-const BANNER_VIDEO_MAX_BYTES = 4 * 1024 * 1024;      // 4 MB of actual video
-const BANNER_VIDEO_TYPES = { 'video/mp4': 'mp4', 'video/webm': 'webm' };
-let _bannerVideoCache = null, _bannerVideoCacheTs = 0;
-async function getHomeBannerVideo() {
-  if (Date.now() - _bannerVideoCacheTs < 60 * 1000 && _bannerVideoCache !== null) return _bannerVideoCache;
-  try {
-    const snap = await db.collection('banners').doc('home-video').get();
-    const d = snap.exists ? snap.data() : {};
-    _bannerVideoCache = (d && d.data && d.mime)
-      ? { buf: Buffer.from(d.data, 'base64'), mime: d.mime, version: d.version || '0' }
-      : { buf: null, mime: null, version: null };
-  } catch (_) { _bannerVideoCache = _bannerVideoCache || { buf: null, mime: null, version: null }; }
-  _bannerVideoCacheTs = Date.now();
-  return _bannerVideoCache;
-}
-// Resolves one `Range:` header against a known body length.
-// Returns null for "no range, send the whole thing", 'invalid' for a range
-// that cannot be satisfied (the caller answers 416), or {start,end} inclusive.
-// Only a single range is honoured -- a multi-range request falls back to the
-// full body, which is a legal response and is what video players actually do.
-function parseByteRange(header, total) {
-  if (!header) return null;
-  const m = /^bytes=(\d*)-(\d*)$/.exec(String(header).trim());
-  if (!m) return null;
-  const hasStart = m[1] !== '', hasEnd = m[2] !== '';
-  if (!hasStart && !hasEnd) return 'invalid';
-  let start, end;
-  if (!hasStart) {
-    // "bytes=-500" means the LAST 500 bytes, not "from 0 to 500".
-    const len = parseInt(m[2], 10);
-    if (!Number.isFinite(len) || len <= 0) return 'invalid';
-    start = Math.max(0, total - len); end = total - 1;
-  } else {
-    start = parseInt(m[1], 10);
-    end = hasEnd ? parseInt(m[2], 10) : total - 1;
-    if (!Number.isFinite(start) || !Number.isFinite(end)) return 'invalid';
-    if (end >= total) end = total - 1;
-  }
-  if (start > end || start >= total || start < 0) return 'invalid';
-  return { start, end };
-}
-// A YouTube link cannot be a banner video, and failing loudly here is the
-// whole point: <video src="https://youtube.com/watch?v=..."> loads an HTML
-// page, not a video file, so the banner just sits blank with no error
-// anywhere. The owner hit exactly this. An embedded YouTube player is not
-// the answer either -- it is an iframe that keeps YouTube's own controls,
-// title bar and end-screen, cannot be made non-tappable, and blocks
-// autoplay far more often than a plain file does.
-function isYouTubeLink(url) {
-  return /(^|\/\/|\.)((m|www|music)\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)(\/|$)/i.test(url);
-}
-const YOUTUBE_VIDEO_ERROR = 'A YouTube link cannot play in the banner -- the app would load YouTube\'s web page, not a video, so the banner would sit blank. It also could not autoplay silently or be made untappable. Upload the video file itself (Upload video, mp4 or webm, up to 4 MB) and it will run on its own with no controls.';
-// A banner video URL the browser will actually load, and that can't be used
-// to smuggle script into the page. Relative paths (a file dropped straight
-// into the VPS's user/ folder) and https:// are allowed; plain http:// is
-// rejected because the app itself is served over https, so the browser
-// would block it as mixed content and the owner would see a silently empty
-// banner with no explanation.
-function sanitizeBannerVideoUrl(raw) {
-  const url = String(raw == null ? '' : raw).trim();
-  if (!url) return { video: null };
-  if (url.length > 2000) return { error: 'That video link is too long (max 2000 characters).' };
-  if (isYouTubeLink(url)) return { error: YOUTUBE_VIDEO_ERROR };
-  if (/^https:\/\/[^\s]+$/i.test(url)) return { video: url };
-  if (/^http:\/\//i.test(url)) return { error: 'Use an https:// link. The app is served over https, so a plain http:// video is blocked by the browser and the banner would just show nothing.' };
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(url)) return { error: 'Only https:// links, or a file name uploaded alongside the app (for example banner.mp4), are allowed.' };
-  // A leading "//" is protocol-relative, not a relative path -- the browser
-  // would resolve //evil.com/a.mp4 against another host entirely, so it must
-  // not slip through the relative-path branch below.
-  if (url.startsWith('//')) return { error: 'Only https:// links, or a file name uploaded alongside the app (for example banner.mp4), are allowed.' };
-  if (/^[\w.\-/]+$/.test(url) && !url.includes('..')) return { video: url };
-  return { error: 'That does not look like a video link. Use an https:// URL or a file name such as banner.mp4.' };
 }
 // Separate admin-configurable banner for the Help Centre page -- its own
 // doc ('banners'/'help' vs 'banners'/'home') and its own cache, kept fully
@@ -3471,51 +3370,6 @@ app.get('/public/banner', async (req, res) => {
   try { publicJson(req, res, { status: 'success', ...(await getHomeBanner()) }, IMAGE_CACHE); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// The uploaded banner video's bytes. Deliberately NOT part of /public/banner:
-// that JSON is fetched on every app start, this is fetched once and then
-// replayed from the phone's own cache.
-//
-// Range support is not optional here -- iOS Safari refuses to play a video
-// whose server cannot serve byte ranges, so without this the banner would
-// work on Android and silently do nothing on iPhone.
-app.get('/public/banner-video', async (req, res) => {
-  try {
-    const v = await getHomeBannerVideo();
-    if (!v.buf) return res.status(404).end();
-    const etag = '"bv-' + v.version + '"';
-    // THIS LINE IS WHY THE VIDEO SHOWS AT ALL. helmet sets
-    // Cross-Origin-Resource-Policy: same-site globally (see the top of this
-    // file). On this VPS, api./app.PETRO_DOMAIN share one registrable domain
-    // and ARE same-site to each other -- but a <video> is a no-cors
-    // subresource load, so CORP still applies to it, and IP:port access
-    // (e.g. http://179.198.197.114:3000 called from :8080 during testing) is
-    // cross-site regardless of any real domain. Leaving this opt-out on this
-    // one route keeps the banner video working under either setup, at no
-    // real cost: it serves a public decorative clip and nothing else. The
-    // global same-site default stays as it is elsewhere; it is a real
-    // protection for the money endpoints.
-    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
-    // The client asks for ?v=<version>, so a new upload is a new URL and the
-    // long cache below can never serve a stale clip.
-    res.set('Cache-Control', 'public, max-age=31536000, immutable');
-    res.set('ETag', etag);
-    res.set('Content-Type', v.mime);
-    res.set('Accept-Ranges', 'bytes');
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    const total = v.buf.length;
-    const r = parseByteRange(req.headers.range, total);
-    if (r === 'invalid') return res.status(416).set('Content-Range', `bytes */${total}`).end();
-    if (r) {
-      res.status(206).set('Content-Range', `bytes ${r.start}-${r.end}/${total}`);
-      res.set('Content-Length', String(r.end - r.start + 1));
-      if (req.method === 'HEAD') return res.end();
-      return res.end(v.buf.subarray(r.start, r.end + 1));
-    }
-    res.set('Content-Length', String(total));
-    if (req.method === 'HEAD') return res.end();
-    res.end(v.buf);
-  } catch (e) { res.status(500).end(); }
-});
 // The installed-app icon, as a real image file. Nothing in the app fetches
 // this -- Chrome does, out of manifest.json at install time. Its URL is
 // hard-coded in manifest.json and in index.html's <head>, so it must stay
@@ -3532,18 +3386,14 @@ function serveBrandAsset(slot) {
       const a = await getBrandAsset(slot);
       if (!a || !a.buf) return res.status(404).end();
       const etag = '"ba-' + slot + '-' + a.version + '"';
-      // The same trap the banner video hit, and for the same reason: a
-      // manifest icon is a no-cors subresource load, which the global
-      // same-site CORP default gates -- IP:port access during testing (see
-      // the banner-video route's own comment above) is cross-site regardless
-      // of the real domain. Without this line the browser drops the icon
-      // silently -- API calls keep working, so nothing looks wrong except an
-      // install prompt with no icon on it.
+      // A manifest icon is a no-cors subresource load, which the global
+      // same-site CORP default gates -- IP:port access during testing is
+      // cross-site regardless of the real domain. Without this line the
+      // browser drops the icon silently -- API calls keep working, so
+      // nothing looks wrong except an install prompt with no icon on it.
       res.set('Cross-Origin-Resource-Policy', 'cross-origin');
-      // Five minutes and revalidate, NOT the banner video's immutable year.
-      // The video gets a ?v=<version> from the client so a new upload is a
-      // new URL; these two cannot -- manifest.json and the og: tags are
-      // static files with fixed hrefs -- so the cache is the ONLY thing that
+      // Five minutes and revalidate: manifest.json and the og: tags are
+      // static files with fixed hrefs, so the cache is the ONLY thing that
       // decides how long a stale icon survives. ETag keeps the repeat cost
       // at a 304 anyway.
       res.set('Cache-Control', 'public, max-age=300, must-revalidate');
@@ -4634,7 +4484,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before depositing.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
     const provider = depositAutomaticProvider(sett);
     // The gateway has to be able to reach THIS country's phone numbers. Every
     // automatic gateway here is Uganda-only (see GATEWAY_DIAL_CODES), and a
@@ -4681,7 +4531,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     // to 5 recorded "attempts" and trip the ban.
     const lastDep = _depCreateDebounce.get(userId) || 0;
     if (Date.now() - lastDep < 7000)
-      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+      return res.status(429).json({ status: 'error', message: 'A top up is already being processed. Please wait a moment.' });
 
     const attemptCount = recordDepositAttempt(userId);
     if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
@@ -5201,10 +5051,10 @@ app.post('/deposit/usdt/submit', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before depositing.' });
-    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT deposits are not available right now.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
+    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT top ups are not available right now.' });
     const rate = Number(sett.usdtRate) || 0;
-    if (rate <= 0) return res.status(400).json({ status: 'error', message: 'USDT deposits are not configured yet. Please try again later.' });
+    if (rate <= 0) return res.status(400).json({ status: 'error', message: 'USDT top ups are not configured yet. Please try again later.' });
 
     const amountUsdt = Number(req.body.amountUsdt);
     if (!isFinite(amountUsdt) || amountUsdt <= 0) return res.status(400).json({ status: 'error', message: 'Enter a valid USDT amount' });
@@ -5222,7 +5072,7 @@ app.post('/deposit/usdt/submit', async (req, res) => {
 
     const lastSub = _usdtSubmitDebounce.get(userId) || 0;
     if (Date.now() - lastSub < 7000)
-      return res.status(429).json({ status: 'error', message: 'A deposit is already being submitted. Please wait a moment.' });
+      return res.status(429).json({ status: 'error', message: 'A top up is already being submitted. Please wait a moment.' });
     _usdtSubmitDebounce.set(userId, Date.now());
 
     // A TXID can only ever back ONE OPEN OR CREDITED claim, by anyone --
@@ -5341,7 +5191,7 @@ app.post('/deposit/usdt/submit', async (req, res) => {
       message: 'Submitted. Verifying on-chain — this can take a minute.' });
   } catch (e) {
     console.error('USDT deposit submit error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not submit your deposit. Please try again.' });
+    res.status(500).json({ status: 'error', message: 'Could not submit your top up. Please try again.' });
   }
 });
 // Lets the client poll a still-pending claim (the common early-return case
@@ -5352,7 +5202,7 @@ app.post('/deposit/usdt/status', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
-    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Top up not found' });
     const dep = snap.data();
     if (dep.status === 'matched') return res.json({ status: 'success', state: 'matched' });
     if (dep.status === 'failed') return res.json({ status: 'success', state: 'rejected', message: dep.failureReason || 'Payment declined.' });
@@ -5379,9 +5229,9 @@ app.post('/admin/deposit/usdt/reject', async (req, res) => {
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Top up not found' });
     const dep = snap.data();
-    if (depositFullyCredited(dep)) return res.status(400).json({ status: 'error', message: 'This deposit was already credited -- cannot reject it now.' });
+    if (depositFullyCredited(dep)) return res.status(400).json({ status: 'error', message: 'This top up was already credited -- cannot reject it now.' });
     const reason = String(req.body.reason || '').trim() || 'Rejected by admin';
     await markDepositFailed(snap.ref, dep.userId, reason);
     logAdminAction(req, 'usdt_deposit_rejected', { depositId, reason });
@@ -5419,7 +5269,7 @@ app.post('/deposit/marzpay/status', async (req, res) => {
   try {
     const depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
     if (!depSnap.exists || depSnap.data().userId !== userId)
-      return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+      return res.status(404).json({ status: 'error', message: 'Top up not found' });
     const dep = depSnap.data();
     if (dep.status === 'matched') {
       // Best-effort self-heal: if a prior credit attempt got the status to
@@ -5503,14 +5353,14 @@ app.post('/deposit/card/submit', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before depositing.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
     if (!sett.cardDepositEnabled) return res.status(400).json({ status: 'error', message: 'Card payments are not available right now.' });
     const min = Math.max(Number(sett.minDeposit) || 0, CARD_MIN_UGX);
     if (amt < min) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(min)}` });
 
     const lastSub = _cardSubmitDebounce.get(userId) || 0;
     if (Date.now() - lastSub < 7000)
-      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+      return res.status(429).json({ status: 'error', message: 'A top up is already being processed. Please wait a moment.' });
     _cardSubmitDebounce.set(userId, Date.now());
 
     const ref = await uniqueRef('C');
@@ -5692,7 +5542,7 @@ app.post('/withdraw/request', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   if (_witRequestInFlight.has(userId))
-    return res.status(429).json({ status: 'error', message: 'A withdrawal is already being processed. Please wait a moment.' });
+    return res.status(429).json({ status: 'error', message: 'A cash out is already being processed. Please wait a moment.' });
   if (_userBeingDeleted.has(userId))
     return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
   _witRequestInFlight.add(userId);
@@ -5702,14 +5552,14 @@ app.post('/withdraw/request', async (req, res) => {
     if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
     if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
     const rawNetwork = String(req.body.network || '').trim();
-    if (!rawNetwork) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
+    if (!rawNetwork) return res.status(400).json({ status: 'error', message: 'Bind a cash out account first.' });
     // cleanPhone() only applies to mobile money -- it enforces this
     // region's phone SHAPE, which a bank account number is not. The bound-
     // account lookup right below (boundSnap) is the real gate either way:
     // a value that doesn't match a real saved bankAccounts doc is refused
     // there regardless of which branch validated its shape here.
     const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(req.body.phone || '') : String(req.body.phone || '').replace(/\s+/g, '').trim();
-    if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
+    if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a cash out account first.' });
     const sett = await getSettings();
     // The cash-out window, enforced HERE and not only shown in the app.
     // Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that when
@@ -5744,15 +5594,15 @@ app.post('/withdraw/request', async (req, res) => {
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)
-      return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: "That withdrawal account isn't saved to your profile. Bind it first, then try again." });
+      return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: "That cash out account isn't saved to your profile. Bind it first, then try again." });
     const holder = boundSnap.docs[0].data().holder;
 
     const feePct = Number(sett.withdrawFeePct);
-    if (!Number.isFinite(feePct) || feePct < 0 || feePct >= 100) throw new Error('Withdrawal fees are unavailable. Contact support.');
+    if (!Number.isFinite(feePct) || feePct < 0 || feePct >= 100) throw new Error('Cash out fees are unavailable. Contact support.');
     if (Number(sett.maxWithdraw) > 0 && amt > Number(sett.maxWithdraw)) throw new Error(`Maximum cash-out is ${fmtMoney(sett.maxWithdraw)}`);
     const fee = Math.round(amt * feePct / 100);
     const net = amt - fee;
-    if (net <= 0) throw new Error('Withdrawal amount is too small after fees.');
+    if (net <= 0) throw new Error('Cash out amount is too small after fees.');
     const ref = await uniqueRef('S');
     // This adapter has no real multi-document rollback. Persist the request
     // first, then charge once with a durable token that recovery can inspect.
@@ -5811,7 +5661,7 @@ app.post('/withdraw/request', async (req, res) => {
     sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested, processing now' });
   } catch (e) {
-    if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your withdrawal request is being checked. Check Transaction Statement before submitting again.' });
+    if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your cash out request is being checked. Check Transaction Statement before submitting again.' });
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   } finally { _witRequestInFlight.delete(userId); }
 });
@@ -5992,7 +5842,7 @@ async function markWithdrawalProcessed(witRef, userId) {
 async function processWithdrawalCore(withdrawalId, processedBy) {
   try {
     const pre = await db.collection('withdrawals').doc(withdrawalId).get();
-    if (!pre.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
+    if (!pre.exists) return { code: 404, body: { status: 'error', message: 'Cash out not found' } };
     return await _processWithdrawalNow(withdrawalId, processedBy);
   } catch (e) {
     console.error('Withdrawal processing failed:', e.message);
@@ -6001,12 +5851,12 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
 }
 async function _processWithdrawalNow(withdrawalId, processedBy) {
   if (_withdrawInFlight.has(withdrawalId))
-    return { code: 409, body: { status: 'error', message: 'Another admin is already acting on this withdrawal. Check the list in a moment.' } };
+    return { code: 409, body: { status: 'error', message: 'Another admin is already acting on this cash out. Check the list in a moment.' } };
   _withdrawInFlight.add(withdrawalId);
   try {
     const witRef = db.collection('withdrawals').doc(withdrawalId);
     const witSnap = await witRef.get();
-    if (!witSnap.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
+    if (!witSnap.exists) return { code: 404, body: { status: 'error', message: 'Cash out not found' } };
     const wit = witSnap.data();
     if (wit.status !== 'pending') return { code: 400, body: { status: 'error', message: `Cannot send, the status is '${wit.status}'` } };
 
@@ -6066,7 +5916,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       // itself hands back in the response, captured the instant it exists.
       const sendingMarker = crypto.randomUUID();
       const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
+      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Cash out status changed. Refresh the list.' } };
 
       let mpData, ambiguous = false;
       try {
@@ -6135,7 +5985,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       // by anything in here.
       const sendingMarker = withdrawalId;
       const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, pesajetRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
+      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Cash out status changed. Refresh the list.' } };
       const pj = await pesajetDisburse({
         amount: wit.net, phone: wit.phone, network: wit.network,
         reference: sendingMarker, description: 'Withdrawal',
@@ -6189,7 +6039,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     // here, before the call, means it's always persisted regardless of
     // whether any later write in this function fails.
     const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, marzReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-    if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
+    if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Cash out status changed. Refresh the list.' } };
 
     let mpData, ambiguous = false;
     try {
@@ -6273,7 +6123,7 @@ app.post('/admin/withdraw/verify', async (req, res) => {
   if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
   try {
     const snap = await db.collection('withdrawals').doc(withdrawalId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Cash out not found' });
     const w = snap.data();
     // A payout the admin sent by hand (manual mode) has no MarzPay record at
     // all, by design. Without this branch it falls into "no gateway
@@ -6685,10 +6535,10 @@ app.post('/bank/save', async (req, res) => {
       await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, createdAt: FieldValue.serverTimestamp() });
       return false;
     });
-    if (dup) return res.status(400).json({ status: 'error', message: 'This account is already saved as a withdrawal account.' });
+    if (dup) return res.status(400).json({ status: 'error', message: 'This account is already saved as a cash out account.' });
     res.json({ status: 'success' });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: 'Could not save the withdrawal account' });
+    res.status(500).json({ status: 'error', message: 'Could not save the cash out account' });
   }
 });
 app.get('/bank/list', async (req, res) => {
@@ -6702,7 +6552,7 @@ app.get('/bank/list', async (req, res) => {
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const snap = await db.collection('bankAccounts').where('userId', '==', userId).get();
     res.json({ status: 'success', accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal accounts' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load cash out accounts' }); }
 });
 app.post('/bank/delete', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -6722,7 +6572,7 @@ app.post('/bank/delete', async (req, res) => {
     // destination, only to actually withdraw money.
     await ref.delete();
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the withdrawal account' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the cash out account' }); }
 });
 app.post('/account/transaction-pin/change', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -6978,8 +6828,8 @@ app.get('/transactions', async (req, res) => {
 // about what a given transaction type is called.
 function statementRowLabel(t, brand) {
   const type = t.type;
-  if (type === 'deposit') return 'Deposit';
-  if (type === 'withdraw') return 'Withdrawal';
+  if (type === 'deposit') return 'Top Up';
+  if (type === 'withdraw') return 'Cash Out';
   if (type === 'cashback') return 'Daily Income';
   if (type === 'commission') return 'Referral Commission';
   if (type === 'promocode') return 'Gift Code';
@@ -7004,15 +6854,25 @@ app.get('/statement/pdf', async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     await settleAllForUser(uid);
-    const userSnap = await db.collection('users').doc(uid).get();
+    // settleAllForUser() must finish first (it can change the wallet total
+    // and add a fresh transaction row) -- but everything below only depends
+    // on ITS result, not on each other, so they no longer wait in a line.
+    // This was the real cause of "why does downloading a statement take a
+    // few seconds on a powerful VPS" -- four independent round trips
+    // (user doc, settings, up to 2000 transactions, the logo image) were
+    // running one after another instead of together.
+    const STATEMENT_TX_LIMIT = 2000; // same cap as GET /transactions above
+    const [userSnap, sett, snap, logoDataUri] = await Promise.all([
+      db.collection('users').doc(uid).get(),
+      getSettings(),
+      db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(STATEMENT_TX_LIMIT).get(),
+      getPetroImage('logo'),
+    ]);
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = userSnap.data();
     if (u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended.' });
-    const sett = await getSettings();
     const brand = sett.brandName || 'Petro';
     const currency = currentRegion().currency || 'UGX';
-    const STATEMENT_TX_LIMIT = 2000; // same cap as GET /transactions above
-    const snap = await db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(STATEMENT_TX_LIMIT).get();
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     // Same admin-uploaded 'logo' slot the app itself shows on Home/Account/
     // Auth (STATE.brandLogo) -- so uploading a logo once already covers the
@@ -7020,7 +6880,6 @@ app.get('/statement/pdf', async (req, res) => {
     // an <img src> takes client-side); pdfkit's doc.image() wants real
     // bytes, so it's decoded here rather than trusting doc.image() to
     // understand a data: URI string across every pdfkit version.
-    const logoDataUri = await getPetroImage('logo');
     let logoBuf = null;
     if (logoDataUri) {
       const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(logoDataUri);
@@ -7096,8 +6955,8 @@ app.get('/statement/pdf', async (req, res) => {
       ['Reference', docRef],
       ['Account holder', u.phone || '-'],
       ['Wallet balance', fmtMoney(u.walletBalance || 0, currency)],
-      ['Total deposited', fmtMoney(u.totalDeposited || 0, currency)],
-      ['Total withdrawn', fmtMoney(u.totalWithdrawn || 0, currency)],
+      ['Total topped up', fmtMoney(u.totalDeposited || 0, currency)],
+      ['Total cashed out', fmtMoney(u.totalWithdrawn || 0, currency)],
       ['Generated', generatedStr],
     ];
     meta.forEach(([label, value]) => {
@@ -7164,11 +7023,14 @@ app.get('/statement/pdf', async (req, res) => {
     // phone/ref denormalized onto the row at write time so the admin list
     // below never needs a per-row user lookup. Never lets a logging
     // failure block a member's own already-generated PDF.
-    try {
-      await db.collection('statementDownloads').add({
-        userId: uid, phone: u.phone || '', ref: docRef, createdAt: FieldValue.serverTimestamp(),
-      });
-    } catch (logErr) { console.error('statementDownloads log failed:', logErr.message); }
+    // Fire-and-forget: this is a log write, not part of the PDF the member
+    // is waiting on. Awaiting it here would make every download pay for a
+    // write round trip it doesn't need -- the try/catch above this comment
+    // already established a logging failure must never block the download,
+    // so it must not be allowed to slow it down either.
+    db.collection('statementDownloads').add({
+      userId: uid, phone: u.phone || '', ref: docRef, createdAt: FieldValue.serverTimestamp(),
+    }).catch(logErr => console.error('statementDownloads log failed:', logErr.message));
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', 'attachment; filename="' + filename.replace(/[^A-Za-z0-9_.-]/g, '') + '"');
     res.send(buffer);
@@ -7183,7 +7045,7 @@ app.get('/deposits', async (req, res) => {
   try {
     const snap = await db.collection('pendingDeposits').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(200).get();
     res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load deposit history' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load top up history' }); }
 });
 app.get('/withdrawals', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -7191,7 +7053,7 @@ app.get('/withdrawals', async (req, res) => {
   try {
     const snap = await db.collection('withdrawals').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(200).get();
     res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal history' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load cash out history' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -7724,100 +7586,27 @@ app.get('/admin/banner', async (req, res) => {
   try { res.json({ status: 'success', ...(await getHomeBanner()) }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Takes image, video, or both, and only touches the keys actually sent --
-// the image and the video are set from two separate controls in the admin
-// panel, and a plain .set({image}) here would silently wipe a configured
-// video the moment the poster was re-uploaded.
 app.post('/admin/banner/set', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const patch = {};
-  let dropUploadedVideo = false;
-  if (req.body.image != null) {
-    const image = String(req.body.image || '');
-    if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
-      return res.status(400).json({ status: 'error', message: 'Invalid image' });
-    patch.image = image;
-  }
-  if (req.body.video != null) {
-    const v = sanitizeBannerVideoUrl(req.body.video);
-    if (v.error) return res.status(400).json({ status: 'error', message: v.error });
-    patch.video = v.video;
-    // A typed link replaces an uploaded file, the mirror of the upload route
-    // clearing the link -- exactly one of the two is ever the live source, so
-    // there is never a question of which one the banner is playing. The
-    // stored bytes go too rather than lingering unreachable in the database.
-    patch.videoVersion = null;
-    dropUploadedVideo = true;
-  }
-  if (!Object.keys(patch).length) return res.status(400).json({ status: 'error', message: 'Nothing to save' });
+  const image = String(req.body.image || '');
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+    return res.status(400).json({ status: 'error', message: 'Invalid image' });
   try {
     const ref = db.collection('banners').doc('home');
     const snap = await ref.get();
-    await ref.set({ ...(snap.exists ? snap.data() : {}), ...patch });
-    if (dropUploadedVideo) { await db.collection('banners').doc('home-video').delete(); _bannerVideoCacheTs = 0; }
+    await ref.set({ ...(snap.exists ? snap.data() : {}), image });
     _bannerCacheTs = 0;
-    logAdminAction(req, 'banner_set', { fields: Object.keys(patch).join(',') });
+    logAdminAction(req, 'banner_set', { fields: 'image' });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the banner' }); }
 });
-// `?what=video` clears just the video and leaves the poster image in place;
-// no parameter clears the whole banner, as it always did.
 app.post('/admin/banner/clear', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const ref = db.collection('banners').doc('home');
-    // "Remove video" has to clear BOTH sources -- the typed link and the
-    // uploaded file -- or the owner would remove one and still see a video.
-    if (String(req.query.what || req.body.what || '') === 'video') {
-      const snap = await ref.get();
-      await ref.set({ ...(snap.exists ? snap.data() : {}), video: null, videoVersion: null });
-      await db.collection('banners').doc('home-video').delete();
-      _bannerVideoCacheTs = 0;
-    } else {
-      await ref.delete();
-      await db.collection('banners').doc('home-video').delete();
-      _bannerVideoCacheTs = 0;
-    }
+    await db.collection('banners').doc('home').delete();
     _bannerCacheTs = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the banner' }); }
-});
-// Upload the video FILE into the database, rather than pointing at one.
-// Owner: "why can't we just upload video to database instead of url".
-//
-// The bytes land in their own `banners/home-video` document and are served
-// from /public/banner-video, so they never ride along in the every-boot
-// /public/banner JSON. The 4 MB cap is not a database limit (Mongo allows
-// 16 MB a document) -- it is a members' data-bill limit: this clip loads on
-// every phone that opens the app, and a banner loop has no business costing
-// someone more than a few seconds of video.
-app.post('/admin/banner/video-upload', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const raw = String(req.body.video || '');
-  const m = /^data:(video\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(raw);
-  if (!m) return res.status(400).json({ status: 'error', message: 'That is not a video file. Choose an .mp4 or .webm.' });
-  const mime = m[1].toLowerCase();
-  if (!BANNER_VIDEO_TYPES[mime]) {
-    return res.status(400).json({ status: 'error', message: `${mime} will not play on every phone. Save the clip as MP4 (H.264) -- that is the one format Android and iPhone both play.` });
-  }
-  let buf;
-  try { buf = Buffer.from(m[2], 'base64'); } catch (_) { buf = null; }
-  if (!buf || !buf.length) return res.status(400).json({ status: 'error', message: 'That video file could not be read.' });
-  if (buf.length > BANNER_VIDEO_MAX_BYTES) {
-    return res.status(400).json({ status: 'error', message: `That video is ${Math.round(buf.length / 1024 / 1024 * 10) / 10} MB. Keep it under 4 MB -- it downloads on every member's phone. A short, silent, muted loop of a few seconds is what fits.` });
-  }
-  try {
-    const version = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
-    await db.collection('banners').doc('home-video').set({ data: buf.toString('base64'), mime, bytes: buf.length, version });
-    const ref = db.collection('banners').doc('home');
-    const snap = await ref.get();
-    // An uploaded file wins over any typed link, and clears it, so there is
-    // never a question of which of the two the banner is actually playing.
-    await ref.set({ ...(snap.exists ? snap.data() : {}), video: null, videoVersion: version });
-    _bannerCacheTs = 0; _bannerVideoCacheTs = 0;
-    logAdminAction(req, 'banner_video_uploaded', { bytes: buf.length, mime });
-    res.json({ status: 'success', bytes: buf.length, version });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the video' }); }
 });
 app.get('/admin/help-banner', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -8876,7 +8665,7 @@ app.post('/admin/user/delete', async (req, res) => {
     // the existing webhook/reconciler, so this is a short, safe wait, not a
     // permanent block.
     const inFlightDepSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', 'in', ['initiating', 'pending']).limit(1).get();
-    if (!inFlightDepSnap.empty) return res.status(409).json({ status: 'error', message: 'This account has a deposit still being confirmed with the payment provider. Wait a moment for it to settle, then try deleting again.' });
+    if (!inFlightDepSnap.empty) return res.status(409).json({ status: 'error', message: 'This account has a top up still being confirmed with the payment provider. Wait a moment for it to settle, then try deleting again.' });
     // Reparent this account's own direct referrals up to ITS referrer, so a
     // deleted account never leaves a permanently orphaned downline.
     //
@@ -9095,7 +8884,7 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Top up not found' });
     if (depositFullyCredited(snap.data())) return res.json({ status: 'success', message: 'Already credited' });
     const ok = await creditDeposit(snap);
     if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit. Try again' });
@@ -9140,12 +8929,12 @@ app.post('/admin/withdrawals/list', async (req, res) => {
 app.post('/admin/withdraw/reject', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const witId = String(req.body.withdrawalId || '');
-  if (_withdrawInFlight.has(witId)) return res.status(409).json({ status: 'error', message: 'This withdrawal is being sent right now. Check the list in a moment.' });
+  if (_withdrawInFlight.has(witId)) return res.status(409).json({ status: 'error', message: 'This cash out is being sent right now. Check the list in a moment.' });
   _withdrawInFlight.add(witId);
   try {
     const ref = db.collection('withdrawals').doc(witId);
     const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Cash out not found' });
     const w = snap.data();
     // Codex-caught real bug: 'sending' (a MarzPay network error mid-request
     // -- genuinely ambiguous whether the payout went out, see
@@ -9161,10 +8950,10 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
     const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
-    if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied. Refresh and try again.' });
+    if (!declined) return res.status(409).json({ status: 'error', message: 'Cash out status changed before this could be applied. Refresh and try again.' });
     await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
     logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded });
-    res.json({ status: 'success', message: refunded ? 'Withdrawal rejected and refunded' : 'Withdrawal rejected, refund is pending and will complete shortly' });
+    res.json({ status: 'success', message: refunded ? 'Cash out rejected and refunded' : 'Cash out rejected, refund is pending and will complete shortly' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _withdrawInFlight.delete(witId); }
 });

@@ -2082,24 +2082,6 @@ async function boot(){
   applyInnerBackgroundSettings();
   STATE.products = p.status === 'success' ? p.products : [];
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
-  // Optional admin-set banner video (Home.dc.html's "ADMIN VIDEO BANNER").
-  // Two sources, and an uploaded file always wins over a typed link:
-  // videoVersion means the owner uploaded the file into the database, and it
-  // is served from /public/banner-video -- its own URL, so the browser caches
-  // and streams it instead of it riding along inside this every-boot JSON.
-  // The version in the query string means a new upload is a new URL, so the
-  // immutable cache header on that endpoint can never serve a stale clip.
-  // STATE.homeBanner doubles as the poster frame when both are set.
-  STATE.homeBannerVideo = (b.status === 'success')
-    ? (b.videoVersion ? API_BASE + '/public/banner-video?v=' + encodeURIComponent(b.videoVersion) : (b.video || null))
-    : null;
-  // The instant-boot path paints Home from the saved snapshot before this
-  // fetch lands, and nothing else repaints Home afterwards -- so without this
-  // a member who had opened the app before would keep seeing the PREVIOUS
-  // banner video (or none) for the whole session after the owner changed it.
-  // Cheap and self-limiting: it only touches the DOM when the URL actually
-  // differs from what is on screen.
-  refreshHomeBannerIfChanged();
   applyNumberFont();
 }
 // Everything the first screen does not need. Called when the three heavy
@@ -2113,9 +2095,8 @@ function applyBootArtwork(ai, ci){
   // page banner and the brand logo on the Account profile card.
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   syncBrandLogoImages();
-  // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner /
-  // STATE.homeBannerVideo, fetched separately above -- it predates the
-  // carousel and is the only slide that can be a video). Filtered to
+  // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner,
+  // fetched separately above -- it predates the carousel). Filtered to
   // whichever are actually set, so 1 or 2 slides render fine too, not only 3.
   STATE.homeSlides2n3 = [
     (ci.status === 'success' && ci.banner2) ? ci.banner2 : null,
@@ -2485,13 +2466,6 @@ function _cachedStateBlob(uid, withImages){
     uid, account: STATE.account, investments: STATE.investments, teamStats: STATE.teamStats,
     bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, transactionsTruncated: STATE.transactionsTruncated,
     products, settings: STATE.settings,
-    // Just the URL, never the clip. The video FILE lives in the browser's own
-    // HTTP cache (immutable, a year, versioned URL), so knowing the URL at
-    // paint time is all the instant-boot path needs to start it right away
-    // instead of leaving the banner blank until /public/banner comes back.
-    // A poster image would be a data: URL worth hundreds of KB, so it is
-    // deliberately NOT kept here -- with the video cached it is barely seen.
-    homeBannerVideo: STATE.homeBannerVideo || null,
   });
 }
 function saveCachedState(uid){
@@ -2527,9 +2501,6 @@ async function enterApp(){
   STATE.products = STATE.products || cached.products;
   STATE.settings = STATE.settings || cached.settings;
   applyBrandName();
-  // Same `||` reasoning as the two above: fill the gap until boot()'s live
-  // /public/banner lands, never overwrite it once it has.
-  STATE.homeBannerVideo = STATE.homeBannerVideo || cached.homeBannerVideo || null;
   // subagent-audit-caught real regression: Round 57 added a wait on
   // _bootPromise right here to stop the announcement dialog/activity
   // ticker popping in after the spinner -- but THIS is the cache-hit
@@ -2647,10 +2618,6 @@ async function bootFromNetwork(uid){
   // was already in memory, so the "nothing cached yet" branch could not fire
   // on any screen.
   await withTimeout(_bootPromise, 6000);
-  // _bootPromise carries /public/banner, so STATE.homeBannerVideo is known by
-  // here -- which is what makes it possible to have the clip downloaded
-  // BEFORE the loading screen comes down rather than after.
-  await preloadBannerVideo(BANNER_PRELOAD_MS);
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
@@ -2999,19 +2966,15 @@ window.navigatePage = function(name){
   return showPage(name);
 };
 window.showPage = async function(name){
+  // The page being left, captured before STATE.page is overwritten below --
+  // maybeAnnounceAfterHomeNav() needs to know what tab a member is arriving
+  // at Home FROM (Assets/Network/Account), not just that they landed on it.
+  const prevPage = STATE.page;
   // The bottom bar now stays visible over sheets (Deposit, Withdraw, Wallet
   // and the rest), so a tab can be tapped while one is open. Close it first,
   // otherwise the new tab paints underneath a sheet that is still covering
   // it and the app looks frozen.
   //
-  // {navigating:true} because this close is a TAB TAP, not a back-out to Home.
-  // Owner: "l don't want when l can go in deposit and l click to another nav
-  // icon not home it should not show announcement dialog." This ran BEFORE
-  // `STATE.page = name` below, so maybeAnnounceAfterSheet() read STATE.page as
-  // the page the sheet was opened over -- 'home' -- and announced, whichever
-  // tab was actually being tapped. The new page then painted under the dialog.
-  // Tapping HOME from Deposit still announces: the 'home' branch below does it,
-  // which is the one path that genuinely is "from deposit back to home".
   // The message detail is its OWN overlay, not a sheet, and it is the only
   // other one that stops above the bottom bar (`bottom:var(--nav-h)`, same as
   // .sheet-bg) -- so the nav is tappable through it and the tap did nothing.
@@ -3075,14 +3038,14 @@ window.showPage = async function(name){
     // Deliberately NOT awaited: renderHome() does its own account/investments
     // refresh (a real network round trip even on a cache-hit repaint), and
     // the announcement decision below depends only on STATE.settings, not on
-    // that data at all -- awaiting it first was adding a real, needless
-    // delay before the dialog could ever show, on top of the (now-removed)
-    // wait a few lines below. paintHome()'s synchronous portion still runs
-    // in this same tick either way (everything in renderHome() before its
-    // own first `await` executes before control returns here), so Home's
-    // paint ordering is unaffected -- only the ANNOUNCEMENT's own timing
-    // changes here.
+    // that data at all -- awaiting it first would add a real, needless delay
+    // before the dialog could ever show. paintHome()'s synchronous portion
+    // still runs in this same tick either way (everything in renderHome()
+    // before its own first `await` executes before control returns here), so
+    // Home's paint ordering is unaffected -- only the announcement's own
+    // timing depends on this not being awaited.
     renderHome();
+    maybeAnnounceAfterHomeNav(prevPage);
   }
   else if (name === 'assets') await renderAssets();
   else if (name === 'network') await renderNetwork();
@@ -3154,40 +3117,22 @@ async function renderHome(){
   if (msgR.status === 'success') STATE.messages = msgR.messages;
   if (STATE.page === 'home') updateMessageBadge();
 }
-// The Home banner has three states, in priority order: an admin-set video
-// (Home.dc.html's "ADMIN VIDEO BANNER"), an admin-set still image, or the
-// built-in striped fallback with the brand tagline.
-// The video is muted+playsinline+loop so mobile browsers will autoplay it;
-// where autoplay is refused (data-saver, low-power mode, some iOS states)
-// the poster image stays up and the mockup's play ring is there to tap. The
-// ring is hidden by the 'playing' class rather than removed, so pausing
-// brings it straight back.
+// The Home banner has two states: an admin-set still image, or the built-in
+// striped fallback with the brand tagline. (The admin-uploadable video
+// banner was removed entirely -- owner: "video banner remove it" -- along
+// with the preload-during-boot wait it needed, which was costing up to 4s
+// of the loading screen on a first open after every upload.)
 function homeBannerInnerHtml(st){
-  if (STATE.homeBannerVideo) {
-    const poster = STATE.homeBanner ? ` poster="${esc(STATE.homeBanner)}"` : '';
-    // Owner: "l dont want it to be tappable or pause or play, l want it to go
-    // or run on its own." So there is no play ring and no controls, and the
-    // element takes no pointer events at all (CSS) -- a tap on the banner
-    // does nothing, it cannot be paused, and there is no picture-in-picture
-    // or long-press download menu either. autoplay+muted+loop+playsinline is
-    // the exact combination phone browsers allow to start on its own.
-    return `<video id="homeBannerVideo" src="${esc(STATE.homeBannerVideo)}"${poster} autoplay muted loop playsinline preload="auto"
-        disablepictureinpicture disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback" tabindex="-1" aria-hidden="true"
-        onerror="this.parentNode&&this.parentNode.classList.add('hb-video-failed')"></video>`;
-  }
   if (STATE.homeBanner) return `<img src="${esc(STATE.homeBanner)}" alt="" onerror="this.style.display='none'">`;
   return `<div class="hb-stripes"></div>`;
 }
 // ── HOME BANNER CAROUSEL (owner: "those slide images will be uploaded
 // from admin panel") ──
-// Only kicks in when there is no video AND more than one image to actually
-// rotate between -- a video keeps its existing single-banner behavior
-// completely untouched (autoplay/preload/live-refresh, all unchanged), and
-// a single image renders exactly as it always has (no dots, nothing to
-// cycle). Slide 1 is STATE.homeBanner (the original, pre-carousel slot);
-// slides 2/3 are the new banner2/banner3 admin uploads.
+// Only kicks in when there is more than one image to actually rotate
+// between -- a single image renders exactly as it always has (no dots,
+// nothing to cycle). Slide 1 is STATE.homeBanner (the original, pre-
+// carousel slot); slides 2/3 are the banner2/banner3 admin uploads.
 function homeCarouselSlides(){
-  if (STATE.homeBannerVideo) return null;
   const slides = [STATE.homeBanner].concat(STATE.homeSlides2n3 || []).filter(Boolean);
   return slides.length > 1 ? slides : null;
 }
@@ -3239,144 +3184,6 @@ function startHomeCarousel(){
     preload.src = slides[nextIdx];
   }, 4500);
 }
-// Puts the element that was preloaded during the loading screen INTO the
-// banner, in place of the fresh <video> paintHome() just wrote.
-//
-// Without this the preload only warms the HTTP cache: paintHome() builds a
-// brand-new <video>, and at the instant the loading screen goes that element
-// has readyState 0 and still has to go and read the file, so the banner shows
-// its poster for a beat first -- exactly the "show up after the loader" the
-// owner did not want. Moving the already-decoded element across closes that
-// gap: it is mid-playback the moment it lands.
-//
-// Every attribute is copied off the node being replaced rather than restated
-// here, so this cannot drift from homeBannerInnerHtml() -- add an attribute
-// there and it comes along automatically.
-function adoptPreloadedBannerVideo(){
-  const el = _bannerPreloadEl;
-  if (!el || !_bannerPreloadOk || !STATE.homeBannerVideo) return;
-  if (el.getAttribute('src') !== STATE.homeBannerVideo) return;   // a stale preload
-  const cur = document.getElementById('homeBannerVideo');
-  if (!cur || cur === el) return;
-  for (const a of Array.from(cur.attributes)) {
-    if (a.name === 'src') continue;                                // identical by the check above
-    try { el.setAttribute(a.name, a.value); } catch (_) {}
-  }
-  const parent = cur.parentNode;
-  if (!parent) return;
-  parent.replaceChild(el, cur);
-  const r = el.play(); if (r && r.catch) r.catch(() => {});
-}
-// Swaps the Home banner in place when the admin-set video URL has changed
-// under a Home that is already painted. A no-op when Home is not on screen,
-// or when what is rendered already matches.
-function refreshHomeBannerIfChanged(){
-  const wrap = document.querySelector('.home-banner');
-  if (!wrap) return;
-  const cur = wrap.querySelector('#homeBannerVideo');
-  const shown = cur ? cur.getAttribute('src') : null;
-  if (shown === (STATE.homeBannerVideo || null)) return;
-  wrap.classList.remove('hb-video-failed');
-  wrap.innerHTML = homeBannerInnerHtml(STATE.settings || {});
-  adoptPreloadedBannerVideo();
-  tryAutoplayHomeBanner();
-}
-// Owner: "make when the start up loader must have loaded also the video
-// before it waiting to load, so video must show up after loader."
-//
-// Downloads the banner video WHILE the loading screen is still up, so Home
-// paints with it already playing instead of showing the poster (or the
-// striped hero) and popping the video in a second or two later.
-//
-// This costs real time only ONCE. The video is served with a year-long
-// immutable cache under a versioned URL, so every later open resolves from
-// the phone's own cache and `canplaythrough` fires almost immediately -- the
-// wait below is effectively first-open-after-an-upload only.
-//
-// It is capped all the same. A member on slow Ugandan mobile data must never
-// be held on a spinner by a decorative clip: when the cap is hit the app
-// opens anyway and the element keeps buffering in the background, so the
-// banner starts as soon as it can. Same for a video that errors -- that path
-// resolves immediately rather than burning the whole cap.
-//
-// The element is kept in a module-level reference on purpose: a detached
-// <video> that gets garbage-collected mid-download would abandon the very
-// fetch this is waiting on.
-var _bannerPreloadEl = null;
-// Only a preload that actually reached "can play" is worth adopting. A failed
-// one must be left alone so the banner's own fresh <video> loads, errors, and
-// trips the hb-video-failed fallback -- adopting the dead element instead
-// meant the error had already fired while it was detached, so the fallback
-// never ran and the banner sat blank.
-var _bannerPreloadOk = false;
-// Ten seconds was too long to hold a member on a loading screen for a
-// decorative clip. The wait exists because the owner asked for it ("the
-// start up loader must have loaded also the video before it"), and it is
-// paid ONCE per upload -- the year-long immutable cache makes every later
-// open resolve from the phone -- so the cap only bites on a first open after
-// a new video, which is exactly when four seconds of loader is plenty and
-// ten is a member deciding the app is broken. A clip still buffering when
-// the cap expires keeps loading behind the app.
-var BANNER_PRELOAD_MS = 4000;
-function preloadBannerVideo(ms){
-  const src = STATE.homeBannerVideo;
-  if (!src) return Promise.resolve('none');
-  return new Promise(resolve => {
-    let settled = false;
-    const finish = (why) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(why);
-    };
-    const v = document.createElement('video');
-    _bannerPreloadEl = v; _bannerPreloadOk = false;
-    // Muted + playsinline so a browser treats this like the real banner and
-    // is willing to buffer it without a gesture.
-    v.muted = true; v.defaultMuted = true; v.playsInline = true;
-    v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
-    v.preload = 'auto';
-    v.addEventListener('canplaythrough', () => { _bannerPreloadOk = true; finish('ready'); }, { once: true });
-    v.loop = true; v.autoplay = true;
-    v.setAttribute('loop', ''); v.setAttribute('autoplay', '');
-    v.addEventListener('error', () => finish('error'), { once: true });
-    const timer = setTimeout(() => finish('timeout'), ms || BANNER_PRELOAD_MS);
-    v.src = src;
-    try { v.load(); } catch (_) { finish('error'); }
-  });
-}
-// The banner must start itself, with nothing to tap. The autoplay attribute
-// covers the normal case; these retries cover the cases where a phone
-// browser refuses the first attempt -- the tab was in the background when
-// Home painted, the phone was in low-power mode, or the browser wants to see
-// a user gesture somewhere on the page first. Each retry is silent: a
-// rejected play() is an expected outcome, not an error, and while it is
-// refused the poster image simply stays up.
-//
-// The retry hooks are installed once, on window, and outlive any single
-// repaint of Home (paintHome() rebuilds the <video> element every time).
-var _bannerAutoplayHooked = false;
-function tryAutoplayHomeBanner(){
-  const v = document.getElementById('homeBannerVideo');
-  if (v) { const r = v.play(); if (r && r.catch) r.catch(() => {}); }
-  if (_bannerAutoplayHooked) return;
-  _bannerAutoplayHooked = true;
-  const kick = () => {
-    const el = document.getElementById('homeBannerVideo');
-    if (!el || !el.paused) return;
-    const r = el.play(); if (r && r.catch) r.catch(() => {});
-  };
-  // Coming back to the app, or rotating/resizing, is a fresh chance to start.
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
-  window.addEventListener('focus', kick);
-  window.addEventListener('pageshow', kick);
-  // Browsers that want a gesture first will accept one made ANYWHERE -- the
-  // member tapping any part of the app unlocks it, without the banner itself
-  // ever being tappable. Passive and non-capturing so it cannot interfere
-  // with the taps it is listening to.
-  ['touchend', 'click'].forEach(ev =>
-    document.addEventListener(ev, kick, { passive: true }));
-}
 function paintHome(){
   const a = STATE.account || {};
   const st = STATE.settings || {};
@@ -3392,10 +3199,10 @@ function paintHome(){
 ${homeBannerBlockHtml(st)}
 <div class="home-actions">
   <button class="home-action" onclick="openDepositSheet()">
-    <span class="badge">${suppliedMemberIcon('deposit')}</span><span class="lbl">Deposit</span>
+    <span class="badge">${suppliedMemberIcon('deposit')}</span><span class="lbl">Top Up</span>
   </button>
   <button class="home-action" onclick="openWithdrawSheet()">
-    <span class="badge">${suppliedMemberIcon('withdraw')}</span><span class="lbl">Withdraw</span>
+    <span class="badge">${suppliedMemberIcon('withdraw')}</span><span class="lbl">Cash Out</span>
   </button>
   <button class="home-action" onclick="navigatePage('network')">
     <span class="badge">${suppliedMemberIcon('invite')}</span><span class="lbl">Invite</span>
@@ -3414,8 +3221,8 @@ ${homeBannerBlockHtml(st)}
 </div>
 <div class="home-stat-row">
   <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.coinsStack}</span><div class="hs-lbl">Cumulative Earnings</div><div class="mono hs-val hs-gold-txt" id="homeTotalEarned">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Deposits</div><div class="mono hs-val hs-red-txt" id="homeTotalDeposited">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Withdrawals</div><div class="mono hs-val" id="homeTotalWithdrawn">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Top Ups</div><div class="mono hs-val hs-red-txt" id="homeTotalDeposited">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Cash Outs</div><div class="mono hs-val" id="homeTotalWithdrawn">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
 </div>
 <div class="checkin-card">
   <span class="cic-gift">${ICONS.checkinCalendar}</span>
@@ -3432,10 +3239,6 @@ ${homeBannerBlockHtml(st)}
 ${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.homeFooterBanner)}" alt="" onerror="this.remove()">` : ''}
 <div style="height:8px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-  // Before tryAutoplayHomeBanner(), so the element it then nudges is the
-  // preloaded one rather than the blank node this paint just created.
-  adoptPreloadedBannerVideo();
-  tryAutoplayHomeBanner();
   startHomeCarousel();
 }
 function patchHomeBalances(){
@@ -3983,7 +3786,7 @@ function taskCenterCardsHtml(type, progress, milestones){
     const current = Number(progress) || 0;
     const targetText = isDeposit ? fmtUGX(target) : String(target);
     const currentText = isDeposit ? fmtUGX(current) : String(current);
-    const label = isDeposit ? 'Team deposit' : 'Level 1 active referrals';
+    const label = isDeposit ? 'Team top up' : 'Level 1 active referrals';
     const button = m.claimed
       ? '<button class="secondary-button" disabled style="min-width:88px;padding:10px 12px;opacity:.72;">Claimed</button>'
       : m.achieved
@@ -4001,9 +3804,9 @@ function taskCenterHtml(t){
   const deposits = Number(t.teamDeposits) || 0;
   return `<section id="taskCenter" class="task-center">
     <div class="task-center-heading"><div><div class="net-section-title">Task Center</div><b>Earn from team progress</b></div></div>
-    <p class="task-center-note">Referral tasks unlock only after your direct Level 1 referral makes a deposit. Every completed task is claimable once.</p>
+    <p class="task-center-note">Referral tasks unlock only after your direct Level 1 referral tops up. Every completed task is claimable once.</p>
     <div class="task-category"><div class="task-category-title">Referral tasks</div><div class="task-center-grid">${taskCenterCardsHtml('count', l1, t.milestones)}</div></div>
-    <div class="task-category"><div class="task-category-title">Deposit tasks</div><div class="task-center-grid">${taskCenterCardsHtml('deposit', deposits, t.milestones)}</div></div>
+    <div class="task-category"><div class="task-category-title">Top up tasks</div><div class="task-center-grid">${taskCenterCardsHtml('deposit', deposits, t.milestones)}</div></div>
   </section>
 `;
 }
@@ -4262,8 +4065,8 @@ async function renderAccount(){
     </div>
   </div>
   <div class="account-money-actions">
-    <button class="account-money-action" onclick="openDepositSheet()"><span>${suppliedMemberIcon('deposit')}</span>Deposit</button>
-    <button class="account-money-action" onclick="openWithdrawSheet()"><span>${suppliedMemberIcon('withdraw')}</span>Withdraw</button>
+    <button class="account-money-action" onclick="openDepositSheet()"><span>${suppliedMemberIcon('deposit')}</span>Top Up</button>
+    <button class="account-money-action" onclick="openWithdrawSheet()"><span>${suppliedMemberIcon('withdraw')}</span>Cash Out</button>
   </div>
   <div class="account-action-list">
     ${acctListCardHtml('accountWallet', 'Payout Wallet', 'openWalletSheet()')}
@@ -4627,8 +4430,8 @@ function statementCategoryMatch(cat, t){
   return STATEMENT_INCOME_TYPES.has(t.type);
 }
 function statementDescription(t){
-  if (t.type === 'deposit') return 'Deposit';
-  if (t.type === 'withdraw') return 'Withdrawal';
+  if (t.type === 'deposit') return 'Top Up';
+  if (t.type === 'withdraw') return 'Cash Out';
   if (t.type === 'cashback') return 'Daily Income';
   if (t.type === 'commission') return 'Referral Commission';
   if (t.type === 'promocode') return 'Gift Code';
@@ -4704,8 +4507,8 @@ window.openTransactionStatement = async function(cat){
     </div>
     <div class="statement-tabs" id="statementTabs">
       <button data-cat="income" class="${_statementCat==='income'?'on':''}" onclick="switchStatementCategory('income')">Income</button>
-      <button data-cat="deposit" class="${_statementCat==='deposit'?'on':''}" onclick="switchStatementCategory('deposit')">Deposits</button>
-      <button data-cat="withdraw" class="${_statementCat==='withdraw'?'on':''}" onclick="switchStatementCategory('withdraw')">Withdrawals</button>
+      <button data-cat="deposit" class="${_statementCat==='deposit'?'on':''}" onclick="switchStatementCategory('deposit')">Top Ups</button>
+      <button data-cat="withdraw" class="${_statementCat==='withdraw'?'on':''}" onclick="switchStatementCategory('withdraw')">Cash Outs</button>
     </div>
     <div class="statement-head" aria-hidden="true">
       <span>Transaction</span><span>Amount</span>
@@ -4913,7 +4716,7 @@ window.submitLoginPasswordChange = async function(){
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
 window.openChangeTradePasswordSheet = function(){
   openSheet('Trade Password', `<div class="reveal-in" style="padding-top:22px;">
-    <p class="pw-note">Your trade password is your 6-digit PIN used to confirm withdrawals and other sensitive actions.</p>
+    <p class="pw-note">Your trade password is your 6-digit PIN used to confirm cash outs and other sensitive actions.</p>
     <div class="pw-head"><span class="bar"></span><span>Old Trade Password</span></div>
     ${pwFieldHtml('tpOld', 'Enter old 6-digit PIN', true)}
     <div class="pw-head"><span class="bar"></span><span>New Trade Password</span></div>
@@ -5054,41 +4857,18 @@ function isAnyOverlayOpen(){
     || ($('annBg') && $('annBg').classList.contains('show')));
 }
 
-// Owner: "make when the announcement dialog message appears when one is from
-// deposit page, and from withdrawal page back to home."
-//
-// showPage('home') is the only thing that fires the announcement, and
-// Recharge/Withdraw are OVERLAYS, not page navigations -- STATE.page stays
-// 'home' the whole time one is open, so closing one never went through
-// showPage() and never re-announced. Closing these specific sheets now does.
-//
-// Deliberately scoped to the recharge/withdrawal flow rather than every
-// sheet: firing it after Records, About, Help Centre or Daily Check-in would
-// put the dialog in front of the member several times a session for no
-// reason. Withdrawal Accounts is included because it is part of the same
-// flow (Withdraw's own empty state opens it), and the STATE.page check below
-// means it stays silent when it was reached from the Account tab instead.
-// Owner, later: "l also want the announcement dialog to show when one has
-// clicked back from deposit page to home also when one has clicked back from
-// withdrawal page."
-//
-// It was supposed to already. The bug was one missing string: the deposit flow
-// opens THREE differently-titled sheets -- 'Recharge' for the method chooser
-// and the manual form, and 'Deposit' for the automatic (PayA) form, which is
-// the one most members actually see. Only 'Recharge' was listed, so backing out
-// of the main deposit screen announced nothing. This list is matched by TITLE,
-// so a screen whose title changes silently drops off it -- test-nav-sheets.py
-// now checks every title in this array is one openSheet() is really called
-// with, which is what would have caught it.
-// 'Wallet' -- not 'Withdrawal Accounts'. That screen was renamed when Petro
-// moved to ONE bound wallet (openWalletSheet), and this entry was left behind
-// pointing at a title nothing opens any more. Dead for however long, and
-// invisible precisely because a title that matches nothing simply never fires.
-// The same new check that caught the missing 'Deposit' caught this too.
-var ANNOUNCE_AFTER_SHEETS = ['Recharge', 'Deposit', 'Withdraw', 'Wallet'];
-function maybeAnnounceAfterSheet(closedTitle){
-  if (!closedTitle || ANNOUNCE_AFTER_SHEETS.indexOf(closedTitle) === -1) return;
-  if (STATE.page !== 'home') return;      // closed back to Account, not Home
+// Owner, superseding the earlier "fires when closing Deposit/Withdraw/Wallet
+// back to Home" rule: "the dialog should appear when one also clicks back to
+// home ie from assets to home, from network to home, and account to home, so
+// remove those existing of from withdrawal, from deposit to home." The
+// trigger is now a bottom-nav PAGE transition, not a sheet closing -- fires
+// only when the tab just left is Assets, Network or Account and the tab just
+// entered is Home. Deposit/Withdraw/Wallet are sheets, not STATE.page values
+// (STATE.page stays 'home' the whole time one is open), so they were never
+// part of this rule to begin with once the old sheet-based mechanism was
+// removed -- nothing extra needed excluding them.
+function maybeAnnounceAfterHomeNav(prevPage){
+  if (['assets', 'network', 'account'].indexOf(prevPage) === -1) return;
   if (isAnyOverlayOpen()) return;         // something else is already in front
   maybeShowAnnouncement();
 }
@@ -5114,21 +4894,15 @@ function openSheet(title, bodyHtml){
   else history.pushState({ sheet: title }, '', '');
   lockBodyScroll();
 }
-// opts.fromAction marks a close the CODE performed after something the
-// member just did (a submitted withdrawal, a recharge handing over to the
-// result modal) rather than the member navigating back. Those must not
-// announce: the dialog would land on top of the confirmation toast or the
-// recharge result the member is actually waiting to read. The back button in
-// index.html calls closeSheet() with no arguments, so a real back-tap is
-// always treated as navigation.
-//
-// opts.navigating marks the OTHER kind of non-back close: showPage() shutting
-// a sheet because a different tab was tapped. Both suppress the announcement,
-// and they are kept as separate flags on purpose -- they suppress it for
-// unrelated reasons, and folding a tab tap into "fromAction" would read as a
-// lie the next time someone traces this.
+// opts.fromAction/opts.navigating used to gate whether closing a sheet could
+// trigger the announcement dialog (a submitted withdrawal, a recharge
+// handing over to its result modal, or a tab tap all had to suppress it).
+// The announcement no longer fires from a sheet closing at all -- see
+// maybeAnnounceAfterHomeNav() -- so both flags are now inert; left on their
+// call sites rather than stripped out of several submit-button paths for a
+// purely cosmetic cleanup. opts.keepHistory is the one flag this function
+// still reads.
 window.closeSheet = function(opts){
-  const closed = _openSheetTitle;
   $('sheetBg').classList.remove('show');
   document.body.classList.remove('sheet-open');
   unlockBodyScroll();
@@ -5137,7 +4911,6 @@ window.closeSheet = function(opts){
   // opts.keepHistory: the caller is retiring several overlay entries itself
   // with one history.go(-n) -- see showPage(). Only that caller sets it.
   if (!(opts && opts.keepHistory) && history.state && history.state.sheet) history.back();
-  if (!(opts && (opts.fromAction || opts.navigating))) maybeAnnounceAfterSheet(closed);
 };
 window.addEventListener('popstate', () => {
   // The message detail sits ON TOP of the Messages sheet and carries its own
@@ -5150,16 +4923,12 @@ window.addEventListener('popstate', () => {
     return;
   }
   // The phone's own Back button, which never goes through closeSheet()
-  // directly. When it ran first, its own history.back() lands here too, but
-  // it's already cleared its own state (title / .show class), so this can't
-  // announce a second time.
-  const closed = _openSheetTitle;
+  // directly.
   $('sheetBg').classList.remove('show');
   document.body.classList.remove('sheet-open');
   unlockBodyScroll();
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
-  maybeAnnounceAfterSheet(closed);
 });
 
 window.openInfoSheet = function(kind){
@@ -5332,7 +5101,7 @@ window.openRulesSheet = async function(){
   await new Promise(resolve => setTimeout(resolve, 100));
   const wrap = $('rulesArticle');
   if (wrap !== article) return;
-  const fallback = s.rulesText || ('Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed deposit: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
+  const fallback = s.rulesText || ('Minimum top up ' + fmtUGX(s.minDeposit) + '. Minimum cash out ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed top up: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
     : [{ type: 'text', text: fallback }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
@@ -5531,7 +5300,7 @@ function openDepositFormSheet(){
     ? `<div class="dep-method-tabs" id="depMethodRow">
       ${methodTabs.map(([k, l]) => `<button type="button" data-dm="${k}" class="${k === 'mm' ? 'on' : ''}" onclick="selectDepMethod('${k}')">${l}</button>`).join('')}
     </div>` : '';
-  openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">
+  openSheet('Top Up', `<div class="reveal-in" style="padding-top:18px;">
     ${tabsHtml}
     <div id="depMmPanel">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
@@ -5545,13 +5314,13 @@ function openDepositFormSheet(){
     </div>
     <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>
 
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Deposit</button>
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Top Up</button>
 
     <div class="dep-instr deposit-guide">
       <h3>How to add funds</h3>
       <ol class="deposit-steps">
         <li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
-        <li><b>Approve on your phone</b><span>Tap Confirm Deposit, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
+        <li><b>Approve on your phone</b><span>Tap Confirm Top Up, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
         <li><b>Follow the payment status</b><span>Wait for confirmation. This checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.</span></li>
       </ol>
     </div>
@@ -5577,7 +5346,7 @@ function openDepositFormSheet(){
       <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Submit USDT Payment</button>
 
       <div class="dep-instr deposit-guide">
-        <h3>How USDT deposits work</h3>
+        <h3>How USDT top ups work</h3>
         <ol class="deposit-steps">
           <li><b>Send the exact amount</b><span>Minimum ${fmtUGX(s.minDeposit)}${Number(s.usdtRate) > 0 ? ` (about ${(Number(s.minDeposit) / Number(s.usdtRate)).toFixed(2)} USDT)` : ''}, on the TRC20 (Tron) network only, to the address above.</span></li>
           <li><b>Paste the transaction hash</b><span>Copy the TXID from your wallet app and paste it here, then tap Submit.</span></li>
@@ -5718,7 +5487,7 @@ window.doUsdtDeposit = async function(){
   btn.disabled = true; btn.textContent = 'Checking payment…';
   const r = await post('/deposit/usdt/submit', { amountUsdt: amtUsdt, txid: txid });
   btn.disabled = false; btn.textContent = label;
-  if (r.status !== 'success') return notify(r.message || 'Could not submit your deposit');
+  if (r.status !== 'success') return notify(r.message || 'Could not submit your top up');
 
   if (r.state === 'rejected') {
     // Fields stay exactly as typed -- the member can see what they entered
@@ -5828,16 +5597,6 @@ window.closeDepositStatusModal = function(){
   $('depStatusBg').classList.remove('show');
   document.body.classList.remove('deposit-status-open');
   unlockBodyScroll();
-  // Subagent-audit-caught real bug: submitDeposit()/pollDepositStatus()/
-  // pollManualDepositStatus() all close the Recharge/Payment sheet
-  // with {fromAction:true} specifically to SUPPRESS the announcement while
-  // handing off to this modal (so it can't land on top of the pending/result
-  // screen) -- but nothing ever un-suppressed it once the member actually
-  // taps Close here, which is the real "back to Home" moment for the most
-  // common real path (submit a recharge -> see the result -> tap Close).
-  // maybeAnnounceAfterSheet() already no-ops correctly when STATE.page isn't
-  // 'home' or another overlay is open, so this is safe to call unconditionally.
-  maybeAnnounceAfterSheet('Recharge');
 };
 // ── ONE STATUS REQUEST AT A TIME ──
 // Owner: "add a button saying verify, so one can tap it but it should not
@@ -6176,11 +5935,11 @@ window.submitDeposit = async function(){
     // optional here.
     r = await post('/deposit/marzpay', { amount, phone });
   } finally {
-    // 'Confirm Deposit', not 'Recharge' -- this restores the button after a
+    // 'Confirm Top Up', not 'Recharge' -- this restores the button after a
     // failed attempt, and the label it was restoring belonged to a screen
     // that no longer exists, so a member whose recharge failed was left
     // looking at a button that had silently renamed itself.
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Deposit';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Top Up';
   }
   if (r && r.stale) return;
   if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start recharge');
@@ -6188,7 +5947,7 @@ window.submitDeposit = async function(){
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
   refreshTransactionsCache().catch(() => {});
-  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
+  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Top Up') closeSheet({ fromAction: true });
   openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
 };
@@ -6242,13 +6001,13 @@ async function pollDepositStatus(depositId){
 // STATE.bankAccounts current for the NEXT time this sheet opens.
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
-  openSheet('Withdraw', '');
+  openSheet('Cash Out', '');
   // Paint the actual withdrawal page immediately. Waiting for /bank/list
   // left a transparent-looking empty sheet over Home on a cold open.
   paintWithdrawSheet(s);
   const amountField = $('witAmount');
   const r = await api('/bank/list');
-  if (_openSheetTitle !== 'Withdraw' || $('witAmount') !== amountField) return;
+  if (_openSheetTitle !== 'Cash Out' || $('witAmount') !== amountField) return;
   if (r.status === 'success' && Array.isArray(r.accounts)) {
     STATE.bankAccounts = r.accounts;
     const wallet = currentWallet();
@@ -6322,7 +6081,7 @@ function paintWithdrawSheet(s){
     <div class="wit-fee">Fee: ${fee}%</div>
     <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
 
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${w && !_withdrawSubmitting ? '' : 'disabled'} onclick="submitWithdraw()">Confirm Withdraw</button>
+    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${w && !_withdrawSubmitting ? '' : 'disabled'} onclick="submitWithdraw()">Confirm Cash Out</button>
 
     <div class="wit-instr withdrawal-guide">
       <h3>Before you cash out</h3>
@@ -6330,7 +6089,7 @@ function paintWithdrawSheet(s){
         <div><dt>Receiving account</dt><dd>Check the name and ${w && !isMobileMoneyNetwork(w.network) ? 'bank account number' : 'mobile money number'} above. Your payout goes to this linked wallet.</dd></div>
         <div><dt>Amount to request</dt><dd>Minimum ${fmtUGX(s.minWithdraw)}${Number(s.maxWithdraw) > 0 ? `; maximum ${fmtUGX(s.maxWithdraw)}` : ''}. Review the fee and the amount you will receive before confirming.${Number(s.withdrawMultiple) > 0 ? ` Use a multiple of ${fmtUGX(s.withdrawMultiple)}.` : ''}</dd></div>
         <div><dt>Availability</dt><dd>${withdrawHoursLine(s)}${Number(s.maxWithdrawalsPerDay) > 0 ? ` Up to ${Number(s.maxWithdrawalsPerDay)} requests per day.` : ''}</dd></div>
-        <div><dt>After submitting</dt><dd>Follow the payout in Transaction Statement → Withdrawals. Wait for a pending request to finish before submitting another.</dd></div>
+        <div><dt>After submitting</dt><dd>Follow the payout in Transaction Statement → Cash Outs. Wait for a pending request to finish before submitting another.</dd></div>
       </dl>
     </div>
   </div>`;
@@ -6390,7 +6149,7 @@ window.submitWithdraw = async function(){
     const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
     return notify(`Cash-out must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
   }
-  if (!acct) return notify('Bind your wallet before withdrawing.');
+  if (!acct) return notify('Bind your wallet before cashing out.');
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
   const win = withdrawWindow(STATE.settings || {});
@@ -6402,12 +6161,12 @@ window.submitWithdraw = async function(){
   try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone }); }
   finally {
     _withdrawSubmitting = false;
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Withdraw';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Cash Out';
     const current = $('witSubmitBtn');
     if (current && current !== submitBtn) current.disabled = !currentWallet();
   }
   if (r.stale) return;
-  if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
+  if (r.status !== 'success') return notify(r.message || 'Could not request cash out.');
   // Owner: "why when l withdrawal the value still remains???"
   // Because nothing here refreshed it. The SERVER debits immediately --
   // /withdraw/request does walletBalance: increment(-amt) before it answers --
@@ -6435,7 +6194,7 @@ window.submitWithdraw = async function(){
   notify(`Cash-out of ${fmtUGXCents(amount)} is processing. You will receive `
     + `${fmtUGXCents(net)} after the ${pct}% charge.`,
     () => openBalanceRecordSheet('withdraw'));
-  if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
+  if (_openSheetTitle === 'Cash Out' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
 };
 // The catch-up after a cash-out, off the path between the server saying yes and
@@ -6482,7 +6241,7 @@ window.openInvestConfirm = function(tierKey, btn){
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
       if (short) {
         closeConfirm();
-        notify('Insufficient balance, redirecting to deposit…', () => openDepositSheet());
+        notify('Insufficient balance, redirecting to top up…', () => openDepositSheet());
         setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
         return;
       }

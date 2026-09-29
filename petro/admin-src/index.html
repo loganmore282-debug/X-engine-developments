@@ -369,11 +369,10 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="analytics">Analytics</button>
         <button class="tab" data-tab="users">Users</button>
-        <button class="tab" data-tab="deposits">Deposits</button>
-        <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
+        <button class="tab" data-tab="deposits">Top Ups</button>
+        <button class="tab" data-tab="withdrawals">Cash Outs <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Assets</button>
         <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
-        <button class="tab" data-tab="messages" id="messagesTab">Messages</button>
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
@@ -483,12 +482,12 @@ function msToDatetimeLocal(ms){
 }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
 const TX_LABELS = {
-  deposit: 'Deposit', withdraw: 'Cash out', commission: 'Commission', team_reward: 'Task Center reward',
+  deposit: 'Top up', withdraw: 'Cash out', commission: 'Commission', team_reward: 'Task Center reward',
   checkin: 'Daily reward', cashback: 'Plan cashback', investment: 'Plan purchase',
   promocode: 'Promo code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
   welcome_bonus: 'Welcome bonus', mission_salary: 'Mission Center salary',
-  mission_deposit_reward: 'Mission Center deposit reward',
-  deposit_reversal: 'Deposit reversed (fraud)',
+  mission_deposit_reward: 'Mission Center top up reward',
+  deposit_reversal: 'Top up reversed (fraud)',
   statement: 'Statement downloaded',
 };
 function txLabel(type){ return TX_LABELS[type] || (type ? type.replace(/_/g,' ') : ''); }
@@ -609,13 +608,6 @@ function guessMimeFromName(name){
   const m = /\.([a-z0-9]+)$/i.exec(String(name||''));
   return (m && NAME_MIME[m[1].toLowerCase()]) || '';
 }
-// Mirrors server.js's own cap and check, so the panel can refuse a bad video
-// before uploading it and explain why in the same words the server would.
-const BANNER_VIDEO_MAX_BYTES = 4 * 1024 * 1024;
-function isYouTubeLink(url){
-  return /(^|\/\/|\.)((m|www|music)\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)(\/|$)/i.test(String(url||''));
-}
-const YOUTUBE_VIDEO_ERROR = 'A YouTube link cannot play in the banner -- the app would load YouTube\'s web page, not a video, so the banner would sit blank. Upload the video file itself instead.';
 function fileToFramedDataUrl(file, W, H, quality=0.82){
   return new Promise((resolve,reject)=>{
     if(!file) return reject(new Error('No file'));
@@ -716,41 +708,6 @@ function fileToSquarePng(file, size){
   });
 }
 
-// Reads the file EXACTLY as it is, with no canvas round trip. fileToDataUrl()
-// above draws onto a canvas and exports image/jpeg, which for an animated GIF
-// means one still frame and no transparency -- the animation would be
-// silently destroyed on upload with nothing to show it had happened. Animated
-// images have to go up byte for byte, so they do.
-// `accept` and `what` default to images, so the existing GIF/logo callers are
-// unchanged; the banner-video upload passes /^video\// instead. Raw bytes
-// either way -- re-encoding is for photos, and would wreck a video as surely
-// as it wrecks an animated GIF.
-function fileToRawDataUrl(file, maxBytes, accept, what){
-  accept = accept || /^image\//; what = what || 'image';
-  return new Promise((resolve,reject)=>{
-    if(!file) return reject(new Error('No file'));
-    // Some Android file pickers hand back a File with an EMPTY type. Judging
-    // only by file.type would then refuse a perfectly good .mp4, so fall back
-    // to the extension -- the server re-checks the real type either way.
-    const typed = file.type || guessMimeFromName(file.name);
-    if(!accept.test(typed)) return reject(new Error('Please choose a'+(what==='image'?'n ':' ')+what+' file'));
-    if(file.size > maxBytes) return reject(new Error('That file is '+Math.round(file.size/1024)+' KB. Keep it under '+Math.round(maxBytes/1024)+' KB -- it loads on every member\'s phone.'));
-    const fr=new FileReader();
-    fr.onerror=()=>reject(new Error('Could not read the file'));
-    fr.onload=()=>{
-      // With an empty file.type the reader emits
-      // "data:application/octet-stream;base64,..." -- which the server's
-      // video/image gate would reject. Rewrite the prefix to the type we
-      // resolved above so a blank-type pick still uploads.
-      let out = String(fr.result||'');
-      if (typed && /^data:(application\/octet-stream)?;?base64,/.test(out)) {
-        out = 'data:' + typed + ';base64,' + out.slice(out.indexOf('base64,') + 7);
-      }
-      resolve(out);
-    };
-    fr.readAsDataURL(file);
-  });
-}
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
@@ -999,7 +956,7 @@ try { setPushUIState(!!localStorage.getItem('snow_admin_push_token')); } catch(_
 }); })();
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','banners','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','banners','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -1012,7 +969,7 @@ function switchTab(name){
   c.inert = true; c.setAttribute('aria-busy','true');
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
-     products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
+     products:renderProducts, promocodes:renderPromoCodes, transactions:renderTransactions,
      referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
@@ -1084,7 +1041,7 @@ function withTabBusy(promise) {
   const safety = setTimeout(finish, 45000);
   return Promise.resolve(promise).finally(() => { clearTimeout(safety); finish(); });
 }
-const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','admins','auditlog']);
+const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','admins','auditlog']);
 // The list-style tabs (Users, Deposits, Withdrawals, Transactions,
 // Referrals) get their OWN quiet*() function here instead of the full
 // render*() -- those only refetch data and patch the table body + subtab
@@ -1097,7 +1054,7 @@ const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals
 // state to lose there beyond scroll position, which is restored below).
 const RENDERERS={ dashboard:()=>renderDashboard(), analytics:()=>renderAnalytics(true), users:()=>quietRefreshUsers(), deposits:()=>quietRefreshDeposits(),
   withdrawals:()=>quietRefreshWithdrawals(), products:()=>renderProducts(),
-  promocodes:()=>renderPromoCodes(), messages:()=>renderMessages(), transactions:()=>quietRefreshTransactions(), referrals:()=>quietRefreshReferrals(),
+  promocodes:()=>renderPromoCodes(), transactions:()=>quietRefreshTransactions(), referrals:()=>quietRefreshReferrals(),
   settings:()=>renderSettings(), admins:()=>renderAdmins(), auditlog:()=>renderAuditLog() };
 function modalOpen(){ const m=$('modalRoot'); return m && !m.classList.contains('hidden'); }
 function contentHasFocus(){
@@ -1131,8 +1088,8 @@ async function renderDashboard(){
   const stats = s.stats||{};
   const moneyCards = `
       <div class="stat"><div class="n">${ugx(stats.walletTotal)}</div><div class="l">Wallet balances</div></div>
-      <div class="stat"><div class="n">${ugx(stats.depositAmount)}</div><div class="l">Total deposited</div></div>
-      <div class="stat"><div class="n">${ugx(stats.withdrawAmount)}</div><div class="l">Total withdrawn</div></div>
+      <div class="stat"><div class="n">${ugx(stats.depositAmount)}</div><div class="l">Total topped up</div></div>
+      <div class="stat"><div class="n">${ugx(stats.withdrawAmount)}</div><div class="l">Total cashed out</div></div>
       <div class="stat"><div class="n">${ugx(stats.investedAmount)}</div><div class="l">Total invested</div></div>`;
   // A capped scan must SAY it was capped. Without this the figures look
   // authoritative while describing only part of the platform -- which is the
@@ -1150,8 +1107,8 @@ async function renderDashboard(){
       <div class="stat"><div class="n">${stats.bannedUsers||0}</div><div class="l">Banned users</div></div>
       ${moneyCards}
       <div class="stat"><div class="n">${stats.activeInvestments||0}</div><div class="l">Active plans</div></div>
-      <div class="stat"><div class="n">${stats.pendingDepCount||0}</div><div class="l">Pending deposits</div></div>
-      <div class="stat"><div class="n">${stats.pendingWitCount||0}</div><div class="l">Pending withdrawals</div></div>
+      <div class="stat"><div class="n">${stats.pendingDepCount||0}</div><div class="l">Pending top ups</div></div>
+      <div class="stat"><div class="n">${stats.pendingWitCount||0}</div><div class="l">Pending cash outs</div></div>
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">MarzPay available balance</h2>
@@ -1264,15 +1221,15 @@ async function renderAnalytics(silent){
   const maxHour = Math.max(1, ...a.byHour.map(h=>Math.max(h.depAmt,h.witAmt)));
   const maxDay  = Math.max(1, ...a.byDay.map(d=>Math.max(d.dep,d.wit)));
   const hourChart = `<div class="chart">${a.byHour.map(h=>`
-     <div class="chart-col" title="${h12(h.h)}: deposits ${ugx(h.depAmt)} (${h.depCnt}), withdrawals ${ugx(h.witAmt)} (${h.witCnt})">
+     <div class="chart-col" title="${h12(h.h)}: top ups ${ugx(h.depAmt)} (${h.depCnt}), cash outs ${ugx(h.witAmt)} (${h.witCnt})">
        <div class="chart-bars"><i style="height:${Math.round(h.depAmt/maxHour*100)}%;background:var(--ok)"></i><i style="height:${Math.round(h.witAmt/maxHour*100)}%;background:var(--danger)"></i></div>
        <div class="chart-x">${h.h}</div></div>`).join('')}</div>`;
   const dayChart = `<div class="chart">${a.byDay.map(d=>`
-     <div class="chart-col" title="${d.day}: deposits ${ugx(d.dep)}, withdrawals ${ugx(d.wit)}, new users ${d.users}">
+     <div class="chart-col" title="${d.day}: top ups ${ugx(d.dep)}, cash outs ${ugx(d.wit)}, new users ${d.users}">
        <div class="chart-bars"><i style="height:${Math.round(d.dep/maxDay*100)}%;background:var(--ok)"></i><i style="height:${Math.round(d.wit/maxDay*100)}%;background:var(--danger)"></i></div>
        <div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>`;
   const bandCard=(key,label)=>{const b=a.bands[key]||{dep:0,wit:0};const on=a.busiestBand===key;
-    return `<div class="stat" style="${on?'outline:2px solid var(--gold);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">deposits</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">withdrawals</div></div>`;};
+    return `<div class="stat" style="${on?'outline:2px solid var(--gold);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">top ups</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">cash outs</div></div>`;};
   const f=a.forecast||{}; const fw=f.withdrawals||{}; const fd=f.deposits||{};
   const sa=a.staffApprovals||{byStaff:[],timeline:[]};
   // Owner-only suspicious-activity tables. `ab` is null outright for a staff
@@ -1284,10 +1241,10 @@ async function renderAnalytics(silent){
     const lastCol = r => `<td>${r.lastAt?fdate(r.lastAt):'—'}</td>`;
     const failedDepRows = rowsOr(ab.repeatedFailedDeposits,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(s=>ugx(s.amount)).join(', ')}</td>${lastCol(r)}</tr>`,
-      'No accounts with repeated failed deposits in this period.');
+      'No accounts with repeated failed top ups in this period.');
     const insufficientRows = rowsOr(ab.repeatedInsufficientWithdrawals,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(s=>`tried ${ugx(s.attempted)} with ${ugx(s.balance)}`).join('; ')}</td>${lastCol(r)}</tr>`,
-      'No accounts repeatedly trying to withdraw more than their balance.');
+      'No accounts repeatedly trying to cash out more than their balance.');
     const checkinRows = rowsOr(ab.repeatedCheckinAlreadyClaimed,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td>${lastCol(r)}</tr>`,
       'No accounts repeatedly re-tapping check-in after already claiming.');
@@ -1297,16 +1254,16 @@ async function renderAnalytics(silent){
     return `
     <div class="row" style="align-items:center;margin:18px 0 6px"><h2 class="sec" style="flex:1;margin:0">Suspicious activity (${ab.period}-day, ${ab.minCount}+ to appear)</h2></div>
     <p class="muted" style="margin:0 0 10px">Owner-only. Patterns worth a look, not automatic accusations -- a slow connection or a genuine mistake can also produce a repeat or two.</p>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated failed deposits</h2>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated failed top ups</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Failures</th><th>Recent amounts</th><th>Last seen</th></tr></thead><tbody>${failedDepRows}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated insufficient-funds withdrawal attempts</h2>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated insufficient-funds cash out attempts</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Recent tries</th><th>Last seen</th></tr></thead><tbody>${insufficientRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated "already checked in" taps</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Last seen</th></tr></thead><tbody>${checkinRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Gift/promo code guessing</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Codes tried</th><th>Last seen</th></tr></thead><tbody>${giftcodeRows}</tbody></table></div></div>`;
   })() : '';
-  const staffTable = sa.byStaff.length ? `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals (${a.period}-day)</h2>
+  const staffTable = sa.byStaff.length ? `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff cash out approvals (${a.period}-day)</h2>
     <p class="muted" style="margin-top:0">Who's actually approving/declining payouts, and how much of the workload each person carries.</p>
     <div class="table-scroll"><table><thead><tr><th>Staff</th><th>Approved</th><th>Declined</th><th>Handled</th><th>Share</th><th>Amount approved</th><th>Last action</th></tr></thead>
     <tbody>${sa.byStaff.map(s=>`<tr><td><b>${esc(s.actor)}</b></td><td style="color:var(--ok)">${s.approvals}</td><td style="color:var(--danger)">${s.declines}</td>
@@ -1314,7 +1271,7 @@ async function renderAnalytics(silent){
   <div class="panel-card"><h2 class="sec" style="margin-top:0">Recent approval activity</h2>
     <div class="table-scroll" style="max-height:280px"><table><thead><tr><th>When</th><th>Staff</th><th>Action</th><th>User</th><th>Amount</th></tr></thead>
     <tbody>${sa.timeline.map(t=>`<tr><td>${fdate(t.at)}</td><td>${esc(t.actor)}</td><td style="color:${t.action==='approved'?'var(--ok)':'var(--danger)'}">${t.action==='approved'?'Approved':'Declined'}</td><td>${esc(t.phone||'')}</td><td>${ugx(t.amount)}</td></tr>`).join('')}</tbody></table></div></div>`
-    : `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals</h2><p class="muted" style="margin:0">No withdrawals approved or declined in this period yet.</p></div>`;
+    : `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff cash out approvals</h2><p class="muted" style="margin:0">No cash outs approved or declined in this period yet.</p></div>`;
   // ── VPS health card ── owner: "Make investment admin panel when l can see
   // vps healthy or speed, in analytics so it will be live". Fed by
   // /admin/system-health, refreshed on the same 30s live tick as the rest
@@ -1357,15 +1314,15 @@ async function renderAnalytics(silent){
       <h2 class="sec" style="margin-top:0">Tomorrow's estimate</h2>
       <p class="muted" style="margin-top:0">Not a guarantee, read member by member from real platform state, not just a trend line.</p>
       <div class="cards">
-        <div class="stat"><div class="n" style="color:var(--danger)">${ugx(fw.estimate)}</div><div class="l">Estimated withdrawals to process tomorrow</div>
+        <div class="stat"><div class="n" style="color:var(--danger)">${ugx(fw.estimate)}</div><div class="l">Estimated cash outs to process tomorrow</div>
           <div class="muted" style="margin-top:4px;font-size:11px">${fw.likelyWithdrawerCount||0} plan(s) likely maturing &nbsp;·&nbsp; trend says ${ugx(fw.trendReference)}</div></div>
-        <div class="stat"><div class="n" style="color:var(--ok)">${ugx(fd.estimate)}</div><div class="l">Estimated deposits tomorrow</div>
+        <div class="stat"><div class="n" style="color:var(--ok)">${ugx(fd.estimate)}</div><div class="l">Estimated top ups tomorrow</div>
           <div class="muted" style="margin-top:4px;font-size:11px">${ugx(fd.organicTrend)} organic trend + ${ugx(fd.maturingReinvestEstimate)} from ${fd.maturingCount||0} plan(s) maturing (${fd.reinvestRatePct||0}% usually reinvest) + ${ugx(fd.pipelineEstimate)} from ${fd.pipelineUserCount||0} new signup(s) mid-funnel (${fd.conversionRatePct||0}% convert within 3 days)</div></div>
       </div>
     </div>
     <div class="cards">
-      <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Deposits (${k.depositsCount||0})</div></div>
-      <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Withdrawals (${k.withdrawalsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Top Ups (${k.depositsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Cash Outs (${k.withdrawalsCount||0})</div></div>
       <div class="stat"><div class="n" style="color:${(k.netFlow||0)>=0?'var(--ok)':'var(--danger)'}">${ugx(k.netFlow)}</div><div class="l">Net flow</div></div>
       <div class="stat"><div class="n">${k.newUsers||0}</div><div class="l">New users</div></div>
       <div class="stat"><div class="n">${k.activeInvestors||0}</div><div class="l">Active investors</div></div>
@@ -1375,26 +1332,26 @@ async function renderAnalytics(silent){
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">When people transact, by hour of day</h2>
-      <div class="legend"><span><i style="background:var(--ok)"></i>Deposits</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Top Ups</span><span><i style="background:var(--danger)"></i>Cash Outs</span></div>
       ${hourChart}
-      <p class="muted" style="margin:10px 0 0">Busiest deposit time: <b>${h12(a.peakDepositHour)}</b> &nbsp;·&nbsp; busiest withdrawal time: <b>${h12(a.peakWithdrawHour)}</b></p>
+      <p class="muted" style="margin:10px 0 0">Busiest top up time: <b>${h12(a.peakDepositHour)}</b> &nbsp;·&nbsp; busiest cash out time: <b>${h12(a.peakWithdrawHour)}</b></p>
     </div>
     <h2 class="sec">Time of day (${a.busiestBand} is busiest)</h2>
     <div class="cards">${bandCard('morning','Morning')}${bandCard('afternoon','Afternoon')}${bandCard('evening','Evening')}${bandCard('night','Night')}</div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Daily trend (last ${a.period} days)</h2>
-      <div class="legend"><span><i style="background:var(--ok)"></i>Deposits</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Top Ups</span><span><i style="background:var(--danger)"></i>Cash Outs</span></div>
       ${dayChart}
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Top referrers</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Direct team</th><th>Commission earned</th></tr></thead>
       <tbody>${(a.topReferrers||[]).length?a.topReferrers.map(r=>`<tr><td>${esc(r.phone)}</td><td>${r.team}</td><td><b>${ugx(r.earned)}</b></td></tr>`).join(''):'<tr><td colspan="3" class="empty">No referrers yet</td></tr>'}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Top depositors</h2>
-      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Total deposited</th></tr></thead>
-      <tbody>${(a.topDepositors||[]).length?a.topDepositors.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No deposits yet</td></tr>'}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Biggest withdrawals</h2>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Top top-uppers</h2>
+      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Total topped up</th></tr></thead>
+      <tbody>${(a.topDepositors||[]).length?a.topDepositors.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No top ups yet</td></tr>'}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Biggest cash outs</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Amount</th></tr></thead>
-      <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No withdrawals yet</td></tr>'}</tbody></table></div></div>
+      <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No cash outs yet</td></tr>'}</tbody></table></div></div>
     ${staffTable}
     ${abuseSection}`;
   document.querySelectorAll('[data-per]').forEach(b=>b.addEventListener('click',()=>{ _anPeriod=parseInt(b.dataset.per); renderAnalytics(); }));
@@ -1467,8 +1424,8 @@ async function renderUsers(){
       const mismatches = d.mismatches||[];
       const alerts = d.alerts||[];
       const total = mismatches.length + alerts.length;
-      const FIELD_LABEL = { walletBalance:'Wallet balance', totalDeposited:'Total deposited', totalEarned:'Total earned', totalInvested:'Total invested' };
-      const ALERT_LABEL = { duplicate_credit:'Duplicate deposit credit', negative_balance:'Negative balance', registration_incomplete:'Registration never completed' };
+      const FIELD_LABEL = { walletBalance:'Wallet balance', totalDeposited:'Total topped up', totalEarned:'Total earned', totalInvested:'Total invested' };
+      const ALERT_LABEL = { duplicate_credit:'Duplicate top up credit', negative_balance:'Negative balance', registration_incomplete:'Registration never completed' };
       // Codex-caught real bug (round 2, still true for walletBalance only):
       // "Recalculate totals" rewrites totalDeposited/totalEarned/
       // totalInvested straight from this same real-ledger computation, so
@@ -1580,7 +1537,7 @@ async function openReferralChain(uid){
     <h3>Referral chain</h3>
     <div class="muted" style="margin-bottom:10px">${esc(r.user.phone||r.user.id)}${r.cycleDetected?' <span class="pill-tag t-bad">Cycle detected in data -- stopped early</span>':''}</div>
     <div class="kv"><span class="k">Team L1/L2/L3 members</span><span>${r.downlineCountByLevel[1]||0} / ${r.downlineCountByLevel[2]||0} / ${r.downlineCountByLevel[3]||0}</span></div>
-    <div class="kv"><span class="k">Team's total deposits</span><b>${ugx(r.teamDeposits)}</b></div>
+    <div class="kv"><span class="k">Team's total top ups</span><b>${ugx(r.teamDeposits)}</b></div>
     <h4 style="margin:10px 0 6px;font-size:13px">Root</h4>
     <div class="kv"><span class="k">${esc(r.root.phone||r.root.id)}</span><span>${esc(r.root.referralCode||'Not set')}${r.root.id===r.user.id?' <span class="pill-tag t-ok">This user</span>':''}</span></div>
     <h4 style="margin:14px 0 6px;font-size:13px">Upline (direct referrer → root), ${r.upline.length} link${r.upline.length===1?'':'s'}</h4>
@@ -1614,15 +1571,15 @@ async function openUser(uid){
     <h3>${esc(u.phone||'')}</h3>
     <div class="muted" style="margin-bottom:10px">Referral code: ${esc(u.referralCode||'Not set')}</div>
     <div class="kv"><span class="k">Wallet balance</span><b>${ugx(u.walletBalance)}</b></div>
-    <div class="kv"><span class="k">Deposited</span><span>${ugx(u.totalDeposited)}</span></div>
+    <div class="kv"><span class="k">Topped up</span><span>${ugx(u.totalDeposited)}</span></div>
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
-    <div class="kv"><span class="k">Withdrawn</span><span>${ugx(u.totalWithdrawn)}</span></div>
+    <div class="kv"><span class="k">Cashed out</span><span>${ugx(u.totalWithdrawn)}</span></div>
     <div class="kv"><span class="k">Total earned (all sources)</span><span>${ugx(u.totalEarned)}</span></div>
     <div class="muted" style="font-size:11px;margin:-4px 0 8px;line-height:1.6">Investment cashback ${ugx(eb.cashback)} &middot; Referral commission ${ugx(eb.commission)} &middot; Check-in ${ugx(eb.checkin)} &middot; Gift codes ${ugx(eb.promocode)} &middot; Task Center ${ugx(eb.team_reward)} &middot; Mission Center ${ugx(mission)}</div>
     <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
-    <div class="kv"><span class="k">Team's total deposits</span><b>${ugx(r.teamDeposits)}</b></div>
+    <div class="kv"><span class="k">Team's total top ups</span><b>${ugx(r.teamDeposits)}</b></div>
     <button class="btn ghost sm" id="viewChainBtn" title="Full upline-to-root and downline tree, not just L1/L2/L3" style="margin:4px 0 6px">View referral chain</button>
     <div class="kv"><span class="k">Check-in streak</span><span id="streakVal">${u.checkinStreak||0}</span>${SESSION_ROLE==='owner'?` <button class="btn ghost sm" id="reconcileStreakBtn" title="Recompute this member's streak from their real check-in history right now" style="margin-left:8px">Reconcile</button>`:''}</div>
     ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned</div>`:''}
@@ -1653,7 +1610,7 @@ async function openUser(uid){
       <button class="btn sky sm" id="completeRegBtn">Complete</button>
     </div>`:''}
     ${!u.referredBy?`<label style="margin-top:14px">Attach referrer</label>
-    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Attach the member's referrer once. Eligible commission from their first confirmed deposit is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.</div>
+    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Attach the member's referrer once. Eligible commission from their first confirmed top up is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.</div>
     <div class="row">
       <div style="flex:2"><input id="attachRefCode" type="text" placeholder="Referrer's code"></div>
       <button class="btn sky sm" id="attachRefBtn">Attach</button>
@@ -1668,12 +1625,12 @@ async function openUser(uid){
     ${(r.bankAccounts||[]).length?(r.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holder||'Account')}</span><span>${esc(a.network||'')} · ${esc(a.phone||'')}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Trade Password</h4>
     <div class="kv"><span class="k">Status</span><span>${u.hasPayoutPin?'Set':'Not set yet'}</span></div>
-    <p class="muted" style="margin:2px 0 8px;font-size:12px">The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can withdraw. They can also change it themselves in the app (Account -&gt; Trade Password).</p>
+    <p class="muted" style="margin:2px 0 8px;font-size:12px">The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can cash out. They can also change it themselves in the app (Account -&gt; Trade Password).</p>
     <div class="row">
       <div style="flex:2"><input id="pinNew" type="text" inputmode="numeric" maxlength="6" placeholder="New 6-digit trade password"></div>
       <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
     </div>`:''}
-    <h4 style="margin:18px 0 8px;font-size:14px">Deposits (${(r.deposits||[]).length})</h4>
+    <h4 style="margin:18px 0 8px;font-size:14px">Top Ups (${(r.deposits||[]).length})</h4>
     ${(r.deposits||[]).length?`<div class="table-scroll" style="max-height:230px"><table><thead><tr><th>When</th><th>Amount</th><th>Paid to</th><th>Paid from</th><th>Status</th></tr></thead><tbody>
       ${r.deposits.map(d=>{
         // Owner: "l can see people's deposits in details such that l see
@@ -1689,7 +1646,7 @@ async function openUser(uid){
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
         return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
       }).join('')}
-    </tbody></table></div>`:'<p class="muted" style="margin:0">No deposits yet.</p>'}
+    </tbody></table></div>`:'<p class="muted" style="margin:0">No top ups yet.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
     <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td>${spinnerHtml()}</td></tr></tbody></table></div>`);
   const tx=(r.transactions||[]).slice(0,25);
@@ -1816,13 +1773,13 @@ async function renderDeposits(){
     <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
     <div class="muted"><b>${grp('matched')}</b> processed all-time · ${ugx(r.processedAmount||0)} received</div></div>
     <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
-    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Deposits processed</th><th>Amount received</th></tr></thead>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Top ups processed</th><th>Amount received</th></tr></thead>
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
+    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Top Ups</h2>
       <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — the automatic gateway (MarzPay or PesaJet), MarzPay card payments, and USDT TRC20. A stuck automatic or card deposit can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain when a TronGrid key is configured (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for one still Awaiting Review.</p>
-    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' deposits only. The platform has more history than this list can currently display.</div>':''}
+    <p class="muted" style="margin:0 0 12px">Every top up attempt, all time — the automatic gateway (MarzPay or PesaJet), MarzPay card payments, and USDT TRC20. A stuck automatic or card top up can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain when a TronGrid key is configured (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for one still Awaiting Review.</p>
+    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' top ups only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
@@ -1919,7 +1876,7 @@ function drawDeps(){
       <td>${esc(d.ref||'Not set')}</td>
       <td>${statusPill(d.status)}${reviewNote}</td>
       <td>${actions}</td></tr>${smsBlock}`;
-  }).join(''):'<tr><td colspan="8" class="empty">No deposits</td></tr>';
+  }).join(''):'<tr><td colspan="8" class="empty">No top ups</td></tr>';
   // Owner: "l want them to have... l can tap on a deposit to see user
   // details just like those when a user is tapped in user list" -- same
   // pattern the Withdrawals tab's own rows already use: tapping anywhere
@@ -1984,13 +1941,13 @@ async function renderWithdrawals(){
     <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
     <div class="muted"><b>${counts.processed||0}</b> processed all-time · ${ugx(r.processedAmount||0)} paid out</div></div>
     <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
-    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Withdrawals processed</th><th>Amount paid</th></tr></thead>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Cash outs processed</th><th>Amount paid</th></tr></thead>
     <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Cash Outs</h2>
       ${_witManualPayouts?'':`<button class="btn sm ghost" id="witSync">Sync payments</button>`}</div>
-    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own. Members withdraw to a bound mobile money number (see each row's destination).</p>`}
-    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_wits.length+' withdrawals only. The platform has more history than this list can currently display.</div>':''}
+    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own. Members cash out to a bound mobile money number (see each row's destination).</p>`}
+    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_wits.length+' cash outs only. The platform has more history than this list can currently display.</div>':''}
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
@@ -2045,7 +2002,7 @@ function drawWits(){
       // refunding one.
       :w.status==='sending'?(SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}" data-rej-sending="1">Reject</button>`:'<span class="muted" style="font-size:11px">Owner only</span>')
       :''}</td></tr>`;
-  }).join(''):'<tr><td colspan="7" class="empty">No withdrawals</td></tr>';
+  }).join(''):'<tr><td colspan="7" class="empty">No cash outs</td></tr>';
   // Tapping anywhere on the row opens the SAME full user-detail modal as
   // the Users tab (balance, plans, saved cash-out accounts, recent
   // transactions, credit/debit/ban/delete) -- except when the tap actually
@@ -2495,7 +2452,7 @@ const AUDIT_LABELS = {
   admin_created:'Admin account created', admin_deactivated:'Admin deactivated', admin_reactivated:'Admin reactivated',
   admin_password_reset:'Admin password reset', admin_deleted:'Admin account deleted',
   manual_sms_log_resolved:'Unmatched SMS marked resolved',
-  withdrawal_rejected:'Withdrawal declined', withdrawal_processed:'Withdrawal sent',
+  withdrawal_rejected:'Cash out declined', withdrawal_processed:'Cash out sent',
   manual_credit:'Manual credit', manual_debit:'Manual debit', user_banned:'User banned', user_unbanned:'User unbanned',
   user_password_reset:'User password reset', user_phone_set:'User phone corrected',
   user_ledger_repaired:'User ledger repaired', user_registration_completed:'Registration completed',
@@ -2506,7 +2463,7 @@ const AUDIT_LABELS = {
   manual_pay_image_set:'Manual-pay screen image changed',
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
-  deposit_force_credited:'Deposit force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
+  deposit_force_credited:'Top up force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
   totals_recounted:'Totals recalculated',
 };
 async function renderAuditLog(){
@@ -2554,7 +2511,7 @@ async function renderTransactions(){
   const { merged, truncated } = await loadTxnsAndStatements(1000);
   if(staleTab('transactions')) return;
   _txns = merged;
-  const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Plans'],['checkin','Check-in'],['promocode','Codes'],['statement','Statements']];
+  const subs=[['all','All'],['deposit','Top Ups'],['withdraw','Cash Outs'],['commission','Commissions'],['investment','Plans'],['checkin','Check-in'],['promocode','Codes'],['statement','Statements']];
   $('content').innerHTML = `
     <h2 class="sec">Transactions</h2>
     <div class="panel-card"><input id="txSearch" placeholder="Search description, type, user id, or a reference"></div>
@@ -2701,8 +2658,6 @@ async function renderBanners(){
   const s = r.settings||{};
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   const bannerImage = br.image||'';
-  const bannerVideo = br.video||'';
-  const bannerVideoUploaded = br.videoVersion||'';
   const authHeroImage = cir.authhero||'';
   const homeSlide2Image = cir.banner2||'';
   const homeSlide3Image = cir.banner3||'';
@@ -2725,30 +2680,14 @@ async function renderBanners(){
     </div>
 
     <h2 class="sec">Home banner</h2>
-    <h2 class="sec">Home banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Home tab's top banner &mdash; a 3-slide carousel with dots. This slide also accepts a looping video instead of the image.</p>
+      <p class="muted" style="margin-top:0">Home tab's top banner &mdash; a 3-slide carousel with dots.</p>
       <div class="banner-row">
         ${bannerImage?`<img class="img-thumb" src="${esc(bannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${bannerImage?'Custom image':'<span class="muted">Default artwork</span>'}</div>
         ${bannerImage?`<button class="btn danger sm" id="homeBannerClear">Revert</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeBannerFile" accept="image/*" hidden></label>
-      <label style="margin-top:16px">Banner video (optional)</label>
-      <div class="banner-row">
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${
-          bannerVideoUploaded ? '<b>Uploaded video file</b> &mdash; playing on Home now'
-          : bannerVideo ? `Linked video: <b>${esc(bannerVideo)}</b>`
-          : '<span class="muted">No video &mdash; the image above is the banner</span>'}</div>
-        ${(bannerVideoUploaded||bannerVideo)?`<button class="btn danger sm" id="homeBannerVideoClear">Remove video</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload video<input type="file" id="homeBannerVideoFile" accept="video/mp4,video/webm" hidden></label>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">Runs muted, looping, no controls. MP4 (H.264) only, up to 4&nbsp;MB &mdash; a YouTube link will not work.</p>
-      <label style="margin-top:16px">…or link a video already uploaded with the app</label>
-      <input id="homeBannerVideo" value="${esc(bannerVideo)}" placeholder="banner.mp4">
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn" id="homeBannerVideoSave" style="flex:1">Save video link</button>
-      </div>
     </div>
 
     <h2 class="sec">Home banner &middot; slides 2 &amp; 3</h2>
@@ -2850,47 +2789,6 @@ function wireBannerHandlers(){
     await withTabBusy((async()=>{
       const d = await api('/admin/banner/clear', {});
       toast(d.status==='success'?'Reverted to the default image':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') renderBanners();
-    })());
-  });
-  // Saved on its own, never bundled with the image upload -- the server
-  // patches only the keys it is sent, so setting one never clears the other.
-  $('homeBannerVideoSave').addEventListener('click', async()=>{
-    const link = $('homeBannerVideo').value.trim();
-    // Caught here as well as on the server so the owner gets the explanation
-    // instantly, without a round trip, the moment he pastes a YouTube link --
-    // this is the mistake that leaves the banner mysteriously blank.
-    if (isYouTubeLink(link)) return toast(YOUTUBE_VIDEO_ERROR, 'err');
-    await withTabBusy((async()=>{
-      const d = await api('/admin/banner/set', { video: link });
-      toast(d.status==='success'?'Video link saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') renderBanners();
-    })());
-  });
-  // Upload the video FILE itself. Read raw (no canvas, no re-encode -- that
-  // is for images and would destroy a video), size-checked here so an
-  // oversized file is refused before megabytes go up the wire.
-  $('homeBannerVideoFile').addEventListener('change', async e=>{
-    const f=e.target.files[0]; if(!f) return;
-    e.target.value='';
-    if (f.size > BANNER_VIDEO_MAX_BYTES) {
-      return toast('That video is '+(Math.round(f.size/1024/1024*10)/10)+' MB. Keep it under 4 MB -- it downloads on every member\'s phone.', 'err');
-    }
-    await withTabBusy((async()=>{
-      try {
-        toast('Uploading video…','ok');
-        const video = await fileToRawDataUrl(f, BANNER_VIDEO_MAX_BYTES, /^video\//, 'video');
-        const d = await api('/admin/banner/video-upload', { video });
-        toast(d.status==='success'?'Video uploaded, playing on Home for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
-        if (d.status==='success') renderBanners();
-      } catch(err){ toast(err.message||'Could not read that video','err'); }
-    })());
-  });
-  const homeBannerVideoClear = $('homeBannerVideoClear');
-  if (homeBannerVideoClear) homeBannerVideoClear.addEventListener('click', async()=>{
-    await withTabBusy((async()=>{
-      const d = await api('/admin/banner/clear', { what:'video' });
-      toast(d.status==='success'?'Video removed, the image banner is back':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') renderBanners();
     })());
   });
@@ -3006,13 +2904,13 @@ async function renderSettings(){
     <h2 class="sec">Rates &amp; limits${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
     <div class="panel-card">
       <div class="row">
-        <div><label>Min deposit</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
-        <div><label>Min withdrawal</label><input id="sMinWit" type="number" value="${v('minWithdraw',8000)}"></div>
+        <div><label>Min top up</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
+        <div><label>Min cash out</label><input id="sMinWit" type="number" value="${v('minWithdraw',8000)}"></div>
         <div><label>Welcome bonus</label><input id="sWelcome" type="number" value="${v('welcomeBonus',5000)}"></div>
         <div><label>Check-in bonus</label><input id="sCheckin" type="number" value="${v('dailyCheckin',500)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
-        <div><label>Withdrawal fee (%)</label><input id="sFee" type="number" step="1" value="${v('withdrawFeePct',15)}"></div>
+        <div><label>Cash out fee (%)</label><input id="sFee" type="number" step="1" value="${v('withdrawFeePct',15)}"></div>
         <div><label>L1 commission (%)</label><input id="sC1" type="number" step="1" value="${v('commL1',27)}"></div>
         <div><label>L2 commission (%)</label><input id="sC2" type="number" step="1" value="${v('commL2',2)}"></div>
         <div><label>L3 commission (%)</label><input id="sC3" type="number" step="1" value="${v('commL3',1)}"></div>
@@ -3020,7 +2918,7 @@ async function renderSettings(){
       <div class="row" style="margin-top:6px">
         <div><label>Return multiple (×)</label><input id="sReturnMult" type="number" step="0.1" value="${v('returnMultiple',30)}"></div>
         <div><label>Cycle (days)</label><input id="sCycle" type="number" value="${v('cycleDays',150)}"></div>
-        <div><label>Max withdrawals per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
+        <div><label>Max cash outs per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
       </div>
       <!-- OTP verification codes cost real money per SMS (MarzSms, ~30 UGX
            each) -- capped per phone number, resetting daily. 0 means send
@@ -3034,15 +2932,15 @@ async function renderSettings(){
         <div><label>Inner pages background opacity (%)</label><input id="sInnerBgOpacity" type="number" min="0" max="100" value="${v('innerBgOpacity',100)}"></div>
         <div><label>Inner pages background blur (px)</label><input id="sInnerBgBlur" type="number" min="0" max="40" value="${v('innerBgBlur',0)}"></div>
       </div>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Deposit, Withdraw, Wallet and other inner pages. Authentication screens are unchanged.</p>
-      <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Top Up, Cash Out, Wallet and other inner pages. Authentication screens are unchanged.</p>
+      <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before cashing out</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require OTP to add a payout account</b> <span class="muted">(off by default)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sBankOtp" ${s.bankOtpRequired===true?'checked':''} style="width:auto"></label></div>
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
            when one tries to withdrawal he sees, that withdrawals start from
            this time to this time, nothing much ie 6pm to 5pm." -->
-      <div class="switch-row" style="margin-top:8px"><span><b>Only allow cash-out between set hours</b> <span class="muted">(members see the hours on the Withdraw screen)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>Only allow cash-out between set hours</b> <span class="muted">(members see the hours on the Cash Out screen)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sWitWindow" ${s.withdrawWindowEnabled===true?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">
         <div><label>Cash-out opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
@@ -3066,42 +2964,42 @@ async function renderSettings(){
       <textarea id="sAllowedOrigins" rows="4" placeholder="petro-platform.com&#10;www.petro-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. petro-platform.com and this VPS's own address are always allowed.</p>
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
-      <p class="muted" style="margin:0 0 4px">Automatic recharge is the only deposit method. Every cash-out waits as Pending until you act on it in Withdrawals.</p>
+      <p class="muted" style="margin:0 0 4px">Automatic recharge is the only top up method. Every cash-out waits as Pending until you act on it in Cash Outs.</p>
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
     <h2 class="sec">Payments</h2>
     <div class="panel-card">
-      <label>Deposit gateway</label>
+      <label>Top up gateway</label>
       <div style="margin:0 0 12px">
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> MarzPay</label>
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depGateway" id="depGatewayPesa" value="pesajet" ${normalizeProv(v('depositMethod','marzpay'))==='pesajet'?'checked':''} style="width:auto"> PesaJet</label>
       </div>
-      <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
-      <p class="muted" style="margin:0 0 8px">Follows the deposit gateway above by default &mdash; pin a different method only if deposits and withdrawals should differ.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the deposit gateway above</label>
+      <h2 class="sec" style="margin:16px 0 4px">Cash outs</h2>
+      <p class="muted" style="margin:0 0 8px">Follows the top up gateway above by default &mdash; pin a different method only if top ups and cash outs should differ.</p>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the top up gateway above</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
     </div>
 
-    <h2 class="sec">Crypto deposits (USDT TRC20)</h2>
+    <h2 class="sec">Crypto top ups (USDT TRC20)</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A third deposit rail alongside MarzPay/PesaJet above (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission &mdash; a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject in the Deposits tab &mdash; nothing here ever forces automatic mode on you.</p>
-      <div class="switch-row"><span><b>Enable USDT deposits</b> <span class="muted">(shows the option in the app)</span></span>
+      <p class="muted" style="margin-top:0">A third top up rail alongside MarzPay/PesaJet above (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission &mdash; a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject in the Top Ups tab &mdash; nothing here ever forces automatic mode on you.</p>
+      <div class="switch-row"><span><b>Enable USDT top ups</b> <span class="muted">(shows the option in the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sUsdtEnabled" ${s.usdtEnabled?'checked':''} style="width:auto"></label></div>
       <label>Receiving wallet address (TRC20)</label><input id="sUsdtAddr" value="${esc(v('usdtWalletAddress',''))}" placeholder="T...">
       <label>Exchange rate (UGX per 1 USDT)</label><input id="sUsdtRate" type="number" step="1" min="0" value="${v('usdtRate',0)}" placeholder="e.g. 3750">
-      <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto deposit settings</button>
+      <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto top up settings</button>
     </div>
 
-    <h2 class="sec">Card deposits (MarzPay)</h2>
+    <h2 class="sec">Card top ups (MarzPay)</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A fourth deposit rail, through MarzPay's own card gateway -- always MarzPay regardless of which gateway is picked for mobile money above. A member is sent to MarzPay's hosted card page to pay, then returns to the app; the deposit resolves the same way a mobile-money one does (webhook + this app's own live re-check), no separate review needed. Requires an active Card Payments subscription on your MarzPay business account -- without one, MarzPay will refuse every attempt even with this switched on.</p>
-      <div class="switch-row"><span><b>Enable card deposits</b> <span class="muted">(shows the option in the app)</span></span>
+      <p class="muted" style="margin-top:0">A fourth top up rail, through MarzPay's own card gateway -- always MarzPay regardless of which gateway is picked for mobile money above. A member is sent to MarzPay's hosted card page to pay, then returns to the app; the top up resolves the same way a mobile-money one does (webhook + this app's own live re-check), no separate review needed. Requires an active Card Payments subscription on your MarzPay business account -- without one, MarzPay will refuse every attempt even with this switched on.</p>
+      <div class="switch-row"><span><b>Enable card top ups</b> <span class="muted">(shows the option in the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sCardEnabled" ${s.cardDepositEnabled?'checked':''} style="width:auto"></label></div>
-      <button class="btn block" id="saveCard" style="margin-top:10px">Save card deposit setting</button>
+      <button class="btn block" id="saveCard" style="margin-top:10px">Save card top up setting</button>
     </div>
 
     <h2 class="sec">Support contacts</h2>
@@ -3117,7 +3015,7 @@ async function renderSettings(){
 
     <h2 class="sec">Home announcement dialog</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A popup shown after a member returns to Home from Deposit, Withdraw or Wallet. Its WhatsApp/email buttons are the same group link and email set in Support contacts above.</p>
+      <p class="muted" style="margin-top:0">A popup shown when a member navigates back to Home from Assets, Network or Account. Its WhatsApp/email buttons are the same group link and email set in Support contacts above.</p>
       <div class="switch-row"><span><b>Enable announcement</b></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAnnEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
       <label>Title</label><input id="sAnnTitle" maxlength="80" value="${esc(v('annTitle',''))}" placeholder="e.g. New assets are live">
@@ -3163,7 +3061,7 @@ async function renderSettings(){
     } });
     const payoutProv = witMethod==='follow' ? gateway : witMethod;
     toast(d.status==='success'
-      ? `Saved. Deposits: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
+      ? `Saved. Top ups: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveUsdt').addEventListener('click', async()=>{
@@ -3469,7 +3367,7 @@ const ADMIN_LANG_ROWS = [
   ['The lower banner on the app\'s Home tab, carrying the Go spin button that opens the turntable. It replaced the product list that used to sit there — products now live on their own tab. Full width, roughly 3:1 (for example 1200×400). An empty slot shows the brand gradient behind the button.', 'Akabaawo ak\'ewansi ku ttabu lya Home, akalina bbaatani ya Go spin eggula akanyoolera. Kaddira mu kifo ky\'olukalala lw\'ebyamaguzi olwalibangawo — ebyamaguzi kati biri ku ttabu lyabyo. Obugazi bwonna, nga 3:1 (ng\'ekyokulabirako 1200×400). Ekifo ekyereere kiraga langi z\'ekitongole emabega wa bbaatani.', 'Bango la chini kwenye kichupo cha Nyumbani cha programu, lenye kitufe cha Go spin kinachofungua gurudumu. Lilichukua nafasi ya orodha ya bidhaa iliyokuwa hapo — bidhaa sasa ziko kwenye kichupo chao. Upana kamili, takriban 3:1 (mfano 1200×400). Nafasi tupu huonyesha upinde rangi wa chapa nyuma ya kitufe.', 'La bannière du bas sur l\'onglet Accueil de l\'application, portant le bouton Go spin qui ouvre la roue. Elle a remplacé la liste de produits qui s\'y trouvait — les produits ont maintenant leur propre onglet. Pleine largeur, environ 3:1 (par exemple 1200×400). Un emplacement vide affiche le dégradé de la marque derrière le bouton.', 'Ikirango cyo hasi ku gice cy\'Ahabanza cya porogaramu, gifite buto ya Go spin ifungura uruziga. Cyasimbuye urutonde rw\'ibicuruzwa rwahoze aho — ibicuruzwa ubu bifite igice cyabyo bwite. Ubugari bwose, hafi 3:1 (urugero 1200×400). Umwanya usa ugaragaza amabara y\'ikirango inyuma ya buto.', 'Ekirango eky\'ahansi aha kacweka ka Home, ekiine akabatuni ka Go spin akarikwigura akanyoorera. Kyatwaire omwanya gw\'orutonde rw\'ebyamaguzi orwabaire ruriho — ebyamaguzi hati biri aha kacweka kaabyo. Obugazi bwoona, nka 3:1 (nk\'eky\'okureeberaho 1200×400). Omwanya ogwo busha nigworeka amabara g\'ekitongore enyima y\'akabatuni.'],
   ['The orange area. Landscape, about 1200 × 700. An empty slot shows the brand gradient. The picture sits over the gradient, so lowering opacity blends it back toward the orange rather than toward nothing.', 'Ekitundu ekya langi ya oranji. Eky\'obugazi, nga 1200 × 700. Ekifo ekyereere kiraga langi z\'ekitongole. Ekifaananyi kiteekebwa ku langi, kale okukendeeza ku bulabikirwa kikitabula okudda eri langi ya oranji so si eri bwereere.', 'Eneo la rangi ya machungwa. Mlalo, takriban 1200 × 700. Nafasi tupu huonyesha upinde rangi wa chapa. Picha hukaa juu ya upinde rangi, kwa hivyo kupunguza uwazi huichanganya kurudi kwenye rangi ya machungwa badala ya kuelekea utupu.', 'La zone orange. Paysage, environ 1200 × 700. Un emplacement vide affiche le dégradé de la marque. L\'image repose sur le dégradé, donc baisser l\'opacité la fond vers l\'orange plutôt que vers le vide.', 'Ahantu h\'ibara ry\'icunga. Iryambitse, hafi 1200 × 700. Umwanya usa ugaragaza amabara y\'ikirango. Ishusho iri hejuru y\'amabara, bityo kugabanya ukubonerana biyivanga isubira ku ibara ry\'icunga aho kujya ku busa.', 'Akacweka ak\'erangi ya oranje. Aka kugazire, nka 1200 × 700. Omwanya ogwo busha nigworeka amabara g\'ekitongore. Ekishushani nikitebekwa aha mabara, n\'ahabw\'ekyo okukyendeza aha kureeberwa nikikitaburamu kikagaruka aha rangi ya oranje ti aha busha.'],
   ['The picture that appears when the app\'s link is pasted into WhatsApp, Telegram or Facebook. Upload 1200 × 630 (landscape, just under 2:1). Any size is accepted and centre-cropped to fit, but anything far off that shape loses its edges. Put the logo and any words in the middle — WhatsApp crops the sides on some phones.', 'Ekifaananyi ekirabika ng\'ekkubo lya app liteekeddwa mu WhatsApp, Telegram oba Facebook. Teeka 1200 × 630 (eky\'obugazi, wansi wa 2:1). Obunene bwonna bukkirizibwa era busalibwa wakati okutuukagana, naye ekitali kya nkula eyo kifiirwa ensonda zaakyo. Teeka akabonero n\'ebigambo byonna wakati — WhatsApp esala embiriizi ku ssimu ezimu.', 'Picha inayoonekana wakati kiungo cha programu kinapobandikwa kwenye WhatsApp, Telegram au Facebook. Pakia 1200 × 630 (mlalo, chini kidogo ya 2:1). Ukubwa wowote hukubaliwa na hukatwa katikati ili kutoshea, lakini kitu kilicho mbali na umbo hilo hupoteza pembezoni mwake. Weka nembo na maneno yoyote katikati — WhatsApp hukata pembeni kwenye simu nyingine.', 'L\'image qui apparaît quand le lien de l\'application est collé dans WhatsApp, Telegram ou Facebook. Téléversez 1200 × 630 (paysage, juste en dessous de 2:1). Toute taille est acceptée et recadrée au centre pour s\'ajuster, mais tout ce qui s\'éloigne de cette forme perd ses bords. Mettez le logo et les mots au milieu — WhatsApp rogne les côtés sur certains téléphones.', 'Ishusho igaragara iyo umurongo wa porogaramu ukomekwe muri WhatsApp, Telegram cyangwa Facebook. Shyiraho 1200 × 630 (iryambitse, munsi gato ya 2:1). Ingano iyo ari yo yose iremerwa igacibwa hagati kugira ngo ikwire, ariko ikintu kitandukanye cyane n\'iyo sura kibura impera zacyo. Shyira ikirango n\'amagambo hagati — WhatsApp iceta impande kuri zimwe muri telefoni.', 'Ekishushani ekirikureeberwa ku omuhanda gwa puroguramu gurikutwarwa omu WhatsApp, Telegram nari Facebook. Ta 1200 × 630 (eki kugazire, ahansi ya 2:1). Obungi bwoona nibwikirizibwa kandi nibucwa ahagati kugira ngo buhikaane, kwonka ekitari kya nshusha egyo nikifeerwa empera zaakyo. Ta ekirango n\'ebigambo byoona ahagati — WhatsApp neecwa empande aha nyabarugo ezimwe.'],
-  ['The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can withdraw. They can also change it themselves in the app (Account -> Trade Password).', 'PIN ekwekebwa mu ngeri etaddayo -- teyinza kulabika, wabula esobola okuddizibwa. Eteeka ekisumuluzo eky\'obusuubuzi eky\'ennamba 6 ekiri wansi butereevu; kiwe omuntu asobole okuggyamu ssente. Era asobola okukikyusa yekka mu app (Akaawunti -> Trade Password).', 'PIN imefichwa kwa njia isiyorudi nyuma -- haiwezi kamwe kuonekana, inaweza tu kubadilishwa. Huweka nenosiri la biashara la tarakimu 6 lililo hapa chini moja kwa moja; mpe mwanachama ili aweze kutoa pesa. Anaweza pia kulibadilisha mwenyewe kwenye programu (Akaunti -> Trade Password).', 'Le code PIN est haché à sens unique -- il ne peut jamais être consulté, seulement remplacé. Il définit directement le mot de passe de transaction à 6 chiffres ci-dessous ; donnez-le au membre pour qu\'il puisse retirer. Il peut aussi le changer lui-même dans l\'application (Compte -> Trade Password).', 'PIN ihishwe mu buryo budasubirwaho -- ntishobora na rimwe kurebwa, ishobora gusa gusimburwa. Ishyiraho ijambobanga ry\'ubucuruzi ry\'imibare 6 riri hasi ako kanya; rihe umunyamuryango kugira ngo abashe kubikuza. Ashobora no kurihindura ubwe muri porogaramu (Konti -> Trade Password).', 'PIN neeshereekwa omu muringo ogutarikugaruka -- tekirikubaasa kureeberwa, kirikubaasa kwonka kugaruzibwamu. Nekita ekishumuruzo ky\'obushuubuzi eky\'ebibaro 6 ekiri ahansi ahonaaho; kihe omuntu kugira ngo abaase kwihamu sente. Naabaasa kandi kukihindura we omwene omu puroguramu (Akaunti -> Trade Password).'],
+  ['The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can cash out. They can also change it themselves in the app (Account -> Trade Password).', 'PIN ekwekebwa mu ngeri etaddayo -- teyinza kulabika, wabula esobola okuddizibwa. Eteeka ekisumuluzo eky\'obusuubuzi eky\'ennamba 6 ekiri wansi butereevu; kiwe omuntu asobole okuggyamu ssente. Era asobola okukikyusa yekka mu app (Akaawunti -> Trade Password).', 'PIN imefichwa kwa njia isiyorudi nyuma -- haiwezi kamwe kuonekana, inaweza tu kubadilishwa. Huweka nenosiri la biashara la tarakimu 6 lililo hapa chini moja kwa moja; mpe mwanachama ili aweze kutoa pesa. Anaweza pia kulibadilisha mwenyewe kwenye programu (Akaunti -> Trade Password).', 'Le code PIN est haché à sens unique -- il ne peut jamais être consulté, seulement remplacé. Il définit directement le mot de passe de transaction à 6 chiffres ci-dessous ; donnez-le au membre pour qu\'il puisse retirer. Il peut aussi le changer lui-même dans l\'application (Compte -> Trade Password).', 'PIN ihishwe mu buryo budasubirwaho -- ntishobora na rimwe kurebwa, ishobora gusa gusimburwa. Ishyiraho ijambobanga ry\'ubucuruzi ry\'imibare 6 riri hasi ako kanya; rihe umunyamuryango kugira ngo abashe kubikuza. Ashobora no kurihindura ubwe muri porogaramu (Konti -> Trade Password).', 'PIN neeshereekwa omu muringo ogutarikugaruka -- tekirikubaasa kureeberwa, kirikubaasa kwonka kugaruzibwamu. Nekita ekishumuruzo ky\'obushuubuzi eky\'ebibaro 6 ekiri ahansi ahonaaho; kihe omuntu kugira ngo abaase kwihamu sente. Naabaasa kandi kukihindura we omwene omu puroguramu (Akaunti -> Trade Password).'],
   ['The screen a member sees before signing in. It has two parts, and each takes its own picture. Both apply to the Log In tab and the Sign Up tab — they share this screen, so one image each keeps the background steady when a member switches between them.', 'Olupapula omuntu lw\'alaba nga tannayingira. Lulina ebitundu bibiri, era buli kimu kitwala ekifaananyi kyakyo. Byombi bikola ku ttabu lya Log In ne Sign Up — bigabana olupapula luno, kale ekifaananyi kimu ku buli kimu kikuuma emabega nga tewali kukyuka ng\'omuntu akyuka wakati waabyo.', 'Skrini mwanachama anayoiona kabla ya kuingia. Ina sehemu mbili, na kila moja huchukua picha yake. Zote hutumika kwenye kichupo cha Log In na kichupo cha Sign Up — vinashiriki skrini hii, kwa hivyo picha moja kila upande huweka mandharinyuma imara mwanachama anapobadilisha kati yao.', 'L\'écran qu\'un membre voit avant de se connecter. Il a deux parties, et chacune prend sa propre image. Les deux s\'appliquent à l\'onglet Log In et à l\'onglet Sign Up — ils partagent cet écran, donc une image chacun garde le fond stable quand un membre passe de l\'un à l\'autre.', 'Ipaji umunyamuryango abona mbere yo kwinjira. Rifite ibice bibiri, kandi buri kimwe gifata ishusho yacyo. Byombi bikoreshwa ku gice cya Log In n\'icya Sign Up — bisangira iri paji, bityo ishusho imwe kuri buri kimwe ituma inyuma iguma idahindagurika iyo umunyamuryango ahinduranya.', 'Orupapura omuntu arikureeba atakataahire. Ruine ebicweka bibiri, kandi buri kimwe nikitwara ekishushani kyakyo. Byombi nibikora aha kacweka ka Log In n\'aka Sign Up — nibigabana orupapura oru, n\'ahabw\'ekyo ekishushani kimwe aha buri kimwe nikikuuma enyima etarikuhinduka obu omuntu arikuhindura ahagati yaabyo.'],
   ['The video replaces the image on Home and runs on its own — muted, looping, no play button, and nothing to tap or pause. The image above is its still frame while it loads.', 'Vidiyo eddira mu kifo ky\'ekifaananyi ku Home era etambula yokka — nga tesirika, ediza, nga terina bbaatani ya kuzannya, era nga tewali kya kukwatako oba okuyimiriza. Ekifaananyi ekiri waggulu kye kifaananyi kyayo ekiyimiridde nga ekyakkakkanya.', 'Video huchukua nafasi ya picha kwenye Nyumbani na hucheza yenyewe — imenyamazishwa, hujirudia, hakuna kitufe cha kucheza, wala hakuna cha kugusa au kusimamisha. Picha iliyo juu ndiyo fremu yake tuli inapopakia.', 'La vidéo remplace l\'image sur l\'Accueil et se joue toute seule — sans son, en boucle, sans bouton de lecture, et rien à toucher ni à mettre en pause. L\'image ci-dessus est son image fixe pendant le chargement.', 'Videwo isimbura ishusho kuri Ahabanza kandi ikina yonyine — nta jwi, isubiramo, nta buto yo gukina, kandi nta cyo gukanda cyangwa guhagarika. Ishusho iri haruguru ni ishusho yayo ihamye mu gihe iracyapakirwa.', 'Vidiyo neetwara omwanya gw\'ekishushani aha Home kandi neezaana yonka — etaine maraka, neegaruka, etaine kabatuni k\'okuzaana, kandi tihariho eky\'okukwataho nari okwemeza. Ekishushani ekiri haiguru n\'ekishushani kyayo ekyemiriire obu erikwija.'],
   ['The white panel carrying LOGIN / SIGN UP and the input boxes. Portrait, about 900 × 1200. It sits over the white card, so opacity blends it back toward white. Keep this one faint — try 20–35% opacity with some blur, or the text and the input boxes become hard to read.', 'Akabaawo akeeru akalina LOGIN / SIGN UP n\'obubokisi obw\'okuwandiikamu. Eky\'obuwanvu, nga 900 × 1200. Kiteekebwa ku kaadi enjeru, kale obulabikirwa kikitabula okudda eri enjeru. Kireke kibe nga tekirabika nnyo — gezaako obulabikirwa 20–35% n\'akakoodozo katono, si ekyo ebiwandiiko n\'obubokisi bikaluba okusomeka.', 'Paneli nyeupe yenye LOGIN / SIGN UP na visanduku vya kuandika. Wima, takriban 900 × 1200. Hukaa juu ya kadi nyeupe, kwa hivyo uwazi huichanganya kurudi kwenye weupe. Iache hii hafifu — jaribu uwazi wa 20–35% na ukungu kidogo, la sivyo maandishi na visanduku vya kuandika huwa vigumu kusoma.', 'Le panneau blanc portant LOGIN / SIGN UP et les champs de saisie. Portrait, environ 900 × 1200. Il repose sur la carte blanche, donc l\'opacité le fond vers le blanc. Gardez celui-ci discret — essayez 20–35 % d\'opacité avec un peu de flou, sinon le texte et les champs deviennent difficiles à lire.', 'Urubaho rwera rufite LOGIN / SIGN UP n\'utwanya two kwandikamo. Ruhagaritse, hafi 900 × 1200. Ruri hejuru y\'ikarita yera, bityo ukubonerana kuruvanga rugasubira ku bwera. Reka uru rube rutabonerana cyane — gerageza ukubonerana kwa 20–35% hamwe no kutabonerana gato, bitari ibyo inyandiko n\'utwanya two kwandikamo biragorana gusoma.', 'Orubaaho orwera orwine LOGIN / SIGN UP n\'obubokisi bw\'okuhandiikamu. Oru kwemeera, nka 900 × 1200. Niruteekwa aha kaadi eyera, n\'ahabw\'ekyo okureeberwa nikirutabuura rikagaruka aha bwera. Reka oru rube rutarikureeberwa munonga — geezaho okureeberwa 20–35% hamwe n\'okwijwaijwa kukye, kutari ekyo ebihandiiko n\'obubokisi nibigumira kushomwa.'],
@@ -3638,18 +3536,13 @@ const ADMIN_LANG_ROWS = [
   ['Opacity (0–100%)', 'Obuzibu bw\'ekifaananyi (0–100%)', 'Uzito wa rangi (0–100%)', 'Opacité (0–100 %)', 'Ubwijime bw\'ishusho (0–100%)', 'Obuzibu bw\'ekishushani (0–100%)'],
   ['Blur (0–40 px)', 'Okusiikuula (0–40 px)', 'Ufifishaji (0–40 px)', 'Flou (0–40 px)', 'Ukwijima (0–40 px)', 'Okusiikuura (0–40 px)'],
   ['Save opacity & blur', 'Tereka obuzibu n\'okusiikuula', 'Hifadhi uzito na ufifishaji', 'Enregistrer l\'opacité et le flou', 'Bika ubwijime n\'ukwijima', 'Biika obuzibu n\'okusiikuura'],
-  ['Banner video (optional)', 'Vidiyo y\'ekifaananyi (si ya buwaze)', 'Video ya bango (si lazima)', 'Vidéo de la bannière (facultatif)', 'Videwo y\'ibendera (ntabwo ari itegeko)', 'Vidiyo y\'ekishushani (tiya buriijo)'],
-  ['Save video link', 'Tereka ekinywanyizo kya vidiyo', 'Hifadhi kiungo cha video', 'Enregistrer le lien de la vidéo', 'Bika umurongo wa videwo', 'Biika omukwate gwa vidiyo'],
   ['Save announcement', 'Tereka amawulire', 'Hifadhi tangazo', 'Enregistrer l\'annonce', 'Bika itangazo', 'Biika amakuru'],
   ['No banner set', 'Tewali kifaananyi kitereddwa', 'Hakuna bango lililowekwa', 'Aucune bannière définie', 'Nta bendera ryashyizweho', 'Tihariho kishushani kitairweho'],
   ['No image set', 'Tewali kifaananyi kitereddwa', 'Hakuna picha iliyowekwa', 'Aucune image définie', 'Nta shusho yashyizweho', 'Tihariho kishushani kitairweho'],
-  ['No video — the image above is the banner', 'Tewali vidiyo — ekifaananyi ekiri waggulu kye kifaananyi', 'Hakuna video — picha iliyo juu ni bango', 'Aucune vidéo — l\'image ci-dessus est la bannière', 'Nta videwo — ishusho iri hejuru ni ibendera', 'Tihariho vidiyo — ekishushani ekiri ahaiguru nikyo kishushani'],
-  ['…or link a video already uploaded with the app', '…oba nyweza vidiyo eyatereddwa ne pulogulaamu', '…au unganisha video iliyopakiwa na programu', '…ou liez une vidéo déjà fournie avec l\'application', '…cyangwa uhuze videwo isanzwe iri kuri porogaramu', '…nari kwata vidiyo eyaatairwe na porogaraamu'],
   ['Nothing uploaded — links share the built-in card', 'Tewali kiteekeddwamu — ebinywanyizo bigabana kaadi eriwo dda', 'Hakuna kilichopakiwa — viungo hushiriki kadi iliyojengwa ndani', 'Rien de téléversé — les liens partagent la carte intégrée', 'Nta cyashyizwemo — imirongo isangira ikarita iri imbere', 'Tihariho ekitairwemu — emikwate nigigabana ekaadi eriyo'],
   ['Number/digit font (every money figure in the app)', 'Ennukuta z\'emiwendo (buli muwendo gw\'ssente mu pulogulaamu)', 'Fonti ya namba (kila kiasi cha pesa katika programu)', 'Police des chiffres (tous les montants de l\'application)', 'Imyandiko y\'imibare (buri mubare w\'amafaranga muri porogaramu)', 'Obuhandiiko bw\'emibaro (buri mubaro gwa sente omu porogaraamu)'],
   ['Upload icon', 'Teekamu akabonero', 'Pakia aikoni', 'Téléverser une icône', 'Shyiramo ikimenyetso', 'Taamu ekimanyiso'],
   ['Upload image', 'Teekamu ekifaananyi', 'Pakia picha', 'Téléverser une image', 'Shyiramo ishusho', 'Taamu ekishushani'],
-  ['Upload video', 'Teekamu vidiyo', 'Pakia video', 'Téléverser une vidéo', 'Shyiramo videwo', 'Taamu vidiyo'],
   ['Upload preview', 'Teekamu ekifaananyi ky\'okulabako', 'Pakia muhtasari', 'Téléverser l\'aperçu', 'Shyiramo incamake', 'Taamu ekishushani ky\'okureeberera'],
   ['Upload GIF', 'Teekamu GIF', 'Pakia GIF', 'Téléverser un GIF', 'Shyiramo GIF', 'Taamu GIF'],
   ['Upload top-band image', 'Teekamu ekifaananyi ky\'omusipi ogw\'awaggulu', 'Pakia picha ya ukanda wa juu', 'Téléverser l\'image du bandeau du haut', 'Shyiramo ishusho y\'umukandara wo hejuru', 'Taamu ekishushani ky\'omukyeeka ogw\'ahaiguru'],
@@ -3726,7 +3619,6 @@ const ADMIN_LANG_ROWS = [
   ['A daily free spin for every member, plus extra spins earned by buying products. Winnings are credited straight to the wallet and show under the Turntable tab of Balance Record.', 'Okukyusa kwa buli lunaku okw\'obwereere eri buli muntu, n\'okukyusa okulala okufunibwa nga bagula ebyamaguzi. Ssente ezifunibwa ziteekebwa butereevu mu nsawo era zirabika ku ttabu lya Kanyoolera mu Kyapa ky\'Ssente.', 'Mzunguko wa bure kila siku kwa kila mwanachama, pamoja na mizunguko ya ziada inayopatikana kwa kununua bidhaa. Ushindi huwekwa moja kwa moja kwenye pochi na huonekana chini ya kichupo cha Gurudumu kwenye Rekodi ya Salio.', 'Un tour gratuit par jour pour chaque membre, plus des tours supplémentaires gagnés en achetant des produits. Les gains sont crédités directement au portefeuille et apparaissent sous l\'onglet Roue du Relevé de solde.', 'Uruziga rw\'ubuntu buri munsi kuri buri munyamuryango, hiyongeraho izindi nzunguruka zibonwa mu kugura ibicuruzwa. Ibyatsindiwe bishyirwa ako kanya mu ikofi kandi bigaragara mu gice cy\'Uruziga rw\'Inyandiko y\'Amafaranga.', 'Okuzunguka kw\'obusa buri izooba ahari buri mwanamuryango, hamwe n\'okuzunguka okundi okurikutungwa omu kugura ebyamaguzi. Sente ezitungirwe nizita omu nsaho ahonaaho kandi nizireeberwa omu kacweka ka Kanyoolera omu Kyapa kya Sente.'],
   ['A member is assigned one of these round-robin the moment Manual is active above -- give each one a real holder name, it\'s shown to the member so they know who they\'re sending to.', 'Omuntu aweebwa emu ku zino nga bakwatagana bwe bati amangu ddala nga Manual eri nga ekola waggulu -- buli emu giwe erinnya lya nannyini yo ery\'amazima, kubanga liraga omuntu asindika asobole okumanya gw\'asindikira.', 'Mwanachama hupewa mojawapo ya hizi kwa zamu mara tu Manual inapowashwa hapo juu -- kila moja ipe jina halisi la mmiliki, kwa sababu mwanachama huliona ili ajue anamtumia nani.', 'Un membre se voit attribuer l\'un de ces numéros à tour de rôle dès que Manuel est actif ci-dessus -- donnez à chacun un vrai nom de titulaire, il est montré au membre pour qu\'il sache à qui il envoie.', 'Umunyamuryango ahabwa kimwe muri ibi ku buryo bukurikirana ako kanya iyo Manual ikoresheje haruguru -- buri kimwe ugihe izina nyaryo rya nyiracyo, kuko umunyamuryango arirebera amenye uwo yoherereza.', 'Omuntu naaheebwa emwe aha ezi nk\'oku zirikukuratana obu Manual erikukora haiguru -- buri emwe ogihe eiziina rya nyineyo eriyo buzima, ahakuba omuntu naaryereeba amanye ou arikutumira.'],
   ['A request above the max amount is skipped and left Pending for you to approve by hand. It does not block smaller requests behind it in the queue. Set to 0 to auto-approve every amount.', 'Okusaba okusukka ku muwendo ogusinga obunene kubuukibwa ne kulekebwa nga Kulindiriddwa osobole okukukkiriza n\'engalo. Tekuziyiza kusaba okutono okuli emabega waakwo mu lunyiriri. Teeka ku 0 okukkiriza buli muwendo mu bwengula.', 'Ombi linalozidi kiasi cha juu huachwa na kubaki Linasubiri ili uliidhinishe kwa mkono. Halizuii maombi madogo yaliyo nyuma yake kwenye foleni. Weka 0 ili kuidhinisha kila kiasi kiotomatiki.', 'Une demande supérieure au montant maximum est ignorée et laissée En attente pour que vous l\'approuviez à la main. Elle ne bloque pas les demandes plus petites derrière elle dans la file. Mettez 0 pour approuver automatiquement tout montant.', 'Ubusabe burenze umubare ntarengwa burasimburwa bugasigara ku Butegereje kugira ngo ubwemeze n\'intoki. Ntibubuza ubusabe buto buri inyuma yabwo ku murongo. Shyira 0 kugira ngo buri mubare wemezwe wenyine.', 'Okushaba okurikukira omuhendo ogurikukira kubaasa nikubuukwa kikasigara nka Kirikutegyerezibwa kugira ngo okyikirize n\'engaro. Tikirikuzibira okushaba okukye okuri enyima yaakyo omu murongo. Ta aha 0 kugira ngo buri muhendo gwikirizibwe gwenka.'],
-  ['A YouTube link will not work. The app would fetch YouTube\'s web page, not a video, so the banner would sit blank — and a YouTube player cannot be silenced, untapped or made to autoplay reliably. Download the clip as MP4 and upload it here instead.', 'Ekkubo lya YouTube terikola. App yandinzeeko olupapula lwa YouTube, si vidiyo, kale akabaawo kandisigadde nga kalimu bbwereere — ate YouTube tesobola kusirisibwa, kulekebwa nga tekakwatibwa, oba okukola yokka bulijjo. Kkakkanya vidiyo nga MP4 ogiteeke wano.', 'Kiungo cha YouTube hakitafanya kazi. Programu ingepakua ukurasa wa wavuti wa YouTube, si video, kwa hivyo bango lingebaki tupu — na kicheza cha YouTube hakiwezi kunyamazishwa, kuzuiwa kuguswa, wala kuchezeshwa chenyewe kwa uhakika. Pakua klipu kama MP4 kisha uipakie hapa badala yake.', 'Un lien YouTube ne fonctionnera pas. L\'application chargerait la page web de YouTube, pas une vidéo, donc la bannière resterait vide — et un lecteur YouTube ne peut pas être mis en sourdine, rendu intouchable ni lancé automatiquement de façon fiable. Téléchargez le clip en MP4 et déposez-le ici à la place.', 'Umurongo wa YouTube ntuzakora. Porogaramu yaza gufata urupapuro rwa YouTube, atari videwo, bityo ikirango kikaguma ubusa — kandi igikinisho cya YouTube ntigishobora guceceka, kudakandwa, cyangwa gutangira cyonyine mu buryo bwizewe. Manura videwo nka MP4 uyishyire hano ahubwo.', 'Omuhanda gwa YouTube tigurikukora. Puroguramu yakugyendiire orupapura rwa YouTube, ti vidiyo, n\'ahabw\'ekyo ekirango kyakusigaire kiri busha — kandi ekizaanisa kya YouTube tikirikubaasa kusirisibwa, kutakwatwa, nari kwetandika kyonka buzima. Ihura vidiyo nka MP4 ogite hanu omu mwanya gw\'ekyo.'],
   ['Addresses that must never serve the app, on top of the root domain. Your own server address is permanently exempt, so a mistake here cannot lock you out of this panel.', 'Endagiriro ezitateekwa kuweereza app, okwongera ku root domain. Endagiriro yo ey\'ekitongole kyo tekwatibwa n\'akatono, kale ensobi wano teyinza kukuggalirawo bweru w\'ekifo kino.', 'Anwani ambazo hazipaswi kamwe kuhudumia programu, zaidi ya kikoa cha msingi. Anwani yako ya seva imesamehewa kabisa, kwa hivyo kosa hapa haliwezi kukufungia nje ya paneli hii.', 'Adresses qui ne doivent jamais servir l\'application, en plus du domaine racine. L\'adresse de votre propre serveur en est exemptée de façon permanente, donc une erreur ici ne peut pas vous enfermer dehors de ce panneau.', 'Aderesi zitagomba na rimwe gutanga porogaramu, hiyongereye ku izina ry\'urufatiro. Aderesi ya seriveri yawe bwite isonewe burundu, bityo ikosa hano ntirishobora kugukumira kuri iyi paneli.', 'Endagiriro ezitashemereire kuheereza puroguramu, hamwe na root domain. Endagiriro ya seriveri yaawe yenka tirikukwatwa, n\'ahabw\'ekyo ekishobi hanu tikirikubaasa kukuzibira kutaaha omu kacweka aka.'],
   ['Both thumbnails sit on a checkerboard, so you can see straight away whether the background really came off. Only background touching the EDGE of the picture is removed — black inside the artwork, an outline or dark lettering, is left alone. Untick the box to upload a logo exactly as it is.', 'Ebifaananyi byombi ebitono biteekebwa ku kibaawo eky\'ebibbo, osobole okulaba amangu oba emabega lyagenda ddala. Emabega erikwata ku MABBALI g\'ekifaananyi lyokka lye liggyibwako — enzirugavu eri munda mu kifaananyi, olukoloboze oba ennukuta enzirugavu, tebikwatibwako. Ggyako akabokisi okuteeka ekifaananyi nga bwe kiri.', 'Picha zote mbili ndogo huwekwa kwenye ubao wa cheki, ili uone mara moja kama mandharinyuma yaliondoka kweli. Ni mandharinyuma yanayogusa PEMBEZONI mwa picha pekee yanayoondolewa — weusi ulio ndani ya mchoro, mstari au herufi nyeusi, huachwa. Ondoa alama kwenye kisanduku ili kupakia nembo kama ilivyo.', 'Les deux vignettes reposent sur un damier, pour que vous voyiez tout de suite si le fond est vraiment parti. Seul le fond qui touche le BORD de l\'image est retiré — le noir à l\'intérieur du dessin, un contour ou des lettres sombres, est laissé tel quel. Décochez la case pour téléverser un logo exactement tel qu\'il est.', 'Amashusho yombi mato ashyirwa ku kibaho gifite utubariro, kugira ngo ubone ako kanya niba inyuma koko yavuyeho. Gusa inyuma ikora ku MPERA y\'ishusho ni yo ikurwaho — umukara uri imbere mu gishushanyo, umurongo cyangwa inyuguti zijimye, bisigara uko biri. Kuraho akamenyetso kugira ngo ushyire ikirango uko kimeze.', 'Ebishushani byombi ebikye nibitebekwa aha kibaaho eky\'ebibaati, kugira ngo oreebe ahonaaho yaaba enyima ekagyendaho buzima. Ni enyima erikukwata aha MPERA y\'ekishushani yonka erikwihwaho — omukara oguri omunda y\'ekishushani, orurongo nari ebihandiiko ebikwatsiire, nibisigara. Ihaho akabokisi kugira ngo oteeho ekirango nk\'oku kiri.'],
   ['Build the About page as an ordered list of blocks. Add as many text blocks and images as you like, in any order (an image doesn\'t need to follow every paragraph, and you can skip images entirely). Members see each block animate in as they scroll down.', 'Zimba olupapula lwa Ebikwata Ku Ffe ng\'olukalala lw\'ebitundu olutegekeddwa. Yongerako ebitundu by\'ebiwandiiko n\'ebifaananyi nga bw\'oyagala, mu nteekateeka yonna (ekifaananyi tekyetaagisa kugoberera buli katundu, era osobola obutateekamu bifaananyi n\'akamu). Abantu balaba buli katundu nga kajja nga baserengeta.', 'Jenga ukurasa wa Kutuhusu kama orodha ya vipande iliyopangwa. Ongeza vipande vya maandishi na picha kadri utakavyo, kwa mpangilio wowote (picha si lazima ifuate kila aya, na unaweza kuacha picha kabisa). Wanachama huona kila kipande kikijitokeza wanaposogeza chini.', 'Construisez la page À propos comme une liste ordonnée de blocs. Ajoutez autant de blocs de texte et d\'images que vous voulez, dans n\'importe quel ordre (une image n\'a pas besoin de suivre chaque paragraphe, et vous pouvez ne mettre aucune image). Les membres voient chaque bloc apparaître en faisant défiler.', 'Ubaka urupapuro rwa Ibyerekeye nk\'urutonde rutondekanyije rw\'ibice. Ongeraho ibice by\'inyandiko n\'amashusho uko ushaka, mu buryo ubwo ari bwo bwose (ishusho ntigomba gukurikira buri gika, kandi ushobora kutayishyiramo na gato). Abanyamuryango babona buri gice kigaragara mu gihe bamanuka.', 'Ombeka orupapura rwa Ebirikutukwataho nk\'orutonde rw\'ebicweka orutebekanisiibwe. Ongyeraho ebicweka by\'ebihandiiko n\'ebishushani nk\'oku orikwenda, omu ntebekanisa yoona (ekishushani tikirikwetenga kukuratira buri kacweka, kandi nobaasa kutata bishushani). Abantu nibareeba buri kacweka nikaija ku barikwikiriza ahansi.'],
@@ -3741,7 +3633,6 @@ const ADMIN_LANG_ROWS = [
   ['Paste any link (e.g. a WhatsApp group invite, https://chat.whatsapp.com/...) directly into the message -- it becomes tappable text automatically, right where you typed it.', 'Teeka ekkubo lyonna (ng\'ekyokulabirako okuyita mu ggwanika lya WhatsApp, https://chat.whatsapp.com/...) butereevu mu bubaka -- lifuuka ebiwandiiko ebikwatibwako bwokka, mu kifo we walitadde.', 'Bandika kiungo chochote (mfano mwaliko wa kikundi cha WhatsApp, https://chat.whatsapp.com/...) moja kwa moja kwenye ujumbe -- huwa maandishi yanayogusika chenyewe, pale pale ulipoandika.', 'Collez n\'importe quel lien (par exemple une invitation à un groupe WhatsApp, https://chat.whatsapp.com/...) directement dans le message -- il devient automatiquement un texte cliquable, là où vous l\'avez tapé.', 'Komeka umurongo uwo ari wo wose (urugero ubutumire bw\'itsinda rya WhatsApp, https://chat.whatsapp.com/...) mu butumwa -- uhita uba inyandiko ikandwa, aho wanditse.', 'Ta omuhanda gwoona (nk\'eky\'okureeberaho okweta omu kibiina kya WhatsApp, https://chat.whatsapp.com/...) omu butumwa -- niguhinduka ebihandiiko ebirikukwatwaho gwonka, aho oguteire.'],
   ['Phones that already installed the app keep the old icon. Android copies the icon onto the home screen at install time and does not go back for it. To see a new icon on a phone that already has the app, remove it and install it again. New installs get the new icon straight away.', 'Essimu ezaateekawo dda app zisigala n\'akafaananyi ak\'edda. Android ekoppa akafaananyi n\'akateeka ku lupapula olusooka nga app eteekebwawo, era teddayo kukanoonya. Okulaba akafaananyi akapya ku ssimu erina dda app, ggyawo app ogiteekewo nate. Ezitandikawo obuggya zifuna akafaananyi akapya amangu.', 'Simu ambazo tayari zimesakinisha programu hubaki na aikoni ya zamani. Android hunakili aikoni kwenye skrini ya nyumbani wakati wa usakinishaji na hairudi kuichukua tena. Ili kuona aikoni mpya kwenye simu iliyo na programu tayari, iondoe kisha isakinishe upya. Usakinishaji mpya hupata aikoni mpya mara moja.', 'Les téléphones qui ont déjà installé l\'application gardent l\'ancienne icône. Android copie l\'icône sur l\'écran d\'accueil au moment de l\'installation et ne revient jamais la chercher. Pour voir une nouvelle icône sur un téléphone qui a déjà l\'application, désinstallez-la puis réinstallez-la. Les nouvelles installations reçoivent tout de suite la nouvelle icône.', 'Telefoni zimaze gushyiraho porogaramu zigumana agashushondanga ka kera. Android ikoporora agashushondanga kuri ecran y\'ibanze igihe cyo gushyiraho kandi ntisubira kukazana. Kugira ngo ubone agashushondanga gashya kuri telefoni isanzwe ifite porogaramu, uyikureho hanyuma uyisubizeho. Abashya bahita babona agashushondanga gashya.', 'Enyabarugo ezaataireho puroguramu nizisigara n\'akashushani aka ira. Android neekopa akashushani ekakata aha rupapura orw\'omuka obu puroguramu erikutairweho kandi tegarukayo kukashaka. Kugira ngo oreebe akashushani akasya aha nyabarugo eyine puroguramu, gyiihaho oigarukyemu. Ezirikutandika obusya nizitunga akashushani akasya ahonaaho.'],
   ['Shown on the manual-deposit code screen once the member picks that network. Use {{number}} and {{amount}} anywhere in the steps -- both are replaced with that member\'s own real account number and order amount. Leave a network blank to hide the section for it.', 'Kiraga ku lupapula lwa koodi ey\'okuteekamu ssente n\'engalo ng\'omuntu amaze okulonda netiwaka eyo. Kozesa {{number}} ne {{amount}} wonna mu ntambula -- byombi biddizibwa nnamba ya akawunti y\'omuntu oyo ne ssente z\'asaba. Leka netiwaka nga yereere okukweka ekitundu kyayo.', 'Huonyeshwa kwenye skrini ya msimbo wa amana ya mkono mara tu mwanachama anapochagua mtandao huo. Tumia {{number}} na {{amount}} popote kwenye hatua -- vyote hubadilishwa kuwa namba halisi ya akaunti ya mwanachama huyo na kiasi cha oda yake. Acha mtandao wazi ili kuficha sehemu yake.', 'Affiché sur l\'écran du code de dépôt manuel dès que le membre choisit ce réseau. Utilisez {{number}} et {{amount}} n\'importe où dans les étapes -- les deux sont remplacés par le vrai numéro de compte de ce membre et le montant de sa commande. Laissez un réseau vide pour masquer sa section.', 'Bigaragara ku ipaji rya kode yo gushyiramo amafaranga n\'intoki iyo umunyamuryango ahisemo urwo rusobe. Koresha {{number}} na {{amount}} ahantu hose mu ntambwe -- byombi bisimburwa na nimero nyayo ya konti y\'uwo munyamuryango n\'umubare w\'ubusabe bwe. Reka urusobe ubusa kugira ngo uhishe igice cyarwo.', 'Nikireeberwa aha rupapura rwa koodi y\'okuta sente n\'engaro obu omuntu arikucwamu neetiweeki egyo. Koresa {{number}} na {{amount}} hoona omu ntambura -- byombi nibigaruzibwamu namba ya akaunti y\'omuntu ogwo n\'omuhendo gw\'ebi arikushaba. Reka neetiweeki eri busha kugira ngo oshereke akacweka kaayo.'],
-  ['Only if you put the file in the same upload as the app — type its name (for example banner.mp4), or paste a full https:// link to a video file. Saving here replaces an uploaded video, and uploading replaces this.', 'Kyokka bw\'oba oteeka fayiro mu kuteeka kwe kumu n\'app — wandiika erinnya lyayo (ng\'ekyokulabirako banner.mp4), oba oteeka ekkubo ekijjuvu erya https:// eridda ku fayiro ya vidiyo. Okutereka wano kiddira mu kifo kya vidiyo eyateekebwa, ate okuteeka vidiyo kiddira mu kifo kya kino.', 'Ni tu ikiwa umeweka faili katika upakiaji ule ule wa programu — andika jina lake (mfano banner.mp4), au bandika kiungo kamili cha https:// cha faili ya video. Kuhifadhi hapa hubadilisha video iliyopakiwa, na kupakia hubadilisha hii.', 'Seulement si vous mettez le fichier dans le même téléversement que l\'application — tapez son nom (par exemple banner.mp4), ou collez un lien https:// complet vers un fichier vidéo. Enregistrer ici remplace une vidéo téléversée, et téléverser remplace ceci.', 'Gusa niba washyize dosiye mu bwoherezwa bumwe na porogaramu — andika izina ryayo (urugero banner.mp4), cyangwa ukomeke umurongo wuzuye wa https:// werekeza kuri dosiye ya videwo. Kubika hano bisimbura videwo yashyizweho, no gushyiraho bisimbura ibi.', 'Kwonka ku oraate eifaira omu kuta kumwe na puroguramu — handiika eiziina ryayo (nk\'eky\'okureeberaho banner.mp4), nari ota omuhanda ogwijwire ogwa https:// ogurikuza aha ifaira ya vidiyo. Okubika hanu nikitwara omwanya gwa vidiyo eyatairweho, kandi okuta vidiyo nikitwara omwanya gw\'eki.'],
   ['MP4 (H.264), up to 4 MB. That cap is about your members, not the database: the clip downloads onto every phone that opens the app. A few silent seconds is what belongs here. Uploaded once, it is then served from its own cached address, so a member downloads it one time and replays it from their phone after that.', 'MP4 (H.264), okutuuka ku 4 MB. Ekkomo eryo likwata ku bantu bo, si ku ttereka: vidiyo ekkakkanyizibwa ku buli ssimu eyiggula app. Obudde obutono obutaliimu maloboozi bwe busaanira wano. Bw\'emala okuteekebwa, eweerezebwa okuva ku ndagiriro yaayo, kale omuntu agikkakkanya omulundi gumu n\'oluvannyuma agizanyisa okuva ku ssimu ye.', 'MP4 (H.264), hadi 4 MB. Kikomo hicho kinahusu wanachama wako, si hifadhidata: klipu hupakuliwa kwenye kila simu inayofungua programu. Sekunde chache zisizo na sauti ndizo zinazofaa hapa. Ikishapakiwa mara moja, hutolewa kutoka anwani yake iliyohifadhiwa, kwa hivyo mwanachama huipakua mara moja kisha huicheza tena kutoka simu yake.', 'MP4 (H.264), jusqu\'à 4 Mo. Cette limite concerne vos membres, pas la base de données : le clip se télécharge sur chaque téléphone qui ouvre l\'application. Quelques secondes sans son, voilà ce qui a sa place ici. Une fois téléversé, il est servi depuis sa propre adresse mise en cache, donc un membre le télécharge une seule fois et le rejoue ensuite depuis son téléphone.', 'MP4 (H.264), kugeza kuri 4 MB. Uwo mupaka ureba abanyamuryango bawe, si ububikoshingiro: agace ka videwo kamanurwa kuri buri telefoni ifungura porogaramu. Amasegonda macye adafite ijwi ni yo akwiriye hano. Iyo yamaze gushyirwaho, itangwa iva kuri aderesi yayo bwite, bityo umunyamuryango ayimanura rimwe akongera kuyireba ava kuri telefoni ye.', 'MP4 (H.264), okuhika aha 4 MB. Ekikomo ekyo nikikwata aha bantu baawe, ti aha bubiiko: vidiyo neeihurwa aha buri nyabarugo erikwigura puroguramu. Obwire obukye obutaine maraka nibwo bushemereire hanu. Ku erikuba etairweho, neeheebwa kuruga aha ndagiriro yaayo, n\'ahabw\'ekyo omuntu naagyihura omurundi gumwe reero akagizaanisa kuruga aha nyabarugo ye.'],
   ['Payments are set to Manual, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap Mark as paid. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.', 'Okusasula kuteekeddwa ku Manual, kale okusasula tekuyita mu mulyango gwonna ogwekolera. Sindika ssente ggwe kennyini okuva ku ssimu y\'omukulembeze ey\'ssente ez\'oku ssimu okudda ku nnamba eri ku lunyiriri, oluvannyuma onyige Laga nga kisasuddwa. Okulaga olunyiriri nga lusasuddwa kuwandiika bwawandiisi okusasula kwe wamaze okukola, tekusindika kintu kyonna. Okukkiriza okwekolera tekussibwako mmere nga eno ekola.', 'Malipo yamewekwa kuwa ya Mkono, kwa hivyo malipo hayapiti kwenye lango lolote la kiotomatiki. Tuma pesa wewe mwenyewe kutoka simu ya pesa ya msimamizi kwenda namba ya lengo iliyo kwenye safu, kisha gusa Weka alama kuwa imelipwa. Kuweka alama kwenye safu hurekodi tu malipo uliyokwisha fanya, hakutumi chochote. Kuidhinisha kiotomatiki hupuuzwa wakati hali hii imewashwa.', 'Les paiements sont réglés sur Manuel, donc les versements ne passent par aucune passerelle automatique. Envoyez l\'argent vous-même depuis un téléphone mobile money d\'administrateur vers le numéro de destination indiqué sur la ligne, puis touchez Marquer comme payé. Marquer une ligne comme payée ne fait qu\'enregistrer un paiement que vous avez déjà effectué, cela n\'envoie jamais rien. L\'approbation automatique est ignorée tant que ce mode est actif.', 'Kwishyura byashyizwe kuri Manual, bityo kwishyura ntibinyura mu irembo iryo ari ryo ryose ryikora. Ohereza amafaranga ubwawe uvuye kuri telefoni y\'ubuyobozi y\'amafaranga ujya kuri nimero igaragara ku murongo, hanyuma ukande Shyiraho ko byishyuwe. Gushyiraho ko umurongo wishyuwe byandika gusa kwishyura wamaze gukora, ntibyohereza ikintu na kimwe. Kwemeza byikora ntibyitabwaho igihe ubu buryo bukoresha.', 'Okushashura kutairwe aha Manual, n\'ahabw\'ekyo okushashura tikurikurabira omu muryango gwoona ogurikwekorera. Tuma sente iwe omwene kuruga aha simu y\'omwebembezi ey\'esente z\'aha simu okuza aha namba eri aha murongo, reero okande Manyisa ngu kishashwiirwe. Okumanyisa omurongo ngu gushashwiirwe nikihandiika kwonka okushashura oku waaba omazire kukora, tikirikutuma kintu. Okwikiriza kwenka tikurikutwarwaho ku ogu murikukora.'],
   ['Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested, even a single request always waits the full interval, it\'s never approved instantly) before the server approves and sends it. It checks every few seconds, and every request that\'s old enough at that moment is approved and sent back-to-back in the same pass, not spaced apart from each other. No tap needed per request. It reuses the exact same send logic as the approve button on the Withdrawals tab (whichever provider that currently sends through), so it can never double-pay a request or act on one that isn\'t still genuinely pending.', 'Kikolebwa sseva: nga kikola, buli kusaba okuggyamu ssente kusooka kulinda ekiseera ekiri wansi (okubalirwa okuva lwe kusabiddwa, ne bwe kuba kumu kulinda ekiseera kyonna, tekukkirizibwa mangu) sseva nga tennakukkiriza n\'okukusindika. Ekebera buli sekonda ntono, era buli kusaba okumaze ekiseera ekimala mu kaseera ako kukkirizibwa ne kusindikibwa kumpi na kunnaakwo mu mulundi gwe gumu, si nga kwawukanyiziddwa. Tewali kunyiga kwetaagisa ku buli kusaba. Kikozesa enkola y\'okusindika y\'emu n\'eya bbaatani ey\'okukkiriza ku ttabu lya Okuggyamu (ne provider gw\'ekozesa mu kiseera ekyo), kale tekiyinza kusasula mulundi gwa kubiri oba okukola ku kusaba okutakyali mu kulindirira.', 'Inaendeshwa na seva: ikiwa imewashwa, kila ombi la utoaji linalowasili kwanza husubiri muda ulio hapa chini (unaohesabiwa tangu ombi lilipowekwa, hata ombi moja husubiri muda wote, halikubaliwi papo hapo) kabla seva haijaidhinisha na kulituma. Hukagua kila sekunde chache, na kila ombi lililokomaa wakati huo huidhinishwa na kutumwa mfululizo katika pasi ile ile, si kwa kutenganishwa. Hakuna kugusa kunakohitajika kwa kila ombi. Hutumia mantiki ile ile ya kutuma kama kitufe cha kuidhinisha kwenye kichupo cha Utoaji (mtoa huduma yeyote anayetumika wakati huo), kwa hivyo haiwezi kamwe kulipa ombi mara mbili au kushughulikia lile ambalo halisubiri kweli.', 'Piloté par le serveur : lorsqu\'il est actif, chaque demande de retrait entrante attend d\'abord l\'intervalle ci-dessous (compté depuis le moment de la demande ; même une demande isolée attend toujours l\'intervalle complet, elle n\'est jamais approuvée instantanément) avant que le serveur ne l\'approuve et ne l\'envoie. Il vérifie toutes les quelques secondes, et chaque demande assez ancienne à ce moment-là est approuvée et envoyée à la suite dans le même passage, sans être espacée. Aucun appui nécessaire par demande. Il réutilise exactement la même logique d\'envoi que le bouton d\'approbation de l\'onglet Retraits (quel que soit le prestataire qui envoie actuellement), il ne peut donc jamais payer deux fois une demande ni agir sur une demande qui n\'est plus réellement en attente.', 'Biyoborwa na seriveri: iyo bikoresha, buri busabe bwo kubikuza buhageze butegereza mbere igihe kiri hasi (kibarwa uhereye igihe bwasabwe; n\'ubusabe bumwe buhora butegereza igihe cyose, ntibwemezwa ako kanya) mbere y\'uko seriveri ibwemeza ikanabwohereza. Igenzura buri masegonda macye, kandi buri busabe bwakuze icyo gihe bwemezwa bukoherezwa bukurikiranye muri iyo nzira imwe, atari mu buryo butandukanyije. Nta gukanda bikenewe kuri buri busabe. Ikoresha uburyo bwo kohereza bumwe n\'ubwa buto bwo kwemeza bwo ku gice cy\'Ukubikuza (uwo ari we wese utanga serivisi icyo gihe), bityo ntibishobora kwishyura ubusabe kabiri cyangwa gukora ku bwo butakiri ku butegereje koko.', 'Nikikorwa seeva: ku erikuba erikukora, buri kushaba okwihamu sente kurikwija nikubanza kutegyereza obwire oburi ahansi (nibubarwa kuruga obu kwashabirwe; n\'okushaba kumwe nikutegyereza obwire bwoona, tikurikwikirizibwa ahonaaho) seeva etakakwikiriize n\'okukutuma. Neekyebera buri sekonda nkye, kandi buri kushaba okumazire obwire obuhikire aha kaanya ako nikwikirizibwa kikatumwa nikukuratana omu muringo gumwe, ti nikwahukanisibwa. Tihariho kukanda okurikwetengwa aha buri kushaba. Nikikoresa omuringo gw\'okutuma ogwo gumwe nk\'ogwa akabatuni k\'okwikiriza aha kacweka k\'Okwihamu (ou arikuheereza aha kaanya ako), n\'ahabw\'ekyo tikirikubaasa kushashura okushaba emirundi ebiri nari kukora aha okutakiri omu kutegyerezibwa buzima.'],
@@ -3932,7 +3823,7 @@ if ('serviceWorker' in navigator) {
       var box=document.createElement('div');
       box.id='innerBgAdminPanel';
       box.innerHTML='<h2 class="sec">Signed-in page background</h2>'
-        +'<div class="panel-card"><p class="muted" style="margin-top:0">Controls only Home, Assets, Network, Profile, Deposit, Withdraw, Wallet and other pages after login. Login, Sign Up and Forgot Password are not changed.</p>'
+        +'<div class="panel-card"><p class="muted" style="margin-top:0">Controls only Home, Assets, Network, Profile, Top Up, Cash Out, Wallet and other pages after login. Login, Sign Up and Forgot Password are not changed.</p>'
         +'<div class="row"><div><label>Background opacity (0–100%)</label><input id="innerBgOpAdmin" type="number" min="0" max="100" value="'+(s.innerBgOpacity!=null?s.innerBgOpacity:100)+'"></div>'
         +'<div><label>Background blur (0–40 px)</label><input id="innerBgBlurAdmin" type="number" min="0" max="40" value="'+(s.innerBgBlur!=null?s.innerBgBlur:0)+'"></div></div>'
         +'<button class="btn block" id="saveInnerBgAdmin" style="margin-top:12px">Save inner background</button></div>';
