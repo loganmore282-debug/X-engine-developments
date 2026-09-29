@@ -5177,3 +5177,107 @@ domain. Worth a final owner-side check after this deploys: open
 `https://app.petro-cchnug.com` in a real browser and confirm the app
 loads and can sign in, the same end-to-end check every prior
 backend-move round in this file has called for.
+
+## Follow-up 33 -- real domain live: nginx template's two bugs from the actual cutover, plus scraping/brute-force hardening
+
+Follow-up 32's cutover ran into two more real nginx bugs, both found
+live (not caught by `nginx -t`, since both were syntactically valid
+config that just did the wrong thing) and both now fixed in
+`deploy/nginx-petro.conf.template` for next time:
+
+- **The `root` path in the generated `/etc/nginx/sites-available/petro`
+  was the OLD, pre-fix template's `/srv/petro/user` even after Follow-up
+  32's fix landed** -- traced to the owner's first attempt at the `sed`
+  command silently never completing (an SSH session had timed out
+  mid-command, and the next few commands were unknowingly typed into
+  the phone's own local Termux shell instead of the VPS -- confirmed
+  by a stray "Connection timed out" a few lines up in the transcript,
+  easy to miss on a phone screen). Re-running the same `sed` command
+  after reconnecting produced the correct file immediately -- not a
+  bug in the fix itself, a one-off session hiccup.
+- **`try_files $uri =404` (both app. and admin. blocks) 404'd on a bare
+  `/` request even though `index.html` served fine by its exact
+  filename** -- `$uri` for a `/` request is a directory, not a file,
+  so `try_files` never got to consult the `index` directive at all and
+  fell straight to `=404`. Needs the `$uri/` alternative
+  (`try_files $uri $uri/ =404;`) for nginx to recognize the directory
+  match and apply `index index.html`. Also fixed the certbot
+  `--nginx` installer's own separate failure from earlier in the same
+  round ("Could not automatically find a matching server block") --
+  that one was simply because the site config didn't exist on disk yet
+  at the moment certbot's installer ran (see above); the certificate
+  itself still issued successfully regardless, and was wired into
+  nginx by hand (inserting `ssl_certificate`/`ssl_certificate_key`
+  directly, pointing at the multi-SAN cert certbot had already saved
+  under `/etc/letsencrypt/live/api.petro-cchnug.com/`) rather than
+  re-running the installer a second time.
+
+**Once the app was reachable at a real, public domain, the owner
+asked directly for scraping/injection/admin-brute-force hardening.**
+Audited the actual code first rather than assuming a gap existed:
+`server.js`'s admin login (`/admin/login`) already uses constant-time
+key comparison (`safeEqual`, `crypto.timingSafeEqual`), a dummy-hash
+timing trick so a failed attempt can't be used to enumerate real
+usernames, `express-rate-limit` (8/min on `/admin/login` and
+`/admin/check-key` specifically) AND a separate `loginLocked()`/
+`recordLoginFail()` mechanism with its own independent lockout window
+-- two different mechanisms, not one. Spot-checked the NoSQL-injection
+class of bug directly (an object payload where a string is expected,
+e.g. `{"phone":{"$ne":null}}`, silently becoming a Mongo query
+operator) across every high-value `.where()` call site touched by
+raw request input -- phone lookups (`cleanPhone()` → `localDigits()`,
+both do `String(raw || '')` before any regex/digit processing),
+referral-code lookups (`findUserByReferralCode()`: `String(code ||
+'').trim()`), gift-code redemption (`/redeem`: `String(...).trim()`
+plus a `/^[A-Za-z0-9-]+$/` whitelist before it ever reaches a query) --
+all already string-coerced before use, not vulnerable. This app-level
+posture was already solid; nothing here needed changing.
+
+**What was genuinely missing, added to `deploy/nginx-petro.conf.template`**
+(ahead of Node, so a flood or scan is rejected before it even reaches
+the app process -- defense in depth, not a replacement for the
+app-level protections above):
+- `server_tokens off;` -- the live site was leaking
+  `nginx/1.24.0 (Ubuntu)` in every response header (visible in this
+  round's own `curl -I` output), which an automated scanner uses to
+  pick which known CVEs to try first against that exact version.
+- Two `limit_req_zone`s: a general 20r/s (burst 40) zone across all of
+  `api.`, and a much stricter 1r/s (burst 5) zone specifically for
+  `/admin/login` and `/admin/check-key` -- the two paths a real
+  credential-stuffing bot actually aims at. Matched via a regex
+  `location`, which nginx gives precedence over the plain `location /`
+  prefix regardless of file order, so this genuinely intercepts those
+  two paths first.
+- `X-Robots-Tag: noindex, nofollow` plus an inline `/robots.txt` (no
+  physical file needed -- served directly via `return 200 "User-agent:
+  *\nDisallow: /\n";`) on both `api.` and `admin.` -- keeps the admin
+  login page and the bare API surface out of search-engine indexes and
+  casual crawler discovery. Explicitly **not** a real access-control
+  boundary (the subdomains are still normal, reachable HTTPS sites to
+  anyone who already has the address) -- stated as such in the
+  template's own comment, so a future reader doesn't mistake it for
+  one. `app.` (the real member-facing site) was deliberately left
+  indexable -- nothing asked for that to change, and it's the one
+  subdomain with a real reason to be discoverable.
+
+**Not done, flagged rather than guessed at**: a WAF/CDN in front of
+the domain (e.g. Cloudflare) would add a further layer (bot-fingerprint
+challenges, a much larger attacker-facing rate-limit budget than one
+VPS's own nginx can absorb alone) but is a new service to set up, not
+a config change to the existing one -- raised here as a real option,
+not silently added. Also not done: an exhaustive line-by-line audit of
+all 115 `.where()` call sites in `server.js` -- the sampled high-value
+ones (auth, referral codes, gift codes, phone lookups) all followed
+the same `String()`-coercion-before-query pattern consistently enough
+to trust the convention holds elsewhere, rather than spending a full
+round re-reading every internal-status-string comparison that was
+never reachable from user input in the first place.
+
+**Applying this to the live VPS still needs the owner's own hands**
+(same reason as every other nginx change in this file -- no SSH out
+from a Claude session): regenerate `/etc/nginx/sites-available/petro`
+from the updated template (`sed 's/PETRO_DOMAIN/petro-cchnug.com/g'
+.../nginx-petro.conf.template > /etc/nginx/sites-available/petro`,
+same command used for the original cutover), `nginx -t`, then
+`systemctl reload nginx` -- not yet confirmed live as of this
+entry.

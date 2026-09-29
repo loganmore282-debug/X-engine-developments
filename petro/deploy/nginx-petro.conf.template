@@ -47,6 +47,25 @@ map $host $csp_header {
     default "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://api.PETRO_DOMAIN https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
 }
 
+# Hides "nginx/1.24.0 (Ubuntu)" from every response (already visible in a
+# plain `curl -I` -- an automated scanner uses exactly that string to pick
+# which known nginx CVEs to try first). Cheap, and this file is the one
+# place with total 'http' context this project's sites-enabled/* pipeline
+# ever gives it (server_tokens is off-only-in-error-pages-too by default in
+# recent nginx, but stated explicitly here rather than assumed).
+server_tokens off;
+
+# ── rate limiting, ahead of Node -- defense in depth, not a replacement ──
+# server.js already rate-limits and locks out admin login attempts on its
+# own (see its own "RATE LIMITERS" section and loginLocked()/
+# recordLoginFail() -- 8/min via express-rate-limit, a separate 15-minute
+# lockout after repeated failures, constant-time key comparison). These
+# nginx-level zones exist so a flood is rejected before it even reaches the
+# Node process (cheaper, and protects the box itself, not just the app),
+# not because the app-level protection was found lacking.
+limit_req_zone $binary_remote_addr zone=petro_api:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=petro_admin_login:10m rate=1r/s;
+
 server {
     listen 80;
     listen [::]:80;
@@ -70,7 +89,31 @@ server {
 
     client_max_body_size 8m;
 
+    # An API has no page for a search engine to index -- and every hit here
+    # is a real backend request, unlike a static host's robots.txt.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    location = /robots.txt {
+        add_header Content-Type text/plain;
+        return 200 "User-agent: *\nDisallow: /\n";
+    }
+
+    # /admin/login and /admin/check-key specifically, ahead of the general
+    # zone below -- this is where a credential-stuffing/brute-force bot
+    # actually aims. A regex location takes precedence over the plain
+    # `location /` prefix below regardless of file order, so this is
+    # genuinely hit first for these two paths only.
+    location ~ ^/admin/(login|check-key)$ {
+        limit_req zone=petro_admin_login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location / {
+        limit_req zone=petro_api burst=40 nodelay;
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -160,10 +203,22 @@ server {
     add_header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()" always;
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
     add_header Cross-Origin-Resource-Policy "same-site" always;
+    # A search engine indexing "petro admin login" is a worse outcome than
+    # a slightly less discoverable panel -- this doesn't stop a targeted
+    # attacker (the subdomain is still a normal, reachable HTTPS site,
+    # same as it always was; this only keeps it out of casual search
+    # results and crawlers), real access control is still the login form
+    # itself and server.js's own admin auth.
+    add_header X-Robots-Tag "noindex, nofollow" always;
 
     # The whole panel is one file -- every request revalidates, same
     # reasoning as index.html above but for all of it, not just three names.
     add_header Cache-Control "no-cache";
+
+    location = /robots.txt {
+        add_header Content-Type text/plain;
+        return 200 "User-agent: *\nDisallow: /\n";
+    }
 
     location / {
         try_files $uri $uri/ =404;
