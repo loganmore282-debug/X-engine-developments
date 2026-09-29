@@ -3181,6 +3181,9 @@ async function renderSettings(){
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
       <label>Customer Service (Telegram)</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/youragent">
       <label>WhatsApp group or channel</label><input id="spWaGroup" value="${esc(v('whatsappGroup',''))}" placeholder="https://chat.whatsapp.com/yourgroup">
+      <label>Support email</label><input id="spEmail" type="email" value="${esc(v('supportEmail',''))}" placeholder="support@yourdomain.com">
+      <p class="muted" style="margin:4px 0 10px">Home's Support tile opens this address directly in the member's mail app. Account &gt; Support shows it alongside the WhatsApp link and the working hours below.</p>
+      <label>Working hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Mon-Sat, 9am-6pm EAT">
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
@@ -3248,7 +3251,8 @@ async function renderSettings(){
   });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(),
-      telegramGroup:$('spTgGroup').value.trim(), whatsappGroup:$('spWaGroup').value.trim() };
+      telegramGroup:$('spTgGroup').value.trim(), whatsappGroup:$('spWaGroup').value.trim(),
+      supportEmail:$('spEmail').value.trim(), supportHours:$('spHours').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveBrandName').addEventListener('click', async()=>{

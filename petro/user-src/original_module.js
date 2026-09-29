@@ -3362,7 +3362,7 @@ ${homeBannerBlockHtml(st)}
   <button class="home-action" onclick="navigatePage('network')">
     <span class="badge">${suppliedMemberIcon('invite')}</span><span class="lbl">Invite</span>
   </button>
-  <button class="home-action" onclick="openCustomerService()">
+  <button class="home-action" onclick="openSupportMail()">
     <span class="badge">${suppliedMemberIcon('support')}</span><span class="lbl">Support</span>
   </button>
 </div>
@@ -4210,7 +4210,7 @@ async function renderAccount(){
     ${acctListCardHtml('accountStatement', 'Transaction Statement', "openTransactionStatement('income')")}
     ${acctListCardHtml('accountGift', 'Gift Codes', 'openChestSheet()')}
     ${acctListCardHtml('accountSecurity', 'Security Settings', 'openChangeLoginPasswordSheet()')}
-    ${acctListCardHtml('support', 'Customer Support', 'openCustomerService()')}
+    ${acctListCardHtml('support', 'Support', 'openSupportSheet()')}
     ${acctListCardHtml('accountAbout', 'About Us', 'openAboutSheet()')}
   </div>
   <button class="logout-btn-v2" onclick="doLogout()">${ICONS.logoutArrow} Log Out</button>
@@ -5153,49 +5153,38 @@ window.openInfoSheet = function(kind){
   const [title, body] = map[kind] || ['Info', ''];
   openSheet(title, `<div class="reveal-in"><p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p></div>`);
 };
-// ── CUSTOMER SERVICE: ONE LINK, NO PAGE ──
+// ── SUPPORT: MAIL ON HOME, A REAL PAGE UNDER ACCOUNT ──
 //
-// Owner: "on customer service icon, l don't want one to go to new page, only 1
-// link will be put there for customer service it should support either WhatsApp
-// or telegram."
+// Owner: "introduce support instead of customer care, in account, so
+// support will have a channel link for WhatsApp and customer service
+// email... so it will be same on the home so it should remain as it is
+// so email will be put so that when one taps support on home he goes to
+// mail, and when one comes in account under support he sees channel link
+// and support email plus working hours down."
 //
-// Tapping Service now opens that one chat straight away. The Help Centre sheet
-// it used to open is still in the file and still reachable from the Account
-// menu -- it carries the banner, the support hours and the group links, which
-// are a different thing from "get me a human now".
-//
-// WhatsApp or Telegram, whichever the admin saved. The order below is the
-// order of preference, and every field is one the admin panel already has, so
-// nothing new has to be filled in for this to work:
-//   supportTelegram  -- the dedicated support contact
-//   whatsappContact  -- the dedicated support number
-//   then the group links, as a fallback rather than a dead button.
-//
-// A bare phone number is accepted and turned into a wa.me link: typing
-// 0771234567 into a "WhatsApp" box is the obvious thing to do, and silently
-// producing a broken link for it would be the app's fault, not the owner's.
-function customerServiceUrl(){
+// Two different destinations behind the one "Support" label on purpose:
+// Home's tile is the fast path (one tap, straight to the member's mail
+// app, no sheet in between); Account's is the full page, for someone who
+// actually wants to see every way to reach support before picking one.
+// This replaces the app's earlier "one link, no page" WhatsApp/Telegram
+// shortcut -- that function (customerServiceUrl()/openCustomerService())
+// had zero callers left once both tiles moved to these, so it's gone
+// rather than left behind as dead code with nothing pointing at it.
+window.openSupportMail = function(){
   const s = STATE.settings || {};
-  const raw = String(s.supportTelegram || s.whatsappContact
-    || s.telegramGroup || s.whatsappGroup || '').trim();
-  if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) return raw;
-  // @handle -> Telegram.
-  if (raw.charAt(0) === '@') return 'https://t.me/' + raw.slice(1);
-  // Digits (with or without +, spaces or dashes) -> WhatsApp.
-  const digits = raw.replace(/[^0-9]/g, '');
-  if (digits && /^[0-9+][0-9\s+-]*$/.test(raw)) {
-    // A local 07... number needs the region's country code, or wa.me
-    // rejects it.
-    const intl = digits.charAt(0) === '0' ? dial() + digits.slice(1) : digits;
-    return 'https://wa.me/' + intl;
-  }
-  return 'https://t.me/' + raw.replace(/^\/+/, '');
-}
-window.openCustomerService = function(){
-  const url = customerServiceUrl();
-  if (!url) return notify('Customer service is not set up yet. Please try again later.');
-  window.open(url, '_blank', 'noopener');
+  const email = String(s.supportEmail || '').trim();
+  if (!email) return notify('Support email is not set up yet. Please try again later.');
+  window.location.href = 'mailto:' + email;
+};
+window.openSupportSheet = function(){
+  const s = STATE.settings || {};
+  const rows = [];
+  if (s.whatsappGroup) rows.push(`<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-green);" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">WhatsApp Channel</a>`);
+  if (s.supportEmail) rows.push(`<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-ink);" href="mailto:${esc(s.supportEmail)}">${esc(s.supportEmail)}</a>`);
+  openSheet('Support', `<div class="reveal-in">
+    ${rows.length ? `<div style="display:flex;flex-direction:column;gap:10px;">${rows.join('')}</div>` : `<p style="line-height:1.6;color:var(--snow-muted);">${esc(t('Contact support for help with your account.'))}</p>`}
+    ${s.supportHours ? `<p style="white-space:pre-line;line-height:1.6;color:var(--snow-muted);margin-top:18px;font-size:13px;">${esc('Support hours: ' + s.supportHours)}</p>` : ''}
+  </div>`);
 };
 // Help Centre banner + the two support links are lazy-fetched only when
 // this page is actually opened (the banner can be a large embedded image,
@@ -5438,7 +5427,7 @@ function openDepositFormSheet(){
   if (usdtOn) methodTabs.push(['usdt', 'USDT (TRC20)']);
   if (cardOn) methodTabs.push(['card', 'Card']);
   const tabsHtml = methodTabs.length > 1
-    ? `<div class="statement-tabs" id="depMethodRow" style="grid-template-columns:repeat(${methodTabs.length},minmax(0,1fr));margin-bottom:18px;">
+    ? `<div class="dep-method-tabs" id="depMethodRow">
       ${methodTabs.map(([k, l]) => `<button type="button" data-dm="${k}" class="${k === 'mm' ? 'on' : ''}" onclick="selectDepMethod('${k}')">${l}</button>`).join('')}
     </div>` : '';
   openSheet('Deposit', `<div class="reveal-in" style="padding-top:18px;">

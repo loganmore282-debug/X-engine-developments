@@ -579,7 +579,7 @@ const DEFAULT_SETTINGS = {
   // autoApproveMaxAmount: 0 = unlimited; a nonzero value leaves anything
   // above it for manual review instead.
   autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
-  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
+  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', supportEmail: '',
   rulesText: '', aboutText: '',
   // Owner: "l would like to also to edit the app name petro, so make it when
   // it can be editable everywhere." The platform's own name, previously
@@ -7501,6 +7501,16 @@ function isSafeExternalUrl(v) {
   try { const u = new URL(String(v)); return u.protocol === 'http:' || u.protocol === 'https:'; }
   catch (_) { return false; }
 }
+// Same XSS class as SETTINGS_URL_FIELDS above: supportEmail is rendered
+// into href="mailto:${esc(...)}" (openSupportSheet() and the Home Support
+// tile in user-src/original_module.js), and esc() does not touch the URI
+// scheme. A plain "looks like an email" check keeps a "javascript:..."
+// value from ever being savable here in the first place.
+const SETTINGS_EMAIL_FIELDS = ['supportEmail'];
+function isSafeEmail(v) {
+  if (!v) return true; // blank clears the field -- always allowed
+  return /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(String(v)) && String(v).length <= 120;
+}
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -7522,6 +7532,10 @@ app.post('/admin/settings/update', async (req, res) => {
     for (const key of SETTINGS_URL_FIELDS) {
       if (key in updates && !isSafeExternalUrl(updates[key]))
         return res.status(400).json({ status: 'error', message: `${key} must be a valid http(s) link, or left blank.` });
+    }
+    for (const key of SETTINGS_EMAIL_FIELDS) {
+      if (key in updates && !isSafeEmail(updates[key]))
+        return res.status(400).json({ status: 'error', message: `${key} must be a valid email address, or left blank.` });
     }
     if ('allowedOrigins' in updates) {
       const r = sanitizeAllowedOrigins(updates.allowedOrigins);

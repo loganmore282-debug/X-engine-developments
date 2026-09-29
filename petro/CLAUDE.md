@@ -4113,3 +4113,106 @@ placeholder `"8000"`, and `showChestWin(300, ...)` renders `"UGX
 decimal-free. `build-core.js`/`build-admin.js` both "round-trip OK".
 `user/sw.js` bumped `v194` → `v195`, `admin/sw.js` bumped `v46` →
 `v47`.
+
+## Follow-up 20 — reviewed Codex's work, deposit tabs, stat-card overflow safety net, Support feature
+
+Two commits landed on the branch from a concurrent session/tool
+("Codex", per the owner) between rounds: `9f88a76` (loader percentage
+counter no longer visibly resets to 0% mid-boot -- eases toward 99%
+and completes at 100% only when the app is actually ready) and
+`63f4ef5` (a real USDT-deposit race: two submissions of the same
+on-chain TXID at the same instant could create two separate claim
+rows; fixed with a deterministic `usdt:<txid>` doc id + `createIfAbsent()`,
+with careful handling for correcting a failed claim and migrating
+pre-existing random-ID rows; also a touch-axis fix so the edge-scroll
+guard no longer swallows horizontal swipes, which may be the real
+cause of the still-unresolved "buttons don't respond sometimes"
+report from earlier in this session; plus a dozen new Mongo indexes
+and package.json's leftover "Chipz — Backend Server" description
+fixed). Owner asked for a review before continuing: read both diffs
+in full, ran every existing test plus the 3 new ones
+(`test-touch-edges.js`, `test-usdt-claim-race.js`,
+`test-index-coverage.js`) individually and via `npm run test:audit`
+-- all pass. No issues found. Fast-forwarded onto it (no local
+changes were in flight yet).
+
+**Deposit method tabs, underline → pill** -- owner: *"why did you put
+lines instead of tabs... l nolonger need chipz designs."* The Deposit
+sheet's Mobile Money/USDT/Card row reused `.statement-tabs`, a bare
+bottom-border underline -- literally Chipz's own tab treatment (also
+the class Records' real tab row still uses, deliberately left alone
+here since nobody asked to change that screen). Gave it its own
+`.dep-method-tabs` class styled as pill buttons matching `.dep-chip`
+right above it in the same file -- the exact fix already applied once
+this session to the amount chips for the identical underline
+complaint, now applied to the method row too instead of inventing a
+third tab style. `selectDepMethod()` only toggles a generic `.on`
+class by `data-dm`, so the rename needed no JS logic changes.
+
+**Stat-card overflow safety net** -- owner: *"make sure those boxes
+can withstand figures ie of 7 characters."* Tested live in headless
+Chromium against the real built bundle before touching anything:
+Home's 3-stat row already handles this correctly (`word-break:break-word`,
+generous `min-height`) up to 9-digit values at a 320px viewport with
+no visible overflow. Found two components that had `white-space:nowrap`
+with NO overflow fallback at all -- `.p-stat .v` (the Assets tab's
+product-card Price/Days/Daily/Total mini-stats) and `.asset-stats b`
+(the list-view Cost/Term/Daily Yield/Expected Return stats) -- and
+tested those too: also fine at realistic widths and even a
+UGX 3,000,000 "Total" figure (Mega Plant's full ×3 payout). Added
+`overflow:hidden;text-overflow:ellipsis;max-width:100%` to both
+anyway as a pure safety net -- changes nothing for any value that
+already fits (every real one does), but guarantees nothing can ever
+visually spill past a card edge for a genuinely extreme value or an
+unusual device.
+
+**Support, replacing the old "one link, no page" behavior** -- owner:
+*"introduce support instead of customer care, in account, so support
+will have a channel link for WhatsApp and customer service email...
+so it will be same on the home so it should remain as it is so email
+will be put so that when one taps support on home he goes to mail,
+and when one comes in account under support he sees channel link and
+support email plus working hours down."* Two destinations behind one
+label, deliberately:
+- **New setting**: `supportEmail` (server.js `DEFAULT_SETTINGS`),
+  validated as a genuine email address before save -- same XSS class
+  as the existing `SETTINGS_URL_FIELDS` (rendered into
+  `href="mailto:${esc(...)}"`, and `esc()` doesn't touch URI schemes),
+  so a `javascript:...` value can never be saved into it.
+- **Admin panel**: added "Support email" and "Working hours" inputs
+  to the existing "Support contacts" card (`supportHours` already
+  existed in `DEFAULT_SETTINGS` from an earlier round but had NO
+  admin input at all -- genuinely unsettable until now).
+- **Home's Support tile**: `openCustomerService()` → `openSupportMail()`,
+  a one-tap `mailto:` straight to the member's mail app. Guards on a
+  blank `supportEmail` with the same "not set up yet" notify pattern
+  the old function used.
+- **Account's "Customer Support" row**: renamed to just "Support"
+  (matching Home's label) and repointed to a new `openSupportSheet()`
+  -- WhatsApp channel link (`s.whatsappGroup`, already URL-validated
+  server-side) + the support email as a tappable `mailto:` link +
+  working hours at the bottom, shown only when the admin actually set
+  one. Deliberately leaner than the pre-existing (already-unreachable
+  from any menu before this round) `openHelpSheet()`/"Help Centre" --
+  that one's 4-button-plus-banner design is a different, bigger
+  feature nobody asked to touch here, so it and its
+  `/public/help-banner` backing were left exactly as they were.
+- **Removed**: `customerServiceUrl()`/`openCustomerService()` --
+  both callers moved to the functions above, leaving zero callers.
+  Deleted rather than left as dead code, same policy this session
+  already applied to `fmtUGX2()`.
+
+`node -c` clean on `server.js` and `user-src/original_module.js`.
+Admin script syntax-checked via the same extraction `build-admin.js`
+uses. `npm run test:audit` passes in full (including the 3 new tests
+from the Codex commit). Verified live in headless Chromium against
+the real built `user/` bundle: `openSupportMail()` shows the correct
+"not set up yet" notify when `supportEmail` is blank; `openSupportSheet()`
+renders title "Support" with the WhatsApp link, the `mailto:` email
+link, and the working-hours text all present when set; Home's
+Support tile's rendered `onclick` is `openSupportMail()`; the Account
+row's rendered label is "Support" (not "Customer Support") with
+`onclick="openSupportSheet()"`. `build-core.js`/`build-admin.js` both
+"round-trip OK". `user/sw.js` bumped `v197` → `v198` (Codex's two
+commits had already carried it to v197), `admin/sw.js` bumped `v47`
+→ `v48`.

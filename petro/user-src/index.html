@@ -390,7 +390,15 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .p-stat{background:var(--snow-green-soft);border-radius:var(--r-ctl);padding:8px 6px;text-align:center;}
 .p-stat.warm{background:var(--snow-wine-soft);}
 .p-stat .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);font-weight:600;}
-.p-stat .v{font-size:16px;font-weight:700;color:var(--snow-ink);margin-top:2px;font-family:var(--number-font,inherit);white-space:nowrap;}
+/* Owner: "make sure those boxes can withstand figures ie of 7 characters."
+   Verified live (headless Chromium, real card width, up to 9-digit UGX
+   values at 320px) that these already hold a genuinely large figure
+   without visibly overflowing -- but white-space:nowrap had no overflow
+   fallback at all, so a truly extreme value (or a device zoomed in) would
+   have had nowhere to go but spill past the card edge. overflow:hidden +
+   ellipsis is a pure safety net: it changes nothing for any value that
+   already fits, which every real one does. */
+.p-stat .v{font-size:16px;font-weight:700;color:var(--snow-ink);margin-top:2px;font-family:var(--number-font,inherit);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .p-card .p-cta{width:100%;height:44px;padding:0;font-size:16px;letter-spacing:.04em;border-radius:var(--r-ctl);}
 .product-card__stats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:10px 16px;}
 .product-card__cta{width:100%;min-height:44px;margin-top:16px;border-radius:var(--r-ctl);font-size:14px;}
@@ -1101,6 +1109,18 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .dep-chips{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 30px;}
 .dep-chip{flex:0 0 auto;text-align:center;padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;border:1.5px solid var(--snow-border);background:transparent;color:var(--snow-ink);font-family:inherit;box-shadow:none;transition:background .15s,border-color .15s,color .15s;}
 .dep-chip.sel{background:var(--snow-wine);color:#fff;border-color:var(--snow-wine);box-shadow:none;font-weight:700;}
+/* Owner: "why did you put lines instead of tabs, l nolonger need chipz
+   designs." The Deposit method row (Mobile Money / USDT / Card) reused
+   .statement-tabs -- a bare bottom-border underline, the exact bordered-
+   line look Chipz used for its own tab rows. Given its own pill-shaped
+   buttons instead, matching .dep-chip right above (already redone from
+   the same underline-to-pill complaint about the amount chips) rather
+   than inventing a third tab style for one sheet. Kept its own class,
+   not a restyle of .statement-tabs itself -- that class is still Records'
+   real tab row, a separate screen nobody asked to change here. */
+.dep-method-tabs{display:flex;gap:8px;margin-bottom:18px;}
+.dep-method-tabs button{flex:1;text-align:center;padding:10px 6px;border-radius:999px;font-weight:600;font-size:13px;border:1.5px solid var(--snow-border);background:transparent;color:var(--snow-ink);font-family:inherit;transition:background .15s,border-color .15s,color .15s;}
+.dep-method-tabs button.on{background:var(--snow-wine);color:#fff;border-color:var(--snow-wine);font-weight:700;}
 .dep-phone{display:flex;align-items:center;height:58px;border-radius:0;overflow:visible;border:0;border-bottom:1.6px solid var(--snow-border);margin-bottom:8px;background:transparent;}
 .dep-phone:focus-within{border-bottom-color:var(--snow-wine);}
 .dep-phone .prefix{background:transparent;color:var(--snow-ink);font-weight:700;display:flex;align-items:center;padding:0 12px 0 0;font-size:15px;flex-shrink:0;border-right:1px solid var(--snow-border);}
@@ -2074,6 +2094,7 @@ body.deposit-status-open .bottom-nav{display:none;}
 .sheet-body .dep-phone input,
 .sheet-body .dep-phone .prefix,
 .sheet-body .dep-chip,
+.sheet-body .dep-method-tabs button,
 .sheet-body .wit-bal .val,
 .sheet-body .wit-amt input,
 .sheet-body .wit-pw input,
@@ -2539,7 +2560,7 @@ html,body,#app{overscroll-behavior-y:none;}
 .asset-name{font-size:16px;line-height:1.24;margin-bottom:11px;}
 .asset-stats{gap:10px 12px;margin-bottom:14px;flex:1;align-content:start;}
 .asset-stats span{display:block;font-size:10.5px;line-height:1.15;}
-.asset-stats b{display:block;font-size:13px;line-height:1.2;margin:3px 0 0;white-space:nowrap;}
+.asset-stats b{display:block;font-size:13px;line-height:1.2;margin:3px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .asset-row .p-cta{height:44px;font-size:14px;}
 
 </style>
