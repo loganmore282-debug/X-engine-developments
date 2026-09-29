@@ -5345,6 +5345,27 @@ which a Claude session can do (no SSH out)**:
    `HTTP/2 200`) and that `https://admin.petro-cchnug.com/` no longer
    resolves once its DNS record is removed.
 
-None of this has been confirmed live as of this entry -- the repo
-side (template + CORS allowlist) is done and pushed, the VPS side is
-the owner's next step.
+**Confirmed live, same session**: the owner ran all four VPS steps.
+Certbot issued a fresh certificate as a new lineage
+(`api.petro-cchnug.com-0001`, since the domain set changed from the
+old one) rather than expanding the original -- expected, not an
+error -- and deployed it to all three server blocks itself
+("Successfully deployed certificate for api./app./qumx.petro-cchnug.com").
+`curl -I` against all three subdomains returned `HTTP/2 200`. The old
+`admin` DNS A record and the now-orphaned original certificate
+(`certbot delete --cert-name api.petro-cchnug.com`, the one without
+the `-0001` suffix) were both removed afterward -- `admin.petro-cchnug.com`
+no longer resolves to anything. Also confirmed the day's earlier
+scraping/injection hardening (Follow-up 33 -- `server_tokens off`,
+the admin-login rate-limit zone, `X-Robots-Tag`/`robots.txt`) is part
+of this same live config, since it was regenerated from the same
+updated template in the same pass.
+
+The three real, live URLs as of this entry:
+- Member app: `https://app.petro-cchnug.com`
+- Admin panel: `https://qumx.petro-cchnug.com`
+- Backend API: `https://api.petro-cchnug.com` (not meant to be
+  browsed directly -- both apps talk to it, and it now rejects casual
+  discovery via `X-Robots-Tag`/`robots.txt`, though see Follow-up 34's
+  own note that this is not real access control, only Firebase-token
+  verification and the money-crediting re-check logic are).
