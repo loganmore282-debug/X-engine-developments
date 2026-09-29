@@ -1524,6 +1524,11 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    ("Referral code" vs "(optional)") was ever visible. Restored under the
    referral field. */
 .af-reg-referral-hint{margin:-8px 0 14px;font-size:12px;line-height:1.4;color:rgba(255,255,255,.62);}
+/* Forgot Password's support-contact state, shown instead of the OTP/
+   password form when otpVerificationEnabled is off -- same white-on-photo
+   palette as every other auth-screen line, sized for being the main
+   content of that state rather than a small hint under a field. */
+.af-otp-support-msg{margin:0 0 20px;font-size:14px;line-height:1.55;color:rgba(255,255,255,.82);text-align:center;}
 .af-forgot a{color:rgba(255,255,255,.85);text-decoration:none;font-weight:600;}
 .af-btn-v2{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--petro-grad);
   color:#fff;border:0;border-radius:var(--r-ctl);height:54px;font:inherit;font-size:16px;font-weight:700;
@@ -2913,7 +2918,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
           <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
-        <div class="af-v2 with-btn">
+        <div class="af-v2 with-btn" id="regOtpRow">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
           <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code">
           <button class="af-inline-btn" id="regSendOtpBtn" onclick="doRegSendOtp()">Send Code</button>
@@ -2953,26 +2958,38 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
           <h1>Reset your password</h1>
           <p>Follow the steps below to regain access to your account.</p>
         </div>
-        <div class="af-v2">
-          <span class="af-prefix" id="forgotDial">+256</span>
-          <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+        <div id="forgotFormGroup">
+          <div class="af-v2">
+            <span class="af-prefix" id="forgotDial">+256</span>
+            <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          </div>
+          <div class="af-v2 with-btn">
+            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
+            <input id="forgotOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code">
+            <button class="af-inline-btn" id="forgotSendOtpBtn" onclick="doForgotSendOtp()">Send Code</button>
+          </div>
+          <div class="af-v2">
+            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+            <input id="forgotPassword" type="password" placeholder="New password" autocomplete="new-password">
+            <button class="af-eye" onclick="togglePw('forgotPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <div class="af-v2">
+            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+            <input id="forgotPassword2" type="password" placeholder="Confirm new password" autocomplete="new-password">
+            <button class="af-eye" onclick="togglePw('forgotPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <button class="af-btn-v2" id="forgotSubmitBtn" onclick="doForgotSubmit()">Reset Password</button>
         </div>
-        <div class="af-v2 with-btn">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
-          <input id="forgotOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code">
-          <button class="af-inline-btn" id="forgotSendOtpBtn" onclick="doForgotSendOtp()">Send Code</button>
+        <!-- Shown instead of the form above when the admin has OTP
+             verification turned off (STATE.settings.otpVerificationEnabled
+             === false, see applyOtpVerificationUi() in original_module.js)
+             -- without OTP there is no self-service way to prove who is
+             asking for a password reset, so this routes to a human instead
+             of pretending self-service still works. -->
+        <div id="forgotSupportGroup" style="display:none;">
+          <p class="af-otp-support-msg">Password reset needs a quick check from our team right now. Contact support and we'll help you back in.</p>
+          <a class="af-btn-v2" id="forgotSupportLink" href="#" style="display:flex;align-items:center;justify-content:center;text-decoration:none;">Email Support</a>
         </div>
-        <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="forgotPassword" type="password" placeholder="New password" autocomplete="new-password">
-          <button class="af-eye" onclick="togglePw('forgotPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        </div>
-        <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="forgotPassword2" type="password" placeholder="Confirm new password" autocomplete="new-password">
-          <button class="af-eye" onclick="togglePw('forgotPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        </div>
-        <button class="af-btn-v2" id="forgotSubmitBtn" onclick="doForgotSubmit()">Reset Password</button>
         <p class="af-forgot after-btn"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
       </div>
     </div>

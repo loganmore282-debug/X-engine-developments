@@ -2909,7 +2909,9 @@ async function renderSettings(){
       <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Top Up, Cash Out, Wallet and other inner pages. Authentication screens are unchanged.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before cashing out</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>Require OTP to add a payout account</b> <span class="muted">(off by default)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>OTP verification (registration, reset, add wallet)</b> <span class="muted">(off: code fields disappear and those flows show a support-contact message instead)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sOtpVerification" ${s.otpVerificationEnabled!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Require OTP to add a payout account</b> <span class="muted">(off by default; ignored while OTP verification above is off)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sBankOtp" ${s.bankOtpRequired===true?'checked':''} style="width:auto"></label></div>
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
            when one tries to withdrawal he sees, that withdrawals start from
@@ -3058,6 +3060,7 @@ async function renderSettings(){
       innerBgOpacity:+$('sInnerBgOpacity').value, innerBgBlur:+$('sInnerBgBlur').value,
       otpDailyLimitRegister:+$('sOtpReg').value, otpDailyLimitReset:+$('sOtpReset').value, otpDailyLimitBank:+$('sOtpBank').value,
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
+      otpVerificationEnabled:$('sOtpVerification').checked,
       bankOtpRequired:$('sBankOtp').checked,
       withdrawWindowEnabled:$('sWitWindow').checked,
       withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,

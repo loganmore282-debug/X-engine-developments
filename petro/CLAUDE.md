@@ -6151,3 +6151,113 @@ round-trip OK, `npm run test:audit` passes in full (163 checks). Live in
 headless Chromium against the real built bundle: `productCtaHtml()`'s
 returned markup and the confirm dialog's rendered button both read "Buy
 Asset", zero page errors. `user/sw.js` bumped `v224` → `v225`.
+
+## Follow-up 43 -- master OTP-verification toggle: off makes registration/reset/bind-wallet OTP disappear completely, replaced by a support-contact message
+
+Owner: *"removed, so also bro l want when l disable otp verification system
+the functions go away completely ie put code field, and on reset it shows
+support email, on payout account it shows support email, so l just toggle
+and system switches."*
+
+**One new setting, `otpVerificationEnabled`** (server.js `DEFAULT_SETTINGS`,
+default `true` -- preserves today's live behavior with zero migration
+needed), deliberately separate from the existing `bankOtpRequired` toggle
+(which only ever gated the wallet-bind OTP step, off by default). This new
+one is a master switch: off means every self-service OTP flow in the app
+disappears at once, not just the wallet one, and it OVERRIDES
+`bankOtpRequired` when the two disagree (off always wins -- there is no
+partial state where OTP is "master-off" but bank-bind OTP is somehow still
+on, since without OTP itself there is no way left to satisfy that
+requirement).
+
+**What "off" actually does, per screen:**
+- **Registration**: the OTP code field (`#regOtpRow`) is gone entirely, no
+  `/auth/otp/verify` call happens, `doRegister()` proceeds straight from
+  phone+password to account creation -- a brand-new account has no existing
+  identity to protect, so there's nothing for OTP to verify.
+- **Forgot Password**: the whole self-service form (`#forgotFormGroup`) is
+  replaced by `#forgotSupportGroup` -- a message plus an "Email Support"
+  mailto link built from the admin's own `supportEmail` setting. There is no
+  substitute identity check for a password reset without OTP, so self-service
+  is refused outright rather than offered with nothing backing it.
+- **Bind Wallet** (`renderWalletSheet()`): the add-wallet form is replaced
+  by a support-contact card (reusing `supportRowHtml()`, the same WhatsApp-
+  Channel/Email-Support row component the Support page already established)
+  whenever there is no wallet yet, or when "+ Add another wallet" would
+  otherwise be tapped -- that button itself is hidden when the toggle is
+  off. Already-saved wallets still list and delete completely normally
+  either way; only ADDING a new one needs the identity check.
+
+**Client** (`user-src/original_module.js`/`index.html`): new
+`otpVerificationEnabled()` helper (mirrors `referralIsRequired()`'s own
+"default true before settings load" pattern -- a slow/failed settings fetch
+can never silently disable a security step) and `applyOtpVerificationUi()`,
+wired into the existing `loadAuthSettings()` call chain right alongside
+`updateReferralFieldHint()`. New `walletOtpDisabledHtml()` builds the
+wallet-sheet support card. `index.html` gained `id="regOtpRow"` on the
+registration OTP row and a restructured Forgot Password pane
+(`#forgotFormGroup`/`#forgotSupportGroup` siblings, "Back to Log In" kept
+outside both so it's always visible), plus one new CSS rule
+(`.af-otp-support-msg`).
+
+**A real regression found and fixed during this round's own verification,
+not shipped blind**: `bootFromNetwork()` used
+`!!window._pendingRegOtpTicket` as its signal for "this boot is for a
+registration that just happened in this tab" -- driving both a fast-path
+optimization (skip a doomed-to-fail `/account` call right after signup) and
+the `signupFlow` flag that decides whether the toast says "Registration
+successful" or "Login successful". With the master toggle off, that ticket
+is always `null` (no `/auth/otp/verify` call ever happens), so a fresh
+registration would have silently lost the fast path and shown "Login
+successful" instead of "Registration successful" -- found by reading the
+full `doRegister()` → `bootFromNetwork()` chain end to end during this
+round's verification, not reported by the owner. Fixed by switching both
+to `window._pendingRegPhone`, which `doRegister()` already sets
+unconditionally right before Firebase account creation, regardless of the
+OTP toggle.
+
+**Server** (`server.js`): `otpVerificationEnabled: true` added to
+`DEFAULT_SETTINGS` and `SETTINGS_BOOLEAN_FIELDS`. `/auth/otp/send` now
+refuses (503, `OTP_DISABLED`) for every purpose when the master toggle is
+off -- defense in depth, since none of the three flows have a UI entry
+point left to reach it, but the server should not rely on the client alone
+never calling it directly. `/register` only demands a valid `otpTicket`
+when the toggle is on (unchanged when it's off -- the same idempotent
+"already registered" short-circuit above it is untouched). `/auth/reset/
+confirm` refuses outright (403, `OTP_DISABLED`) with a support-contact
+message when off, before ever touching a ticket. `/bank/save` refuses
+outright (403, `OTP_DISABLED`) when off, checked BEFORE the existing
+`bankOtpRequired` branch so the master switch genuinely overrides it, not
+just usually agrees with it.
+
+**Admin panel** (`admin-src/index.html`): new "OTP verification
+(registration, reset, add wallet)" toggle in Rates & limits, directly above
+the existing "Require OTP to add a payout account" row with an updated
+helper line ("ignored while OTP verification above is off") so the
+relationship between the two is visible in the UI, not just in a code
+comment. Wired into the existing `saveRates` handler's payload.
+
+**Verified**: `node -c user-src/original_module.js`, `node --check
+server.js`, `node build-core.js` + `node build-admin.js` (both round-trip
+OK -- ran twice, the second time after the `bootFromNetwork()` fix landed).
+`npm run test:audit` passes in full (163 checks, exit 0), both before and
+after the fix. Live in headless Chromium against the real built
+`user/index.html`: with the toggle on, `#regOtpRow`/`#forgotFormGroup` are
+visible and `#forgotSupportGroup` is hidden, and the wallet sheet renders
+the real add-wallet form; with it off, `#regOtpRow`/`#forgotFormGroup` are
+hidden and `#forgotSupportGroup` renders with a working `mailto:` link
+built from a mock `supportEmail`, and the wallet sheet renders the
+WhatsApp/email support card instead of the form -- zero page errors in
+either state. Live in headless Chromium against the real
+`admin-src/index.html` (not the obfuscated build, same precedent as
+earlier admin-panel rounds): `switchTab('settings')` with a mocked
+`otpVerificationEnabled:false` response correctly renders `#sOtpVerification`
+unchecked alongside `#sBankOtp` checked, zero page errors. `user/sw.js`
+bumped `v225` → `v226`, `admin/sw.js` bumped `v57` → `v58`.
+
+**Not yet addressed**: the same message's separate complaint, "download
+statement takes long yet we are using a VPS" -- Follow-up 28 already fixed
+one real inefficiency in this exact route (serial reads → parallel, the
+audit-log write made fire-and-forget); this needs fresh investigation for
+what else might still be slow, not an assumption that the earlier fix was
+insufficient.

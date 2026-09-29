@@ -1797,9 +1797,12 @@ window.doRegister = async function(){
   // Petro makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
-  if (!window._regOtp.otpId || window._regOtp.phone !== phone)
-    return regError('Please tap Send Code first.');
-  if (!/^\d{6}$/.test(code)) return regError('Enter the 6-digit verification code sent to your phone.');
+  const otpOn = otpVerificationEnabled();
+  if (otpOn) {
+    if (!window._regOtp.otpId || window._regOtp.phone !== phone)
+      return regError('Please tap Send Code first.');
+    if (!/^\d{6}$/.test(code)) return regError('Enter the 6-digit verification code sent to your phone.');
+  }
   if (!pass || pass.length < 6) return regError('Password must be at least 6 characters.');
   if (pass !== pass2) return regError('The two passwords do not match.');
   // Required or not is the SERVER's call (settings.referralRequired), which
@@ -1810,11 +1813,18 @@ window.doRegister = async function(){
   if (!referral && referralIsRequired())
     return regError('A referral code is required to sign up. Ask the person who invited you for theirs.');
   regError('');
-  setBtnLoading('regBtn', true, 'Register', 'Verifying code…');
-  if (!window._regOtp.ticket) {
-    const v = await post('/auth/otp/verify', { otpId: window._regOtp.otpId, code });
-    if (v.status !== 'success') { setBtnLoading('regBtn', false, 'Register'); return regError(v.message || 'Incorrect verification code.'); }
-    window._regOtp.ticket = v.ticket;
+  // Owner: "when l disable otp verification system the functions go away
+  // completely" -- with the toggle off, registration skips straight to
+  // account creation, no /auth/otp/verify call and no ticket. The server's
+  // own /register mirrors this (see completeRegistrationCore()'s caller):
+  // it only demands otpTicket when settings.otpVerificationEnabled is true.
+  if (otpOn) {
+    setBtnLoading('regBtn', true, 'Register', 'Verifying code…');
+    if (!window._regOtp.ticket) {
+      const v = await post('/auth/otp/verify', { otpId: window._regOtp.otpId, code });
+      if (v.status !== 'success') { setBtnLoading('regBtn', false, 'Register'); return regError(v.message || 'Incorrect verification code.'); }
+      window._regOtp.ticket = v.ticket;
+    }
   }
   setBtnLoading('regBtn', true, 'Register', 'Creating your account…');
   STATE.refCode = referral;
@@ -2297,10 +2307,46 @@ async function loadAuthSettings(){
     if (s && s.status === 'success') { STATE.settings = s.settings || {}; applyRegion(); applyBrandName(); }
   } catch (_) {}
   updateReferralFieldHint();
+  applyOtpVerificationUi();
 }
 function referralIsRequired(){
   const st = STATE.settings || {};
   return st.referralRequired !== false;
+}
+// Owner: "when l disable otp verification system the functions go away
+// completely ie put code field, and on reset it shows support email, on
+// payout account it shows support email, so l just toggle and system
+// switches." One admin setting (settings.otpVerificationEnabled, default
+// true so nothing already live changes behavior until it's actually
+// flipped) governs all three OTP-gated flows at once. Default TRUE before
+// settings load, same reasoning as referralIsRequired() -- a failed
+// settings fetch must never silently turn a security step off.
+function otpVerificationEnabled(){
+  const st = STATE.settings || {};
+  return st.otpVerificationEnabled !== false;
+}
+// Registration is the one flow that just drops its OTP step when the
+// toggle is off (a brand-new account has no existing identity to protect,
+// so "verify the phone number" is a nice-to-have there, not a safeguard) --
+// see doRegister()'s own branch. Reset Password and Bind Wallet are
+// different: both are ways to redirect an ALREADY-registered member's
+// money or access, and OTP is the only thing standing in for "prove this
+// is really the account holder" on either. With it off there is no
+// self-service substitute -- both route to Support instead, which is why
+// this function also drives renderWalletSheet()'s own equivalent branch.
+function applyOtpVerificationUi(){
+  const on = otpVerificationEnabled();
+  const regRow = $('regOtpRow');
+  if (regRow) regRow.style.display = on ? '' : 'none';
+  const formGroup = $('forgotFormGroup'), supportGroup = $('forgotSupportGroup');
+  if (formGroup) formGroup.style.display = on ? '' : 'none';
+  if (supportGroup) supportGroup.style.display = on ? 'none' : '';
+  const link = $('forgotSupportLink');
+  if (link) {
+    const email = String((STATE.settings || {}).supportEmail || '').trim();
+    link.href = email ? 'mailto:' + email : '#';
+    link.textContent = email ? 'Email Support' : 'Contact Support';
+  }
 }
 // Says out loud whether the box must be filled, instead of leaving members
 // to discover it by being rejected. Runs whenever the auth screen paints.
@@ -2568,7 +2614,13 @@ async function registerCurrentUser(pin, phone, otpTicket){
   return reg;
 }
 async function bootFromNetwork(uid){
-  const signupFlow = !!window._pendingRegOtpTicket;
+  // Was `!!window._pendingRegOtpTicket` -- broke the moment OTP verification
+  // could be off (that ticket is always null then, since no /auth/otp/verify
+  // call ever happens). _pendingRegPhone is set unconditionally by
+  // doRegister() right before Firebase account creation, regardless of the
+  // OTP toggle, so it's the correct "did I just register in this tab"
+  // signal for both the fast-path skip below and the signupFlow toast.
+  const signupFlow = !!window._pendingRegPhone;
   let r;
   // subagent-audit-caught: a brand-new registration always paid for a
   // GUARANTEED-to-fail /account call first (the profile doc genuinely
@@ -2583,7 +2635,7 @@ async function bootFromNetwork(uid){
   // already known to fail. Captured into locals and cleared immediately so
   // a later re-login in the same tab session (no page reload) never
   // wrongly takes this shortcut again.
-  if (window._pendingRegOtpTicket) {
+  if (window._pendingRegPhone) {
     const pin = window._pendingRegPin, phone = window._pendingRegPhone, otpTicket = window._pendingRegOtpTicket;
     const reg = await registerCurrentUser(pin, phone, otpTicket);
     if (reg.status !== 'success' && reg.status !== 'already_done') {
@@ -4223,6 +4275,22 @@ function walletPlainRowHtml(w){
     <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button>
   </div>`;
 }
+// Owner: with the master OTP-verification toggle off, self-service wallet
+// binding has no way left to verify it's genuinely the account holder --
+// same reasoning as Reset Password's own support-contact fallback below.
+// Shown in place of the add-wallet form (and the "+ Add another wallet"
+// button never appears either) whenever the toggle is off; already-saved
+// wallets still list/delete normally either way.
+function walletOtpDisabledHtml(){
+  const s = STATE.settings || {};
+  const rows = [];
+  if (s.whatsappGroup) rows.push(supportRowHtml('whatsapp', ICONS.whatsapp, 'WhatsApp Channel', 'Chat with us', s.whatsappGroup));
+  if (s.supportEmail) rows.push(supportRowHtml('mail', ICONS.emailPetro, 'Email Support', s.supportEmail, 'mailto:' + s.supportEmail));
+  return `<div class="reveal-in">
+    <p style="line-height:1.6;color:var(--snow-muted);margin:0 0 18px;">Adding a payout wallet needs a quick check from our team right now. Contact support and we will help you add it.</p>
+    ${rows.join('') || `<p style="line-height:1.6;color:var(--snow-muted);">Contact support for help adding a payout wallet.</p>`}
+  </div>`;
+}
 function renderWalletSheet(){
   const w = currentWallet();
   // Owner: "add all supported banks so withdrawals will also be processed
@@ -4237,10 +4305,18 @@ function renderWalletSheet(){
     // One row per saved wallet, not just the first -- walletPlainRowHtml()'s
     // own delete button already worked per-row, it just never had more than
     // one row to act on before this round. "Add another wallet" reuses the
-    // exact same add-form toggleWalletEdit() already drives.
+    // exact same add-form toggleWalletEdit() already drives -- hidden
+    // entirely when the master OTP toggle is off, since there both a wallet
+    // sheet and it would just land back here anyway.
     const rows = (STATE.bankAccounts || []).map(walletPlainRowHtml).join('');
-    $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + rows
-      + '<button class="btn-bind" type="button" style="margin:6px 0 0;" onclick="toggleWalletEdit(true)">+ Add another wallet</button></div>';
+    const addBtn = otpVerificationEnabled()
+      ? '<button class="btn-bind" type="button" style="margin:6px 0 0;" onclick="toggleWalletEdit(true)">+ Add another wallet</button>'
+      : '';
+    $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + rows + addBtn + '</div>';
+    return;
+  }
+  if (!otpVerificationEnabled()) {
+    $('sheetBody').innerHTML = walletOtpDisabledHtml();
     return;
   }
   // Only prefill when this IS still the old single-wallet "edit my one

@@ -568,6 +568,18 @@ const DEFAULT_SETTINGS = {
   // Default OFF now; an owner who wants that extra step back can switch it
   // on here.
   bankOtpRequired: false,
+  // Owner: "when I disable otp verification system the functions go away
+  // completely" -- one master switch, separate from bankOtpRequired above.
+  // Default ON (today's live behavior: registration/reset/bank-bind OTP all
+  // still work exactly as before). Off means self-service identity
+  // verification is unavailable everywhere it's used: registration skips
+  // the OTP step outright (a brand-new account has no existing identity to
+  // protect), and both Reset Password and Bind Wallet refuse self-service
+  // entirely and point the member at support instead -- there is no
+  // substitute verification step for either of those once OTP is off, so
+  // this deliberately overrides bankOtpRequired rather than layering with
+  // it (off wins).
+  otpVerificationEnabled: true,
   // The hours cash-out is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
@@ -3708,6 +3720,12 @@ app.post('/auth/otp/send', async (req, res) => {
   try {
     const purpose = String(req.body.purpose || '');
     if (!OTP_PURPOSES.has(purpose)) return res.status(400).json({ status: 'error', message: 'Invalid verification purpose' });
+    // Master switch off -- none of the three OTP flows have a UI entry point
+    // left once this is off (see applyOtpVerificationUi()), so refuse here
+    // too rather than trust the client alone to never call this directly.
+    if ((await getSettings()).otpVerificationEnabled === false) {
+      return res.status(503).json({ status: 'error', code: 'OTP_DISABLED', message: 'Verification codes are turned off right now. Contact support for help.' });
+    }
     let phone;
     if (purpose === 'bank') {
       const userId = await verifyAuth(req);
@@ -3792,6 +3810,15 @@ app.post('/auth/otp/verify', async (req, res) => {
 // ticket backs it instead of an owner's say-so.
 app.post('/auth/reset/confirm', async (req, res) => {
   try {
+    // Master switch off -- self-service reset has no substitute identity
+    // check without OTP, so it is refused outright rather than silently
+    // resetting a password with nothing proving who asked. Matches the
+    // client's own applyOtpVerificationUi(), which swaps the whole Forgot
+    // Password form for a support-contact message in this state.
+    const sett = await getSettings();
+    if (sett.otpVerificationEnabled === false) {
+      return res.status(403).json({ status: 'error', code: 'OTP_DISABLED', message: 'Password reset needs a quick check from our team right now. Contact support for help.' });
+    }
     const phone = cleanPhone(req.body.phone || '');
     if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
     const newPassword = String(req.body.newPassword || '');
@@ -3824,8 +3851,16 @@ app.post('/register', async (req, res) => {
     // already succeeded.
     const already = await db.collection('users').doc(userId).get();
     if (!already.exists || !already.data().registrationDone) {
-      const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), phone, 'register', userId);
-      if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
+      // Master switch off -- a brand-new account has no existing identity to
+      // protect, so registration simply skips the OTP step (see
+      // DEFAULT_SETTINGS.otpVerificationEnabled and doRegister()'s own
+      // matching client-side branch). On, unchanged: a valid ticket is
+      // required exactly as before.
+      const sett = await getSettings();
+      if (sett.otpVerificationEnabled !== false) {
+        const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), phone, 'register', userId);
+        if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
+      }
     }
     const result = await completeRegistrationCore(userId, req.body.referralCode, req.body.pin, phone);
     const { referrerId, ...memberBody } = result.body;
@@ -6559,7 +6594,18 @@ app.post('/bank/save', async (req, res) => {
     // the new account being added and could belong to someone else
     // entirely (a family member's mobile money, for instance). Optional
     // now, per the owner -- off by default (see DEFAULT_SETTINGS.bankOtpRequired).
-    if ((await getSettings()).bankOtpRequired) {
+    const walletSettings = await getSettings();
+    // The master switch (see DEFAULT_SETTINGS.otpVerificationEnabled)
+    // overrides bankOtpRequired entirely when it's off -- there is no
+    // substitute identity check once OTP itself is unavailable, so
+    // self-service wallet binding is refused outright rather than silently
+    // falling back to "no verification at all". Matches the client's own
+    // renderWalletSheet(), which stops offering the add-wallet form the
+    // instant this setting is off.
+    if (walletSettings.otpVerificationEnabled === false) {
+      return res.status(403).json({ status: 'error', code: 'OTP_DISABLED', message: 'Adding a payout wallet needs a quick check from our team right now. Contact support for help.' });
+    }
+    if (walletSettings.bankOtpRequired) {
       const ownPhone = cleanPhone((uSnap.exists && uSnap.data().phone) || '');
       const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), ownPhone, 'bank');
       if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify with the code sent to your phone first.' });
@@ -7396,7 +7442,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // near this), not a business one -- same reasoning as withdrawMultiple.
   usdtRate: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled', 'otpVerificationEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
