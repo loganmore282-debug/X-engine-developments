@@ -849,12 +849,17 @@ async function getHelpBanner() {
 // banner2/banner3 back the Home screen's multi-slide carousel (owner:
 // "those slide images will be uploaded from admin panel") -- slide 1 is the
 // already-existing 'home' banner (banners/home doc, /admin/banner/set,
-// which also accepts video), not duplicated here. homefooter is the static
-// "Clean Energy Stronger Communities"-style image at the bottom of Home.
-// Both reuse this exact already-built upload mechanism rather than adding a
-// new one; see CLAUDE.md's "Design system" section.
-// profilecard is the Account screen's refinery-photo header background
-// (owner's mockup) -- same reused mechanism as every slot before it.
+// which also accepts video), not duplicated here. Both reuse this exact
+// already-built upload mechanism rather than adding a new one; see
+// CLAUDE.md's "Design system" section.
+//
+// 'homefooter' (the "Clean Energy Stronger Communities"-style image at the
+// bottom of Home) and 'profilecard' (the Account screen's refinery-photo
+// header background) REMOVED (owner, circling both upload rows directly:
+// "the headers l meant were those ones, and account screen header photos
+// those were what l meant") -- along with their admin upload rows and every
+// client render site (Home's footer image, the Account profile card's
+// background image).
 //
 // 'profilegif' and 'authcard' REMOVED (owner: "every idle code which has no
 // function it is really doing should be removed") -- both were confirmed
@@ -873,7 +878,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const PETRO_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'homefooter', 'profilecard', 'checkinbanner'];
+const PETRO_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner'];
 const _petroImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getPetroImage(slot) {
@@ -3425,12 +3430,12 @@ app.get('/public/announcement-image', async (req, res) => {
 // Petro artwork needed by the current member surfaces, fetched together.
 app.get('/public/petro-images', async (req, res) => {
   try {
-    const [logo, authhero, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
+    const [logo, authhero, banner2, banner3, checkinbanner] = await Promise.all([
       getPetroImage('logo'),
       getPetroImage('authhero'), getPetroImage('banner2'),
-      getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'), getPetroImage('checkinbanner'),
+      getPetroImage('banner3'), getPetroImage('checkinbanner'),
     ]);
-    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, homefooter, profilecard, checkinbanner }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -7505,12 +7510,12 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/petro-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
+    const [logo, authhero, banner2, banner3, checkinbanner] = await Promise.all([
       getPetroImage('logo'),
       getPetroImage('authhero'), getPetroImage('banner2'),
-      getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'), getPetroImage('checkinbanner'),
+      getPetroImage('banner3'), getPetroImage('checkinbanner'),
     ]);
-    res.json({ status: 'success', logo, authhero, banner2, banner3, homefooter, profilecard, checkinbanner });
+    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/petro-image/set', async (req, res) => {

@@ -2102,15 +2102,8 @@ function applyBootArtwork(ai, ci){
     (ci.status === 'success' && ci.banner2) ? ci.banner2 : null,
     (ci.status === 'success' && ci.banner3) ? ci.banner3 : null,
   ].filter(Boolean);
-  // Static image at the very bottom of Home (the mockup's "Clean Energy
-  // Stronger Communities" band). Optional -- Home just renders nothing here
-  // when it's unset.
-  STATE.homeFooterBanner = (ci.status === 'success' && ci.homefooter) ? ci.homefooter : null;
   // Optional admin-managed artwork behind the Daily Check-in sheet.
   STATE.checkinBanner = (ci.status === 'success' && ci.checkinbanner) ? ci.checkinbanner : null;
-  // Account screen's header background (the mockup's refinery photo behind
-  // the phone/ID card).
-  STATE.profileCard = (ci.status === 'success' && ci.profilecard) ? ci.profilecard : null;
   // The Login / Sign Up backdrop (single full-bleed photo -- see
   // applyAuthBackgrounds()'s own comment on why there is only one now).
   STATE.authHeroImage = (ci.status === 'success' && ci.authhero) ? ci.authhero : null;
@@ -3236,7 +3229,6 @@ ${homeBannerBlockHtml(st)}
   <h2>My Assets</h2>
   <div id="myAssetsInner">${myAssetsInnerHtml()}</div>
 </section>
-${STATE.homeFooterBanner ? `<img class="home-footer-banner" src="${esc(STATE.homeFooterBanner)}" alt="" onerror="this.remove()">` : ''}
 <div style="height:8px;"></div>`;
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   startHomeCarousel();
@@ -4034,11 +4026,13 @@ function settingRowHtml(icon, title, sub, onclick){
 window.openSecuritySettingsSheet = function(){
   openChangeLoginPasswordSheet();
 };
-// Rebuilt to the owner's Account mockup -- a profile card over an
-// admin-uploadable refinery photo (new 'profilecard' image slot, same
-// PETRO_IMAGE_SLOTS mechanism as logo/authhero/etc.) and a plain row list
-// with coloured-circle SVG icons replacing the old settings list's coloured
-// squares + Petro raster PNGs.
+// Rebuilt to the owner's Account mockup -- a profile card over a refinery
+// photo (the account screen's own 'profilecard' image slot was removed by
+// the owner -- see server.js's PETRO_IMAGE_SLOTS comment -- so the card
+// falls back to the shared auth-hero photo via .acct-card's own
+// --acct-card-image default) and a plain row list with coloured-circle SVG
+// icons replacing the old settings list's coloured squares + Petro raster
+// PNGs.
 //
 // Deliberately NOT built into this round: a per-member profile PHOTO upload
 // (the mockup's camera badge) and phone-number editing (the mockup's pencil
@@ -4055,7 +4049,7 @@ async function renderAccount(){
   const html = `
 <div class="account-page" style="padding:0 10px;">
   <div class="member-page-title">Profile</div>
-  <div class="acct-card"${STATE.profileCard ? ` style="--acct-card-image:url('${esc(STATE.profileCard)}')"` : ''}>
+  <div class="acct-card">
     <div class="acct-avatar">
       <span id="accountBrandFallback" class="acct-avatar-fallback" style="display:${STATE.brandLogo ? 'none' : 'flex'}">${ICONS.peopleGroup}</span>
       <img id="accountBrandLogo" class="acct-avatar-logo" alt=""${STATE.brandLogo ? ` src="${esc(STATE.brandLogo)}"` : ''} style="display:${STATE.brandLogo ? 'block' : 'none'}" onerror="this.style.display='none';var f=document.getElementById('accountBrandFallback');if(f)f.style.display='flex'">

@@ -2661,8 +2661,6 @@ async function renderBanners(){
   const authHeroImage = cir.authhero||'';
   const homeSlide2Image = cir.banner2||'';
   const homeSlide3Image = cir.banner3||'';
-  const homeFooterImage = cir.homefooter||'';
-  const profileCardImage = cir.profilecard||'';
   const logoImage = cir.logo||'';
   const checkinBannerImage = cir.checkinbanner||'';
   const appIconImage = bar.appIcon||'';
@@ -2707,17 +2705,6 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload slide 3 image<input type="file" id="homeSlide3File" accept="image/*" hidden></label>
     </div>
 
-    <h2 class="sec">Home footer banner</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">Optional image at the very bottom of Home. Hidden entirely when not set.</p>
-      <div class="banner-row">
-        ${homeFooterImage?`<img class="img-thumb" src="${esc(homeFooterImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${homeFooterImage?'Custom image':'<span class="muted">Not set &mdash; hidden</span>'}</div>
-        ${homeFooterImage?`<button class="btn danger sm" id="homeFooterClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeFooterFile" accept="image/*" hidden></label>
-    </div>
-
     <h2 class="sec">Daily Check-in banner</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Optional image shown behind the member's Daily Check-in total and claim button.</p>
@@ -2727,17 +2714,6 @@ async function renderBanners(){
         ${checkinBannerImage?`<button class="btn danger sm" id="checkinBannerClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="checkinBannerFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Account screen header photo</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">Background photo behind the profile card on the Account screen.</p>
-      <div class="banner-row">
-        ${profileCardImage?`<img class="img-thumb" src="${esc(profileCardImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${profileCardImage?'Custom image':'<span class="muted">Not set &mdash; plain card</span>'}</div>
-        ${profileCardImage?`<button class="btn danger sm" id="profileCardClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileCardFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Login &amp; Sign Up background</h2>
@@ -2849,9 +2825,7 @@ function wireBannerHandlers(){
   wirePetroImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Background image saved, live on Log In and Sign Up', 'Background image removed');
   wirePetroImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
   wirePetroImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
-  wirePetroImageSlot('homefooter', 'homeFooterFile', 'homeFooterClear', 'Footer banner saved, live on Home', 'Footer banner removed');
   wirePetroImageSlot('checkinbanner', 'checkinBannerFile', 'checkinBannerClear', 'Check-in banner saved, live for every user', 'Check-in banner removed');
-  wirePetroImageSlot('profilecard', 'profileCardFile', 'profileCardClear', 'Account header photo saved, live for every user', 'Account header photo removed');
   const brandLogoFile = $('brandLogoFile');
   if (brandLogoFile) brandLogoFile.addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;

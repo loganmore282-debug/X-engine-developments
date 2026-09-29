@@ -4756,12 +4756,45 @@ everything, so that it is perfect. Also improve smooth navigation."*
   real, measurable cost to first paint -- removing it is a genuine
   speed win toward the "improve speed of everything" ask, not just
   cosmetic.
-- **"Headers remove them"** -- read in context (same sentence as video
-  banner removal, same section of code being edited) as the duplicate
+- **"Headers remove them"** -- first guessed (wrongly) as the duplicate
   `<h2 class="sec">Home banner</h2>` heading bug in admin-src's Home
-  banner panel-card, left over from the video-upload block that sat
-  between the two headings. Fixed by removing the stray duplicate,
-  confirmed by grep that only one "Home banner" heading remains.
+  banner panel-card, left over from the video-upload block that used
+  to sit between the two headings (that duplicate is real and was
+  fixed regardless, confirmed by grep that only one "Home banner"
+  heading remains -- just not what the owner meant). The owner then
+  sent a screenshot of the admin Banners tab with the **"Home footer
+  banner"** and **"Account screen header photo"** upload cards
+  circled directly: *"the headers l meant were those ones, and account
+  screen header photos those were what l meant."* Removed both, end to
+  end, not just the admin UI: the `homefooter`/`profilecard` entries
+  out of `PETRO_IMAGE_SLOTS` (server.js) and both `/public/petro-images`/
+  `/admin/petro-images` `Promise.all` fetches, the two admin panel-cards
+  and their `wirePetroImageSlot(...)` wiring (admin-src), and both
+  client render sites: `STATE.homeFooterBanner`'s `<img
+  class="home-footer-banner">` at the bottom of Home (removed outright,
+  along with its now-dead CSS in both the mobile and desktop rule
+  blocks) and `STATE.profileCard`'s inline `--acct-card-image` override
+  on the Account screen's profile card. The Account card does NOT go
+  blank without it -- `.acct-card`'s own base rule already defaults
+  `--acct-card-image` to `var(--auth-hero-img)` (the same photo Login/
+  Sign Up already use), a fallback this exact CSS block's own comment
+  already documented ("or the signed-in refinery image as its
+  fallback") -- so Account now always shows that shared photo instead
+  of a separately admin-set one, a coherent, already-designed-for
+  outcome, not a regression needing new CSS. Same "actually remove it,
+  not just hide the UI" standard as every other genuine feature reversal
+  in this file (video banner above, LipaPay, Turntable, subdomains,
+  etc.) -- an admin can no longer even attempt to set either slot via
+  the raw API, not just lose the upload button. Verified live in
+  headless Chromium: the Banners tab no longer shows either section or
+  their `homeFooterFile`/`profileCardFile` inputs (their neighbors,
+  Daily Check-in banner and Login & Sign Up background, still do);
+  Home paints with zero `.home-footer-banner` element; the Account
+  card still renders with no inline style (falls through to the CSS
+  default), zero page errors on either bundle. `user/sw.js` bumped
+  `v214` → `v215`, `admin/sw.js` bumped `v53` → `v54` (this correction
+  is its own commit on top of the round above, not folded into it --
+  both source files it touches changed again).
 - **Announcement dialog trigger moved from sheet-close to bottom-nav
   navigation** -- a real reversal of Follow-up 24's own explicit
   mechanism (which reintroduced the dialog specifically firing on
@@ -4866,5 +4899,4 @@ everything, so that it is perfect. Also improve smooth navigation."*
   precedent as Follow-up 24) confirms every renamed label present and
   zero stray "Deposit"/"Withdrawal" text remaining, Messages tab gone
   from the tab bar, zero page errors on either bundle. `user/sw.js`
-  bumped `v213` → `v214`, `admin/sw.js` bumped `v52` → `v53` (both
-  source files this round touched).
+  bumped `v213` → `v214`, `admin/sw.js` bumped `v52` → `v53`.
