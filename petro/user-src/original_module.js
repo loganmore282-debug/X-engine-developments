@@ -4154,9 +4154,9 @@ async function renderAccount(){
     <button class="account-money-action" onclick="openWithdrawSheet()"><span>${suppliedMemberIcon('withdraw')}</span>Cash Out</button>
   </div>
   <div class="account-action-list">
-    ${acctListCardHtml('accountWallet', 'Payout Wallet', 'openWalletSheet()')}
+    ${acctListCardHtml('accountWallet', 'Bind bank card', 'openWalletSheet()')}
     ${acctListCardHtml('accountStatement', 'Transaction Statement', "openTransactionStatement('income')")}
-    ${acctListCardHtml('accountGift', 'Gift Codes', 'openChestSheet()')}
+    ${acctListCardHtml('accountGift', 'Redeem Gift', 'openChestSheet()')}
     ${acctListCardHtml('accountRules', 'Rules and Regulations', 'openRulesSheet()')}
     ${acctListCardHtml('accountSecurity', 'Security Settings', 'openChangeLoginPasswordSheet()')}
     ${acctListCardHtml('support', 'Support', 'openSupportSheet()')}

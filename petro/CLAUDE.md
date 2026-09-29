@@ -6332,3 +6332,25 @@ the `db.js` index addition. No `-src` file was touched this round (this is
 a pure `server.js`/`db.js` change), so no rebuild or `sw.js` bump is
 needed -- it reaches the VPS the normal way, via `git pull` + `pm2 reload`
 (or the auto-deploy webhook, already wired).
+
+## Follow-up 45 -- two Account row labels renamed
+
+Owner: *"change words in account from giftCodes to Redeem Gift, from payout
+wallet to Bind bank card."* Scoped to exactly the two Account screen row
+labels named, both plain string literals in `renderAccount()`'s row list
+(`acctListCardHtml()` calls) -- neither routes through `t()`, so there was
+no i18n table row to update or orphan. Nothing else with either old wording
+was touched (the Gift Codes sheet's own title, the Withdraw sheet's "Bind
+Wallet"/"Manage Wallets" button, the wallet card's "Payout Wallet" kicker)
+-- the owner said "in account", and this file's own standing rule is to
+match a rename's scope to what was actually asked, not sweep every
+occurrence of the old words.
+
+- `'Payout Wallet'` -> `'Bind bank card'` (row that opens `openWalletSheet()`).
+- `'Gift Codes'` -> `'Redeem Gift'` (row that opens `openChestSheet()`).
+
+**Verified**: `node -c user-src/original_module.js`, `node build-core.js`
+round-trip OK, `npm run test:audit` passes in full (163 checks). Live in
+headless Chromium against the real built bundle: `renderAccount()` renders
+both new labels, neither old label survives anywhere in the rendered
+markup, zero page errors. `user/sw.js` bumped `v226` → `v227`.
