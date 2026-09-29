@@ -287,8 +287,8 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
     st = fresh({ wits: [{ id: 'w0', userId: 'u1', status, amount: 20000 }] });
     r = await run(st, REQ);
     ck(r.code === 400 && r.replied.code === 'WITHDRAW_PENDING',
-       `a ${status} cash-out blocks the next (${r.code} ${r.replied && r.replied.code})`);
-    ck(/already have a cash-out/i.test((r.replied || {}).message || ''),
+       `a ${status} withdrawal blocks the next (${r.code} ${r.replied && r.replied.code})`);
+    ck(/already have a withdrawal/i.test((r.replied || {}).message || ''),
        `  and says why: ${(r.replied || {}).message}`);
     ck(st.wits.length === 1 && st.user.walletBalance === 100000,
        '  nothing written, nothing debited');

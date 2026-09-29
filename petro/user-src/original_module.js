@@ -511,7 +511,7 @@ var LANG_PATTERNS = [
   ['Minimum deposit amount: {0}', 'Ssente ezisembayo obutono okuteeka: {0}', 'Kiasi cha chini cha kuweka: {0}', 'Montant minimum de recharge : {0}', 'Ingano ntoya yo kubitsa: {0}', 'Sente ezirikukira obukye okuta: {0}'],
   ['Check In · {0}', 'Okukyalira · {0}', 'Kuhudhuria · {0}', 'Pointage · {0}', 'Kwiyandikisha · {0}', 'Okwoleka · {0}'],
   ['Check in once every day (resets at midnight) to keep your streak and earn {0} each time.', 'Kyalira omulundi gumu buli lunaku (kuddamu ku ttumbi) okukuuma olukalala lwo n’ofune {0} buli mulundi.', 'Hudhuria mara moja kila siku (inarudia usiku wa manane) ili kuendeleza mfululizo wako na kupata {0} kila mara.', 'Pointez une fois par jour (réinitialisé à minuit) pour conserver votre série et gagner {0} à chaque fois.', 'Iyandikishe rimwe ku munsi (bisubirana saa sita z’ijoro) kugira ngo ukomeze urukurikirane rwawe kandi wunguke {0} igihe cyose.', 'Yoleka omurundi gumwe buri izooba (nikugarukamu aha kiro) kurindira orukurato rwaawe kandi otunge {0} buri murundi.'],
-  ['Cash-out time: {0} to {1}.', 'Ebiseera by’okuggyamu ssente: {0} okutuuka {1}.', 'Muda wa kutoa pesa: {0} hadi {1}.', 'Heures de retrait : de {0} à {1}.', 'Igihe cyo kubikuza: {0} kugeza {1}.', 'Obwire bw’okwihamu sente: {0} kuhika {1}.'],
+  ['Withdraw time: {0} to {1}.', 'Ebiseera by’okuggyamu ssente: {0} okutuuka {1}.', 'Muda wa kutoa pesa: {0} hadi {1}.', 'Heures de retrait : de {0} à {1}.', 'Igihe cyo kubikuza: {0} kugeza {1}.', 'Obwire bw’okwihamu sente: {0} kuhika {1}.'],
   ['Amounts must be a multiple of {0} — for example {1}.', 'Omuwendo gulina kuba gwa {0} — okugeza {1}.', 'Kiasi kinapaswa kuwa kizidishi cha {0} — kwa mfano {1}.', 'Les montants doivent être un multiple de {0} — par exemple {1}.', 'Ingano igomba kuba umubare ushobora kugabanywa na {0} — urugero {1}.', 'Omuhendo gushemereire kuba gwa {0} — nk’oku {1}.'],
   ['Withdrawal amounts should be between {0} and {1}.', 'Ssente z’okuggyamu zirina kuba wakati wa {0} ne {1}.', 'Kiasi cha kutoa kinapaswa kuwa kati ya {0} na {1}.', 'Les montants de retrait doivent être compris entre {0} et {1}.', 'Ingano yo kubikuza igomba kuba iri hagati ya {0} na {1}.', 'Sente z’okwihamu zishemereire kuba hagati ya {0} na {1}.'],
   ['One cash-out at a time — once it is paid you can request the next. Up to {0} per day.', 'Okuggyamu kumu kkumu — nga kusasuddwa osobola okusaba okuddako. Okutuuka ku {0} olunaku.', 'Kutoa pesa moja kwa wakati — baada ya kulipwa unaweza kuomba kingine. Hadi {0} kwa siku.', 'Un retrait à la fois — une fois payé, vous pouvez demander le suivant. Jusqu’à {0} par jour.', 'Kubikuza rimwe gusa — iyo bimaze kwishyurwa ushobora gusaba ibikurikira. Kugeza kuri {0} ku munsi.', 'Okwihamu rumwe — ku kushashwirwe nobaasa kushaba okundi. Kuhika aha {0} aha izooba.'],
@@ -531,9 +531,9 @@ var LANG_PATTERNS = [
   // verbatim.
   ['Check-in successful ✓', 'Okukyalira kugenze bulungi ✓', 'Kuhudhuria kumefanikiwa ✓', 'Pointage réussi ✓', 'Kwiyandikisha byagenze neza ✓', 'Okwoleka kugyenzire gye ✓'],
   ['Registration successful ✓', 'Okwewandiisa kugenze bulungi ✓', 'Usajili umefanikiwa ✓', 'Inscription réussie ✓', 'Kwiyandikisha byagenze neza ✓', 'Okuhandiikwa kwagenze gye ✓'],
-  ['Cash-out must be a multiple of {0}. Try {1} or {2}.', 'Okuggyamu kulina kuba kwa {0}. Gezaako {1} oba {2}.', 'Kutoa pesa lazima kiwe kizidishi cha {0}. Jaribu {1} au {2}.', 'Le retrait doit être un multiple de {0}. Essayez {1} ou {2}.', 'Kubikuza bigomba kuba umubare ushobora kugabanywa na {0}. Gerageza {1} cyangwa {2}.', 'Okwihamu kushemereire kuba kwa {0}. Gyezaho {1} nari {2}.'],
-  ['Cash-out is open from {0} to {1}. Please come back then.', 'Okuggyamu ssente kuggulwa okuva ku {0} okutuuka {1}. Ddamu okomewo mu budde obwo.', 'Kutoa pesa kunapatikana kuanzia {0} hadi {1}. Tafadhali rudi wakati huo.', 'Le retrait est ouvert de {0} à {1}. Merci de revenir à ce moment-là.', 'Kubikuza bifungura kuva {0} kugeza {1}. Ongera ugaruke icyo gihe.', 'Okwihamu sente nikwigurwa kuruga aha {0} kuhika {1}. Ogaruke omu bwire obu.'],
-  ['Cash-out of {0} is processing. You will receive {1} after the {2}% charge.', 'Okuggyamu {0} kukolebwako. Ojja kufuna {1} oluvannyuma lw\'ossente z\'obuweereza eza {2}%.', 'Kutoa {0} kunashughulikiwa. Utapokea {1} baada ya ada ya {2}%.', 'Le retrait de {0} est en cours. Vous recevrez {1} après les frais de {2} %.', 'Kubikuza {0} birimo gutunganywa. Uzabona {1} nyuma y\'amafaranga ya serivisi ya {2}%.', 'Okwihamu {0} nikukorwaho. Noija kutunga {1} bwanyima ya sente z\'obuheereza eza {2}%.'],
+  ['Withdraw must be a multiple of {0}. Try {1} or {2}.', 'Okuggyamu kulina kuba kwa {0}. Gezaako {1} oba {2}.', 'Kutoa pesa lazima kiwe kizidishi cha {0}. Jaribu {1} au {2}.', 'Le retrait doit être un multiple de {0}. Essayez {1} ou {2}.', 'Kubikuza bigomba kuba umubare ushobora kugabanywa na {0}. Gerageza {1} cyangwa {2}.', 'Okwihamu kushemereire kuba kwa {0}. Gyezaho {1} nari {2}.'],
+  ['Withdraw is open from {0} to {1}. Please come back then.', 'Okuggyamu ssente kuggulwa okuva ku {0} okutuuka {1}. Ddamu okomewo mu budde obwo.', 'Kutoa pesa kunapatikana kuanzia {0} hadi {1}. Tafadhali rudi wakati huo.', 'Le retrait est ouvert de {0} à {1}. Merci de revenir à ce moment-là.', 'Kubikuza bifungura kuva {0} kugeza {1}. Ongera ugaruke icyo gihe.', 'Okwihamu sente nikwigurwa kuruga aha {0} kuhika {1}. Ogaruke omu bwire obu.'],
+  ['Withdraw of {0} is processing. You will receive {1} after the {2}% charge.', 'Okuggyamu {0} kukolebwako. Ojja kufuna {1} oluvannyuma lw\'ossente z\'obuweereza eza {2}%.', 'Kutoa {0} kunashughulikiwa. Utapokea {1} baada ya ada ya {2}%.', 'Le retrait de {0} est en cours. Vous recevrez {1} après les frais de {2} %.', 'Kubikuza {0} birimo gutunganywa. Uzabona {1} nyuma y\'amafaranga ya serivisi ya {2}%.', 'Okwihamu {0} nikukorwaho. Noija kutunga {1} bwanyima ya sente z\'obuheereza eza {2}%.'],
   ['{0} is now running. You will find it under My Products.', '{0} kitandise. Ojja kukisanga mu Byamaguzi Byange.', '{0} sasa inaendelea. Utaipata chini ya Bidhaa Zangu.', '{0} est maintenant actif. Vous le trouverez dans Mes produits.', '{0} ubu birakora. Uzabisanga muri Ibicuruzwa Byanjye.', '{0} kitandikire. Noija kukishanga omu Byamaguzi Byangye.'],
   ['Already installed, or your browser doesn\'t support installing {0}.', 'Eteekeddwawo dda, oba browser yo teteeka {0}.', 'Tayari imesakinishwa, au kivinjari chako hakiruhusu kusakinisha {0}.', 'Déjà installée, ou votre navigateur ne permet pas d\'installer {0}.', 'Yamaze gushyirwaho, cyangwa mushakisha wawe ntiyemera gushyiraho {0}.', 'Eteirweho, nari browser yaawe teine bushoboorozi bw\'okuteeraho {0}.'],
 ];
@@ -3275,10 +3275,10 @@ function paintHome(){
 ${homeBannerBlockHtml(st)}
 <div class="home-actions">
   <button class="home-action" onclick="openDepositSheet()">
-    <span class="badge">${suppliedMemberIcon('deposit')}</span><span class="lbl">Top Up</span>
+    <span class="badge">${suppliedMemberIcon('deposit')}</span><span class="lbl">Recharge</span>
   </button>
   <button class="home-action" onclick="openWithdrawSheet()">
-    <span class="badge">${suppliedMemberIcon('withdraw')}</span><span class="lbl">Cash Out</span>
+    <span class="badge">${suppliedMemberIcon('withdraw')}</span><span class="lbl">Withdraw</span>
   </button>
   <button class="home-action" onclick="navigatePage('network')">
     <span class="badge">${suppliedMemberIcon('invite')}</span><span class="lbl">Invite</span>
@@ -3297,8 +3297,8 @@ ${homeBannerBlockHtml(st)}
 </div>
 <div class="home-stat-row">
   <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.coinsStack}</span><div class="hs-lbl">Cumulative Earnings</div><div class="mono hs-val hs-gold-txt" id="homeTotalEarned">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Top Ups</div><div class="mono hs-val hs-red-txt" id="homeTotalDeposited">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Cash Outs</div><div class="mono hs-val" id="homeTotalWithdrawn">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Recharges</div><div class="mono hs-val hs-red-txt" id="homeTotalDeposited">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
+  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Withdrawals</div><div class="mono hs-val" id="homeTotalWithdrawn">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
 </div>
 <div class="checkin-card">
   <span class="cic-gift">${ICONS.checkinCalendar}</span>
@@ -3869,7 +3869,7 @@ function taskCenterCardsHtml(type, progress, milestones){
     const current = Number(progress) || 0;
     const targetText = isDeposit ? fmtUGX(target) : String(target);
     const currentText = isDeposit ? fmtUGX(current) : String(current);
-    const label = isDeposit ? 'Team top up' : 'Level 1 active referrals';
+    const label = isDeposit ? 'Team recharge' : 'Level 1 active referrals';
     const button = m.claimed
       ? '<button class="secondary-button" disabled style="min-width:88px;padding:10px 12px;opacity:.72;">Claimed</button>'
       : m.achieved
@@ -3887,9 +3887,9 @@ function taskCenterHtml(t){
   const deposits = Number(t.teamDeposits) || 0;
   return `<section id="taskCenter" class="task-center">
     <div class="task-center-heading"><div><div class="net-section-title">Task Center</div><b>Earn from team progress</b></div></div>
-    <p class="task-center-note">Referral tasks unlock only after your direct Level 1 referral tops up. Every completed task is claimable once.</p>
+    <p class="task-center-note">Referral tasks unlock only after your direct Level 1 referral recharges. Every completed task is claimable once.</p>
     <div class="task-category"><div class="task-category-title">Referral tasks</div><div class="task-center-grid">${taskCenterCardsHtml('count', l1, t.milestones)}</div></div>
-    <div class="task-category"><div class="task-category-title">Top up tasks</div><div class="task-center-grid">${taskCenterCardsHtml('deposit', deposits, t.milestones)}</div></div>
+    <div class="task-category"><div class="task-category-title">Recharge tasks</div><div class="task-center-grid">${taskCenterCardsHtml('deposit', deposits, t.milestones)}</div></div>
   </section>
 `;
 }
@@ -4150,8 +4150,8 @@ async function renderAccount(){
     </div>
   </div>
   <div class="account-money-actions">
-    <button class="account-money-action" onclick="openDepositSheet()"><span>${suppliedMemberIcon('deposit')}</span>Top Up</button>
-    <button class="account-money-action" onclick="openWithdrawSheet()"><span>${suppliedMemberIcon('withdraw')}</span>Cash Out</button>
+    <button class="account-money-action" onclick="openDepositSheet()"><span>${suppliedMemberIcon('deposit')}</span>Recharge</button>
+    <button class="account-money-action" onclick="openWithdrawSheet()"><span>${suppliedMemberIcon('withdraw')}</span>Withdraw</button>
   </div>
   <div class="account-action-list">
     ${acctListCardHtml('accountWallet', 'Bind bank card', 'openWalletSheet()')}
@@ -4499,7 +4499,7 @@ window.deleteWallet = function(id){
     // rule openWalletSheet() itself already uses.
     _walletEditing = !(STATE.bankAccounts || []).length;
     if (_openSheetTitle === 'Wallet') renderWalletSheet();
-    // The Cash Out screen may have had exactly this wallet selected --
+    // The Withdraw screen may have had exactly this wallet selected --
     // clear a now-dangling selection so it falls back to whatever is left.
     if (_witSelectedWalletId === id) _witSelectedWalletId = null;
     return true;
@@ -4556,8 +4556,8 @@ function statementCategoryMatch(cat, t){
   return STATEMENT_INCOME_TYPES.has(t.type);
 }
 function statementDescription(t){
-  if (t.type === 'deposit') return 'Top Up';
-  if (t.type === 'withdraw') return 'Cash Out';
+  if (t.type === 'deposit') return 'Recharge';
+  if (t.type === 'withdraw') return 'Withdraw';
   if (t.type === 'cashback') return 'Daily Income';
   if (t.type === 'commission') return 'Referral Commission';
   if (t.type === 'promocode') return 'Gift Code';
@@ -4633,8 +4633,8 @@ window.openTransactionStatement = async function(cat){
     </div>
     <div class="statement-tabs" id="statementTabs">
       <button data-cat="income" class="${_statementCat==='income'?'on':''}" onclick="switchStatementCategory('income')">Income</button>
-      <button data-cat="deposit" class="${_statementCat==='deposit'?'on':''}" onclick="switchStatementCategory('deposit')">Top Ups</button>
-      <button data-cat="withdraw" class="${_statementCat==='withdraw'?'on':''}" onclick="switchStatementCategory('withdraw')">Cash Outs</button>
+      <button data-cat="deposit" class="${_statementCat==='deposit'?'on':''}" onclick="switchStatementCategory('deposit')">Recharges</button>
+      <button data-cat="withdraw" class="${_statementCat==='withdraw'?'on':''}" onclick="switchStatementCategory('withdraw')">Withdrawals</button>
     </div>
     <div class="statement-head" aria-hidden="true">
       <span>Transaction</span><span>Amount</span>
@@ -5240,7 +5240,7 @@ window.openRulesSheet = async function(){
   await new Promise(resolve => setTimeout(resolve, 100));
   const wrap = $('rulesArticle');
   if (wrap !== article) return;
-  const fallback = s.rulesText || ('Minimum top up ' + fmtUGX(s.minDeposit) + '. Minimum cash out ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed top up: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
+  const fallback = s.rulesText || ('Minimum recharge ' + fmtUGX(s.minDeposit) + '. Minimum withdraw ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed recharge: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
     : [{ type: 'text', text: fallback }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
@@ -5439,7 +5439,7 @@ function openDepositFormSheet(){
     ? `<div class="dep-method-tabs" id="depMethodRow">
       ${methodTabs.map(([k, l]) => `<button type="button" data-dm="${k}" class="${k === 'mm' ? 'on' : ''}" onclick="selectDepMethod('${k}')">${l}</button>`).join('')}
     </div>` : '';
-  openSheet('Top Up', `<div class="reveal-in" style="padding-top:18px;">
+  openSheet('Recharge', `<div class="reveal-in" style="padding-top:18px;">
     ${tabsHtml}
     <div id="depMmPanel">
     <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
@@ -5453,13 +5453,13 @@ function openDepositFormSheet(){
     </div>
     <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>
 
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Top Up</button>
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Recharge</button>
 
     <div class="dep-instr deposit-guide">
       <h3>How to add funds</h3>
       <ol class="deposit-steps">
         <li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
-        <li><b>Approve on your phone</b><span>Tap Confirm Top Up, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
+        <li><b>Approve on your phone</b><span>Tap Confirm Recharge, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
         <li><b>Follow the payment status</b><span>Wait for confirmation. This checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.</span></li>
       </ol>
     </div>
@@ -5485,7 +5485,7 @@ function openDepositFormSheet(){
       <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Submit USDT Payment</button>
 
       <div class="dep-instr deposit-guide">
-        <h3>How USDT top ups work</h3>
+        <h3>How USDT recharges work</h3>
         <ol class="deposit-steps">
           <li><b>Send the exact amount</b><span>Minimum ${fmtUGX(s.minDeposit)}${Number(s.usdtRate) > 0 ? ` (about ${(Number(s.minDeposit) / Number(s.usdtRate)).toFixed(2)} USDT)` : ''}, on the TRC20 (Tron) network only, to the address above.</span></li>
           <li><b>Paste the transaction hash</b><span>Copy the TXID from your wallet app and paste it here, then tap Submit.</span></li>
@@ -5626,7 +5626,7 @@ window.doUsdtDeposit = async function(){
   btn.disabled = true; btn.textContent = 'Checking payment…';
   const r = await post('/deposit/usdt/submit', { amountUsdt: amtUsdt, txid: txid });
   btn.disabled = false; btn.textContent = label;
-  if (r.status !== 'success') return notify(r.message || 'Could not submit your top up');
+  if (r.status !== 'success') return notify(r.message || 'Could not submit your recharge');
 
   if (r.state === 'rejected') {
     // Fields stay exactly as typed -- the member can see what they entered
@@ -6087,11 +6087,11 @@ window.submitDeposit = async function(){
     // optional here.
     r = await post('/deposit/marzpay', { amount, phone });
   } finally {
-    // 'Confirm Top Up', not 'Recharge' -- this restores the button after a
-    // failed attempt, and the label it was restoring belonged to a screen
-    // that no longer exists, so a member whose recharge failed was left
-    // looking at a button that had silently renamed itself.
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Top Up';
+    // Restores the button's resting label after a failed attempt -- must
+    // match whatever submitBtn actually reads at rest (see the sheet's own
+    // button above), or a member whose recharge failed is left looking at a
+    // button that silently renamed itself.
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Recharge';
   }
   if (r && r.stale) return;
   if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start recharge');
@@ -6099,7 +6099,7 @@ window.submitDeposit = async function(){
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
   refreshTransactionsCache().catch(() => {});
-  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Top Up') closeSheet({ fromAction: true });
+  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Recharge') closeSheet({ fromAction: true });
   openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
 };
@@ -6151,7 +6151,7 @@ async function pollDepositStatus(depositId){
 // replacing them out from under someone mid-entry would be a much worse bug
 // than a slightly-stale account list. The background fetch still keeps
 // STATE.bankAccounts current for the NEXT time this sheet opens.
-// Which saved wallet THIS cash-out goes to, now that more than one can
+// Which saved wallet THIS withdrawal goes to, now that more than one can
 // exist. null means "no explicit pick yet" -- witSelectedWallet() then
 // falls back to the first saved one, so a member with only one wallet (the
 // common case) never sees a picker or has to choose anything.
@@ -6167,13 +6167,13 @@ function witSelectedWallet(){
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
   _witSelectedWalletId = null;
-  openSheet('Cash Out', '');
+  openSheet('Withdraw', '');
   // Paint the actual withdrawal page immediately. Waiting for /bank/list
   // left a transparent-looking empty sheet over Home on a cold open.
   paintWithdrawSheet(s);
   const amountField = $('witAmount');
   const r = await api('/bank/list');
-  if (_openSheetTitle !== 'Cash Out' || $('witAmount') !== amountField) return;
+  if (_openSheetTitle !== 'Withdraw' || $('witAmount') !== amountField) return;
   if (r.status === 'success' && Array.isArray(r.accounts)) {
     STATE.bankAccounts = r.accounts;
     // Only the wallet block -- never #witAmount or anything else on the
@@ -6186,14 +6186,14 @@ window.openWithdrawSheet = async function(){
     if (submitBtn) submitBtn.disabled = _withdrawSubmitting;
   }
 };
-// ── The cash-out window, client side ────────────────────────────────────
+// ── The withdraw window, client side ────────────────────────────────────
 // Mirrors server.js's withdrawWindowState()/hhmmLabel(). The SERVER decides;
 // this only tells the member what the rule is before they type an amount, and
 // saves them a round trip when it is plainly shut.
 //
 // What was here before was worse than nothing: a hardcoded "Withdrawal time:
 // 06:00:00 - 17:00:00." that no code enforced, so the app quietly promised
-// hours it did not keep. If the window is off, the line now says cash-out is
+// hours it did not keep. If the window is off, the line now says withdraw is
 // open any time, because that is the truth.
 var _WIT_HHMM = /^(\d{1,2}):(\d{2})$/;
 function witMinutes(v){
@@ -6224,15 +6224,15 @@ function withdrawWindow(s){
 }
 function withdrawHoursLine(s){
   const w = withdrawWindow(s);
-  if (!w.enabled) return 'Cash-out can be requested at any time of day.';
-  return `Cash-out time: ${esc(w.from)} to ${esc(w.to)}.`;
+  if (!w.enabled) return 'Withdraw can be requested at any time of day.';
+  return `Withdraw time: ${esc(w.from)} to ${esc(w.to)}.`;
 }
 // The wallet card, plus a "Switch wallet" picker when more than one saved
 // wallet exists (owner: "make when one can add multiple banks") -- a
 // separate small toggle list under the card, reusing the exact
 // .prov-list/.prov-opt look the provider picker already established,
 // rather than sending the member all the way to the Wallet sheet just to
-// choose which of their OWN already-saved wallets this one cash-out goes
+// choose which of their OWN already-saved wallets this one withdrawal goes
 // to. Isolated in its own function so openWithdrawSheet()'s post-fetch
 // update can repaint only this block, never #witAmount.
 function witWalletBlockHtml(s){
@@ -6288,15 +6288,15 @@ function paintWithdrawSheet(s){
     <div class="wit-fee">Fee: ${fee}%</div>
     <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
 
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Cash Out</button>
+    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
 
     <div class="wit-instr withdrawal-guide">
-      <h3>Before you cash out</h3>
+      <h3>Before you withdraw</h3>
       <dl>
         <div><dt>Receiving account</dt><dd>Check the name and ${w && !isMobileMoneyNetwork(w.network) ? 'bank account number' : 'mobile money number'} above. Your payout goes to this linked wallet.</dd></div>
         <div><dt>Amount to request</dt><dd>Minimum ${fmtUGX(s.minWithdraw)}${Number(s.maxWithdraw) > 0 ? `; maximum ${fmtUGX(s.maxWithdraw)}` : ''}. Review the fee and the amount you will receive before confirming.${Number(s.withdrawMultiple) > 0 ? ` Use a multiple of ${fmtUGX(s.withdrawMultiple)}.` : ''}</dd></div>
         <div><dt>Availability</dt><dd>${withdrawHoursLine(s)}${Number(s.maxWithdrawalsPerDay) > 0 ? ` Up to ${Number(s.maxWithdrawalsPerDay)} requests per day.` : ''}</dd></div>
-        <div><dt>After submitting</dt><dd>Follow the payout in Transaction Statement → Cash Outs. Wait for a pending request to finish before submitting another.</dd></div>
+        <div><dt>After submitting</dt><dd>Follow the payout in Transaction Statement → Withdrawals. Wait for a pending request to finish before submitting another.</dd></div>
       </dl>
     </div>
   </div>`;
@@ -6355,7 +6355,7 @@ window.submitWithdraw = async function(){
   const wMult = Math.max(0, Math.floor(Number((STATE.settings || {}).withdrawMultiple) || 0));
   if (wMult > 0 && amount % wMult !== 0) {
     const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
-    return notify(`Cash-out must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
+    return notify(`Withdraw must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
   }
   // Owner: "I want a notify to appear when one tries to press confirm
   // cashout but when he hasn't saved a bank." Confirm Cash Out used to be a
@@ -6363,19 +6363,19 @@ window.submitWithdraw = async function(){
   // button swallows a tap with zero feedback, so the member saw nothing at
   // all. It's tappable unconditionally now (see paintWithdrawSheet()); this
   // check is what actually tells them why nothing happened.
-  if (!acct) return notify('Please add a payout wallet before cashing out.');
+  if (!acct) return notify('Please add a payout wallet before withdrawing.');
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open)
-    return notify(`Cash-out is open from ${win.from} to ${win.to}. Please come back then.`);
+    return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
   _withdrawSubmitting = true;
   submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
   let r;
   try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone }); }
   finally {
     _withdrawSubmitting = false;
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Cash Out';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Withdraw';
     // A background /bank/list landing mid-request can have repainted the
     // wallet block (see openWithdrawSheet()) and left a DIFFERENT button
     // element in the DOM -- disabled state is only ever about an in-flight
@@ -6384,7 +6384,7 @@ window.submitWithdraw = async function(){
     if (current && current !== submitBtn) current.disabled = false;
   }
   if (r.stale) return;
-  if (r.status !== 'success') return notify(r.message || 'Could not request cash out.');
+  if (r.status !== 'success') return notify(r.message || 'Could not request withdrawal.');
   // Owner: "why when l withdrawal the value still remains???"
   // Because nothing here refreshed it. The SERVER debits immediately --
   // /withdraw/request does walletBalance: increment(-amt) before it answers --
@@ -6409,13 +6409,13 @@ window.submitWithdraw = async function(){
   // On OK, not before: the card carries the amount they will actually receive,
   // and yanking the screen out from under it while they are still reading is
   // how that number gets missed.
-  notify(`Cash-out of ${fmtUGXCents(amount)} is processing. You will receive `
+  notify(`Withdraw of ${fmtUGXCents(amount)} is processing. You will receive `
     + `${fmtUGXCents(net)} after the ${pct}% charge.`,
     () => openBalanceRecordSheet('withdraw'));
-  if (_openSheetTitle === 'Cash Out' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
+  if (_openSheetTitle === 'Withdraw' && $('witSubmitBtn') === submitBtn) closeSheet({ fromAction: true });
   refreshAfterWithdraw();
 };
-// The catch-up after a cash-out, off the path between the server saying yes and
+// The catch-up after a withdrawal, off the path between the server saying yes and
 // the member being told. Not awaited: the balance above is already correct, and
 // nothing on the dialog depends on either of these landing.
 async function refreshAfterWithdraw(){
@@ -6459,7 +6459,7 @@ window.openInvestConfirm = function(tierKey, btn){
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
       if (short) {
         closeConfirm();
-        notify('Insufficient balance, redirecting to top up…', () => openDepositSheet());
+        notify('Insufficient balance, redirecting to recharge…', () => openDepositSheet());
         setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
         return;
       }

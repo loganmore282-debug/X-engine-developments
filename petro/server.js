@@ -580,7 +580,7 @@ const DEFAULT_SETTINGS = {
   // this deliberately overrides bankOtpRequired rather than layering with
   // it (off wins).
   otpVerificationEnabled: true,
-  // The hours cash-out is open. Owner: "one withdrawal time should be
+  // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
   // 5pm."
@@ -590,7 +590,7 @@ const DEFAULT_SETTINGS = {
   // window that does, and a from<=to-only check would have read it as
   // "closed always".
   //
-  // Off by default: a fresh install must not lock cash-out behind hours
+  // Off by default: a fresh install must not lock withdraw behind hours
   // nobody has set yet.
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   // Off by default — approves every pending withdrawal automatically a few
@@ -1119,7 +1119,7 @@ function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function roundWhole(n) { return Math.round(Number(n) || 0); }
 function stripHtml(s) { return String(s || '').replace(/<[^>]*>/g, '').trim(); }
 // The region's own wall clock. Kampala (UTC+3) for Uganda, and whatever
-// utcOffsetMin the admin set for any other country -- a cash-out window of
+// utcOffsetMin the admin set for any other country -- a withdraw window of
 // "09:00 to 17:00" has to mean nine in the morning where the member lives,
 // not nine in Kampala. Named eatNow() still because every caller and every
 // stored date/time field was written against EAT and Uganda is still the
@@ -1222,7 +1222,7 @@ function eatParts(ts) {
   const pad = n => String(n).padStart(2, '0');
   return { day: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, hour: d.getUTCHours() };
 }
-// ── The cash-out window ──────────────────────────────────────────────────
+// ── The withdraw window ──────────────────────────────────────────────────
 // Parsing is hhmmToMin()'s job -- it already existed for the product-schedule
 // helpers and does exactly this, returning null rather than 0 for anything
 // that is not a real time (a bad string coerced to 0 would silently become
@@ -1258,7 +1258,7 @@ function hhmmLabel(v) {
   if (t == null) return '';
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
-// Whether cash-out is open right now, plus the labels the client shows.
+// Whether withdraw is open right now, plus the labels the client shows.
 //
 // The window MAY WRAP past midnight, and that is not an edge case: the
 // owner's own example is 18:00 to 17:00, which wraps and is open for 23 of
@@ -3540,7 +3540,7 @@ function isWeakPin(pin) { return /^(\d)\1{5}$/.test(String(pin || '')); }
 // `regionKey` is stamped here, ONCE, from the region that owns the hostname
 // the account was created on, and is never written again. Everything the
 // member ever sees or is charged -- currency, product prices, minimums,
-// cash-out hours, their number's shape -- is read from it for the life of
+// withdraw hours, their number's shape -- is read from it for the life of
 // the account, on whatever hostname they open next. See the REGIONS section
 // for why it must not come from the request.
 function defaultProfileDoc(phone, regionKey) {
@@ -4638,7 +4638,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     // to 5 recorded "attempts" and trip the ban.
     const lastDep = _depCreateDebounce.get(userId) || 0;
     if (Date.now() - lastDep < 7000)
-      return res.status(429).json({ status: 'error', message: 'A top up is already being processed. Please wait a moment.' });
+      return res.status(429).json({ status: 'error', message: 'A recharge is already being processed. Please wait a moment.' });
 
     const attemptCount = recordDepositAttempt(userId);
     if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
@@ -5158,10 +5158,10 @@ app.post('/deposit/usdt/submit', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
-    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT top ups are not available right now.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before recharging.' });
+    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT recharges are not available right now.' });
     const rate = Number(sett.usdtRate) || 0;
-    if (rate <= 0) return res.status(400).json({ status: 'error', message: 'USDT top ups are not configured yet. Please try again later.' });
+    if (rate <= 0) return res.status(400).json({ status: 'error', message: 'USDT recharges are not configured yet. Please try again later.' });
 
     const amountUsdt = Number(req.body.amountUsdt);
     if (!isFinite(amountUsdt) || amountUsdt <= 0) return res.status(400).json({ status: 'error', message: 'Enter a valid USDT amount' });
@@ -5179,7 +5179,7 @@ app.post('/deposit/usdt/submit', async (req, res) => {
 
     const lastSub = _usdtSubmitDebounce.get(userId) || 0;
     if (Date.now() - lastSub < 7000)
-      return res.status(429).json({ status: 'error', message: 'A top up is already being submitted. Please wait a moment.' });
+      return res.status(429).json({ status: 'error', message: 'A recharge is already being submitted. Please wait a moment.' });
     _usdtSubmitDebounce.set(userId, Date.now());
 
     // A TXID can only ever back ONE OPEN OR CREDITED claim, by anyone --
@@ -5298,7 +5298,7 @@ app.post('/deposit/usdt/submit', async (req, res) => {
       message: 'Submitted. Verifying on-chain — this can take a minute.' });
   } catch (e) {
     console.error('USDT deposit submit error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not submit your top up. Please try again.' });
+    res.status(500).json({ status: 'error', message: 'Could not submit your recharge. Please try again.' });
   }
 });
 // Lets the client poll a still-pending claim (the common early-return case
@@ -5309,7 +5309,7 @@ app.post('/deposit/usdt/status', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
-    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Top up not found' });
+    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
     const dep = snap.data();
     if (dep.status === 'matched') return res.json({ status: 'success', state: 'matched' });
     if (dep.status === 'failed') return res.json({ status: 'success', state: 'rejected', message: dep.failureReason || 'Payment declined.' });
@@ -5336,9 +5336,9 @@ app.post('/admin/deposit/usdt/reject', async (req, res) => {
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Top up not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
     const dep = snap.data();
-    if (depositFullyCredited(dep)) return res.status(400).json({ status: 'error', message: 'This top up was already credited -- cannot reject it now.' });
+    if (depositFullyCredited(dep)) return res.status(400).json({ status: 'error', message: 'This recharge was already credited -- cannot reject it now.' });
     const reason = String(req.body.reason || '').trim() || 'Rejected by admin';
     await markDepositFailed(snap.ref, dep.userId, reason);
     logAdminAction(req, 'usdt_deposit_rejected', { depositId, reason });
@@ -5376,7 +5376,7 @@ app.post('/deposit/marzpay/status', async (req, res) => {
   try {
     const depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
     if (!depSnap.exists || depSnap.data().userId !== userId)
-      return res.status(404).json({ status: 'error', message: 'Top up not found' });
+      return res.status(404).json({ status: 'error', message: 'Recharge not found' });
     const dep = depSnap.data();
     if (dep.status === 'matched') {
       // Best-effort self-heal: if a prior credit attempt got the status to
@@ -5468,7 +5468,7 @@ app.post('/deposit/card/submit', async (req, res) => {
 
     const lastSub = _cardSubmitDebounce.get(userId) || 0;
     if (Date.now() - lastSub < 7000)
-      return res.status(429).json({ status: 'error', message: 'A top up is already being processed. Please wait a moment.' });
+      return res.status(429).json({ status: 'error', message: 'A recharge is already being processed. Please wait a moment.' });
     _cardSubmitDebounce.set(userId, Date.now());
 
     const ref = await uniqueRef('C');
@@ -5650,7 +5650,7 @@ app.post('/withdraw/request', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   if (_witRequestInFlight.has(userId))
-    return res.status(429).json({ status: 'error', message: 'A cash out is already being processed. Please wait a moment.' });
+    return res.status(429).json({ status: 'error', message: 'A withdrawal is already being processed. Please wait a moment.' });
   if (_userBeingDeleted.has(userId))
     return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
   _witRequestInFlight.add(userId);
@@ -5660,16 +5660,16 @@ app.post('/withdraw/request', async (req, res) => {
     if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
     if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
     const rawNetwork = String(req.body.network || '').trim();
-    if (!rawNetwork) return res.status(400).json({ status: 'error', message: 'Bind a cash out account first.' });
+    if (!rawNetwork) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     // cleanPhone() only applies to mobile money -- it enforces this
     // region's phone SHAPE, which a bank account number is not. The bound-
     // account lookup right below (boundSnap) is the real gate either way:
     // a value that doesn't match a real saved bankAccounts doc is refused
     // there regardless of which branch validated its shape here.
     const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(req.body.phone || '') : String(req.body.phone || '').replace(/\s+/g, '').trim();
-    if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a cash out account first.' });
+    if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
-    // The cash-out window, enforced HERE and not only shown in the app.
+    // The withdraw window, enforced HERE and not only shown in the app.
     // Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that when
     // one tries to withdrawal he sees, that withdrawals start from this time
     // to this time." The app draws the hours on the screen, but this route is
@@ -5678,8 +5678,8 @@ app.post('/withdraw/request', async (req, res) => {
     const win = withdrawWindowState(sett, Date.now());
     if (win.enabled && !win.open)
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
-        message: `Cash-out is open from ${win.from} to ${win.to}. Please come back then.` });
-    if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtMoney(sett.minWithdraw)}` });
+        message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
+    if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum withdraw is ${fmtMoney(sett.minWithdraw)}` });
     // Checked HERE, not only in the app: the client's own check is a
     // courtesy so a member sees the rule before submitting, but /withdraw/
     // request is a plain authenticated POST and the amount in its body is
@@ -5688,7 +5688,7 @@ app.post('/withdraw/request', async (req, res) => {
     if (wMult > 0 && amt % wMult !== 0) {
       const low = Math.floor(amt / wMult) * wMult, high = low + wMult;
       return res.status(400).json({ status: 'error',
-        message: `Cash-out must be a multiple of ${fmtMoney(wMult)}. Try ${fmtMoney(Math.max(low, sett.minWithdraw))} or ${fmtMoney(high)}.` });
+        message: `Withdraw must be a multiple of ${fmtMoney(wMult)}. Try ${fmtMoney(Math.max(low, sett.minWithdraw))} or ${fmtMoney(high)}.` });
     }
     // Trade Password / withdrawal PIN gate REMOVED here (owner: "what I am
     // giving you is what you should put... remove trade passwords" -- the
@@ -5702,15 +5702,15 @@ app.post('/withdraw/request', async (req, res) => {
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)
-      return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: "That cash out account isn't saved to your profile. Bind it first, then try again." });
+      return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: "That withdrawal account isn't saved to your profile. Bind it first, then try again." });
     const holder = boundSnap.docs[0].data().holder;
 
     const feePct = Number(sett.withdrawFeePct);
-    if (!Number.isFinite(feePct) || feePct < 0 || feePct >= 100) throw new Error('Cash out fees are unavailable. Contact support.');
-    if (Number(sett.maxWithdraw) > 0 && amt > Number(sett.maxWithdraw)) throw new Error(`Maximum cash-out is ${fmtMoney(sett.maxWithdraw)}`);
+    if (!Number.isFinite(feePct) || feePct < 0 || feePct >= 100) throw new Error('Withdraw fees are unavailable. Contact support.');
+    if (Number(sett.maxWithdraw) > 0 && amt > Number(sett.maxWithdraw)) throw new Error(`Maximum withdraw is ${fmtMoney(sett.maxWithdraw)}`);
     const fee = Math.round(amt * feePct / 100);
     const net = amt - fee;
-    if (net <= 0) throw new Error('Cash out amount is too small after fees.');
+    if (net <= 0) throw new Error('Withdraw amount is too small after fees.');
     const ref = await uniqueRef('S');
     // This adapter has no real multi-document rollback. Persist the request
     // first, then charge once with a durable token that recovery can inspect.
@@ -5721,13 +5721,13 @@ app.post('/withdraw/request', async (req, res) => {
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       if (fresh.data().registrationDone === false) throw new Error('Finish signing up before withdrawing.');
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
-        throw new Error('Purchase at least one plan before you can cash out.');
+        throw new Error('Purchase at least one plan before you can withdraw.');
       const bal = fresh.data().walletBalance || 0;
       if (bal < amt) {
         logSecurityEvent(userId, 'withdraw_insufficient_funds', { attempted: amt, balance: bal });
         throw new Error(`Not enough balance, you have ${fmtMoney(bal)}`);
       }
-      // ONE UNRESOLVED CASH-OUT AT A TIME. Owner: "no requesting another
+      // ONE UNRESOLVED WITHDRAWAL AT A TIME. Owner: "no requesting another
       // withdrawal yet another one is on pending, so one should have got his
       // processing one to be paid then requests another."
       //
@@ -5735,13 +5735,13 @@ app.post('/withdraw/request', async (req, res) => {
       // find nothing pending. The three statuses are exactly the ones
       // /admin/withdrawals/list treats as unresolved -- 'processed' and
       // 'rejected' are finished and must not block anything, or a member's
-      // first ever cash-out would be their last.
+      // first ever withdrawal would be their last.
       const openSnap = await db.collection('withdrawals')
         .where('userId', '==', userId).where('status', 'in', ['creating', 'pending', 'sending', 'processing'])
         .limit(1).get();
       if (!openSnap.empty) {
         const w = openSnap.docs[0].data();
-        const e = new Error(`You already have a cash-out of ${fmtMoney(w.amount || 0)} waiting. Once it is paid you can request another.`);
+        const e = new Error(`You already have a withdrawal of ${fmtMoney(w.amount || 0)} waiting. Once it is paid you can request another.`);
         e.code = 'WITHDRAW_PENDING';
         throw e;
       }
@@ -5750,7 +5750,7 @@ app.post('/withdraw/request', async (req, res) => {
         const today = nowStr().date;
         const todaySnap = await db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today).get();
         if (todaySnap.size >= maxPerDay)
-          throw new Error(`You've reached today's limit of ${maxPerDay} cash-out${maxPerDay === 1 ? '' : 's'}. Try again tomorrow.`);
+          throw new Error(`You've reached today's limit of ${maxPerDay} withdrawal${maxPerDay === 1 ? '' : 's'}. Try again tomorrow.`);
       }
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
@@ -5767,9 +5767,9 @@ app.post('/withdraw/request', async (req, res) => {
       await finishWithdrawalCreation(witRef, userId);
     });
     sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
-    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested, processing now' });
+    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Withdrawal requested, processing now' });
   } catch (e) {
-    if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your cash out request is being checked. Check Transaction Statement before submitting again.' });
+    if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your withdrawal request is being checked. Check Transaction Statement before submitting again.' });
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   } finally { _witRequestInFlight.delete(userId); }
 });
@@ -5950,7 +5950,7 @@ async function markWithdrawalProcessed(witRef, userId) {
 async function processWithdrawalCore(withdrawalId, processedBy) {
   try {
     const pre = await db.collection('withdrawals').doc(withdrawalId).get();
-    if (!pre.exists) return { code: 404, body: { status: 'error', message: 'Cash out not found' } };
+    if (!pre.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
     return await _processWithdrawalNow(withdrawalId, processedBy);
   } catch (e) {
     console.error('Withdrawal processing failed:', e.message);
@@ -5959,12 +5959,12 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
 }
 async function _processWithdrawalNow(withdrawalId, processedBy) {
   if (_withdrawInFlight.has(withdrawalId))
-    return { code: 409, body: { status: 'error', message: 'Another admin is already acting on this cash out. Check the list in a moment.' } };
+    return { code: 409, body: { status: 'error', message: 'Another admin is already acting on this withdrawal. Check the list in a moment.' } };
   _withdrawInFlight.add(withdrawalId);
   try {
     const witRef = db.collection('withdrawals').doc(withdrawalId);
     const witSnap = await witRef.get();
-    if (!witSnap.exists) return { code: 404, body: { status: 'error', message: 'Cash out not found' } };
+    if (!witSnap.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
     const wit = witSnap.data();
     if (wit.status !== 'pending') return { code: 400, body: { status: 'error', message: `Cannot send, the status is '${wit.status}'` } };
 
@@ -6024,7 +6024,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       // itself hands back in the response, captured the instant it exists.
       const sendingMarker = crypto.randomUUID();
       const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Cash out status changed. Refresh the list.' } };
+      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
 
       let mpData, ambiguous = false;
       try {
@@ -6093,7 +6093,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       // by anything in here.
       const sendingMarker = withdrawalId;
       const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, pesajetRef: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Cash out status changed. Refresh the list.' } };
+      if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
       const pj = await pesajetDisburse({
         amount: wit.net, phone: wit.phone, network: wit.network,
         reference: sendingMarker, description: 'Withdrawal',
@@ -6147,7 +6147,7 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
     // here, before the call, means it's always persisted regardless of
     // whether any later write in this function fails.
     const sendingClaimed = await witRef.updateIf({ status: 'pending' }, { status: 'sending', sendingReference: sendingMarker, marzReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
-    if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Cash out status changed. Refresh the list.' } };
+    if (!sendingClaimed) return { code: 409, body: { status: 'error', message: 'Withdrawal status changed. Refresh the list.' } };
 
     let mpData, ambiguous = false;
     try {
@@ -6231,7 +6231,7 @@ app.post('/admin/withdraw/verify', async (req, res) => {
   if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
   try {
     const snap = await db.collection('withdrawals').doc(withdrawalId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Cash out not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
     // A payout the admin sent by hand (manual mode) has no MarzPay record at
     // all, by design. Without this branch it falls into "no gateway
@@ -6329,7 +6329,7 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
   try {
     const witSnap = await db.collection('withdrawals').doc(String(req.body.withdrawalId || '')).get();
     if (!witSnap.exists || witSnap.data().userId !== userId)
-      return res.status(404).json({ status: 'error', message: 'Cash-out not found' });
+      return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const wit = witSnap.data();
     if (wit.status !== 'processing') return res.json({ status: 'success', state: wit.status });
     // Bank transfer branch, checked against marzReference/the bank-transfer
@@ -6384,7 +6384,7 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
     res.json({ status: 'success', state: 'processing' });
   } catch (e) {
     console.error('Withdraw status error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not check cash-out status' });
+    res.status(500).json({ status: 'error', message: 'Could not check withdrawal status' });
   }
 });
 app.post('/withdraw/callback', async (req, res) => {
@@ -6654,10 +6654,10 @@ app.post('/bank/save', async (req, res) => {
       await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, createdAt: FieldValue.serverTimestamp() });
       return false;
     });
-    if (dup) return res.status(400).json({ status: 'error', message: 'This account is already saved as a cash out account.' });
+    if (dup) return res.status(400).json({ status: 'error', message: 'This account is already saved as a withdrawal account.' });
     res.json({ status: 'success' });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: 'Could not save the cash out account' });
+    res.status(500).json({ status: 'error', message: 'Could not save the withdrawal account' });
   }
 });
 app.get('/bank/list', async (req, res) => {
@@ -6671,7 +6671,7 @@ app.get('/bank/list', async (req, res) => {
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const snap = await db.collection('bankAccounts').where('userId', '==', userId).get();
     res.json({ status: 'success', accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load cash out accounts' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal accounts' }); }
 });
 app.post('/bank/delete', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -6691,7 +6691,7 @@ app.post('/bank/delete', async (req, res) => {
     // destination, only to actually withdraw money.
     await ref.delete();
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the cash out account' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the withdrawal account' }); }
 });
 app.post('/account/transaction-pin/change', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -6947,8 +6947,8 @@ app.get('/transactions', async (req, res) => {
 // about what a given transaction type is called.
 function statementRowLabel(t, brand) {
   const type = t.type;
-  if (type === 'deposit') return 'Top Up';
-  if (type === 'withdraw') return 'Cash Out';
+  if (type === 'deposit') return 'Recharge';
+  if (type === 'withdraw') return 'Withdraw';
   if (type === 'cashback') return 'Daily Income';
   if (type === 'commission') return 'Referral Commission';
   if (type === 'promocode') return 'Gift Code';
@@ -7164,7 +7164,7 @@ app.get('/deposits', async (req, res) => {
   try {
     const snap = await db.collection('pendingDeposits').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(200).get();
     res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load top up history' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load recharge history' }); }
 });
 app.get('/withdrawals', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -7172,7 +7172,7 @@ app.get('/withdrawals', async (req, res) => {
   try {
     const snap = await db.collection('withdrawals').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(200).get();
     res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load cash out history' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal history' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -7557,9 +7557,9 @@ app.post('/admin/settings/update', async (req, res) => {
         return res.status(400).json({ status: 'error', message: 'That does not look like a valid TRC20 wallet address (should start with T, 34 characters).' });
       updates.usdtWalletAddress = addr;
     }
-    // The two cash-out times. Refused rather than coerced: a silently
+    // The two withdraw times. Refused rather than coerced: a silently
     // repaired time is a window the owner did not choose, on a screen whose
-    // whole job is telling members exactly when they can cash out.
+    // whole job is telling members exactly when they can withdraw.
     for (const key of ['withdrawOpenFrom', 'withdrawOpenTo']) {
       if (!(key in updates)) continue;
       // Padded BEFORE parsing, not after: hhmmToMin() requires a two-digit
@@ -7579,7 +7579,7 @@ app.post('/admin/settings/update', async (req, res) => {
       const f = 'withdrawOpenFrom' in updates ? updates.withdrawOpenFrom : null;
       const t = 'withdrawOpenTo' in updates ? updates.withdrawOpenTo : null;
       if (f != null && t != null && f === t)
-        return res.status(400).json({ status: 'error', message: 'Cash-out opening and closing times cannot be the same.' });
+        return res.status(400).json({ status: 'error', message: 'Withdraw opening and closing times cannot be the same.' });
     }
     if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
       return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });
@@ -7939,7 +7939,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     openAt = typeof p.openAt === 'number' ? p.openAt : Date.parse(p.openAt);
     if (!Number.isFinite(openAt) || openAt <= 0) return refuse('Opens at (one-off)', 'is not a date the server can read');
   }
-  // Padded BEFORE parsing, exactly as the cash-out-hours settings route does:
+  // Padded BEFORE parsing, exactly as the withdraw-hours settings route does:
   // hhmmToMin() demands a two-digit hour, so a stored or hand-sent "9:00"
   // would be refused on a technicality that has nothing to do with the owner.
   // An <input type="time"> always hands over "HH:MM", so this only ever
@@ -8512,7 +8512,7 @@ app.post('/admin/user/repair-wallet', async (req, res) => {
       if (diff < 0) {
         return { ok: false, message: `The real ledger total (${fmtMoney(Math.round(real))}) is LOWER than the stored wallet balance (${fmtMoney(stored)}). This direction is never auto-repaired -- diagnose by hand (a duplicate/erroneous credit somewhere is more likely than a missing debit).` };
       }
-      // Deliberately does NOT write a new transactions row for this top-up --
+      // Deliberately does NOT write a new transactions row for this recharge --
       // the ledger ALREADY contains whatever real event(s) this diff
       // represents (that's the entire premise: real > stored means money the
       // ledger already documents never actually reached the wallet). Adding
@@ -8784,7 +8784,7 @@ app.post('/admin/user/delete', async (req, res) => {
     // the existing webhook/reconciler, so this is a short, safe wait, not a
     // permanent block.
     const inFlightDepSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', 'in', ['initiating', 'pending']).limit(1).get();
-    if (!inFlightDepSnap.empty) return res.status(409).json({ status: 'error', message: 'This account has a top up still being confirmed with the payment provider. Wait a moment for it to settle, then try deleting again.' });
+    if (!inFlightDepSnap.empty) return res.status(409).json({ status: 'error', message: 'This account has a recharge still being confirmed with the payment provider. Wait a moment for it to settle, then try deleting again.' });
     // Reparent this account's own direct referrals up to ITS referrer, so a
     // deleted account never leaves a permanently orphaned downline.
     //
@@ -9003,7 +9003,7 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Top up not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
     if (depositFullyCredited(snap.data())) return res.json({ status: 'success', message: 'Already credited' });
     const ok = await creditDeposit(snap);
     if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit. Try again' });
@@ -9048,12 +9048,12 @@ app.post('/admin/withdrawals/list', async (req, res) => {
 app.post('/admin/withdraw/reject', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const witId = String(req.body.withdrawalId || '');
-  if (_withdrawInFlight.has(witId)) return res.status(409).json({ status: 'error', message: 'This cash out is being sent right now. Check the list in a moment.' });
+  if (_withdrawInFlight.has(witId)) return res.status(409).json({ status: 'error', message: 'This withdrawal is being sent right now. Check the list in a moment.' });
   _withdrawInFlight.add(witId);
   try {
     const ref = db.collection('withdrawals').doc(witId);
     const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Cash out not found' });
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
     // Codex-caught real bug: 'sending' (a MarzPay network error mid-request
     // -- genuinely ambiguous whether the payout went out, see
@@ -9069,10 +9069,10 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
     const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
-    if (!declined) return res.status(409).json({ status: 'error', message: 'Cash out status changed before this could be applied. Refresh and try again.' });
+    if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied. Refresh and try again.' });
     await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
     logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded });
-    res.json({ status: 'success', message: refunded ? 'Cash out rejected and refunded' : 'Cash out rejected, refund is pending and will complete shortly' });
+    res.json({ status: 'success', message: refunded ? 'Withdrawal rejected and refunded' : 'Withdrawal rejected, refund is pending and will complete shortly' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _withdrawInFlight.delete(witId); }
 });
@@ -10361,7 +10361,7 @@ function runReconciler() {
 // Runs once per region, because auto-approval is one of the settings each
 // region owns: Uganda can be auto-paying while Kenya is still hand-checked,
 // and each region's own interval and safety cap apply to its own members'
-// cash-outs. A withdrawal with no regionKey (raised before regions existed)
+// withdrawals. A withdrawal with no regionKey (raised before regions existed)
 // belongs to the founding region.
 async function autoApproveWithdrawalsTick() {
   try {

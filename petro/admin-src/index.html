@@ -369,8 +369,8 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="analytics">Analytics</button>
         <button class="tab" data-tab="users">Users</button>
-        <button class="tab" data-tab="deposits">Top Ups</button>
-        <button class="tab" data-tab="withdrawals">Cash Outs <span class="badge-n hidden" id="wBadge"></span></button>
+        <button class="tab" data-tab="deposits">Recharges</button>
+        <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Assets</button>
         <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
         <button class="tab" data-tab="transactions">Transactions</button>
@@ -482,12 +482,12 @@ function msToDatetimeLocal(ms){
 }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
 const TX_LABELS = {
-  deposit: 'Top up', withdraw: 'Cash out', commission: 'Commission', team_reward: 'Task Center reward',
+  deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Task Center reward',
   checkin: 'Daily reward', cashback: 'Plan cashback', investment: 'Plan purchase',
   promocode: 'Promo code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
   welcome_bonus: 'Welcome bonus', mission_salary: 'Mission Center salary',
-  mission_deposit_reward: 'Mission Center top up reward',
-  deposit_reversal: 'Top up reversed (fraud)',
+  mission_deposit_reward: 'Mission Center recharge reward',
+  deposit_reversal: 'Recharge reversed (fraud)',
   statement: 'Statement downloaded',
 };
 function txLabel(type){ return TX_LABELS[type] || (type ? type.replace(/_/g,' ') : ''); }
@@ -1107,8 +1107,8 @@ async function renderDashboard(){
       <div class="stat"><div class="n">${stats.bannedUsers||0}</div><div class="l">Banned users</div></div>
       ${moneyCards}
       <div class="stat"><div class="n">${stats.activeInvestments||0}</div><div class="l">Active plans</div></div>
-      <div class="stat"><div class="n">${stats.pendingDepCount||0}</div><div class="l">Pending top ups</div></div>
-      <div class="stat"><div class="n">${stats.pendingWitCount||0}</div><div class="l">Pending cash outs</div></div>
+      <div class="stat"><div class="n">${stats.pendingDepCount||0}</div><div class="l">Pending recharges</div></div>
+      <div class="stat"><div class="n">${stats.pendingWitCount||0}</div><div class="l">Pending withdrawals</div></div>
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">MarzPay available balance</h2>
@@ -1221,15 +1221,15 @@ async function renderAnalytics(silent){
   const maxHour = Math.max(1, ...a.byHour.map(h=>Math.max(h.depAmt,h.witAmt)));
   const maxDay  = Math.max(1, ...a.byDay.map(d=>Math.max(d.dep,d.wit)));
   const hourChart = `<div class="chart">${a.byHour.map(h=>`
-     <div class="chart-col" title="${h12(h.h)}: top ups ${ugx(h.depAmt)} (${h.depCnt}), cash outs ${ugx(h.witAmt)} (${h.witCnt})">
+     <div class="chart-col" title="${h12(h.h)}: recharges ${ugx(h.depAmt)} (${h.depCnt}), withdrawals ${ugx(h.witAmt)} (${h.witCnt})">
        <div class="chart-bars"><i style="height:${Math.round(h.depAmt/maxHour*100)}%;background:var(--ok)"></i><i style="height:${Math.round(h.witAmt/maxHour*100)}%;background:var(--danger)"></i></div>
        <div class="chart-x">${h.h}</div></div>`).join('')}</div>`;
   const dayChart = `<div class="chart">${a.byDay.map(d=>`
-     <div class="chart-col" title="${d.day}: top ups ${ugx(d.dep)}, cash outs ${ugx(d.wit)}, new users ${d.users}">
+     <div class="chart-col" title="${d.day}: recharges ${ugx(d.dep)}, withdrawals ${ugx(d.wit)}, new users ${d.users}">
        <div class="chart-bars"><i style="height:${Math.round(d.dep/maxDay*100)}%;background:var(--ok)"></i><i style="height:${Math.round(d.wit/maxDay*100)}%;background:var(--danger)"></i></div>
        <div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>`;
   const bandCard=(key,label)=>{const b=a.bands[key]||{dep:0,wit:0};const on=a.busiestBand===key;
-    return `<div class="stat" style="${on?'outline:2px solid var(--gold);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">top ups</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">cash outs</div></div>`;};
+    return `<div class="stat" style="${on?'outline:2px solid var(--gold);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">recharges</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">withdrawals</div></div>`;};
   const f=a.forecast||{}; const fw=f.withdrawals||{}; const fd=f.deposits||{};
   const sa=a.staffApprovals||{byStaff:[],timeline:[]};
   // Owner-only suspicious-activity tables. `ab` is null outright for a staff
@@ -1241,10 +1241,10 @@ async function renderAnalytics(silent){
     const lastCol = r => `<td>${r.lastAt?fdate(r.lastAt):'—'}</td>`;
     const failedDepRows = rowsOr(ab.repeatedFailedDeposits,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(s=>ugx(s.amount)).join(', ')}</td>${lastCol(r)}</tr>`,
-      'No accounts with repeated failed top ups in this period.');
+      'No accounts with repeated failed recharges in this period.');
     const insufficientRows = rowsOr(ab.repeatedInsufficientWithdrawals,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(s=>`tried ${ugx(s.attempted)} with ${ugx(s.balance)}`).join('; ')}</td>${lastCol(r)}</tr>`,
-      'No accounts repeatedly trying to cash out more than their balance.');
+      'No accounts repeatedly trying to withdraw more than their balance.');
     const checkinRows = rowsOr(ab.repeatedCheckinAlreadyClaimed,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td>${lastCol(r)}</tr>`,
       'No accounts repeatedly re-tapping check-in after already claiming.');
@@ -1254,16 +1254,16 @@ async function renderAnalytics(silent){
     return `
     <div class="row" style="align-items:center;margin:18px 0 6px"><h2 class="sec" style="flex:1;margin:0">Suspicious activity (${ab.period}-day, ${ab.minCount}+ to appear)</h2></div>
     <p class="muted" style="margin:0 0 10px">Owner-only. Patterns worth a look, not automatic accusations -- a slow connection or a genuine mistake can also produce a repeat or two.</p>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated failed top ups</h2>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated failed recharges</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Failures</th><th>Recent amounts</th><th>Last seen</th></tr></thead><tbody>${failedDepRows}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated insufficient-funds cash out attempts</h2>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated insufficient-funds withdraw attempts</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Recent tries</th><th>Last seen</th></tr></thead><tbody>${insufficientRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated "already checked in" taps</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Last seen</th></tr></thead><tbody>${checkinRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Gift/promo code guessing</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Codes tried</th><th>Last seen</th></tr></thead><tbody>${giftcodeRows}</tbody></table></div></div>`;
   })() : '';
-  const staffTable = sa.byStaff.length ? `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff cash out approvals (${a.period}-day)</h2>
+  const staffTable = sa.byStaff.length ? `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals (${a.period}-day)</h2>
     <p class="muted" style="margin-top:0">Who's actually approving/declining payouts, and how much of the workload each person carries.</p>
     <div class="table-scroll"><table><thead><tr><th>Staff</th><th>Approved</th><th>Declined</th><th>Handled</th><th>Share</th><th>Amount approved</th><th>Last action</th></tr></thead>
     <tbody>${sa.byStaff.map(s=>`<tr><td><b>${esc(s.actor)}</b></td><td style="color:var(--ok)">${s.approvals}</td><td style="color:var(--danger)">${s.declines}</td>
@@ -1271,7 +1271,7 @@ async function renderAnalytics(silent){
   <div class="panel-card"><h2 class="sec" style="margin-top:0">Recent approval activity</h2>
     <div class="table-scroll" style="max-height:280px"><table><thead><tr><th>When</th><th>Staff</th><th>Action</th><th>User</th><th>Amount</th></tr></thead>
     <tbody>${sa.timeline.map(t=>`<tr><td>${fdate(t.at)}</td><td>${esc(t.actor)}</td><td style="color:${t.action==='approved'?'var(--ok)':'var(--danger)'}">${t.action==='approved'?'Approved':'Declined'}</td><td>${esc(t.phone||'')}</td><td>${ugx(t.amount)}</td></tr>`).join('')}</tbody></table></div></div>`
-    : `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff cash out approvals</h2><p class="muted" style="margin:0">No cash outs approved or declined in this period yet.</p></div>`;
+    : `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals</h2><p class="muted" style="margin:0">No withdrawals approved or declined in this period yet.</p></div>`;
   // ── VPS health card ── owner: "Make investment admin panel when l can see
   // vps healthy or speed, in analytics so it will be live". Fed by
   // /admin/system-health, refreshed on the same 30s live tick as the rest
@@ -1314,15 +1314,15 @@ async function renderAnalytics(silent){
       <h2 class="sec" style="margin-top:0">Tomorrow's estimate</h2>
       <p class="muted" style="margin-top:0">Not a guarantee, read member by member from real platform state, not just a trend line.</p>
       <div class="cards">
-        <div class="stat"><div class="n" style="color:var(--danger)">${ugx(fw.estimate)}</div><div class="l">Estimated cash outs to process tomorrow</div>
+        <div class="stat"><div class="n" style="color:var(--danger)">${ugx(fw.estimate)}</div><div class="l">Estimated withdrawals to process tomorrow</div>
           <div class="muted" style="margin-top:4px;font-size:11px">${fw.likelyWithdrawerCount||0} plan(s) likely maturing &nbsp;·&nbsp; trend says ${ugx(fw.trendReference)}</div></div>
-        <div class="stat"><div class="n" style="color:var(--ok)">${ugx(fd.estimate)}</div><div class="l">Estimated top ups tomorrow</div>
+        <div class="stat"><div class="n" style="color:var(--ok)">${ugx(fd.estimate)}</div><div class="l">Estimated recharges tomorrow</div>
           <div class="muted" style="margin-top:4px;font-size:11px">${ugx(fd.organicTrend)} organic trend + ${ugx(fd.maturingReinvestEstimate)} from ${fd.maturingCount||0} plan(s) maturing (${fd.reinvestRatePct||0}% usually reinvest) + ${ugx(fd.pipelineEstimate)} from ${fd.pipelineUserCount||0} new signup(s) mid-funnel (${fd.conversionRatePct||0}% convert within 3 days)</div></div>
       </div>
     </div>
     <div class="cards">
-      <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Top Ups (${k.depositsCount||0})</div></div>
-      <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Cash Outs (${k.withdrawalsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Recharges (${k.depositsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Withdrawals (${k.withdrawalsCount||0})</div></div>
       <div class="stat"><div class="n" style="color:${(k.netFlow||0)>=0?'var(--ok)':'var(--danger)'}">${ugx(k.netFlow)}</div><div class="l">Net flow</div></div>
       <div class="stat"><div class="n">${k.newUsers||0}</div><div class="l">New users</div></div>
       <div class="stat"><div class="n">${k.activeInvestors||0}</div><div class="l">Active investors</div></div>
@@ -1332,26 +1332,26 @@ async function renderAnalytics(silent){
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">When people transact, by hour of day</h2>
-      <div class="legend"><span><i style="background:var(--ok)"></i>Top Ups</span><span><i style="background:var(--danger)"></i>Cash Outs</span></div>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Recharges</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
       ${hourChart}
-      <p class="muted" style="margin:10px 0 0">Busiest top up time: <b>${h12(a.peakDepositHour)}</b> &nbsp;·&nbsp; busiest cash out time: <b>${h12(a.peakWithdrawHour)}</b></p>
+      <p class="muted" style="margin:10px 0 0">Busiest recharge time: <b>${h12(a.peakDepositHour)}</b> &nbsp;·&nbsp; busiest withdraw time: <b>${h12(a.peakWithdrawHour)}</b></p>
     </div>
     <h2 class="sec">Time of day (${a.busiestBand} is busiest)</h2>
     <div class="cards">${bandCard('morning','Morning')}${bandCard('afternoon','Afternoon')}${bandCard('evening','Evening')}${bandCard('night','Night')}</div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Daily trend (last ${a.period} days)</h2>
-      <div class="legend"><span><i style="background:var(--ok)"></i>Top Ups</span><span><i style="background:var(--danger)"></i>Cash Outs</span></div>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Recharges</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
       ${dayChart}
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Top referrers</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Direct team</th><th>Commission earned</th></tr></thead>
       <tbody>${(a.topReferrers||[]).length?a.topReferrers.map(r=>`<tr><td>${esc(r.phone)}</td><td>${r.team}</td><td><b>${ugx(r.earned)}</b></td></tr>`).join(''):'<tr><td colspan="3" class="empty">No referrers yet</td></tr>'}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Top top-uppers</h2>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Top rechargers</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Total topped up</th></tr></thead>
-      <tbody>${(a.topDepositors||[]).length?a.topDepositors.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No top ups yet</td></tr>'}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Biggest cash outs</h2>
+      <tbody>${(a.topDepositors||[]).length?a.topDepositors.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No recharges yet</td></tr>'}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Biggest withdrawals</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Amount</th></tr></thead>
-      <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No cash outs yet</td></tr>'}</tbody></table></div></div>
+      <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No withdrawals yet</td></tr>'}</tbody></table></div></div>
     ${staffTable}
     ${abuseSection}`;
   document.querySelectorAll('[data-per]').forEach(b=>b.addEventListener('click',()=>{ _anPeriod=parseInt(b.dataset.per); renderAnalytics(); }));
@@ -1425,7 +1425,7 @@ async function renderUsers(){
       const alerts = d.alerts||[];
       const total = mismatches.length + alerts.length;
       const FIELD_LABEL = { walletBalance:'Wallet balance', totalDeposited:'Total topped up', totalEarned:'Total earned', totalInvested:'Total invested' };
-      const ALERT_LABEL = { duplicate_credit:'Duplicate top up credit', negative_balance:'Negative balance', registration_incomplete:'Registration never completed' };
+      const ALERT_LABEL = { duplicate_credit:'Duplicate recharge credit', negative_balance:'Negative balance', registration_incomplete:'Registration never completed' };
       // Codex-caught real bug (round 2, still true for walletBalance only):
       // "Recalculate totals" rewrites totalDeposited/totalEarned/
       // totalInvested straight from this same real-ledger computation, so
@@ -1460,7 +1460,7 @@ async function renderUsers(){
         <button class="btn block" data-close>Close</button>`);
       document.querySelectorAll('[data-openuser]').forEach(b=>b.addEventListener('click', ()=>{ closeModal(); openUser(b.dataset.openuser); }));
       document.querySelectorAll('[data-repairwallet]').forEach(b=>b.addEventListener('click', async()=>{
-        if(!confirm('Top up this wallet to match the real ledger total? Only do this after you understand why the gap exists -- this tops the wallet UP, it never reduces one.'))return;
+        if(!confirm('Recharge this wallet to match the real ledger total? Only do this after you understand why the gap exists -- this only adds to the wallet, it never reduces one.'))return;
         b.disabled=true; b.textContent='Repairing…';
         const rd=await api('/admin/user/repair-wallet',{userId:b.dataset.repairwallet});
         toast(rd.message||rd.status, rd.status==='success'?'ok':'err');
@@ -1537,7 +1537,7 @@ async function openReferralChain(uid){
     <h3>Referral chain</h3>
     <div class="muted" style="margin-bottom:10px">${esc(r.user.phone||r.user.id)}${r.cycleDetected?' <span class="pill-tag t-bad">Cycle detected in data -- stopped early</span>':''}</div>
     <div class="kv"><span class="k">Team L1/L2/L3 members</span><span>${r.downlineCountByLevel[1]||0} / ${r.downlineCountByLevel[2]||0} / ${r.downlineCountByLevel[3]||0}</span></div>
-    <div class="kv"><span class="k">Team's total top ups</span><b>${ugx(r.teamDeposits)}</b></div>
+    <div class="kv"><span class="k">Team's total recharges</span><b>${ugx(r.teamDeposits)}</b></div>
     <h4 style="margin:10px 0 6px;font-size:13px">Root</h4>
     <div class="kv"><span class="k">${esc(r.root.phone||r.root.id)}</span><span>${esc(r.root.referralCode||'Not set')}${r.root.id===r.user.id?' <span class="pill-tag t-ok">This user</span>':''}</span></div>
     <h4 style="margin:14px 0 6px;font-size:13px">Upline (direct referrer → root), ${r.upline.length} link${r.upline.length===1?'':'s'}</h4>
@@ -1579,7 +1579,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Team commission <span class="muted" style="font-size:10.5px">(already included above)</span></span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
-    <div class="kv"><span class="k">Team's total top ups</span><b>${ugx(r.teamDeposits)}</b></div>
+    <div class="kv"><span class="k">Team's total recharges</span><b>${ugx(r.teamDeposits)}</b></div>
     <button class="btn ghost sm" id="viewChainBtn" title="Full upline-to-root and downline tree, not just L1/L2/L3" style="margin:4px 0 6px">View referral chain</button>
     <div class="kv"><span class="k">Check-in streak</span><span id="streakVal">${u.checkinStreak||0}</span>${SESSION_ROLE==='owner'?` <button class="btn ghost sm" id="reconcileStreakBtn" title="Recompute this member's streak from their real check-in history right now" style="margin-left:8px">Reconcile</button>`:''}</div>
     ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned</div>`:''}
@@ -1610,7 +1610,7 @@ async function openUser(uid){
       <button class="btn sky sm" id="completeRegBtn">Complete</button>
     </div>`:''}
     ${!u.referredBy?`<label style="margin-top:14px">Attach referrer</label>
-    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Attach the member's referrer once. Eligible commission from their first confirmed top up is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.</div>
+    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">Attach the member's referrer once. Eligible commission from their first confirmed recharge is processed immediately. Existing commission payments are preserved; attaching a referrer does not pay them again.</div>
     <div class="row">
       <div style="flex:2"><input id="attachRefCode" type="text" placeholder="Referrer's code"></div>
       <button class="btn sky sm" id="attachRefBtn">Attach</button>
@@ -1621,16 +1621,16 @@ async function openUser(uid){
         <td><span class="pill-tag ${iv.status==='active'?'t-warn':iv.status==='matured'?'t-ok':'t-mut'}">${esc(iv.status)}</span></td>
         <td style="white-space:nowrap">${ugx(iv.paidOut)} / ${ugx(iv.expectedReturn)}</td></tr>`).join('')}
     </tbody></table></div>`:'<p class="muted" style="margin:0">No plans purchased yet.</p>'}
-    <h4 style="margin:18px 0 8px;font-size:14px">Saved cash-out accounts</h4>
+    <h4 style="margin:18px 0 8px;font-size:14px">Saved withdrawal accounts</h4>
     ${(r.bankAccounts||[]).length?(r.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holder||'Account')}</span><span>${esc(a.network||'')} · ${esc(a.phone||'')}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Trade Password</h4>
     <div class="kv"><span class="k">Status</span><span>${u.hasPayoutPin?'Set':'Not set yet'}</span></div>
-    <p class="muted" style="margin:2px 0 8px;font-size:12px">The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can cash out. They can also change it themselves in the app (Account -&gt; Trade Password).</p>
+    <p class="muted" style="margin:2px 0 8px;font-size:12px">The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 6-digit trade password below directly; give it to the member so they can withdraw. They can also change it themselves in the app (Account -&gt; Trade Password).</p>
     <div class="row">
       <div style="flex:2"><input id="pinNew" type="text" inputmode="numeric" maxlength="6" placeholder="New 6-digit trade password"></div>
       <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
     </div>`:''}
-    <h4 style="margin:18px 0 8px;font-size:14px">Top Ups (${(r.deposits||[]).length})</h4>
+    <h4 style="margin:18px 0 8px;font-size:14px">Recharges (${(r.deposits||[]).length})</h4>
     ${(r.deposits||[]).length?`<div class="table-scroll" style="max-height:230px"><table><thead><tr><th>When</th><th>Amount</th><th>Paid to</th><th>Paid from</th><th>Status</th></tr></thead><tbody>
       ${r.deposits.map(d=>{
         // Owner: "l can see people's deposits in details such that l see
@@ -1646,7 +1646,7 @@ async function openUser(uid){
         const paidFrom = esc(d.senderPhone||d.phone||'Not set');
         return `<tr><td style="white-space:nowrap">${fdate(d.createdAt)}</td><td><b>${ugx(d.amount, d.regionKey)}</b></td><td>${paidTo}</td><td>${paidFrom}</td><td>${statusPill(d.status)}</td></tr>`;
       }).join('')}
-    </tbody></table></div>`:'<p class="muted" style="margin:0">No top ups yet.</p>'}
+    </tbody></table></div>`:'<p class="muted" style="margin:0">No recharges yet.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
     <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td>${spinnerHtml()}</td></tr></tbody></table></div>`);
   const tx=(r.transactions||[]).slice(0,25);
@@ -1773,13 +1773,13 @@ async function renderDeposits(){
     <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
     <div class="muted"><b>${grp('matched')}</b> processed all-time · ${ugx(r.processedAmount||0)} received</div></div>
     <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
-    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Top ups processed</th><th>Amount received</th></tr></thead>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Recharges processed</th><th>Amount received</th></tr></thead>
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Top Ups</h2>
+    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Recharges</h2>
       <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every top up attempt, all time — the automatic gateway (MarzPay or PesaJet), MarzPay card payments, and USDT TRC20. A stuck automatic or card top up can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain when a TronGrid key is configured (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for one still Awaiting Review.</p>
-    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' top ups only. The platform has more history than this list can currently display.</div>':''}
+    <p class="muted" style="margin:0 0 12px">Every recharge attempt, all time — the automatic gateway (MarzPay or PesaJet), MarzPay card payments, and USDT TRC20. A stuck automatic or card recharge can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain when a TronGrid key is configured (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for one still Awaiting Review.</p>
+    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
@@ -1876,7 +1876,7 @@ function drawDeps(){
       <td>${esc(d.ref||'Not set')}</td>
       <td>${statusPill(d.status)}${reviewNote}</td>
       <td>${actions}</td></tr>${smsBlock}`;
-  }).join(''):'<tr><td colspan="8" class="empty">No top ups</td></tr>';
+  }).join(''):'<tr><td colspan="8" class="empty">No recharges</td></tr>';
   // Owner: "l want them to have... l can tap on a deposit to see user
   // details just like those when a user is tapped in user list" -- same
   // pattern the Withdrawals tab's own rows already use: tapping anywhere
@@ -1941,13 +1941,13 @@ async function renderWithdrawals(){
     <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
     <div class="muted"><b>${counts.processed||0}</b> processed all-time · ${ugx(r.processedAmount||0)} paid out</div></div>
     <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${esc(dayLabel(d.day))}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
-    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Cash outs processed</th><th>Amount paid</th></tr></thead>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Withdrawals processed</th><th>Amount paid</th></tr></thead>
     <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Cash Outs</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
       ${_witManualPayouts?'':`<button class="btn sm ghost" id="witSync">Sync payments</button>`}</div>
-    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own. Members cash out to a bound mobile money number (see each row's destination).</p>`}
-    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_wits.length+' cash outs only. The platform has more history than this list can currently display.</div>':''}
+    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every withdraw request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own. Members withdraw to a bound mobile money number (see each row's destination).</p>`}
+    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_wits.length+' withdrawals only. The platform has more history than this list can currently display.</div>':''}
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
@@ -2002,9 +2002,9 @@ function drawWits(){
       // refunding one.
       :w.status==='sending'?(SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}" data-rej-sending="1">Reject</button>`:'<span class="muted" style="font-size:11px">Owner only</span>')
       :''}</td></tr>`;
-  }).join(''):'<tr><td colspan="7" class="empty">No cash outs</td></tr>';
+  }).join(''):'<tr><td colspan="7" class="empty">No withdrawals</td></tr>';
   // Tapping anywhere on the row opens the SAME full user-detail modal as
-  // the Users tab (balance, plans, saved cash-out accounts, recent
+  // the Users tab (balance, plans, saved withdrawal accounts, recent
   // transactions, credit/debit/ban/delete) -- except when the tap actually
   // landed on one of the row's own action buttons below, which must still
   // do their own thing instead of also opening the modal underneath them.
@@ -2387,7 +2387,7 @@ async function renderPromoCodes(){
 //
 // One row per country. A country owns the subdomain(s) it is served from,
 // the currency label printed in front of every amount, the dialling code
-// and number shape its members type, and the clock its cash-out hours and
+// and number shape its members type, and the clock its withdraw hours and
 // product windows are judged against. Its RATES and its PRODUCT PRICES are
 // edited on the Settings and Products tabs, with this country picked there.
 var ADMIN_BASE_DOMAIN = 'petro-platform.com';
@@ -2452,7 +2452,7 @@ const AUDIT_LABELS = {
   admin_created:'Admin account created', admin_deactivated:'Admin deactivated', admin_reactivated:'Admin reactivated',
   admin_password_reset:'Admin password reset', admin_deleted:'Admin account deleted',
   manual_sms_log_resolved:'Unmatched SMS marked resolved',
-  withdrawal_rejected:'Cash out declined', withdrawal_processed:'Cash out sent',
+  withdrawal_rejected:'Withdraw declined', withdrawal_processed:'Withdraw sent',
   manual_credit:'Manual credit', manual_debit:'Manual debit', user_banned:'User banned', user_unbanned:'User unbanned',
   user_password_reset:'User password reset', user_phone_set:'User phone corrected',
   user_ledger_repaired:'User ledger repaired', user_registration_completed:'Registration completed',
@@ -2463,7 +2463,7 @@ const AUDIT_LABELS = {
   manual_pay_image_set:'Manual-pay screen image changed',
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared', products_synced:'Product pricing synced to defaults',
-  deposit_force_credited:'Top up force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
+  deposit_force_credited:'Recharge force-credited', giftcode_generated:'Gift codes generated', giftcode_deactivated:'Gift code deactivated',
   totals_recounted:'Totals recalculated',
 };
 async function renderAuditLog(){
@@ -2511,7 +2511,7 @@ async function renderTransactions(){
   const { merged, truncated } = await loadTxnsAndStatements(1000);
   if(staleTab('transactions')) return;
   _txns = merged;
-  const subs=[['all','All'],['deposit','Top Ups'],['withdraw','Cash Outs'],['commission','Commissions'],['investment','Plans'],['checkin','Check-in'],['promocode','Codes'],['statement','Statements']];
+  const subs=[['all','All'],['deposit','Recharges'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Plans'],['checkin','Check-in'],['promocode','Codes'],['statement','Statements']];
   $('content').innerHTML = `
     <h2 class="sec">Transactions</h2>
     <div class="panel-card"><input id="txSearch" placeholder="Search description, type, user id, or a reference"></div>
@@ -2878,13 +2878,13 @@ async function renderSettings(){
     <h2 class="sec">Rates &amp; limits${ADMIN_REGIONS.length > 1 ? ' &middot; ' + esc(regionByKeyAdmin().name) : ''}</h2>
     <div class="panel-card">
       <div class="row">
-        <div><label>Min top up</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
-        <div><label>Min cash out</label><input id="sMinWit" type="number" value="${v('minWithdraw',8000)}"></div>
+        <div><label>Min recharge</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
+        <div><label>Min withdraw</label><input id="sMinWit" type="number" value="${v('minWithdraw',8000)}"></div>
         <div><label>Welcome bonus</label><input id="sWelcome" type="number" value="${v('welcomeBonus',5000)}"></div>
         <div><label>Check-in bonus</label><input id="sCheckin" type="number" value="${v('dailyCheckin',500)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
-        <div><label>Cash out fee (%)</label><input id="sFee" type="number" step="1" value="${v('withdrawFeePct',15)}"></div>
+        <div><label>Withdraw fee (%)</label><input id="sFee" type="number" step="1" value="${v('withdrawFeePct',15)}"></div>
         <div><label>L1 commission (%)</label><input id="sC1" type="number" step="1" value="${v('commL1',27)}"></div>
         <div><label>L2 commission (%)</label><input id="sC2" type="number" step="1" value="${v('commL2',2)}"></div>
         <div><label>L3 commission (%)</label><input id="sC3" type="number" step="1" value="${v('commL3',1)}"></div>
@@ -2892,7 +2892,7 @@ async function renderSettings(){
       <div class="row" style="margin-top:6px">
         <div><label>Return multiple (×)</label><input id="sReturnMult" type="number" step="0.1" value="${v('returnMultiple',30)}"></div>
         <div><label>Cycle (days)</label><input id="sCycle" type="number" value="${v('cycleDays',150)}"></div>
-        <div><label>Max cash outs per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
+        <div><label>Max withdrawals per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
       </div>
       <!-- OTP verification codes cost real money per SMS (MarzSms, ~30 UGX
            each) -- capped per phone number, resetting daily. 0 means send
@@ -2906,8 +2906,8 @@ async function renderSettings(){
         <div><label>Inner pages background opacity (%)</label><input id="sInnerBgOpacity" type="number" min="0" max="100" value="${v('innerBgOpacity',100)}"></div>
         <div><label>Inner pages background blur (px)</label><input id="sInnerBgBlur" type="number" min="0" max="40" value="${v('innerBgBlur',0)}"></div>
       </div>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Top Up, Cash Out, Wallet and other inner pages. Authentication screens are unchanged.</p>
-      <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before cashing out</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Recharge, Withdraw, Wallet and other inner pages. Authentication screens are unchanged.</p>
+      <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>OTP verification (registration, reset, add wallet)</b> <span class="muted">(off: code fields disappear and those flows show a support-contact message instead)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sOtpVerification" ${s.otpVerificationEnabled!==false?'checked':''} style="width:auto"></label></div>
@@ -2916,11 +2916,11 @@ async function renderSettings(){
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
            when one tries to withdrawal he sees, that withdrawals start from
            this time to this time, nothing much ie 6pm to 5pm." -->
-      <div class="switch-row" style="margin-top:8px"><span><b>Only allow cash-out between set hours</b> <span class="muted">(members see the hours on the Cash Out screen)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>Only allow withdraw between set hours</b> <span class="muted">(members see the hours on the Withdraw screen)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sWitWindow" ${s.withdrawWindowEnabled===true?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">
-        <div><label>Cash-out opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
-        <div><label>Cash-out closes at</label><input id="sWitTo" type="time" value="${esc(v('withdrawOpenTo','17:00'))}"></div>
+        <div><label>Withdraw opens at</label><input id="sWitFrom" type="time" value="${esc(v('withdrawOpenFrom','09:00'))}"></div>
+        <div><label>Withdraw closes at</label><input id="sWitTo" type="time" value="${esc(v('withdrawOpenTo','17:00'))}"></div>
       </div>
       <!-- It said "East Africa Time" and gave its example in 12-hour ("between
            5pm and 6pm"), and both were wrong once countries existed. The window
@@ -2929,7 +2929,7 @@ async function renderSettings(){
            is 24-hour. Owner: "withdrawal time has problems, is it in 24hrs or,
            please make sure every withdrawal time is reading very well on each
            country". -->
-      <p class="muted" style="margin:6px 0 0">24-hour, local time. Can run past midnight (e.g. 18:00&ndash;17:00). One cash-out at a time per member, always.</p>
+      <p class="muted" style="margin:6px 0 0">24-hour, local time. Can run past midnight (e.g. 18:00&ndash;17:00). One withdrawal at a time per member, always.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a referral code to sign up</b> <span class="muted">(every new member must be invited by an existing one)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqReferral" ${s.requireReferralCode!==false?'checked':''} style="width:auto"></label></div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Leave ON &mdash; the first-ever account is always let through.</p>
@@ -2940,42 +2940,42 @@ async function renderSettings(){
       <textarea id="sAllowedOrigins" rows="4" placeholder="petro-platform.com&#10;www.petro-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. petro-platform.com and this VPS's own address are always allowed.</p>
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
-      <p class="muted" style="margin:0 0 4px">Automatic recharge is the only top up method. Every cash-out waits as Pending until you act on it in Cash Outs.</p>
+      <p class="muted" style="margin:0 0 4px">Automatic recharge is the only recharge method. Every withdrawal waits as Pending until you act on it in Withdrawals.</p>
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
     <h2 class="sec">Payments</h2>
     <div class="panel-card">
-      <label>Top up gateway</label>
+      <label>Recharge gateway</label>
       <div style="margin:0 0 12px">
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:4px;"><input type="radio" name="depGateway" id="depGatewayMarz" value="marzpay" ${normalizeProv(v('depositMethod','marzpay'))==='marzpay'?'checked':''} style="width:auto"> MarzPay</label>
         <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depGateway" id="depGatewayPesa" value="pesajet" ${normalizeProv(v('depositMethod','marzpay'))==='pesajet'?'checked':''} style="width:auto"> PesaJet</label>
       </div>
-      <h2 class="sec" style="margin:16px 0 4px">Cash outs</h2>
-      <p class="muted" style="margin:0 0 8px">Follows the top up gateway above by default &mdash; pin a different method only if top ups and cash outs should differ.</p>
-      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the top up gateway above</label>
+      <h2 class="sec" style="margin:16px 0 4px">Withdrawals</h2>
+      <p class="muted" style="margin:0 0 8px">Follows the recharge gateway above by default &mdash; pin a different method only if recharges and withdrawals should differ.</p>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodFollow" value="follow" ${v('withdrawMethod','follow')==='follow'?'checked':''} style="width:auto"> Follow the recharge gateway above</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodMarz" value="marzpay" ${v('withdrawMethod','follow')==='marzpay'||v('withdrawMethod','follow')==='automatic'?'checked':''} style="width:auto"> Always automatic (MarzPay sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="witMethod" id="witMethodPesa" value="pesajet" ${v('withdrawMethod','follow')==='pesajet'?'checked':''} style="width:auto"> Always automatic (PesaJet sends payouts)</label>
       <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="witMethod" id="witMethodManual" value="manual" ${v('withdrawMethod','follow')==='manual'?'checked':''} style="width:auto"> Always manual (you send payouts by hand)</label>
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
     </div>
 
-    <h2 class="sec">Crypto top ups (USDT TRC20)</h2>
+    <h2 class="sec">Crypto recharges (USDT TRC20)</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A third top up rail alongside MarzPay/PesaJet above (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission &mdash; a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject in the Top Ups tab &mdash; nothing here ever forces automatic mode on you.</p>
-      <div class="switch-row"><span><b>Enable USDT top ups</b> <span class="muted">(shows the option in the app)</span></span>
+      <p class="muted" style="margin-top:0">A third recharge rail alongside MarzPay/PesaJet above (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission &mdash; a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject in the Recharges tab &mdash; nothing here ever forces automatic mode on you.</p>
+      <div class="switch-row"><span><b>Enable USDT recharges</b> <span class="muted">(shows the option in the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sUsdtEnabled" ${s.usdtEnabled?'checked':''} style="width:auto"></label></div>
       <label>Receiving wallet address (TRC20)</label><input id="sUsdtAddr" value="${esc(v('usdtWalletAddress',''))}" placeholder="T...">
       <label>Exchange rate (UGX per 1 USDT)</label><input id="sUsdtRate" type="number" step="1" min="0" value="${v('usdtRate',0)}" placeholder="e.g. 3750">
-      <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto top up settings</button>
+      <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto recharge settings</button>
     </div>
 
-    <h2 class="sec">Card top ups (MarzPay)</h2>
+    <h2 class="sec">Card recharges (MarzPay)</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A fourth top up rail, through MarzPay's own card gateway -- always MarzPay regardless of which gateway is picked for mobile money above. A member is sent to MarzPay's hosted card page to pay, then returns to the app; the top up resolves the same way a mobile-money one does (webhook + this app's own live re-check), no separate review needed. Requires an active Card Payments subscription on your MarzPay business account -- without one, MarzPay will refuse every attempt even with this switched on.</p>
-      <div class="switch-row"><span><b>Enable card top ups</b> <span class="muted">(shows the option in the app)</span></span>
+      <p class="muted" style="margin-top:0">A fourth recharge rail, through MarzPay's own card gateway -- always MarzPay regardless of which gateway is picked for mobile money above. A member is sent to MarzPay's hosted card page to pay, then returns to the app; the recharge resolves the same way a mobile-money one does (webhook + this app's own live re-check), no separate review needed. Requires an active Card Payments subscription on your MarzPay business account -- without one, MarzPay will refuse every attempt even with this switched on.</p>
+      <div class="switch-row"><span><b>Enable card recharges</b> <span class="muted">(shows the option in the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sCardEnabled" ${s.cardDepositEnabled?'checked':''} style="width:auto"></label></div>
-      <button class="btn block" id="saveCard" style="margin-top:10px">Save card top up setting</button>
+      <button class="btn block" id="saveCard" style="margin-top:10px">Save card recharge setting</button>
     </div>
 
     <h2 class="sec">Support contacts</h2>
@@ -3037,7 +3037,7 @@ async function renderSettings(){
     } });
     const payoutProv = witMethod==='follow' ? gateway : witMethod;
     toast(d.status==='success'
-      ? `Saved. Top ups: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
+      ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveUsdt').addEventListener('click', async()=>{
@@ -3800,7 +3800,7 @@ if ('serviceWorker' in navigator) {
       var box=document.createElement('div');
       box.id='innerBgAdminPanel';
       box.innerHTML='<h2 class="sec">Signed-in page background</h2>'
-        +'<div class="panel-card"><p class="muted" style="margin-top:0">Controls only Home, Assets, Network, Profile, Top Up, Cash Out, Wallet and other pages after login. Login, Sign Up and Forgot Password are not changed.</p>'
+        +'<div class="panel-card"><p class="muted" style="margin-top:0">Controls only Home, Assets, Network, Profile, Recharge, Withdraw, Wallet and other pages after login. Login, Sign Up and Forgot Password are not changed.</p>'
         +'<div class="row"><div><label>Background opacity (0–100%)</label><input id="innerBgOpAdmin" type="number" min="0" max="100" value="'+(s.innerBgOpacity!=null?s.innerBgOpacity:100)+'"></div>'
         +'<div><label>Background blur (0–40 px)</label><input id="innerBgBlurAdmin" type="number" min="0" max="40" value="'+(s.innerBgBlur!=null?s.innerBgBlur:0)+'"></div></div>'
         +'<button class="btn block" id="saveInnerBgAdmin" style="margin-top:12px">Save inner background</button></div>';

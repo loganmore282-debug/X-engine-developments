@@ -6354,3 +6354,118 @@ round-trip OK, `npm run test:audit` passes in full (163 checks). Live in
 headless Chromium against the real built bundle: `renderAccount()` renders
 both new labels, neither old label survives anywhere in the rendered
 markup, zero page errors. `user/sw.js` bumped `v226` → `v227`.
+
+## Follow-up 46 -- global rename: Top Up -> Recharge, Cash Out -> Withdraw, everywhere
+
+Owner: *"then top up to Recharge, cashout to withdraw, everywhere."* A
+genuinely large sweep, same scale and same discipline as Follow-up 28's
+own Deposit->Top Up/Withdrawal->Cash Out rename -- every place a member or
+admin actually reads the words, not the internal identifiers underneath
+them.
+
+**Wording convention adopted, stated once here rather than re-derived per
+line**: "Recharge" works unchanged as both verb and noun, singular and
+plural ("Recharge" button, "Total Recharges" stat). "Cash Out" doesn't have
+as clean a plural, so: singular verb/label contexts (buttons, tiles,
+sentence subjects, "Confirm Withdraw") became **"Withdraw"**; plural COUNT-
+NOUN contexts (stat labels, tab names, "no accounts found" messages) became
+**"Withdrawals"**, its only sensible plural -- "Total Withdraws" isn't a
+word most people would write. This is the one place this round exercised
+judgment rather than a pure literal substitution, and is flagged here in
+case it should be revisited.
+
+**Scope, same three files Follow-up 28 touched, same "internal identifiers
+stay exactly as they are" rule** (`data-tab="deposits"`/`"withdrawals"`,
+`depositMethod`/`withdrawMethod`, `minDeposit`/`minWithdraw`, route paths
+like `/deposit/marzpay`/`/withdraw/request`, function names like
+`openDepositSheet`/`submitWithdraw`, `type==='deposit'`/`'withdraw'`
+comparisons -- none of it changed):
+
+- **`user-src/original_module.js`**: Home's two action tiles and 3-stat row
+  ("Recharge"/"Withdraw", "Total Recharges"/"Total Withdrawals"), Account's
+  two money-action buttons, the Task Center's team-recharge card/heading,
+  `statementDescription()`'s per-transaction-type label, the Transaction
+  Statement's two category tabs, the Rules & Regulations fallback text, the
+  Recharge sheet's own title/button/instructions (all 3 rails --
+  MoMo/USDT/Card), the Withdraw sheet's own title/button/instructions, every
+  `notify()` message a member can see on either flow (insufficient balance,
+  window-closed, multiple-of, no-wallet, submit failures), and the three
+  `LANG_PATTERNS` rows (`Withdraw time:`/`Withdraw must be a multiple
+  of:`/`Withdraw is open from:`/`Withdraw of {0} is processing:`) that back
+  the withdraw-hours copy in other languages -- their English keys were
+  updated to match, the other 5 language columns deliberately left as-is
+  (same "don't guess a translation" standard this table has followed since
+  it was built). One already-orphaned `LANG_PATTERNS` row ("One cash-out at
+  a time...") and one confirmed-unreachable dead sheet
+  (`openChangeTradePasswordSheet()`, per this file's own earlier "Trade
+  Password removed app-wide" note) were left untouched -- neither is
+  reachable from any live screen, so neither is "everywhere" the owner can
+  actually see.
+- **A real regression caught during this round's own verification, not
+  shipped blind**: `bootFromNetwork()`'s "did I just register in this tab"
+  fast-path check compared `_openSheetTitle` against the sheet's OLD
+  literal title string in 5 separate places (`openDepositSheet()`/
+  `openWithdrawSheet()`/`submitWithdraw()`, 3 comparisons total) -- renaming
+  the sheet titles to `'Recharge'`/`'Withdraw'` without updating these
+  comparisons would have silently broken the "close the sheet and show the
+  status modal" step on every submit, since the guard would never again
+  match. Found and fixed by grepping every `_openSheetTitle` comparison in
+  the file before shipping (the same discipline Follow-up 28's own
+  `_openSheetTitle !== 'Withdraw'` bug was caught with).
+- **`admin-src/index.html`**: the tab bar (Recharges/Withdrawals), the
+  `TX_LABELS` map, the whole Analytics tab (stat cards, chart legends/
+  tooltips, the abuse-detection tables, staff-approval headings, the
+  forecast card), the Deposits/Withdrawals tabs' own headings/help text/
+  empty-states, the user-detail modal (saved accounts heading, PIN-reset
+  help text, referral-attach help text), the Transactions tab's subtabs,
+  `AUDIT_LABELS`, Rates & Limits (every field label, both switch-row
+  descriptions, the withdraw-hours inputs and their help text), the
+  Payments card (gateway radios, their help text), the USDT and Card
+  settings panels (headings, toggle labels, help text, save-button labels),
+  and the Signed-in-page-background help text. `ADMIN_LANG_ROWS` (the
+  admin's own translation table, concatenated into the same `LANG_ROWS`
+  the member app uses) was deliberately left untouched -- confirmed by
+  reading the admin panel's own boot code that it has **no language
+  switcher at all**, so `LANG` never leaves its English default in an
+  admin session and every `t()` call already resolves to English
+  regardless of what the table says; editing it would have been pure
+  churn with zero visible effect, and leaving it matches Follow-up 28's
+  own explicit "editing the English source without re-translating the
+  other 5 languages would desync the lookup" reasoning anyway.
+- **`server.js`**: every member-facing error/success message across
+  `/deposit/usdt/submit`, `/deposit/usdt/status`, `/admin/deposit/usdt/
+  reject`, `/deposit/marzpay/status`, `/withdraw/request` (the big one --
+  window-closed, multiple-of, unbound-account, fee-unavailable, amount-too-
+  small, pending-limit, per-day-limit, success/recovery messages),
+  `/admin/withdraw/reject`, `/admin/deposit/force-credit`, `/bank/save`/
+  `/bank/list`/`/bank/delete`, `/deposits`/`/withdrawals` history routes,
+  `statementRowLabel()` (the PDF statement's own per-transaction-type
+  label, kept in lockstep with the client's `statementDescription()` per
+  this file's own "must match in two places" precedent), and every code
+  comment describing current withdraw-window/settings behavior (comments
+  narrating PAST owner quotes or PAST bug states were left untouched,
+  preserving the historical record per this file's own standing rule).
+- **One real test assertion fixed, not just app code**:
+  `test-withdraw-rules.js` asserted the literal old string `/already have a
+  cash-out/i` against `/withdraw/request`'s own pending-request error --
+  found by running the full suite after the rename (3 failures, all this
+  one assertion hit three times for the 3 blocking statuses) and updated to
+  match the new wording, same underlying behavior. A handful of OTHER test
+  files (`test-languages.js`, `test-regions.js`, `test-product-config.js`,
+  `test-activity-feed-region.js`) still contain "cash out"/"top up" but
+  only as illustrative fixture text or human-readable `ck()` labels, never
+  as an assertion against real app strings -- confirmed by reading each one
+  before deciding not to touch it, not assumed safe.
+
+**Verified**: `node -c user-src/original_module.js`, `node --check
+server.js`, `node build-core.js` + `node build-admin.js` (both round-trip
+OK). `npm run test:audit` passes in full (163 checks, exit 0) after the one
+test-file fix. Live in headless Chromium against the real built
+`user/index.html`: Home/Account/Withdraw-sheet/Deposit-sheet/Transaction-
+Statement all render the new words with zero trace of the old ones and
+zero page errors; the Deposit sheet's own `_openSheetTitle` reads
+`'Recharge'` exactly. Live in headless Chromium against the real
+`admin-src/index.html` (not the obfuscated build, same precedent as
+earlier admin rounds): the tab bar and the Rates & Limits section both
+render the new words with zero trace of the old ones, zero page errors.
+`user/sw.js` bumped `v227` → `v228`, `admin/sw.js` bumped `v58` → `v59`.
