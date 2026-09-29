@@ -1691,9 +1691,20 @@ function fbErrMsg(e){
 function credManSupported(){
   return !!(window.PasswordCredential && navigator.credentials && navigator.credentials.get && navigator.credentials.store);
 }
-async function storeCredentialIfPossible(email, pass){
+// id MUST stay the synthetic Firebase email -- tryAutoSignIn() below reads
+// cred.id straight back out and hands it to fbSignIn() as-is, so anything
+// else there breaks silent sign-in outright. `name` is a separate, purely
+// cosmetic field the Credential Management API spec defines for exactly
+// this case (an id that isn't human-friendly) -- Chrome's own "Use saved
+// password?" picker shows `name` in place of `id` when it's set, which is
+// what lets a member see their own phone number there instead of
+// "<digits>@petro-platform.com" without touching what actually signs them
+// in. Owner: "can't you remove it from appearing as that only number, or
+// will it affect Firebase authentication system" -- this does the former
+// without touching the latter at all.
+async function storeCredentialIfPossible(email, pass, displayPhone){
   if (!credManSupported()) return;
-  try { await navigator.credentials.store(new PasswordCredential({ id: email, password: pass })); } catch (_) {}
+  try { await navigator.credentials.store(new PasswordCredential({ id: email, password: pass, name: displayPhone || email })); } catch (_) {}
 }
 // Returns true if a stored credential was found AND a sign-in attempt was
 // kicked off (the resulting snow-auth event -- success or failure -- drives
@@ -1739,7 +1750,7 @@ window.doLogin = async function(){
     // drives tryAutoSignIn() on the next visit. Unchecked -> nothing is
     // saved, so the login screen asks again next time.
     const remember = $('rememberMe');
-    if (!remember || remember.checked) storeCredentialIfPossible(email, pass);
+    if (!remember || remember.checked) storeCredentialIfPossible(email, pass, phone);
   }
   catch (e) {
     window._pendingLoginSuccess = false;
@@ -1814,7 +1825,7 @@ window.doRegister = async function(){
   try {
     const email = phoneToEmail(phone);
     await window.fbCreateUser(email, pass);
-    storeCredentialIfPossible(email, pass);
+    storeCredentialIfPossible(email, pass, phone);
   }
   catch (e) {
     // Owner-reported real bug: a Firebase Auth account can exist with no
@@ -1846,7 +1857,7 @@ window.doRegister = async function(){
       try {
         const sameUid = STATE.user && STATE.user.email === retryEmail ? STATE.user.uid : null;
         await window.fbSignIn(retryEmail, pass);
-        storeCredentialIfPossible(retryEmail, pass);
+        storeCredentialIfPossible(retryEmail, pass, phone);
         if (sameUid && STATE.user && STATE.user.uid === sameUid)
           await bootFromNetwork(sameUid);
         return;

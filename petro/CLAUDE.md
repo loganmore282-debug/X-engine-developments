@@ -5677,3 +5677,53 @@ the Network page's copy buttons render correctly with no shared
 the new monospace font, with zero page errors in either check.
 `user/sw.js` bumped `v219` → `v220`, `admin/sw.js` bumped `v56` →
 `v57` (both source files this round's own changes touched).
+
+## Follow-up 37 -- Chrome's "Use saved password?" now shows the phone number, not the synthetic Firebase email
+
+Owner, with a screenshot of Chrome's native saved-password picker showing
+`769968158@petro-platform.com` as the saved username: *"I don't want google
+to save the tied link, let's just be number, l understand Firebase enrolls
+numbers as email but can't you remove it from appearing as that only
+number, or it will affect Firebase authentication system?"*
+
+**Root cause, not a Chrome quirk to work around.** `storeCredentialIfPossible()`
+(`user-src/original_module.js`) explicitly saves the login via the
+Credential Management API --
+`navigator.credentials.store(new PasswordCredential({ id: email, password: pass }))`
+-- called from `doLogin()`/`doRegister()`'s two success paths right after a
+real Firebase sign-in. `id` was always the synthetic
+`<digits>@petro-platform.com` address `phoneToEmail()` builds (never the
+raw phone), because `tryAutoSignIn()` reads `cred.id` straight back out on
+the NEXT visit and hands it directly to `fbSignIn(cred.id, cred.password)`
+for silent sign-in -- it has to be a real Firebase-acceptable address.
+Chrome's own "Use saved password?" sheet, and its saved-passwords list in
+Settings, display whatever was passed as `id` when nothing else was given
+-- which is exactly the ugly synthetic address the owner is looking at.
+
+**Fix, using the field the spec built for exactly this case.** The W3C
+Credential Management API's `PasswordCredential` accepts a separate,
+purely cosmetic `name` field precisely for an `id` that isn't
+human-readable (this is the standard federated/SSO pattern -- e.g. an
+account keyed by a UUID showing its owner's real name instead). Chrome's
+own picker shows `name` in place of `id` when it's set. `storeCredentialIfPossible(email,
+pass)` gained a third `displayPhone` parameter, passed as `name` --
+`id` is completely untouched, so `tryAutoSignIn()`'s silent sign-in a
+member relies on every return visit keeps working exactly as before. All
+three call sites (`doLogin()`, `doRegister()`'s normal path, and its
+"ghost account" retry-sign-in branch) already had the member's own
+`cleanPhone()`-formatted number (`+256769968158` shape) in scope and now
+pass it through.
+
+**Verified, not assumed.** Read `tryAutoSignIn()` directly to confirm it
+reads `cred.id` (never `cred.name`) for the actual sign-in call -- this
+change genuinely cannot touch authentication. Live in headless Chromium
+against the real built bundle: stubbed `window.PasswordCredential`/
+`navigator.credentials.store` (via `Object.defineProperty`, since a plain
+assignment silently no-ops against Chromium's own already-built-in
+implementation of this exact API) and called the real
+`storeCredentialIfPossible()` from the shipped code -- confirmed the
+stored credential's `id` is still the unchanged synthetic email
+(`769968158@petro-platform.com`) while `name` is now the phone
+(`+256769968158`), with zero page errors. `node -c`, `build-core.js`
+round-trip OK, `npm run test:audit` passes in full (163 checks).
+`user/sw.js` bumped `v220` → `v221`.
