@@ -130,8 +130,17 @@ server {
     location = /sw.js       { add_header Cache-Control "no-cache"; }
     location = /manifest.json { add_header Cache-Control "no-cache"; }
 
+    # `try_files $uri =404` alone (a first-draft, never live-tested version
+    # of this template) treats a bare `/` request as a literal file lookup,
+    # which fails since root+"/" is a directory, not a file -- it falls
+    # straight to =404 without ever consulting `index` above. The `$uri/`
+    # alternative is what makes nginx recognize the directory match and
+    # apply `index index.html` -- found live on the real domain cutover
+    # (index.html itself served fine via its exact filename, only `/`
+    # 404'd), not caught by a syntax check, since this is valid nginx that
+    # just does the wrong thing.
     location / {
-        try_files $uri =404;
+        try_files $uri $uri/ =404;
     }
 }
 
@@ -157,6 +166,6 @@ server {
     add_header Cache-Control "no-cache";
 
     location / {
-        try_files $uri =404;
+        try_files $uri $uri/ =404;
     }
 }
