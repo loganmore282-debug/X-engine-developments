@@ -186,6 +186,7 @@ var LANG_ROWS = [
   ['Messages', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa'],
   ['Transaction Statement', 'Ebiwandiiko bya Ssente', 'Rekodi ya Salio', 'Historique du solde', 'Amateka y\'amafaranga', 'Ebihandiiko bya Sente'],
   ['Rules and Regulations', '', '', '', '', ''],
+  ['Login successful ✓', '', '', '', '', ''],
   ['Login Password', 'Ekisumuluzo ky\'Okuyingira', 'Nenosiri la Kuingia', 'Mot de passe de connexion', 'Ijambobanga ryo kwinjira', 'Ekisumuruzo ky\'Okutaaha'],
   ['Trade Password', 'Ekisumuluzo ky\'Okusuubula', 'Nenosiri la Malipo', 'Mot de passe de transaction', 'Ijambobanga ry\'ubucuruzi', 'Ekisumuruzo ky\'Okushuubura'],
   ['Download APP', 'Tikka APP', 'Pakua APP', 'T\u00e9l\u00e9charger l\'application', 'Kuramo APP', 'Tikka APP'],
@@ -1715,6 +1716,7 @@ window.doLogin = async function(){
   if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
   if (!pass) return notify('Enter your password.');
   setBtnLoading('loginBtn', true, 'Log In', 'Logging in…');
+  window._pendingLoginSuccess = true;
   try {
     // Tries this region's address, then the other shape for the same region
     // -- see loginAddressCandidates(). The LAST error is the one reported, so
@@ -1740,6 +1742,7 @@ window.doLogin = async function(){
     if (!remember || remember.checked) storeCredentialIfPossible(email, pass);
   }
   catch (e) {
+    window._pendingLoginSuccess = false;
     notify(fbErrMsg(e));
     setBtnLoading('loginBtn', false, 'Log In');
   }
@@ -2414,6 +2417,7 @@ window.addEventListener('snow-auth', async (ev) => {
   } else { _memberSession.clear(); clearCachedState(); }
   if (await maybeShowOpeningGate()) return;
   if (!user) {
+    window._pendingLoginSuccess = false;
     // Only worth trying once, on the very first "nobody's signed in" we see
     // this page load (a real boot) -- not after an in-session doLogout(),
     // which already called preventSilentAccess() specifically so this
@@ -2539,6 +2543,7 @@ async function enterApp(){
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
+  if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
   refreshAppDataInBackground(uid);
 }
 // Shared by both bootFromNetwork() branches below -- retries /register,
@@ -2649,7 +2654,8 @@ async function bootFromNetwork(uid){
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
-  if (signupFlow) notify(t('Registration successful ✓'));
+  if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
+  else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
   // and costs no round trip. Tiny (a few hostnames), un-awaited, and a
@@ -3053,11 +3059,7 @@ window.showPage = async function(name){
   // insufficient-balance toast's "send them to Deposit"), and a member
   // tapping a different tab is not acknowledging the toast -- it must not
   // ALSO force a navigation neither the toast nor the tap asked for.
-  if ($('notifyBg') && $('notifyBg').classList.contains('show')) {
-    if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
-    $('notifyBg').classList.remove('show');
-    _notifyOnClose = null;
-  }
+  dismissNotify();
   if (sheetOpen && typeof closeSheet === 'function') closeSheet({ navigating: true, keepHistory: true });
   // payOpen is deliberately absent from this count -- it pushes no history
   // entry, so including it would retire someone else's.
@@ -4585,6 +4587,11 @@ window.deleteWallet = function(id){
 // inherit a stale callback.
 var _notifyOnClose = null;
 var _notifyTimer = null;
+function dismissNotify(){
+  if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
+  $('notifyBg').classList.remove('show');
+  _notifyOnClose = null;
+}
 window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
@@ -4593,7 +4600,7 @@ window.notify = function(message, onClose){
   // acknowledge) -- tapping it early still works via closeNotify() on the
   // card's own onclick, which clears this same timer first.
   if (_notifyTimer) clearTimeout(_notifyTimer);
-  _notifyTimer = setTimeout(closeNotify, 3600);
+  _notifyTimer = setTimeout(closeNotify, 2200);
 };
 window.closeNotify = function(){
   if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
@@ -5138,6 +5145,7 @@ function maybeAnnounceAfterSheet(closedTitle){
   maybeShowAnnouncement();
 }
 function openSheet(title, bodyHtml){
+  dismissNotify();
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
@@ -5319,9 +5327,12 @@ function revealWordsHtml(escapedText){
 // block as the member scrolls (owner: "whenever one scrolls down, images
 // and words I placed show animation").
 let _aboutScrollObserver = null;
+function articleLoadingHtml(){
+  return '<div class="article-loading" role="status" aria-label="Loading">' + MINI_RING_LOADER + '</div>';
+}
 window.openAboutSheet = async function(){
   const s = STATE.settings || {};
-  openSheet('About ' + brandName(), `<div id="aboutArticle" class="reveal-in"><p style="color:rgba(255,255,255,.68);">Loading…</p></div>`);
+  openSheet('About ' + brandName(), `<div id="aboutArticle" class="reveal-in">${articleLoadingHtml()}</div>`);
   const r = await api('/public/about-content');
   const wrap = $('aboutArticle');
   if (!wrap) return; // sheet was closed again before this resolved
@@ -5344,7 +5355,7 @@ window.openAboutSheet = async function(){
 // with its own content document so optional images stay out of /settings.
 window.openRulesSheet = async function(){
   const s = STATE.settings || {};
-  openSheet('Rules and Regulations', `<div id="rulesArticle" class="reveal-in"><p style="color:rgba(255,255,255,.68);">Loading…</p></div>`);
+  openSheet('Rules and Regulations', `<div id="rulesArticle" class="reveal-in">${articleLoadingHtml()}</div>`);
   const r = await api('/public/rules-content');
   const wrap = $('rulesArticle');
   if (!wrap) return;
