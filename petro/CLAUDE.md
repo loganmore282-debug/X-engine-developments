@@ -5074,3 +5074,106 @@ no separate preview page, just a different URL.
   `index.html?ref=oldformatcode` form still captures correctly too,
   confirming backward compatibility survived the change. `user/sw.js`
   bumped `v216` → `v217`.
+
+## Follow-up 32 -- domain cutover complete: petro-cchnug.com is live, TLS issued, app repointed
+
+The "Not done yet" gap this file has flagged since the VPS first went
+live is closed. The owner ran the DNS + nginx + certbot steps
+themselves (Termux, as always); two real problems came up along the
+way, both found and fixed on the live server, not guessed at:
+
+- **The nginx symlink already in use was named `petro-bare-ip`, not
+  `petro`** -- the pre-existing port-8080/8081 bare-IP setup this file's
+  "Status" section already documents. Harmless collision once
+  noticed (different name, no conflict), but it meant the FIRST attempt
+  to drop the new domain config in (`sed ... > /etc/nginx/sites-available/petro`)
+  silently never completed -- an SSH session had timed out mid-command,
+  and the next few commands were unknowingly typed into the phone's own
+  local Termux shell instead of the VPS. Re-running the same command
+  after reconnecting worked immediately.
+- **Certbot's `--nginx` installer couldn't find a matching server
+  block on the first run**, because the site config didn't exist yet
+  at that point (see above) -- the certificate itself still issued
+  successfully (`certbot certonly`-equivalent always runs before the
+  installer step), it just wasn't wired into nginx. Once the real
+  site config existed, `nginx -t` immediately surfaced the actual
+  underlying issue plainly: the template's three `listen 443 ssl`
+  blocks have no `ssl_certificate`/`ssl_certificate_key` directives by
+  design (a comment in the template says certbot fills them in) --
+  fixed by inserting the two directives (pointing at the already-issued
+  cert under `/etc/letsencrypt/live/api.petro-cchnug.com/`, which
+  covers all three subdomains as one multi-SAN cert) after each
+  `listen [::]:443 ssl http2;` line directly, rather than re-running
+  certbot's installer a second time. `nginx -t` passed clean after
+  that, `systemctl reload nginx` succeeded, and
+  `curl -I https://api.petro-cchnug.com/health` returned a real
+  `HTTP/2 200` with a valid HSTS header from the VPS itself -- TLS is
+  genuinely live, not just certificate-issued.
+- Also set up: a **business mailbox, `support@petro-cchnug.com`**
+  (Hostinger's own mail service, no code involved) -- the natural
+  address for the admin panel's existing "Support email" setting
+  (Settings -> Support contacts, see the Support-page rounds above).
+
+**App repointed at the real domain, not left on the bare IP once TLS
+was confirmed working**:
+- `node set-backend-url.js https://api.petro-cchnug.com`, then
+  `build-core.js`/`build-admin.js` to regenerate both bundles -- same
+  documented order as every other backend move in this file's history
+  (see "Build & deploy pipeline" above: rewrite sources, THEN rebuild,
+  never the other way around, since `API_BASE`/`SERVER` live inside
+  the obfuscated bundle, not just the readable source).
+- **A real, second gap in `set-backend-url.js` itself found and fixed
+  before it could bite twice** -- its own verification sweep caught a
+  stray `http://179.198.197.114:3000` reference in the rebuilt
+  `admin/index.html` even after the first rewrite pass. Traced to
+  `admin-src/index.html`'s `<script data-inner-bg-admin>` block (the
+  small "Signed-in page background" settings panel) -- a separate,
+  non-obfuscated plain script that cannot read `SERVER` out of the
+  main module's scope, so it keeps its OWN copy of the backend origin
+  in a bare `fetch('http://...'+path,o)` call. `set-backend-url.js`'s
+  `SITES` list had no pattern for this shape at all, so its own
+  rewrite pass silently skipped it every single time this script has
+  ever run -- exactly the same failure class its own header comment
+  already documents for `user/sw.js`/`admin/sw.js`/`static-server.js`
+  ("MISSED by the first version of this script... found by
+  test-brand-assets.js failing, not by anyone noticing"), just a
+  fourth instance nobody had hit yet. Added a new rewrite rule
+  (anchored on the `+path` suffix right after the origin string --
+  confirmed via grep that nothing else in the file matches that
+  specific shape before trusting the anchor) and the matching pattern
+  in `originsIn()` so `--check` and the safety sweep both account for
+  it going forward. Re-ran `set-backend-url.js` against the real
+  domain a second time with the fix in place -- it now genuinely finds
+  and fixes this line instead of silently leaving it stale.
+- **Verified, not assumed**: `set-backend-url.js --check` shows every
+  one of the 8 rewrite-target files agreeing on
+  `https://api.petro-cchnug.com`, and a direct grep for the bare IP
+  across every source AND built file (`user/index.html`,
+  `user/share.html`, `admin/index.html`, both `-src` files, sw.js's,
+  manifests) returns zero hits -- `server.js`'s own single remaining
+  reference is the deliberate, still-correct CORS allowlist entry for
+  the bare-IP frontend, not a miss. A full write-mode re-run of
+  `set-backend-url.js` now exits 0 with "0 file(s) changed" -- fully
+  converged, no strays left anywhere. `node -c`/`node --check` clean
+  on every touched `.js` file, both builds round-trip OK,
+  `npm run test:audit` passes in full (163 checks).
+- **Found, not fixed, out of scope**: `test-brand-assets.js` has 3
+  pre-existing failures (`fileToSquarePng`/`roundIconCorners`-related,
+  in the admin icon-upload code) -- confirmed via `git stash` that
+  they already failed on the already-pushed commit before any of this
+  round's changes, unrelated to the domain cutover. Not part of
+  `npm run test:audit`'s own list; flagged for a separate round rather
+  than guessed at here, same precedent as Follow-up 11.5's own
+  "found, not fixed" note.
+- `user/sw.js` bumped `v217` → `v218`, `admin/sw.js` bumped `v55` →
+  `v56` (both source files' baked-in origin genuinely changed, not a
+  no-op edit).
+
+**Still open, unchanged from before**: `app.`/`admin.petro-cchnug.com`
+themselves were being checked live by the owner in parallel with this
+work (their own `curl -I` against each) -- not independently confirmed
+from this session, since this sandbox has no route to the real
+domain. Worth a final owner-side check after this deploys: open
+`https://app.petro-cchnug.com` in a real browser and confirm the app
+loads and can sign in, the same end-to-end check every prior
+backend-move round in this file has called for.

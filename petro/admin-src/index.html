@@ -41,7 +41,7 @@
      frame-ancestors is NOT here: a meta policy cannot express it (the browser
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' http://179.198.197.114:3000 https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://api.petro-cchnug.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#e30613">
 <link rel="manifest" href="/manifest.json">
 <!-- Same server-hosted brand asset the user app installs with, NOT a local
@@ -50,8 +50,8 @@
      that shipped in the repo, so the icon "never changed" here no matter how
      many times it was replaced. One source of truth now: whatever
      /admin/app-icon/set last wrote. -->
-<link rel="icon" href="http://179.198.197.114:3000/public/app-icon-192.png">
-<link rel="apple-touch-icon" href="http://179.198.197.114:3000/public/app-icon-192.png">
+<link rel="icon" href="https://api.petro-cchnug.com/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="https://api.petro-cchnug.com/public/app-icon-192.png">
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
 window._adminInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window._adminInstallPrompt = e;
@@ -391,7 +391,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <script>
 // Petro Admin panel.
-const SERVER = 'http://179.198.197.114:3000';
+const SERVER = 'https://api.petro-cchnug.com';
 
 let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
 try {
@@ -3780,7 +3780,7 @@ if ('serviceWorker' in navigator) {
     var h={};var t=token();if(t)h.Authorization='Bearer '+t;
     var o={method:body?'POST':'GET',headers:h};
     if(body){h['Content-Type']='application/json';o.body=JSON.stringify(body);}
-    var r=await fetch('http://179.198.197.114:3000'+path,o);return r.json();
+    var r=await fetch('https://api.petro-cchnug.com'+path,o);return r.json();
   }
   async function mount(){
     if(busy)return;

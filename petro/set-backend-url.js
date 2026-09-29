@@ -52,6 +52,15 @@ const SITES = [
     [/const SERVER = '[^']*'/g, `const SERVER = '${o}'`],
     [/(connect-src 'self' )https?:\/\/[^\s;]+/g, `$1${o}`],
     [/(<link rel="(?:icon|apple-touch-icon)" href=")https?:\/\/[^/]+(\/public\/)/g, `$1${o}$2`],
+    // <script data-inner-bg-admin>'s own req() -- a small, separate plain
+    // script (not part of the obfuscated core, so it cannot just read
+    // SERVER out of module scope) that hardcodes its own copy of the
+    // backend origin. Found the same way the three below were: this exact
+    // class of miss, not remembered ahead of time. Anchored on the '+path
+    // suffix right after the origin string, which nothing else in this
+    // file matches (SERVER+path is already covered by the SERVER rule
+    // above -- confirmed by grep before adding this, not assumed).
+    [/fetch\('https?:\/\/[^']*'\+path/g, `fetch('${o}'+path`],
   ]],
   ['user-src/index.html', o => [
     [/(connect-src 'self' )https?:\/\/[^\s;]+/g, `$1${o}`],
@@ -92,7 +101,8 @@ function originsIn(text) {
                     /"(https?:\/\/[^/]+)\/public\/app-icon-/g,
                     /const API_ORIGIN = '([^']*)'/g,
                     /const BRAND_ICON = '(https?:\/\/[^/]+)\/public\//g,
-                    /process\.env\.PETRO_API_ORIGIN \|\| '([^']*)'/g]) {
+                    /process\.env\.PETRO_API_ORIGIN \|\| '([^']*)'/g,
+                    /fetch\('(https?:\/\/[^']*)'\+path/g]) {
     let m;
     while ((m = re.exec(text))) out.add(m[1].replace(/\/+$/, ''));
   }

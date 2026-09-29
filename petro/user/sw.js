@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'petro-shell-v217';
+const CACHE = 'petro-shell-v218';
 const VENDOR_CACHE = 'petro-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
@@ -52,7 +52,7 @@ const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 // asleep, malformed JSON -- falls through to the manifest exactly as shipped,
 // because a phone that cannot install the app is a far worse outcome than one
 // that installs it under last week's name.
-const API_ORIGIN = 'http://179.198.197.114:3000';
+const API_ORIGIN = 'https://api.petro-cchnug.com';
 const BRAND_CACHE = 'petro-brand-v1';
 const BRAND_KEY = '/__brand-name';
 

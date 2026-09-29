@@ -1,12 +1,12 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'petro-admin-shell-v55';
+const CACHE = 'petro-admin-shell-v56';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 // The uploaded icon, served by Petro backend. manifest.json and index.html's
 // <link rel="icon"> point here too; the local /icon-*.png above stay only as
 // the offline shell copy. Before this, the admin panel read the PNG that
 // shipped in the repo, so replacing the icon in Admin -> Brand changed the
 // members' app and left the admin's own icon untouched forever.
-const BRAND_ICON = 'http://179.198.197.114:3000/public/app-icon-192.png';
+const BRAND_ICON = 'https://api.petro-cchnug.com/public/app-icon-192.png';
 
 // Firebase Messaging background handler -- shows a notification for pushes
 // that arrive while the admin panel tab isn't open/focused. Foreground

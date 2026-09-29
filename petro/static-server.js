@@ -41,7 +41,7 @@ if (WHICH !== 'user' && WHICH !== 'admin') {
 }
 const ROOT = path.join(__dirname, WHICH);
 const PORT = Number(process.env.PORT) || 8080;
-const API_ORIGIN = (process.env.PETRO_API_ORIGIN || 'http://179.198.197.114:3000')
+const API_ORIGIN = (process.env.PETRO_API_ORIGIN || 'https://api.petro-cchnug.com')
   .trim().replace(/\/+$/, '');
 
 if (!fs.existsSync(path.join(ROOT, 'index.html'))) {
