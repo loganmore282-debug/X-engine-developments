@@ -1497,6 +1497,16 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   box-shadow:0 7px 22px rgba(0,0,0,.28);}
 .auth-intro h1{margin:0 0 6px;color:#fff;font-size:25px;line-height:1.2;font-weight:800;letter-spacing:-.02em;}
 .auth-intro p{margin:0;color:rgba(255,255,255,.8);font-size:13.5px;line-height:1.5;font-weight:500;}
+/* Real bug found in an audit, not requested by name: admin Settings has
+   always had "App tagline (shown under the logo, and on the Home header)"
+   (brandTagline) and applyAuthTagline() has always existed to paint it --
+   but no #authTagline element was ever actually in this screen's markup
+   (through several auth-screen rebuilds), so the setting has silently never
+   shown anywhere on Login since the Home-header copy of it was removed on
+   its own earlier round. Restored here, under the logo as the admin label
+   promises -- applyAuthTagline() itself needed no changes, it already
+   null-safely hides this element when the tagline is blank. */
+.auth-tagline{margin:0 0 10px;color:rgba(255,255,255,.72);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
 .af-v2{display:flex;align-items:center;gap:10px;background:rgba(20,12,8,.44);border:1.5px solid rgba(255,255,255,.18);
   border-radius:var(--r-ctl);padding:0 16px;height:54px;margin-bottom:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .af-v2 input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:#fff;}
@@ -1518,6 +1528,14 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   padding:0 16px;height:38px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;}
 .af-inline-btn:disabled{opacity:.55;cursor:default;}
 .af-forgot{text-align:right;margin:-4px 0 18px;font-size:13.5px;}
+/* Another real bug from the same audit: updateReferralFieldHint() ("says out
+   loud whether the box must be filled, instead of leaving members to
+   discover it by being rejected") has always null-safely set textContent
+   on #regReferralHint -- which never existed in this markup, so the hint
+   text has never actually shown; only the input's own placeholder swap
+   ("Referral code" vs "(optional)") was ever visible. Restored under the
+   referral field. */
+.af-reg-referral-hint{margin:-8px 0 14px;font-size:12px;line-height:1.4;color:rgba(255,255,255,.62);}
 .af-forgot a{color:rgba(255,255,255,.85);text-decoration:none;font-weight:600;}
 .af-btn-v2{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--petro-grad);
   color:#fff;border:0;border-radius:var(--r-ctl);height:54px;font:inherit;font-size:16px;font-weight:700;
@@ -2853,6 +2871,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
             <img class="auth-brand-logo" id="loginBrandLogo" data-auth-brand-logo data-auth-fallback="loginBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('loginBrandFallback');if(f)f.style.display='flex'">
             <span class="auth-brand-fallback" id="loginBrandFallback" aria-hidden="true">P</span>
           </div>
+          <p class="auth-tagline" id="authTagline" style="display:none;"></p>
           <h1>Welcome back</h1>
           <p>Log in to your Petro account to continue.</p>
         </div>
@@ -2918,6 +2937,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg></span>
           <input id="regReferral" type="text" placeholder="Enter invitation code (optional)" autocomplete="off" maxlength="12">
         </div>
+        <p class="af-reg-referral-hint" id="regReferralHint"></p>
         <button class="af-btn-v2" id="regBtn" onclick="doRegister()">Register</button>
         <p class="af-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
       </div>

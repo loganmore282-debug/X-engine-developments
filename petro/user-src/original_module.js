@@ -5210,12 +5210,11 @@ window.openInfoSheet = function(kind){
   if (kind === 'about') return openAboutSheet();
   if (kind === 'rules') return openRulesSheet();
   if (kind === 'help') return openHelpSheet();
-  const s = STATE.settings || {};
-  const map = {
-    rules: ['Rules & Terms', s.rulesText || 'Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed deposit: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.'],
-  };
-  const [title, body] = map[kind] || ['Info', ''];
-  openSheet(title, `<div class="reveal-in"><p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p></div>`);
+  // No remaining caller passes any other kind -- openInfoSheet() itself has
+  // zero callers left anywhere in this file (confirmed by grep), same as
+  // when CLAUDE.md's own history first found it unreachable. Kept, not
+  // deleted, as the generic fallback the three branches above grew out of.
+  openSheet('Info', '');
 };
 // ── SUPPORT: MAIL ON HOME, A REAL PAGE UNDER ACCOUNT ──
 //

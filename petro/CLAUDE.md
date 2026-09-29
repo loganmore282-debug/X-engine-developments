@@ -4532,3 +4532,102 @@ actual visible window (`pointer-events:auto` while `.show` is present, a
 dispatched click on the card closes it). `node -c` n/a (CSS-only, no JS
 touched), `build-core.js` "round-trip OK", `npm run test:audit` passes in
 full. `user/sw.js` bumped `v202` → `v203`.
+
+## Follow-up 26 -- reviewed Codex's 4 commits (clean); a real bugsweep found two dead admin settings that had never actually rendered anywhere
+
+Owner: *"codex made some commits, so you can take a look. and also fix all
+bugs in the code, check the bugs."* Two separate asks, both done.
+
+**Codex's 4 commits reviewed** (`a9db377`..`f28297e`, fast-forwarded onto
+this branch): `Match Petro account icons to supplied references` (gift-
+code/email/download-app icons redrawn from the owner's reference images,
+including a JPEG traced into an inline SVG for the gift-code mark),
+`Restore Gift Codes tile styling and contrast` (put the gift-code icon's
+badge background back and fixed its heading to white -- it sits on the
+dark glass `.sheet-body`, so the earlier dark-ink heading would have been
+near-invisible), `Restore Account Gift Codes row icon` (reverted the
+Account row's gift icon back to the raster mask version, removing the
+now-unused `.gift-reference-svg` sizing rule for that one spot), and `Add
+admin-managed Rules and Regulations page` (a genuine new feature: a
+`content/rules` Mongo doc + `/public/rules-content`/`/admin/rules-content`
+routes, mirroring the existing About-page block-editor pattern almost
+exactly -- same validation shape, same `verifyOwner` gate on the write,
+same `_dirty`-flag/`beforeunload` guard in the admin editor). All four
+read cleanly and build clean; ran the full test suite (all pass) and
+grep-audited every `$('id')` reference in both `-src` files against every
+id actually declared (static or templated) anywhere in the same file, and
+every `onclick="fn()"` reference against every defined function -- zero
+dangling references introduced by any of the four commits, the specific
+failure shape this file's own history has caught repeatedly before.
+
+**One small, genuinely dead leftover cleaned up, not a functional bug**:
+the `Rules and Regulations` commit added `if (kind === 'rules') return
+openRulesSheet();` to `openInfoSheet()`, which made its own pre-existing
+`map.rules` entry (the old plain-text fallback for the same kind)
+unreachable -- confirmed `openInfoSheet()` itself has zero callers left
+anywhere in the file (same "entirely unreachable" finding this file's own
+"Regulation page" section documented once already, for the identical
+function, before the Rules page existed to call into it for real).
+Simplified rather than left as confusing dead-looking-live code.
+
+**The actual bugsweep** (per "fix all bugs in the code, check the bugs"):
+syntax/build checks and the full `npm run test:audit` suite were already
+clean (see above), so the real work was a static reachability sweep for
+this codebase's own repeatedly-proven failure class -- an element or
+function a live code path references that was quietly never wired into
+the markup, or was removed from it without updating the reference. Found
+two, both real, both silent (never crashed, never logged -- just never
+rendered), both restored:
+
+- **`applyAuthTagline()`** (called once from `boot()`) has always
+  targeted `#authTagline` to paint the admin's "App tagline (shown under
+  the logo...)" setting (`brandTagline`) onto the Login screen -- but no
+  `#authTagline` element has ever actually existed in `user-src/index.html`,
+  through several full auth-screen rebuilds this file's own history
+  documents. The function's own null-guard (`if (!el) return;`) meant this
+  failed completely silently: the setting has been saveable in Admin ->
+  Settings this whole time and has never shown up anywhere a member could
+  see it. (Its OTHER promised location, the Home top-bar, WAS live once
+  but was deliberately removed in an earlier round -- a different,
+  intentional removal, not this bug.) Fixed by adding the missing
+  `<p id="authTagline">` under the login pane's logo, in a new
+  `.auth-tagline` style matched to the rest of `.auth-intro`'s white-on-
+  photo palette -- `applyAuthTagline()` itself needed no code changes, it
+  was already correct. The admin label's own text ("...and on the Home
+  header") was also stale (that half is gone on purpose) -- trimmed to
+  match what's actually still true.
+- **`updateReferralFieldHint()`** (runs on every auth-screen load, per its
+  own comment: "says out loud whether the box must be filled, instead of
+  leaving members to discover it by being rejected") has always
+  null-safely tried to write into `#regReferralHint`, which also never
+  existed in the markup -- so only its OTHER effect (swapping the
+  referral field's placeholder between "Referral code" and "Referral code
+  (optional)") was ever visible; the actual sentence explaining WHY was
+  silently dropped every single time. Fixed the same way: added
+  `<p id="regReferralHint">` under the referral field in the Register
+  pane, with its own small `.af-reg-referral-hint` style.
+- **Checked and ruled out as false positives, not additional bugs**: 12
+  other `$('id')` references the same automated sweep initially flagged --
+  `confettiCanvas`/`langSheetBg` are created via `element.id = '...'`
+  (a JS property assignment, not an HTML attribute, which the sweep's
+  regex doesn't parse) rather than missing; `langBtnLabel`/`langRowValue`
+  and `lpOld`/`lpNew`/`lpNew2`/`tpOld`/`tpNew`/`tpNew2` are either
+  null-guarded already or generated by `pwFieldHtml()` inside the exact
+  same `openSheet()` call that also wires the button referencing them, so
+  they always exist by the time anything could click that button;
+  `rememberMe`'s `if (!remember || remember.checked)` fallback is the
+  already-documented, deliberate "credentials now always save locally on
+  login" behavior from the single-screen auth rebuild, not a new find;
+  `manPayTotal` was only ever a code comment, no live reference at all.
+
+**Verified, not assumed**: `node -c`/`build-core.js`/`build-admin.js` all
+clean (`round-trip OK` on both), `npm run test:audit` passes in full after
+the fixes. Live in headless Chromium against the real built bundle: called
+`applyAuthTagline()` directly with a mock `brandTagline` and confirmed
+`#authTagline` now exists, shows the exact text, and correctly hides
+itself again (`display:none`) when the setting is blank; called
+`updateReferralFieldHint()` in both the required and optional states and
+confirmed `#regReferralHint` now shows the right sentence in each,
+alongside the placeholder swap that already worked. `user/sw.js` bumped
+`v207` → `v208`, `admin/sw.js` bumped `v50` → `v51` (the admin label-text
+fix touched `admin-src/index.html`).
