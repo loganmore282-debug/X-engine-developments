@@ -2668,8 +2668,10 @@ async function quietRefreshReferrals(){
 // draft is actually saved (or the tab is left and the app is reloaded fresh).
 let _aboutBlocks = [];
 let _aboutBlocksDirty = false;
+let _rulesBlocks = [];
+let _rulesBlocksDirty = false;
 window.addEventListener('beforeunload', (e) => {
-  if (_aboutBlocksDirty) { e.preventDefault(); e.returnValue = ''; }
+  if (_aboutBlocksDirty || _rulesBlocksDirty) { e.preventDefault(); e.returnValue = ''; }
 });
 // The panel wears the platform's name too, so renaming the app renames this.
 // The <title> and the two "<name> Admin" headings are the whole surface --
@@ -2990,12 +2992,13 @@ async function renderSettings(){
   // Image/banner uploads all moved to their own tab, see renderBanners() --
   // this fetch only needs what Rates/Payments/Support/App name/About
   // actually render now.
-  const [r, abr] = await Promise.all([
-    api('/admin/settings'), api('/admin/about-content')
+  const [r, abr, rbr] = await Promise.all([
+    api('/admin/settings'), api('/admin/about-content'), api('/admin/rules-content')
   ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
+  if (!_rulesBlocksDirty) _rulesBlocks = Array.isArray(rbr.blocks) ? rbr.blocks : [];
   applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
@@ -3140,8 +3143,18 @@ async function renderSettings(){
       <button class="btn block" id="abAddText">+ Add text block</button>
       <label class="btn block file-btn">+ Add image block<input type="file" id="abAddImageFile" accept="image/*" hidden></label>
       <button class="btn block" id="saveAbout">Save about page</button>
+    </div>
+
+    <h2 class="sec">Rules and Regulations</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Build the member-facing Rules and Regulations page with ordered text and image blocks. Changes appear in Account after saving.</p>
+      <div id="rulesBlocksList"></div>
+      <button class="btn block" id="rrAddText">+ Add text block</button>
+      <label class="btn block file-btn">+ Add image block<input type="file" id="rrAddImageFile" accept="image/*" hidden></label>
+      <button class="btn block" id="saveRulesContent">Save Rules and Regulations</button>
     </div>`;
   renderAboutBlocksEditor();
+  renderRulesBlocksEditor();
   $('saveDepMethod').addEventListener('click', async()=>{
     const gateway = document.querySelector('input[name="depGateway"]:checked').value;
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
@@ -3232,6 +3245,29 @@ async function renderSettings(){
       if (d.status==='success') _aboutBlocksDirty = false;
     })());
   });
+  $('rrAddText').addEventListener('click', ()=>{
+    _rulesBlocks.push({ type:'text', text:'' });
+    _rulesBlocksDirty = true;
+    renderRulesBlocksEditor();
+    const areas = document.querySelectorAll('#rulesBlocksList textarea');
+    if (areas.length) areas[areas.length-1].focus();
+  });
+  $('rrAddImageFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; e.target.value=''; if(!f) return;
+    try {
+      const image = await fileToDataUrl(f,1280,0.82);
+      _rulesBlocks.push({ type:'image', image });
+      _rulesBlocksDirty = true;
+      renderRulesBlocksEditor();
+    } catch(err){ toast(err.message||'Could not read image','err'); }
+  });
+  $('saveRulesContent').addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/rules-content/set', { blocks:_rulesBlocks });
+      toast(d.status==='success'?'Rules and Regulations saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') _rulesBlocksDirty = false;
+    })());
+  });
 }
 // About page block editor -- a plain ordered array of {type:'text',text} /
 // {type:'image',image} kept in _aboutBlocks while the tab is open, redrawn
@@ -3262,6 +3298,34 @@ function renderAboutBlocksEditor(){
   }));
   box.querySelectorAll('[data-ab-text]').forEach(ta=>ta.addEventListener('input', ()=>{
     _aboutBlocks[+ta.dataset.abText].text = ta.value; _aboutBlocksDirty=true;
+  }));
+}
+function renderRulesBlocksEditor(){
+  const box = $('rulesBlocksList'); if (!box) return;
+  if (!_rulesBlocks.length) { box.innerHTML = '<p class="muted" style="margin:8px 0">No rules content yet. Add text and image blocks below.</p>'; return; }
+  box.innerHTML = _rulesBlocks.map((b,i)=>`
+    <div class="panel-card" style="margin-bottom:8px;padding:10px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <span class="muted" style="font-size:11px;flex:1;">${i+1}. ${b.type==='image'?'Image':'Text'}</span>
+        <button class="btn sm" data-rr-up="${i}" ${i===0?'disabled':''}>↑</button>
+        <button class="btn sm" data-rr-down="${i}" ${i===_rulesBlocks.length-1?'disabled':''}>↓</button>
+        <button class="btn danger sm" data-rr-del="${i}">Delete</button>
+      </div>
+      ${b.type==='image'
+        ? `<img src="${esc(b.image)}" style="width:100%;display:block;border-radius:8px;">`
+        : `<textarea data-rr-text="${i}" rows="4" maxlength="4000" placeholder="Write a rule or regulation…">${esc(b.text)}</textarea>`}
+    </div>`).join('');
+  box.querySelectorAll('[data-rr-up]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const i=+btn.dataset.rrUp; [_rulesBlocks[i-1],_rulesBlocks[i]]=[_rulesBlocks[i],_rulesBlocks[i-1]]; _rulesBlocksDirty=true; renderRulesBlocksEditor();
+  }));
+  box.querySelectorAll('[data-rr-down]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const i=+btn.dataset.rrDown; [_rulesBlocks[i+1],_rulesBlocks[i]]=[_rulesBlocks[i],_rulesBlocks[i+1]]; _rulesBlocksDirty=true; renderRulesBlocksEditor();
+  }));
+  box.querySelectorAll('[data-rr-del]').forEach(btn=>btn.addEventListener('click', ()=>{
+    _rulesBlocks.splice(+btn.dataset.rrDel,1); _rulesBlocksDirty=true; renderRulesBlocksEditor();
+  }));
+  box.querySelectorAll('[data-rr-text]').forEach(ta=>ta.addEventListener('input', ()=>{
+    _rulesBlocks[+ta.dataset.rrText].text=ta.value; _rulesBlocksDirty=true;
   }));
 }
 

@@ -185,6 +185,7 @@ var LANG_ROWS = [
   ['Wallet', 'Ensawo', 'Pochi', 'Portefeuille', 'Umufuka', 'Ensaho'],
   ['Messages', 'Obubaka', 'Ujumbe', '=', 'Ubutumwa', 'Obutumwa'],
   ['Transaction Statement', 'Ebiwandiiko bya Ssente', 'Rekodi ya Salio', 'Historique du solde', 'Amateka y\'amafaranga', 'Ebihandiiko bya Sente'],
+  ['Rules and Regulations', '', '', '', '', ''],
   ['Login Password', 'Ekisumuluzo ky\'Okuyingira', 'Nenosiri la Kuingia', 'Mot de passe de connexion', 'Ijambobanga ryo kwinjira', 'Ekisumuruzo ky\'Okutaaha'],
   ['Trade Password', 'Ekisumuluzo ky\'Okusuubula', 'Nenosiri la Malipo', 'Mot de passe de transaction', 'Ijambobanga ry\'ubucuruzi', 'Ekisumuruzo ky\'Okushuubura'],
   ['Download APP', 'Tikka APP', 'Pakua APP', 'T\u00e9l\u00e9charger l\'application', 'Kuramo APP', 'Tikka APP'],
@@ -1083,6 +1084,7 @@ var ICONS = {
   arrowDownTray: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19.5h16"/></svg>',
   peoplePlus: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg>',
   giftBox: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9.5" width="18" height="10.5" rx="1.6"/><path d="M3 13.5h18"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.6 0-4-.7-4-3 0-1.5 1.2-2.5 2.5-2.5C12.2 4 12 7 12 9.5Z"/><path d="M12 9.5c1.6 0 4-.7 4-3 0-1.5-1.2-2.5-2.5-2.5C11.8 4 12 7 12 9.5Z"/></svg>',
+  rulesGavel: '<svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="rotate(24 27 22)" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><rect x="12" y="3" width="31" height="10" rx="4"/><path d="M17 13h21v20H17z"/><rect x="9" y="32" width="37" height="10" rx="4"/></g><path d="m38 37 18 10" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><path d="M14 51a14 9 0 0 1 28 0" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><rect x="6" y="52" width="44" height="6" rx="3" fill="currentColor"/></svg>',
   // Vector redraw of the supplied sparkly Petro gift: warm red box, golden
   // ribbon and bow, plus the alternating red/yellow/white celebration marks.
   checkinCalendar: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="1.4" y="2.5" width="21.2" height="20" rx="3.1" stroke="currentColor" stroke-width="2.6"/><path d="M7.3 1v3.2m9.4-3.2v3.2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M8.3 9.1h2.8v2.8H8.3zm4.3 0h2.8v2.8h-2.8zm4.3 0h2.8v2.8h-2.8zM4 13.6h2.8v2.8H4zm4.3 0h2.8v2.8H8.3zm8.6 0h2.8v2.8h-2.8zM4 17.9h2.8v2.8H4zm4.3 0h2.8v2.8H8.3zm4.3 0h2.8v2.8h-2.8z" fill="currentColor"/><path d="m12.5 14.9 1.2 1.2 2.7-3.2" stroke="currentColor" stroke-width="2.1" stroke-linecap="square" stroke-linejoin="miter"/></svg>',
@@ -4178,7 +4180,7 @@ function acctGridCardHtml(iconName, title, onclick){
   '</button>';
 }
 function acctListCardHtml(iconName, title, onclick){
-  const icon = suppliedMemberIcon(iconName);
+  const icon = iconName === 'accountRules' ? ICONS.rulesGavel : suppliedMemberIcon(iconName);
   return '<button class="acct-list-card" onclick="' + onclick + '">' +
     '<span class="acct-list-icon">' + icon + '</span>' +
     '<span class="acct-list-label">' + title + '</span>' + ICONS.chevronRight +
@@ -4264,6 +4266,7 @@ async function renderAccount(){
     ${acctListCardHtml('accountWallet', 'Payout Wallet', 'openWalletSheet()')}
     ${acctListCardHtml('accountStatement', 'Transaction Statement', "openTransactionStatement('income')")}
     ${acctListCardHtml('accountGift', 'Gift Codes', 'openChestSheet()')}
+    ${acctListCardHtml('accountRules', 'Rules and Regulations', 'openRulesSheet()')}
     ${acctListCardHtml('accountSecurity', 'Security Settings', 'openChangeLoginPasswordSheet()')}
     ${acctListCardHtml('support', 'Support', 'openSupportSheet()')}
     ${acctListCardHtml('accountAbout', 'About Us', 'openAboutSheet()')}
@@ -5205,6 +5208,7 @@ window.addEventListener('popstate', () => {
 
 window.openInfoSheet = function(kind){
   if (kind === 'about') return openAboutSheet();
+  if (kind === 'rules') return openRulesSheet();
   if (kind === 'help') return openHelpSheet();
   const s = STATE.settings || {};
   const map = {
@@ -5326,6 +5330,30 @@ window.openAboutSheet = async function(){
     : [{ type: 'text', text: s.aboutText || (brandName() + ' lets you invest in a range of products with daily income and a 3-level referral program.') }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
     ? `<div class="scroll-reveal about-image about-block"><img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;" alt=""></div>`
+    : `<div class="scroll-reveal about-block"><p style="white-space:pre-line;line-height:1.7;color:rgba(255,255,255,.90);">${revealWordsHtml(esc(b.text))}</p></div>`
+  ).join('');
+  if (_aboutScrollObserver) _aboutScrollObserver.disconnect();
+  _aboutScrollObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('in-view'); _aboutScrollObserver.unobserve(e.target); }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -8% 0px' });
+  wrap.querySelectorAll('.scroll-reveal').forEach(el => _aboutScrollObserver.observe(el));
+};
+
+// Rules and Regulations is an admin-authored ordered article like About,
+// with its own content document so optional images stay out of /settings.
+window.openRulesSheet = async function(){
+  const s = STATE.settings || {};
+  openSheet('Rules and Regulations', `<div id="rulesArticle" class="reveal-in"><p style="color:rgba(255,255,255,.68);">Loading…</p></div>`);
+  const r = await api('/public/rules-content');
+  const wrap = $('rulesArticle');
+  if (!wrap) return;
+  const fallback = s.rulesText || ('Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed deposit: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
+  const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
+    : [{ type: 'text', text: fallback }];
+  wrap.innerHTML = blocks.map(b => b.type === 'image'
+    ? `<div class="scroll-reveal about-image about-block"><img src="${esc(b.image)}" style="width:100%;height:auto;display:block;border-radius:12px;" alt=""></div>`
     : `<div class="scroll-reveal about-block"><p style="white-space:pre-line;line-height:1.7;color:rgba(255,255,255,.90);">${revealWordsHtml(esc(b.text))}</p></div>`
   ).join('');
   if (_aboutScrollObserver) _aboutScrollObserver.disconnect();

@@ -129,7 +129,7 @@ const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', 
 // The banner video is capped at 4 MB of actual video, which is ~5.5 MB once
 // base64'd, so it needs the huge parser -- bigJsonParser's 4 MB limit would
 // reject a legal upload before the route's own, friendlier size check ran.
-const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/banner/video-upload']);
+const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-content/set', '/admin/banner/video-upload']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
 // this secret"). A digest over a re-serialised object is NOT the same bytes,
@@ -1140,6 +1140,19 @@ async function getAboutContent() {
   } catch (_) { _aboutCache = _aboutCache || null; }
   _aboutCacheTs = Date.now();
   return _aboutCache;
+}
+// The Rules and Regulations article is an independent, admin-authored list
+// of text/image blocks. Keep its images out of /public/settings so every app
+// boot does not download rules-page artwork that most members never open.
+let _rulesCache = null, _rulesCacheTs = 0;
+async function getRulesContent() {
+  if (Date.now() - _rulesCacheTs < 60 * 1000 && _rulesCache !== null) return _rulesCache;
+  try {
+    const snap = await db.collection('content').doc('rules').get();
+    _rulesCache = (snap.exists && Array.isArray(snap.data().blocks)) ? snap.data().blocks : null;
+  } catch (_) { _rulesCache = _rulesCache || null; }
+  _rulesCacheTs = Date.now();
+  return _rulesCache;
 }
 
 // ── HELPERS ──
@@ -3574,6 +3587,10 @@ app.get('/public/petro-images', async (req, res) => {
 // of /public/settings, see getAboutContent()'s own comment for why.
 app.get('/public/about-content', async (_req, res) => {
   try { res.json({ status: 'success', blocks: await getAboutContent() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.get('/public/rules-content', async (_req, res) => {
+  try { res.json({ status: 'success', blocks: await getRulesContent() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -7885,6 +7902,40 @@ app.post('/admin/about-content/set', async (req, res) => {
     logAdminAction(req, 'about_content_set', { blockCount: blocks.length });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the About page' }); }
+});
+app.get('/admin/rules-content', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', blocks: await getRulesContent() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/rules-content/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const raw = Array.isArray(req.body.blocks) ? req.body.blocks : null;
+  if (!raw || raw.length > 60) return res.status(400).json({ status: 'error', message: 'Invalid content -- 60 blocks max' });
+  const blocks = [];
+  let totalSize = 0;
+  for (const b of raw) {
+    if (b && b.type === 'text') {
+      const text = String(b.text || '').slice(0, 4000).trim();
+      if (!text) continue;
+      blocks.push({ type: 'text', text });
+      totalSize += text.length;
+    } else if (b && b.type === 'image') {
+      const image = String(b.image || '');
+      if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+        return res.status(400).json({ status: 'error', message: 'One of the images is invalid or too large' });
+      blocks.push({ type: 'image', image });
+      totalSize += image.length;
+    }
+  }
+  if (totalSize > 11_000_000) return res.status(400).json({ status: 'error', message: 'Total content is too large -- remove or compress some images' });
+  try {
+    await db.collection('content').doc('rules').set({ blocks });
+    _rulesCache = blocks;
+    _rulesCacheTs = Date.now();
+    logAdminAction(req, 'rules_content_set', { blockCount: blocks.length });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the Rules and Regulations page' }); }
 });
 // A product's total payout, in priority order:
 //   1. its own multiplier (price x multiplier) -- the owner's preferred
