@@ -1103,8 +1103,17 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .dep-sec{display:flex;align-items:center;margin:0 0 10px;}
 .dep-sec .bar{display:none;}
 .dep-sec span{font-size:13px;font-weight:650;letter-spacing:.02em;color:var(--snow-muted);}
-.dep-amt{height:64px;display:flex;align-items:center;padding:0 2px;margin-bottom:8px;background:transparent;border:0;border-bottom:1.6px solid var(--snow-border);border-radius:0;}
-.dep-amt:focus-within{border-bottom-color:var(--snow-wine);}
+/* Owner: "l said these are lines why even on other methods" -- pointing at
+   the amount and phone fields' own bottom-border-only underline, the same
+   Chipz "line" look already fixed once on the method tabs and the chips.
+   Reused here on .dep-amt/.dep-phone/.wit-amt/.wit-pw, since Mobile Money,
+   USDT and Card all render through the same two classes -- one fix covers
+   every method, matching what was actually asked ("why even on other
+   methods"). Boxed to match .auth-field, the app's own established boxed-
+   input convention (Login/Sign Up), rather than inventing a fourth input
+   style: full border + var(--r-ctl) radius instead of border-bottom only. */
+.dep-amt{height:64px;display:flex;align-items:center;padding:0 16px;margin-bottom:8px;background:transparent;border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);}
+.dep-amt:focus-within{border-color:var(--snow-wine);}
 .dep-amt input{border:0;outline:0;background:transparent;font-size:30px;font-weight:650;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;font-variant-numeric:tabular-nums;}
 .dep-chips{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 30px;}
 .dep-chip{flex:0 0 auto;text-align:center;padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;border:1.5px solid var(--snow-border);background:transparent;color:var(--snow-ink);font-family:inherit;box-shadow:none;transition:background .15s,border-color .15s,color .15s;}
@@ -1121,8 +1130,8 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .dep-method-tabs{display:flex;gap:8px;margin-bottom:18px;}
 .dep-method-tabs button{flex:1;text-align:center;padding:10px 6px;border-radius:999px;font-weight:600;font-size:13px;border:1.5px solid var(--snow-border);background:transparent;color:var(--snow-ink);font-family:inherit;transition:background .15s,border-color .15s,color .15s;}
 .dep-method-tabs button.on{background:var(--snow-wine);color:#fff;border-color:var(--snow-wine);font-weight:700;}
-.dep-phone{display:flex;align-items:center;height:58px;border-radius:0;overflow:visible;border:0;border-bottom:1.6px solid var(--snow-border);margin-bottom:8px;background:transparent;}
-.dep-phone:focus-within{border-bottom-color:var(--snow-wine);}
+.dep-phone{display:flex;align-items:center;height:58px;border-radius:var(--r-ctl);overflow:visible;border:1.6px solid var(--snow-border);margin-bottom:8px;background:transparent;padding:0 14px 0 16px;}
+.dep-phone:focus-within{border-color:var(--snow-wine);}
 .dep-phone .prefix{background:transparent;color:var(--snow-ink);font-weight:700;display:flex;align-items:center;padding:0 12px 0 0;font-size:15px;flex-shrink:0;border-right:1px solid var(--snow-border);}
 .dep-phone input{border:0;outline:0;background:transparent;flex:1;padding:0 0 0 12px;font-family:inherit;font-size:16px;color:var(--snow-ink);min-width:0;}
 .dep-hint{font-size:11.5px;color:var(--snow-muted);font-weight:450;margin:0 0 8px;}
@@ -1138,12 +1147,12 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .wit-bal{background:transparent;border:0;border-radius:0;padding:18px 0 10px;margin:0;box-shadow:none;border-bottom:1px solid var(--line-soft);}
 .wit-bal .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--snow-muted);font-weight:650;}
 .wit-bal .val{font-size:24px;font-weight:650;color:var(--snow-ink);margin-top:5px;font-variant-numeric:tabular-nums;}
-.wit-amt{background:transparent;border:0;border-bottom:1.6px solid var(--snow-border);border-radius:0;height:68px;display:flex;align-items:center;padding:0 2px;margin-bottom:16px;gap:10px;}
-.wit-amt:focus-within{border-bottom-color:var(--snow-wine);}
+.wit-amt{background:transparent;border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:68px;display:flex;align-items:center;padding:0 16px;margin-bottom:16px;gap:10px;}
+.wit-amt:focus-within{border-color:var(--snow-wine);}
 .wit-amt span{color:var(--snow-muted);font-weight:650;font-size:15px;}
 .wit-amt input{border:0;outline:0;background:transparent;font-size:30px;font-weight:650;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;font-variant-numeric:tabular-nums;}
 .btn-bind{display:block;width:auto;height:auto;border:0;border-radius:0;background:transparent;color:var(--snow-wine);font-weight:700;font-size:12.5px;margin:0 0 10px auto;padding:8px 0;font-family:inherit;}
-.wit-pw{background:transparent;border:0;border-bottom:1.6px solid var(--snow-border);border-radius:0;height:62px;display:flex;align-items:center;padding:0 2px;margin-bottom:12px;}
+.wit-pw{background:transparent;border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 16px;margin-bottom:12px;}
 .wit-pw input{border:0;outline:0;background:transparent;font-size:22px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
 .wit-fee{font-size:12px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
 .wit-instr{background:transparent;border:0;border-top:1px solid var(--line-soft);border-radius:0;padding:20px 0 0;}

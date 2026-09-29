@@ -4216,3 +4216,38 @@ row's rendered label is "Support" (not "Customer Support") with
 "round-trip OK". `user/sw.js` bumped `v197` → `v198` (Codex's two
 commits had already carried it to v197), `admin/sw.js` bumped `v47`
 → `v48`.
+
+## Follow-up 21 — the amount/phone fields were lines too
+
+Owner, with a screenshot circling the amount field's underline and the
+phone field's underline: *"l said these are lines why even on other
+methods."* Same complaint as Follow-up 20's tab fix, just pointing one
+level down -- the deposit method tabs were pills now, but the fields
+underneath them (`.dep-amt`, `.dep-phone`) were still the Chipz-style
+bottom-border-only "line" treatment. `.wit-amt`/`.wit-pw` (Withdraw's
+amount and trade-password fields) used the identical pattern and got
+the same fix, since they're the same class of thing even though the
+owner's screenshot only showed Deposit.
+
+"Why even on other methods" -- Mobile Money, USDT, and Card all render
+their amount field through the one shared `.dep-amt` class (USDT's
+address display and TXID field, and Card's amount field, all reuse
+`.dep-amt`/`.dep-phone` too), so this was never three separate
+underlines to fix, just the one pair of classes. Boxed to match
+`.auth-field`, the app's own already-established boxed-input look from
+Login/Sign Up (`border:1.6px solid var(--snow-border);border-radius:var(--r-ctl)`,
+16px horizontal padding) instead of inventing a fifth input style --
+full border, not just a bottom edge, `:focus-within` now recolors
+`border-color` instead of `border-bottom-color`. The existing dark-
+sheet override (`border-color:rgba(255,255,255,.14)`) needed no
+changes: it already targets `border-color` generically, so it now
+tints all four sides instead of just the one that used to exist.
+
+`build-core.js`: "round-trip OK". Verified live in headless Chromium
+against the real built bundle, computed styles on all four classes
+(`border`, `border-radius`) confirmed boxed on both the Deposit sheet
+(Mobile Money, then switched live to USDT and Card via
+`selectDepMethod()` and re-screenshotted each) and the Withdraw
+sheet, plus a visual screenshot of all three deposit methods and
+Withdraw showing the boxed fields. `user/sw.js` bumped `v198` →
+`v199`.
