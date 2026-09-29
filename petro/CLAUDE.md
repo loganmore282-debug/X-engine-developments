@@ -4470,3 +4470,65 @@ assertions and a screenshot that the enable checkbox, title, and message
 fields all populate correctly from mock settings and the Save button is
 present. `user/sw.js` bumped `v201` → `v202`, `admin/sw.js` bumped `v48`
 → `v49` (both source files changed this round).
+
+## Follow-up 25 -- real cause found for "buttons tend to freeze": a stale, invisible notify() toast was swallowing taps
+
+Owner: *"l saw, when a notify appears buttons tend to freeze, what causes
+that??"* Follow-up 12 investigated a vaguer version of this same report
+("buttons don't respond, I can tap 3+ times") and came up empty --
+`.notify-bg` looked correctly non-blocking from reading the CSS alone, and
+nothing else pointed at a specific line. This round's report gave a much
+sharper clue (it correlates with a notify appearing at all), which was
+enough to actually reproduce and root-cause it, not just re-read the same
+CSS a second time.
+
+**Root cause**: `.notify-card` (the small dark toast bubble `notify()`
+shows) had `pointer-events:auto` set unconditionally in its base rule, not
+scoped to only while `.notify-bg.show` is actually applied. Before any
+notify() ever fires, `#notifyMsg`'s `textContent` is empty, so the
+invisible resting card is tiny (about 36×25px, just its own padding) --
+easy to miss in practice. But `notify()` never clears that text back out
+when the toast closes (`closeNotify()` only toggles the `.show` class), so
+the moment ANY notify() call fires once with a real message, the invisible
+card is permanently resized to fit whatever that message needed (a
+realistic error message measured ~300×60px in testing) and stays
+`pointer-events:auto` forever after -- sitting dead-centre of the
+viewport, on top of whatever happens to be there, for the rest of the
+session. Confirmed directly with `elementFromPoint()` in headless
+Chromium: a real tap at a centred button's own on-screen coordinates
+resolved to `notifyMsg` (the ghost toast), not the button -- exactly the
+"freeze" being reported, and exactly why it reads as starting "when a
+notify appears": before the first one, the phantom hitbox is too small to
+matter; after, it is not. This explains why it was unreproducible from
+static reading alone in Follow-up 12 -- the bug only exists in the DOM's
+runtime state (`textContent` left over from a past call), never visible
+in the source.
+
+Auth screens (Login/Sign Up/Forgot Password) are hit hardest: they're
+explicitly centred (`justify-content:center`, from the "login is raised
+up" fix several rounds back) and route every validation error through
+`notify()` (`regError()`/`forgotError()`/`doLogin()`, from the "auth
+screens had their own second error pattern" round) -- meaning a single
+failed login attempt is enough to leave a phantom hitbox parked right
+where the Login button itself sits.
+
+**Fix** (`user-src/index.html`): `.notify-card`'s base rule is now
+`pointer-events:none`; `pointer-events:auto` moved onto the existing
+`.notify-bg.show .notify-card` rule (which already exists, for the
+scale/opacity transition) so the card can only ever intercept a tap while
+it is genuinely visible -- fixes the whole class of it regardless of the
+leftover message's size, rather than needing to also remember to clear
+`notifyMsg.textContent` on every close path (`closeNotify()`, the 3.6s
+auto-dismiss timer, and any future caller that closes it another way).
+
+**Verified, not assumed**: reproduced the bug live first (a real
+`getBoundingClientRect()`/`elementFromPoint()` check in headless Chromium
+showed the ghost card's `pointer-events` reading `auto` and swallowing a
+tap on a centred test button after one `notify()` call, before the fix),
+then confirmed the same script passes after the fix (`pointer-events:none`
+at rest, `elementFromPoint()` correctly resolves to the real button
+again). Separately confirmed tap-to-dismiss still works during the toast's
+actual visible window (`pointer-events:auto` while `.show` is present, a
+dispatched click on the card closes it). `node -c` n/a (CSS-only, no JS
+touched), `build-core.js` "round-trip OK", `npm run test:audit` passes in
+full. `user/sw.js` bumped `v202` → `v203`.
