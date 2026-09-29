@@ -2989,7 +2989,7 @@ async function renderSettings(){
 
     <h2 class="sec">Home announcement dialog</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A popup shown when a member navigates back to Home from Assets, Network or Account. Its WhatsApp/email buttons are the same group link and email set in Support contacts above.</p>
+      <p class="muted" style="margin-top:0">A popup shown every time a member logs in or completes registration, and also when they navigate back to Home from Assets, Network or Account. Its WhatsApp/email buttons are the same group link and email set in Support contacts above.</p>
       <div class="switch-row"><span><b>Enable announcement</b></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAnnEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
       <label>Title</label><input id="sAnnTitle" maxlength="80" value="${esc(v('annTitle',''))}" placeholder="e.g. New assets are live">

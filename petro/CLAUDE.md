@@ -4900,3 +4900,41 @@ everything, so that it is perfect. Also improve smooth navigation."*
   zero stray "Deposit"/"Withdrawal" text remaining, Messages tab gone
   from the tab bar, zero page errors on either bundle. `user/sw.js`
   bumped `v213` → `v214`, `admin/sw.js` bumped `v52` → `v53`.
+
+## Follow-up 29 -- announcement dialog now also fires on every login/registration
+
+Owner, immediately after the round above: *"l also wanted the dialog
+to show when on every visit ie logging in again, registration like
+that."* A second, independent trigger alongside Follow-up 28's
+bottom-nav one, not a replacement for it.
+
+New `maybeAnnounceOnEntry()` (`user-src/original_module.js`) -- checks
+`isAnyOverlayOpen()` then calls the same `maybeShowAnnouncement()`
+every other trigger already shares, called from both places a member's
+loading screen actually comes down: `enterApp()`'s cache-hit instant-
+boot path and `bootFromNetwork()`'s full-boot path (the same function
+both a returning login AND a just-finished registration go through --
+`bootFromNetwork()` already branches on `signupFlow` for its "Login
+successful"/"Registration successful" toast, so this one call covers
+both without needing to duplicate it per case). Not folded into
+`maybeAnnounceAfterHomeNav()`: that one requires a real `prevPage` of
+`assets`/`network`/`account`, which is never true on a fresh app entry
+(`STATE.page` is unset at that point) -- trying to make the nav-check
+pass for this case would have meant weakening a guard that is correct
+for its own trigger. The admin Settings help text for the announcement
+section (Rates & limits card) was rewritten again to describe both
+triggers together.
+
+**Verified**: `node -c user-src/original_module.js`, `build-core.js` +
+`build-admin.js` both round-trip OK, `npm run test:audit` passes in
+full (163 checks). Live in headless Chromium against the real built
+`user/index.html`, reproducing the exact `enterApp()`/
+`bootFromNetwork()` sequence (`STATE.page` unset, `showPage('home')`
+then `maybeAnnounceOnEntry()`): the dialog shows on a fresh entry,
+stays hidden when `annEnabled` is off, does not stack when a real
+sheet is already open (opened via the actual `openSheet()` call, not a
+faked class toggle, since `isAnyOverlayOpen()` checks `_openSheetTitle`
+not a CSS class directly), and the Follow-up 28 nav-based trigger
+(Assets→Home) still fires independently afterward -- confirming
+neither trigger interferes with the other. `user/sw.js` bumped `v215`
+→ `v216`, `admin/sw.js` bumped `v54` → `v55`.

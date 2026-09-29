@@ -2507,6 +2507,7 @@ async function enterApp(){
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
+  maybeAnnounceOnEntry();
   if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
   refreshAppDataInBackground(uid);
 }
@@ -2614,6 +2615,7 @@ async function bootFromNetwork(uid){
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
+  maybeAnnounceOnEntry();
   if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
   else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
   // The invite-address pool, fetched behind the app rather than in front of
@@ -4864,6 +4866,19 @@ function isAnyOverlayOpen(){
 function maybeAnnounceAfterHomeNav(prevPage){
   if (['assets', 'network', 'account'].indexOf(prevPage) === -1) return;
   if (isAnyOverlayOpen()) return;         // something else is already in front
+  maybeShowAnnouncement();
+}
+// Owner: "l also wanted the dialog to show when on every visit ie logging in
+// again, registration like that." A second, independent trigger alongside
+// the bottom-nav one above -- fires once, right after the loading screen
+// comes down on login OR a fresh registration, from both places that ever
+// happens (enterApp()'s cache-hit instant-boot path and bootFromNetwork()'s
+// full-boot path). Not folded into maybeAnnounceAfterHomeNav() itself: that
+// one deliberately requires a REAL prevPage of assets/network/account, which
+// is never true on a fresh app entry (STATE.page is unset at that point), so
+// this needed its own call rather than trying to make the nav-check pass.
+function maybeAnnounceOnEntry(){
+  if (isAnyOverlayOpen()) return;
   maybeShowAnnouncement();
 }
 function openSheet(title, bodyHtml){
