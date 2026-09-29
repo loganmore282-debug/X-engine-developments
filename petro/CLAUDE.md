@@ -5281,3 +5281,70 @@ from the updated template (`sed 's/PETRO_DOMAIN/petro-cchnug.com/g'
 same command used for the original cutover), `nginx -t`, then
 `systemctl reload nginx` -- not yet confirmed live as of this
 entry.
+
+## Follow-up 34 -- admin subdomain renamed off "admin", not a guessable word
+
+Owner, after applying Follow-up 33's hardening and hitting the
+expected "no ssl_certificate is defined" error (regenerating the
+config from the template resets its own certbot placeholder -- same
+class of gotcha Follow-up 32 already hit once, see its own note on
+bundling the cert-insertion step into one combined command from now
+on): *"let the admin not be a subdomain admin, let's get a random 4
+character letters and words."* A real, reasonable ask once the domain
+went public -- "admin." is exactly what a subdomain wordlist scanner
+tries first, alongside "portal.", "backend.", "api-admin.", etc.
+
+Chosen: `qumx` (four characters, drawn via Node's `crypto.randomInt`
+from the same unambiguous alphabet this codebase already uses for
+gift/referral codes -- no 0/O/1/l/I confusion, since a human still
+needs to type it occasionally even though its whole point is being
+hard to guess). `qumx.petro-cchnug.com` replaces
+`admin.petro-cchnug.com` everywhere the old name lived:
+`deploy/nginx-petro.conf.template` (`server_name` in both the shared
+:80 block and its own :443 block, the header comment's `certbot -d`
+example, a new explanatory comment on why it's random rather than a
+word) and `server.js`'s `CORS_ALLOWED_ORIGINS`. Explicitly stated in
+both places' own comments: this is not real access control, only
+raises the bar against casual/wordlist discovery -- a targeted
+attacker who already has this exact string is in the same position as
+before.
+
+**Verified**: `node --check server.js` clean, `test-cors-origins.js`/
+`test-allowed-origins.js` both re-run clean (the new origin is
+allowed, the old `admin.petro-cchnug.com` string is simply gone, not
+asserted either way), `npm run test:audit` passes in full (163
+checks).
+
+**What the owner still needs to do, all on the VPS side, none of
+which a Claude session can do (no SSH out)**:
+1. In Hostinger's DNS Zone Editor, add a new A record: `qumx` →
+   `179.198.197.114`. The old `admin` A record can be deleted once the
+   new one is confirmed working -- leaving it resolving to the same IP
+   with no matching nginx `server_name` for it anymore means a request
+   to `admin.petro-cchnug.com` just falls through to whichever server
+   block nginx picks as its default (not the admin panel specifically,
+   but still real traffic hitting the box), so removing the DNS record
+   entirely is the cleaner outcome, not required for correctness.
+2. One combined command block, run together this time so the earlier
+   "forgot to re-add the cert lines" mistake can't repeat itself:
+   ```
+   sed 's/PETRO_DOMAIN/petro-cchnug.com/g' /srv/petro-src/petro/deploy/nginx-petro.conf.template > /etc/nginx/sites-available/petro
+   cat > /tmp/sslcert.inc << 'EOF'
+       ssl_certificate /etc/letsencrypt/live/api.petro-cchnug.com/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/api.petro-cchnug.com/privkey.pem;
+   EOF
+   sed -i '/listen \[::\]:443 ssl http2;/r /tmp/sslcert.inc' /etc/nginx/sites-available/petro
+   nginx -t && systemctl reload nginx
+   ```
+3. `certbot --nginx -d api.petro-cchnug.com -d app.petro-cchnug.com -d qumx.petro-cchnug.com`
+   -- drops `admin.petro-cchnug.com` from the certificate's SAN list
+   and adds `qumx.petro-cchnug.com` in its place (same certificate
+   name, `api.petro-cchnug.com`, since that's always the first `-d`
+   flag -- the `ssl_certificate` paths above don't need to change).
+4. Confirm with `curl -I https://qumx.petro-cchnug.com/` (expect
+   `HTTP/2 200`) and that `https://admin.petro-cchnug.com/` no longer
+   resolves once its DNS record is removed.
+
+None of this has been confirmed live as of this entry -- the repo
+side (template + CORS allowlist) is done and pushed, the VPS side is
+the owner's next step.

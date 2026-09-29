@@ -157,14 +157,16 @@ app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 // this copy -- it has no business reaching Petro's database.
 const CORS_ALLOWED_ORIGINS = new Set([
   'https://petro-platform.com', 'https://www.petro-platform.com',
-  // The real domain the owner actually bought (2026-09-29), ahead of DNS/
-  // nginx/TLS being live for it yet -- added now so the cutover to it later
-  // (see petro/CLAUDE.md's "Hosting" section) is a DNS+nginx change only,
-  // not another server.js edit+redeploy in the same round. app./admin. are
-  // the two frontend subdomains nginx-petro.conf.template serves; api.
-  // itself never needs to be in this list (a same-origin API call carries
-  // no Origin header requiring a CORS allowance).
-  'https://app.petro-cchnug.com', 'https://admin.petro-cchnug.com',
+  // The real domain the owner actually bought (2026-09-29). app./qumx.
+  // are the two frontend subdomains nginx-petro.conf.template serves;
+  // api. itself never needs to be in this list (a same-origin API call
+  // carries no Origin header requiring a CORS allowance). qumx. is the
+  // admin panel's own subdomain -- deliberately a random 4-letter string,
+  // not "admin", per the owner's own request once the domain went public
+  // (see nginx-petro.conf.template's matching comment); if it's ever
+  // regenerated, this entry, the template, and the live certbot cert all
+  // have to agree.
+  'https://app.petro-cchnug.com', 'https://qumx.petro-cchnug.com',
   // Direct VPS frontend used while Petro is served/tested on port 8080.
   // Different ports are different browser origins, so without this exact
   // entry the member page loads but every API call to :3000 is blocked by CORS.

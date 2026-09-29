@@ -16,7 +16,20 @@
 #
 # api.PETRO_DOMAIN   -> proxied to the Node backend (server.js via pm2, :3000)
 # app.PETRO_DOMAIN   -> static files, petro/user/  (member app)
-# admin.PETRO_DOMAIN -> static files, petro/admin/ (admin panel)
+# qumx.PETRO_DOMAIN  -> static files, petro/admin/ (admin panel)
+#
+# The admin subdomain is deliberately a random 4-letter string, not the
+# word "admin" -- owner: "let the admin not be a subdomain admin, let's
+# get a random 4 character letters and words," after the domain went
+# public and automated scanners started probing predictable subdomain
+# names (admin., portal., backend., etc. are exactly what a subdomain
+# wordlist tries first). This is the same X-Robots-Tag/robots.txt
+# reasoning below, one level up: it does not stop a targeted attacker who
+# already has this exact string, only casual/wordlist discovery. If this
+# name is ever regenerated, update it here, in server.js's
+# CORS_ALLOWED_ORIGINS, and re-run certbot with the new name -- the three
+# must agree, same as every other place this project keeps one fact in
+# more than one file.
 #
 # The two `root` paths below are /srv/petro-src/petro/user and
 # /srv/petro-src/petro/admin -- a real fix, not a guess: this template was
@@ -27,7 +40,7 @@
 # sparse checkout of petro/* at /srv/petro-src/petro. If that checkout path
 # ever changes on the VPS, these two `root` lines must be updated to match.
 #
-# TLS: run `certbot --nginx -d api.PETRO_DOMAIN -d app.PETRO_DOMAIN -d admin.PETRO_DOMAIN`
+# TLS: run `certbot --nginx -d api.PETRO_DOMAIN -d app.PETRO_DOMAIN -d qumx.PETRO_DOMAIN`
 # after this file is in place and nginx has reloaded on port 80 -- certbot
 # rewrites the `listen 443`/`ssl_certificate` lines in place. The bare :80
 # server block below exists so certbot's HTTP-01 challenge (and any plain
@@ -69,7 +82,7 @@ limit_req_zone $binary_remote_addr zone=petro_admin_login:10m rate=1r/s;
 server {
     listen 80;
     listen [::]:80;
-    server_name api.PETRO_DOMAIN app.PETRO_DOMAIN admin.PETRO_DOMAIN;
+    server_name api.PETRO_DOMAIN app.PETRO_DOMAIN qumx.PETRO_DOMAIN;
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -187,11 +200,11 @@ server {
     }
 }
 
-# ── admin.PETRO_DOMAIN -> petro/admin/ (admin panel, moves money) ──────
+# ── qumx.PETRO_DOMAIN -> petro/admin/ (admin panel, moves money) ──────
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name admin.PETRO_DOMAIN;
+    server_name qumx.PETRO_DOMAIN;
 
     root /srv/petro-src/petro/admin;
     index index.html;
