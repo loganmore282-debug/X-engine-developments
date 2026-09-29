@@ -48,10 +48,13 @@ async function main(){
   assert.match(d.querySelector('#myAssetsInner').textContent,/Test Asset/);
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
-  w.showChestWin(100,50000,50100,'gift');
-  assert.match(d.querySelector('#chestWinAmount').textContent,/100/);
-  assert.match(d.querySelector('#chestWinBalance').textContent,/50,100/);
-  d.querySelector('#chestWinBg').classList.remove('show');w.unlockBodyScroll();
+  // The old full-screen "Congratulations!" win card (showChestWin()) was
+  // removed -- a redeemed gift code is now just this toast (see
+  // submitChestKey() in original_module.js).
+  w.notify('Giftcode redeemed successfully ✓');
+  assert.match(d.querySelector('#notifyMsg').textContent,/Giftcode redeemed successfully/);
+  assert.equal(d.querySelector('#notifyBg').classList.contains('show'),true);
+  w.closeNotify();
   setState();
   const bank=deferred();w.api=()=>bank.promise;
   const opened=w.openWithdrawSheet();

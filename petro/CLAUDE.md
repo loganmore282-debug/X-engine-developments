@@ -4631,3 +4631,94 @@ confirmed `#regReferralHint` now shows the right sentence in each,
 alongside the placeholder swap that already worked. `user/sw.js` bumped
 `v207` → `v208`, `admin/sw.js` bumped `v50` → `v51` (the admin label-text
 fix touched `admin-src/index.html`).
+
+## Follow-up 27 -- gift-code win card removed in favor of a plain notify; last of the Chipz i18n residue swept out
+
+Owner, with two screenshots of the "Congratulations! You won UGX 169...
+COLLECT" full-screen win card: *"l was still chatting with codex and
+weekly limit hit, so bro help me complete and remove it, so notify has
+[a checkmark]... Remove this stuff completely, only just put a notify
+'giftcode redeemed successfully [checkmark]'. Look for all chipz stuffs
+l nolonger need the[m]."*
+
+**Win card removed end to end, not hidden.** `showChestWin()`/
+`correctChestWinBalance()`/`closeChestWin()`/`chestWinBalFmt()`/
+`_chestWinBalFrom` are all deleted from `user-src/original_module.js` --
+`submitChestKey()` (the gift-code redeem handler) now just closes the
+sheet and calls `notify('Giftcode redeemed successfully ✓')`, the
+exact same toast mechanism every other quick confirmation in this app
+already uses, per the owner's own wording. `refreshAfterWin()` (the
+background `/account` + transactions refresh that follows a redeem) is
+kept -- it was never part of the visual card, just quietly catches
+`STATE`/Home/Account up afterward -- with its now-pointless
+`correctChestWinBalance()` call removed. The `#chestWinBg`/
+`#chestWinGhost`/`#chestWinAmount`/`#chestWinBalance` markup and its
+`.chest-win-bg`/`.chest-win-card`/`.gift-win-mark`/`winFlash` CSS are
+gone from `user-src/index.html`, and `isAnyOverlayOpen()` no longer
+checks `#chestWinBg`. `GIFT_CODE_REFERENCE_SVG`/`.gift-code-mark`
+(the icon on the REDEEM form itself, not the win card) are untouched --
+a different, still-live piece of the same screen. Confirmed
+`showChestWin()` had exactly one caller in the whole file before this
+change (the old spin/Turntable `source==='spin'` branch inside it was
+already fully dead, Turntable having been removed in an earlier round),
+so nothing else needed touching.
+
+**A real test caught by this, not shipped blind**:
+`test-member-audit.js` called `w.showChestWin(...)` directly and
+asserted against `#chestWinAmount`/`#chestWinBalance` -- would have
+thrown `TypeError: w.showChestWin is not a function` on every future
+`test:audit` run had it been left alone. Rewritten to call
+`w.notify('Giftcode redeemed successfully ✓')` and assert against
+`#notifyMsg`/`#notifyBg.show` instead, matching what the code path
+actually does now.
+
+**Chipz i18n residue swept out of the admin panel.** A fresh grep sweep
+(the whole repo, not just the two touched files) for `chipz`/`CHIPZ`
+found the live source files already clean of anything but historical,
+accurately-quoted comments (owner quotes, past design-history notes --
+CLAUDE.md's own standing rule against rewriting those into invented
+narrative) and `guard-src.js`'s explanatory comment about why the
+frame-bust code deliberately uses `window.location.href` instead of a
+hardcoded domain (real reasoning that happens to name a past Chipz URL,
+not a current one -- the code itself is already domain-agnostic). What
+WAS real: 5 orphaned i18n translation-table rows in `admin-src/index.html`,
+each carrying literal "Chipz"/"CHIPZ" text in their English source --
+`'Built-in Chipz icon'`, `'1. Top band (behind the CHIPZ logo)'`,
+`'Mint a new short address for this country, e.g. g26e.chipz-platform.com'`,
+`'The round logo on the app's Account profile card. An empty slot shows
+the CHIPZ wordmark instead...'`, `'Replaces the CHIPZ wordmark on the
+manual-deposit flow's own 2 screens...'`. Confirmed each one's exact
+English text appears NOWHERE else in the file -- not in any live label,
+button, or help paragraph -- meaning these described UI that earlier
+rounds already removed (the old two-part hero+card auth layout, the
+Countries/subdomain-minting tab, the manual-deposit logo upload) and
+were simply never cleaned up alongside it. Deleted outright, same
+"orphaned translation row, source text is gone" convention this file
+has followed every other time.
+
+**Verified, not assumed**: `node -c` on the touched `.js` file,
+`build-core.js`/`build-admin.js` both "round-trip OK", `npm run
+test:audit` passes in full (after the `test-member-audit.js` fix). Live
+in headless Chromium against the real built `user/index.html`: confirmed
+`window.showChestWin`/`window.closeChestWin` are both `undefined` and
+`#chestWinBg` no longer exists anywhere in the DOM; ran
+`submitChestKey()` end-to-end against a mocked `/redeem` response and
+confirmed the toast shows with the exact requested text
+("Giftcode redeemed successfully ✓") while `STATE.account.walletBalance`
+still updates correctly in the background.
+
+**Merge note**: a concurrent session pushed 4 commits to this branch
+while this round was in progress (article-loader ring polish, a traced
+gavel/gift-box icon replacing the earlier base64-JPEG version, a login-
+success toast, a shared `dismissNotify()` helper) -- fast-forwarded
+cleanly onto them (`git fetch` + read the incoming log first, matched
+this file's own standing precedent for this exact situation), then
+`git stash`/`pop`'d this round's own source edits back on top; both
+sides auto-merged with zero conflicts. Rebuilt both bundles fresh from
+the merged source rather than trusting a stashed copy of the generated
+files, and re-ran the full verification above (build round-trips,
+`test:audit`, and the live headless-Chromium gift-code check) against
+that fresh build before pushing. `user/sw.js` bumped `v212` → `v213`,
+`admin/sw.js` bumped `v51` → `v52` (both source files this round's own
+changes touched, on top of whichever version the concurrent session's
+commits had already reached).

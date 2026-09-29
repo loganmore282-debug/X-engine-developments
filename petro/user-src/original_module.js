@@ -4986,79 +4986,27 @@ window.submitChestKey = async function(){
     ? Number(r.walletBalance) : before + reward;
   if (STATE.account) STATE.account.walletBalance = after;
   closeSheet({ fromAction: true });
-  showChestWin(reward, before, after);
-  // Now catch the app up, behind the card the member is already reading.
+  // Owner: "remove this stuff completely, only just put a notify 'giftcode
+  // redeemed successfully'." The old full-screen win card (Congratulations/
+  // amount/live-counting balance/COLLECT, showChestWin() and friends) is
+  // gone -- a redeemed code is now just this one toast, the same notify()
+  // every other quick confirmation in this app already uses.
+  notify('Giftcode redeemed successfully ✓');
+  // Now catch the app up in the background.
   refreshAfterWin();
 };
-// The two network refreshes a win needs, moved off the path between the
-// server saying "you won" and the card saying so. Deliberately not awaited by
-// its callers: nothing on the win card depends on either result, and the
-// balance correction below is the only thing that ever writes to it.
+// The two network refreshes a win needs. Deliberately not awaited by its
+// caller -- the toast above already told the member it worked, so nothing
+// on screen is waiting on either result.
 async function refreshAfterWin(){
   try {
     const acc = await api('/account');
-    if (acc.status === 'success') {
-      STATE.account = acc.account;
-      correctChestWinBalance(Number(acc.account.walletBalance) || 0);
-    }
+    if (acc.status === 'success') STATE.account = acc.account;
     await refreshTransactionsCache();
     if (STATE.page === 'home') renderHome();
     if (STATE.page === 'account') renderAccount();
-  } catch (_) { /* the card is already correct; a failed refresh changes nothing */ }
+  } catch (_) { /* STATE.account is already correct from the redeem response */ }
 }
-// One win card, two sources -- and the blurred artwork behind it names which.
-// Owner: "when one spins it shows that spin icon background icon l generated
-// my own instead of chest box." A spin is not a treasure chest, and showing a
-// chest behind a turntable win was the screen telling the member the wrong
-// story about where their money came from.
-//
-// The source is passed in rather than read off whatever screen happens to be
-// open: the spin's own win lands four seconds after the tap, by which time the
-// member may well have moved.
-//
-// Owner: "l want when congratulations card comes let the balance also have a
-// live growing animation." It counts from the balance held BEFORE the reward
-// landed up to the one held after, so what grows on screen is the size of the
-// win itself -- counting up from zero would animate the member's whole
-// savings, which says nothing about what they just won.
-var _chestWinBalFrom = 0;
-function chestWinBalFmt(v){ return 'New Balance: ' + fmtUGX(v); }
-function showChestWin(reward, balanceBefore, balanceAfter, source){
-  const ghost = $('chestWinGhost');
-  if (ghost) ghost.innerHTML = source === 'spin' ? ICONS.wheel : GIFT_CODE_REFERENCE_SVG;
-  _chestWinBalFrom = Number(balanceBefore) || 0;
-  $('chestWinAmount').textContent = fmtUGX(reward);
-  $('chestWinBg').classList.add('show');
-  // Counted only once the card is actually showing: an element inside a
-  // display:none layer has no frames to animate over, and the count would be
-  // finished before the member ever saw it.
-  countBetweenEl($('chestWinBalance'), _chestWinBalFrom, balanceAfter, chestWinBalFmt, 1200);
-  lockBodyScroll();
-}
-// The card opens on the balance the app can work out on the spot; the live
-// /account refresh that follows is what confirms it. When the two differ (a
-// payout that matured in the same moment, say), re-aim the count at the real
-// figure instead of snapping to it -- but only while the card is still up.
-window.correctChestWinBalance = function(real){
-  const el = $('chestWinBalance');
-  if (!el || !$('chestWinBg').classList.contains('show')) return;
-  real = Number(real) || 0;
-  const showing = parseFloat(String(el.textContent).replace(/[^0-9.]/g, '')) || _chestWinBalFrom;
-  // Upward only. A figure LOWER than what the card is showing is either a read
-  // that has not caught up with the credit yet, or a debit that has nothing to
-  // do with this win -- and a congratulations card that visibly takes money
-  // back off the member is worse than one that is a few seconds behind. The
-  // real balance is on Home and Account the moment they close this, and
-  // STATE.account already holds it, so nothing is lost by leaving the card be.
-  if (real <= showing + 0.005) return;
-  countBetweenEl(el, showing, real, chestWinBalFmt, 600);
-};
-window.closeChestWin = function(){
-  $('chestWinBg').classList.remove('show');
-  if (!_openSheetTitle) unlockBodyScroll();
-  if (STATE.page === 'home') renderHome();
-  if (STATE.page === 'account') renderAccount();
-};
 
 // Shared by every full-screen overlay (sheets, the announcement dialog, the
 // gift-code modal, confirm dialogs) that needs to stop the page behind it
@@ -5086,13 +5034,12 @@ function unlockBodyScroll(){
 // See openWithdrawSheet/openWalletSheet.
 var _openSheetTitle = null;
 // Used by showPage()'s deferred maybeShowAnnouncement() call to check whether
-// the member has since opened a sheet, the gift-code chest, or a confirm
-// dialog on top of Home while the announcement's own wait was still in
-// flight -- none of those are page navigations (STATE.page stays 'home'
-// throughout), so _openSheetTitle alone isn't enough on its own.
+// the member has since opened a sheet or a confirm dialog on top of Home
+// while the announcement's own wait was still in flight -- none of those
+// are page navigations (STATE.page stays 'home' throughout), so
+// _openSheetTitle alone isn't enough on its own.
 function isAnyOverlayOpen(){
   return !!(_openSheetTitle
-    || ($('chestWinBg') && $('chestWinBg').classList.contains('show'))
     || ($('msgDetailBg') && $('msgDetailBg').classList.contains('show'))
     || ($('notifyBg') && $('notifyBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))

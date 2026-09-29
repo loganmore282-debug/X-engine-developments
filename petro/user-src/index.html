@@ -1142,17 +1142,13 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .key-field{width:100%;height:54px;border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);background:var(--snow-surface);display:flex;align-items:center;padding:0 18px;margin-bottom:14px;box-shadow:inset 4px 0 0 rgba(245,160,0,.32);}
 .key-field:focus-within{border-color:var(--snow-wine);box-shadow:inset 4px 0 0 var(--petro-gold),0 0 0 3px rgba(227,6,19,.08);}
 .key-field input{border:0;outline:0;background:transparent;font-size:16px;text-align:center;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;letter-spacing:.05em;}
-.chest-win-bg{position:fixed;inset:0;background:rgba(37,38,43,.96);display:none;align-items:center;justify-content:center;padding:28px;z-index:320;}
-.chest-win-bg.show{display:flex;animation:winFlash .24s ease-out;}
-@keyframes winFlash{from{opacity:0;}to{opacity:1;}}
-.gift-win-mark{position:absolute;top:calc(50% - 220px);left:50%;transform:translateX(-50%);width:72px;height:72px;border-radius:22px;background:var(--snow-green-soft);color:var(--snow-green);display:flex;align-items:center;justify-content:center;border:1px solid rgba(26,122,62,.14);box-shadow:0 16px 28px -20px rgba(0,0,0,.5);}
-.gift-win-mark .gift-reference-svg{display:block;width:48px;height:48px;}
-.chest-win-card{position:relative;width:100%;max-width:340px;background:#fff;border-radius:var(--r-card);border:1px solid rgba(255,255,255,.7);box-shadow:0 28px 60px -24px rgba(0,0,0,.7);padding:42px 26px 30px;text-align:center;overflow:hidden;}
-.chest-win-card::before{content:'';position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,var(--snow-wine),var(--petro-gold));}
-.chest-win-card h1{font-size:25px;font-weight:800;margin:0 0 10px;color:var(--snow-ink);}
-.chest-win-card .sub{font-size:14px;color:var(--snow-muted);font-weight:500;margin:0 0 12px;}
-.chest-win-card .amt{font-size:36px;font-weight:800;margin:0 0 18px;color:var(--snow-wine);}
-.chest-win-card .bal{font-size:13px;color:var(--snow-muted);font-weight:500;margin:0 0 24px;}
+/* The full-screen "Congratulations! You won..." win card (chest-win-bg/
+   chest-win-card/gift-win-mark, ChestSuccess.dc.html) is removed entirely --
+   owner: "remove this stuff completely, only just put a notify 'giftcode
+   redeemed successfully'." A redeemed code now just closes the sheet and
+   shows the same notify() toast every other quick confirmation in this app
+   uses (see submitChestKey() in original_module.js), not a second win-card
+   system of its own. */
 
 /* ── Transaction Statement ──
    Professional ledger presentation: categories are one horizontal tab row at
@@ -3049,20 +3045,6 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
 <div class="notify-bg" id="notifyBg">
   <div class="notify-card" onclick="closeNotify()">
     <div class="notify-msg" id="notifyMsg"></div>
-  </div>
-</div>
-
-<!-- Treasure-chest win state (ChestSuccess.dc.html): a full green flash
-     behind a Congratulations card. Its own layer, not a sheet -- it covers
-     the chest screen it was opened from. -->
-<div class="chest-win-bg" id="chestWinBg">
-  <div class="gift-win-mark" id="chestWinGhost" aria-hidden="true"></div>
-  <div class="chest-win-card">
-    <h1>Congratulations!</h1>
-    <div class="sub">You won</div>
-    <div class="amt" id="chestWinAmount"></div>
-    <div class="bal" id="chestWinBalance"></div>
-    <button class="dark-button" style="width:100%;height:52px;padding:0;letter-spacing:.06em;" onclick="closeChestWin()">COLLECT</button>
   </div>
 </div>
 
