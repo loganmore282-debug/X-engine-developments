@@ -5369,3 +5369,121 @@ The three real, live URLs as of this entry:
   discovery via `X-Robots-Tag`/`robots.txt`, though see Follow-up 34's
   own note that this is not real access control, only Firebase-token
   verification and the money-crediting re-check logic are).
+
+## Follow-up 35 -- link preview removed for real this time; WhatsApp Channel wording; audited Network/Referrals/Task Center; installed-app-name explained
+
+Owner, one message, several asks: check Network/referrals/referral
+codes/Task Center are working correctly and idempotent; make sure
+everything is encrypted and safeguarded; why does the installed app
+still say the old name after a rename; make every place the app name
+appears validate against the live setting; why does a link preview
+still show up; and swap "Chat on WhatsApp" for "WhatsApp Channel."
+
+**Link preview -- actually fully gone now, not half.** An earlier
+round (Follow-up 24) removed the *image* half
+(`og:image`/`twitter:image`) but deliberately kept
+`og:title`/`og:description`/`og:type`/`twitter:title`/
+`twitter:description` on the theory that a shared link should still
+carry a text-only summary card. The owner's "why still link preview
+stuffs are still showing up" is that exact text-only card, still
+rendering on a WhatsApp/Telegram paste even with no image -- which
+reads as "still a preview," correctly. All six tags removed from
+`user-src/index.html`; pasting the app's link now renders as a bare
+URL, same as a page with no `og:`/`twitter:` tags at all.
+`<meta name="description">` was deliberately left alone -- that is a
+search-result snippet, a different mechanism, not what was asked
+about. `set-backend-url.js`'s own `og:image`/`twitter:image` rewrite
+rule (already dead since Follow-up 24, never cleaned up) removed too,
+since it's now doubly obsolete.
+
+**"WhatsApp Channel" instead of "Chat on WhatsApp."** The Support page
+(Follow-up 23) already titles this row "WhatsApp Channel" -- the one
+place that still said something else was the announcement dialog's
+own CTA button (`maybeShowAnnouncement()`), fixed to match.
+
+**Why the already-installed app still shows the old name -- a real
+platform limit, not a bug left unfixed.** `user/sw.js`'s own
+"THE INSTALLED APP'S NAME" section (built in an earlier round) already
+does exactly what a rename needs: it intercepts every `/manifest.json`
+fetch and rewrites `name`/`short_name` from the LIVE `brandName`
+setting before Chrome ever sees the shipped file, precisely so a
+rename in Admin -> Settings reaches a member without a rebuild. That
+mechanism is confirmed working as designed. What it cannot do -- what
+no service worker or manifest can do, on Android or iOS -- is rename
+an icon a member ALREADY has on their home screen: Chrome bakes the
+app's name into the installed WebAPK at the moment of install, and
+neither the OS nor the browser re-reads manifest.json for an icon
+that's already there. A member who installed before the rename will
+keep seeing the old name on that one icon until they uninstall and
+reinstall; anyone installing fresh from today onward gets the current
+name immediately. This is the exact tradeoff `user/sw.js`'s own
+comment already states ("a phone that cannot install the app is a far
+worse outcome than one that installs it under last week's name") --
+confirmed as intended behavior, not something a code change can close.
+
+**"Make every place the app name appears validate against the live
+setting"** -- audited rather than assumed clean. `document.title` is
+already set dynamically on boot in both apps (`user-src/
+original_module.js` for members, the admin panel's own boot script)
+from the live `brandName`; the static `<title>Petro</title>`/
+`<title>Petro Admin</title>` in each HTML source is only the
+pre-JS-boot fallback shown for a single frame on a slow load, the
+same precedent this file already documents for the admin panel's own
+static heading spans. `user/manifest.json`/`admin/manifest.json`'s
+static `"Petro"` values are the shipped-file fallback the service
+worker rewrites live, per the mechanism above -- also by design, not
+a miss. No hardcoded, never-corrected "Petro" was found in a genuinely
+live, unrepaired display path.
+
+**Network / referrals / referral codes / Task Center -- read the
+actual code, not assumed solid.** All confirmed correctly built,
+nothing needed changing:
+- `generateUniqueReferralCode()`/`findUserByReferralCode()`: codes are
+  generated with a collision-retry loop under a process-local lock,
+  looked up case-insensitively via a dedicated `referralCodeLower`
+  field so at most one account can ever answer to a given spelling.
+- `/redeem` (gift codes): input is length-capped, whitelisted to
+  `[A-Za-z0-9-]`, and matched via `codeLower` before ever reaching a
+  query -- the exact NoSQL-injection-safe pattern already confirmed
+  in Follow-up 33's audit.
+- `/team/milestone/claim` (Task Center): genuinely idempotent by
+  construction, not just by convention -- an atomic
+  `updateIf({[claimFlag]: {$ne: true}, ...}, {...FieldValue.increment...})`
+  guards the wallet credit itself (a concurrent double-claim can only
+  ever win once), nested inside two locks (`milestoneclaim:` then
+  `bal:`), and the matching transaction ledger row is written via
+  `createIfAbsent()` against a fully deterministic doc id
+  (`team-reward:<userId>:<type>:<target>`) so even a retried request
+  after a partial failure can never create a second ledger row for
+  the same milestone. An `alreadyClaimed` response path exists
+  specifically so a client retry after its own dropped response reads
+  as "already done" rather than an error.
+- `paintNetwork()`'s referral link (Follow-up 31's `/share.html`
+  format) and the region-rotation address-picker above it
+  (`refreshShareHost()`) were both re-read in this pass too -- no
+  issues found.
+
+**Encryption / safeguarding, checked concretely rather than restated
+from memory:**
+- `db.js`'s `MONGODB_URI` is a `mongodb+srv://` connection string --
+  TLS is on by default for that scheme, and Atlas itself requires TLS
+  at the cluster level regardless, so database traffic is already
+  encrypted in transit.
+- Every subdomain now serves real HTTPS (Follow-up 32/33/34) with
+  HSTS `includeSubDomains`.
+- Passwords/PINs are `scrypt`-hashed (`scryptHash`/`scryptVerify`),
+  never stored or logged in plaintext -- confirmed in the same admin-
+  login code path Follow-up 33 already read in full.
+- Webhook authenticity (PesaJet HMAC signature, MarzPay's
+  independent-re-check pattern) already confirmed solid in Follow-up
+  33 -- not re-litigated here, still holds.
+
+**Verified**: `node -c` on both touched `.js`-bearing files,
+`build-core.js` round-trip OK (confirmed `user/index.html`/
+`user/share.html` byte-identical again), `npm run test:audit` passes
+in full (163 checks). Live in headless Chromium against the real
+built bundle: the announcement dialog's CTA renders "WhatsApp
+Channel" with zero page errors; a direct grep of the built
+`user/index.html` confirms zero remaining `og:title`/`og:description`/
+`og:type`/`og:site_name`/`twitter:title`/`twitter:description`/
+`twitter:card` occurrences. `user/sw.js` bumped `v218` → `v219`.

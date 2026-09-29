@@ -12,7 +12,7 @@
  *   admin-src/index.html          SERVER            the panel cannot sign in
  *   user-src/index.html           meta CSP          browser blocks every call
  *   admin-src/index.html          meta CSP          same, for the panel
- *   user-src/index.html           icon + og:image   blurry icon, no share card
+ *   user-src/index.html           icon              blurry icon
  *   admin-src/index.html          icon links        blurry admin icon
  *   user/manifest.json            icon srcs         installed icon breaks
  *   admin/manifest.json           icon srcs         same, for the panel
@@ -65,7 +65,9 @@ const SITES = [
   ['user-src/index.html', o => [
     [/(connect-src 'self' )https?:\/\/[^\s;]+/g, `$1${o}`],
     [/(<link rel="(?:icon|apple-touch-icon)" href=")https?:\/\/[^/]+(\/public\/)/g, `$1${o}$2`],
-    [/(<meta (?:property="og:image"|name="twitter:image") content=")https?:\/\/[^/]+(\/public\/)/g, `$1${o}$2`],
+    // og:image/twitter:image REMOVED (see user-src/index.html's own
+    // comment: the link-preview card, image and all, is gone) -- their
+    // rewrite rule went with them rather than left pointing at nothing.
   ]],
   ['user/manifest.json', o => [[/(")https?:\/\/[^/]+(\/public\/app-icon-)/g, `$1${o}$2`]]],
   ['admin/manifest.json', o => [[/(")https?:\/\/[^/]+(\/public\/app-icon-)/g, `$1${o}$2`]]],

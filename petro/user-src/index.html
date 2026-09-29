@@ -66,25 +66,20 @@
 <link rel="icon" href="https://api.petro-cchnug.com/public/app-icon-192.png">
 <link rel="apple-touch-icon" href="https://api.petro-cchnug.com/public/app-icon-192.png">
 <meta name="description" content="Petro — invest, earn daily income, and grow your team.">
-<!-- Link preview REMOVED entirely (owner: "remove stuffs of link preview,
-     here there will be no link preview") -- no og:image/twitter:image, no
-     admin upload for one, no /public/link-preview.jpg route on the server.
-     og:title/og:description/og:type/twitter:title/twitter:description stay:
-     those are general share metadata, not the picture, and nobody asked for
-     a shared link to lose its title too -- just its card image. twitter:card
-     drops to "summary" (a small icon, not a large photo) since there is no
-     large image left to back "summary_large_image". -->
-<!-- og:url is deliberately absent. A crawler falls back to the URL it
-     actually fetched, so the card keeps working on any domain the app is
-     served from; a hard-coded one would silently go stale the day a custom
-     domain is added. -->
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="Petro">
-<meta property="og:title" content="Petro">
-<meta property="og:description" content="Invest, earn daily income, and grow your team.">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Petro">
-<meta name="twitter:description" content="Invest, earn daily income, and grow your team.">
+<!-- Link preview REMOVED entirely, again, all the way this time (owner,
+     after the previous round left a text-only card in place: "why still
+     link preview stuffs are still showing up") -- the earlier round kept
+     og:title/og:description/og:type/twitter:title/twitter:description on
+     the theory that a shared link should keep SOME summary card, just
+     lose its picture. That reasoning is superseded now: a WhatsApp/
+     Telegram/Facebook paste still rendered a title+description card with
+     no image, which reads as "still showing a preview" exactly as
+     reported. All of it is gone now, not just the image half -- pasting
+     the link renders as a bare URL, the same as any page with no
+     og:/twitter: tags at all. <meta name="description"> above is left
+     alone; that is a search-result snippet, not a link-preview card, and
+     removing it would hurt search visibility for zero benefit toward
+     what was actually asked. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in

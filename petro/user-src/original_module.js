@@ -3077,7 +3077,7 @@ function maybeShowAnnouncement(){
   const bg = $('annBg'), sheet = $('annSheet');
   if (!bg || !sheet) return;
   const ctas = [];
-  if (s.whatsappGroup) ctas.push(`<a class="whatsapp" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">${ICONS.whatsapp}<span>Chat on WhatsApp</span></a>`);
+  if (s.whatsappGroup) ctas.push(`<a class="whatsapp" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">${ICONS.whatsapp}<span>WhatsApp Channel</span></a>`);
   if (s.supportEmail) ctas.push(`<a class="mail" href="mailto:${esc(s.supportEmail)}">${ICONS.envelope}<span>Email us</span></a>`);
   sheet.innerHTML = `
     <button class="ann-close" onclick="closeAnnouncement()" aria-label="Close">${ICONS.x}</button>
