@@ -2101,10 +2101,6 @@ function applyBootArtwork(ai, ci){
   // page banner and the brand logo on the Account profile card.
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   syncBrandLogoImages();
-  // Backdrop for the Download APP screen. Fetched here with the rest rather
-  // than when the screen opens: it is a full-bleed image, and loading it on
-  // open would show an empty dark panel for the moment it takes to arrive.
-  STATE.downloadBg = (ci.status === 'success' && ci.downloadbg) ? ci.downloadbg : null;
   // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner /
   // STATE.homeBannerVideo, fetched separately above -- it predates the
   // carousel and is the only slide that can be a video). Filtered to
@@ -3081,17 +3077,41 @@ window.showPage = async function(name){
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
 };
-// Announcement dialog REMOVED entirely (owner: "remove announcement
-// everywhere") -- the pop-up that used to fire on every Home visit, Home's
-// own inline "Latest Announcement" row, and the admin panel's "Home
-// announcement dialog" settings section are all gone; see petro/CLAUDE.md's
-// "Design system" section. maybeShowAnnouncement() stays as a deliberate
-// no-op rather than being deleted outright: maybeAnnounceAfterSheet() below
-// still calls it from several deposit/withdraw sheet-closing paths, and
-// leaving those call sites alone (rather than editing five separate spots
-// in that money-adjacent code) is the lower-risk way to make the feature
-// truly disappear everywhere it used to show.
-function maybeShowAnnouncement(){}
+// Announcement dialog, reintroduced (owner: "we are going to introduce
+// announcement dialog, so it will have channel and email buttons shaking
+// and glowing, the cancel X sign will be top right... it opens from middle
+// as usual and also just like mechanism of previous chipz clicking back to
+// home stimulates it"). Was removed entirely in an earlier round (see
+// petro/CLAUDE.md's "Design system" section) -- maybeShowAnnouncement() was
+// deliberately kept as a no-op rather than deleted specifically so
+// maybeAnnounceAfterSheet()'s five call sites never needed touching either
+// time; this round just gives it a real body again. Content (annTitle/
+// annBody) and the WhatsApp/email CTAs (whatsappGroup/supportEmail) reuse
+// the exact same admin settings and rendering pattern openSupportSheet()
+// already established -- one set of contact fields, two places they show.
+window.closeAnnouncement = function(){
+  const bg = $('annBg');
+  if (bg) bg.classList.remove('show');
+  if (!isAnyOverlayOpen()) unlockBodyScroll();
+};
+function maybeShowAnnouncement(){
+  const s = STATE.settings || {};
+  if (!s.annEnabled || !(s.annTitle || s.annBody)) return;
+  const bg = $('annBg'), sheet = $('annSheet');
+  if (!bg || !sheet) return;
+  const ctas = [];
+  if (s.whatsappGroup) ctas.push(`<a class="whatsapp" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">${ICONS.whatsapp}<span>Chat on WhatsApp</span></a>`);
+  if (s.supportEmail) ctas.push(`<a class="mail" href="mailto:${esc(s.supportEmail)}">${ICONS.envelope}<span>Email us</span></a>`);
+  sheet.innerHTML = `
+    <button class="ann-close" onclick="closeAnnouncement()" aria-label="Close">${ICONS.x}</button>
+    <div class="ann-mark">${ICONS.megaphone}</div>
+    ${s.annTitle ? `<h3 class="ann-title">${esc(s.annTitle)}</h3>` : ''}
+    ${s.annBody ? `<p class="ann-body">${esc(s.annBody)}</p>` : ''}
+    ${ctas.length ? `<div class="ann-cta">${ctas.join('')}</div>` : ''}
+  `;
+  bg.classList.add('show');
+  lockBodyScroll();
+}
 
 // ── HOME ──
 // Cache-first: a page revisit paints instantly from whatever STATE already
@@ -4156,6 +4176,27 @@ function acctListCardHtml(iconName, title, onclick){
     '<span class="acct-list-label">' + title + '</span>' + ICONS.chevronRight +
   '</button>';
 }
+// Same acct-list-card shell as acctListCardHtml(), but the icon is a real
+// <img> against the app's own uploaded icon (/public/app-icon-192.png) --
+// suppliedMemberIcon()'s named CSS-mask icons only cover fixed artwork, not
+// an admin-replaceable photo. Owner: "app icon will be uploaded from admin
+// panel" -- promptInstallApp() is the existing PWA-install trigger, unchanged.
+// The <img> has an onerror fallback to a generic download glyph, same
+// pattern renderAccount()'s own accountBrandLogo/accountBrandFallback pair
+// uses just above -- API_BASE is still the VPS's bare-HTTP address (see
+// CLAUDE.md's "Hosting" section), which this page's own CSP img-src
+// (deliberately kept self/data/blob/https-only, not loosened for this one
+// icon -- see test-csp-runtime.py's own note) will refuse to load until the
+// real HTTPS domain cutover, so the icon degrades instead of showing broken.
+function downloadAppRowHtml(){
+  return '<button class="acct-list-card" onclick="promptInstallApp()">' +
+    '<span class="acct-list-icon">' +
+      '<img src="' + API_BASE + '/public/app-icon-192.png" alt="" style="width:34px;height:34px;border-radius:9px;object-fit:cover;" onerror="this.style.display=\'none\';var f=this.nextElementSibling;if(f)f.style.display=\'flex\';">' +
+      '<span style="display:none;width:34px;height:34px;align-items:center;justify-content:center;">' + ICONS.download + '</span>' +
+    '</span>' +
+    '<span class="acct-list-label">Download App</span>' + ICONS.chevronRight +
+  '</button>';
+}
 function settingRowHtml(icon, title, sub, onclick){
   const rowIcons = {
     download: ICONS.download,
@@ -4218,6 +4259,7 @@ async function renderAccount(){
     ${acctListCardHtml('accountSecurity', 'Security Settings', 'openChangeLoginPasswordSheet()')}
     ${acctListCardHtml('support', 'Support', 'openSupportSheet()')}
     ${acctListCardHtml('accountAbout', 'About Us', 'openAboutSheet()')}
+    ${downloadAppRowHtml()}
   </div>
   <button class="logout-btn-v2" onclick="doLogout()">${ICONS.logoutArrow} Log Out</button>
   <div style="height:20px;"></div>
@@ -5039,7 +5081,11 @@ function isAnyOverlayOpen(){
     // written and was never added to it -- it is exactly the kind of thing
     // the announcement must never land on top of, since it carries the
     // outcome of a payment the member is waiting on.
-    || ($('depStatusBg') && $('depStatusBg').classList.contains('show')));
+    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
+    // The announcement dialog itself, now that it's real again -- so a
+    // second trigger (e.g. Withdraw closing right after Deposit already
+    // opened it) can't stack a second announcement on top of the first.
+    || ($('annBg') && $('annBg').classList.contains('show')));
 }
 
 // Owner: "make when the announcement dialog message appears when one is from
@@ -6478,40 +6524,15 @@ window.addEventListener('beforeinstallprompt', (e) => {
   window._installPrompt = e;
 });
 window.addEventListener('appinstalled', () => { window._installPrompt = null; });
-// Owner: "make when one taps download, it opens and middle there is a button
-// download, and in background there is image uploaded from admin panel."
-//
-// So Download APP is now a screen, not a straight-to-the-browser-prompt row.
-// It uses the ordinary sheet overlay, which means the phone Back button
-// closes it like every other screen for free. The admin image is a real <img>
-// rather than a CSS background so a slow or missing one degrades to the brand
-// gradient underneath instead of a blank panel.
-window.openDownloadSheet = function(){
-  const bg = STATE.downloadBg
-    ? `<img class="dl-bg" src="${esc(STATE.downloadBg)}" alt="" onerror="this.remove()">`
-    : '';
-  openSheet('Download APP', `
-  <div class="dl-screen reveal-in">
-    ${bg}
-    <div class="dl-scrim"></div>
-    <div class="dl-body">
-      <div class="dl-top">
-        <div class="dl-mark">${petroMarkHtml(72)}</div>
-        <h2 class="dl-title">Get the ${esc(brandName())} app</h2>
-        <p class="dl-sub">Install it on your phone for faster access, and open it straight from your home screen.</p>
-      </div>
-      <button class="primary-button dl-btn" id="dlInstallBtn" onclick="promptInstallApp()">Download</button>
-      <p class="dl-note" id="dlNote"></p>
-    </div>
-  </div>`);
-  // Written after the sheet is in the DOM, and only when there is genuinely
-  // nothing to install -- saying "already installed" underneath a button
-  // that WILL work would be worse than saying nothing.
-  if (!window._installPrompt) {
-    const n = $('dlNote');
-    if (n) n.textContent = 'If nothing happens, the app is already installed — open it from your home screen. On iPhone, use Share then "Add to Home Screen".';
-  }
-};
+// Owner, originally: "make when one taps download, it opens and middle
+// there is a button download, and in background there is image uploaded
+// from admin panel" -- built as its own full screen (openDownloadSheet(),
+// with an admin-uploadable 'downloadbg' backdrop). Later reversed: "remove
+// that stuff of download app background, here, one just taps on and it
+// stimulates downloading, no going inside, so remove download app back
+// image input." The Account row below now calls promptInstallApp()
+// directly -- no screen in between -- and the 'downloadbg' image slot, its
+// admin upload UI, and this function are gone, not just unlinked.
 window.promptInstallApp = async function(){
   if (!window._installPrompt) { notify('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
   window._installPrompt.prompt();

@@ -4332,3 +4332,141 @@ mock `whatsappGroup`/`supportEmail`/`supportHours` renders exactly 2
 the hours card present with the right text -- plus a screenshot
 confirming the title/subtitle now stack correctly and the icons match
 the owner's reference colors. `user/sw.js` bumped `v200` → `v201`.
+
+## Follow-up 24 -- Download App row replaces the old download screen; the announcement dialog is rebuilt
+
+Owner, one message, two asks: *"introduce another tab here of download app,
+so app icon will be uploaded from admin panel name, and also remove that
+stuff of download app background, here, one just taps on and it stimulates
+downloading, no going inside, so remove download app back image input, also
+remove stuffs of link preview, here there will be no link preview."* Then,
+in the same message: *"another thing we are going to introduce announcement
+dialog, so it will have channel and email buttons shaking and glowing, the
+cancel X sign will be top right please put all your experience and skills
+in it and it opens from middle as usual and also just like mechanism of
+previous chipz clicking back to home stimulates it, and let it have a good
+appearing animation not just appearing abruptly."*
+
+**Download App / link preview removal.** The `downloadbg` image slot and
+`linkPreviewEnabled`/og:image machinery are gone server-side (routes,
+`DEFAULT_SETTINGS` fields, `PETRO_IMAGE_SLOTS`/`BRAND_ASSET_SLOTS`),
+client-side (`og:image`/`twitter:image` meta tags removed from
+`user-src/index.html`), and from the admin panel (the Link preview and
+Download screen background upload sections removed from `admin-src/
+index.html`) -- all from a prior round in this same session. This round
+finished the client half: `openDownloadSheet()` (the old full-screen
+"Download APP" overlay with its admin-uploadable backdrop) is deleted from
+`user-src/original_module.js`, replaced by an explanatory comment directly
+above the unchanged `promptInstallApp()` (the actual PWA-install trigger,
+which the screen only ever wrapped). Its dead `.dl-screen`/`.dl-bg`/
+`.dl-scrim`/`.dl-body`/`.dl-top`/`.dl-mark`/`.dl-title`/`.dl-sub`/`.dl-btn`/
+`.dl-note` CSS is removed from `user-src/index.html`. Account's row list
+(`renderAccount()`) gained a new **Download App** row (`downloadAppRowHtml()`),
+after About Us, calling `promptInstallApp()` directly -- "one just taps on
+and it stimulates downloading, no going inside." server.js's own comment
+above `PETRO_IMAGE_SLOTS` (which used to point at a not-yet-written
+`openDownloadApp()`) was corrected to name the functions that actually
+ship: `downloadAppRowHtml()`/`promptInstallApp()`.
+
+**A real bug caught before shipping, not guessed at**: the new row's icon
+is the app's own uploaded icon (`${API_BASE}/public/app-icon-192.png`),
+the first `<img>` in this codebase to reference the backend's bare-HTTP
+address directly rather than through a `data:` URI. Rendering it live in
+headless Chromium showed the browser silently refusing to load it --
+`user-src/index.html`'s own CSP `img-src` is deliberately kept
+`'self' data: blob: https:` only, and CLAUDE.md's own "Hosting" section
+already names this exact tradeoff (`test-csp-runtime.py`'s note: do not
+loosen the CSP to accommodate the bare-HTTP VPS icon URL; wait for the
+real HTTPS domain cutover). Rather than either break that rule or ship a
+visibly broken image, the row's `<img>` now has an `onerror` fallback to
+a plain `ICONS.download` glyph -- the exact same pattern `renderAccount()`'s
+own `accountBrandLogo`/`accountBrandFallback` pair already uses two lines
+above it. Degrades gracefully today, and will start showing the real icon
+on its own the moment the real domain/HTTPS cutover happens (the CSP's
+existing `https:` allowance already covers it then) -- no code change
+needed at that point.
+
+**Announcement dialog, reintroduced.** Was removed entirely several rounds
+ago on an explicit earlier instruction (see "Design system" above);
+`maybeShowAnnouncement()` was deliberately kept as a no-op rather than
+deleted specifically so this round could give it a real body again without
+touching `maybeAnnounceAfterSheet()`'s five call sites -- exactly what
+happened. The trigger mechanism the owner asked to reuse ("just like
+mechanism of previous chipz clicking back to home stimulates it") was
+never removed in the first place: `maybeAnnounceAfterSheet()` +
+`ANNOUNCE_AFTER_SHEETS` (`['Recharge','Deposit','Withdraw','Wallet']`)
+still fire on the phone Back button or tapping back to Home from those
+four sheets, unchanged.
+
+- **CSS** (`user-src/index.html`): `.ann-bg`/`.ann-sheet` reuse the exact
+  centred scale+fade "gentle settle" entrance `.confirm-sheet`/`.chest-modal`
+  already established (same `cubic-bezier(.22,1,.36,1)` curve, same 520ms/
+  100ms-delay timing) -- "opens from middle as usual" is literally this
+  existing pattern, not a new one. `.ann-close` (top-right, `ICONS.x`),
+  `.ann-mark` (a red circular badge with `ICONS.megaphone`), `.ann-title`/
+  `.ann-body` follow. The CTA buttons (`.ann-cta a.whatsapp`/`.mail`) carry
+  a periodic wiggle+glow (`annShake`/`annGlow` keyframes, a `--ann-glow`
+  custom property so one shared keyframe pair serves both brand colors) --
+  deliberately a short pulse near the end of each ~2.6s cycle rather than
+  constant jitter the whole time, which would be unreadable on a button
+  carrying real text; the email button is offset half a cycle
+  (`animation-delay`) so the two never pulse in lockstep. Respects
+  `prefers-reduced-motion` (animation disabled entirely).
+- **Markup**: `<div class="ann-bg" id="annBg">` was already stubbed as an
+  empty HTML comment from the earlier removal round, marking exactly where
+  to add it back -- replaced with the real `#annBg`/`#annSheet` pair,
+  tap-outside-to-close wired the same way `#confirmBg`/`#msgDetailBg`
+  already do.
+- **JS** (`user-src/original_module.js`): `maybeShowAnnouncement()` now
+  reads `STATE.settings.annEnabled`/`annTitle`/`annBody` (no-ops if
+  disabled or both are empty) and builds the WhatsApp/email CTAs from
+  `whatsappGroup`/`supportEmail` -- the exact same two settings and the
+  same `esc()`-guarded `href`/`mailto:` pattern `openSupportSheet()`
+  already established two rounds ago, not a second contact-info system.
+  New `window.closeAnnouncement()` mirrors `closeSheet()`'s own
+  `isAnyOverlayOpen()`-gated `unlockBodyScroll()` call. `isAnyOverlayOpen()`
+  gained an `#annBg` check so a second trigger firing while the dialog is
+  already open can never stack a duplicate on top.
+- **Backend**: needed zero changes. `annEnabled`/`annTitle`/`annBody`/
+  `annUpdatedAt` were already live in `DEFAULT_SETTINGS`,
+  `SETTINGS_BOOLEAN_FIELDS`, and `/admin/settings/update`'s
+  `annUpdatedAt`-stamping logic from when the feature first existed --
+  left in place, unreachable, the whole time it was removed from the UI
+  (same "leave the dormant code, remove only the entry point" precedent
+  this file documents for Turntable/subdomains/Trade Password/etc.).
+- **Admin panel** (`admin-src/index.html`): a new "Home announcement
+  dialog" panel-card (enable checkbox, Title input, Message textarea, its
+  own Save button) added right after Support contacts, reusing the
+  `Support contacts`-card's own `v()`/`esc()`/`api('/admin/settings/update')`
+  pattern verbatim. Its own i18n translation-table row (`'Home announcement
+  dialog'`) was deliberately kept, unused, when the section was removed
+  several rounds ago specifically "for reuse" -- confirmed still present
+  and correct in all 6 languages, needed no new translation work.
+
+**Verified, not assumed**: `node -c`/`node --check` clean on both touched
+`.js`-bearing files; `build-core.js`/`build-admin.js` both "round-trip OK".
+`npm run test:audit` passes in full. Live in headless Chromium against the
+real built `user/index.html`: the new Account row renders with the correct
+`onclick="promptInstallApp()"`, the old `.dl-screen`/"Download APP" markup
+is completely absent from the DOM, and the icon's `onerror` fallback
+correctly swaps to the generic glyph under the current bare-HTTP CSP
+(confirmed via `getComputedStyle` on both the `<img>` and its fallback
+`<span>`, not just read from the code). For the announcement dialog:
+`maybeShowAnnouncement()` renders the right title/body/CTAs and shows the
+dialog; `maybeAnnounceAfterSheet('Withdraw')` (the real Chipz-mechanism
+trigger) fires it exactly the same way a direct call does; it does NOT
+fire for an unrelated sheet title or when `annEnabled` is false;
+`closeAnnouncement()` correctly hides it and `isAnyOverlayOpen()` correctly
+reports `true` while it's shown; both CTA buttons carry the `annShake`/
+`annGlow` animations (checked via `getComputedStyle().animationName`); a
+screenshot confirms the centred card, top-right X, megaphone mark, and
+both brand-colored CTA buttons render together correctly. The admin
+panel's new section was verified the same way an earlier round verified
+Analytics's VPS-health card: loaded `admin-src/index.html` directly (not
+the obfuscated `admin/index.html` build, which doesn't expose its
+functions as bare globals), drove it through the real `switchTab('settings')`
+call with `api()` intercepted/mocked, and confirmed via both DOM
+assertions and a screenshot that the enable checkbox, title, and message
+fields all populate correctly from mock settings and the Save button is
+present. `user/sw.js` bumped `v201` → `v202`, `admin/sw.js` bumped `v48`
+→ `v49` (both source files changed this round).

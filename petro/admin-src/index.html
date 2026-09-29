@@ -2701,7 +2701,6 @@ async function renderBanners(){
   const bannerImage = br.image||'';
   const bannerVideo = br.video||'';
   const bannerVideoUploaded = br.videoVersion||'';
-  const downloadBgImage = cir.downloadbg||'';
   const authHeroImage = cir.authhero||'';
   const homeSlide2Image = cir.banner2||'';
   const homeSlide3Image = cir.banner3||'';
@@ -2711,8 +2710,6 @@ async function renderBanners(){
   const checkinBannerImage = cir.checkinbanner||'';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
-  const linkPreviewImage = bar.linkPreview||'';
-  const linkPreviewCustom = !!bar.linkPreviewCustom;
   $('content').innerHTML = `
     <h2 class="sec">Brand logo</h2>
     <div class="panel-card">
@@ -2830,29 +2827,6 @@ async function renderBanners(){
       <p class="muted" style="margin:10px 0 0;font-size:12px">Phones that already installed the app keep the old icon until reinstalled.</p>
     </div>
 
-    <h2 class="sec">Link preview</h2>
-    <div class="panel-card">
-      <label style="width:auto;display:flex;align-items:center;gap:8px;margin:0 0 10px;"><input type="checkbox" id="linkPrevOn" ${s.linkPreviewEnabled !== false ? 'checked' : ''} style="width:auto"> Show a picture on shared links</label>
-      <p class="muted" style="margin-top:0">The picture shown when the app's link is pasted into WhatsApp, Telegram or Facebook. 1200&times;630.</p>
-      <div class="banner-row">
-        ${linkPreviewImage?`<img class="img-thumb" style="border-radius:6px" src="${esc(linkPreviewImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:6px"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${linkPreviewCustom?'Your uploaded preview':'<span class="muted">Nothing uploaded — links share the built-in card</span>'}</div>
-        ${linkPreviewCustom?`<button class="btn danger sm" id="linkPreviewClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload preview<input type="file" id="linkPreviewFile" accept="image/*" hidden></label>
-    </div>
-
-    <h2 class="sec">Download screen background</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">Background photo behind the Download button (Account &rarr; Download APP). Portrait, 1080&times;1920.</p>
-      <div class="banner-row">
-        ${downloadBgImage?`<img class="img-thumb" src="${esc(downloadBgImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
-        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${downloadBgImage?'Custom image':'<span class="muted">Brand gradient</span>'}</div>
-        ${downloadBgImage?`<button class="btn danger sm" id="downloadBgClear">Remove</button>`:''}
-      </div>
-      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="downloadBgFile" accept="image/*" hidden></label>
-    </div>
-
   `;
   wireBannerHandlers();
 }
@@ -2927,13 +2901,10 @@ function wireBannerHandlers(){
       await withTabBusy((async()=>{
         try {
           toast('Uploading…','ok');
-          // The download backdrop fills a whole phone screen, so it keeps more
-          // resolution than the banners: 1280 on the long side of a portrait
-          // image is only 720 wide, which is visibly soft full-bleed.
-          // The download backdrop and the two auth backdrops all fill large
-          // areas, so they keep more resolution than the banners.
+          // The auth backdrop fills a large area, so it keeps more
+          // resolution than the banners.
           const maxDim = slot==='logo' ? 512
-                       : (slot==='downloadbg' || slot==='authhero') ? 1600
+                       : slot==='authhero' ? 1600
                        : 1280;
           const image = await fileToDataUrl(f, maxDim, 0.82);
           const d = await api('/admin/petro-image/set', { slot, image });
@@ -2975,52 +2946,6 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  // ── Link preview ── 1200x630 is the size WhatsApp, Telegram and Facebook
-  // all read; cover-fit, because a share card is artwork that should fill
-  // the frame rather than sit letterboxed inside it.
-  //
-  // The switch saves on change rather than behind a button: it is one boolean,
-  // and a switch that needs a separate Save is a switch people flip and walk
-  // away from. `region: 'ug'` is named EXPLICITLY because the setting is
-  // backend-wide -- without it the field would be stripped from the save
-  // whenever another country is picked, and the toast would still say saved.
-  const linkPrevOn = $('linkPrevOn');
-  if (linkPrevOn) linkPrevOn.addEventListener('change', async()=>{
-    const on = linkPrevOn.checked;
-    linkPrevOn.disabled = true;
-    const d = await api('/admin/settings/update', { region: 'ug', settings: { linkPreviewEnabled: on } });
-    linkPrevOn.disabled = false;
-    if (d.status !== 'success') {
-      linkPrevOn.checked = !on;   // put the switch back where the server left it
-      return toast(d.message || 'Could not change that', 'err');
-    }
-    // Says what actually happens next, including the delay, because "saved"
-    // on a share card that still shows the old picture reads as a failure.
-    toast(on ? 'Shared links will show a picture — allow up to five minutes'
-             : 'Shared links will show no picture — allow up to five minutes', 'ok');
-  });
-  const linkPreviewFile = $('linkPreviewFile');
-  if (linkPreviewFile) linkPreviewFile.addEventListener('change', async e=>{
-    const f=e.target.files[0]; if(!f) return;
-    await withTabBusy((async()=>{
-      try {
-        toast('Uploading…','ok');
-        const image = await fileToFramedDataUrl(f,1200,630,0.85);
-        const d = await api('/admin/link-preview/set', { image });
-        toast(d.status==='success'?'Link preview saved — new shares will show it':(d.message||'Failed'), d.status==='success'?'ok':'err');
-        if (d.status==='success') renderBanners();
-      } catch(err){ toast(err.message||'Could not read that image','err'); }
-    })());
-  });
-  const linkPreviewClear = $('linkPreviewClear');
-  if (linkPreviewClear) linkPreviewClear.addEventListener('click', async()=>{
-    await withTabBusy((async()=>{
-      const d = await api('/admin/link-preview/clear', {});
-      toast(d.status==='success'?'Link preview removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') renderBanners();
-    })());
-  });
-  wirePetroImageSlot('downloadbg', 'downloadBgFile', 'downloadBgClear', 'Download screen background saved, live for every user', 'Download screen background removed');
   wirePetroImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Background image saved, live on Log In and Sign Up', 'Background image removed');
   wirePetroImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
   wirePetroImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
@@ -3187,6 +3112,16 @@ async function renderSettings(){
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
+    <h2 class="sec">Home announcement dialog</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">A popup shown after a member returns to Home from Deposit, Withdraw or Wallet. Its WhatsApp/email buttons are the same group link and email set in Support contacts above.</p>
+      <div class="switch-row"><span><b>Enable announcement</b></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sAnnEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
+      <label>Title</label><input id="sAnnTitle" maxlength="80" value="${esc(v('annTitle',''))}" placeholder="e.g. New assets are live">
+      <label>Message</label><textarea id="sAnnBody" rows="3" maxlength="400" placeholder="What you want members to see when they open the app.">${esc(v('annBody',''))}</textarea>
+      <button class="btn block" id="saveAnn" style="margin-top:10px">Save announcement</button>
+    </div>
+
     <h2 class="sec">App name</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Renames the app everywhere inside it &mdash; Home, profile, About, browser tab. Up to 24 characters.</p>
@@ -3254,6 +3189,11 @@ async function renderSettings(){
       telegramGroup:$('spTgGroup').value.trim(), whatsappGroup:$('spWaGroup').value.trim(),
       supportEmail:$('spEmail').value.trim(), supportHours:$('spHours').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveAnn').addEventListener('click', async()=>{
+    const upd = { annEnabled:$('sAnnEnabled').checked,
+      annTitle:$('sAnnTitle').value.trim(), annBody:$('sAnnBody').value.trim() };
+    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveBrandName').addEventListener('click', async()=>{
     const name = $('brandNameInput').value.trim();
@@ -3628,9 +3568,7 @@ const ADMIN_LANG_ROWS = [
   ['Referral banner', 'Ekifaananyi ky\'okuyita', 'Bango la mialiko', 'Bannière de parrainage', 'Ibendera ryo gutumira', 'Ekishushani ky\'okweta'],
   ['Help Centre banner', 'Ekifaananyi ky\'ekifo ky\'obuyambi', 'Bango la kituo cha usaidizi', 'Bannière du centre d\'aide', 'Ibendera ry\'ikigo cy\'ubufasha', 'Ekishushani ky\'ekicweka ky\'obuhwezi'],
   ['Home announcement dialog', 'Ekiwandiiko ky\'amawulire ku lupapula olusooka', 'Kidirisha cha tangazo la ukurasa wa nyumbani', 'Fenêtre d\'annonce sur l\'accueil', 'Idirishya ry\'itangazo ku rupapuro rw\'ahabanza', 'Ekibaasa ky\'amakuru aha rupapura rw\'omuka'],
-  ['Download screen background', 'Ekifaananyi eky\'emabega ku lupapula lw\'okudaunloodinga', 'Mandhari ya skrini ya kupakua', 'Fond de l\'écran de téléchargement', 'Mbuganyuma y\'urupapuro rwo kumanura', 'Ekishushani ky\'enyima aha rupapura rw\'okuteekyera'],
   ['Profile animation', 'Ekifaananyi ekitambula ku profayiro', 'Uhuishaji wa wasifu', 'Animation du profil', 'Ishusho inyeganyega ku mwirondoro', 'Ekishushani ekirikugyenda aha profairo'],
-  ['Link preview', 'Ekifaananyi ky\'ekinywanyizo', 'Muhtasari wa kiungo', 'Aperçu du lien', 'Incamake y\'umurongo', 'Ekishushani ky\'omukwate'],
   ['Manual payment screen images', 'Ebifaananyi by\'olupapula lw\'okusasula n\'emikono', 'Picha za skrini ya malipo ya mkono', 'Images de l\'écran de paiement manuel', 'Amashusho y\'urupapuro rwo kwishyura intoki', 'Ebishushani by\'orupapura rw\'okushashura n\'emikono'],
   ['Login & Sign Up screen', 'Olupapula lw\'okuyingira n\'okwewandiisa', 'Skrini ya kuingia na kujisajili', 'Écran de connexion et d\'inscription', 'Urupapuro rwo kwinjira no kwiyandikisha', 'Orupapura rw\'okutaaha n\'okwehandiisa'],
   ['1. Top band (behind the CHIPZ logo)', '1. Omusipi ogw\'awaggulu (emabega w\'akabonero ka CHIPZ)', '1. Ukanda wa juu (nyuma ya nembo ya CHIPZ)', '1. Bandeau du haut (derrière le logo CHIPZ)', '1. Umukandara wo hejuru (inyuma y\'ikirango cya CHIPZ)', '1. Omukyeeka ogw\'ahaiguru (enyima y\'ekimanyiso kya CHIPZ)'],

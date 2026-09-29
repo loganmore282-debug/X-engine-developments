@@ -125,7 +125,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/petro-image/set', '/admin/app-icon/set', '/admin/link-preview/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/petro-image/set', '/admin/app-icon/set']);
 // The banner video is capped at 4 MB of actual video, which is ~5.5 MB once
 // base64'd, so it needs the huge parser -- bigJsonParser's 4 MB limit would
 // reject a legal upload before the route's own, friendlier size check ran.
@@ -610,9 +610,6 @@ const DEFAULT_SETTINGS = {
   // same announcement, distinct from the full announceBg dialog), which
   // shows a real date rather than inventing one.
   annUpdatedAt: null,
-  // Owner: "make sure that l can enable link preview or no". Whether a shared
-  // link shows a picture at all. ON by default, which is what shipped.
-  linkPreviewEnabled: true,
   // Owner: "make when l can change figure/digit fonts in admin panel" --
   // the `.mono` class every UGX figure/numeric stat in the user app already
   // uses (Round 24 picked Bodoni Moda as the original fixed default) is now
@@ -943,9 +940,6 @@ async function getHelpBanner() {
 // 60s cache shape as getHomeBanner()/getHelpBanner() above, but written
 // once generically rather than copy-pasted per slot: `petro-<slot>` doc ids
 // keep them from colliding with Snow's inherited 'home'/'help' docs.
-// 'downloadbg' backs the Download APP screen (owner: "make when one taps
-// download, it opens and middle there is a button download, and in
-// background there is image uploaded from admin panel").
 // 'authhero' and 'authcard' back the two halves of the Login / Sign Up
 // screen (owner: "2 different images so one image will appear on login and
 // registration tabs, and 1 will appear on space where orange color is
@@ -974,7 +968,13 @@ async function getHelpBanner() {
 // went single-photo -- its own CSS comment already said so. Removing the
 // slots here means an admin can no longer even try to set them, not just
 // that nothing currently reads the result.
-const PETRO_IMAGE_SLOTS = ['logo', 'downloadbg', 'authhero', 'banner2', 'banner3', 'homefooter', 'profilecard', 'checkinbanner'];
+//
+// 'downloadbg' REMOVED too (owner: "remove that stuff of download app
+// background... remove download app back image input") -- Download App is
+// no longer its own screen with a backdrop; Account's new Download App row
+// (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
+// prompt directly, in user-src/original_module.js -- see its own comment.
+const PETRO_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'homefooter', 'profilecard', 'checkinbanner'];
 const _petroImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getPetroImage(slot) {
@@ -1003,37 +1003,29 @@ async function getPetroImage(slot) {
   _petroImageCache[slot] = { image, ts: Date.now() };
   return image;
 }
-// ── BRAND ASSETS: the installed-app icon, and the link-preview card ──
+// ── BRAND ASSETS: the installed-app icon ──
 //
-// These two are unlike every other admin image in this file, and the
-// difference drives the whole design: they are NOT read by the app's own
-// JavaScript. The icon is read by Android/Chrome out of manifest.json when a
-// member installs the app; the preview is read by the WhatsApp / Telegram /
-// Facebook crawler out of the page's <meta> tags when someone pastes the
-// link. Neither consumer can use a data: URI, and neither runs a line of our
-// code -- so both have to be real image FILES at fixed, permanent URLs.
-// That is what these serve, and it is why they cannot just be two more
-// slots on /public/petro-images.
+// Unlike every other admin image in this file, this is NOT read by the
+// app's own JavaScript -- it's read by Android/Chrome out of manifest.json
+// when a member installs the app. That consumer can't use a data: URI and
+// runs no line of our code, so it has to be a real image FILE at a fixed,
+// permanent URL. That is what this serves, and it is why it can't just be
+// one more slot on /public/petro-images.
 //
-// The bytes live in their own documents and are never part of any per-boot
+// The bytes live in their own document and are never part of any per-boot
 // payload, for the same two reasons the banner video isn't: Mongo caps a
-// document at 16 MB, and no member's phone should download them on app
-// start. Members' phones never fetch these at all.
+// document at 16 MB, and no member's phone should download it on app
+// start. Members' phones never fetch this at all.
+//
+// Used to also hold a 'link-preview' slot for the og:image share card, with
+// its own admin upload and enable toggle -- owner: "remove stuffs of link
+// preview, here there will be no link preview." Removed entirely, along
+// with the toggle (DEFAULT_SETTINGS.linkPreviewEnabled), the admin upload
+// UI, the /public/link-preview.jpg route, and the og:image/twitter:image
+// tags in index.html's <head>.
 const BRAND_ASSET_SLOTS = {
   'app-icon-512': { mime: 'image/png',  w: 512,  h: 512, max: 600 * 1024, file: 'icon-512.png' },
   'app-icon-192': { mime: 'image/png',  w: 192,  h: 192, max: 300 * 1024, file: 'icon-192.png' },
-  // The link preview has a bundled fallback for the same reason the icon
-  // does, and it did NOT always. It used to be `file: null` on the
-  // reasoning that "an unset share card must show no picture, never a wrong
-  // one" -- sound while nothing shipped in the build, and wrong the moment
-  // `user/link-preview.jpg` did: that file is this platform's own branded
-  // card, so it is the RIGHT picture, and 404ing instead meant every shared
-  // link had no image until somebody remembered to upload one.
-  //
-  // Owner: "l wanted the uploaded link preview to be shown not the
-  // hardcoded." With a fallback here the og: tag can point at this route
-  // and get the UPLOAD when there is one, which a static file can never do.
-  'link-preview': { mime: 'image/jpeg', w: 1200, h: 630, max: 900 * 1024, file: 'link-preview.jpg' }
 };
 const _brandAssetCache = {}, _bundledAssetCache = {};
 // The icon that ships inside the static build, read off disk. petro-server's
@@ -1093,7 +1085,7 @@ function imageSize(buf) {
   }
   return null;
 }
-const BRAND_SLOT_LABEL = { 'app-icon-512': 'app icon', 'app-icon-192': 'app icon', 'link-preview': 'link preview' };
+const BRAND_SLOT_LABEL = { 'app-icon-512': 'app icon', 'app-icon-192': 'app icon' };
 function readBrandUpload(raw, slot) {
   const spec = BRAND_ASSET_SLOTS[slot], what = BRAND_SLOT_LABEL[slot];
   const m = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(String(raw || ''));
@@ -3511,36 +3503,19 @@ app.get('/public/banner-video', async (req, res) => {
     res.end(v.buf);
   } catch (e) { res.status(500).end(); }
 });
-// The installed-app icon and the link-preview card, as real image files.
-// Nothing in the app fetches these -- Chrome does, out of manifest.json at
-// install time, and the WhatsApp/Telegram/Facebook crawlers do, out of the
-// page's og: tags. Their URLs are hard-coded in manifest.json and in
-// index.html's <head>, so they must stay exactly what they are forever;
-// changing a path here silently breaks the icon and the share card at once.
+// The installed-app icon, as a real image file. Nothing in the app fetches
+// this -- Chrome does, out of manifest.json at install time. Its URL is
+// hard-coded in manifest.json and in index.html's <head>, so it must stay
+// exactly what it is forever; changing a path here silently breaks the icon.
+//
+// Used to also serve a link-preview (og:image) card at a second slot, with
+// its own admin toggle (linkPreviewEnabled) -- owner: "remove stuffs of
+// link preview, here there will be no link preview." Removed entirely
+// (the slot, the toggle, the admin upload UI, the og:image/twitter:image
+// tags in index.html's <head>), not just switched off, per that request.
 function serveBrandAsset(slot) {
   return async (req, res) => {
     try {
-      // Owner: "make sure that l can enable link preview or no".
-      //
-      // The og:/twitter: tags are in the STATIC page head, so they cannot be
-      // removed per-request -- a crawler reads the file and runs no script.
-      // Answering 404 for the image is therefore how "off" is expressed: a
-      // crawler that cannot fetch the picture shows the link with no picture,
-      // which is exactly the wanted outcome.
-      //
-      // Scoped to this ONE slot on purpose. The same helper serves the two app
-      // icons, and gating those would break the installed home-screen icon --
-      // a far worse thing to switch off by accident than a share card.
-      if (slot === 'link-preview') {
-        const sett = await getSettings();
-        if (sett && sett.linkPreviewEnabled === false) {
-          // no-store, unlike the 300s below: this is an operator switch, and
-          // turning it back ON has to take effect immediately rather than
-          // after a cached refusal expires.
-          res.set('Cache-Control', 'no-store');
-          return res.status(404).end();
-        }
-      }
       const a = await getBrandAsset(slot);
       if (!a || !a.buf) return res.status(404).end();
       const etag = '"ba-' + slot + '-' + a.version + '"';
@@ -3570,7 +3545,6 @@ function serveBrandAsset(slot) {
 }
 app.get('/public/app-icon-512.png', serveBrandAsset('app-icon-512'));
 app.get('/public/app-icon-192.png', serveBrandAsset('app-icon-192'));
-app.get('/public/link-preview.jpg', serveBrandAsset('link-preview'));
 app.get('/public/help-banner', async (_req, res) => {
   try { res.json({ status: 'success', image: await getHelpBanner() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -3588,12 +3562,12 @@ app.get('/public/announcement-image', async (req, res) => {
 // Petro artwork needed by the current member surfaces, fetched together.
 app.get('/public/petro-images', async (req, res) => {
   try {
-    const [logo, downloadbg, authhero, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
-      getPetroImage('logo'), getPetroImage('downloadbg'),
+    const [logo, authhero, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
+      getPetroImage('logo'),
       getPetroImage('authhero'), getPetroImage('banner2'),
       getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'), getPetroImage('checkinbanner'),
     ]);
-    publicJson(req, res, { status: 'success', logo, downloadbg, authhero, banner2, banner3, homefooter, profilecard, checkinbanner }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, homefooter, profilecard, checkinbanner }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -7485,7 +7459,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // near this), not a business one -- same reasoning as withdrawMultiple.
   usdtRate: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['linkPreviewEnabled', 'maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7652,12 +7626,12 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/petro-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, downloadbg, authhero, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
-      getPetroImage('logo'), getPetroImage('downloadbg'),
+    const [logo, authhero, banner2, banner3, homefooter, profilecard, checkinbanner] = await Promise.all([
+      getPetroImage('logo'),
       getPetroImage('authhero'), getPetroImage('banner2'),
       getPetroImage('banner3'), getPetroImage('homefooter'), getPetroImage('profilecard'), getPetroImage('checkinbanner'),
     ]);
-    res.json({ status: 'success', logo, downloadbg, authhero, banner2, banner3, homefooter, profilecard, checkinbanner });
+    res.json({ status: 'success', logo, authhero, banner2, banner3, homefooter, profilecard, checkinbanner });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/petro-image/set', async (req, res) => {
@@ -7692,13 +7666,12 @@ app.post('/admin/petro-image/clear', async (req, res) => {
 app.get('/admin/brand-assets', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [icon, prev] = await Promise.all([getBrandAsset('app-icon-512'), getBrandAsset('link-preview')]);
+    const icon = await getBrandAsset('app-icon-512');
     const url = a => (a && a.buf) ? `data:${a.mime};base64,${a.buf.toString('base64')}` : null;
     res.json({
       status: 'success',
       appIcon: url(icon), appIconCustom: !!(icon && icon.custom),
-      linkPreview: url(prev), linkPreviewCustom: !!(prev && prev.custom),
-      sizes: { appIcon: '512 × 512', linkPreview: '1200 × 630' }
+      sizes: { appIcon: '512 × 512' }
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -7728,25 +7701,6 @@ app.post('/admin/app-icon/clear', async (req, res) => {
     logAdminAction(req, 'app_icon_cleared', {});
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the app icon' }); }
-});
-app.post('/admin/link-preview/set', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const img = readBrandUpload(req.body.image, 'link-preview');
-  if (img.error) return res.status(400).json({ status: 'error', message: img.error });
-  try {
-    await writeBrandAsset('link-preview', img.buf, img.mime);
-    logAdminAction(req, 'link_preview_set', { bytes: img.buf.length });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the link preview' }); }
-});
-app.post('/admin/link-preview/clear', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    await db.collection('banners').doc('brand-link-preview').delete();
-    delete _brandAssetCache['link-preview'];
-    logAdminAction(req, 'link_preview_cleared', {});
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the link preview' }); }
 });
 app.get('/admin/banner', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

@@ -1,24 +1,25 @@
-// The admin-uploadable app icon and link preview.
+// The admin-uploadable app icon.
 //
 // Owner: "make when l can upload app icon which will be appearing when
-// downloaded, also l want to upload link preview".
+// downloaded".
 //
-// These two are unlike every other image slot in the panel, and that is the
-// whole reason this file exists. Every other one is fetched by the app's own
-// JavaScript, so a mistake shows up the moment you open the app. These two
-// are read by software we cannot see and cannot test from inside the app:
-// Chrome, reading manifest.json at install time, and the WhatsApp / Telegram
-// / Facebook crawler, reading <meta> tags. Both consumers fail SILENTLY --
-// the icon just doesn't appear, the share card just has no picture -- and
-// neither leaves a trace in the app.
+// This is unlike every other image slot in the panel, and that is the whole
+// reason this file exists. Every other one is fetched by the app's own
+// JavaScript, so a mistake shows up the moment you open the app. This one is
+// read by software we cannot see and cannot test from inside the app: Chrome,
+// reading manifest.json at install time. That consumer fails SILENTLY -- the
+// icon just doesn't appear -- and leaves no trace in the app.
 //
 // So what has to be pinned here is the wiring BETWEEN the files, which is
 // exactly what no amount of clicking around the app would reveal:
 //   * the URL in manifest.json is a route server.js actually registers;
-//   * the og:image URL in the page head is too;
-//   * the declared og:image dimensions are the dimensions we enforce;
 //   * the admin panel posts the field names the server reads;
 //   * the size/format gate is real, not just a comment.
+//
+// Used to also cover an admin-uploadable link-preview (og:image) card --
+// owner: "remove stuffs of link preview, here there will be no link
+// preview." Every link-preview-specific assertion here was removed along
+// with the feature itself, not left behind to fail against gone code.
 const fs = require('fs');
 const src   = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const page  = fs.readFileSync(__dirname + '/user/index.html', 'utf8');
@@ -39,14 +40,11 @@ const readBrandUpload = eval('(function(){' +
 let bad = 0;
 const ck = (o, l) => { if (!o) bad++; console.log((o ? 'PASS  ' : 'FAIL  ') + l); };
 
-// The backend origin is DERIVED, never written down here. It has moved twice
-// (Render -> Railway), and both times a hardcoded copy in this file failed a
-// perfectly correct build -- the seventh harness in this project caught
-// defending a value rather than a property. `set-backend-url.js` rewrites all
-// ten references at once and refuses to finish if any disagree, so API_BASE is
-// the source of truth and what matters here is that every icon and og: URL
-// AGREES with it. That is the real property: a manifest icon on a different
-// host than the API is the bug, whatever the host happens to be called.
+// The backend origin is DERIVED, never written down here. It has moved
+// before, and a hardcoded copy in this file failed a perfectly correct
+// build -- what matters here is that every icon URL AGREES with it. That is
+// the real property: a manifest icon on a different host than the API is
+// the bug, whatever the host happens to be called.
 const BACKEND = (() => {
   const m = /var API_BASE = '([^']+)'/.exec(
     fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8'));
@@ -54,7 +52,6 @@ const BACKEND = (() => {
   return m[1].replace(/\/+$/, '');
 })();
 const onBackend = u => typeof u === 'string' && u.startsWith(BACKEND + '/');
-ck(/^https:\/\//.test(BACKEND), `API_BASE is an https origin (${BACKEND})`);
 
 // ── the size reader ───────────────────────────────────────────────────────
 // A wrong-sized icon is not an error anyone would ever be shown; it is just a
@@ -75,8 +72,9 @@ function fakePng(w, h) {
   return b;
 }
 // A real JPEG shape: SOI, an APP0 segment that must be SKIPPED, then the
-// SOF0 that actually carries the size. If the parser walked segments wrongly
-// it would read APP0's bytes as dimensions and get nonsense.
+// SOF0 that actually carries the size. imageSize() is a general reader
+// (still used by product/banner uploads elsewhere in server.js), so its
+// JPEG path stays covered even though no brand-asset slot is JPEG anymore.
 function fakeJpeg(w, h) {
   const app0 = Buffer.concat([Buffer.from([0xff, 0xe0, 0x00, 0x10]), Buffer.alloc(14, 0x41)]);
   const sof = Buffer.alloc(11);
@@ -97,15 +95,12 @@ const dataUrl = (mime, buf) => `data:${mime};base64,${buf.toString('base64')}`;
 const cases = [
   ['app-icon-512', dataUrl('image/png',  fakePng(512, 512)),   true,  'a 512×512 PNG icon'],
   ['app-icon-192', dataUrl('image/png',  fakePng(192, 192)),   true,  'a 192×192 PNG icon'],
-  ['link-preview', dataUrl('image/jpeg', fakeJpeg(1200, 630)), true,  'a 1200×630 JPEG preview'],
   // Wrong size is THE failure this gate exists for.
   ['app-icon-512', dataUrl('image/png',  fakePng(500, 500)),   false, 'a 500×500 icon (nearly right, still refused)'],
   ['app-icon-512', dataUrl('image/png',  fakePng(512, 384)),   false, 'a 512×384 icon (not square)'],
-  ['link-preview', dataUrl('image/jpeg', fakeJpeg(1200, 628)), false, 'a 1200×628 preview (two pixels short)'],
   // Wrong format: a JPEG icon cannot hold transparency, and the manifest
   // declares image/png, so it must not be storable.
   ['app-icon-512', dataUrl('image/jpeg', fakeJpeg(512, 512)),  false, 'a JPEG in the icon slot'],
-  ['link-preview', dataUrl('image/png',  fakePng(1200, 630)),  false, 'a PNG in the preview slot'],
   ['app-icon-512', 'data:image/svg+xml;base64,PHN2Zy8+',       false, 'an SVG'],
   ['app-icon-512', 'data:text/html;base64,PHNjcmlwdD4=',       false, 'html pretending to be an image'],
   ['app-icon-512', 'https://example.com/icon.png',             false, 'a link instead of a file'],
@@ -135,15 +130,13 @@ ck(iconBodyWorst < 4 * 1024 * 1024,
    'both icons at their caps base64 to ' + Math.round(iconBodyWorst / 1048576 * 10) / 10 + ' MB, inside the image parser');
 ck(/IMAGE_BODY_ROUTES = new Set\(\[[^\]]*'\/admin\/app-icon\/set'/.test(src),
    'the icon route is on the image body parser, not the 64 KB one');
-ck(/IMAGE_BODY_ROUTES = new Set\(\[[^\]]*'\/admin\/link-preview\/set'/.test(src),
-   'and so is the link-preview route');
 
 // ── the wiring nothing else would catch ───────────────────────────────────
 console.log('\n— manifest.json points at routes that exist —');
 const routes = [...src.matchAll(/app\.get\('(\/public\/[a-z0-9\-.]+)', serveBrandAsset\('([a-z0-9-]+)'\)\)/g)]
   .reduce((m, x) => (m[x[1]] = x[2], m), {});
 console.log('   ', routes);
-ck(Object.keys(routes).length === 3, 'three brand-asset routes are registered');
+ck(Object.keys(routes).length === 2, 'two brand-asset routes are registered (both icon sizes)');
 for (const slot of Object.keys(BRAND_ASSET_SLOTS))
   ck(Object.values(routes).includes(slot), slot + ' is actually served');
 
@@ -160,94 +153,19 @@ for (const ic of icons) {
   ck(ic.type === spec.mime, `manifest says ${ic.type} and the server enforces ${spec.mime}`);
 }
 
-console.log('\n— the share card the crawlers read —');
-const meta = (prop) => {
-  const m = new RegExp(`<meta (?:property|name)="${prop}" content="([^"]*)"`).exec(page);
-  return m ? m[1] : null;
-};
-const ogImage = meta('og:image');
-console.log('    og:image =', ogImage);
-ck(!!ogImage, 'the built page carries an og:image');
-ck(/^https:\/\//.test(ogImage || ''),
-   'it is an absolute URL — a crawler cannot resolve a relative one');
-// ── og:image IS THE BACKEND ROUTE, SO THE UPLOAD IS WHAT SHOWS ──
-// This assertion has now been written BOTH ways, and the history is the
-// point. It first required a backend route; that was changed to require a
-// static file after the backend route showed no picture; it requires the
-// backend route again now. Neither rewrite was a whim -- each time the
-// REASON the old shape failed was removed:
-//
-//   * "it 404s until something is uploaded" -- it cannot any more. The
-//     link-preview slot has a bundled fallback (asserted below), the same
-//     way the app icon always has.
-//   * "that host sleeps" -- chipz-server is a paid instance and does not.
-//     That was a free-tier assumption, already untrue for this deploy.
-//
-// What is left is the thing the owner actually asked for: "l wanted the
-// uploaded link preview to be shown not the hardcoded". Only a route can
-// serve an upload; a file in the build can only ever be the hardcoded one.
-const ogPath = (ogImage || '').replace(/^https?:\/\/[^/]+/, '');
-ck(!!routes[ogPath],
-   'og:image resolves to a real backend route, so an admin upload is what crawlers fetch');
-ck(onBackend(ogImage || ''),
-   'it names the backend, on the same host the manifest icons are served from');
-const lp = BRAND_ASSET_SLOTS['link-preview'];
-// The FALLBACK file has to actually be on disk beside server.js, or the
-// route is back to answering 404 with nothing uploaded -- which is the whole
-// reason this tag was moved off the backend once before.
-const ogFile = __dirname + '/user/' + lp.file;
-ck(!!lp.file, 'the slot declares a bundled fallback file');
-ck(fs.existsSync(ogFile), `and it is really shipped: user/${lp.file}`);
-// Its REAL pixel size, read out of the JPEG header, must match what the tags
-// promise -- a crawler that is told 1200x630 and handed something else
-// renders a broken or cropped card.
-function jpegSize(buf) {
-  let i = 2;
-  while (i < buf.length) {
-    if (buf[i] !== 0xFF) { i++; continue; }
-    const m = buf[i + 1];
-    if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
-    const len = buf.readUInt16BE(i + 2);
-    if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC)
-      return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
-    i += 2 + len;
-  }
-  return null;
-}
-if (fs.existsSync(ogFile)) {
-  const real = jpegSize(fs.readFileSync(ogFile));
-  ck(!!real && real.w === lp.w && real.h === lp.h,
-     `the shipped file really is ${lp.w}×${lp.h} (found ${real ? real.w + '×' + real.h : 'unreadable'})`);
-}
-ck(meta('og:image:width') === String(lp.w) && meta('og:image:height') === String(lp.h),
-   `the declared ${meta('og:image:width')}×${meta('og:image:height')} matches the enforced ${lp.w}×${lp.h}`);
-ck(meta('twitter:image') === ogImage, 'twitter:image points at the same file');
-// A source fixed but never rebuilt is a real failure mode in this project --
-// everything above reads the BUILT page, so without this an edited og: tag
-// that was never put through build-core.js would pass here and ship the old
-// picture.
-{
-  const srcPage = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
-  const srcOg = /<meta property="og:image" content="([^"]*)"/.exec(srcPage);
-  ck(!!srcOg && srcOg[1] === ogImage,
-     'and the built page matches user-src/index.html, so the build is not stale');
-}
-ck(meta('twitter:card') === 'summary_large_image',
-   'and asks for the large card, not a thumbnail');
-// A hard-coded og:url would go stale the day a custom domain is added, and a
-// wrong one makes the card link somewhere else entirely.
-ck(!/property="og:url"/.test(page),
-   'no hard-coded og:url — the crawler uses whatever domain it fetched');
+console.log('\n— the browser-tab / home-screen icon links —');
+ck(!/property="og:image"/.test(page),
+   'no og:image tag remains — link preview was removed, not just disabled');
+ck(!/name="twitter:image"/.test(page), 'no twitter:image tag remains either');
 ck(page.includes(`<link rel="icon" href="${BACKEND}/public/app-icon-192.png">`),
-   'the browser-tab icon follows the upload too');
+   'the browser-tab icon follows the upload');
 ck(page.includes(`<link rel="apple-touch-icon" href="${BACKEND}/public/app-icon-192.png">`),
    'and so does the iPhone home-screen icon');
 
 console.log('\n— the CORP trap that already cost a round on the banner video —');
-// helmet sets Cross-Origin-Resource-Policy: same-site globally, onrender.com
-// is on the Public Suffix List, so chipz-app and chipz-server are separate
-// SITES -- and a manifest icon is a no-cors subresource load. Without the
-// per-route override the browser drops the icon and says nothing.
+// helmet sets Cross-Origin-Resource-Policy: same-site globally, and a
+// manifest icon is a no-cors subresource load. Without the per-route
+// override the browser drops the icon and says nothing.
 const serveFn = grab('function serveBrandAsset', "app.get('/public/app-icon-512.png'");
 ck(/res\.set\('Cross-Origin-Resource-Policy', 'cross-origin'\)/.test(serveFn),
    'the brand-asset route opts out of the global same-site CORP');
@@ -262,31 +180,17 @@ for (const slot of ['app-icon-512', 'app-icon-192']) {
   ck(!!f && fs.existsSync(__dirname + '/user/' + f),
      `${slot} falls back to user/${f}, which exists on disk`);
 }
-// This once asserted `file === null`, on the reasoning that an unset share
-// card must show NO picture rather than a wrong one. That reasoning stopped
-// holding when a branded 1200x630 card started shipping in the build: it is
-// not a wrong picture, it is this platform's own. And a fallback is what
-// lets og:image point at the route that serves the UPLOAD.
-{
-  const f = BRAND_ASSET_SLOTS['link-preview'].file;
-  ck(!!f && fs.existsSync(__dirname + '/user/' + f),
-     `the link preview falls back to user/${f}, which exists on disk`);
-}
 
 console.log('\n— the panel sends what the server reads —');
 ck(/api\('\/admin\/app-icon\/set', \{ png512, png192 \}\)/.test(admin),
    'the panel posts png512 + png192');
 ck(/req\.body\.png512/.test(src) && /req\.body\.png192/.test(src),
    'and the server reads exactly those two fields');
-ck(/api\('\/admin\/link-preview\/set', \{ image \}\)/.test(admin) &&
-   /readBrandUpload\(req\.body\.image, 'link-preview'\)/.test(src),
-   'the preview posts `image` and the server reads `image`');
+ck(!/\/admin\/link-preview\/set/.test(admin), 'no link-preview upload wiring remains in the panel');
 // One file becomes both renditions, so the launcher icon and the task
 // switcher can never end up showing two different logos.
 ck(/fileToSquarePng\(f,512\), fileToSquarePng\(f,192\)/.test(admin),
    'both icon sizes are rendered from the SAME chosen file');
-ck(/fileToFramedDataUrl\(f,1200,630,0\.85\)/.test(admin),
-   'the preview is cover-fitted to exactly 1200×630 before upload');
 // grab() reads server.js; this one has to read the ADMIN source. Getting
 // that wrong silently slices an EMPTY string, and an assertion against
 // nothing passes while proving nothing -- which is exactly what happened
@@ -335,11 +239,9 @@ ck(/arcTo\(/.test(roundCode) && !/roundRect/.test(roundCode),
 // The one thing the owner will otherwise report as a bug.
 ck(/already installed the app keep the old icon/i.test(admin),
    'the panel warns that already-installed phones keep the old icon');
-ck(/WhatsApp and Facebook remember the old picture/i.test(admin),
-   'and that WhatsApp caches an already-shared preview');
 
 console.log('\n— owner-only, like every other destructive admin route —');
-for (const r of ['/admin/app-icon/set', '/admin/app-icon/clear', '/admin/link-preview/set', '/admin/link-preview/clear']) {
+for (const r of ['/admin/app-icon/set', '/admin/app-icon/clear']) {
   const body = src.slice(src.indexOf(`app.post('${r}'`), src.indexOf(`app.post('${r}'`) + 260);
   ck(/verifyOwner\(req\)/.test(body), r + ' requires the owner key');
 }
@@ -358,13 +260,7 @@ ck(/app\.get\('\/admin\/brand-assets'[\s\S]{0,120}verifyAdmin\(req\)/.test(src),
   const db = { collection: () => ({ doc: () => ({
     get: async () => ({ exists: !!stored, data: () => stored })
   }) }) };
-  // serveBrandAsset reads getSettings() now, to honour the "show a picture on
-  // shared links" switch -- so the sandbox has to supply one or the route
-  // throws and every assertion below reads as a 404. Returns {}, i.e. the
-  // switch unset, which is the shipped default and the state this block is
-  // about. The OFF state is covered by test-link-preview-and-delete.js.
   const rt = eval('(function(){' +
-    'async function getSettings(){ return {}; }' +
     grab('const BRAND_ASSET_SLOTS', 'function imageSize') +
     grab('function serveBrandAsset', "app.get('/public/app-icon-512.png'") +
     'return { serveBrandAsset, _cache: _brandAssetCache };})()');
@@ -382,7 +278,6 @@ ck(/app\.get\('\/admin\/brand-assets'[\s\S]{0,120}verifyAdmin\(req\)/.test(src),
     });
   }
   const icon = rt.serveBrandAsset('app-icon-512');
-  const prev = rt.serveBrandAsset('link-preview');
 
   // Nothing uploaded yet: the icon must still be a real PNG.
   let r = await call(icon);
@@ -393,18 +288,6 @@ ck(/app\.get\('\/admin\/brand-assets'[\s\S]{0,120}verifyAdmin\(req\)/.test(src),
      'with CORP cross-origin, or the browser would drop it silently');
   const s = imageSize(r.body);
   ck(s && s.w === 512 && s.h === 512, 'and it really is 512×512');
-
-  // With nothing uploaded the share card is the bundled one, NOT a 404 --
-  // a crawler that gets a 404 renders a card with no picture at all, which
-  // is what "those route domains aren't fetching link preview image" was.
-  const p = await call(prev);
-  ck(p.code === 200 && Buffer.isBuffer(p.body) && p.body.length > 100,
-     'an unset link preview serves the bundled card (' + (p.body ? p.body.length : 0) + ' bytes)');
-  ck(p.headers['content-type'] === 'image/jpeg', 'as image/jpeg');
-  ck(p.headers['cross-origin-resource-policy'] === 'cross-origin',
-     'with CORP cross-origin, like the icon');
-  const ps = imageSize(p.body);
-  ck(ps && ps.w === 1200 && ps.h === 630, 'and it really is 1200×630');
 
   // Now "upload" one and confirm the served bytes change.
   const uploaded = fakePng(512, 512);
