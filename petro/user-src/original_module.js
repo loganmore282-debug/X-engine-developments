@@ -2245,16 +2245,23 @@ function captureReferralFromUrl(){
       const qIdx = location.hash.indexOf('?');
       if (qIdx !== -1) ref = new URLSearchParams(location.hash.slice(qIdx + 1)).get('ref');
     }
-    // The CURRENT shared form (owner: "let the link be '/refCode='"):
-    // <origin>/refCode=<code>, read straight off the path. Checked last only
-    // because the two older forms above are cheaper to test, not because it
-    // is the fallback -- this is what every new invite carries. Both older
-    // forms are kept working on purpose: links already sent to real people
-    // are out of our hands and must not start failing.
+    // <origin>/refCode=<code>, read straight off the path. Checked after the
+    // two forms above only because they're cheaper to test, not because
+    // either older form is the fallback -- every one of them is kept working
+    // on purpose: links already sent to real people are out of our hands and
+    // must not start failing.
     if (!ref) {
       const m = /\/refCode=([^/?#]+)/.exec(location.pathname);
       if (m) { try { ref = decodeURIComponent(m[1]); } catch (_) { ref = m[1]; } }
     }
+    // The CURRENT shared form (owner: "l wanted my link to look like
+    // .../share.html?v=<timestamp>&code=<code>") -- share.html is a literal
+    // copy of this same file (see build-core.js), so it boots the exact same
+    // app and reaches this same function; only the query param name differs
+    // from the original ".../?ref=" form above. `v` is never read here --
+    // it exists purely so every generated link is unique (see paintNetwork()'s
+    // own comment on why).
+    if (!ref) ref = search.get('code');
     if (!ref) return;
     STATE.refCode = ref;
     // Referral codes are case-sensitive on the server (exact-match lookup,
@@ -3727,7 +3734,15 @@ function paintNetwork(){
   const rates = t.commRates || {};
   const a = STATE.account || {};
   const code = a.referralCode || t.referralCode || '';
-  const link = code ? `${shareOrigin()}/?ref=${encodeURIComponent(code)}` : '';
+  // Owner: "l wanted my link to look like .../share.html?v=<timestamp>&code=<code>".
+  // share.html is a literal copy of this app's own index.html (see
+  // build-core.js), so it boots identically and reaches captureReferralFromUrl()'s
+  // new `code` branch. `v` is a fresh Unix-seconds timestamp on every paint of
+  // this screen (not a fixed build version) -- it's never read by the app
+  // itself, its only job is making each rendered link a slightly different
+  // URL so a link-preview cache (WhatsApp, Telegram, etc.) can't quietly
+  // reuse a stale preview from an earlier share.
+  const link = code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
   const earnText = _earningsHidden ? 'UGX ••••••' : fmtUGX(Number(t.teamCommission) || 0);
   const html = `
 <div class="member-page-title">Network</div>

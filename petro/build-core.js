@@ -31,6 +31,16 @@ const SRC_MOD  = path.join(ROOT, 'user-src', 'original_module.js');
 const GUARD    = path.join(ROOT, 'guard-src.js');
 const OUT_DIR  = path.join(ROOT, 'user');
 const OUT_HTML = path.join(OUT_DIR, 'index.html');
+// Referral links now point here (owner: "l wanted my link to look like
+// .../share.html?v=<timestamp>&code=<code>") -- a literal duplicate of
+// index.html's own bytes, not a separate landing page. Both static-
+// server.js (fs.stat on the exact path) and nginx's `try_files $uri`
+// already serve any real file by name with zero extra config, so this
+// needed no server-side routing change -- just a second copy of the same
+// build output, kept in sync automatically by writing it here instead of
+// by hand. captureReferralFromUrl() (user-src/original_module.js) reads
+// the `code` param the same way it already reads `ref`/`refCode=`.
+const OUT_SHARE_HTML = path.join(OUT_DIR, 'share.html');
 const log = (...a) => console.log(...a);
 
 let html = fs.readFileSync(SRC_HTML, 'utf8');
@@ -146,5 +156,7 @@ outHtml = outHtml.replace('<script data-nx-core></script>', `<script data-nx-cor
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(OUT_HTML, outHtml);
 log('user/index.html:', fs.statSync(OUT_HTML).size, 'bytes — deployed artifact written');
+fs.writeFileSync(OUT_SHARE_HTML, outHtml);
+log('user/share.html:', fs.statSync(OUT_SHARE_HTML).size, 'bytes — deployed artifact written (identical copy, for referral links)');
 
 log('\nDone. Deploy the generated user/ (git-based, autoDeploy) — commit both user-src/ (readable) and user/ (built).');

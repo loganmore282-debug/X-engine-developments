@@ -123,6 +123,10 @@ server {
     # rather than copying an aggressive immutable-cache policy from a
     # typical static-site config.
     location = /index.html { add_header Cache-Control "no-cache"; }
+    # share.html is a literal duplicate of index.html's own bytes (referral
+    # links now point here -- see build-core.js/captureReferralFromUrl()'s
+    # own comments) -- same no-cache treatment, same reason.
+    location = /share.html { add_header Cache-Control "no-cache"; }
     location = /sw.js       { add_header Cache-Control "no-cache"; }
     location = /manifest.json { add_header Cache-Control "no-cache"; }
 
