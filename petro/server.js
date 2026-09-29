@@ -29,15 +29,16 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'same-site' }
 }));
 
-// The member app is served from this same Node process in the production
-// setup. Keep the existing :8080 address usable for members while API routes
-// continue below; express.static only handles files and leaves /api-style
-// routes untouched.
-app.use(express.static(path.join(__dirname, 'user'), {
-  index: 'index.html',
-  etag: true,
-  maxAge: '1h'
-}));
+// This process is reached ONLY via api.PETRO_DOMAIN now (see
+// deploy/nginx-petro.conf.template -- app./qumx. each get their own nginx
+// `root`, straight off disk, independent of this backend). Serving the
+// member app's static files here too was a leftover from the bare-IP-only
+// era, before that split existed, when this process had to double as the
+// static host. Owner: "why also api visits website? is it normal" -- it
+// isn't needed anymore, and having api. quietly mirror the whole app
+// undercuts the point of hardening it (noindex/nofollow, hidden server
+// version, etc. -- see CLAUDE.md's Follow-up 33) by making it look like
+// just another copy of the site to a scanner or a curious visitor.
 
 // ── RATE LIMITERS ──
 // Money endpoints are keyed by the Firebase user (from the token), not
@@ -9986,8 +9987,6 @@ app.get('/admin/users/recount', async (req, res) => {
     res.json({ status: 'success', ...result });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-
-app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'user', 'index.html')));
 
 app.use((err, _req, res, _next) => {
   if (err && err.type === 'entity.too.large') return res.status(413).json({ status: 'error', message: 'Request is too large' });

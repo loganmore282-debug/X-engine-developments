@@ -5835,3 +5835,58 @@ X path confirmed absent) and correctly displays a real passed-in reason
 string; `setDepositStatusUnknown()`'s body text no longer contains a
 literal `--`; zero page errors throughout. `user/sw.js` bumped `v221` →
 `v222`.
+
+## Follow-up 39 -- api.petro-cchnug.com no longer mirrors the whole app
+
+Owner: *"Why also api visits website? Is it normal https://api.petro-
+cchnug.com/ It visits website."*
+
+**Real, found root cause, not a guess.** `server.js` -- the same Node
+process nginx proxies EVERY request on `api.PETRO_DOMAIN` straight to,
+with no `root` directive of its own for that subdomain -- had:
+```
+app.use(express.static(path.join(__dirname, 'user'), {...}));
+...
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'user', 'index.html')));
+```
+right near the top, serving the ENTIRE member app's static files
+(`index.html`, `manifest.json`, `sw.js`, the icons) and falling back to
+`index.html` for anything unmatched. Its own comment said why: "Keep the
+existing :8080 address usable for members" -- a leftover from before the
+real domain existed, when this backend had no separate static host and
+had to double as one (the bare-IP `:3000`/`:8080` era this file's own
+"Hosting" section documents). Since the real domain cutover (Follow-up
+32-34), `deploy/nginx-petro.conf.template`'s `app.` server block already
+serves the frontend straight from disk, completely independent of this
+backend -- so this had become pure redundancy, and worse, it meant
+`api.` (which the earlier hardening round explicitly tried to keep
+uninteresting to a scanner -- `noindex, nofollow`, hidden server version)
+quietly looked like just another full copy of the site to anyone who
+visited its bare root.
+
+**Asked before touching it, since it's live production routing, not a
+cosmetic fix** -- confirmed by grep that nothing else in `server.js`
+referenced `express.static`/`res.sendFile`, no test asserted this
+behavior, and `static-server.js` (the file that actually DOES serve
+`user`/`admin` as static hosts) is separate, unused-on-the-VPS Railway-
+era reference code, not connected to this route at all. Owner said yes,
+go ahead.
+
+**Removed both**, replacing the `express.static` block with a comment
+explaining why it's gone (same "leave a note, not silence" precedent this
+file always follows for a real reversal) rather than just deleting it
+silently. `api.petro-cchnug.com/` and any other unmatched path there now
+fall through to Express's own default 404 -- real API routes (`/health`,
+`/register`, `/deposit/*`, etc.) are completely untouched, since none of
+them were ever routed through the removed static middleware.
+
+**Verified**: `node --check server.js` clean, `npm run test:audit`
+passes in full (163 checks, unaffected -- confirmed nothing tested the
+removed behavior). Sanity-checked the actual Express fallthrough
+behavior with a minimal standalone Express app mirroring the real
+post-fix route set (no static middleware, no `/` handler, just a
+representative real route plus the final error middleware): a real HTTP
+request to `/` and to `/manifest.json` both come back `404`, confirming
+Express's own default 404 is what a visitor now gets, not a served page.
+No rebuild needed -- neither `user-src/` nor `admin-src/` was touched,
+this was `server.js` only.
