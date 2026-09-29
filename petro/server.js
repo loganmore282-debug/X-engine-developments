@@ -2279,7 +2279,28 @@ async function consumeOtpTicket(ticket, phone, purpose, registrationUserId) {
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
   const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || d?.status || '';
-  return { status: String(rawStatus).toLowerCase(), reference: tx.reference || tx.transaction_reference || null };
+  // Whatever MarzPay itself said about WHY, when it said anything -- e.g. a
+  // real "insufficient funds"/"cancelled by user" on a declined transaction,
+  // not a guess this codebase would be inventing. Checked in the same few
+  // plausible shapes marzUserMsg() already does for the initiation response,
+  // since a status-check reply isn't guaranteed to nest it identically.
+  const message = tx.message || tx.reason || tx.status_reason || tx.failure_reason ||
+    d?.message || d?.data?.message || null;
+  return {
+    status: String(rawStatus).toLowerCase(),
+    reference: tx.reference || tx.transaction_reference || null,
+    message,
+  };
+}
+// The real reason a MarzPay collection failed, when MarzPay actually gave
+// one (e.g. "Insufficient funds") -- reuses marzUserMsg()'s own filter so an
+// infrastructure complaint ("gateway timeout", "database error") never
+// leaks to a member as if it were something about THEIR payment; only a
+// genuine, specific decline reason passes through. Falls back to the plain
+// DEPOSIT_FAILED_MSG when MarzPay didn't say anything more specific --
+// never invents a reason that wasn't actually reported.
+function marzDepositFailureMsg(tx) {
+  return marzUserMsg({ message: tx && tx.message }, DEPOSIT_FAILED_MSG);
 }
 async function _marzFetchTxStatus(path, uuid, label) {
   let lastErr = null;
@@ -2315,7 +2336,6 @@ async function _marzFetchTxStatus(path, uuid, label) {
 }
 async function marzGetCollectTx(uuid) { return _marzFetchTxStatus(`/collect-money/${uuid}`, uuid, 'marzGetCollectTx'); }
 async function marzGetSendTx(uuid)    { return _marzFetchTxStatus(`/send-money/${uuid}`,    uuid, 'marzGetSendTx'); }
-async function marzGetCollectStatus(uuid) { return (await marzGetCollectTx(uuid)).status; }
 async function marzGetSendStatus(uuid) { return (await marzGetSendTx(uuid)).status; }
 const SUCCESS_STATUSES = new Set(['success', 'successful', 'completed']);
 const FAILED_STATUSES  = new Set(['failed', 'declined', 'cancelled', 'canceled', 'rejected', 'expired']);
@@ -5321,18 +5341,19 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: 'pending' });
     }
     if (!dep.marzTxUuid) return res.json({ status: 'success', state: 'pending' });
-    const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
-    if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
-    if (FAILED_STATUSES.has(marzStatus)) {
+    const marzTx = await marzGetCollectTx(dep.marzTxUuid);
+    if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
+    if (FAILED_STATUSES.has(marzTx.status)) {
       // Own test-caught bug: markDepositFailed() can now correctly no-op
       // (returns false) when this exact deposit was already credited by a
       // DIFFERENT in-flight check that won the race -- reporting "failed"
       // here regardless, as this used to, would show a member "Deposit
       // failed" for money that genuinely landed moments earlier. Report
       // what actually happened instead.
-      const reallyFailed = await markDepositFailed(depSnap.ref, userId, DEPOSIT_FAILED_MSG);
+      const failMsg = marzDepositFailureMsg(marzTx);
+      const reallyFailed = await markDepositFailed(depSnap.ref, userId, failMsg);
       if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
-      return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
+      return res.json({ status: 'success', state: 'failed', message: failMsg });
     }
     res.json({ status: 'success', state: 'pending' });
   } catch (e) {
@@ -5483,7 +5504,7 @@ app.post('/deposit/callback', async (req, res) => {
       await creditDeposit(doc);
     } else if (isFailed) {
       if (!FAILED_STATUSES.has(tx.status)) return;
-      await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
+      await markDepositFailed(doc.ref, dep.userId, marzDepositFailureMsg(tx));
     }
   } catch (e) { console.error('Deposit callback error:', e.message); }
 });
@@ -10007,9 +10028,9 @@ async function reconcilePendingDeposits() {
     for (const doc of snap.docs) {
       const dep = doc.data();
       if (!dep.marzTxUuid) continue;
-      const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
-      if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(doc); settled++; }
-      else if (FAILED_STATUSES.has(marzStatus)) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
+      const marzTx = await marzGetCollectTx(dep.marzTxUuid);
+      if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(doc); settled++; }
+      else if (FAILED_STATUSES.has(marzTx.status)) await markDepositFailed(doc.ref, dep.userId, marzDepositFailureMsg(marzTx));
     }
     // PesaJet's own pending/initiating deposits. This sweep matters MORE for
     // this gateway than for the other two: PesaJet's webhook URL is

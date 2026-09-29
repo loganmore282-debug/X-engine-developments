@@ -5727,3 +5727,111 @@ stored credential's `id` is still the unchanged synthetic email
 (`+256769968158`), with zero page errors. `node -c`, `build-core.js`
 round-trip OK, `npm run test:audit` passes in full (163 checks).
 `user/sw.js` bumped `v220` → `v221`.
+
+## Follow-up 38 -- referral hint simplified, real MarzPay decline reasons now shown, payment-not-completed icon changed from an X to an exclamation mark, one more literal hyphen removed
+
+Owner, with 4 screenshots (the referral field's hint, and 3 different
+"payment failed"-style icons): *"Remove it bro, that word should be
+removed saying you're first signing, it should just say optional full
+stop as in the box so remove that word nothing to replace it with remove
+it, and make sure no hyphens (-) check everywhere, l saw a hyphens on
+payment complete, also on payment not completed you have to put due to
+insufficient funds, and change sign for payment not completed pick any of
+the 2, l said signs not words."*
+
+**Referral hint shortened to just "Optional."** `updateReferralFieldHint()`
+used to write a full explanatory sentence under the referral field when
+it isn't required -- "No code needed yet — you are among the first to
+join." -- on top of the field's own placeholder, which already says
+"Referral code (optional)". The owner wants the hint itself to say only
+what the placeholder already implies, nothing more: now just `'Optional.'`
+when the code isn't required, unchanged `'Referral code is required'`
+when it is. The old i18n row (5 translated languages, all describing "you
+are among the first to join") is orphaned by the English-source change and
+was replaced with a new one for `'Optional.'` -- filled only in French
+(`'Facultatif.'`, the same word row 452 right above it already uses for
+"(optional)", so a confirmed word rather than a guess); the other 5
+languages' own row-452 forms are "(not needed)" phrases built to sit
+inside parentheses, not a standalone capitalized sentence, so left blank
+per this table's own established policy rather than force-fit.
+
+**A real, unfixed gap closed, not just a display tweak: MarzPay's own
+decline reason (e.g. "Insufficient funds") now reaches the member, when
+MarzPay actually reports one.** Read `_marzExtractTx()` (the function
+every MarzPay collection-status check parses its response through) and
+found it only ever kept `status`/`reference` -- any `message`/`reason`
+field MarzPay's own API returned on a declined transaction was being
+silently discarded, so every failed Mobile Money/Card deposit fell back
+to the one generic sentence `DEPOSIT_FAILED_MSG`
+("Payment was not completed. Please try again.") regardless of why it
+actually failed. Fixed by extending `_marzExtractTx()` to also capture
+`message`/`reason`/`status_reason`/`failure_reason` (checked in the same
+few plausible shapes `marzUserMsg()` already handles for the initiation
+response, since a status-check reply isn't guaranteed to nest identically)
+and a new `marzDepositFailureMsg(tx)` helper that reuses `marzUserMsg()`'s
+existing filter -- a genuine decline reason passes straight through, but
+an infrastructure-sounding message ("database error", "gateway timeout")
+is still swapped for the generic provider-busy sentence instead of
+confusing a member into thinking something is wrong with THEIR payment.
+Wired into all three places a MarzPay deposit can resolve to failed: the
+member's own live status poll (`/deposit/marzpay/status`, switched from
+the status-only `marzGetCollectStatus()` to `marzGetCollectTx()` so the
+message is available), the `/deposit/callback` webhook (already had the
+full `tx` object in scope), and the 30s reconciler sweep. Deliberately
+did NOT hardcode "insufficient funds" as the owner's literal example
+suggested -- that would be false, and this codebase's own standing rule
+(`setDepositStatusFailed()`'s own comment: "says what is true and
+checkable... a guess about someone else's money") applies exactly here:
+this shows whatever MarzPay actually said, honest by construction, not
+a made-up reason MarzPay never gave. `marzGetCollectStatus()` (the
+status-only wrapper this change made fully unused, confirmed by grep) was
+removed rather than left dormant, since it was a trivial one-line wrapper
+around the very function replacing it -- `marzGetSendStatus()` (the
+withdrawal-side equivalent, still actively used in 4 places) was left
+untouched.
+
+**"Payment not completed" icon changed from an X to an exclamation mark.**
+`setDepositStatusFailed()` used to draw a red X inside a soft-filled
+circle; the owner's two reference images showed an exclamation mark in a
+circle instead and said "pick any of the 2, I said signs not words" --
+i.e. change the icon glyph, not the wording (which was correct already).
+Picked the outlined/soft-fill style (closer to the checkmark
+`setDepositStatusSuccess()` already draws right above this function, same
+`--snow-wine-soft`/`--snow-wine` tokens, same circle) over the solid-
+filled alternative, for visual consistency with that sibling rather than
+introducing a third treatment.
+
+**One more literal `--` found and fixed, this time via a proper sweep, not
+a guess about which screen.** Wrote a small script stripping every HTML
+comment (`<!-- -->`), JS block comment (`/* */`), and JS line comment
+(`//`) from `user-src/index.html`, `user-src/original_module.js`, and
+`admin-src/index.html`, then searched what was left for ` -- ` -- the
+same class of bug this file has now found and fixed three separate times
+(Follow-up 11, Follow-up 12, and this round), always a leftover from this
+codebase's own comment-dash convention leaking into a string meant for
+the screen. Found exactly one real hit, in `setDepositStatusUnknown()`'s
+body text ("...updates on its own automatically -- or look under
+Transaction Statement later to check."), fixed to a comma. The sweep's
+remaining ` -- ` hits were all either genuine prose comments (the vast
+majority) or admin-panel-only UI (title attributes, toasts, translation
+rows) -- left alone, matching Follow-up 11's own explicit scoping of this
+exact cleanup to the member-facing app, since the owner's screenshots this
+round were all of member-facing screens too.
+
+**Verified**: `node --check server.js`, `node -c user-src/
+original_module.js`, `node build-core.js` round-trip OK, `npm run
+test:audit` passes in full (163 checks). `marzDepositFailureMsg()`'s
+extraction/filtering logic verified in isolation with a standalone script
+against 4 synthetic MarzPay response shapes (a real specific reason passes
+through unchanged; no reason falls back to the generic sentence; an
+infrastructure-sounding message is correctly swapped for the busy
+message, never shown to a member as if it were about their own payment; a
+different top-level response shape is still parsed correctly). Live in
+headless Chromium against the real built bundle:
+`updateReferralFieldHint()` renders exactly `'Optional.'`/`'Referral code
+is required'` in the two states with the old sentence gone entirely;
+`setDepositStatusFailed()` renders the new exclamation-mark icon (the old
+X path confirmed absent) and correctly displays a real passed-in reason
+string; `setDepositStatusUnknown()`'s body text no longer contains a
+literal `--`; zero page errors throughout. `user/sw.js` bumped `v221` →
+`v222`.

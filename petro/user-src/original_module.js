@@ -450,7 +450,14 @@ var LANG_ROWS = [
   // fixture had always sent referralRequired:true, so this pair of sentences
   // had never once been on screen while anything was measuring.
   ['Referral code (optional)', "Koodi y'okuyita (teetaagisa)", 'Msimbo wa mwaliko (si lazima)', 'Code de parrainage (facultatif)', 'Kode yo gutumira (ntikenewe)', "Koodi y'okweta (tikyetengyesa)"],
-  ['No code needed yet — you are among the first to join.', 'Tewetaagisa koodi kati — oli mu babereberye okwegatta.', 'Hakuna msimbo unaohitajika bado — wewe ni kati ya wa kwanza kujiunga.', "Aucun code n'est encore nécessaire — vous êtes parmi les premiers à nous rejoindre.", 'Nta kode ikenewe ubu — uri mu bambere binjira.', "Tihakwetengyesa koodi hati — oine omu b'okubanza kwegaitaho."],
+  // Replaces the old, longer "you are among the first to join" sentence
+  // (owner: "that word should be removed... it should just say optional
+  // full stop") -- 'facultatif' is the same word row 452 above already
+  // uses for "(optional)" in French, so it's a confirmed word, not a
+  // guess; the other 5 languages' own row 452 forms are "(not needed)"
+  // phrases built for sitting inside parentheses, not a standalone
+  // capitalized sentence, so left blank here rather than force-fit.
+  ['Optional.', '', '', 'Facultatif.', '', ''],
   // ── Popup messages, and the activity ticker's own verbs ──
   // A popup only appears when something goes WRONG, and the coverage
   // sweep walks every screen successfully -- so 58 notify() call sites
@@ -2313,7 +2320,12 @@ function updateReferralFieldHint(){
   const hint = $('regReferralHint');
   if (hint) hint.textContent = required
     ? 'Referral code is required'
-    : 'No code needed yet — you are among the first to join.';
+    // Owner: "that word should be removed saying you're first signing, it
+    // should just say optional full stop as in the box" -- the field's own
+    // placeholder already says "Referral code (optional)"; this hint used
+    // to add an explanatory sentence on top of that, which is exactly what
+    // was asked to come out, with nothing put back in its place.
+    : 'Optional.';
 }
 
 // Owner: "let's establish a timer ie like saying snow opening in
@@ -5906,12 +5918,22 @@ function setDepositStatusSuccess(){
 }
 function setDepositStatusFailed(msg){
   $('depStatusIcon').className = 'dep-status-icon failed';
-  $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-wine-soft)" stroke="var(--snow-wine)" stroke-width="4"/><path d="M43 43l34 34M77 43L43 77" stroke="var(--snow-wine)" stroke-width="8" stroke-linecap="round"/></svg>';
+  // Owner sent two reference icon styles for this state and said "pick any
+  // of the 2, I said signs not words" -- an exclamation mark, not the X this
+  // used to draw. Kept the same soft-fill-circle-plus-stroke treatment
+  // setDepositStatusSuccess()'s own checkmark right above already uses
+  // (same --snow-wine-soft/--snow-wine tokens this circle already had) --
+  // only the mark inside changed, matching image 2's outlined style over
+  // image 3's solid-filled one, for visual consistency with that sibling.
+  $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-wine-soft)" stroke="var(--snow-wine)" stroke-width="4"/><line x1="60" y1="34" x2="60" y2="70" stroke="var(--snow-wine)" stroke-width="9" stroke-linecap="round"/><circle cx="60" cy="86" r="5.5" fill="var(--snow-wine)"/></svg>';
   $('depStatusTitle').textContent = 'Payment not completed';
   // Says what is true and checkable -- the wallet balance did not move -- and
   // deliberately makes no claim about the member's mobile money account,
   // which this app cannot see. Promising "nothing was taken" would be a
-  // guess about someone else's money.
+  // guess about someone else's money. `msg` now carries MarzPay's own real
+  // decline reason (e.g. "Insufficient funds") when it gave one -- see
+  // marzDepositFailureMsg() in server.js -- and only falls back to this
+  // generic sentence when MarzPay didn't say anything more specific.
   $('depStatusBody').innerHTML = '<p>' + esc(msg
     || 'This recharge did not go through, so your ' + brandName() + ' balance has not changed. You can start it again whenever you are ready.') + '</p>';
   // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
@@ -5925,7 +5947,7 @@ function setDepositStatusUnknown(){
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
   $('depStatusTitle').textContent = 'Still waiting for the provider';
   $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
-    + 'If it goes through, your balance updates on its own automatically -- '
+    + 'If it goes through, your balance updates on its own automatically, '
     + 'or look under Transaction Statement later to check.</p>';
   const cu = $('depStatusCloseBtn'); if (cu) cu.textContent = 'Close';
   // Verify removed here too (see setDepositStatusPending's own comment) --
