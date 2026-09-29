@@ -6261,3 +6261,74 @@ one real inefficiency in this exact route (serial reads → parallel, the
 audit-log write made fire-and-forget); this needs fresh investigation for
 what else might still be slow, not an assumption that the earlier fix was
 insufficient.
+
+## Follow-up 44 -- real second bottleneck found in the statement-PDF path: settleAllForUser() was settling a member's investments one at a time
+
+Continuing Follow-up 43's leftover item ("download statement takes long yet
+we are using a VPS"). Follow-up 28 already parallelized the 4 INDEPENDENT
+reads inside `GET /statement/pdf` itself (user doc, settings, transactions,
+logo); this round looked at what runs BEFORE those four -- `settleAllForUser(uid)`,
+which both `/account` and `/statement/pdf` call first (it can change the
+wallet total and add a fresh transaction row, so it genuinely has to finish
+before anything else).
+
+**Root cause, found by reading the function, not guessed at**: it looped
+over every one of the member's ACTIVE investments with a sequential
+`for...await`, settling them one at a time. In the common case (nothing due
+yet) `settleInvestmentIfDue()` returns almost instantly -- pure date math on
+an already-fetched doc, no I/O -- so the sequential loop cost nothing
+extra. But the moment two or more investments become due on the SAME day
+(a real, ordinary shape: a member who bought several assets around the same
+time has their daily figures roll over together), each one pays its own
+~4-round-trip settlement (a fresh doc read, a user-ban check, the wallet
+increment, a ledger-row write) one after another instead of together --
+exactly the kind of member-specific slowdown that would read as "the VPS is
+powerful but this still takes a few seconds," since it only shows up for
+someone with more than one active plan, not for a fresh test account with
+one.
+
+**Fixed**: `settleAllForUser()` now runs `Promise.all(snap.docs.map(doc =>
+settleInvestmentIfDue(doc)...))` instead of the sequential loop. Confirmed
+safe to parallelize by reading `settleInvestmentIfDue()`'s own locking, not
+assumed: each investment settles under its own `'payout:<id>'` lock (so
+different investments never contend with each other at all), and the
+ACTUAL wallet credit inside it is separately serialized per member via
+`'bal:<userId>'` -- `withLock()` is a real promise-chain mutex per key, so
+running several investments for the same member in parallel still queues
+correctly at that one shared critical section; it just no longer waits for
+each investment's OWN independent work (the parts outside that lock) to
+finish before starting the next one. Verified with a standalone simulation
+(not the real DB, which this sandbox can't reach) that copies `withLock()`'s
+real implementation verbatim rather than a different mock: 6 simulated
+investments for one member, randomized jitter, settled via `Promise.all` --
+final wallet balance matched the exact sum of all 6 amounts with no lost
+update, and a second check confirmed two DIFFERENT members settling in
+parallel don't interfere with each other's balances at all.
+
+**A related, smaller finding, added while already in this exact query**:
+`settleAllForUser()`'s own investments query (`userId + status:'active'`)
+had no compound index -- just the existing plain `{userId:1}` one, meaning
+Mongo has to filter `status` in memory across a member's FULL investment
+history (including every matured/legacy one) rather than at the index
+level. Harmless today at typical per-member investment counts, but this
+query runs on every single `/account` load and every statement download --
+one of the hottest reads in the app -- so it grows worse as members
+accumulate history rather than staying flat. Added
+`['investments', { userId: 1, status: 1 }]` to `db.js`, matching this
+exact call site's own filter shape, same "index what a real hot query
+actually filters on" precedent Follow-up 16 already established for
+`users.phone`.
+
+**Not a third bottleneck found**: re-checked the rest of the route (the
+`Promise.all` of 4 reads, the pdfkit drawing loop, the fire-and-forget
+`statementDownloads` log write) against Follow-up 28's own audit -- all
+still exactly as that round left them, no new issue found there. `getSettings()`
+and `getPetroImage('logo')` are both already in-process-cached for 60s, so
+neither pays a fresh round trip on a typical repeat download either.
+
+**Verified**: `node --check server.js`, `node --check db.js` clean. `npm
+run test:audit` passes in full (163 checks, exit 0) both before and after
+the `db.js` index addition. No `-src` file was touched this round (this is
+a pure `server.js`/`db.js` change), so no rebuild or `sw.js` bump is
+needed -- it reaches the VPS the normal way, via `git pull` + `pm2 reload`
+(or the auto-deploy webhook, already wired).

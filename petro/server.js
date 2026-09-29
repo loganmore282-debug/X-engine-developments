@@ -2818,7 +2818,22 @@ async function _settleDueInvestmentNow(doc) {
 }
 async function settleAllForUser(userId) {
   const snap = await db.collection('investments').where('userId', '==', userId).where('status', '==', 'active').get();
-  for (const doc of snap.docs) { await settleInvestmentIfDue(doc).catch(e => console.error('Settle error:', e.message)); }
+  // Was a sequential for-await loop -- harmless in the common case (nothing
+  // due yet is pure math on the already-fetched doc, no I/O at all), but a
+  // real, measurable slowdown for a member with several investments that all
+  // became due the same day (e.g. a few assets bought around the same time,
+  // all paying their daily figure together): each one paid its own ~4-round-
+  // trip settlement one after another instead of together. Found while
+  // investigating "statement download takes long on a powerful VPS" -- this
+  // runs at the top of both /account and GET /statement/pdf, so every load
+  // was paying that serial cost for exactly that member shape. Safe to run
+  // in parallel: each investment settles under its OWN 'payout:<id>' lock
+  // (see settleInvestmentIfDue()), and the actual wallet credit inside it is
+  // separately, correctly serialized per-user via 'bal:<userId>' regardless
+  // of how many callers reach it concurrently -- withLock() is a proper
+  // promise-chain mutex per key, not a per-call one, so parallel investments
+  // for the same user still queue safely at that one critical section.
+  await Promise.all(snap.docs.map(doc => settleInvestmentIfDue(doc).catch(e => console.error('Settle error:', e.message))));
 }
 
 // ── REFERRAL COMMISSION (L1/L2/L3, first confirmed deposit) ──

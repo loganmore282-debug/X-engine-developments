@@ -106,6 +106,14 @@ async function ensureIndexes() {
     ['pendingDeposits', { commissionPending: 1, walletCredited: 1, commissionBanBlocked: 1, createdAt: 1 }],
     ['investments',     { userId: 1, createdAt: -1 }],
     ['investments',     { userId: 1, isFirstInvestment: 1 }],
+    // Follow-up 43 (petro/CLAUDE.md) -- settleAllForUser()'s own query
+    // (userId + status:'active') runs at the top of BOTH /account and
+    // GET /statement/pdf, so it's one of the hottest reads in the app; the
+    // plain {userId:1} index above still worked (Mongo just filters status
+    // in memory after it), but as a member accumulates matured/legacy
+    // investments over time this compound index keeps that filter at the
+    // index level instead of growing linearly with their full history.
+    ['investments',     { userId: 1, status: 1 }],
     ['transactions',    { userId: 1 }],
     ['transactions',    { withdrawalId: 1 }],
     // Round 106 -- markDepositFailed()/creditDeposit() both look up the
