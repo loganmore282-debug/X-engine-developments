@@ -4251,3 +4251,39 @@ against the real built bundle, computed styles on all four classes
 sheet, plus a visual screenshot of all three deposit methods and
 Withdraw showing the boxed fields. `user/sw.js` bumped `v198` →
 `v199`.
+
+## Follow-up 22 — reopening Deposit left a chip "selected" against an empty box
+
+Owner, on the freshly-boxed amount field, with a screenshot showing
+30,000 highlighted red but the amount box itself empty: *"when you
+had selected and gone back you come back when it shows selected but
+no figure input in amount card."*
+
+Root cause: `#depAmount` is a brand-new `<input>` every time
+`openDepositFormSheet()` runs -- no `value=` carried over, so it's
+always genuinely empty on open. But the chip's own `.sel` class comes
+from `depositChipsHtml()` reading `_depChosenAmount`, a plain module-
+level var that is never reset -- only `_depMethod` was reset back to
+`'mm'` at the top of that function. So picking 30,000, leaving the
+sheet, and reopening it left the chip still remembering the OLD pick
+against an input that had genuinely gone back to blank -- exactly the
+mismatch in the screenshot. Same bug exists for Card's `_cardChosenAmount`/
+`#cardAmount` pair, identical mechanism, so fixed both even though the
+owner's screenshot only showed Mobile Money.
+
+Fix: reset `_depChosenAmount = 0; _cardChosenAmount = 0;` at the top
+of `openDepositFormSheet()`, right beside the existing `_depMethod = 'mm'`
+reset -- the sheet already treats itself as "start fresh" on every
+open for the method tab, this just makes the amount-chip state follow
+the same rule instead of being the one piece of state that survived a
+close.
+
+`node -c` clean. `build-core.js`: "round-trip OK". Verified live in
+headless Chromium against the real built bundle by reproducing the
+exact reported sequence: `openDepositFormSheet()` → `pickDepositAmount(30000,...)`
+→ confirmed input reads "30000" → `closeSheet()` → `openDepositFormSheet()`
+again (no page reload, matching what navigating away and back
+actually does) → confirmed both the input (`""`) and the chip
+selection (`null`, none `.sel`) are back in agreement instead of the
+chip alone remembering the stale pick. `user/sw.js` bumped `v199` →
+`v200`.

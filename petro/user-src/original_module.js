@@ -5406,6 +5406,17 @@ function openDepositFormSheet(){
   const usdtOn = s.usdtEnabled === true;
   const cardOn = s.cardDepositEnabled === true;
   _depMethod = 'mm';
+  // Owner: "when you had selected and gone back you come back when it
+  // shows selected but no figure input in amount card." #depAmount/
+  // #cardAmount are FRESH inputs every time this sheet opens (no value=
+  // carried over from before) -- but _depChosenAmount/_cardChosenAmount
+  // are plain module-level vars that never reset, so depositChipsHtml()
+  // below kept marking last time's chip .sel against an input that had
+  // gone back to empty. Reset both here, the same place _depMethod above
+  // already resets on every open, so the chips and the inputs start back
+  // in agreement instead of the chip alone remembering a stale pick.
+  _depChosenAmount = 0;
+  _cardChosenAmount = 0;
   // Owner: "let the registered number also appear as a default deposit
   // number for mobile money" -- pre-filled, not locked: a deposit can
   // genuinely come from a different mobile-money number than the one the
