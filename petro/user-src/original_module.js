@@ -5329,14 +5329,35 @@ function revealWordsHtml(escapedText){
 // and words I placed show animation").
 let _aboutScrollObserver = null;
 function articleLoadingHtml(){
-  return '<div class="article-loading" role="status" aria-label="Loading">' + MINI_RING_LOADER + '</div>';
+  return '<div class="article-loading"><div class="article-ring-wrap">' + MINI_RING_LOADER
+    + '<span class="ls-percent article-percent" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">0</span></div></div>';
+}
+function startArticleProgress(article){
+  const value = article.querySelector('.article-percent');
+  let percent = 0;
+  const timer = setInterval(() => {
+    if (!article.isConnected) { clearInterval(timer); return; }
+    percent = Math.min(90, percent + (percent < 60 ? 3 : 1));
+    value.textContent = percent;
+    value.setAttribute('aria-valuenow', percent);
+  }, 80);
+  return () => {
+    clearInterval(timer);
+    if (!article.isConnected) return;
+    value.textContent = '100';
+    value.setAttribute('aria-valuenow', '100');
+  };
 }
 window.openAboutSheet = async function(){
   const s = STATE.settings || {};
   openSheet('About ' + brandName(), `<div id="aboutArticle" class="reveal-in">${articleLoadingHtml()}</div>`);
+  const article = $('aboutArticle');
+  const finishLoading = startArticleProgress(article);
   const r = await api('/public/about-content');
+  finishLoading();
+  await new Promise(resolve => setTimeout(resolve, 100));
   const wrap = $('aboutArticle');
-  if (!wrap) return; // sheet was closed again before this resolved
+  if (wrap !== article) return; // sheet was closed or replaced before this resolved
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
     : [{ type: 'text', text: s.aboutText || (brandName() + ' lets you invest in a range of products with daily income and a 3-level referral program.') }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
@@ -5357,9 +5378,13 @@ window.openAboutSheet = async function(){
 window.openRulesSheet = async function(){
   const s = STATE.settings || {};
   openSheet('Rules and Regulations', `<div id="rulesArticle" class="reveal-in">${articleLoadingHtml()}</div>`);
+  const article = $('rulesArticle');
+  const finishLoading = startArticleProgress(article);
   const r = await api('/public/rules-content');
+  finishLoading();
+  await new Promise(resolve => setTimeout(resolve, 100));
   const wrap = $('rulesArticle');
-  if (!wrap) return;
+  if (wrap !== article) return;
   const fallback = s.rulesText || ('Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed deposit: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
     : [{ type: 'text', text: fallback }];
