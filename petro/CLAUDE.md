@@ -4287,3 +4287,48 @@ actually does) → confirmed both the input (`""`) and the chip
 selection (`null`, none `.sel`) are back in agreement instead of the
 chip alone remembering the stale pick. `user/sw.js` bumped `v199` →
 `v200`.
+
+## Follow-up 23 — Support page redesign, real WhatsApp/email icons
+
+Owner, with a screenshot of the just-shipped Support page and two
+reference images (the WhatsApp brand mark, a red envelope): *"support
+page is too ugly and small tiny tab make good design and extract
+those icons so [thumbs-up] for email and WhatsApp channel or group."*
+
+The previous version was two thin `.primary-button` pills floating
+directly on the refinery photo with no card underneath at all -- read
+exactly as "tiny tab" against that big blurred background. Rebuilt on
+`.acct-list-card`'s own dark-glass card shell (the screen Support is
+reached FROM already uses this everywhere), as full rows: a 48px
+circular icon badge (WhatsApp brand green `#25d366`, email the app's
+own `--snow-wine` red -- matching the reference images' colors, not
+arbitrary ones), a title, a subtitle (a one-line "Chat with us" /
+the actual email address), and a chevron implying "tap to open" the
+same way every other Account row already does.
+
+Added `ICONS.whatsapp` -- a real WhatsApp glyph (single `currentColor`
+path, same convention as the existing `ICONS.telegram`), not the
+generic outlined `ICONS.envelope` reused twice. `ICONS.envelope`
+(already in the file) covers email. New `supportRowHtml()` helper
+builds each row consistently rather than hand-duplicating the markup
+per contact method; a `.support-hours-card` in the same card language
+(dimmer background, clock icon) replaces the previous plain gray
+paragraph for the hours line.
+
+One real bug caught before shipping: the title/subtitle spans
+(`.t1`/`.t2`) rendered inline on the same line on first pass (e.g.
+"WhatsApp ChannelChat with us" run together) -- missing `display:block`
+on both, unlike every other title+subtitle pattern already in this
+file which sets that inline on the element. Fixed in the CSS class
+itself instead of copying that inline-style workaround a third time.
+
+`node -c` clean. `build-core.js`: "round-trip OK" (twice -- caught
+the inline/block bug on the first live screenshot, fixed, rebuilt).
+`npm run test:audit` still passes in full. Verified live in headless
+Chromium against the real built bundle: `openSupportSheet()` with
+mock `whatsappGroup`/`supportEmail`/`supportHours` renders exactly 2
+`.support-row` elements with the right `href`s (`https://chat.whatsapp.com/...`,
+`mailto:support@...`), correct icon classes (`whatsapp`/`mail`), and
+the hours card present with the right text -- plus a screenshot
+confirming the title/subtitle now stack correctly and the icons match
+the owner's reference colors. `user/sw.js` bumped `v200` → `v201`.

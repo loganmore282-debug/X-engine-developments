@@ -2558,6 +2558,27 @@ html,body,#app{overscroll-behavior-y:none;}
 .acct-list-label{min-width:0;flex:1;font-size:15px;font-weight:800;line-height:1.18;}
 .acct-list-card>svg{width:18px;height:18px;color:rgba(255,255,255,.64);flex:0 0 auto;}
 .account-page .logout-btn-v2{background:rgba(58,36,21,.56);border-color:rgba(255,255,255,.20);}
+/* Owner: "support page is too ugly and small tiny tab make good design
+   and extract those icons... for email and WhatsApp channel or group."
+   Full-size rows on the same dark-glass card shell .acct-list-card already
+   uses (Account, the screen Support is reached from), not the thin
+   .primary-button pills this used to be -- those had no card under them
+   at all, floating directly on the photo, which read as the "tiny tab"
+   complaint. Own class rather than reusing .acct-list-card itself: these
+   rows carry a subtitle line and a big brand-colored circular icon badge,
+   neither of which that class has room for. */
+.support-row{width:100%;min-height:78px;padding:14px 16px;margin-bottom:12px;border:1px solid rgba(255,255,255,.20);border-radius:17px;background:rgba(58,36,21,.58);color:#fff;display:flex;align-items:center;gap:14px;text-align:left;text-decoration:none;box-sizing:border-box;box-shadow:0 12px 28px -20px rgba(0,0,0,.72);}
+.support-row-icon{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 48px;color:#fff;}
+.support-row-icon svg{width:23px;height:23px;}
+.support-row-icon.whatsapp{background:#25d366;}
+.support-row-icon.mail{background:var(--snow-wine);}
+.support-row-txt{min-width:0;flex:1;}
+.support-row-txt .t1{display:block;font-size:15.5px;font-weight:800;line-height:1.2;color:#fff;}
+.support-row-txt .t2{display:block;font-size:12.5px;font-weight:500;color:rgba(255,255,255,.62);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.support-row>svg{width:18px;height:18px;color:rgba(255,255,255,.64);flex:0 0 auto;}
+.support-hours-card{width:100%;min-height:78px;padding:14px 16px;margin-top:4px;border:1px solid rgba(255,255,255,.20);border-radius:17px;background:rgba(58,36,21,.42);color:#fff;display:flex;align-items:center;gap:14px;box-sizing:border-box;}
+.support-hours-icon{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;flex:0 0 48px;color:#fff;}
+.support-hours-icon svg{width:22px;height:22px;}
 
 /* Raise the glass slightly above the dark refinery wallpaper for a cleaner,
    brighter signed-in surface without changing the Petro colour system. */

@@ -1108,6 +1108,12 @@ var ICONS = {
   lock: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
   keyIcon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l2 2M14 9l2 2"/></svg>',
   telegram: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 3.5 2.9 10.6c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14c.3-1.3-.5-1.9-1.6-1.5Z"/></svg>',
+  // Real WhatsApp glyph (the handset-in-speech-bubble mark alone, not a
+  // second circle -- openSupportSheet() below already draws the brand-green
+  // circular badge in CSS, so a second ring baked into the SVG would just
+  // double it up). Same single-path fill="currentColor" convention as the
+  // telegram icon right above.
+  whatsapp: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2.5c-5.26 0-9.54 4.26-9.54 9.5 0 1.68.45 3.28 1.23 4.66L2.5 21.5l5-1.22a9.55 9.55 0 0 0 4.54 1.15h.01c5.26 0 9.54-4.26 9.54-9.5 0-2.53-1-4.9-2.8-6.7a9.54 9.54 0 0 0-6.75-2.73Zm5.56 13.44c-.24.66-1.4 1.27-1.93 1.34-.5.07-1.11.1-1.79-.11a16.4 16.4 0 0 1-1.63-.6c-2.88-1.24-4.76-4.13-4.9-4.32-.14-.2-1.17-1.56-1.17-2.97 0-1.42.74-2.11 1-2.4.27-.29.58-.36.78-.36.2 0 .39 0 .56.01.18.01.42-.07.65.5.24.58.81 2 .88 2.15.07.15.12.32.02.51-.1.2-.15.32-.3.49-.14.17-.3.38-.43.51-.15.15-.3.31-.13.6.17.3.77 1.27 1.65 2.06 1.14 1.01 2.1 1.33 2.4 1.48.3.15.47.13.65-.08.17-.2.73-.85.93-1.15.19-.29.39-.24.65-.14.27.09 1.7.8 2 .95.29.14.48.21.55.33.07.13.07.72-.17 1.4Z"/></svg>',
   warnTriangle: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none"><path d="M12 3 2 20h20L12 3Z" fill="#ffb000" stroke="#a66a00" stroke-width="1"/><path d="M12 10v4" stroke="#5a3d00" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="#5a3d00"/></svg>',
   wheel: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg>',
   bell: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
@@ -5176,14 +5182,33 @@ window.openSupportMail = function(){
   if (!email) return notify('Support email is not set up yet. Please try again later.');
   window.location.href = 'mailto:' + email;
 };
+// Owner, on the first pass: "support page is too ugly and small tiny tab
+// make good design and extract those icons so [thumbs-up] for email and
+// WhatsApp channel or group" -- with a green WhatsApp glyph and a red
+// envelope as reference. The old version was two thin .primary-button
+// pills floating directly on the photo with no card under them at all,
+// which is exactly what read as "tiny tab." Rebuilt as full-size rows
+// matching .acct-list-card -- the same dark-glass card language Account
+// (the screen this sheet is reached FROM) already uses everywhere else --
+// each with its own big brand-colored circular icon badge (WhatsApp
+// green, email the app's own red) instead of a flat button, so it reads
+// as a real page rather than two afterthought links.
+function supportRowHtml(kind, icon, title, sub, href){
+  const target = kind === 'mail' ? '' : ' target="_blank" rel="noopener"';
+  return `<a class="support-row" href="${esc(href)}"${target}>
+    <span class="support-row-icon ${kind}">${icon}</span>
+    <span class="support-row-txt"><span class="t1">${esc(title)}</span><span class="t2">${esc(sub)}</span></span>
+    ${ICONS.chevronRight}
+  </a>`;
+}
 window.openSupportSheet = function(){
   const s = STATE.settings || {};
   const rows = [];
-  if (s.whatsappGroup) rows.push(`<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-green);" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">WhatsApp Channel</a>`);
-  if (s.supportEmail) rows.push(`<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-ink);" href="mailto:${esc(s.supportEmail)}">${esc(s.supportEmail)}</a>`);
+  if (s.whatsappGroup) rows.push(supportRowHtml('whatsapp', ICONS.whatsapp, 'WhatsApp Channel', 'Chat with us', s.whatsappGroup));
+  if (s.supportEmail) rows.push(supportRowHtml('mail', ICONS.envelope, 'Email Support', s.supportEmail, 'mailto:' + s.supportEmail));
   openSheet('Support', `<div class="reveal-in">
-    ${rows.length ? `<div style="display:flex;flex-direction:column;gap:10px;">${rows.join('')}</div>` : `<p style="line-height:1.6;color:var(--snow-muted);">${esc(t('Contact support for help with your account.'))}</p>`}
-    ${s.supportHours ? `<p style="white-space:pre-line;line-height:1.6;color:var(--snow-muted);margin-top:18px;font-size:13px;">${esc('Support hours: ' + s.supportHours)}</p>` : ''}
+    ${rows.length ? rows.join('') : `<p style="line-height:1.6;color:var(--snow-muted);">${esc(t('Contact support for help with your account.'))}</p>`}
+    ${s.supportHours ? `<div class="support-hours-card"><span class="support-hours-icon">${ICONS.clock}</span><span class="support-row-txt"><span class="t1">Support hours</span><span class="t2">${esc(s.supportHours)}</span></span></div>` : ''}
   </div>`);
 };
 // Help Centre banner + the two support links are lazy-fetched only when
