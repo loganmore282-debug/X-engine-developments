@@ -2734,7 +2734,8 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
 
 /* Contain document edge drags on browsers that ignore overscroll-behavior.
  * Use the current movement direction so reversing at an edge works within
- * the same gesture. Leave nested scrollers and multi-touch to the browser. */
+ * the same gesture. Lock only vertical gestures after a small movement
+ * threshold; sideways swipes, nested scrollers and multi-touch stay native. */
 (function(){
   function hasOwnScroller(el){
     while (el && el !== document.body && el !== document.documentElement) {
@@ -2746,10 +2747,12 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
     }
     return false;
   }
-  var lastY = 0, blocking = false;
+  var startX = 0, startY = 0, lastY = 0, axis = null, blocking = false;
   document.addEventListener('touchstart', function(e){
     if (e.touches.length !== 1) { blocking = false; return; }
-    lastY = e.touches[0].clientY;
+    startX = e.touches[0].clientX;
+    startY = lastY = e.touches[0].clientY;
+    axis = null;
     blocking = !hasOwnScroller(e.target);
   }, { passive: true });
   document.addEventListener('touchmove', function(e){
@@ -2758,6 +2761,13 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
     var y = e.touches[0].clientY;
     var dy = y - lastY;
     lastY = y;
+    if (axis === null) {
+      var dx = Math.abs(e.touches[0].clientX - startX);
+      var travelY = Math.abs(y - startY);
+      if (Math.max(dx, travelY) < 8) return;
+      axis = travelY > dx ? 'vertical' : 'horizontal';
+    }
+    if (axis !== 'vertical') return;
     var root = document.scrollingElement || document.documentElement;
     var atTop = root.scrollTop <= 0;
     var atBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 1;

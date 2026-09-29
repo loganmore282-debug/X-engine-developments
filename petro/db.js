@@ -92,6 +92,8 @@ async function ensureIndexes() {
     ['users',           { referralCode: 1 }],
     ['users',           { referralCodeLower: 1 }],
     ['users',           { usernameLower: 1 }],
+    ['users',           { registrationDone: 1 }],
+    ['users',           { phone: 1, registrationDone: 1 }],
     ['investments',     { userId: 1 }],
     ['investments',     { status: 1 }],
     ['investments',     { status: 1, createdAt: 1 }],
@@ -103,6 +105,7 @@ async function ensureIndexes() {
     ['investments',     { commissionPending: 1, commissionBanBlocked: 1, createdAt: 1 }],
     ['pendingDeposits', { commissionPending: 1, walletCredited: 1, commissionBanBlocked: 1, createdAt: 1 }],
     ['investments',     { userId: 1, createdAt: -1 }],
+    ['investments',     { userId: 1, isFirstInvestment: 1 }],
     ['transactions',    { userId: 1 }],
     ['transactions',    { withdrawalId: 1 }],
     // Round 106 -- markDepositFailed()/creditDeposit() both look up the
@@ -111,6 +114,11 @@ async function ensureIndexes() {
     // fastest-growing, unbounded collection in the schema, so this was a
     // full COLLSCAN on the hot money-crediting path.
     ['transactions',    { depositId: 1 }],
+    ['transactions',    { investmentId: 1 }],
+    ['transactions',    { investmentId: 1, commissionLevel: 1 }],
+    ['transactions',    { referralDepositId: 1, commissionLevel: 1 }],
+    ['transactions',    { userId: 1, type: 1, giftCode: 1 }],
+    ['transactions',    { userId: 1, type: 1, milestone: 1 }],
     ['transactions',    { marzReference: 1 }],
     ['transactions',    { ref: 1 }],
     ['transactions',    { userId: 1, createdAt: -1 }],
@@ -120,6 +128,9 @@ async function ensureIndexes() {
     ['withdrawals',     { marzTxUuid: 1 }],
     ['withdrawals',     { ref: 1 }],
     ['withdrawals',     { userId: 1, createdAt: -1 }],
+    ['withdrawals',     { userId: 1, date: 1 }],
+    ['withdrawals',     { userId: 1, network: 1, phone: 1 }],
+    ['withdrawals',     { pesajetRef: 1 }],
     ['withdrawals',     { status: 1, createdAt: 1 }],
     // Round 106 -- reconcilePendingWithdrawals()'s real query shape (status
     // + marzTxUuid + createdAt), mirroring the exact compound indexes
@@ -136,6 +147,7 @@ async function ensureIndexes() {
     ['pendingDeposits', { status: 1 }],
     ['pendingDeposits', { provider: 1, status: 1, createdAt: 1 }], // reconcilePendingDeposits()'s PesaJet sweep
     ['pendingDeposits', { ref: 1 }],
+    ['pendingDeposits', { txid: 1 }],
     ['pendingDeposits', { userId: 1, createdAt: -1 }],
     ['pendingDeposits', { status: 1, createdAt: 1 }],
     ['pendingDeposits', { needsManualCredit: 1 }],
@@ -156,6 +168,11 @@ async function ensureIndexes() {
     ['promoRedemptions',{ userId: 1 }],
     ['securityEvents',  { userId: 1 }],
     ['securityEvents',  { createdAt: -1 }],
+    ['turntableSpins',  { investmentId: 1 }],
+    ['turntableSpins',  { userId: 1, used: 1, createdAt: 1 }],
+    ['promoRedemptions',{ userId: 1, code: 1 }],
+    ['messageReads',    { userId: 1 }],
+    ['statementDownloads', { createdAt: -1 }],
     // OTP verification (registration / password reset / bank-account
     // linking) -- consumeOtpTicket()'s lookup, and otpSendLog's daily
     // rate-limit counter is already keyed by its own deterministic doc id

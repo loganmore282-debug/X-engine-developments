@@ -80,7 +80,7 @@ async function main(){
   w.openChangeLoginPasswordSheet();
   deposit.resolve({status:'error',message:'Test request rejected'});await sending;
   assert(d.querySelector('#lpOld'),'deposit cleanup must tolerate the original button being removed');
-  assert(!d.querySelector('#depRedirect').classList.contains('show'));
+  assert.equal(d.querySelector('#depRedirect'),null,'removed redirect overlay stays absent after a rejected deposit');
   console.log('PASS '+(built?'guarded bundle':'source')+': Home refresh, reward dialog, wallet races, zero fees, repeat taps, navigation, and payment guidance');
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>w.close());

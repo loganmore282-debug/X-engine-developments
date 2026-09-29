@@ -5147,6 +5147,14 @@ async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
 // transactions confirm on TRON within seconds to low minutes, so 15 minutes
 // is a generous margin, not a tight one.
 const USDT_UNRESOLVED_TIMEOUT_MS = 15 * 60 * 1000;
+// The transaction hash itself is the database identity for new USDT claims.
+// A "query for this TXID, then insert a random document" sequence is not
+// atomic: two accounts can both see no row and submit the same on-chain
+// payment at the same instant. createIfAbsent() on this deterministic id
+// gives MongoDB one atomic winner even across overlapping server processes.
+// Failed claims may still be corrected and resubmitted by conditionally
+// replacing that same document while its status is exactly `failed`.
+function usdtDepositDocId(txid) { return 'usdt:' + txid; }
 // The one function that decides a USDT claim's fate -- used by the
 // synchronous check-loop at submit time, the client's own status poll, and
 // the 30s reconciler sweep, so there is exactly one path that can ever move
@@ -5233,7 +5241,7 @@ app.post('/deposit/usdt/submit', async (req, res) => {
     // DECLINED doesn't count as a conflict -- the member is allowed to
     // correct a mistaken claim (e.g. the right amount) against the same
     // real transaction rather than being permanently locked out over it.
-    const dupSnap = await db.collection('pendingDeposits').where('txid', '==', txid).limit(20).get();
+    const dupSnap = await db.collection('pendingDeposits').where('txid', '==', txid).get();
     const openOrPaid = dupSnap.docs.filter(d => d.data().status !== 'failed');
     if (openOrPaid.length) {
       const matched = openOrPaid.find(d => d.data().status === 'matched');
@@ -5248,23 +5256,74 @@ app.post('/deposit/usdt/submit', async (req, res) => {
       return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
     }
 
+    // Older releases used random document IDs for USDT claims. If one of
+    // those claims failed, reuse that existing row on correction instead of
+    // creating a second claim under the newer deterministic ID.
+    const failedPrior = dupSnap.docs.find(d => d.data().status === 'failed' && d.data().userId === userId);
+    // A declined claim can be corrected by its original submitter, but the
+    // same TXID must never be transferred to a different account after a
+    // decline. Older releases allowed random-ID duplicates, so inspect every
+    // matching row rather than only a capped prefix.
+    if (!failedPrior && dupSnap.docs.some(d => d.data().status === 'failed'))
+      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been used.' });
+
     const ref = await uniqueRef('U');
     const { date, time } = nowStr();
-    const depRef = db.collection('pendingDeposits').doc();
-    await depRef.set({
+    const depRef = db.collection('pendingDeposits').doc(failedPrior ? failedPrior.id : usdtDepositDocId(txid));
+    const claimData = {
       userId, method: 'usdt', amount: amountUgx, amountUsdt, rate, txid, ref,
       walletAddress: sett.usdtWalletAddress, status: 'awaiting_verification',
       commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
       regionKey: currentRegionKey(),
       date, time, createdAt: FieldValue.serverTimestamp()
-    });
+    };
+    let claimed = await depRef.createIfAbsent(claimData);
+    let raced = null;
+    if (!claimed) {
+      raced = await depRef.get();
+      // A conclusively failed claim is deliberately reusable: the member may
+      // have pasted the right hash with the wrong amount. Only one retry can
+      // move it back to awaiting_verification.
+      if (raced.exists && raced.data().status === 'failed') {
+        claimed = await depRef.updateIf({ status: 'failed', userId, txid }, {
+          ...claimData,
+          failureReason: FieldValue.delete(), autoDeclined: FieldValue.delete(),
+          autoVerified: FieldValue.delete(), onChainAmountUsdt: FieldValue.delete(),
+        });
+        if (!claimed) raced = await depRef.get();
+      }
+      if (!claimed) {
+        if (!raced || !raced.exists) throw new Error('USDT claim changed while it was being submitted');
+        const prior = raced.data();
+        if (prior.userId === userId) {
+          if (prior.status === 'matched')
+            return res.json({ status: 'success', state: 'matched', depositId: raced.id, message: 'This transaction was already credited.' });
+          return res.json({ status: 'success', state: 'awaiting_verification', depositId: raced.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
+        }
+        return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
+      }
+    }
     // Same ledger-row-up-front pattern as /deposit/marzpay -- Records shows
     // this immediately as Processing rather than staying invisible until
     // credited.
-    await db.collection('transactions').add({
+    const ledgerData = {
       userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(amountUgx)})`,
       amount: amountUgx, displayAmount: amountUgx, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
-    }).catch(e => console.error(`USDT deposit ledger row create failed for dep=${depRef.id}:`, e.message));
+    };
+    try {
+      // A corrected retry reuses the deterministic claim document. Reuse its
+      // failed/zeroed ledger row too: creating another row with the same
+      // depositId would make creditDeposit() restore BOTH rows to the full
+      // amount and double the integrity totals even though the wallet credit
+      // itself stayed idempotent.
+      const priorLedger = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
+      if (priorLedger.empty) await db.collection('transactions').add(ledgerData);
+      else {
+        const priorRow = priorLedger.docs[0];
+        const priorData = priorRow.data();
+        await priorRow.ref.update({ ...ledgerData, statementId: priorData.statementId || ledgerData.statementId });
+      }
+    } catch (e) { console.error(`USDT deposit ledger row create failed for dep=${depRef.id}:`, e.message); }
 
     // Try to resolve it right here, a few times, before answering at all --
     // in practice the member usually already sent the crypto and waited for

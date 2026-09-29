@@ -79,13 +79,14 @@ function response() { return {code:200,status(n){this.code=n;return this;},json(
 function context(db, extra={}) {
   const routes = new Map();
   const c = vm.createContext({
-    db, FieldValue:FV, crypto, Date, Math, Map, Set, Number, String, Boolean,
+    db, FieldValue:FV, crypto, Date, Math, Map, Set, Number, String, Boolean, process:{env:{}},
     console:{log(){},warn(){},error(){}}, AbortSignal,
     app:{post:(p,fn) => routes.set(p,fn)},
     _withdrawInFlight:new Set(), _lockTails:new Map(),
-    getSettings:async() => ({}), payoutIsManual:() => false,
+    getSettings:async() => ({}), payoutIsManual:() => false, isBankNetwork:() => false,
     withdrawProvider:() => 'marzpay', fmtMoney:n => 'UGX ' + n,
     PUBLIC_URL:'https://invalid.example', MARZPAY_BASE:'https://invalid.example',
+    NETWORK_NAMES:new Set(['MTN Mobile Money', 'Airtel Money']),
     MARZPAY_KEY:'test-only', MARZ_TIMEOUT:1000,
     // MarzPay is multi-market now, so its request body carries the region's
     // `country` and marzSendMoney refuses rather than guess when it cannot
@@ -112,7 +113,7 @@ function context(db, extra={}) {
 }
 function paymentSeed() {
   return {users:{u:{walletBalance:0,totalWithdrawn:0}}, withdrawals:{w:{
-    userId:'u',status:'pending',amount:10000,net:8500,phone:'+256700000000',network:'MTN'
+    userId:'u',status:'pending',amount:10000,net:8500,phone:'+256700000000',network:'MTN Mobile Money'
   }},transactions:{tx:{withdrawalId:'w',status:'pending',amount:-10000}}};
 }
 function loadProcess(c) {
