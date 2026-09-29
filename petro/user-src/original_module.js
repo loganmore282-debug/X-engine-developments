@@ -3347,7 +3347,7 @@ function productCardHtml(p){
 function productCtaHtml(p){
   const open = p.isOpen !== false && !p.comingSoon;
   if (open) {
-    return `<button class="primary-button p-cta" onclick="openInvestConfirm('${esc(p.key)}',this)">Invest Now</button>`;
+    return `<button class="primary-button p-cta" onclick="openInvestConfirm('${esc(p.key)}',this)">Buy Asset</button>`;
   }
   const at = Number(p.opensAt) || 0;
   if (!at || p.openMode === 'soon' || p.comingSoon) {
@@ -6371,15 +6371,15 @@ window.openInvestConfirm = function(tierKey, btn){
     <div class="confirm-row"><span>Term</span><b>${fig.cycle} Days</b></div>
     <div class="confirm-row"><span>Daily Yield</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
     <div class="confirm-row"><span>Expected Return</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
-    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Invest Now</button>
+    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Buy Asset</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
   const actionBtn = $('confirmActionBtn');
   actionBtn.onclick = async () => {
     if (actionBtn.disabled) return;
-    actionBtn.disabled = true; actionBtn.textContent = 'Investing…';
+    actionBtn.disabled = true; actionBtn.textContent = 'Buying…';
     const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey }) });
     if (result.status !== 'success') {
-      actionBtn.disabled = false; actionBtn.textContent = 'Invest Now';
+      actionBtn.disabled = false; actionBtn.textContent = 'Buy Asset';
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
       if (short) {
         closeConfirm();

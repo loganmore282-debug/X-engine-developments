@@ -6057,3 +6057,97 @@ and the "add another wallet" form renders genuinely blank, confirming the
 prefill bug fix. Also confirmed live that the new deposit-failure fallback
 message renders the full, honest multi-cause sentence. `user/sw.js`
 bumped `v223` → `v224`.
+
+## Follow-up 42 -- link previews actually suppressed for real crawlers (root-caused via a live WhatsApp screenshot); "Invest Now" renamed to "Buy Asset"
+
+Owner, with a real WhatsApp compose-box screenshot showing a full preview
+card (app icon, "Petro" title, a description sentence) on a pasted
+`/share.html` referral link: *"it is bringing app preview icon plus some
+words please l need the link to be only as it is no add ons."*
+
+**Root-caused properly this time, not patched a third time on a guess.**
+Two earlier rounds (Follow-up 24, Follow-up 35) removed every
+`og:`/`twitter:` meta tag from `user-src/index.html`, on the theory that
+those tags were the whole mechanism -- confirmed at the time by grepping
+the built HTML for zero remaining occurrences, which was true but not
+sufficient. This screenshot proves WhatsApp's own link-unfurl crawler
+does NOT depend on `og:`/`twitter:` tags at all -- absent those, it falls
+back to whatever else `<head>` still has: the plain `<title>`, `<meta
+name="description">` (left in place on purpose in both earlier rounds,
+since it also serves search-result snippets, a genuinely different job),
+and `<link rel="icon">`/`apple-touch-icon` as the thumbnail image. All
+three tags are real, needed for their own jobs (the browser tab, search
+snippets, the home-screen icon) -- deleting them again would break real
+things nobody asked to break, and still wouldn't guarantee every
+platform's own fallback heuristic stops finding *something* to show.
+
+**Fixed by changing WHO gets served the page, not the page's own tags.**
+`deploy/nginx-petro.conf.template` gained a `map $http_user_agent
+$petro_bot_html` block matching the well-known preview-crawler User-Agent
+substrings (WhatsApp, Facebook/Meta, Telegram, X/Twitter, Slack,
+LinkedIn, Discord, Skype, Reddit, Pinterest, VK, Viber, LINE) --
+case-insensitive. The `app.PETRO_DOMAIN` server block's `/`, `/index.html`,
+and `/share.html` locations (the three URL shapes a shared link can take;
+`/share.html` is what the real referral-link format actually uses) now
+`try_files $petro_bot_html /<real file> =404` -- for every real visitor
+$petro_bot_html is an empty string, so `try_files` falls straight through
+to the genuine app exactly as before; only a matched crawler UA gets
+`/no-preview.html` instead. New file `user/no-preview.html`: a bare,
+valid HTML document with no `<title>`, no meta tags, no icon links --
+nothing for any crawler's fallback heuristic to build a card from,
+regardless of which specific tag it happens to fall back to. A real human
+tapping the link in WhatsApp's own in-app browser is unaffected -- that
+in-app browser sends an ordinary mobile browser User-Agent, not the
+separate "WhatsApp/x.x.x" string the PREVIEW-fetching bot uses, so it
+never matches this map and always gets the real app.
+
+**Verified, not assumed.** `nginx -t` genuinely run against the real
+generated config (installed nginx 1.24.0 locally -- the same version this
+VPS runs -- rendered the template with `sed` exactly as the owner's own
+deploy command does, added throwaway test certificates since the
+live template's `ssl_certificate` lines only exist after certbot fills
+them in): "syntax is ok". The one failure it reported afterward
+(`socket() [::]:80 failed`) is this sandbox's own lack of IPv6 support,
+unrelated to anything touched here -- confirmed by it failing identically
+against the UNMODIFIED template too.
+
+**Still needs the owner's own hands to go live** -- same as every other
+nginx change in this file's history (a Claude session cannot SSH out):
+```
+sed 's/PETRO_DOMAIN/petro-cchnug.com/g' /srv/petro-src/petro/deploy/nginx-petro.conf.template > /etc/nginx/sites-available/petro
+```
+then re-insert the `ssl_certificate`/`ssl_certificate_key` lines this
+regeneration always wipes (see Follow-up 32's own note on this exact
+gotcha, and Follow-up 34's combined-command fix for it), `nginx -t &&
+systemctl reload nginx`. The VPS's own `git pull` (or the auto-deploy
+webhook) picks up `user/no-preview.html` automatically like any other
+file; only the nginx config itself needs a manual regenerate+reload,
+since nginx never re-reads its own config on a plain file change.
+
+**"Invest Now" renamed to "Buy Asset"**, owner: *"continue, change it to
+Buy Asset"* (a screenshot of the confirm-purchase button). All three
+places this exact button's own text lives:
+`productCtaHtml()`'s asset-card CTA, the confirm-purchase dialog's
+default label, and its own reset-after-a-failed-purchase label -- all
+now say "Buy Asset". Also renamed the in-flight loading state on the
+same button, "Investing…" -> "Buying…", for the same button's own
+internal consistency (not asked for separately, but leaving the loading
+state saying "Investing" under a button that now reads "Buy Asset" at
+rest would read as an oversight, not a second feature). Scoped tight to
+just this button's own three text states, per the owner's own single
+screenshot -- the confirm dialog's title ("Confirm Investment") and
+subtitle weren't named and were left alone, matching this file's own
+"don't invent unprompted" standard elsewhere. Internal identifiers
+(`openInvestConfirm`, `/invest/create`, `confirmActionBtn`) are
+unchanged, same convention as every previous label-only rename in this
+file. Found, not touched: an already-orphaned `'Buy Now'` i18n row (line
+204) whose English key hasn't matched anything actually rendered since an
+even earlier rename to "Invest Now" that never touched the table --
+pre-existing, unrelated to this round's own change, flagged rather than
+silently fixed under an already-large round.
+
+**Verified**: `node -c user-src/original_module.js`, `node build-core.js`
+round-trip OK, `npm run test:audit` passes in full (163 checks). Live in
+headless Chromium against the real built bundle: `productCtaHtml()`'s
+returned markup and the confirm dialog's rendered button both read "Buy
+Asset", zero page errors. `user/sw.js` bumped `v224` → `v225`.
