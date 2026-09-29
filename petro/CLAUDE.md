@@ -5890,3 +5890,54 @@ request to `/` and to `/manifest.json` both come back `404`, confirming
 Express's own default 404 is what a visitor now gets, not a served page.
 No rebuild needed -- neither `user-src/` nor `admin-src/` was touched,
 this was `server.js` only.
+
+## Follow-up 40 -- referral hint corrected properly (removed, not replaced); Reset Password/Back-to-Login spacing fixed
+
+Owner, with two screenshots (the referral hint still showing "Optional."
+under a box that already says "(optional)"; the Reset Password button
+sitting hard against "Back to Log In"): *"I said don't replace it with
+any word down, you put put optional, why that is repetition, so let only
+optional in box be there only, also background to login word is very too
+closed to reset password button."*
+
+**Follow-up 38's own fix was incomplete -- it swapped one repeated
+sentence for a shorter repeated word, not for nothing.** The owner's
+original ask ("remove that word... nothing to replace it with, remove
+it") already said not to put anything back; `updateReferralFieldHint()`
+put `'Optional.'` there anyway, which still duplicates the exact word the
+field's own placeholder already shows ("Referral code (optional)"). Fixed
+properly this time: when the code isn't required, the hint element now
+gets no text AND `display:none` (not just an empty string, which would
+still leave a blank line from its own line-height/margin) -- there is
+nothing under the field at all in that state, only the placeholder inside
+the box itself. The required case is untouched ('Referral code is
+required', which isn't a repetition -- the placeholder in that state is
+just "Referral code", no "(optional)" to duplicate). The now-orphaned
+`'Optional.'`/`'Facultatif.'` i18n row added last round is removed too,
+same "delete an orphaned row, don't leave it dangling" convention this
+file has followed every other time an English source string changed out
+from under a translation.
+
+**Reset Password / Back to Log In spacing -- a real, found root cause,
+not a guess.** `.af-forgot` (`margin:-4px 0 18px`) is used in two places:
+under the LOGIN PASSWORD FIELD ("Forgot Password?", where the -4px pulls
+it up snugly against a plain input -- correct there) and under the RESET
+PASSWORD BUTTON ("Back to Log In", where the exact same negative pull
+crowds it against a solid, visually heavier button instead). One class
+built for one context was reused verbatim in a different one. Added a
+`.af-forgot.after-btn` modifier (`margin-top:16px`, a real positive gap)
+and applied it only to the Back-to-Login link -- matching the SAME
+positive-margin pattern `.af-switch` already uses correctly for Sign Up's
+own "Already have an account? Log In" line sitting under ITS button, so
+this isn't a new pattern, just extending an already-correct one to the
+one spot that was still using the wrong class's spacing. The Forgot
+Password link under the password field is untouched.
+
+**Verified**: `node -c user-src/original_module.js`, `node build-core.js`
+round-trip OK, `npm run test:audit` passes in full (163 checks). Live in
+headless Chromium against the real built bundle: the hint element is
+confirmed empty AND `display:none` when not required, confirmed showing
+plain "Referral code is required" text when required; the Back-to-Login
+link is confirmed carrying the new `after-btn` class with a computed
+`margin-top` of `16px` (not `-4px`), with zero page errors. `user/sw.js`
+bumped `v222` → `v223`.

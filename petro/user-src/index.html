@@ -1505,6 +1505,17 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   padding:0 16px;height:38px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;}
 .af-inline-btn:disabled{opacity:.55;cursor:default;}
 .af-forgot{text-align:right;margin:-4px 0 18px;font-size:13.5px;}
+/* .af-forgot's -4px top margin exists to tuck "Forgot Password?" up close
+   under the LOGIN PASSWORD FIELD right above it -- correct there, but the
+   same class reused verbatim for "Back to Log In" under the Reset Password
+   BUTTON pulled that link up against the button's own bottom edge instead
+   (owner: "background to login word is very too closed to reset password
+   button"). A button already carries visual weight a plain input field
+   doesn't, so the identical negative pull reads as crowding here. This
+   modifier swaps it for a real gap, matching .af-switch's own positive
+   margin-top -- the same "link sits below a button" case already solved
+   correctly for Sign Up's "Already have an account?" line. */
+.af-forgot.after-btn{margin-top:16px;}
 /* Another real bug from the same audit: updateReferralFieldHint() ("says out
    loud whether the box must be filled, instead of leaving members to
    discover it by being rejected") has always null-safely set textContent
@@ -2962,7 +2973,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
           <button class="af-eye" onclick="togglePw('forgotPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <button class="af-btn-v2" id="forgotSubmitBtn" onclick="doForgotSubmit()">Reset Password</button>
-        <p class="af-forgot"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
+        <p class="af-forgot after-btn"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
       </div>
     </div>
   </div>

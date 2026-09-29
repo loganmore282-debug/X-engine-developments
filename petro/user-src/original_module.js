@@ -450,14 +450,6 @@ var LANG_ROWS = [
   // fixture had always sent referralRequired:true, so this pair of sentences
   // had never once been on screen while anything was measuring.
   ['Referral code (optional)', "Koodi y'okuyita (teetaagisa)", 'Msimbo wa mwaliko (si lazima)', 'Code de parrainage (facultatif)', 'Kode yo gutumira (ntikenewe)', "Koodi y'okweta (tikyetengyesa)"],
-  // Replaces the old, longer "you are among the first to join" sentence
-  // (owner: "that word should be removed... it should just say optional
-  // full stop") -- 'facultatif' is the same word row 452 above already
-  // uses for "(optional)" in French, so it's a confirmed word, not a
-  // guess; the other 5 languages' own row 452 forms are "(not needed)"
-  // phrases built for sitting inside parentheses, not a standalone
-  // capitalized sentence, so left blank here rather than force-fit.
-  ['Optional.', '', '', 'Facultatif.', '', ''],
   // ── Popup messages, and the activity ticker's own verbs ──
   // A popup only appears when something goes WRONG, and the coverage
   // sweep walks every screen successfully -- so 58 notify() call sites
@@ -2318,14 +2310,21 @@ function updateReferralFieldHint(){
   const required = referralIsRequired();
   input.placeholder = required ? 'Referral code' : 'Referral code (optional)';
   const hint = $('regReferralHint');
-  if (hint) hint.textContent = required
-    ? 'Referral code is required'
-    // Owner: "that word should be removed saying you're first signing, it
-    // should just say optional full stop as in the box" -- the field's own
-    // placeholder already says "Referral code (optional)"; this hint used
-    // to add an explanatory sentence on top of that, which is exactly what
-    // was asked to come out, with nothing put back in its place.
-    : 'Optional.';
+  if (hint) {
+    // Owner: "don't replace it with any word down... let only optional in
+    // box be there only" -- the field's OWN placeholder already reads
+    // "Referral code (optional)" when it isn't required; a separate
+    // "Optional." line underneath just repeated that same word a second
+    // time. Nothing shows here at all in that case now -- hidden outright
+    // (not just emptied), so no blank line is left behind either.
+    if (required) {
+      hint.textContent = 'Referral code is required';
+      hint.style.display = '';
+    } else {
+      hint.textContent = '';
+      hint.style.display = 'none';
+    }
+  }
 }
 
 // Owner: "let's establish a timer ie like saying snow opening in
