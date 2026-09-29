@@ -4132,11 +4132,15 @@ function formatPhoneDisplay(phone){
 }
 
 // ── WALLET (Wallet.dc.html) ──
-// ONE bound payout account, shown as a mobile-money status panel. "Edit Wallet"
-// reveals the provider/account/holder form; Submit saves through the same
-// /bank/save endpoint the app already had, and because Petro binds exactly
-// one wallet, saving a second one replaces the first (any older rows are
-// deleted after the new one lands). Not Snow's list-of-many model.
+// Multiple saved payout accounts, shown as a list (owner: "make when one can
+// add multiple banks"). This REVERSES an earlier round's deliberate choice
+// to bind exactly one wallet, collapsing every save down to the newest --
+// /bank/save and /withdraw/request never actually enforced that limit
+// server-side (a withdrawal has always resolved its destination by looking
+// up whichever saved bankAccounts row matches the network/phone the client
+// sent, not "the one bound wallet"), so lifting it client-side needed no
+// server change at all. "Edit Wallet"/the add form is unchanged; saving now
+// simply adds another row instead of deleting every other one first.
 var _walletEditing = false;
 window.openWalletSheet = async function(){
   const hadCache = Array.isArray(STATE.bankAccounts);
@@ -4230,25 +4234,38 @@ function renderWalletSheet(){
   // mobile-money options exactly as it always has.
   const providers = ['MTN Mobile Money', 'Airtel Money', ...(STATE.supportedBanks || [])];
   if (w && !_walletEditing) {
-    $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + walletPlainRowHtml(w) + '</div>';
+    // One row per saved wallet, not just the first -- walletPlainRowHtml()'s
+    // own delete button already worked per-row, it just never had more than
+    // one row to act on before this round. "Add another wallet" reuses the
+    // exact same add-form toggleWalletEdit() already drives.
+    const rows = (STATE.bankAccounts || []).map(walletPlainRowHtml).join('');
+    $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + rows
+      + '<button class="btn-bind" type="button" style="margin:6px 0 0;" onclick="toggleWalletEdit(true)">+ Add another wallet</button></div>';
     return;
   }
-  const editingBank = w && !isMobileMoneyNetwork(w.network);
+  // Only prefill when this IS still the old single-wallet "edit my one
+  // wallet" case (no saved wallets yet, or the account was JUST deleted
+  // down to none). "+ Add another wallet" also lands here now that Petro
+  // allows saving more than one, but that's a genuinely NEW entry, not an
+  // edit of an existing row -- prefilling it with the first saved wallet's
+  // own details would read as if adding a duplicate of it by accident.
+  const prefill = (STATE.bankAccounts || []).length ? null : w;
+  const editingBank = prefill && !isMobileMoneyNetwork(prefill.network);
   $('sheetBody').innerHTML = `<div class="wallet-minimal reveal-in">
     <div class="wallet-add-form" id="walFormGroup">
       <div class="prov-pick" id="walProviderPick">
         <div class="wallet-line-field prov-input" onclick="toggleProviderList()">
-          <input id="walProvider" type="text" readonly placeholder="Select network or bank" value="${w && w.network ? esc(w.network) : ''}">
+          <input id="walProvider" type="text" readonly placeholder="Select network or bank" value="${prefill && prefill.network ? esc(prefill.network) : ''}">
           <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </div>
         <div class="prov-list" id="walProviderList">
-          ${providers.map(p => `<button type="button" class="prov-opt${w && w.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
+          ${providers.map(p => `<button type="button" class="prov-opt${prefill && prefill.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
         </div>
       </div>
       <div class="wallet-line-field">
-        <input id="walPhone" type="${editingBank ? 'text' : 'tel'}" inputmode="${editingBank ? 'text' : 'numeric'}" autocomplete="${editingBank ? 'off' : 'tel'}" enterkeyhint="next" placeholder="${editingBank ? 'Account number' : 'Phone number'}" value="${w ? esc(walletDestDisplay(w)) : ''}" oninput="handleWalDestInput(this)">
+        <input id="walPhone" type="${editingBank ? 'text' : 'tel'}" inputmode="${editingBank ? 'text' : 'numeric'}" autocomplete="${editingBank ? 'off' : 'tel'}" enterkeyhint="next" placeholder="${editingBank ? 'Account number' : 'Phone number'}" value="${prefill ? esc(walletDestDisplay(prefill)) : ''}" oninput="handleWalDestInput(this)">
       </div>
-      <div class="wallet-line-field"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" placeholder="Account holder name" value="${w ? esc(w.holder || '') : ''}"></div>
+      <div class="wallet-line-field"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" placeholder="Account holder name" value="${prefill ? esc(prefill.holder || '') : ''}"></div>
       <button class="primary-button wallet-save" id="walSaveBtn" onclick="submitWallet()">Save</button>
     </div>
     <div id="walOtpGroup" style="display:none;">
@@ -4385,18 +4402,10 @@ window.confirmWalletOtp = async function(){
 // Shared tail of a successful /bank/save, whether it came from the OTP flow
 // above or straight from submitWallet() when bankOtpRequired is off.
 async function finishWalletSave(){
-  // Petro binds exactly ONE wallet -- drop any older rows so the card, the
-  // summary row and the Withdraw screen can never disagree about which
-  // account a payout goes to.
-  const list = await api('/bank/list');
-  let accounts = list.status === 'success' ? list.accounts : [];
-  const keep = accounts[accounts.length - 1];
-  for (const acc of accounts) {
-    if (keep && acc.id === keep.id) continue;
-    await post('/bank/delete', { id: acc.id });
-  }
+  // Just re-read the real list and show it -- Petro now allows saving more
+  // than one wallet, so the old "delete every other row" collapse is gone.
   const fresh = await api('/bank/list');
-  STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (keep ? [keep] : []);
+  STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (STATE.bankAccounts || []);
   _walletEditing = false;
   notify('Wallet saved');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
@@ -4407,8 +4416,16 @@ window.deleteWallet = function(id){
     const r = await post('/bank/delete', { id });
     if (r.status !== 'success') { notify(r.message || 'Could not remove the wallet.'); return false; }
     STATE.bankAccounts = (STATE.bankAccounts || []).filter(x => x.id !== id);
-    _walletEditing = true;
+    // Was unconditional -- correct back when a delete always emptied the
+    // list entirely (Petro's old one-wallet rule), wrong now that deleting
+    // ONE of several should return to the remaining list, not jump straight
+    // into "add a new wallet". Same "editing only when genuinely empty"
+    // rule openWalletSheet() itself already uses.
+    _walletEditing = !(STATE.bankAccounts || []).length;
     if (_openSheetTitle === 'Wallet') renderWalletSheet();
+    // The Cash Out screen may have had exactly this wallet selected --
+    // clear a now-dangling selection so it falls back to whatever is left.
+    if (_witSelectedWalletId === id) _witSelectedWalletId = null;
     return true;
   });
 };
@@ -5926,15 +5943,18 @@ function setDepositStatusFailed(msg){
   // image 3's solid-filled one, for visual consistency with that sibling.
   $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-wine-soft)" stroke="var(--snow-wine)" stroke-width="4"/><line x1="60" y1="34" x2="60" y2="70" stroke="var(--snow-wine)" stroke-width="9" stroke-linecap="round"/><circle cx="60" cy="86" r="5.5" fill="var(--snow-wine)"/></svg>';
   $('depStatusTitle').textContent = 'Payment not completed';
-  // Says what is true and checkable -- the wallet balance did not move -- and
-  // deliberately makes no claim about the member's mobile money account,
-  // which this app cannot see. Promising "nothing was taken" would be a
-  // guess about someone else's money. `msg` now carries MarzPay's own real
-  // decline reason (e.g. "Insufficient funds") when it gave one -- see
-  // marzDepositFailureMsg() in server.js -- and only falls back to this
-  // generic sentence when MarzPay didn't say anything more specific.
+  // Owner asked for "due to insufficient funds" here -- checked against
+  // MarzPay's own integration guide first rather than guessing at a field
+  // name: a collection that fails after being accepted carries no reason at
+  // all in MarzPay's documented response/webhook shapes, only a terminal
+  // status (see server.js's DEPOSIT_FAILED_MSG, and its own long comment,
+  // for the full citation). Naming ONE specific cause here would be a
+  // fabricated claim this app has no way to know is true -- this instead
+  // lists the real, plausible causes without asserting which one it was.
+  // `msg` is server-supplied on the normal path; this fallback only fires
+  // for a purely client-side failure that never reached the server at all.
   $('depStatusBody').innerHTML = '<p>' + esc(msg
-    || 'This recharge did not go through, so your ' + brandName() + ' balance has not changed. You can start it again whenever you are ready.') + '</p>';
+    || 'This recharge did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
   // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
   // button means plain Close here, on a modal a later deposit attempt can
   // reuse without a fresh page load in between.
@@ -6055,8 +6075,22 @@ async function pollDepositStatus(depositId){
 // replacing them out from under someone mid-entry would be a much worse bug
 // than a slightly-stale account list. The background fetch still keeps
 // STATE.bankAccounts current for the NEXT time this sheet opens.
+// Which saved wallet THIS cash-out goes to, now that more than one can
+// exist. null means "no explicit pick yet" -- witSelectedWallet() then
+// falls back to the first saved one, so a member with only one wallet (the
+// common case) never sees a picker or has to choose anything.
+var _witSelectedWalletId = null;
+function witSelectedWallet(){
+  const accounts = STATE.bankAccounts || [];
+  if (_witSelectedWalletId) {
+    const hit = accounts.find(a => a.id === _witSelectedWalletId);
+    if (hit) return hit;
+  }
+  return accounts[0] || null;
+}
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
+  _witSelectedWalletId = null;
   openSheet('Cash Out', '');
   // Paint the actual withdrawal page immediately. Waiting for /bank/list
   // left a transparent-looking empty sheet over Home on a cold open.
@@ -6066,10 +6100,14 @@ window.openWithdrawSheet = async function(){
   if (_openSheetTitle !== 'Cash Out' || $('witAmount') !== amountField) return;
   if (r.status === 'success' && Array.isArray(r.accounts)) {
     STATE.bankAccounts = r.accounts;
-    const wallet = currentWallet();
-    $('witWallet').innerHTML = walletCardHtml(wallet);
-    $('witBindBtn').textContent = wallet ? 'Change Wallet' : 'Bind Wallet';
-    $('witSubmitBtn').disabled = !wallet || _withdrawSubmitting;
+    // Only the wallet block -- never #witAmount or anything else on the
+    // page, per this function's own standing rule (see the comment above
+    // it): a member may already be mid-typing an amount by the time this
+    // background fetch lands.
+    const block = $('witWalletBlock');
+    if (block) block.innerHTML = witWalletBlockHtml(s);
+    const submitBtn = $('witSubmitBtn');
+    if (submitBtn) submitBtn.disabled = _withdrawSubmitting;
   }
 };
 // ── The cash-out window, client side ────────────────────────────────────
@@ -6113,17 +6151,54 @@ function withdrawHoursLine(s){
   if (!w.enabled) return 'Cash-out can be requested at any time of day.';
   return `Cash-out time: ${esc(w.from)} to ${esc(w.to)}.`;
 }
+// The wallet card, plus a "Switch wallet" picker when more than one saved
+// wallet exists (owner: "make when one can add multiple banks") -- a
+// separate small toggle list under the card, reusing the exact
+// .prov-list/.prov-opt look the provider picker already established,
+// rather than sending the member all the way to the Wallet sheet just to
+// choose which of their OWN already-saved wallets this one cash-out goes
+// to. Isolated in its own function so openWithdrawSheet()'s post-fetch
+// update can repaint only this block, never #witAmount.
+function witWalletBlockHtml(s){
+  const accounts = STATE.bankAccounts || [];
+  const w = witSelectedWallet();
+  const switcher = accounts.length > 1 ? `
+    <div class="prov-pick" id="witWalletPick">
+      <button class="btn-bind" type="button" style="margin:0 0 10px;" onclick="toggleWitWalletPicker()">Switch wallet</button>
+      <div class="prov-list" id="witWalletList">
+        ${accounts.map(a => `<button type="button" class="prov-opt${w && a.id === w.id ? ' on' : ''}" onclick="selectWitWallet('${esc(a.id)}')">${esc(walletDestDisplay(a))} — ${esc(String(a.network || '').replace(/\s*(Mobile )?Money$/i, ''))}</button>`).join('')}
+      </div>
+    </div>` : '';
+  return `<div id="witWallet">${walletCardHtml(w)}</div>
+    ${switcher}
+    <button id="witBindBtn" class="btn-bind" type="button" onclick="openWalletSheet()">${accounts.length ? 'Manage Wallets' : 'Bind Wallet'}</button>`;
+}
+window.toggleWitWalletPicker = function(){
+  const box = $('witWalletPick');
+  if (box) box.classList.toggle('open');
+};
+window.selectWitWallet = function(id){
+  _witSelectedWalletId = id;
+  const s = STATE.settings || {};
+  const block = $('witWalletBlock');
+  if (block) block.innerHTML = witWalletBlockHtml(s);
+};
+// Closes the wallet switcher the same way the provider picker's own
+// document-level listener does -- tapping anywhere outside it.
+document.addEventListener('click', function(e){
+  const box = document.getElementById('witWalletPick');
+  if (box && box.classList.contains('open') && !box.contains(e.target)) box.classList.remove('open');
+});
 // Withdraw.dc.html. Replaces the form inherited from Snow: a tinted balance
 // card, a UGX-prefixed amount field, the bound wallet shown as the same
 // bank-card tile the Wallet screen uses (not a <select> of several), the
 // trade-password field, the fee line, and the instruction card.
 function paintWithdrawSheet(s){
   const balance = (STATE.account && STATE.account.walletBalance) || 0;
-  const w = (STATE.bankAccounts || [])[0] || null;
+  const w = witSelectedWallet();
   const fee = withdrawalFeePct(s);
   $('sheetBody').innerHTML = `<div class="reveal-in" style="padding-top:18px;">
-    <div id="witWallet">${walletCardHtml(w)}</div>
-    <button id="witBindBtn" class="btn-bind" type="button" onclick="openWalletSheet()">${w ? 'Change Wallet' : 'Bind Wallet'}</button>
+    <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
 
     <div class="wit-bal">
       <div class="lbl">Available Balance</div>
@@ -6137,7 +6212,7 @@ function paintWithdrawSheet(s){
     <div class="wit-fee">Fee: ${fee}%</div>
     <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
 
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${w && !_withdrawSubmitting ? '' : 'disabled'} onclick="submitWithdraw()">Confirm Cash Out</button>
+    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Cash Out</button>
 
     <div class="wit-instr withdrawal-guide">
       <h3>Before you cash out</h3>
@@ -6194,9 +6269,10 @@ window.submitWithdraw = async function(){
   const submitBtn = $('witSubmitBtn');
   if (!submitBtn || submitBtn.disabled || _withdrawSubmitting || !$('witAmount')) return;
   const amount = parseMoneyInput($('witAmount').value);
-  // Petro binds exactly ONE wallet, so there is no account picker to read --
-  // the withdrawal always goes to the bound wallet the screen is showing.
-  const acct = (STATE.bankAccounts || [])[0] || null;
+  // Whichever saved wallet is currently selected on screen -- may be one of
+  // several now that Petro allows saving more than one (see
+  // witSelectedWallet()'s own comment).
+  const acct = witSelectedWallet();
   if (!amount || amount <= 0) return notify('Enter a valid amount.');
   // Mirrors the server's rule so the member is told BEFORE a round trip.
   // The server checks it again -- this is a courtesy, not the enforcement.
@@ -6205,7 +6281,13 @@ window.submitWithdraw = async function(){
     const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
     return notify(`Cash-out must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
   }
-  if (!acct) return notify('Bind your wallet before cashing out.');
+  // Owner: "I want a notify to appear when one tries to press confirm
+  // cashout but when he hasn't saved a bank." Confirm Cash Out used to be a
+  // plain HTML `disabled` button whenever there was no wallet -- a disabled
+  // button swallows a tap with zero feedback, so the member saw nothing at
+  // all. It's tappable unconditionally now (see paintWithdrawSheet()); this
+  // check is what actually tells them why nothing happened.
+  if (!acct) return notify('Please add a payout wallet before cashing out.');
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
   const win = withdrawWindow(STATE.settings || {});
@@ -6218,8 +6300,12 @@ window.submitWithdraw = async function(){
   finally {
     _withdrawSubmitting = false;
     submitBtn.disabled = false; submitBtn.textContent = 'Confirm Cash Out';
+    // A background /bank/list landing mid-request can have repainted the
+    // wallet block (see openWithdrawSheet()) and left a DIFFERENT button
+    // element in the DOM -- disabled state is only ever about an in-flight
+    // request now, not wallet presence, so the new one is simply enabled.
     const current = $('witSubmitBtn');
-    if (current && current !== submitBtn) current.disabled = !currentWallet();
+    if (current && current !== submitBtn) current.disabled = false;
   }
   if (r.stale) return;
   if (r.status !== 'success') return notify(r.message || 'Could not request cash out.');

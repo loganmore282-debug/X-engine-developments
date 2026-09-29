@@ -5941,3 +5941,119 @@ plain "Referral code is required" text when required; the Back-to-Login
 link is confirmed carrying the new `after-btn` class with a computed
 `margin-top` of `16px` (not `-4px`), with zero page errors. `user/sw.js`
 bumped `v222` → `v223`.
+
+## Follow-up 41 -- honest "payment not completed" wording (checked against MarzPay's real docs), a silently-disabled Confirm Cash Out button fixed, multiple saved payout wallets
+
+Owner, with two screenshots (the same generic "Payment not completed"
+message; the Cash Out screen with no wallet linked): *"l said you put that
+due to insufficient funds, but you didn't put, also l want a notify to
+appear when one tries to press confirm cashout but when he hasn't saved a
+bank, also make when one can add multiple banks. so a notify should be
+like please add a payout wallet or, you can say select payout wallet."*
+
+**"Insufficient funds" checked against MarzPay's own real API docs before
+touching the wording again -- not just retried with a different guess.**
+The owner attached `docs/marzpay-integration-guide.pdf` (MarzPay's own
+merchant integration guide, not something this session had access to
+before). Reading it end to end settles exactly why Follow-up 38's fix
+never actually showed a specific reason: neither the collection-status
+response (`GET /collect-money/{uuid}`, guide section 5.5) nor any
+collection webhook payload (section 11.5) documents a reason field on a
+failed/cancelled collection anywhere -- only a terminal status
+(`"status":"failed"`/`event_type:"collection.failed"`). MarzPay's one
+documented per-transaction reason, `error_code: INSUFFICIENT_BALANCE`
+(section 12.2), belongs to the immediate error envelope a bad `/collect-money`
+REQUEST gets back synchronously -- already surfaced separately via
+`marzUserMsg()` at submission time ("Could not start the payment") -- and
+it names the BUSINESS's own MarzPay wallet running low, not a customer's
+mobile money balance. There is structurally no live data source for "why"
+a customer's own payment failed once MarzPay accepted it and sent the
+prompt. Follow-up 38's speculative field-name guessing
+(`tx.message`/`tx.reason`/etc.) is left in place -- harmless, and free
+forward-compatibility if MarzPay ever adds such a field -- but its own
+comment and `marzDepositFailureMsg()`'s were corrected to say so plainly
+instead of implying it already works.
+
+Given that, asserting "due to insufficient funds" specifically would be a
+fabricated claim this app has no way to verify -- exactly what
+`setDepositStatusFailed()`'s own standing comment already warns against
+("says what is true and checkable... a guess about someone else's money").
+Instead, `DEPOSIT_FAILED_MSG` (`server.js`) and the client's own
+`setDepositStatusFailed()` fallback (used only when a failure never
+reaches the server at all) both now name the real, plausible causes
+without asserting one: *"This payment was not completed. This can happen
+if you did not approve the prompt in time, cancelled it, or had
+insufficient funds. Please try again."* -- more useful than the old bare
+"Please try again", and honest about what isn't actually known.
+
+**Confirm Cash Out button was a real, found bug: a plain HTML `disabled`
+attribute swallows a tap with ZERO feedback.** `paintWithdrawSheet()` used
+to render `disabled` on the button whenever no wallet was linked --
+`submitWithdraw()`'s own `if (!acct) return notify(...)` guard existed
+already, but a disabled button never reaches its `onclick` handler at all,
+so that notify could never fire in practice; the member just saw nothing
+happen. Fixed by never disabling the button for "no wallet" (only while an
+actual submit is in flight), so the tap now genuinely reaches
+`submitWithdraw()` and its notify. Wording changed to match the owner's
+own suggestion: *"Please add a payout wallet before cashing out."*
+
+**Multiple saved payout wallets -- a real feature, not just a display
+fix.** Reversed an earlier round's deliberate "Petro binds exactly ONE
+wallet" decision (owner: "make when one can add multiple banks"). Checked
+first, not assumed: `/bank/save`/`/withdraw/request` (`server.js`) never
+actually enforced a one-wallet limit server-side -- `/bank/save` has
+always just added a new `bankAccounts` row (refusing only an exact
+duplicate phone number already saved), and `/withdraw/request` has always
+resolved its payout destination by looking up whichever saved
+`{network, phone}` the client sent, never "the one bound wallet" by
+assumption. The one-wallet rule was entirely client-side
+(`finishWalletSave()` deleting every other row after each save), so
+lifting it needed no server change at all.
+- `finishWalletSave()` no longer deletes anything -- just re-reads and
+  shows the real list.
+- `renderWalletSheet()` now lists every saved wallet (one row each, via
+  the same `walletPlainRowHtml()`/`deleteWallet()` per-row delete this
+  screen already had -- it just never had more than one row before), plus
+  a new "+ Add another wallet" button.
+- **A real bug caught before shipping, not after**: with several wallets
+  saved, tapping "+ Add another wallet" would have prefilled the add-form
+  from the FIRST saved wallet's own details (the old single-wallet
+  "edit" code path, reused unmodified) -- reading as accidentally adding
+  a duplicate of an existing wallet rather than a genuinely new one. Fixed
+  by only prefilling when there are zero saved wallets at all (the
+  original "nothing to edit yet" case); "add another" now always starts
+  from a blank form.
+- **Cash Out screen** gets a new `witSelectedWallet()`/`_witSelectedWalletId`
+  pair: with 0-1 saved wallets it behaves exactly as before (no picker,
+  nothing new to decide); with 2+, a small "Switch wallet" toggle list
+  appears under the wallet card -- reusing the EXACT `.prov-list`/`.prov-opt`
+  look the provider picker already established, not a new pattern --
+  letting the member pick which saved wallet THIS cash-out goes to.
+  `submitWithdraw()` sends whichever one is selected, defaulting to the
+  first when nothing's been explicitly picked (so a member with only one
+  wallet, the common case, never has to choose anything).
+- `openWithdrawSheet()`'s post-`/bank/list` update was rewritten to
+  targeted-patch only the wallet block (`#witWalletBlock`), never
+  `#witAmount` or the rest of the page -- preserving this function's own
+  standing rule that a member's in-progress amount typing must never be
+  wiped out by a background refetch landing mid-entry.
+- `deleteWallet()`'s own `_walletEditing = true` (unconditional after any
+  delete) was also a real bug once more than one wallet could exist --
+  deleting ONE of several used to always jump straight into "add a new
+  wallet" instead of returning to the remaining list. Fixed to only enter
+  edit mode when the list is now genuinely empty.
+
+**Verified**: `node --check server.js`, `node -c user-src/
+original_module.js`, `node build-core.js` round-trip OK, `npm run
+test:audit` passes in full (163 checks). Live in headless Chromium against
+the real built bundle, five separate scenarios: zero wallets (button
+enabled, correct notify fires, "Bind Wallet" label); one wallet (no
+switcher shown, "Manage Wallets" label); two wallets (switcher renders
+with exactly 2 options, selecting the second updates the displayed card
+AND is what `/withdraw/request` actually receives -- confirmed by
+intercepting the real `post()` call, not just reading the code); the
+wallet-management sheet lists both saved rows with the add button present;
+and the "add another wallet" form renders genuinely blank, confirming the
+prefill bug fix. Also confirmed live that the new deposit-failure fallback
+message renders the full, honest multi-cause sentence. `user/sw.js`
+bumped `v223` → `v224`.

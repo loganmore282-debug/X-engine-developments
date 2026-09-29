@@ -1933,7 +1933,24 @@ async function markDepositFailed(depRef, userId, reason) {
 
 // ── MARZPAY (mobile money collect/send) ──
 const PROVIDER_BUSY_MSG = 'The payment provider is busy right now. Please try again in a moment.';
-const DEPOSIT_FAILED_MSG = 'Payment was not completed. Please try again.';
+// Owner asked for "due to insufficient funds" on this exact screen. Checked
+// against MarzPay's own integration guide (docs/marzpay-integration-guide.pdf,
+// sections 5.5/11.5/12) before wording this: a collection that moves past
+// "processing" into "failed"/"cancelled" -- via GET /collect-money/{uuid} or
+// the collection.failed webhook -- carries only that terminal status, no
+// reason field anywhere in the documented transaction/collection/webhook
+// shapes. MarzPay's only documented per-transaction reason
+// (INSUFFICIENT_BALANCE, an error_code in section 12.2) belongs to the
+// error envelope a bad /collect-money REQUEST gets back immediately --
+// already surfaced separately via marzUserMsg() at submission time (see
+// "Could not start the payment"/"Could not start the card payment"), and it
+// describes the BUSINESS's own MarzPay wallet running low, not a customer's
+// mobile money balance. There is no live data source for "why" a customer's
+// own payment failed once MarzPay accepted it and sent the prompt -- stating
+// a specific cause here would be a guess, not a fact (this app's own
+// standing rule, see setDepositStatusFailed()'s comment). Lists the real
+// possibilities instead of asserting one.
+const DEPOSIT_FAILED_MSG = 'This payment was not completed. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Please try again.';
 function marzUserMsg(mp, fallback) {
   const raw = mp && (mp.message || mp.data?.message || mp.error || mp.data?.error);
   if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
@@ -2280,11 +2297,14 @@ async function consumeOtpTicket(ticket, phone, purpose, registrationUserId) {
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
   const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || d?.status || '';
-  // Whatever MarzPay itself said about WHY, when it said anything -- e.g. a
-  // real "insufficient funds"/"cancelled by user" on a declined transaction,
-  // not a guess this codebase would be inventing. Checked in the same few
-  // plausible shapes marzUserMsg() already does for the initiation response,
-  // since a status-check reply isn't guaranteed to nest it identically.
+  // Speculative, checked against MarzPay's own integration guide afterward
+  // (docs/marzpay-integration-guide.pdf) rather than assumed correct:
+  // neither the collection-status response (5.5) nor the webhook payloads
+  // (11.5) document a reason field anywhere on a failed/cancelled
+  // collection -- only a terminal status. Kept anyway as a genuinely
+  // harmless forward-compatible read (costs nothing if MarzPay ever adds
+  // one; marzDepositFailureMsg() below already falls back safely when it's
+  // absent, which per the docs is every real case today).
   const message = tx.message || tx.reason || tx.status_reason || tx.failure_reason ||
     d?.message || d?.data?.message || null;
   return {
@@ -2293,13 +2313,14 @@ function _marzExtractTx(d) {
     message,
   };
 }
-// The real reason a MarzPay collection failed, when MarzPay actually gave
-// one (e.g. "Insufficient funds") -- reuses marzUserMsg()'s own filter so an
-// infrastructure complaint ("gateway timeout", "database error") never
-// leaks to a member as if it were something about THEIR payment; only a
-// genuine, specific decline reason passes through. Falls back to the plain
-// DEPOSIT_FAILED_MSG when MarzPay didn't say anything more specific --
-// never invents a reason that wasn't actually reported.
+// The real reason a MarzPay collection failed, on the rare/undocumented
+// chance MarzPay ever actually supplies one on tx.message -- reuses
+// marzUserMsg()'s own filter so an infrastructure complaint ("gateway
+// timeout", "database error") never leaks to a member as if it were
+// something about THEIR payment. Falls back to DEPOSIT_FAILED_MSG's own
+// honest, cause-agnostic wording otherwise -- confirmed against MarzPay's
+// own docs to be the normal case for every failed/cancelled collection,
+// not a gap in this function.
 function marzDepositFailureMsg(tx) {
   return marzUserMsg({ message: tx && tx.message }, DEPOSIT_FAILED_MSG);
 }
