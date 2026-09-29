@@ -4938,3 +4938,85 @@ not a CSS class directly), and the Follow-up 28 nav-based trigger
 (Assets→Home) still fires independently afterward -- confirming
 neither trigger interferes with the other. `user/sw.js` bumped `v215`
 → `v216`, `admin/sw.js` bumped `v54` → `v55`.
+
+## Follow-up 30 -- real domain bought: petro-cchnug.com (Hostinger), business email set up
+
+Owner bought **`petro-cchnug.com`** through Hostinger and set up its
+business email (`@petro-cchnug.com`, shown checked off in Hostinger's
+own domain checklist) -- the "No domain pointed at the VPS yet" gap
+this file's "Not done yet" list (and Follow-up 12's own aside) has
+been flagging since the VPS first went live is now real, actionable
+work, not a placeholder. This is prep only: DNS is still parked on
+Hostinger's own nameservers (`lunar.dns-parking.com`/
+`solar.dns-parking.com`, confirmed from the owner's own screenshot),
+so nothing below changes what's actually live yet -- see "What's still
+needed" below for the real next steps, which need the owner's own
+hands (DNS panel + Termux/SSH), not this session's.
+
+**Prepared and shipped this round** (safe, additive, does not touch
+what's currently live and working on the bare IP):
+- **A real bug in `deploy/nginx-petro.conf.template` found and fixed
+  before handing it to the owner, not after a 404 report**: both
+  `root` directives (`/srv/petro/user`, `/srv/petro/admin`) matched
+  `deploy.sh`'s never-actually-used rsync layout
+  (`PETRO_VPS_PATH=/srv/petro`), not the git-pull sparse-checkout path
+  this file's own "Hosting" section documents as what the VPS
+  genuinely runs (`/srv/petro-src/petro`). Fixed to
+  `/srv/petro-src/petro/user` / `/srv/petro-src/petro/admin`, with a
+  comment explaining why the template drifted and what to check if the
+  VPS's checkout path is ever moved. Would have served a 404 (wrong,
+  probably nonexistent, directory) the moment nginx reloaded with the
+  un-fixed template -- caught by reading `deploy.sh`/this file's
+  "Hosting" section side by side before trusting the template, the
+  same "verify, don't assume" discipline this file's history already
+  credits for catching the earlier Railway/EdgeOne and CSP-comment
+  bugs.
+- **`server.js`'s `CORS_ALLOWED_ORIGINS`** gained
+  `https://app.petro-cchnug.com` / `https://admin.petro-cchnug.com`
+  (the two frontend subdomains the nginx template serves; `api.` itself
+  never needs an entry -- a same-origin API call carries no `Origin`
+  header) -- added now, ahead of DNS/TLS, so the eventual cutover is a
+  DNS+nginx change only, not a second server.js edit+redeploy in the
+  same round. Purely additive: the existing `petro-platform.com`
+  placeholder and the working bare-IP `:8080` origin are both left in
+  place, so nothing currently live changes behavior. `test-cors-
+  origins.js`/`test-allowed-origins.js` both re-run clean (neither
+  asserts the new origins should be refused), `npm run test:audit`
+  passes in full (163 checks).
+- **Deliberately NOT done this round**: `set-backend-url.js` was NOT
+  run, and neither bundle was rebuilt against the new domain. This
+  file's own "Not done yet" list already states the correct order --
+  nginx+DNS+TLS first, `set-backend-url.js` only once that's actually
+  live -- and jumping ahead would point the shipped bundles at a
+  domain that doesn't resolve or serve anything yet, breaking the
+  currently-working bare-IP app for every real user the next time the
+  VPS pulls and rebuilds. Also not touched: `deploy.sh`'s own
+  `PETRO_VPS_PATH` default (still `/srv/petro`) -- it's dead/reference
+  code per this file's own "Hosting" section (a Claude session cannot
+  SSH out to run it), so its default was left alone rather than edited
+  to match a path it will never actually use.
+
+**What's still needed, and whose hands it needs** -- none of this can
+run from a Claude Code session (no SSH out, see "Hosting" above); the
+owner does it themselves, most likely via the same Termux setup
+already used for every other VPS command in this file:
+1. In Hostinger's DNS Zone Editor for `petro-cchnug.com` (NOT a
+   nameserver change -- it's already on Hostinger's own nameservers,
+   which is fine, DNS records go into their zone editor), add three A
+   records pointing at the VPS: `api` / `app` / `admin`, all →
+   `179.198.197.114`.
+2. Once those resolve (`ping app.petro-cchnug.com` from anywhere, or
+   Hostinger's own DNS-propagation check), on the VPS via Termux:
+   `sudo ufw allow 'Nginx Full'`, then
+   `sed 's/PETRO_DOMAIN/petro-cchnug.com/g' /srv/petro-src/petro/deploy/nginx-petro.conf.template > /etc/nginx/sites-available/petro`,
+   symlink it into `sites-enabled` if not already, `nginx -t`,
+   `systemctl reload nginx`.
+3. `certbot --nginx -d api.petro-cchnug.com -d app.petro-cchnug.com -d admin.petro-cchnug.com`
+   (issues real TLS certs and rewrites the template's `listen 443`
+   lines in place).
+4. Tell a Claude session once `https://api.petro-cchnug.com/health`
+   answers `{"status":"ok","db":true}` from a real browser/phone --
+   that's the signal to run `set-backend-url.js` against the real
+   domain, rebuild both bundles, and push; the VPS's own `git pull` +
+   rebuild + `pm2 reload` (or the auto-deploy webhook, already wired)
+   picks it up from there, same as any other code change.

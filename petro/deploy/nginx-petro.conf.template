@@ -18,6 +18,15 @@
 # app.PETRO_DOMAIN   -> static files, petro/user/  (member app)
 # admin.PETRO_DOMAIN -> static files, petro/admin/ (admin panel)
 #
+# The two `root` paths below are /srv/petro-src/petro/user and
+# /srv/petro-src/petro/admin -- a real fix, not a guess: this template was
+# originally written assuming deploy.sh's rsync layout (PETRO_VPS_PATH,
+# default /srv/petro), but deploy.sh was never actually usable (a Claude
+# session cannot SSH out, see petro/CLAUDE.md's "Hosting" section) -- the
+# pipeline actually in use is the VPS pulling this repo itself via git, as a
+# sparse checkout of petro/* at /srv/petro-src/petro. If that checkout path
+# ever changes on the VPS, these two `root` lines must be updated to match.
+#
 # TLS: run `certbot --nginx -d api.PETRO_DOMAIN -d app.PETRO_DOMAIN -d admin.PETRO_DOMAIN`
 # after this file is in place and nginx has reloaded on port 80 -- certbot
 # rewrites the `listen 443`/`ssl_certificate` lines in place. The bare :80
@@ -86,7 +95,7 @@ server {
     listen [::]:443 ssl http2;
     server_name app.PETRO_DOMAIN;
 
-    root /srv/petro/user;
+    root /srv/petro-src/petro/user;
     index index.html;
 
     add_header X-Frame-Options "DENY" always;
@@ -128,7 +137,7 @@ server {
     listen [::]:443 ssl http2;
     server_name admin.PETRO_DOMAIN;
 
-    root /srv/petro/admin;
+    root /srv/petro-src/petro/admin;
     index index.html;
 
     add_header X-Frame-Options "DENY" always;
