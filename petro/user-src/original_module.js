@@ -3751,11 +3751,11 @@ function paintNetwork(){
     <div class="net-section-title">Invite</div>
   <div class="net-invite-line">
     <div><span>Invitation code</span><b class="mono">${esc(code || '—')}</b></div>
-    <button data-copy-group="net" onclick="copyText('${esc(code)}')" aria-label="Copy invitation code">${ICONS.copy}</button>
+    <button onclick="copyText('${esc(code)}')" aria-label="Copy invitation code">${ICONS.copy}</button>
   </div>
   <div class="net-invite-line">
     <div><span>Invitation link</span><b class="net-link">${esc(link || '—')}</b></div>
-    <button data-copy-group="net" onclick="copyText('${esc(link)}')" aria-label="Copy invitation link">${ICONS.copy}</button>
+    <button onclick="copyText('${esc(link)}')" aria-label="Copy invitation link">${ICONS.copy}</button>
   </div>
   </section>
 
@@ -5357,14 +5357,14 @@ function openDepositFormSheet(){
 
       <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Send to this address (TRC20 only)</span></div>
       <div class="dep-phone" style="height:auto;padding:12px 0;">
-        <span id="usdtAddrDisplay" style="word-break:break-all;font-size:12.5px;flex:1;">${esc(s.usdtWalletAddress || '')}</span>
+        <span id="usdtAddrDisplay" style="word-break:break-all;font-size:12.5px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;letter-spacing:.2px;flex:1;">${esc(s.usdtWalletAddress || '')}</span>
         <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtAddress()">Copy</button>
       </div>
       <div class="dep-hint">TRC20 (Tron) network only &mdash; any other network permanently loses the funds.</div>
 
       <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Transaction Hash (TXID)</span></div>
       <div class="dep-phone">
-        <input id="usdtTxid" type="text" placeholder="Paste your transaction hash">
+        <input id="usdtTxid" type="text" placeholder="Paste your transaction hash" style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;">
       </div>
 
       <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Submit USDT Payment</button>

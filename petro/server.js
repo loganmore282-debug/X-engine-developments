@@ -9813,8 +9813,42 @@ async function computeRealTotals() {
 async function recountAllTotals() {
   return withLock('totals-recount', async () => {
     const { totals, invested, checkinTimestamps, withdrawn } = await computeRealTotals();
-    let updated = 0, investedFixed = 0, streaksFixed = 0;
+    let updated = 0, investedFixed = 0, streaksFixed = 0, teamCountsFixed = 0;
     const usersSnap = await db.collection('users').limit(10000).get();
+
+    // Cheap in-memory pre-filter for teamL1/L2/L3Count, reusing usersSnap's
+    // own docs instead of paying for a second users query. childrenOf maps
+    // referrerId -> [childId,...] straight from every doc's own referredBy
+    // field, so L1/L2/L3 for any user in THIS snapshot can be derived by
+    // walking the map instead of re-querying -- same snapshot-then-
+    // live-reverify pattern as moneyLooksStale/streakLooksStale above: this
+    // is only ever used to decide WHETHER a user might be stale, never
+    // trusted as the value to write. A genuinely stale user gets its counts
+    // rebuilt fresh from the live referredBy chain via the already-existing
+    // recomputeTeamCounts() (subagent-audit-caught Finding #6, see its own
+    // comment above) -- reused rather than duplicated, so this and
+    // /admin/user/delete can never disagree about how a team count is
+    // derived.
+    const childrenOf = new Map();
+    for (const d of usersSnap.docs) {
+      const parent = d.data().referredBy;
+      if (!parent) continue;
+      if (!childrenOf.has(parent)) childrenOf.set(parent, []);
+      childrenOf.get(parent).push(d.id);
+    }
+    function snapshotTeamCounts(rootId) {
+      let ids = [rootId];
+      const counts = [0, 0, 0];
+      for (let level = 0; level < 3; level++) {
+        if (!ids.length) break;
+        const next = [];
+        for (const id of ids) next.push(...(childrenOf.get(id) || []));
+        counts[level] = next.length;
+        ids = next;
+      }
+      return counts;
+    }
+
     for (const doc of usersSnap.docs) {
       const row = totals[doc.id] || { deposited: 0, earned: 0 };
       const realInvestedSnapshot = invested[doc.id] || 0;
@@ -9897,9 +9931,30 @@ async function recountAllTotals() {
         });
       }
 
-      if (moneyWrote || wroteStreak) { updated++; if (investedChanged) investedFixed++; if (wroteStreak) streaksFixed++; }
+      // Team counts -- see snapshotTeamCounts()'s own comment above for why
+      // this is a pre-filter, not the write itself. u (this user's doc data,
+      // read at the top of this loop iteration) is stale by the time we get
+      // here in exactly the same sense moneyLooksStale/streakLooksStale
+      // already tolerate -- recomputeTeamCounts() re-derives from the live
+      // referredBy chain, not from usersSnap, so a live signup/deletion
+      // landing mid-run can only ever be caught fresh, never baked over.
+      const [snapL1, snapL2, snapL3] = snapshotTeamCounts(doc.id);
+      const teamCountsLookStale = (u.teamL1Count || 0) !== snapL1 ||
+        (u.teamL2Count || 0) !== snapL2 || (u.teamL3Count || 0) !== snapL3;
+      let wroteTeamCounts = false;
+      if (teamCountsLookStale) {
+        await recomputeTeamCounts(doc.id);
+        wroteTeamCounts = true;
+      }
+
+      if (moneyWrote || wroteStreak || wroteTeamCounts) {
+        updated++;
+        if (investedChanged) investedFixed++;
+        if (wroteStreak) streaksFixed++;
+        if (wroteTeamCounts) teamCountsFixed++;
+      }
     }
-    return { ok: true, updated, investedFixed, streaksFixed };
+    return { ok: true, updated, investedFixed, streaksFixed, teamCountsFixed };
   });
 }
 app.get('/admin/users/recount', async (req, res) => {

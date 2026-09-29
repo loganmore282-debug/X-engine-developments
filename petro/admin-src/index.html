@@ -1400,7 +1400,7 @@ async function renderUsers(){
       // though this request gave up waiting.
       const timedOut = d.status !== 'success' && /waking up/i.test(d.message || '');
       b.disabled=false; b.textContent='Recalculate totals';
-      toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)${d.streaksFixed?`, ${d.streaksFixed} check-in streak(s) corrected`:''}${d.investedFixed?`, ${d.investedFixed} invested total(s) corrected`:''}`:(timedOut?'This request timed out waiting -- it may still be running server-side (this scan reads every transaction/investment/user, which can genuinely take a while). Check back in a minute before retrying.':(d.message||'Failed')), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)${d.streaksFixed?`, ${d.streaksFixed} check-in streak(s) corrected`:''}${d.investedFixed?`, ${d.investedFixed} invested total(s) corrected`:''}${d.teamCountsFixed?`, ${d.teamCountsFixed} team count(s) corrected`:''}`:(timedOut?'This request timed out waiting -- it may still be running server-side (this scan reads every transaction/investment/user, which can genuinely take a while). Check back in a minute before retrying.':(d.message||'Failed')), d.status==='success'?'ok':'err');
       renderUsers();
     });
     $('auditBtn').addEventListener('click', async()=>{

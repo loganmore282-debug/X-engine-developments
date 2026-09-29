@@ -5487,3 +5487,193 @@ Channel" with zero page errors; a direct grep of the built
 `user/index.html` confirms zero remaining `og:title`/`og:description`/
 `og:type`/`og:site_name`/`twitter:title`/`twitter:description`/
 `twitter:card` occurrences. `user/sw.js` bumped `v218` → `v219`.
+
+## Follow-up 36 -- app-icon-removal explained (platform limit), a real double-copy bug fixed, team counts now self-heal, gift-code/TRC20/DB-speed audited
+
+Owner, one message, several asks: why does the app icon still show
+after being deleted/removed in admin; why does copying a link also
+flash the referral code as copied; make sure team percentages work
+perfectly with no losses of members; referral codes/routes/chains
+should be "globally recognized"; gift codes should be unguessable;
+TRC20 should be well-defined to prevent copying errors; everything
+should read/write fast from the database given the VPS's power.
+
+**"Why does the app icon still show after I delete/remove it" -- same
+platform limit as the app-name issue, not a server bug.** Read
+`serveBrandAsset()`/`getBrandAsset()`/`bundledBrandAsset()` and
+`/admin/app-icon/clear` end to end: the ETag is version-keyed, the
+in-process cache is correctly invalidated the instant Clear is called,
+and the very next request for `/public/app-icon-*.png` genuinely
+serves the fallback bundled icon, not a stale cached one -- confirmed
+by reading the invalidation logic directly, not assumed. The icon that
+"never goes away" is the one already on a member's home screen: same
+as `user/sw.js`'s own documented limit for the app NAME (see Follow-up
+35 above), Android bakes an installed PWA's icon into its WebAPK at
+install time, and neither the OS nor Chrome re-reads
+`/public/app-icon-*.png` for an icon that's already on the home
+screen. Clearing the icon in admin is correctly reflected for
+everyone installing fresh from that point on, and for anyone who
+reopens the app in a normal browser tab (not an installed icon) -- an
+already-installed icon needs an uninstall+reinstall to pick up a
+change, the same tradeoff already documented and accepted for the
+brand name.
+
+**Real bug, already found and fixed this round: copying the referral
+LINK also visually flashed the referral CODE as copied.** Root cause:
+`paintNetwork()`'s invitation-code and invitation-link copy buttons
+both carried `data-copy-group="net"`, a mechanism
+(`flashCopied()`/`flashCopiedOne()`) built specifically for the case
+where two controls copy the SAME text (e.g. an icon button and a
+labelled button both copying one value) -- grouping them means tapping
+either one visually confirms both. Here the two buttons copy TWO
+DIFFERENT values (the code, and a full URL containing that code), so
+sharing a group made tapping Copy on the link also flash the code
+button green as if it too had just been copied -- exactly the "double
+action" reported. Fixed by removing `data-copy-group="net"` from both
+buttons in `user-src/original_module.js` -- each now flashes only
+itself. Verified live in headless Chromium against the real built
+bundle: the Network page's two copy buttons render with distinct
+`aria-label`s and neither carries a `data-copy-group` attribute
+anywhere in the rendered markup.
+
+**Team counts now self-heal -- closes a real gap, not a reported bug.**
+`/team/stats` reads denormalized `teamL1Count`/`teamL2Count`/
+`teamL3Count` counters on the user doc, kept live by atomic increments
+at registration time (deliberately ordered AFTER the new member's own
+doc write, so a crash can only under-count, never double-count -- see
+that code's own comment). `recomputeTeamCounts(rootId)` already existed
+as a correct, fresh-from-the-real-`referredBy`-chain recomputation, but
+was wired ONLY to `/admin/user/delete` -- there was no platform-wide
+tool to catch and repair a counter that drifted any other way (a
+missed increment on some other edge case, manual DB surgery, etc.),
+unlike money totals and check-in streaks, which `recountAllTotals()`
+(the "Recalculate totals" admin button) already rebuilds from source
+on every run. This is the literal "no losses of members" the owner
+asked to be sure of -- a drifted counter doesn't lose a referral
+relationship (the real source of truth, `referredBy`, is untouched),
+but it would silently under- or over-report team size and, since
+`/team/stats` also reads commission-rate settings alongside these
+counts, could read as if downline members had vanished.
+
+Extended `recountAllTotals()` to also verify and repair team counts,
+reusing `recomputeTeamCounts()` rather than duplicating its logic:
+- Builds an in-memory `childrenOf` map (referrerId -> child ids)
+  straight from the SAME `usersSnap.docs` array the function already
+  fetches for its money-totals pass -- no second `users` query needed.
+- `snapshotTeamCounts(rootId)` walks that map 3 levels to produce a
+  cheap, snapshot-based L1/L2/L3 figure per user -- used ONLY as a
+  pre-filter to decide whether a user's stored counts look stale,
+  exactly the same "trust the snapshot only to decide whether to
+  re-check, never as the value to write" pattern this same function
+  already uses for money totals and check-in streaks.
+- Any user whose stored counts disagree with the snapshot gets
+  `recomputeTeamCounts(doc.id)` called for real -- which re-reads the
+  LIVE `referredBy` chain from the database, not the snapshot, so a
+  registration or deletion landing mid-run is still handled correctly
+  rather than baked over.
+- Return value gained `teamCountsFixed`; the admin panel's
+  "Recalculate totals" success toast now reports it alongside the
+  existing check-in-streak/invested-total counts.
+- Verified the snapshot-walk logic in isolation with a standalone
+  script (a synthetic 4-level referral tree: confirmed a root's L1/L2/L3
+  stop exactly at 3 levels and don't leak a 4th-level descendant into
+  L3, confirmed a leaf with no downline reads all-zero, confirmed an
+  id absent from the snapshot entirely returns all-zero rather than
+  throwing) before trusting it against the real, much larger function.
+
+**Referral codes/routes/chains "globally recognized" -- already true,
+confirmed by reading the code, not guessed at.** Read as: does a
+referral code/link work correctly regardless of which entry point or
+device it's opened from, not tied to one host or an old link format.
+Confirmed yes, already: `findUserByReferralCode()` matches
+case-insensitively via a dedicated `referralCodeLower` field (so at
+most one account can ever answer to a given spelling, per its own
+established uniqueness guarantee); `captureReferralFromUrl()` accepts
+THREE historical URL shapes (`?ref=`, `?refCode=`, and the current
+`?code=` from Follow-up 31's `/share.html` format) so a link shared
+months ago still works exactly as well as one copied today; `share.html`
+is a byte-identical duplicate of `index.html` (`build-core.js` writes
+both from the same build), so opening a referral link never lands on a
+different, out-of-date copy of the app. The L1/L2/L3 chain itself is
+walked fresh from the real `referredBy` field by `recomputeTeamCounts()`
+(now reachable both from `/admin/user/delete` and the recount tool
+above) -- there is no cached or region-specific copy of the chain
+anywhere to fall out of sync. No code change was needed here; this was
+a verification, not a fix.
+
+**Gift codes -- already cryptographically unguessable, confirmed by
+reading the generator, not assumed.** `genGiftCode()` draws from a
+32-character unambiguous alphabet (no 0/O/1/l/I) via `crypto.randomInt`
+(Node's CSPRNG, not `Math.random()`), 12 meaningful characters --
+32^12 is roughly 1.15 x 10^18 possible codes, dash-grouped
+`XXXX-XXXX-XXXX` purely for human readability, not reduced entropy.
+`/redeem`'s lookup is a length/whitelist-checked, case-normalized
+exact match against a unique-indexed field -- there is no guessing
+surface to brute-force even ignoring the alphabet size (a would-be
+attacker gets one wrong answer per request, rate-limited same as every
+other endpoint). No change needed; reported to the owner as already
+solid rather than treated as a gap to "fix."
+
+**TRC20 (USDT) copying accuracy -- one real, small display gap found
+and closed.** The actual money-safety side was already correct:
+`/deposit/usdt/submit` validates the TXID against a strict
+`^[a-f0-9]{60,66}$` hex pattern server-side before it's ever used as a
+lookup key, and the deposit wallet address the admin sets is validated
+as a real TRC20 shape (`T` + 33 base58 characters) before it can be
+saved -- a typo can't even be published to members in the first place.
+Client-side, the Copy button (`copyUsdtAddress()`) already copies the
+address's full `textContent` with no truncation. What WAS a real gap:
+the address and TXID fields rendered in the app's ordinary UI font
+(Inter, proportional-width) at a small 12.5px size -- the industry-
+standard convention for any value a member might need to visually
+double-check character-by-character (a crypto address, a hash) is a
+monospaced font specifically because it makes every character occupy
+the same width, reducing the chance of misreading a run of similar
+glyphs. Added a monospace font stack
+(`SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace`) to
+both `#usdtAddrDisplay` and the `#usdtTxid` input in `user-src/
+original_module.js` -- purely a readability change, no validation
+logic touched. Verified live in headless Chromium against the real
+built bundle: both elements' `getComputedStyle().fontFamily` resolves
+to the new monospace stack, with zero page errors.
+
+**"Everything should read/write fast from the database, we're on a
+powerful VPS" -- answered honestly, consistent with every prior round
+that asked the identical question (Follow-up 11, 16, 28), not treated
+as an invitation to invent new performance work.** This exact ask has
+already been audited three separate times this project's history:
+`db.js`'s connection pool is tuned (`maxPoolSize:50`, warm
+`minPoolSize:3`), every hot query has a matching compound/unique
+index (`ensureIndexes()`, ~30+ specs, including the `users.phone`
+index Follow-up 16 found and added after a real audit), webhooks ack
+the sender before touching the database, and the client already does
+instant cache-hit painting plus parallel prefetch on boot. This
+round's own new work (`recountAllTotals()`'s team-count extension) was
+built specifically to respect that standard: it reuses the SAME
+`usersSnap.docs` array the function already fetches rather than
+issuing a second `users` query, and only calls the real,
+DB-hitting `recomputeTeamCounts()` for a user whose in-memory
+pre-filter actually looks stale -- not for all 10,000 possible users
+on every run. No further speculative changes were made without a
+concrete slow path to point at, the same posture Follow-up 11 already
+explained to the owner and that held up under later, more specific
+reports (which each turned out to be real, separate, fixable bugs --
+Follow-up 16's missing index, Follow-up 28's serial-not-parallel
+statement-PDF reads -- rather than the database layer itself being
+slow).
+
+**Verified**: `node --check server.js`, `node -c user-src/
+original_module.js`, `node build-core.js` + `node build-admin.js`
+(both round-trip OK -- ran twice, the second time after the USDT
+monospace-font edit landed on top of the already-verified team-count/
+copy-group changes, so the shipped bundle reflects every edit in this
+round). `npm run test:audit` passes in full (163 checks, exit 0).
+The `snapshotTeamCounts()` pre-filter logic was verified in isolation
+with a standalone Node script against a synthetic multi-level referral
+tree before being trusted inside the much larger `recountAllTotals()`.
+Live in headless Chromium against the real built `user/index.html`:
+the Network page's copy buttons render correctly with no shared
+`data-copy-group`, and the USDT panel's address/TXID fields compute
+the new monospace font, with zero page errors in either check.
+`user/sw.js` bumped `v219` → `v220`, `admin/sw.js` bumped `v56` →
+`v57` (both source files this round's own changes touched).
