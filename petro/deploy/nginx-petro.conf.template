@@ -109,6 +109,32 @@ server_tokens off;
 limit_req_zone $binary_remote_addr zone=petro_api:10m rate=20r/s;
 limit_req_zone $binary_remote_addr zone=petro_admin_login:10m rate=1r/s;
 
+# ── TLS hardening ────────────────────────────────────────────────────────
+# certbot's own `--nginx` installer normally injects `include
+# /etc/letsencrypt/options-ssl-nginx.conf;` + `ssl_dhparam` into every
+# server block it edits -- this project does NOT use that installer path
+# (see petro/CLAUDE.md, Follow-up 32/34: the cert lines are inserted by
+# hand into each `listen 443` block, since certbot's installer failed to
+# find a matching server block the first time this domain was cut over,
+# and the fix was to wire the certificate in manually rather than re-run
+# it). That means the modern-protocol/cipher/session defaults certbot's
+# installer would otherwise have supplied were never actually set anywhere
+# here -- a real gap, not a style choice. Set once at this file's own top
+# level (already proven to run in `http` context, same as `server_tokens
+# off;`/`limit_req_zone` above -- nginx.conf includes sites-enabled/*
+# straight inside `http{}`), so every `listen ... ssl` block below picks
+# it up without repeating it three times.
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers off;
+ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+ssl_session_cache shared:PetroSSL:10m;
+ssl_session_timeout 1d;
+# Off, not just unset -- session TICKETS (distinct from the session CACHE
+# above) trade forward secrecy for a faster resume, and nginx's own ticket
+# key rotates only on a reload/restart. This box reloads rarely enough
+# that the tradeoff isn't worth it here.
+ssl_session_tickets off;
+
 server {
     listen 80;
     listen [::]:80;

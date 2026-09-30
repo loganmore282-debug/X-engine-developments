@@ -3769,16 +3769,12 @@ function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
   const box = $('teamMembersBox');
   if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">No members at this level yet.</div>'; return; }
-  // Member card layout per Team.dc.html: avatar, masked phone, amount on the
-  // right, join date and a "Total Purchase" footer line.
-  //
-  // Owner: "why the logo is empty?" -- because it was. Team.dc.html draws
-  // these avatars as bare gradient discs and that is what got built: a
-  // <div class="avatar"> with a background and no content at all. Every member
-  // is deliberately anonymous here (the name is the literal "User" and the
-  // phone is masked, so one member cannot harvest another's number), so there
-  // is no per-person image to put in it and an empty disc just reads as a
-  // picture that failed to load.
+  // Owner: "a profile logo like one uploaded from admin, number and active
+  // or inactive nothing else to put" -- a deliberate strip-down of the
+  // richer Team.dc.html mockup card (amount/joined-date/footer) this list
+  // used to carry. Every member is still deliberately anonymous (the phone
+  // is masked, so one member cannot harvest another's number) -- only what
+  // was actually asked for renders now.
   //
   // Same chain as the Account profile card, so uploading a Brand logo once
   // lands here too: the uploaded logo, else the wordmark. The alternating
@@ -3790,20 +3786,9 @@ function renderTeamMembers(level){
   <div class="team-member">
     <div class="top">
       <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#ffb000,#e30613)' : 'var(--petro-grad)'};">${avatar}</div>
-      <div style="min-width:0;">
-        <div class="name">User</div>
-        <div class="phone mono">${esc(maskPhone(m.phone))}</div>
-      </div>
-      <div class="amt3 mono">${fmtUGXCents(m.invested || 0)}</div>
+      <div class="phone mono">${esc(maskPhone(m.phone))}</div>
+      <span class="status-pill ${m.active ? 'active' : 'inactive'}">${m.active ? 'Active' : 'Inactive'}</span>
     </div>
-    <!-- ONE "Joined", and joinedStamp() no longer carries its own, so the
-         literal belongs here. The doubled "Joined Joined 1 day ago" came from
-         the old timeAgo() returning a prefixed string AND this line adding
-         another. The fallback keeps the word so a member with no recorded
-         timestamp still reads as a sentence rather than a bare dash. -->
-    <div class="joined">Joined ${esc(joinedStamp(m.createdAt) || 'recently')}</div>
-    <div class="ln2"></div>
-    <div class="foot">Total Purchase</div>
   </div>`).join('') + '</div>';
 }
 

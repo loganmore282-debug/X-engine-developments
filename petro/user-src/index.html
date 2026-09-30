@@ -781,6 +781,10 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
      side margin   32 dev  =  17.3 CSS   (ours 18 -- unchanged) */
 .team-member{background:var(--snow-surface);border:1px solid #dceadd;border-radius:var(--r-card);padding:16px;margin-bottom:15px;
   box-shadow:0 6px 24px rgba(74,170,108,.34),0 2px 8px rgba(74,170,108,.20);}
+/* Owner: "a profile logo like one uploaded from admin, number and active or
+   inactive nothing else to put" -- avatar, phone, status pill, one row, no
+   card content beneath it. Replaces the earlier mockup-matched card (amount/
+   joined-date/footer, with its own measured-ink-height sizing) entirely. */
 .team-member .top{display:flex;align-items:center;gap:12px;}
 /* The disc holds a mark now (owner: "why the logo is empty?"), so it needs to
    centre one. Mirrors .acct-logo's rules at 44px instead of 68px: cover for an
@@ -790,35 +794,9 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .team-member .avatar img{width:100%;height:100%;object-fit:cover;display:block;}
 .team-member .avatar span{color:#fff;font-weight:800;letter-spacing:.04em;line-height:1;}
-/* Text sizes derived from INK HEIGHTS, not guessed. Each of his blocks was
-   measured, then converted with this app's own measured cap-to-font ratio for
-   that same element (same font family, so the ratio transfers) -- and only
-   where the two strings share a glyph class, since an ink height that includes
-   an ascender or descender is not comparable to one that does not.
-
-     element   his ink   our ink @ our size   -> his size   ours now
-     .name       10.8      10 @ 15px             16.2         16
-     .phone       8.1       9 @ 12px             10.8         11
-     .amt3       13.0      12 @ 16px             17.3         17
-     .foot        8.1       8 @ 11px             11.1         11 (unchanged)
-
-   .joined is deliberately absent: his string and ours were different, so ink
-   height could not compare them. It is set by WIDTH instead, now that both
-   render the same "Joined 07/09/2026 01:21" -- his measures 123.0 CSS wide. */
-.team-member .name{font-weight:600;font-size:16px;}
-.team-member .phone{font-size:11px;color:var(--snow-muted);font-weight:500;}
-.team-member .amt3{margin-left:auto;font-size:17px;font-weight:700;color:var(--snow-wine);}
-/* 11px stays: measured by WIDTH, not ink height, now that his string and ours
-   are the same. His "Joined 07/09/2026 01:21" runs 123.0 CSS wide; ours at
-   11px measures 121.1, inside 2%. Ink height could not have settled this --
-   the old text had descenders his has none of.
-
-   The bottom margin is 12, not 8, and it is the whole 3px the card was short:
-   his divider sits 94.8 CSS below the card top and ours sat at 91. With 12 it
-   lands at 95, the footer line at 104, and the card at 132 against his 131.6. */
-.team-member .joined{font-size:11px;color:var(--snow-muted);font-weight:500;margin:10px 0 12px;}
-.team-member .ln2{height:1px;background:var(--snow-border);margin-bottom:8px;}
-.team-member .foot{font-size:11px;color:var(--snow-muted);font-weight:500;}
+.team-member .phone{font-size:15px;font-weight:600;color:var(--snow-ink);flex:1;min-width:0;}
+.team-member .status-pill{margin-left:auto;flex-shrink:0;}
+.status-pill.inactive{background:var(--snow-neutral-soft);color:var(--snow-muted);border:1px solid var(--line-soft);font-weight:600;}
 
 /* Team.dc.html's level switcher: three separate pills, the active one filled
    with the brand gradient and its own 3D shelf -- not the soft segmented

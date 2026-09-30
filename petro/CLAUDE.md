@@ -6795,3 +6795,129 @@ commits to reconcile. No `-src` file was touched this round (pure
 `server.js`), so no rebuild or `sw.js`/`admin/sw.js` bump is needed -- it
 reaches the VPS the normal way, via `git pull` + `pm2 reload` (or the
 auto-deploy webhook, already wired).
+
+## Follow-up 51 -- All Referrals list stripped down to logo/number/status; TLS hardening added; SSH/auth security audited
+
+Owner, after confirming the referral-list layout was inherited Chipz
+structure (recolored, not redesigned): *"I don't like the layout, so remove
+it so it will just look like this: a profile logo like one uploaded from
+admin, number and active or inactive nothing else to put, also protect the
+ssh, HTTPS encryption and secure authentication."* Two separate asks.
+
+**All Referrals row layout, cut to exactly what was named.**
+`renderTeamMembers()` (`user-src/original_module.js`, backs
+`openAllReferralsSheet()`'s "All Referrals" sheet -- the screen in the
+owner's own screenshot) used to render a Team.dc.html mockup-matched card:
+avatar, the literal name "User", masked phone, an invested-amount figure,
+a join date, and a "Total Purchase" footer line -- several rounds of
+careful ink-height-measured CSS behind it (see its own removed comment
+block), all inherited Chipz-derived structure, never asked for on this
+screen. Cut to three things, one row:
+- **Avatar** -- unchanged: the same admin-uploaded Brand logo
+  (`STATE.brandLogo`) every other avatar in this app already shows, alternating
+  red/gold gradient backdrop.
+- **Number** -- the same masked phone (`maskPhone()`) already shown, now the
+  row's main content instead of a small caption under a fake name.
+- **Active or Inactive** -- new, real data, not previously computed
+  anywhere. `GET /team/members` (`server.js`) now runs one extra query
+  against the `investments` collection (`userId in <this level's member
+  ids>, status:'active'`) and stamps `active:true/false` onto each member
+  row -- whether that downline member currently has a live investment
+  running, the one status meaning a referrer actually cares about (an
+  inactive member is paying no ongoing commission). Reuses the existing,
+  already-in-the-file `.status-pill`/`.status-pill.active` styling
+  (dormant since the old Balance Record screen's status pills were removed
+  in an earlier round) rather than inventing a new pill component, plus a
+  new `.status-pill.inactive` modifier.
+- The name/amount/joined/footer markup, and their whole measured-ink-
+  height CSS block, are deleted outright, not hidden -- the owner said
+  "remove it," matching this file's own standing "actually remove it, not
+  just hide the UI" convention for a genuine feature reversal.
+- `joinedStamp()` is left defined but now has zero live callers -- same
+  "leave the small dormant helper, remove only the entry point" precedent
+  this file has followed for Turntable/subdomains/Trade Password/etc.,
+  not worth deleting a working date-formatter that might be wanted again.
+
+**Verified, not assumed**: `node -c`/`node --check` clean, `build-core.js`
+round-trip OK, `npm run test:audit` passes in full (163 checks). Live in
+headless Chromium against the real built `user/index.html`: called
+`renderTeamMembers(1)` directly against two mock members (one active, one
+not) and confirmed the rendered markup has zero `.name`/`.amt3`/`.joined`/
+`.foot` elements, the phone renders masked, and the pill reads exactly
+"Active"/"Inactive" with the right class on each -- zero page errors.
+`user/sw.js` bumped `v230` → `v231`.
+
+**HTTPS encryption -- one real, found gap fixed; SSH and authentication
+audited, both already solid.** Checked each of the three things named,
+not assumed:
+
+- **TLS/HTTPS**: real gap. `deploy/nginx-petro.conf.template` already
+  runs HTTPS with HSTS (`includeSubDomains`) on every subdomain (Follow-up
+  32-34), but had never set `ssl_protocols`/`ssl_ciphers`/session-cache
+  settings anywhere -- because this project's cert wiring is manual (the
+  `ssl_certificate`/`ssl_certificate_key` lines are inserted by hand into
+  each `listen 443` block, per Follow-up 32/34's own notes on why certbot's
+  `--nginx` installer step was bypassed), the modern-protocol/cipher
+  defaults certbot's installer would normally have injected alongside those
+  lines were simply never added. Fixed: `ssl_protocols TLSv1.2 TLSv1.3;`
+  (drops the legacy TLS 1.0/1.1 nginx's own compiled defaults would
+  otherwise still allow), a modern AEAD-only cipher list (all
+  ECDHE-*-GCM/CHACHA20, forward-secret, no CBC/RC4/3DES), `ssl_session_cache`/
+  `ssl_session_timeout` (fast resume without a second handshake), and
+  `ssl_session_tickets off` (session tickets trade away forward secrecy for
+  a faster resume via a key nginx only rotates on reload -- not worth it on
+  a box that reloads rarely). Set once at the file's own top level (proven
+  to run in `http` context already, same as the existing `server_tokens
+  off;`), so all three `listen ... ssl` blocks pick it up without repeating
+  it. Verified with a real local `nginx -t` against the rendered template
+  (self-signed throwaway cert, same method as Follow-up 42's own
+  verification) -- "syntax is ok"; the only failure reported afterward is
+  this sandbox's own lack of IPv6 (`socket() [::]:80 failed`), confirmed
+  unrelated by it failing identically against the pre-existing template too.
+
+- **SSH**: audited what a Claude session can check (this app's own code)
+  and found nothing to change there -- SSH itself is VPS/OS configuration
+  outside this repo, and (per this file's own standing "Hosting" section)
+  a Claude session cannot reach the VPS at all, so there's nothing here to
+  push. Told the owner plainly what real SSH hardening looks like, to run
+  themselves via Termux, since guessing at OS-level changes on a live box
+  from outside it is exactly the kind of thing this file's history warns
+  against: disable password authentication in `/etc/ssh/sshd_config`
+  (`PasswordAuthentication no`, key-only login -- the owner's Termux client
+  already authenticates however it currently does; if that's still a
+  password, switching to an SSH keypair first is the actual prerequisite),
+  disable root login over SSH if a non-root sudo user exists
+  (`PermitRootLogin no`), and `fail2ban` (`apt install fail2ban`, its
+  default `sshd` jail already covers repeated failed logins) for the same
+  "lock out a brute-force source" protection `loginLocked()` already gives
+  the admin panel, at the OS level instead of the app level. None of this
+  is a code change in this repo, so nothing was pushed for it -- flagged as
+  real work with real commands, not silently skipped.
+
+- **Secure authentication**: re-checked rather than assumed still current,
+  since the last full pass was Follow-up 33/35. Confirmed unchanged and
+  still solid: Firebase handles real member sign-in (Google's own
+  infrastructure, not this app's to harden further); passwords/PINs are
+  `scrypt`-hashed (`scryptHash`/`scryptVerify`), never stored or logged in
+  plaintext; `/admin/login` uses constant-time key comparison
+  (`crypto.timingSafeEqual`) plus a dummy-hash timing trick so a failed
+  attempt can't be used to enumerate real usernames, backed by TWO
+  independent lockout mechanisms (`express-rate-limit` at 8/min, and a
+  separate `loginLocked()`/`recordLoginFail()` window) -- now ALSO backed
+  by nginx's own `petro_admin_login` rate-limit zone ahead of Node (Follow-up
+  33). No gap found; nothing changed here.
+
+**Verified**: `node --check server.js` clean (the `/team/members` change),
+`npm run test:audit` passes in full (163 checks, exit 0) after every edit
+in this round. `git fetch` before pushing showed no concurrent commits.
+
+**Still needs the owner's own hands, all on the VPS side**: the nginx TLS
+hardening reaches the live box the usual way --
+```
+sed 's/PETRO_DOMAIN/petro-cchnug.com/g' /srv/petro-src/petro/deploy/nginx-petro.conf.template > /etc/nginx/sites-available/petro
+```
+then re-insert the `ssl_certificate`/`ssl_certificate_key` lines this
+regeneration always wipes (Follow-up 34's combined-command fix for that
+exact gotcha), `nginx -t && systemctl reload nginx`. The SSH-hardening
+commands above are a separate, one-time task, not tied to this deploy --
+they don't need a `git pull`, just running directly on the VPS.

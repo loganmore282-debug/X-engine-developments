@@ -3109,6 +3109,19 @@ app.get('/team/members', async (req, res) => {
       members = rows;
       parentIds = nextIds;
     }
+    // "active"/"inactive" per member, for the All Referrals list -- whether
+    // this downline member currently has a live investment running, the
+    // one status a referrer actually cares about (an inactive member pays
+    // no ongoing commission). One extra query against the target level's
+    // own ids only, never per intermediate level.
+    if (members.length) {
+      const activeSnap = await db.collection('investments')
+        .where('userId', 'in', members.map(m => m.id))
+        .where('status', '==', 'active').get();
+      const activeIds = new Set();
+      activeSnap.forEach(d => activeIds.add(d.data().userId));
+      members = members.map(m => ({ ...m, active: activeIds.has(m.id) }));
+    }
     res.json({ status: 'success', level, members });
   } catch (e) {
     console.error('Team members error:', e.message);
