@@ -155,8 +155,11 @@ app.use('/admin/', async (req, _res, next) => {
 // requests, slow down" message convention every other limiter in this
 // file already uses -- never anything reading as a ban, which is exactly
 // what express-rate-limit's own window-based 429 already is: it clears
-// itself after windowMs, not a persistent block.
-const otpSendLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+// itself after windowMs, not a persistent block. Owner follow-up: window
+// widened from 1 minute to 5 -- same 10-request cap, just spread over a
+// longer stretch, so 10 sends can no longer be burned in the first minute
+// and then sit fully open for the rest of a longer session.
+const otpSendLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Please wait a moment and try again.' } });
 app.use('/auth/otp/send', otpSendLimiter);
 

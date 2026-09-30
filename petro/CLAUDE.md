@@ -6667,3 +6667,14 @@ the window elapses the route accepts requests again -- confirming it is
 genuinely temporary. No `-src` file touched this round, so no rebuild or
 `sw.js` bump was needed -- reaches the VPS the normal way, via `git pull` +
 `pm2 reload` (or the auto-deploy webhook, already wired).
+
+**Follow-up 49b, same round, owner correction**: *"let it be in 5 minutes
+not 1 min."* `otpSendLimiter`'s `windowMs` widened `60 * 1000` -> `5 * 60 *
+1000`, cap unchanged at 10. Same effect as before, just spread over a
+longer stretch -- 10 real SMS sends can no longer be burned in the first
+minute and then leave the rest of a longer session fully open; a source
+genuinely trying to run up the bill has to wait out a 5-minute window
+between every batch of 10, not just one. `node --check server.js` clean,
+`npm run test:audit` passes in full (163 checks). Confirmed the literal
+`windowMs` expression evaluates to `300000` (5 minutes) rather than
+re-reading it by eye. No `-src` file touched, no rebuild/sw.js bump needed.
