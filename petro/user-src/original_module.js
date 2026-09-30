@@ -2883,8 +2883,8 @@ function updateNavIcons(){
 //
 // A NOTE ON FIREBASE LISTENERS, because he asked for those by name: they are
 // not available to this data. Firebase here is Auth only -- who you are. Every
-// figure in the app (balances, plans, records, team, messages) lives in MongoDB
-// behind petro-server, so there is no Firestore document to attach onSnapshot
+// figure in the app (balances, plans, records, team, messages, settings) lives
+// in MongoDB behind petro-server, so there is no Firestore document to attach onSnapshot
 // to. The equivalent behaviour without rebuilding the backend is this: a short
 // poll that repaints IN PLACE. Nothing reloads, nothing navigates, and the
 // member cannot tell the difference. (A genuine server push would be SSE from
@@ -2911,6 +2911,8 @@ var _liveTimer = null, _liveBusy = false, _liveDelay = 0, _liveSigs = {}, _liveG
 var LIVE_MS = 5000, LIVE_MAX_MS = 60000;
 // Team stats get their own, slower beat -- see the note at their fetch.
 var LIVE_TEAM_MS = 30000, _liveTeamAt = 0;
+// Settings get their own slower beat too -- see the note at their fetch.
+var LIVE_SETTINGS_MS = 30000, _liveSettingsAt = 0;
 // Tunable from the backend without shipping an app build. Floored at 2s: below
 // that the phone spends more time on radio wake-ups than on anything a member
 // would notice.
@@ -2929,7 +2931,7 @@ function liveChanged(key, value){
 function stopLiveRefresh(){
   _liveGen++;
   clearTimeout(_liveTimer); _liveTimer = null; _liveBusy = false;
-  _liveDelay = 0; _liveSigs = {}; _liveTeamAt = 0;
+  _liveDelay = 0; _liveSigs = {}; _liveTeamAt = 0; _liveSettingsAt = 0;
 }
 function scheduleLive(gen, ms){
   clearTimeout(_liveTimer);
@@ -2973,6 +2975,32 @@ async function liveRefreshVisible(){
       patchHomeBalances();
     }
   } else ok = false;
+
+  // Owner: "the app still serves the old data, so can't you make when it
+  // loads up without even reloading or restarting app." Settings (fees,
+  // minimums, brand name, the announcement, support contacts, the OTP
+  // toggle, product availability flags, and everything else an admin can
+  // change) were never part of this loop at all -- STATE.settings was
+  // fetched once at boot and held forever, so an admin change only ever
+  // reached an already-open session after a manual reload. Its own slower
+  // beat, like team stats right below: these change rarely (an admin
+  // action), not every few seconds, and every sheet that actually reads a
+  // setting (Deposit, Withdraw, Wallet, ...) already re-reads
+  // STATE.settings fresh at the moment it opens -- so simply keeping this
+  // object current is enough to fix them, no repaint needed there. Brand
+  // name is the one thing shown continuously on screen, so that alone gets
+  // a targeted patch, same non-disruptive pattern as patchHomeBalances()
+  // above -- never a full re-render, which would reset scroll position and
+  // read as the reload he does not want.
+  if (Date.now() - _liveSettingsAt >= LIVE_SETTINGS_MS) {
+    _liveSettingsAt = Date.now();
+    const sr = await api('/public/settings');
+    if (sr.status === 'success') {
+      const changed = liveChanged('settings', sr.settings);
+      STATE.settings = sr.settings || {};
+      if (changed) applyBrandName();
+    } else { _liveSettingsAt = 0; ok = false; }
+  }
 
   // An open sheet is what the member is actually looking at, so it wins over
   // the page behind it.

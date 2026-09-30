@@ -6469,3 +6469,67 @@ zero page errors; the Deposit sheet's own `_openSheetTitle` reads
 earlier admin rounds): the tab bar and the Rates & Limits section both
 render the new words with zero trace of the old ones, zero page errors.
 `user/sw.js` bumped `v227` → `v228`, `admin/sw.js` bumped `v58` → `v59`.
+
+## Follow-up 47 -- the real fix for "still serves the old data": settings were never part of the live-refresh loop
+
+Owner, following up on the earlier pull-to-refresh conversation (that gesture
+stays intentionally blocked, per the overscroll-bounce fix and the owner's
+own "leave it as is" choice a few rounds back): *"give your update of not
+pulling up to down to reload, the app still serves the old data, so can't
+you make when it loads up without even reloading or restarting app."* Read
+as: forget the gesture itself -- the real ask is that an already-open
+session should pick up fresh data on its own, no pull, no manual reload, no
+app restart.
+
+**That mechanism already exists and is more capable than it looked at first
+glance.** `liveRefreshVisible()` (built in an earlier round, see its own
+long comment starting "Owner: 'make sure that the app always listens to
+every content and updates quickly without reloads'") already polls and
+in-place-patches the wallet balance on every tick regardless of screen, plus
+Home's plan list, the Assets page, Network's team stats, an open Transaction
+Statement, and an open Messages sheet -- and already resumes at once
+(`scheduleLive(gen, 0)`) the instant the tab/app becomes visible again via
+`document.addEventListener('visibilitychange', ...)`, specifically so
+"coming back to the app shows fresh figures at once rather than after a
+wait." None of that was broken.
+
+**The real, found gap: `STATE.settings` was never in that loop at all.**
+It's fetched once at boot (`loadAuthSettings()` for the auth screen,
+`bootFromNetwork()`/`enterApp()` for a logged-in session) and then held in
+memory for the rest of that session, unrefreshed, forever. Every field an
+admin can actually change from the Settings tab -- minimums, fees, brand
+name, the announcement, support contacts, the OTP-verification toggle,
+product-availability flags, USDT/card-rail toggles, all of it -- only ever
+reached an already-open app after a manual reload or restart. This matches
+the report exactly: the owner testing an admin change against their own
+already-open session, with the balance/plans/team polling working fine
+around it, made it look like "the whole app" was stale when it was
+specifically this one thing.
+
+**Fixed** by adding a settings poll to the same loop, `LIVE_SETTINGS_MS =
+30000` -- its own slower beat, same precedent as team stats' own `LIVE_TEAM_MS`
+right above it (settings change rarely, from a deliberate admin action, not
+worth polling every 5 seconds). On a change, `STATE.settings` is updated in
+place and `applyBrandName()` runs a small, targeted DOM patch (brand text +
+document title, the one setting-driven thing shown continuously on screen)
+-- never a full re-render, which is exactly the "feels like a reload" this
+whole mechanism was built to avoid (resets scroll position, restarts reveal
+animations). Everything else needed no explicit repaint at all: Deposit,
+Withdraw, Wallet and every other sheet that reads a setting already does
+`const s = STATE.settings || {}` fresh at the moment it opens, so simply
+keeping that object current is the entire fix for those -- the next time a
+member opens Withdraw after an admin changes the fee, it's already right,
+with nothing else to wire up.
+
+**Verified**: `node -c user-src/original_module.js`, `node build-core.js`
+round-trip OK, `npm run test:audit` passes in full (163 checks). Live in
+headless Chromium against the real built bundle, calling
+`liveRefreshVisible()` directly with a mocked `api()`: confirmed a changed
+`/public/settings` response updates `STATE.settings` in place, patches a
+live `.home-brand-title` element's text with zero full re-render, and that
+an immediate second tick correctly does NOT re-fetch settings (the 30s
+throttle holding) while the account/investments polls continue on their own
+existing cadence untouched -- three separate assertions, not one
+happy-path check. Zero page errors. `user/sw.js` bumped `v228` → `v229`
+(`admin-src/index.html` untouched this round, so `admin/sw.js` was not
+bumped).
