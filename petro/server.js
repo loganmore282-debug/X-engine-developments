@@ -139,6 +139,26 @@ app.use('/admin/', async (req, _res, next) => {
  '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
  '/team/milestone/claim', '/checkin', '/turntable/spin', '/auth/otp/send', '/auth/otp/verify', '/auth/reset/confirm']
   .forEach(p => app.use(p, apiLimiter));
+// Owner: "some people can deplete sms costs, so block too many requests of
+// otp requests I think 10 requests, the ip should be said too many
+// requests, not ip being banned." A real money risk, not just abuse --
+// every successful send is a real MarzSms charge (~30 UGX). The existing
+// otpDailyLimitRegister/Reset/Bank caps (see DEFAULT_SETTINGS) are keyed
+// per PHONE NUMBER, so they do nothing against one source spamming SMS
+// requests across many DIFFERENT numbers -- apiLimiter's blanket 60/min
+// above already covers this route too, but 60 real sends a minute left
+// running is still a real bill. This is a tighter, SMS-cost-specific
+// ceiling stacked on top of it, IP-keyed by default (no rlKeyByUser
+// override) so it can't be evaded by claiming a fresh fake uid on an
+// unauthenticated 'register'/'reset' send the way apiLimiter's own
+// per-user keying could be. A plain temporary throttle, same "too many
+// requests, slow down" message convention every other limiter in this
+// file already uses -- never anything reading as a ban, which is exactly
+// what express-rate-limit's own window-based 429 already is: it clears
+// itself after windowMs, not a persistent block.
+const otpSendLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Please wait a moment and try again.' } });
+app.use('/auth/otp/send', otpSendLimiter);
 
 // ── BODY PARSING ──
 // A tight 64kb cap by default; admin routes that carry a base64 product

@@ -6621,3 +6621,49 @@ isolated from both, and an unrelated route (`/withdraw/list`) still goes
 through the original `globalLimiter`/`ipOnlyLimiter` untouched. `user/sw.js`
 bumped `v229` → `v230` (`admin-src/index.html` untouched this round, so
 `admin/sw.js` was not bumped).
+
+## Follow-up 49 -- a dedicated, SMS-cost-specific rate limit on /auth/otp/send
+
+Owner: *"also some people can deplete sms costs, so block too many requests
+of otp requests I think 10 requests, the ip should be said too many
+requests, not ip being banned no."*
+
+**A real gap, not overlap with what already existed.** `otpDailyLimitRegister`/
+`otpDailyLimitReset`/`otpDailyLimitBank` (admin-settable, see DEFAULT_SETTINGS
+and Admin -> Settings -> Rates & limits) already cap how many codes ONE
+PHONE NUMBER can receive per day -- but they do nothing against one source
+spamming `/auth/otp/send` across MANY DIFFERENT phone numbers, which is
+exactly the SMS-cost-depletion the owner is naming: every successful send is
+a real MarzSms charge (~30 UGX each), so that vector is a real, ongoing
+money risk, not just an abuse nuisance. The only thing that route already
+had was `apiLimiter`'s blanket 60/min (shared with a dozen other routes,
+keyed per-user-or-IP) -- 60 real SMS sends a minute left running unattended
+is still a real bill.
+
+**Fixed**: a new `otpSendLimiter`, 10/min, IP-keyed (no `rlKeyByUser`
+override, unlike `apiLimiter` -- an anonymous 'register'/'reset' send has no
+session to key by anyway, and IP-keying can't be evaded by claiming a fresh
+fake uid the way a Bearer-token key theoretically could), stacked on top of
+`apiLimiter` on this one route (`app.use('/auth/otp/send', otpSendLimiter)`,
+registered after the existing `apiLimiter` forEach -- Express runs both in
+registration order, but since 10 < 60 the new one is always what actually
+trips in practice). Message: `'Too many requests. Please wait a moment and
+try again.'` -- same "too many requests, slow down" convention every other
+limiter in this file already uses, deliberately not anything that reads as
+a ban, per the owner's own explicit ask. This is also just factually
+correct, not merely reassuring wording: `express-rate-limit`'s window-based
+429 clears itself once `windowMs` (60s) elapses -- it was never a
+persistent block to begin with, on this route or any other in this file.
+
+**Verified**: `node --check server.js` clean, `npm run test:audit` passes
+in full (163 checks). Verified the actual limiter behavior with a
+standalone Express harness (not the full app -- no live Mongo/Firebase in
+this sandbox), using the real middleware registration order copied from
+server.js: the first 10 requests to `/auth/otp/send` succeed, the 11th and
+12th are refused with `429` and the exact message above (confirmed it does
+NOT contain the word "ban"), a sibling route on the same `apiLimiter` list
+(`/auth/otp/verify`) is completely unaffected by the new limiter, and once
+the window elapses the route accepts requests again -- confirming it is
+genuinely temporary. No `-src` file touched this round, so no rebuild or
+`sw.js` bump was needed -- reaches the VPS the normal way, via `git pull` +
+`pm2 reload` (or the auto-deploy webhook, already wired).
