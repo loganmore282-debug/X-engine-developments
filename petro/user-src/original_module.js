@@ -2549,6 +2549,13 @@ function clearCachedState(){
   try { sessionStorage.removeItem(CACHED_STATE_KEY); } catch (_) {}
 }
 async function enterApp(){
+  // Belt-and-suspenders alongside the isScrollLockOverlayOpen() fix above:
+  // a fresh app entry (a login, or a resumed session on page load) can
+  // never legitimately have a real overlay open yet, so there is nothing
+  // to lose by unconditionally clearing any scroll lock a PREVIOUS
+  // session's SPA-level logout left stuck (the exact "freezes, no
+  // scrolling" report this round root-caused).
+  unlockBodyScroll();
   // Fire-and-forget, both branches below: a card deposit the member never
   // returned to the app to see resolved (they closed the tab, lost signal,
   // whatever) picks back up here on the NEXT open, however long that is.
@@ -3179,7 +3186,7 @@ window.showPage = async function(name){
 window.closeAnnouncement = function(){
   const bg = $('annBg');
   if (bg) bg.classList.remove('show');
-  if (!isAnyOverlayOpen()) unlockBodyScroll();
+  if (!isScrollLockOverlayOpen()) unlockBodyScroll();
 };
 function maybeShowAnnouncement(){
   const s = STATE.settings || {};
@@ -5003,6 +5010,39 @@ function isAnyOverlayOpen(){
     // opened it) can't stack a second announcement on top of the first.
     || ($('annBg') && $('annBg').classList.contains('show')));
 }
+// Owner: "when you logout and login again, the system freezes and no
+// scrolling... only if you go back to homescreen and scroll so other pages
+// scroll too" -- root-caused, not guessed at: maybeAnnounceOnEntry() fires
+// the announcement dialog on every login (see its own comment below), which
+// calls lockBodyScroll(); right around the same moment, bootFromNetwork()
+// also fires a "Login successful" notify() toast. If the member closes the
+// announcement WHILE that toast is still in its ~1.4s auto-dismiss window,
+// closeAnnouncement() (and closeConfirm(), the same shape of bug) checked
+// isAnyOverlayOpen() -- which counts a visible toast as "something is still
+// in front" -- and skipped unlockBodyScroll() entirely. Nothing ever
+// retries the unlock afterward, so document.documentElement/body stay
+// permanently stuck at overflow:hidden (the app's real scroll mechanism --
+// #pageHost/#app have no scroller of their own) for the rest of that
+// session, on every page, until something else happens to call
+// unlockBodyScroll() unconditionally (e.g. actually opening and closing a
+// sheet, which is why visiting a page that involves one can look like it
+// "fixes" things). Confirmed live: reproduced the exact toast-still-
+// showing race against a real lockBodyScroll()/closeAnnouncement() pair and
+// watched the unlock get silently skipped.
+//
+// The actual bug is isAnyOverlayOpen() answering two different questions
+// with one check: "is there something else visible I shouldn't stack a new
+// dialog on top of" (notifyBg/msgDetailBg are legitimately relevant there)
+// vs. "is a REAL scroll lock still legitimately held" (notifyBg/msgDetailBg
+// never call lockBodyScroll() at all, so a toast merely being visible must
+// never be a reason to withhold unlockBodyScroll()). This narrower check
+// answers only the second question.
+function isScrollLockOverlayOpen(){
+  return !!(_openSheetTitle
+    || ($('confirmBg') && $('confirmBg').classList.contains('show'))
+    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
+    || ($('annBg') && $('annBg').classList.contains('show')));
+}
 
 // Owner, superseding the earlier "fires when closing Deposit/Withdraw/Wallet
 // back to Home" rule: "the dialog should appear when one also clicks back to
@@ -6532,7 +6572,7 @@ function openSimpleConfirm(title, body, onConfirm){
 window.closeConfirm = function(){
   $('confirmBg').classList.remove('show');
   $('confirmSheet').innerHTML = '';
-  if (!isAnyOverlayOpen()) unlockBodyScroll();
+  if (!isScrollLockOverlayOpen()) unlockBodyScroll();
 };
 
 // ── PWA: install prompt + service worker auto-update ──

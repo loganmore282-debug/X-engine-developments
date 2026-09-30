@@ -6921,3 +6921,80 @@ regeneration always wipes (Follow-up 34's combined-command fix for that
 exact gotcha), `nginx -t && systemctl reload nginx`. The SSH-hardening
 commands above are a separate, one-time task, not tied to this deploy --
 they don't need a `git pull`, just running directly on the VPS.
+
+## Follow-up 52 -- real scroll-lock bug found and fixed: logging out then back in could freeze scrolling for the rest of the session
+
+Owner: *"bro l have another problem, when you logout and login again, the
+system freezes and no scrolling, only home screen scrolls, and only if you
+go back to homescreen and scroll so other pages scroll too like assets,
+network, account etc."*
+
+**Root-caused, not guessed at -- reproduced the exact mechanism live before
+touching anything.** This app's actual scroll mechanism is `document.body`/
+`documentElement` itself (`#pageHost`/`#app` have no `overflow-y:auto` of
+their own), gated by `lockBodyScroll()`/`unlockBodyScroll()` around every
+sheet, confirm dialog, the recharge-status modal, and the announcement
+dialog. `isAnyOverlayOpen()` -- the guard several close-handlers check
+before calling `unlockBodyScroll()` -- answers two genuinely different
+questions with one check: "is something else visible I shouldn't stack a
+new dialog on top of" (where a `notify()` toast or the message-detail
+popup are legitimately relevant) versus "is a REAL scroll lock still
+legitimately held" (where they are not -- neither one ever calls
+`lockBodyScroll()` at all, confirmed by reading both). `closeAnnouncement()`
+and `closeConfirm()` were both using the broader check for the narrower
+question.
+
+`maybeAnnounceOnEntry()` fires the announcement dialog (which calls
+`lockBodyScroll()`) on **every** login (Follow-up 29), and `bootFromNetwork()`
+fires a "Login successful" `notify()` toast around the same moment. If the
+member closes the announcement while that toast is still inside its
+~1.4s auto-dismiss window, `isAnyOverlayOpen()` sees the toast as "still in
+front" and `unlockBodyScroll()` is silently skipped -- and nothing else
+ever retries it. `document.documentElement`/`body` stay stuck at
+`overflow:hidden` for the rest of that session, on every page, since this
+app never does a full page reload across a logout→login cycle (it's the
+same running SPA the whole time) -- exactly the reported "freezes, no
+scrolling." `closeConfirm()` has the identical shape of bug on the exact
+same guard, reachable any time a Confirm dialog closes while a toast
+happens to still be up. Reproduced live in headless Chromium against the
+real built bundle: opened the exact race (lock → toast shows → close the
+overlay while the toast is still visible) and watched the unlock get
+silently skipped, confirming the mechanism before writing a fix.
+
+**Not independently confirmed in this sandbox** (no live Firebase login
+path reachable here): the specific "only Home scrolls, other pages don't,
+until you visit Home and scroll there" asymmetry. `closeSheet()`'s own
+unconditional `unlockBodyScroll()` call (never gated behind any overlay
+check) is the likely reason visiting *any* screen that opens and closes a
+real sheet appears to "fix" the freeze -- that call clears the stuck lock
+regardless of how it got stuck. Why Home specifically reads as already-
+working isn't independently verified; body-level `overflow:hidden` should
+in principle affect every page equally, since none of them have their own
+separate scroll container. Flagged honestly rather than claimed as fully
+explained -- the underlying defect is real, confirmed, and fixed either
+way, and directly produces the "freezes, no scrolling" class of symptom
+reported.
+
+**Fix**: `isAnyOverlayOpen()` is unchanged (still correctly used at
+`maybeAnnounceAfterHomeNav()`/`maybeAnnounceOnEntry()` to avoid stacking
+a new announcement over a still-visible toast or message-detail popup).
+New, narrower `isScrollLockOverlayOpen()` checks only the overlays that
+actually call `lockBodyScroll()` themselves (`_openSheetTitle`,
+`confirmBg`, `depStatusBg`, `annBg`) -- `closeAnnouncement()`/
+`closeConfirm()` now check this instead. Belt-and-suspenders on top: a new
+unconditional `unlockBodyScroll()` at the very start of `enterApp()` --
+a fresh app entry (a login, or a resumed session on page load) can never
+legitimately have a real overlay open yet, so there's nothing to lose by
+clearing any lock a previous session's SPA-level logout left stuck,
+regardless of the exact mechanism that stuck it.
+
+**Verified**: `node -c`, `build-core.js` round-trip OK, `npm run
+test:audit` passes in full (163 checks). Live in headless Chromium
+against the real built bundle, four separate assertions: the exact toast-
+race against `closeAnnouncement()` now correctly unlocks (both
+`documentElement` and `body`), the same race against `closeConfirm()` also
+now correctly unlocks, the toast itself is completely untouched by either
+fix (still shows/auto-dismisses normally), and -- critically -- scroll
+correctly STAYS locked when a real overlay (a genuinely open sheet) is
+still open, confirming the fix narrows the check correctly rather than
+just removing the guard outright. `user/sw.js` bumped `v231` → `v232`.
