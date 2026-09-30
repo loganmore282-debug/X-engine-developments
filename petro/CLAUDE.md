@@ -6678,3 +6678,120 @@ between every batch of 10, not just one. `node --check server.js` clean,
 `npm run test:audit` passes in full (163 checks). Confirmed the literal
 `windowMs` expression evaluates to `300000` (5 minutes) rather than
 re-reading it by eye. No `-src` file touched, no rebuild/sw.js bump needed.
+
+## Follow-up 50 -- real registration bottleneck found and fixed: 3 unnecessary sequential round trips inside completeRegistrationCore()
+
+Owner, right after deferring the WhatsApp-OTP topic: *"do you know that
+registration takes very long, it can say verifying... and takes some
+seconds like 3, then creating more 3 seconds, the same applies to login
+it can take long to authenticate, yet we are using a powerful vps."*
+
+**Measured, not guessed at, before touching anything.** The two-phase
+button-label flow the owner describes ("Verifying code…" then "Creating
+your account…") matches the OTP-ON code path exactly (`doRegister()`:
+`/auth/otp/verify` first, then Firebase account creation + `/register`),
+so OTP verification is live in the current settings. Timed the one
+CPU-bound suspect directly rather than assuming it was the cause:
+`crypto.scryptSync()` (used by both `scryptHash`/`scryptVerify`, including
+inside `/auth/otp/verify`'s own hash check) costs **~55-65ms** with Node's
+default cost parameters, confirmed with a standalone timing script -- real,
+but nowhere close to explaining a 3-second wait on its own. Left alone
+entirely (changing it would also weaken admin-password/PIN hashing
+strength, a much bigger tradeoff than a small speed gain justifies).
+
+**The real cost was sequential MongoDB round trips to the separately-
+hosted Atlas cluster, not CPU.** `db.js`'s own connection pool is already
+tuned (`maxPoolSize:50`, warm `minPoolSize:3`) and every hot query already
+has a supporting index (Follow-up 16/44's own audits) -- the database
+itself was never slow, but `completeRegistrationCore()` was paying for
+several round trips ONE AFTER ANOTHER that didn't need to be, and Atlas is
+a real network hop away from this VPS, not co-located -- each one's
+latency adds directly to the wall-clock time a member watches "Creating
+your account…" sit there. Found by reading the function line by line, not
+assumed:
+
+1. **A brand-new user's profile doc was fetched back from Mongo
+   immediately after being written** (`userRef.set(defaultProfileDoc(phone))`
+   then `userRef.get()`) -- a pointless round trip, since the data just
+   read back is byte-for-byte the same object this same function
+   constructed and sent a moment earlier, under the same `'reg:'+userId`
+   lock the whole time. Now reuses the in-memory object directly.
+2. **`referrerId`'s own document was fetched TWICE in a row** -- once as
+   `refCheck` (to confirm it isn't banned), then again moments later as
+   `l1Snap`, purely to read back the exact same `referredBy` field
+   `refCheck` already had in memory, under the same `'referrer-guard:'`
+   lock the whole time with nothing in between able to change it. Now
+   reuses `refCheck`'s own data instead of re-fetching.
+3. **The L1/L2 team-count increments and the L2-discovery read (needed
+   to find L3) ran one at a time even though they touch three different
+   documents with no dependency on each other** -- L1's own count
+   increment doesn't need L2's write to finish first, and reading L2's
+   `referredBy` field doesn't need to wait for L2's own count increment
+   to land first either (different fields on the same doc). These three
+   now run via a single `Promise.all()`; only the L3 increment genuinely
+   has to wait, since its id isn't known until the L2 read comes back.
+   For a real 3-level referral chain (an established network, not a
+   fresh test account with no upline) this collapses 5 sequential round
+   trips down to 2.
+
+Together, a registration with a 3-level referral chain went from roughly
+9 sequential Mongo round trips (get, set, get, refCheck get, L1 write,
+l1Snap get, L2 write, l2Snap get, L3 write) to about 5 (get, set, refCheck
+get, [L1 write + L2 write + L2 read in parallel], L3 write) -- at a real
+Atlas round trip cost in the low hundreds of milliseconds each, this is
+the difference between roughly a second and roughly two, not a few
+milliseconds either way. This is a genuinely measurable chunk of the
+reported "3 seconds," even though it can't fully explain it alone (see
+below).
+
+**Verified correctness, not just speed, before shipping the parallel
+rewrite** -- money-adjacent code changing from sequential to concurrent
+is exactly the class of change this file's own history treats most
+carefully (see Follow-up 44's own identical discipline for
+`settleAllForUser()`). Wrote a standalone simulation with a mock
+Mongo-compat layer (real `FieldValue.increment` semantics, randomized
+per-call jitter to force real interleaving) running BOTH the old
+sequential algorithm and the new parallel one against identical starting
+snapshots, across every shape that matters: a 3-level chain, a 2-level
+chain, a referrer with no upline at all, three different self-referential
+loop shapes (L2===L1, L3===L1, L3===L2 -- the existing guard conditions
+that prevent a member from ever being their own downline), a banned L1
+referrer, and 50 randomized repeats of the 3-level case to catch any
+ordering-dependent bug the parallel version might introduce. All 57 cases
+produced byte-identical final team counts between old and new. The
+documented money-safety ordering invariant (`userRef.update()` must
+complete before ANY referrer-side write begins, so a crash can only
+under-count, never double-count on a retry) is untouched -- this round
+only reordered work that happens AFTER that write, among independent
+documents, never before it or the user's own doc.
+
+**Login, investigated separately since the owner named it too, and found
+already fast on this app's own side.** `doLogin()` itself makes exactly
+one real network call before the app takes over: Firebase's own
+`signInWithEmailAndPassword()` -- a genuine round trip to Google's
+Identity Toolkit servers, not to this VPS or to Atlas at all, and
+therefore not something this codebase's own performance work can make
+faster, the identical honest conclusion this file already reached once
+before for a different external API call (Follow-up 14's own "cannot be
+made millisecond-fast by VPS power alone, no matter how powerful the box
+is"). What runs after that (this app's own `/account` fetch, via
+`bootFromNetwork()`) was already re-checked and found tight: 2 Mongo round
+trips (a pre-check read, then `settleAllForUser()` -- already parallelized
+across a member's investments since Follow-up 44 -- followed by one
+refreshed read), no redundant work found. Told the owner plainly that
+login's own dominant cost is very likely that one unavoidable Firebase hop,
+not this app's own code, rather than inventing a speculative change with
+no measured problem behind it -- matching this file's own established
+posture from Follow-up 11/16/28 every other time this exact "make it
+faster, we have a powerful VPS" ask came up and the audit came back clean.
+
+**Verified**: `node --check server.js` clean. `npm run test:audit` passes
+in full (163 checks, exit 0). The registration-parallelism correctness
+check above (57/57 matching cases) ran as a standalone script since this
+sandbox has no live Mongo to exercise the real route through -- same
+precedent as every other money-adjacent round in this file that couldn't
+reach a live database. `git fetch` before pushing showed no concurrent
+commits to reconcile. No `-src` file was touched this round (pure
+`server.js`), so no rebuild or `sw.js`/`admin/sw.js` bump is needed -- it
+reaches the VPS the normal way, via `git pull` + `pm2 reload` (or the
+auto-deploy webhook, already wired).

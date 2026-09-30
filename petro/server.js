@@ -3680,14 +3680,22 @@ async function referralRequiredNow() {
 async function completeRegistrationCore(userId, referralCode, pin, phone) {
   return withLock('reg:' + userId, async () => {
     const userRef = db.collection('users').doc(userId);
-    let userSnap = await userRef.get();
+    const userSnap = await userRef.get();
+    // A freshly-created doc's data is already known -- it's the exact
+    // object we're about to write ourselves -- so there's no need to read
+    // it back from Mongo a second time. Safe because the 'reg:'+userId
+    // lock is held for the rest of this function, so nothing else can
+    // touch this doc in between.
+    let userData;
     if (!userSnap.exists) {
-      await userRef.set(defaultProfileDoc(phone));
-      userSnap = await userRef.get();
+      userData = defaultProfileDoc(phone);
+      await userRef.set(userData);
+    } else {
+      userData = userSnap.data();
     }
-    if (userSnap.data().status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
-    if (userSnap.data().registrationDone)
-      return { code: 200, body: { status: 'already_done', referralCode: userSnap.data().referralCode || null } };
+    if (userData.status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+    if (userData.registrationDone)
+      return { code: 200, body: { status: 'already_done', referralCode: userData.referralCode || null } };
 
     // Trade Password (PIN) requirement REMOVED (owner: registration is
     // exactly phone/OTP/password/confirm/referral, nothing else -- see
@@ -3734,9 +3742,11 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     const sett = await getSettings();
     const WELCOME = Number(sett.welcomeBonus) || 0;
     const commit = async () => {
+      let refData = null;
       if (referrerId) {
         const refCheck = await db.collection('users').doc(referrerId).get();
         if (!refCheck.exists || refCheck.data().status === 'banned') referrerId = null;
+        else refData = refCheck.data();
       }
       const update = {
         registrationDone: true, referralCode: myRefCode, publicId: myPublicId,
@@ -3751,12 +3761,24 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
       // never double-count on a retry.
       await userRef.update(update);
       if (referrerId) {
-        await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
-        const l1Snap = await db.collection('users').doc(referrerId).get();
-        const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
+        // referrerId's own referredBy (= L2's id) is already sitting in
+        // refData from the fetch above, under this same referrer-guard
+        // lock -- re-fetching the identical document a moment later just
+        // to read that one field back was a wasted round trip. L1's own
+        // count increment and L2's count increment + discovery read
+        // (needed to find L3) touch three different documents with
+        // nothing depending on each other, so they now run together
+        // instead of one after another; only L3 genuinely has to wait,
+        // since its id isn't known until L2's own doc comes back.
+        const l2Id = refData ? refData.referredBy : null;
+        const tasks = [db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) })];
         if (l2Id && l2Id !== referrerId) {
-          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
-          const l2Snap = await db.collection('users').doc(l2Id).get();
+          tasks.push(db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) }));
+          tasks.push(db.collection('users').doc(l2Id).get());
+        }
+        const results = await Promise.all(tasks);
+        if (l2Id && l2Id !== referrerId) {
+          const l2Snap = results[2];
           const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
           if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
         }
