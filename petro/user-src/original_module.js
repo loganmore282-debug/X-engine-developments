@@ -2908,17 +2908,25 @@ function updateNavIcons(){
 // await when the member signs out would otherwise come back, reschedule itself
 // and keep polling a session that no longer exists.
 var _liveTimer = null, _liveBusy = false, _liveDelay = 0, _liveSigs = {}, _liveGen = 0;
-var LIVE_MS = 5000, LIVE_MAX_MS = 60000;
+// Owner: "let it poll every 1 second, we have a VPS KVM1 and MongoDB flex" --
+// was 5000/floored-at-2000. The 2s floor's own reasoning (phone battery/radio
+// wake-ups, not server cost) still genuinely applies at 1s -- it is simply a
+// tradeoff the owner chose to accept now that the infra behind it is real.
+// Team/settings deliberately were NOT sped up to match -- see their own
+// comments below; neither needs per-second freshness, and hammering them at
+// 1Hz would burn battery for zero perceptible benefit.
+var LIVE_MS = 1000, LIVE_MAX_MS = 60000;
 // Team stats get their own, slower beat -- see the note at their fetch.
 var LIVE_TEAM_MS = 30000, _liveTeamAt = 0;
 // Settings get their own slower beat too -- see the note at their fetch.
 var LIVE_SETTINGS_MS = 30000, _liveSettingsAt = 0;
-// Tunable from the backend without shipping an app build. Floored at 2s: below
-// that the phone spends more time on radio wake-ups than on anything a member
-// would notice.
+// Tunable from the backend without shipping an app build. Floored at 1s:
+// below that the phone spends more time on radio wake-ups than on anything a
+// member would notice, and server.js's own livePollLimiter/livePollIpLimiter
+// (see their comment there) are sized for exactly this floor, not faster.
 function livePollMs(){
   const s = Number((STATE.settings || {}).livePollMs);
-  return Math.max(2000, Number.isFinite(s) && s > 0 ? s : LIVE_MS);
+  return Math.max(1000, Number.isFinite(s) && s > 0 ? s : LIVE_MS);
 }
 // True the first time it sees a given payload, and whenever it changes after
 // that. Keyed per feed, so one busy feed cannot suppress another.

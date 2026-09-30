@@ -6533,3 +6533,91 @@ existing cadence untouched -- three separate assertions, not one
 happy-path check. Zero page errors. `user/sw.js` bumped `v228` → `v229`
 (`admin-src/index.html` untouched this round, so `admin/sw.js` was not
 bumped).
+
+## Follow-up 48 -- live-refresh sped up to 1 second, with the rate-limiter headroom that actually needs
+
+Owner: *"let it poll every 1second, we have a vps kvm1 and MongoDB flex."*
+A direct follow-up to Follow-up 47 -- the live-refresh loop itself (balances,
+plans, assets, team, and now settings, all patched in place with no reload)
+was already working; this is a straight cadence request against it, citing
+real infra behind it (the VPS is live per this file's own "Hosting"
+section, and "MongoDB flex" reads as the owner having moved off the M0 free
+tier this project's own money-safety section has flagged as lacking real
+transactions since the fork -- not independently confirmed from this
+session, no direct DB access here, but nothing in this round depended on
+that specific claim being exact).
+
+**Investigated before touching the number, not guessed at**: read
+`livePollMs()`'s own admin-tunable path first, since CHANGING the constant
+vs. discovering there was already a working admin control would be two very
+different jobs. Confirmed `livePollMs` is dead client-side plumbing only --
+no `DEFAULT_SETTINGS` entry, no `SETTINGS_CRITICAL_RANGES` validation, no
+admin-panel input field anywhere in `admin-src/index.html`. An admin cannot
+tune this from the panel today regardless of the floor; the only real lever
+is the hardcoded client constant, which is what this round actually changed.
+
+**The real risk found before shipping, not after**: the 2s floor's own
+existing comment already named phone battery/radio wake-ups as its reason
+for existing, not server cost -- that tradeoff still applies at 1s and was
+knowingly accepted here, the owner's call to make for their own app.
+What HAD NOT been considered anywhere yet is that none of the 7 read
+routes this loop calls (`/account`, `/public/settings`, `/investments`,
+`/public/products`, `/team/stats`, `/transactions`, `/messages`) have ever
+had a route-specific rate limiter -- they only ever sat behind the two
+general-purpose ones (`globalLimiter`, 400/min per user; `ipOnlyLimiter`,
+900/min per IP, sized specifically because Ugandan carriers NAT many real
+members behind one IP -- see that limiter's own comment). At a 1s cadence,
+one member with the Assets page open generates ~3 requests/second (180/min)
+from polling ALONE, before they have tapped anything -- which would have
+quietly eaten most of `globalLimiter`'s budget, **the same shared budget
+`apiLimiter`-protected money routes (withdraw/invest/deposit/etc.) also draw
+from**, so a member's own background polling could have started
+rate-limiting their own withdraw or invest taps. And a couple of
+concurrently-open sessions on one carrier IP could have approached
+`ipOnlyLimiter`'s 900/min ceiling from polling alone too. Either failure
+mode is silent by design -- `liveTick()` just backs off quietly on a 429,
+never surfacing an error -- so it would have reproduced exactly the "stale
+data" complaint this whole mechanism exists to fix, just from a different
+cause.
+
+**Fixed** by giving these 7 routes their own pair of limiters
+(`livePollLimiter`, 1200/min per user; `livePollIpLimiter`, 3600/min per
+IP) instead of sharing the general-purpose ones -- roughly 5x headroom over
+the 1s-poll worst case on top of normal use, not an unbounded exemption.
+Same "route-specific limiter sized for what that route actually does"
+precedent `apiLimiter` already established for the money-moving POSTs, just
+applied to the read side. `/public/settings`/`/public/products` are the two
+UNAUTHENTICATED routes in this set, which is a real widened-abuse-surface
+question in isolation -- but both are already served from their own 60s
+in-process cache (`getSettings()`/`getProducts()`), so a flood here costs
+cheap memory reads, not repeated Mongo hits, regardless of how generous
+this ceiling is. Wired the same way `/health` was already exempted from
+both blanket limiters (`req.path` checked inside the existing middleware
+functions), not a new middleware-ordering pattern.
+
+**Deliberately NOT sped up to match**: `LIVE_TEAM_MS`/`LIVE_SETTINGS_MS`
+stay at their own 30s beat. Neither team composition nor admin settings
+needs per-second freshness -- nobody perceives the difference between an
+admin's settings change reaching an open session in 1 second vs. 30, and
+hammering either at 1Hz would burn battery for zero visible benefit. Only
+`LIVE_MS`/the floor (the beat behind balances/plans/assets, and the general
+floor `livePollMs()` enforces) moved to 1000.
+
+**Verified**: `node -c user-src/original_module.js`, `node --check
+server.js` clean, `node build-core.js` round-trip OK, `npm run test:audit`
+passes in full (163 checks -- none of them assert the specific limiter
+values touched here, confirmed by grep before assuming green meant
+untested). Live in headless Chromium against the real built bundle:
+`livePollMs()` now returns `1000` with no override, still clamps anything
+sent below `1000` up to it, and still passes a genuine admin override above
+the floor through unclamped (e.g. `5000`) -- confirming the future path for
+an actual admin control, if `livePollMs` is ever wired up for real, isn't
+broken by this. Separately verified the new rate-limiter routing with a
+standalone Express harness (not the full app -- this sandbox has no live
+Mongo/Firebase to boot it through) using the exact same middleware pattern
+copied from server.js: confirmed `/account` is routed through the new
+`livePollLimiter`/`livePollIpLimiter` pair specifically, `/health` stays
+isolated from both, and an unrelated route (`/withdraw/list`) still goes
+through the original `globalLimiter`/`ipOnlyLimiter` untouched. `user/sw.js`
+bumped `v229` → `v230` (`admin-src/index.html` untouched this round, so
+`admin/sw.js` was not bumped).

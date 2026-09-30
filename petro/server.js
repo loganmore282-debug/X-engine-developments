@@ -73,8 +73,40 @@ const ipOnlyLimiter = rateLimit({ windowMs: 60 * 1000, max: 900, standardHeaders
 // sustained) while still putting a ceiling on a flood.
 const healthLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: false, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests.' } });
-app.use((req, res, next) => (req.path === '/health' ? healthLimiter(req, res, next) : ipOnlyLimiter(req, res, next)));
-app.use((req, res, next) => (req.path === '/health' ? next() : globalLimiter(req, res, next)));
+// Owner: "let it poll every 1 second, we have a VPS KVM1 and MongoDB flex" --
+// these are exactly the read-only routes user-src/original_module.js's
+// live-refresh loop hits every tick (see liveRefreshVisible()). At 1s, one
+// actively open Assets-page session alone can generate ~3 requests/second
+// (180/min) from polling ALONE, before the member has tapped anything
+// themselves -- that would have quietly eaten most of globalLimiter's
+// 400/min-per-user budget, the SAME shared budget apiLimiter-protected money
+// routes below also draw from, so a member's own background polling could
+// have started rate-limiting their own withdraw/invest taps. And since
+// Ugandan mobile carriers NAT many real members behind one IP (see
+// ipOnlyLimiter's own comment above), a couple of concurrently-open sessions
+// on the same carrier IP could approach ipOnlyLimiter's 900/min ceiling from
+// polling alone too. Either would silently produce exactly the "stale data"
+// complaint this loop exists to fix -- a 429 here just makes liveTick() back
+// off quietly, not error loudly, so it would have looked like the app "isn't
+// updating" all over again. Own, more generously-sized limiters instead of
+// sharing the general-purpose ones, same "route-specific limiter sized for
+// what that route actually does" precedent apiLimiter already established
+// for the money-moving POSTs below -- 1200/min-per-user and 3600/min-per-IP
+// give roughly 5x headroom over the 1s-poll worst case on top of normal
+// use, not an unbounded exemption. /public/settings and /public/products are
+// the two unauthenticated routes in this set, which is a real widened-abuse-
+// surface question in isolation -- but both are already served from
+// getSettings()/getProducts()'s own 60s in-process cache (see their own
+// comments), so a flood here costs cheap memory reads, not repeated Mongo
+// hits, regardless of how generous this ceiling is.
+const LIVE_POLL_ROUTES = new Set(['/account', '/public/settings', '/investments', '/public/products', '/team/stats', '/transactions', '/messages']);
+const livePollLimiter = rateLimit({ windowMs: 60 * 1000, max: 1200, keyGenerator: rlKeyByUser,
+  standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+const livePollIpLimiter = rateLimit({ windowMs: 60 * 1000, max: 3600, standardHeaders: false, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests from this network. Slow down.' } });
+app.use((req, res, next) => (req.path === '/health' ? healthLimiter(req, res, next) : LIVE_POLL_ROUTES.has(req.path) ? livePollIpLimiter(req, res, next) : ipOnlyLimiter(req, res, next)));
+app.use((req, res, next) => (req.path === '/health' ? next() : LIVE_POLL_ROUTES.has(req.path) ? livePollLimiter(req, res, next) : globalLimiter(req, res, next)));
 
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
