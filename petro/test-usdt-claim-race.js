@@ -11,7 +11,9 @@ assert(routeNode, 'USDT submit route exists');
 const helper = tree.body.find(n => n.type === 'FunctionDeclaration' && n.id.name === 'usdtDepositDocId');
 assert(helper, 'deterministic USDT claim id helper exists');
 let submit;
-const deposits = new Map(), ledger = new Map(); let queryArrivals = 0, releaseQueries;
+const deposits = new Map(), ledger = new Map(), intents = new Map();
+const mkIntent=(id,userId,base)=>intents.set(id,{userId,baseUsdt:base,amountUgx:base*4000,rate:4000,walletAddress:'wallet',exactMicros:Number(id),createdMs:1,status:'open'});
+[['10000001','u1',10],['10000002','u2',10],['10000003','u1',12],['10000004','old-user',11],['10000005','attacker',11],['10000006','new-user',11]].forEach(a=>mkIntent(...a)); let queryArrivals = 0, releaseQueries;
 const queryGate = new Promise(r => { releaseQueries = r; });
 function snap(id) { const row=deposits.get(id); return {id,exists:!!row,data:()=>structuredClone(row)}; }
 function depRef(id) { return {id,
@@ -25,6 +27,7 @@ const db={collection(name){
     where(field,op,value){const query={limit(n){this.limitValue=n;return this;},async get(){queryArrivals++;if(queryArrivals===2)releaseQueries();await queryGate;let docs=[...deposits].filter(([,row])=>field==='txid'&&op==='=='&&row.txid===value).map(([id,row])=>({id,data:()=>structuredClone(row),ref:depRef(id)}));if(this.limitValue)docs=docs.slice(0,this.limitValue);return {docs,empty:!docs.length};}};return query;},
     doc:id=>depRef(id)
   };
+  if(name==='usdtIntents')return {doc:id=>({async get(){const r=intents.get(id);return {id,exists:!!r,data:()=>structuredClone(r)};},async update(d){intents.set(id,{...intents.get(id),...d});}})};
   if(name==='transactions')return {
     where(field,op,value){return {limit(){return this;},async get(){const docs=[...ledger].filter(([,row])=>row[field]===value).map(([id,row])=>({id,data:()=>structuredClone(row),ref:{update:async data=>ledger.set(id,structuredClone(data))}}));return {docs,empty:!docs.length};}};},
     async add(data){ledger.set('tx-'+(ledger.size+1),structuredClone(data));}
@@ -46,8 +49,8 @@ function res(){return {code:200,status(n){this.code=n;return this;},json(v){this
 (async()=>{
   const txid='a'.repeat(64), a=res(), b=res();
   await Promise.all([
-    submit({userId:'u1',body:{amountUsdt:10,txid}},a),
-    submit({userId:'u2',body:{amountUsdt:10,txid}},b)
+    submit({userId:'u1',body:{intentId:'10000001',txid}},a),
+    submit({userId:'u2',body:{intentId:'10000002',txid}},b)
   ]);
   assert.equal(deposits.size,1,'one on-chain transfer creates one claim');
   assert.equal(ledger.size,1,'only the winning claim creates a ledger row');
@@ -58,7 +61,7 @@ function res(){return {code:200,status(n){this.code=n;return this;},json(v){this
   // zeroed ledger row or later success would be counted twice.
   const id=[...deposits.keys()][0];deposits.get(id).status='failed';
   ledger.get('tx-1').status='failed';ledger.get('tx-1').amount=0;
-  const retry=res();await submit({userId:'u1',body:{amountUsdt:12,txid}},retry);
+  const retry=res();await submit({userId:'u1',body:{intentId:'10000003',txid}},retry);
   assert.equal(retry.code,200);assert.equal(deposits.size,1);assert.equal(ledger.size,1);
   assert.equal(ledger.get('tx-1').amount,48000);assert.equal(ledger.get('tx-1').status,'pending');
 
@@ -67,7 +70,7 @@ function res(){return {code:200,status(n){this.code=n;return this;},json(v){this
   const legacyTxid='b'.repeat(64), legacyId='legacy-random-claim-id';
   deposits.set(legacyId,{userId:'old-user',method:'usdt',txid:legacyTxid,status:'failed',amount:0});
   ledger.set('legacy-tx',{userId:'old-user',statementId:'stable-statement',type:'deposit',depositId:legacyId,status:'failed',amount:0});
-  const legacyRetry=res();await submit({userId:'old-user',body:{amountUsdt:11,txid:legacyTxid}},legacyRetry);
+  const legacyRetry=res();await submit({userId:'old-user',body:{intentId:'10000004',txid:legacyTxid}},legacyRetry);
   assert.equal(legacyRetry.code,200);
   assert.equal(deposits.size,2,'legacy retry reuses the random-ID claim instead of creating a deterministic duplicate');
   assert.equal(deposits.get(legacyId).status,'awaiting_verification');
@@ -76,14 +79,38 @@ function res(){return {code:200,status(n){this.code=n;return this;},json(v){this
   assert.equal(ledger.get('legacy-tx').amount,44000);
   assert.equal(ledger.get('legacy-tx').statementId,'stable-statement','retry preserves the existing statement identity');
 
-  const denied=res();await submit({userId:'attacker',body:{amountUsdt:11,txid:legacyTxid}},denied);
+  const denied=res();await submit({userId:'attacker',body:{intentId:'10000005',txid:legacyTxid}},denied);
   assert.equal(denied.code,409,'a different account cannot take over a failed legacy TXID');
   assert.equal(deposits.get(legacyId).userId,'old-user');
 
   const manyTxid='c'.repeat(64);
   for(let i=0;i<21;i++)deposits.set('legacy-failed-'+i,{userId:'prior',method:'usdt',txid:manyTxid,status:'failed',amount:0});
   deposits.set('legacy-open-last',{userId:'prior',method:'usdt',txid:manyTxid,status:'awaiting_verification',amount:44000});
-  const beyondOldLimit=res();await submit({userId:'new-user',body:{amountUsdt:11,txid:manyTxid}},beyondOldLimit);
+  const beyondOldLimit=res();await submit({userId:'new-user',body:{intentId:'10000006',txid:manyTxid}},beyondOldLimit);
   assert.equal(beyondOldLimit.code,409,'an open legacy claim beyond the old 20-row cap still blocks reuse');
+
+  // ── payment requests (the TXID-hijack fix) ──
+  vm.runInContext('_usdtSubmitDebounce.clear()',ctx);
+  let x=res();await submit({userId:'u1',body:{amountUsdt:10,txid:'d'.repeat(64)}},x);
+  assert.equal(x.code,400,'the old amount-and-hash claim is no longer accepted');
+  x=res();await submit({userId:'attacker',body:{intentId:'10000001',txid:'d'.repeat(64)}},x);
+  assert.equal(x.code,404,'someone else\'s payment request cannot be used');
+  // An attacker submits a hash that is not theirs; it is declined on-chain
+  // (amount mismatch), which must NOT lock the real owner out of that hash.
+  const stolen='e'.repeat(64);
+  deposits.set('usdt:'+stolen,{userId:'attacker',method:'usdt',txid:stolen,status:'failed',amount:0,exactMicros:10000005,intentId:'10000005'});
+  ledger.set('atk-tx',{userId:'attacker',statementId:'atk',type:'deposit',depositId:'usdt:'+stolen,status:'failed',amount:0});
+  mkIntent('10000007','victim',10);
+  vm.runInContext('_usdtSubmitDebounce.clear()',ctx);
+  x=res();await submit({userId:'victim',body:{intentId:'10000007',txid:stolen}},x);
+  assert.equal(x.code,200,'a failed attempt by someone else does not block the real owner');
+  assert.equal(deposits.get('usdt:'+stolen).userId,'victim','the claim now belongs to the owner of the matching request');
+  assert.equal(ledger.get('atk-tx').userId,'victim','its single ledger row moves with it (no duplicate rows to double count)');
+  assert.equal(intents.get('10000007').status,'used','the request is marked used');
+  // One request, one transaction.
+  vm.runInContext('_usdtSubmitDebounce.clear()',ctx);
+  x=res();await submit({userId:'victim',body:{intentId:'10000007',txid:'f'.repeat(64)}},x);
+  assert.equal(x.code,409,'a second hash for the same request is refused while the first is live');
+  console.log('PASS: USDT payment requests: hijack attempts, ownership, one hash per request');
   console.log('PASS: USDT TXID races and retries preserve one claim and ledger row, including legacy random-ID claims');
 })().catch(e=>{console.error(e);process.exit(1)});

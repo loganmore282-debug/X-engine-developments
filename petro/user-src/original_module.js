@@ -5662,7 +5662,7 @@ function openDepositFormSheet(){
   // already resets on every open, so the chips and the inputs start back
   // in agreement instead of the chip alone remembering a stale pick.
   _depChosenAmount = 0;
-  _cardChosenAmount = 0;
+  _cardChosenAmount = 0; _usdtIntent = null;
   // Owner: "let the registered number also appear as a default deposit
   // number for mobile money" -- pre-filled, not locked: a deposit can
   // genuinely come from a different mobile-money number than the one the
@@ -5718,25 +5718,36 @@ function openDepositFormSheet(){
       <div class="dep-amt"><input id="usdtAmt" type="number" step="0.01" inputmode="decimal" placeholder="0" oninput="updateUsdtConversion()"></div>
       <div class="dep-hint">1 USDT = ${fmtUGX(Number(s.usdtRate) || 0)} &middot; you will receive <b id="usdtUgxPreview">${fmtUGX(0)}</b></div>
 
-      <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Send to this address (TRC20 only)</span></div>
-      <div class="dep-phone" style="height:auto;padding:12px 0;">
-        <span id="usdtAddrDisplay" style="word-break:break-all;font-size:12.5px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;letter-spacing:.2px;flex:1;">${esc(s.usdtWalletAddress || '')}</span>
-        <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtAddress()">Copy</button>
-      </div>
-      <div class="dep-hint">TRC20 (Tron) network only &mdash; any other network permanently loses the funds.</div>
+      <button class="primary-button" id="usdtIntentBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0 8px;" onclick="doUsdtIntent()">Get payment amount</button>
 
-      <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Transaction Hash (TXID)</span></div>
-      <div class="dep-phone">
-        <input id="usdtTxid" type="text" placeholder="Paste your transaction hash" style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;">
-      </div>
+      <div id="usdtPayBox" style="display:none;">
+        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Send exactly this amount</span></div>
+        <div class="dep-phone" style="height:auto;padding:12px 0;">
+          <span id="usdtExactDisplay" style="font-size:22px;font-weight:800;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;flex:1;"></span>
+          <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtExact()">Copy</button>
+        </div>
+        <div class="dep-hint">Send every digit, exactly. A different amount cannot be credited automatically. <span id="usdtExpiryHint"></span></div>
 
-      <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Submit USDT Payment</button>
+        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>To this address (TRC20 only)</span></div>
+        <div class="dep-phone" style="height:auto;padding:12px 0;">
+          <span id="usdtAddrDisplay" style="word-break:break-all;font-size:12.5px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;letter-spacing:.2px;flex:1;">${esc(s.usdtWalletAddress || '')}</span>
+          <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtAddress()">Copy</button>
+        </div>
+        <div class="dep-hint">TRC20 (Tron) network only &mdash; any other network permanently loses the funds.</div>
+
+        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Transaction Hash (TXID)</span></div>
+        <div class="dep-phone">
+          <input id="usdtTxid" type="text" placeholder="Paste your transaction hash" style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;">
+        </div>
+
+        <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Submit USDT Payment</button>
+      </div>
 
       <div class="dep-instr deposit-guide">
         <h3>How USDT recharges work</h3>
         <ol class="deposit-steps">
-          <li><b>Send the exact amount</b><span>Minimum ${fmtUGX(s.minDeposit)}${Number(s.usdtRate) > 0 ? ` (about ${(Number(s.minDeposit) / Number(s.usdtRate)).toFixed(2)} USDT)` : ''}, on the TRC20 (Tron) network only, to the address above.</span></li>
-          <li><b>Paste the transaction hash</b><span>Copy the TXID from your wallet app and paste it here, then tap Submit.</span></li>
+          <li><b>Get your payment amount</b><span>Minimum ${fmtUGX(s.minDeposit)}${Number(s.usdtRate) > 0 ? ` (about ${(Number(s.minDeposit) / Number(s.usdtRate)).toFixed(2)} USDT)` : ''}. Enter it and tap Get payment amount. You are given an exact amount with extra digits that belong only to you.</span></li>
+          <li><b>Send exactly that amount</b><span>On the TRC20 (Tron) network only, to the address shown. Then copy the TXID from your wallet app, paste it here and tap Submit.</span></li>
           <li><b>Wait for verification</b><span>Most payments confirm within a minute, automatically. If yours is still pending, reopen Transaction Statement later to check.</span></li>
         </ol>
       </div>
@@ -5842,12 +5853,18 @@ async function resumePendingCardDeposit(){
     if (attempts >= 6) clearInterval(timer);
   }, 5000);
 }
+var _usdtIntent = null;
 function updateUsdtConversion(){
   const s = STATE.settings || {};
   const rate = Number(s.usdtRate) || 0;
   const amt = parseFloat(($('usdtAmt') || {}).value) || 0;
   const el = $('usdtUgxPreview');
   if (el) el.textContent = fmtUGX(Math.round(amt * rate));
+  // Changing the amount after getting a payment amount makes that amount stale.
+  if (_usdtIntent && Math.round(amt * 100) !== Math.round(_usdtIntent.base * 100)) {
+    _usdtIntent = null;
+    const box = $('usdtPayBox'); if (box) box.style.display = 'none';
+  }
 }
 window.updateUsdtConversion = updateUsdtConversion;
 window.copyUsdtAddress = function(){
@@ -5856,33 +5873,53 @@ window.copyUsdtAddress = function(){
   if (!addr) return;
   copyText(addr);
 };
+window.copyUsdtExact = function(){
+  if (_usdtIntent) copyText(_usdtIntent.exact);
+};
+window.doUsdtIntent = async function(){
+  const s = STATE.settings || {};
+  const btn = $('usdtIntentBtn');
+  if (!btn || btn.disabled) return;
+  const amtUsdt = parseFloat(($('usdtAmt') || {}).value);
+  if (!amtUsdt || amtUsdt <= 0) return notify('Enter the USDT amount you want to send');
+  const amtUgx = Math.round(amtUsdt * (Number(s.usdtRate) || 0));
+  if (amtUgx < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Getting your amount…';
+  const r = await post('/deposit/usdt/intent', { amountUsdt: amtUsdt });
+  btn.disabled = false; btn.textContent = label;
+  if (r.status !== 'success') return notify(r.message || 'Could not get your payment amount');
+  _usdtIntent = { id: r.intentId, exact: r.exactAmount, base: Math.round(amtUsdt * 100) / 100, address: r.walletAddress, expiresAt: r.expiresAt };
+  const ex = $('usdtExactDisplay'); if (ex) ex.textContent = r.exactAmount + ' USDT';
+  const ad = $('usdtAddrDisplay'); if (ad && r.walletAddress) ad.textContent = r.walletAddress;
+  const mins = Math.max(1, Math.round((Number(r.expiresAt) - Date.now()) / 60000));
+  const hint = $('usdtExpiryHint'); if (hint) hint.textContent = 'This amount is reserved for you for about ' + mins + ' minutes.';
+  const box = $('usdtPayBox'); if (box) box.style.display = 'block';
+};
 window.doUsdtDeposit = async function(){
   const s = STATE.settings || {};
   const btn = $('usdtGoBtn');
   if (!btn || btn.disabled) return;
-  const amtUsdt = parseFloat(($('usdtAmt') || {}).value);
+  if (!_usdtIntent) return notify('Tap Get payment amount first');
   const txid = ($('usdtTxid') || {}).value.trim();
-  if (!amtUsdt || amtUsdt <= 0) return notify('Enter the USDT amount you sent');
   if (!txid) return notify('Enter the transaction hash (TXID)');
-  const amtUgx = Math.round(amtUsdt * (Number(s.usdtRate) || 0));
-  if (amtUgx < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
   const label = btn.textContent;
   // The server itself checks the transaction a few times before answering
   // (see resolveUsdtDeposit server-side) -- this button legitimately takes
   // a few seconds, which "Checking payment…" makes honest rather than just
   // a generic spinner.
   btn.disabled = true; btn.textContent = 'Checking payment…';
-  const r = await post('/deposit/usdt/submit', { amountUsdt: amtUsdt, txid: txid });
+  const r = await post('/deposit/usdt/submit', { intentId: _usdtIntent.id, txid: txid });
   btn.disabled = false; btn.textContent = label;
   if (r.status !== 'success') return notify(r.message || 'Could not submit your recharge');
 
   if (r.state === 'rejected') {
-    // Fields stay exactly as typed -- the member can see what they entered
-    // and correct it (e.g. the right amount) rather than starting over.
+    // The hash stays as typed so the member can see what was declined.
     return notify(r.message || 'Payment declined.');
   }
 
   if (r.state === 'matched') {
+    _usdtIntent = null;
     fireConfetti();
     notify('Payment completed! Credited to your balance.');
     closeSheet({ fromAction: true });

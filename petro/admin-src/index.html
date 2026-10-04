@@ -1979,7 +1979,7 @@ function drawDeps(){
     const usdtBadge = d.autoVerified ? ' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>'
       : d.autoDeclined ? ' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>' : '';
     const methodLabel = isUsdt
-      ? `USDT (TRC20)${usdtBadge}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>`
+      ? `USDT (TRC20)${usdtBadge}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>${d.exactMicros?`<br><span style="font-size:11px" title="The transfer must be exactly this amount">${esc((Number(d.exactMicros)/1e6).toFixed(6))} USDT exact</span>`:''}`
       : isCard
       ? 'Card (MarzPay)'
       : isManual

@@ -5318,7 +5318,12 @@ function addrCore(addr) {
 //                        transaction can simply not have confirmed yet, or
 //                        TronGrid can be having a bad moment. Must be
 //                        retried, never declined outright.
-async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
+// opts (new-style claims, see /deposit/usdt/intent): { exactMicros, notBeforeMs }.
+// A claim made from a payment request must match its unique amount to the last
+// digit and must have been sent after the request was made -- that is what
+// stops one member claiming a payment another member sent (a TXID is public).
+// Older claims (no opts) keep the previous rule: at least the claimed amount.
+async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt, opts = {}) {
   if (!TRONGRID_API_KEY) return { verified: false, conclusive: false, reason: 'TRONGRID_API_KEY not configured' };
   if (!expectWalletAddress) return { verified: false, conclusive: false, reason: 'No receiving wallet address configured' };
   try {
@@ -5333,7 +5338,7 @@ async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
     if (events.length === 0) return { verified: false, conclusive: false, reason: 'Not confirmed on-chain yet' };
     const expectCore = addrCore(expectWalletAddress);
     const contractCore = addrCore(USDT_TRC20_CONTRACT);
-    const transfer = events.find(e =>
+    const toUs = events.filter(e =>
       e && e.event_name === 'Transfer' &&
       addrCore(e.contract_address) === contractCore &&
       e.result && addrCore(e.result.to) === expectCore && expectCore !== ''
@@ -5341,7 +5346,19 @@ async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
     // Something DID confirm under this txid, it just isn't a matching USDT
     // payment to our wallet (wrong token, wrong recipient, or not a
     // Transfer at all) -- the chain itself proves this one is wrong.
-    if (!transfer) return { verified: false, conclusive: true, reason: 'The confirmed transaction is not a matching USDT transfer to our wallet' };
+    if (!toUs.length) return { verified: false, conclusive: true, reason: 'The confirmed transaction is not a matching USDT transfer to our wallet' };
+    const exact = opts.exactMicros != null ? BigInt(opts.exactMicros) : null;
+    let transfer = toUs[0];
+    if (exact !== null) {
+      const valueOf = e => { try { return BigInt(String(e.result.value)); } catch (_) { return null; } };
+      transfer = toUs.find(e => valueOf(e) === exact);
+      if (!transfer) return { verified: false, conclusive: true, reason: `The confirmed amount does not match the exact amount of this request (${usdtMicrosText(opts.exactMicros)} USDT). Start a new request and send exactly the amount shown.` };
+      const when = Number(transfer.block_timestamp);
+      if (!Number.isFinite(when) || when <= 0) return { verified: false, conclusive: false, reason: 'TronGrid gave no block time for this transfer' };
+      if (opts.notBeforeMs && when < opts.notBeforeMs)
+        return { verified: false, conclusive: true, reason: 'This transfer was sent before the payment request was made, so it cannot be used for it.' };
+      return { verified: true, onChainAmount: Number(exact) / 1e6 };
+    }
     // USDT on TRON has 6 decimals -- the raw on-chain value is an integer.
     const onChainAmount = Number(transfer.result.value) / 1e6;
     if (!isFinite(onChainAmount)) return { verified: false, conclusive: false, reason: 'Could not parse on-chain amount' };
@@ -5357,6 +5374,8 @@ async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
     return { verified: false, conclusive: false, reason: e.message };
   }
 }
+// 123456789 micro-USDT -> "123.456789"
+function usdtMicrosText(m) { const t = String(m).padStart(7, '0'); return t.slice(0, -6) + '.' + t.slice(-6); }
 // How long an INCONCLUSIVE claim (TronGrid simply has no record of it yet)
 // is allowed to keep waiting before the reconciler gives up and declines it
 // -- guarantees every claim eventually reaches a definitive completed/
@@ -5381,7 +5400,8 @@ async function resolveUsdtDeposit(depositId) {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
     if (!snap.exists || snap.data().status !== 'awaiting_verification') return { outcome: 'unchanged' };
     const dep = snap.data();
-    const result = await verifyUsdtTx(dep.txid, dep.walletAddress, dep.amountUsdt);
+    const result = await verifyUsdtTx(dep.txid, dep.walletAddress, dep.amountUsdt,
+      dep.exactMicros ? { exactMicros: dep.exactMicros, notBeforeMs: Number(dep.intentCreatedMs) ? Number(dep.intentCreatedMs) - USDT_CLOCK_SKEW_MS : undefined } : {});
     if (result.verified) {
       // autoVerified is set BEFORE the credit for the same claim-before-credit
       // reason as everywhere else -- if this update lands but the credit call
@@ -5419,6 +5439,75 @@ async function resolveUsdtDeposit(depositId) {
     return { outcome: 'pending', reason: e.message };
   }
 }
+// ── PAYMENT REQUESTS (the fix for TXID hijacking) ──
+// A transaction hash is public the moment it is on-chain, and the old flow
+// credited whoever submitted it first, so anyone watching the wallet could
+// claim another member's payment. Now a member first asks for a payment
+// request: the server reserves a UNIQUE exact amount for them (their amount
+// plus a random 1-999 micro-USDT tail, e.g. 25.000417) and only a transfer of
+// exactly that amount, sent after the request was made, can be credited to
+// that request's owner. Nobody else can hold the same amount at the same time.
+// The reservation is the document id (the exact micro-USDT figure), so two
+// requests can never share an amount; an expired one is reclaimed atomically.
+const USDT_INTENT_TTL_MS = 60 * 60 * 1000;
+const USDT_MAX_OPEN_INTENTS = 3;
+const USDT_OFFSET_MAX = 999;
+const USDT_CLOCK_SKEW_MS = 30 * 1000;
+const _usdtIntentDebounce = new Map();
+async function allocateUsdtIntent(userId, baseCents, extra) {
+  const col = db.collection('usdtIntents');
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const micros = baseCents * 10000 + crypto.randomInt(1, USDT_OFFSET_MAX + 1);
+    const now = Date.now();
+    const doc = { userId, baseUsdt: baseCents / 100, exactMicros: micros, status: 'open', createdMs: now,
+      createdAt: FieldValue.serverTimestamp(), expiresAt: new Date(now + USDT_INTENT_TTL_MS), ...extra };
+    const ref = col.doc(String(micros));
+    if (await ref.createIfAbsent(doc)) return { id: ref.id, ...doc };
+    // Taken. Reclaimable only if it has expired; the condition makes the
+    // takeover atomic, so two requests cannot both win the same amount.
+    const reclaimed = await ref.updateIf({ expiresAt: { $lt: new Date() } }, { ...doc, txid: FieldValue.delete() });
+    if (reclaimed) return { id: ref.id, ...doc };
+  }
+  return null;
+}
+app.post('/deposit/usdt/intent', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before recharging.' });
+    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT recharges are not available right now.' });
+    const rate = Number(sett.usdtRate) || 0;
+    if (rate <= 0 || !sett.usdtWalletAddress) return res.status(400).json({ status: 'error', message: 'USDT recharges are not configured yet. Please try again later.' });
+    const baseCents = Math.round(Number(req.body.amountUsdt) * 100);
+    if (!Number.isFinite(baseCents) || baseCents < 1) return res.status(400).json({ status: 'error', message: 'Enter a valid USDT amount' });
+    const amountUgx = Math.round((baseCents / 100) * rate);
+    if (amountUgx > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
+    if (amountUgx < sett.minDeposit)
+      return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)} (about ${(sett.minDeposit / rate).toFixed(2)} USDT)` });
+    const last = _usdtIntentDebounce.get(userId) || 0;
+    if (Date.now() - last < 2000) return res.status(429).json({ status: 'error', message: 'Please wait a moment.' });
+    _usdtIntentDebounce.set(userId, Date.now());
+    const view = i => ({ status: 'success', intentId: i.id, exactAmount: usdtMicrosText(i.exactMicros), amountUgx: i.amountUgx,
+      walletAddress: i.walletAddress, expiresAt: tsMillis(i.expiresAt) || new Date(i.expiresAt).getTime() });
+    // The same amount asked for again gives the same request back; a member
+    // can only hold a few open ones at a time.
+    const mineSnap = await db.collection('usdtIntents').where('userId', '==', userId).where('status', '==', 'open').get();
+    const open = mineSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => tsMillis(i.expiresAt) > Date.now());
+    const same = open.find(i => Math.round(Number(i.baseUsdt) * 100) === baseCents && i.walletAddress === sett.usdtWalletAddress);
+    if (same) return res.json(view(same));
+    if (open.length >= USDT_MAX_OPEN_INTENTS)
+      return res.status(429).json({ status: 'error', message: 'You already have open USDT requests. Use one of them, or wait for it to expire.' });
+    const intent = await allocateUsdtIntent(userId, baseCents, { amountUgx, rate, walletAddress: sett.usdtWalletAddress });
+    if (!intent) return res.status(503).json({ status: 'error', message: 'Could not reserve an amount right now. Please try again in a moment.' });
+    res.json(view(intent));
+  } catch (e) {
+    console.error('USDT intent error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not create your payment request. Please try again.' });
+  }
+});
 const _usdtSubmitDebounce = new Map();
 app.post('/deposit/usdt/submit', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -5429,22 +5518,33 @@ app.post('/deposit/usdt/submit', async (req, res) => {
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before recharging.' });
     if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT recharges are not available right now.' });
-    const rate = Number(sett.usdtRate) || 0;
-    if (rate <= 0) return res.status(400).json({ status: 'error', message: 'USDT recharges are not configured yet. Please try again later.' });
-
-    const amountUsdt = Number(req.body.amountUsdt);
-    if (!isFinite(amountUsdt) || amountUsdt <= 0) return res.status(400).json({ status: 'error', message: 'Enter a valid USDT amount' });
+    // Only a payment request (see /deposit/usdt/intent) can be claimed. The old
+    // "type any amount and a hash" claim could be used to take someone else's
+    // public transaction, so it is no longer accepted.
+    const intentId = String(req.body.intentId || '');
+    if (!/^\d{6,15}$/.test(intentId))
+      return res.status(400).json({ status: 'error', message: 'Start a new USDT recharge to get your exact payment amount first.' });
+    const intentRef = db.collection('usdtIntents').doc(intentId);
+    const intentSnap = await intentRef.get();
+    if (!intentSnap.exists || intentSnap.data().userId !== userId)
+      return res.status(404).json({ status: 'error', message: 'Payment request not found. Start a new USDT recharge.' });
+    const intent = intentSnap.data();
+    const amountUsdt = Number(intent.baseUsdt);
+    const rate = Number(intent.rate);
+    const amountUgx = Number(intent.amountUgx);
     // Tron TXIDs are 64 hex chars -- a loose format check to keep obvious
     // junk/typos out. The real verification is TronGrid (or the admin's own
     // Tronscan check before they approve it); this is not relied on for
     // security.
     const txid = String(req.body.txid || '').trim().toLowerCase();
     if (!/^[a-f0-9]{60,66}$/.test(txid)) return res.status(400).json({ status: 'error', message: 'Enter a valid transaction hash (TXID)' });
-
-    const amountUgx = Math.round(amountUsdt * rate);
-    if (amountUgx > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
-    if (amountUgx < sett.minDeposit)
-      return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)} (about ${(sett.minDeposit / rate).toFixed(2)} USDT)` });
+    // One request, one transaction: a second hash for a request that already
+    // has a live claim is refused (a failed claim may be corrected).
+    if (intent.status === 'used' && intent.txid && intent.txid !== txid) {
+      const prev = await db.collection('pendingDeposits').doc(usdtDepositDocId(intent.txid)).get();
+      if (prev.exists && prev.data().status !== 'failed')
+        return res.status(409).json({ status: 'error', message: 'A transaction was already submitted for this payment request.' });
+    }
 
     const lastSub = _usdtSubmitDebounce.get(userId) || 0;
     if (Date.now() - lastSub < 7000)
@@ -5481,7 +5581,12 @@ app.post('/deposit/usdt/submit', async (req, res) => {
     // same TXID must never be transferred to a different account after a
     // decline. Older releases allowed random-ID duplicates, so inspect every
     // matching row rather than only a capped prefix.
-    if (!failedPrior && dupSnap.docs.some(d => d.data().status === 'failed'))
+    // Claims made from a payment request (they carry exactMicros) are different:
+    // they can only succeed for the request whose unique amount the transfer
+    // really matches, so someone else's failed attempt on this hash (e.g. an
+    // attacker submitting a hash that is not theirs) must not lock the real
+    // owner out of it. Only older, amount-less claims keep the hard lock.
+    if (!failedPrior && dupSnap.docs.some(d => d.data().status === 'failed' && !d.data().exactMicros))
       return res.status(409).json({ status: 'error', message: 'This transaction hash has already been used.' });
 
     const ref = await uniqueRef('U');
@@ -5489,7 +5594,8 @@ app.post('/deposit/usdt/submit', async (req, res) => {
     const depRef = db.collection('pendingDeposits').doc(failedPrior ? failedPrior.id : usdtDepositDocId(txid));
     const claimData = {
       userId, method: 'usdt', amount: amountUgx, amountUsdt, rate, txid, ref,
-      walletAddress: sett.usdtWalletAddress, status: 'awaiting_verification',
+      intentId, exactMicros: intent.exactMicros, intentCreatedMs: intent.createdMs,
+      walletAddress: intent.walletAddress, status: 'awaiting_verification',
       commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
       regionKey: currentRegionKey(),
       date, time, createdAt: FieldValue.serverTimestamp()
@@ -5501,8 +5607,8 @@ app.post('/deposit/usdt/submit', async (req, res) => {
       // A conclusively failed claim is deliberately reusable: the member may
       // have pasted the right hash with the wrong amount. Only one retry can
       // move it back to awaiting_verification.
-      if (raced.exists && raced.data().status === 'failed') {
-        claimed = await depRef.updateIf({ status: 'failed', userId, txid }, {
+      if (raced.exists && raced.data().status === 'failed' && (raced.data().userId === userId || raced.data().exactMicros)) {
+        claimed = await depRef.updateIf({ status: 'failed', txid }, {
           ...claimData,
           failureReason: FieldValue.delete(), autoDeclined: FieldValue.delete(),
           autoVerified: FieldValue.delete(), onChainAmountUsdt: FieldValue.delete(),
@@ -5520,6 +5626,7 @@ app.post('/deposit/usdt/submit', async (req, res) => {
         return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
       }
     }
+    await intentRef.update({ status: 'used', txid }).catch(() => {});
     // Same ledger-row-up-front pattern as /deposit/marzpay -- Records shows
     // this immediately as Processing rather than staying invisible until
     // credited.

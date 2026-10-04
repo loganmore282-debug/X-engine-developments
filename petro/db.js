@@ -151,6 +151,7 @@ async function ensureIndexes() {
     // send-money one immediately above.
     ['withdrawals',     { status: 1, isBankTransfer: 1, marzReference: 1, createdAt: 1 }],
     ['pendingDeposits', { userId: 1 }],
+    ['usdtIntents', { userId: 1, status: 1 }], // /deposit/usdt/intent: a member's open payment requests
     ['pendingDeposits', { marzReference: 1 }],
     ['pendingDeposits', { status: 1 }],
     ['pendingDeposits', { provider: 1, status: 1, createdAt: 1 }], // reconcilePendingDeposits()'s PesaJet sweep
