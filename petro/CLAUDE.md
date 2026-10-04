@@ -7039,3 +7039,55 @@ Not pushed in this review step. On later publication, recheck the branch
 head first; pushing this branch triggers the existing Hostinger VPS webhook
 (GitHub pull, production dependency install, PM2 reload). Report delivery
 as verified only if actually checked.
+
+## 2026-10-04 — Admin analytics use recorded activity and live contracts
+
+Removed the guessed trend/reinvestment/signup-conversion forecast. Analytics
+now offers an EAT calendar date selector (and Today reset) with credited
+deposits, paid withdrawals, and currently unresolved requests created on that
+date. Selected-day totals are independent of the 7/30/90-day chart period.
+Period charts and KPIs use the same EAT calendar boundaries and recorded
+creditedAt/processedAt timestamps, with request-time fallback for legacy rows.
+Matched deposits awaiting wallet credit are unresolved; recorded wallet
+credits still count if only ledger recovery is outstanding. A zero net
+withdrawal stays zero. Active investors are distinct live-contract owners.
+
+Running-product totals use saved purchase prices, paidOut and expectedReturn
+from active contracts. These are contract balances, not predictions of member
+withdrawal/reinvestment choices. Scan caps are surfaced; a failed rewards
+query displays Unavailable rather than zero. Daily views reflect current
+request status and are not historical snapshots of the queue.
+
+Review fixes covered by `node test-admin-analytics.js` (real route with fixture
+snapshots plus date-picker rendering). Rebuild with `node build-admin.js`;
+admin cache is v60. Run `npm run test:audit` and the admin smoke test on the
+built bundle before publishing. No payment writes or auth/session rules change.
+Base remote head: `6e5ddfae67de4304dd15dd3acd0529ebe57ae88c`.
+
+Validation completed: analytics regression test, admin build round-trip, built
+admin smoke test, full 13-command audit suite, server syntax and diff whitespace
+checks passed. The older standalone test-regions.js is obsolete for this
+Uganda-only branch (expects removed normalizeRegion); the audit suite runs
+test-uganda-only.js successfully. Live VPS deployment is not verified here.
+
+## 2026-10-04 — Complete contract-based daily analytics
+
+Daily schedules use saved createdAt, payoutsTotal, payoutsMade, expectedReturn
+and paidOut. Instalments fall every 24 hours from purchase using settlement's
+cumulative rounding, not displayed dailyPayout multiplied by days. Past and
+future dates are supported, including matured contracts for historical days.
+Shows scheduled cashback, currently unpaid selected-day cashback, maturities,
+eligible overdue cashback now, and paused amounts for banned/unavailable
+accounts. Invalid schedules are excluded with a warning. Outstanding deposits
+and net withdrawals across all request dates are shown separately. Future
+deposits and discretionary withdrawals are unknown, not invented forecasts.
+Cashback and withdrawal requests must not be added as predicted cash-out.
+
+Scan limits remain visible through the incomplete-data warning, including
+the historical contract scan. Live reads are not an atomic database snapshot
+or historical queue snapshots. No settlement/payment/session logic changed.
+Regression tests cover EAT/24-hour boundaries, cumulative rounding, maturity,
+settlement progress, paused/missing accounts, invalid schedules and old open
+requests. Analytics regression, admin build round-trip, built admin smoke,
+full 13-command audit and whitespace checks passed. Admin cache is v61.
+Publication and live VPS deployment have not yet been verified.
