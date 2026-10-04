@@ -1623,6 +1623,7 @@ function showAuthTab(tab){
   // stale ticket from a previous attempt.
   if (tab === 'register') window._regOtp = { otpId: null, ticket: null, phone: '' };
   if (tab === 'forgot') window._forgotOtp = { otpId: null, ticket: null, phone: '' };
+  stopSmsCodeListener();
 }
 // ── OTP RESEND COOLDOWN ──
 // Shared by every OTP step (registration, forgot-password, add-wallet) so
@@ -1774,6 +1775,63 @@ window._regOtp = { otpId: null, ticket: null, phone: '' };
 // replacing every call site with notify() directly) purely so nothing
 // else about doRegSendOtp()/doRegister() has to change.
 function regError(msg){ if (msg) notify(msg); }
+// Android Chrome can hand the code straight to the page when the SMS ends
+// with the "@host #code" line the server adds (see otpSmsText() in
+// server.js): one tap on the system prompt fills the box. Anywhere else the
+// feature test fails and nothing changes -- the member just types it.
+var _webOtpAbort = null;
+function stopSmsCodeListener(){
+  if (_webOtpAbort) { try { _webOtpAbort.abort(); } catch (_) {} _webOtpAbort = null; }
+}
+function listenForSmsCode(inputId){
+  try {
+    stopSmsCodeListener();
+    if (!('OTPCredential' in window) || !navigator.credentials || typeof AbortController === 'undefined') return;
+    const ac = _webOtpAbort = new AbortController();
+    navigator.credentials.get({ otp: { transport: ['sms'] }, signal: ac.signal }).then(cred => {
+      const el = $(inputId);
+      if (!cred || !cred.code || ac.signal.aborted || !el) return;
+      el.value = String(cred.code).replace(/\D/g, '').slice(0, 6);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }).catch(() => {});
+  } catch (_) {}
+}
+// The ticket from a successful verify stays valid for 15 minutes but the
+// code it came from expires after 10, so a ticket older than this is checked
+// again rather than trusted -- the server then says plainly if the code ran out.
+var OTP_TICKET_FRESH_MS = 9 * 60 * 1000;
+// Verifies the code the member typed, once. Called the instant the sixth
+// digit lands (onRegOtpInput) and again from doRegister(); whichever asks
+// second reuses the first one's result (or its still-running request)
+// instead of spending another of the code's five attempts.
+function regVerifyOtp(code){
+  const st = window._regOtp;
+  if (!st.otpId) return Promise.resolve({ ok: false, message: 'Please tap Send Code first.' });
+  if (st.ticket && st.verifiedCode === code && Date.now() - st.verifiedAt < OTP_TICKET_FRESH_MS) return Promise.resolve({ ok: true });
+  if (st.pending && st.pendingCode === code) return st.pending;
+  st.pendingCode = code;
+  const p = post('/auth/otp/verify', { otpId: st.otpId, code }).then(v => {
+    // A resend (or leaving the pane) replaced this state while the request
+    // was in flight -- its answer belongs to a code that is no longer current.
+    if (window._regOtp !== st) return { ok: false, stale: true };
+    st.pending = null;
+    if (v.status === 'success') {
+      st.ticket = v.ticket; st.verifiedCode = code; st.verifiedAt = Date.now();
+      return { ok: true };
+    }
+    return { ok: false, message: v.message || 'Incorrect verification code.' };
+  });
+  st.pending = p;
+  return p;
+}
+window.onRegOtpInput = function(el){
+  if (/\D/.test(el.value)) el.value = el.value.replace(/\D/g, '');
+  const code = el.value;
+  const st = window._regOtp;
+  if (code.length !== 6 || !otpVerificationEnabled() || !st.otpId) return;
+  if (st.phone !== cleanPhone($('regPhone').value)) return;
+  regVerifyOtp(code).then(r => { if (!r.ok && !r.stale) notify(r.message); });
+};
 window.doRegSendOtp = async function(){
   const phone = cleanPhone($('regPhone').value);
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
@@ -1783,8 +1841,11 @@ window.doRegSendOtp = async function(){
   setBtnLoading('regSendOtpBtn', false, 'Send Code');
   if (d.status !== 'success') return regError(d.message || 'Could not send the code');
   window._regOtp = { otpId: d.otpId, ticket: null, phone };
-  const otpInput = $('regOtp'); if (otpInput) otpInput.value = '';
+  const otpInput = $('regOtp');
+  if (otpInput) { otpInput.value = ''; try { otpInput.focus(); } catch (_) {} }
+  notify('Verification code sent. It can take a moment to arrive.');
   startOtpResendCooldown('regSendOtpBtn', 30);
+  listenForSmsCode('regOtp');
 };
 window.doRegister = async function(){
   const phone = cleanPhone($('regPhone').value);
@@ -1819,11 +1880,17 @@ window.doRegister = async function(){
   // own /register mirrors this (see completeRegistrationCore()'s caller):
   // it only demands otpTicket when settings.otpVerificationEnabled is true.
   if (otpOn) {
-    setBtnLoading('regBtn', true, 'Register', 'Verifying code…');
-    if (!window._regOtp.ticket) {
-      const v = await post('/auth/otp/verify', { otpId: window._regOtp.otpId, code });
-      if (v.status !== 'success') { setBtnLoading('regBtn', false, 'Register'); return regError(v.message || 'Incorrect verification code.'); }
-      window._regOtp.ticket = v.ticket;
+    // Usually already done: the code is verified as soon as its sixth digit
+    // is entered (onRegOtpInput), so this resolves instantly and the button
+    // goes straight to "Creating your account…". Only a code that has not
+    // been checked yet shows the extra "Verifying code…" step.
+    const st = window._regOtp;
+    const checked = st.ticket && st.verifiedCode === code && Date.now() - st.verifiedAt < OTP_TICKET_FRESH_MS;
+    if (!checked) setBtnLoading('regBtn', true, 'Register', 'Verifying code…');
+    const r = await regVerifyOtp(code);
+    if (!r.ok) {
+      setBtnLoading('regBtn', false, 'Register');
+      return regError(r.stale ? 'A new code was sent. Enter the latest code.' : (r.message || 'Incorrect verification code.'));
     }
   }
   setBtnLoading('regBtn', true, 'Register', 'Creating your account…');
@@ -1895,8 +1962,11 @@ window.doForgotSendOtp = async function(){
   setBtnLoading('forgotSendOtpBtn', false, 'Send Code');
   if (d.status !== 'success') return forgotError(d.message || 'Could not send the code');
   window._forgotOtp = { otpId: d.otpId, ticket: null, phone };
-  const otpInput = $('forgotOtp'); if (otpInput) otpInput.value = '';
+  const otpInput = $('forgotOtp');
+  if (otpInput) { otpInput.value = ''; try { otpInput.focus(); } catch (_) {} }
+  notify('Verification code sent. It can take a moment to arrive.');
   startOtpResendCooldown('forgotSendOtpBtn', 30);
+  listenForSmsCode('forgotOtp');
 };
 window.doForgotSubmit = async function(){
   const phone = cleanPhone($('forgotPhone').value);
@@ -2325,15 +2395,13 @@ function otpVerificationEnabled(){
   const st = STATE.settings || {};
   return st.otpVerificationEnabled !== false;
 }
-// Registration is the one flow that just drops its OTP step when the
-// toggle is off (a brand-new account has no existing identity to protect,
-// so "verify the phone number" is a nice-to-have there, not a safeguard) --
-// see doRegister()'s own branch. Reset Password and Bind Wallet are
-// different: both are ways to redirect an ALREADY-registered member's
-// money or access, and OTP is the only thing standing in for "prove this
-// is really the account holder" on either. With it off there is no
-// self-service substitute -- both route to Support instead, which is why
-// this function also drives renderWalletSheet()'s own equivalent branch.
+// Registration just drops its OTP step when the toggle is off (a brand-new
+// account has no existing identity to protect) -- see doRegister()'s own
+// branch. Saving a payout account is also unchanged apart from the code step
+// disappearing -- see submitWallet(). Reset Password is the one flow with no
+// substitute: it redirects an ALREADY-registered member's access, and OTP is
+// the only thing proving it is really them, so with it off it routes to
+// Support instead.
 function applyOtpVerificationUi(){
   const on = otpVerificationEnabled();
   const regRow = $('regOtpRow');
@@ -4303,22 +4371,6 @@ function walletPlainRowHtml(w){
     <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button>
   </div>`;
 }
-// Owner: with the master OTP-verification toggle off, self-service wallet
-// binding has no way left to verify it's genuinely the account holder --
-// same reasoning as Reset Password's own support-contact fallback below.
-// Shown in place of the add-wallet form (and the "+ Add another wallet"
-// button never appears either) whenever the toggle is off; already-saved
-// wallets still list/delete normally either way.
-function walletOtpDisabledHtml(){
-  const s = STATE.settings || {};
-  const rows = [];
-  if (s.whatsappGroup) rows.push(supportRowHtml('whatsapp', ICONS.whatsapp, 'WhatsApp Channel', 'Chat with us', s.whatsappGroup));
-  if (s.supportEmail) rows.push(supportRowHtml('mail', ICONS.emailPetro, 'Email Support', s.supportEmail, 'mailto:' + s.supportEmail));
-  return `<div class="reveal-in">
-    <p style="line-height:1.6;color:var(--snow-muted);margin:0 0 18px;">Adding a payout wallet needs a quick check from our team right now. Contact support and we will help you add it.</p>
-    ${rows.join('') || `<p style="line-height:1.6;color:var(--snow-muted);">Contact support for help adding a payout wallet.</p>`}
-  </div>`;
-}
 function renderWalletSheet(){
   const w = currentWallet();
   // Owner: "add all supported banks so withdrawals will also be processed
@@ -4333,18 +4385,10 @@ function renderWalletSheet(){
     // One row per saved wallet, not just the first -- walletPlainRowHtml()'s
     // own delete button already worked per-row, it just never had more than
     // one row to act on before this round. "Add another wallet" reuses the
-    // exact same add-form toggleWalletEdit() already drives -- hidden
-    // entirely when the master OTP toggle is off, since there both a wallet
-    // sheet and it would just land back here anyway.
+    // exact same add-form toggleWalletEdit() already drives.
     const rows = (STATE.bankAccounts || []).map(walletPlainRowHtml).join('');
-    const addBtn = otpVerificationEnabled()
-      ? '<button class="btn-bind" type="button" style="margin:6px 0 0;" onclick="toggleWalletEdit(true)">+ Add another wallet</button>'
-      : '';
+    const addBtn = '<button class="btn-bind" type="button" style="margin:6px 0 0;" onclick="toggleWalletEdit(true)">+ Add another wallet</button>';
     $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + rows + addBtn + '</div>';
-    return;
-  }
-  if (!otpVerificationEnabled()) {
-    $('sheetBody').innerHTML = walletOtpDisabledHtml();
     return;
   }
   // Only prefill when this IS still the old single-wallet "edit my one
@@ -4463,7 +4507,9 @@ window.submitWallet = async function(){
   }
   if (!holder) return notify('Enter the account holder name.');
   const btn = $('walSaveBtn');
-  if (!(STATE.settings || {}).bankOtpRequired) {
+  // A code step only exists when OTP is on AND the payout-account option is
+  // on; turning OTP off just removes the code request, saving is unchanged.
+  if (!otpVerificationEnabled() || !(STATE.settings || {}).bankOtpRequired) {
     btn.disabled = true; btn.textContent = 'Saving…';
     const r = await post('/bank/save', { holder, network, phone });
     btn.disabled = false; btn.textContent = 'Submit';

@@ -6998,3 +6998,94 @@ fix (still shows/auto-dismisses normally), and -- critically -- scroll
 correctly STAYS locked when a real overlay (a genuinely open sheet) is
 still open, confirming the fix narrows the check correctly rather than
 just removing the guard outright. `user/sw.js` bumped `v231` → `v232`.
+
+## Follow-up 53 -- payout account saves as usual with OTP off (no support message); OTP delivery and registration made faster and more reliable
+
+Owner: *"when l disable otp, on payout account saving, it should not say to
+contact customer service, it should remain as usual but just disabling otp
+requests, improve on registration and otp delivery."*
+
+**Payout account with OTP off -- reverses the wallet half of Follow-up 43.**
+The master toggle (`otpVerificationEnabled`) now only stops code REQUESTS.
+Saving a payout account behaves exactly as it does when `bankOtpRequired` is
+off: same form, same Save button, saves straight away, no support-contact card.
+- `server.js` `/bank/save`: the 403 `OTP_DISABLED` refusal is gone. A code is
+  demanded only when `otpVerificationEnabled !== false && bankOtpRequired`
+  (master off always wins over the bank option, so it cannot block a save).
+- `user-src/original_module.js`: `walletOtpDisabledHtml()` deleted;
+  `renderWalletSheet()` no longer branches on the toggle and "+ Add another
+  wallet" is always offered; `submitWallet()` skips the code step when OTP is
+  off OR the bank option is off.
+- **Still support-based, unchanged**: Forgot Password with OTP off (there is no
+  substitute identity check for a reset). Registration with OTP off still just
+  drops the code field.
+- Admin toggle helper text rewritten to say what actually happens now.
+
+**OTP delivery (`/auth/otp/send`, `marzSmsSend()`), four real defects fixed:**
+1. **A failed SMS used up the member's daily quota.** The per-phone counter was
+   bumped BEFORE sending and never given back, so with the registration default
+   of 2/day, two provider hiccups locked a real member out until tomorrow. The
+   counter is now refunded (`otpRefundDailyLimit()`, same lock, same day key the
+   send was counted against) when the SMS itself fails. Deliberately NOT
+   refunded when the SMS went out but the database write failed (that text was
+   really sent and billed).
+2. **One transient failure meant no code.** `marzSmsSend()` now retries once on
+   a network error/timeout/5xx (same message, so a timeout that actually
+   delivered still leaves a valid code; worst case one extra 30 UGX text).
+   4xx and an explicit `success:false` are definite answers and never retried.
+   Timeout tightened to 10s (`MARZSMS_TIMEOUT`) from the shared 20s so a retry
+   cannot stretch a request past ~20s.
+3. **The response waited for the database write AND the SMS in sequence.** They
+   now start together (`Promise.allSettled`) -- the member cannot type the code
+   before the response arrives anyway. A failed SMS also removes the code row.
+4. **The text read badly and was hard-coded.** Now `123456 is your <Brand>
+   verification code...` (code first, so a lock-screen preview shows it), brand
+   from the live `brandName` setting (ASCII-only, max 20 chars, so it stays one
+   160-character SMS segment -- non-GSM characters would double the cost).
+   When the request comes from one of our own https app origins, the last line
+   is `@host #code`, the format Android Chrome's WebOTP API reads. The host is
+   only ever taken from an origin already on the CORS allow list.
+
+**Registration, client side (`doRegSendOtp`/`doRegister`):**
+- **The code is verified the moment the 6th digit is entered** (`onRegOtpInput`
+  -> `regVerifyOtp`), so by the time Register is tapped the ticket usually
+  exists and the button goes straight to "Creating your account...". A tap
+  that arrives while the check is still running shares that request instead of
+  spending another of the code's five attempts. A wrong code now reports
+  immediately, not only after tapping Register.
+- A ticket older than 9 minutes (`OTP_TICKET_FRESH_MS`) is re-checked rather
+  than trusted (the code itself expires at 10; the server answers plainly if it
+  ran out). A resend while a check is in flight makes the old answer "stale" and
+  its ticket is never installed.
+- **Android auto-fill**: after Send Code, `listenForSmsCode()` asks Chrome's
+  WebOTP API for the SMS and fills the box (which then auto-verifies). Feature
+  tested first, so every other browser is unaffected; aborted when leaving the
+  pane. Also wired into Forgot Password.
+- Sending a code now gives feedback ("Verification code sent...") and focuses
+  the code box -- previously nothing confirmed it had gone out.
+
+**Verified, not assumed** (no live Mongo/Firebase/MarzSms in this sandbox, so
+the REAL source was extracted from `server.js` and run against mocks):
+- SMS helper: 14 checks -- retry on network error/5xx, no retry on 4xx or
+  `success:false`, gives up after exactly 2 calls, code-first text, one segment
+  with a long/non-ASCII brand, origin line only for our own https origins.
+- `/auth/otp/send` handler: 11 checks -- quota counted once on success, refunded
+  on SMS failure, three failed sends in a row never reach the 2/day limit, not
+  refunded when only the DB write fails, limit still enforced (3rd send -> 429
+  with no SMS), plain code never stored.
+- `/bank/save` handler: 5 checks -- OTP off saves with no code and no "support"
+  wording in any response, every other combination unchanged.
+- Real built bundle in headless Chromium, 27 assertions, zero page errors:
+  wallet form shown and saved via `/bank/save` with OTP off (no `/auth/otp/send`),
+  code step still used with OTP on + bank option on; 5 digits do not verify, the
+  6th verifies exactly once, Register reuses it (no "Verifying code..." label),
+  wrong code reports at once and blocks registration, stale/old tickets handled,
+  WebOTP fills the box and triggers verification, listener stops on tab switch.
+- `node -c`, `node --check server.js`, both builds round-trip OK,
+  `npm run test:audit` passes (exit 0). `user/sw.js` v232 -> v233,
+  `admin/sw.js` v59 -> v60.
+
+**Not verifiable from here**: a real SMS from MarzSms, and whether a particular
+carrier passes the `@host #code` line through untouched (WebOTP then simply does
+not trigger and the member types the code as before). `server.js` changes reach
+the VPS via the auto-deploy webhook (`git pull` + `pm2 reload`).

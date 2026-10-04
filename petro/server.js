@@ -626,14 +626,12 @@ const DEFAULT_SETTINGS = {
   // Owner: "when I disable otp verification system the functions go away
   // completely" -- one master switch, separate from bankOtpRequired above.
   // Default ON (today's live behavior: registration/reset/bank-bind OTP all
-  // still work exactly as before). Off means self-service identity
-  // verification is unavailable everywhere it's used: registration skips
-  // the OTP step outright (a brand-new account has no existing identity to
-  // protect), and both Reset Password and Bind Wallet refuse self-service
-  // entirely and point the member at support instead -- there is no
-  // substitute verification step for either of those once OTP is off, so
-  // this deliberately overrides bankOtpRequired rather than layering with
-  // it (off wins).
+  // still work exactly as before). Off stops every code request: registration
+  // skips the OTP step outright (a brand-new account has no existing identity
+  // to protect), Reset Password refuses self-service and points the member at
+  // support (there is no substitute check for it), and saving a payout
+  // account simply saves with no code step, exactly as it does when
+  // bankOtpRequired is off -- off always wins over bankOtpRequired.
   otpVerificationEnabled: true,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
@@ -2276,18 +2274,40 @@ async function marzGetBalance(region) {
 }
 // ── MARZSMS (a SEPARATE MarzPay product, sms.wearemarz.com -- alerts
 // staff by text, never moves money) ──
+// A code that never arrives is worse than a slow one, so one transient
+// failure (a network error, a timeout, or a 5xx from the provider) is retried
+// once before giving up. A 4xx is a definite answer (bad key, bad number,
+// out of credit) and is never retried. Both attempts carry the same message,
+// so a timeout that actually delivered still leaves the member holding a
+// valid code; the worst case is one extra 30 UGX text.
+const MARZSMS_TIMEOUT = 10000;
 async function marzSmsSend(recipients, message) {
-  const resp = await fetch(`${MARZSMS_BASE}/sms/send`, {
-    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
-    headers: { 'Authorization': `Basic ${MARZSMS_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipient: recipients, message }),
-  });
-  const data = await resp.json().catch(() => ({}));
-  // MarzSms's own documented error shape is {success:false,message,error}
-  // (no `status` field, unlike the wallet API) -- resp.ok is the reliable
-  // signal here, not any particular body field.
-  if (!resp.ok) throw new Error(data.message || data.error || `MarzSms HTTP ${resp.status}`);
-  return data;
+  const attempt = async () => {
+    let resp;
+    try {
+      resp = await fetch(`${MARZSMS_BASE}/sms/send`, {
+        method: 'POST', signal: AbortSignal.timeout(MARZSMS_TIMEOUT),
+        headers: { 'Authorization': `Basic ${MARZSMS_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: recipients, message }),
+      });
+    } catch (e) { e.transient = true; throw e; }
+    const data = await resp.json().catch(() => ({}));
+    // MarzSms's own documented error shape is {success:false,message,error}
+    // (no `status` field, unlike the wallet API) -- resp.ok is the reliable
+    // signal here; an explicit success:false on a 200 is also a refusal.
+    if (!resp.ok || data.success === false) {
+      const err = new Error(data.message || data.error || `MarzSms HTTP ${resp.status}`);
+      err.transient = resp.status >= 500;
+      throw err;
+    }
+    return data;
+  };
+  try { return await attempt(); }
+  catch (e) {
+    if (!e.transient) throw e;
+    await new Promise(r => setTimeout(r, 400));
+    return attempt();
+  }
 }
 // ── OTP (SMS one-time codes, via MarzSms above) ──
 // Owner: registration goes phone -> OTP -> password -> confirm password;
@@ -2323,6 +2343,8 @@ async function otpDailyLimit(purpose, sett) {
 // transaction) because ecosystem.config.js pins this process to a single
 // instance -- the same money-safety assumption every other counter in this
 // file already relies on (see withLock's own header comment).
+// Resolves to the day key the send was counted against (so a refund hits the
+// same day even if midnight passes mid-request), or false when refused.
 async function otpCheckAndBumpDailyLimit(phone, purpose) {
   const day = eatDayKey(new Date());
   const limit = await otpDailyLimit(purpose);
@@ -2333,8 +2355,39 @@ async function otpCheckAndBumpDailyLimit(phone, purpose) {
     const count = snap.exists ? (Number(snap.data().count) || 0) : 0;
     if (count >= limit) return false;
     await ref.set({ phone, purpose, day, count: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return true;
+    return day;
   });
+}
+// A text that could not be sent was never delivered, so it must not use up
+// one of the member's few daily codes (the registration default is 2 -- two
+// provider hiccups would otherwise lock a real member out until tomorrow).
+async function otpRefundDailyLimit(phone, purpose, day) {
+  try {
+    await withLock('otp-limit:' + phone + ':' + purpose, async () => {
+      await db.collection('otpSendLog').doc(`${phone}:${purpose}:${day}`)
+        .set({ count: FieldValue.increment(-1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    });
+  } catch (e) { console.error('OTP quota refund failed:', e.message); }
+}
+// The text itself: code first, so a lock-screen preview shows it without
+// opening the message. The optional last line ("@host #code") is the format
+// Android Chrome's WebOTP API reads to offer the code to the page that
+// requested it -- only added when the caller's origin is one of our own
+// https app origins, so it can never point a browser at somebody else's host.
+function otpOriginHost(req) {
+  try {
+    const o = new URL(String(req.headers.origin || ''));
+    if (o.protocol !== 'https:' || o.port) return '';
+    const h = o.hostname.toLowerCase();
+    if (CORS_ALLOWED_ORIGINS.has(o.origin) || corsHostAllowed(h)) return h;
+  } catch (_) {}
+  return '';
+}
+function otpSmsText(code, sett, req) {
+  const brand = String((sett && sett.brandName) || 'Petro').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 20) || 'Petro';
+  const host = otpOriginHost(req);
+  return `${code} is your ${brand} verification code. It expires in 10 minutes. Never share it with anyone.` +
+    (host ? `\n\n@${host} #${code}` : '');
 }
 // Looks the code up by its ticket (not by the otpCodes doc id, which the
 // caller of /auth/otp/verify never learns), and only ever consumes it once:
@@ -3828,7 +3881,8 @@ app.post('/auth/otp/send', async (req, res) => {
     // Master switch off -- none of the three OTP flows have a UI entry point
     // left once this is off (see applyOtpVerificationUi()), so refuse here
     // too rather than trust the client alone to never call this directly.
-    if ((await getSettings()).otpVerificationEnabled === false) {
+    const sett = await getSettings();
+    if (sett.otpVerificationEnabled === false) {
       return res.status(503).json({ status: 'error', code: 'OTP_DISABLED', message: 'Verification codes are turned off right now. Contact support for help.' });
     }
     let phone;
@@ -3858,25 +3912,38 @@ app.post('/auth/otp/send', async (req, res) => {
         return res.status(400).json({ status: 'error', message: 'No account found with this phone number.' });
     }
     if (!MARZSMS_KEY) return res.status(503).json({ status: 'error', message: 'SMS verification is not available right now. Try again later.' });
-    const allowed = await otpCheckAndBumpDailyLimit(phone, purpose);
-    if (!allowed) return res.status(429).json({ status: 'error', message: 'Too many verification codes requested for this number today. Try again tomorrow.' });
+    const countedDay = await otpCheckAndBumpDailyLimit(phone, purpose);
+    if (!countedDay) return res.status(429).json({ status: 'error', message: 'Too many verification codes requested for this number today. Try again tomorrow.' });
     const code = generateOtpCode();
     const otpRef = db.collection('otpCodes').doc();
-    await otpRef.set({
-      phone, purpose, codeHash: scryptHash(code), attempts: 0, verified: false,
-      ticket: null, ticketExpiresAt: null, consumedAt: null,
-      expiresAt: new Date(Date.now() + OTP_EXPIRES_MS), createdAt: FieldValue.serverTimestamp(),
-    });
-    try {
-      await marzSmsSend(phone, `Your Petro verification code is ${code}. It expires in 10 minutes. Do not share this code with anyone.`);
-    } catch (e) {
+    // The member cannot type the code before this response arrives, so the
+    // database write and the SMS hand-off do not need to run one after the
+    // other -- both start now and the response waits for whichever is slower
+    // instead of for their sum.
+    const [saved, sent] = await Promise.allSettled([
+      otpRef.set({
+        phone, purpose, codeHash: scryptHash(code), attempts: 0, verified: false,
+        ticket: null, ticketExpiresAt: null, consumedAt: null,
+        expiresAt: new Date(Date.now() + OTP_EXPIRES_MS), createdAt: FieldValue.serverTimestamp(),
+      }),
+      marzSmsSend(phone, otpSmsText(code, sett, req)),
+    ]);
+    if (sent.status === 'rejected') {
       await otpRef.delete().catch(() => {});
-      throw e;
+      await otpRefundDailyLimit(phone, purpose, countedDay);
+      throw sent.reason;
+    }
+    // The text went out but there is no record to check it against: the code
+    // is useless, so remove any partial row and ask for a fresh one. No
+    // refund here -- the SMS was really sent and really billed.
+    if (saved.status === 'rejected') {
+      await otpRef.delete().catch(() => {});
+      throw saved.reason;
     }
     res.json({ status: 'success', otpId: otpRef.id, expiresInSec: OTP_EXPIRES_MS / 1000 });
   } catch (e) {
     console.error('OTP send error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not send a verification code right now' });
+    res.status(500).json({ status: 'error', message: 'We could not send the code just now. Please try again in a moment.' });
   }
 });
 app.post('/auth/otp/verify', async (req, res) => {
@@ -6700,17 +6767,12 @@ app.post('/bank/save', async (req, res) => {
     // entirely (a family member's mobile money, for instance). Optional
     // now, per the owner -- off by default (see DEFAULT_SETTINGS.bankOtpRequired).
     const walletSettings = await getSettings();
-    // The master switch (see DEFAULT_SETTINGS.otpVerificationEnabled)
-    // overrides bankOtpRequired entirely when it's off -- there is no
-    // substitute identity check once OTP itself is unavailable, so
-    // self-service wallet binding is refused outright rather than silently
-    // falling back to "no verification at all". Matches the client's own
-    // renderWalletSheet(), which stops offering the add-wallet form the
-    // instant this setting is off.
-    if (walletSettings.otpVerificationEnabled === false) {
-      return res.status(403).json({ status: 'error', code: 'OTP_DISABLED', message: 'Adding a payout wallet needs a quick check from our team right now. Contact support for help.' });
-    }
-    if (walletSettings.bankOtpRequired) {
+    // The master switch (see DEFAULT_SETTINGS.otpVerificationEnabled) only
+    // turns the code request OFF -- saving a payout account works exactly as
+    // usual either way (owner: "it should remain as usual but just disabling
+    // otp requests"). With it off the bank-OTP requirement can never be
+    // satisfied, so it is skipped too rather than refusing the save.
+    if (walletSettings.otpVerificationEnabled !== false && walletSettings.bankOtpRequired) {
       const ownPhone = cleanPhone((uSnap.exists && uSnap.data().phone) || '');
       const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), ownPhone, 'bank');
       if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify with the code sent to your phone first.' });

@@ -2898,7 +2898,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
         <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
         <div class="af-v2 with-btn" id="regOtpRow">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
-          <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code">
+          <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code" oninput="onRegOtpInput(this)">
           <button class="af-inline-btn" id="regSendOtpBtn" onclick="doRegSendOtp()">Send Code</button>
         </div>
         <div class="af-v2">
