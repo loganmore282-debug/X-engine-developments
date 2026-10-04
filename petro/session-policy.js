@@ -1,11 +1,12 @@
 'use strict';
 const crypto = require('crypto');
-const IDLE_MS = 15 * 60 * 1000;
+const IDLE_MS = 60 * 60 * 1000;
+const ADMIN_IDLE_MS = 15 * 60 * 1000;
 const MAX_MS = 8 * 60 * 60 * 1000;
 const millis = value => value instanceof Date ? value.getTime() : Number(value) || Date.parse(value) || 0;
-function validSession(session, now = Date.now()) {
+function validSession(session, now = Date.now(), idleMs = IDLE_MS) {
   return !!session && !session.revoked && millis(session.expiresAt) > now &&
-    millis(session.lastActiveAt) > now - IDLE_MS;
+    millis(session.lastActiveAt) > now - idleMs;
 }
 function memberKey(decoded) {
   return crypto.createHash('sha256').update(decoded.uid + ':' + decoded.auth_time).digest('hex');
@@ -24,4 +25,4 @@ async function checkMember(db, decoded, touch = false, now = Date.now()) {
     lastActiveAt: { $gt: new Date(now - IDLE_MS) } }, { lastActiveAt: new Date(now) });
   return true;
 }
-module.exports = { IDLE_MS, MAX_MS, validSession, memberKey, checkMember };
+module.exports = { IDLE_MS, ADMIN_IDLE_MS, MAX_MS, validSession, memberKey, checkMember };

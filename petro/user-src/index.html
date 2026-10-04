@@ -82,6 +82,9 @@
      what was actually asked. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Warm the existing login/API connections while the sign-in screen loads. -->
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://api.petro-cchnug.com" crossorigin>
 <!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in
      original_module.js) loaded in one request -- Georgia and "System
      default" need no webfont, so they aren't listed here. Loading every
@@ -2615,7 +2618,7 @@ html,body,#app{overscroll-behavior-y:none;}
 <script data-petro-idle>
 // Real interaction renews activity; polling, focus, and visibility never do.
 window.createPetroIdleSession = function(key, onExpire, onActivity){
-  var IDLE = 15 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
+  var IDLE = 60 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
   var state = null, lastPulse = 0, lastSave = 0, timer = null;
   function save(force){
     if (!state || (!force && Date.now() - lastSave < 1000)) return;
@@ -2650,8 +2653,11 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
       clearInterval(timer);
       var saved = null;
       try { saved = JSON.parse(sessionStorage.getItem(key)); } catch (_) {}
+      // Firebase timestamps use the server clock. Allow the same small
+      // forward skew as the backend; clamp locally so no lifetime is added.
+      var localStarted = started > Date.now() && started <= Date.now() + 60000 ? Date.now() : started;
       state = !fresh && saved && saved.identity === identity ? saved :
-        {identity:identity, started:started, last:started};
+        {identity:identity, started:localStarted, last:localStarted};
       if (!check()) return false;
       save(true); timer = setInterval(check, 1000); lastPulse = 0; pulse(); return true;
     },

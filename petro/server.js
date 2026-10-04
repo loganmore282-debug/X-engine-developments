@@ -1859,9 +1859,9 @@ async function resolveSession(token, touch = false) {
   const snap = await db.collection('adminSessions').doc(token).get();
   if (!snap.exists) return null;
   const s = snap.data();
-  if (!sessionPolicy.validSession(s)) return null;
+  if (!sessionPolicy.validSession(s, Date.now(), sessionPolicy.ADMIN_IDLE_MS)) return null;
   if (touch && !(await db.collection('adminSessions').doc(token).updateIf({
-    expiresAt: { $gt: new Date() }, lastActiveAt: { $gt: new Date(Date.now() - sessionPolicy.IDLE_MS) }
+    expiresAt: { $gt: new Date() }, lastActiveAt: { $gt: new Date(Date.now() - sessionPolicy.ADMIN_IDLE_MS) }
   }, { lastActiveAt: new Date() }))) return null;
   if (s.role !== 'owner') {
     const uSnap = await db.collection('adminUsers').doc(s.username).get();
@@ -9591,17 +9591,47 @@ function bandOf(h) {
   if (h >= 17 && h < 21) return 'evening';
   return 'night';
 }
+// Read-only schedule math mirrors settlement's cumulative rounding. Each
+// instalment falls 24 hours after purchase, never at calendar midnight.
+function analyticsContractDay(inv, start, end, now) {
+  const created = tsMillis(inv.createdAt);
+  const total = Number(inv.payoutsTotal);
+  const expected = Number(inv.expectedReturn);
+  const made = Number(inv.payoutsMade);
+  const paid = Number(inv.paidOut);
+  if (!created || !Number.isInteger(total) || total <= 0 ||
+      !Number.isFinite(expected) || expected < 0 || !Number.isInteger(made) ||
+      made < 0 || made > total || !Number.isFinite(paid) || paid < 0) return null;
+  const target = n => Math.round(expected * n / total);
+  const first = Math.max(1, Math.ceil((start - created) / 86400000));
+  const last = Math.min(total, Math.ceil((end - created) / 86400000) - 1);
+  const scheduled = last >= first ? target(last) - target(first - 1) : 0;
+  const unpaidFirst = Math.max(first, made + 1);
+  const unpaid = inv.status === 'active' && last >= unpaidFirst
+    ? Math.max(0, target(last) - Math.max(paid, target(unpaidFirst - 1))) : 0;
+  const due = Math.max(0, Math.min(total, Math.floor((now - created) / 86400000)));
+  const overdue = inv.status === 'active' && due > made ? Math.max(0, target(due) - paid) : 0;
+  const maturity = created + total * 86400000;
+  return { scheduled, unpaid, overdue, matures: maturity >= start && maturity < end };
+}
 app.post('/admin/analytics', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const days = Math.min(Math.max(parseInt(req.body.days) || 30, 1), 180);
-  const sinceMs = Date.now() - days * 86400000;
+  const nowMs = Date.now();
+  const sinceMs = eatNextMidnight(nowMs) - days * 86400000;
+  const today = eatDayKey(new Date(nowMs));
+  const requestedDay = String(req.body.day || '');
+  const requestedDayMs = /^\d{4}-\d{2}-\d{2}$/.test(requestedDay) ? Date.parse(`${requestedDay}T00:00:00Z`) : NaN;
+  const selectedDay = Number.isFinite(requestedDayMs) && new Date(requestedDayMs).toISOString().slice(0, 10) === requestedDay ? requestedDay : today;
+  const selectedDayStart = Date.parse(`${selectedDay}T00:00:00Z`) - tzOffMs();
+  const selectedDayEnd = selectedDayStart + 86400000;
   try {
-    const [depSnap, witSnap, usersSnap, activeInvSnap, sett] = await Promise.all([
+    const [depSnap, witSnap, usersSnap, activeInvSnap, contractSnap] = await Promise.all([
       db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(10000).get(),
       db.collection('withdrawals').orderBy('createdAt', 'desc').limit(10000).get(),
       db.collection('users').limit(10000).get(),
       db.collection('investments').where('status', '==', 'active').limit(10000).get(),
-      getSettings(),
+      db.collection('investments').where('status', 'in', ['active', 'matured']).orderBy('createdAt', 'desc').limit(10000).get(),
     ]);
     // One country at a time -- every amount below is money in a currency,
     // so a mixed total is meaningless. Built once here and applied at each
@@ -9616,15 +9646,29 @@ app.post('/admin/analytics', async (req, res) => {
     const ensureDay = k => (dayMap[k] = dayMap[k] || { day: k, dep: 0, wit: 0, users: 0 });
 
     let depAmount = 0, depCount = 0;
+    const dayTotals = { day: selectedDay, depositsCompletedAmount: 0, depositsCompletedCount: 0,
+      withdrawalsCompletedAmount: 0, withdrawalsCompletedCount: 0,
+      depositsOpenAmount: 0, depositsOpenCount: 0, withdrawalsOpenAmount: 0, withdrawalsOpenCount: 0 };
+    const openRequests = { depositsAmount: 0, depositsCount: 0, withdrawalsAmount: 0, withdrawalsCount: 0 };
     depSnap.forEach(d => {
       const dep = d.data();
-      if (dep.status !== 'matched') return;
       if (!mine(dep)) return;
-      const ms = tsMillis(dep.createdAt);
-      if (ms < sinceMs) return;
+      const createdMs = tsMillis(dep.createdAt);
+      const completedMs = tsMillis(dep.creditedAt) || createdMs;
+      const credited = dep.status === 'matched' && (dep.walletCredited === true || !dep.needsManualCredit);
+      const open = ['pending', 'initiating', 'review'].includes(dep.status) || (dep.status === 'matched' && !credited);
+      if (open) { openRequests.depositsAmount += finiteMoney(dep.amount); openRequests.depositsCount++; }
+      if (open && createdMs >= selectedDayStart && createdMs < selectedDayEnd) {
+        dayTotals.depositsOpenAmount += finiteMoney(dep.amount); dayTotals.depositsOpenCount++;
+      }
+      if (!credited || !completedMs || completedMs > nowMs) return;
       const a = finiteMoney(dep.amount);
+      if (completedMs >= selectedDayStart && completedMs < selectedDayEnd) {
+        dayTotals.depositsCompletedAmount += a; dayTotals.depositsCompletedCount++;
+      }
+      if (completedMs < sinceMs) return;
       depAmount += a; depCount++;
-      const { hour, day } = eatParts(dep.createdAt);
+      const { hour, day } = eatParts(new Date(completedMs));
       byHour[hour].depAmt += a; byHour[hour].depCnt++;
       bands[bandOf(hour)].dep += a;
       ensureDay(day).dep += a;
@@ -9634,14 +9678,23 @@ app.post('/admin/analytics', async (req, res) => {
     const bigWits = [];
     witSnap.forEach(d => {
       const w = d.data();
-      if (w.status !== 'processed') return;
       if (!mine(w)) return;
-      const ms = tsMillis(w.createdAt);
-      bigWits.push({ phone: w.phone || w.holder || '', amount: finiteMoney(w.net) || finiteMoney(w.amount), when: ms });
-      if (ms < sinceMs) return;
-      const a = finiteMoney(w.net) || finiteMoney(w.amount);
+      const createdMs = tsMillis(w.createdAt);
+      const completedMs = tsMillis(w.processedAt) || createdMs;
+      const a = w.net == null ? finiteMoney(w.amount) : finiteMoney(w.net);
+      const open = ['pending', 'sending', 'processing'].includes(w.status);
+      if (open) { openRequests.withdrawalsAmount += a; openRequests.withdrawalsCount++; }
+      if (open && createdMs >= selectedDayStart && createdMs < selectedDayEnd) {
+        dayTotals.withdrawalsOpenAmount += a; dayTotals.withdrawalsOpenCount++;
+      }
+      if (w.status !== 'processed' || !completedMs || completedMs > nowMs) return;
+      if (completedMs >= selectedDayStart && completedMs < selectedDayEnd) {
+        dayTotals.withdrawalsCompletedAmount += a; dayTotals.withdrawalsCompletedCount++;
+      }
+      if (completedMs < sinceMs) return;
+      bigWits.push({ phone: w.phone || w.holder || '', amount: a, when: completedMs });
       witAmount += a; witCount++;
-      const { hour, day } = eatParts(w.createdAt);
+      const { hour, day } = eatParts(new Date(completedMs));
       byHour[hour].witAmt += a; byHour[hour].witCnt++;
       bands[bandOf(hour)].wit += a;
       ensureDay(day).wit += a;
@@ -9700,8 +9753,7 @@ app.post('/admin/analytics', async (req, res) => {
       if (want && (String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY) !== want) return;
       totalUsers++;
       const ms = tsMillis(u.createdAt);
-      if (ms >= sinceMs) { newUsers++; const { day } = eatParts(u.createdAt); ensureDay(day).users++; }
-      if ((u.totalInvested || 0) > 0) activeInvestors++;
+      if (ms >= sinceMs && ms <= nowMs) { newUsers++; const { day } = eatParts(u.createdAt); ensureDay(day).users++; }
       investedAmount += finiteMoney(u.totalInvested);
       commissionsPaid += finiteMoney(u.teamCommission);
       if ((u.teamL1Count || 0) > 0 || (u.teamCommission || 0) > 0)
@@ -9713,59 +9765,70 @@ app.post('/admin/analytics', async (req, res) => {
     // claim time, so summing those directly is correct even after the
     // owner edits the reward ladder's rates later (unlike re-deriving it
     // from the CURRENT ladder, which would silently misstate history).
-    let teamRewardsPaid = 0;
+    let teamRewardsPaid = 0, rewardsTruncated = false, rewardsUnavailable = false;
     try {
       const rewardTxSnap = await db.collection('transactions').where('type', '==', 'team_reward').limit(200000).get();
+      rewardsTruncated = rewardTxSnap.docs.length >= 200000;
       rewardTxSnap.forEach(d => { const t = d.data(); if (mine(t)) teamRewardsPaid += finiteMoney(t.amount); });
-    } catch (e) { console.error('teamRewardsPaid query error:', e.message); }
+    } catch (e) { teamRewardsPaid = null; rewardsUnavailable = true; console.error('teamRewardsPaid query error:', e.message); }
     referrers.sort((a, b) => (b.team - a.team) || (b.earned - a.earned));
     depositors.sort((a, b) => b.amount - a.amount);
 
     const byDay = [];
     for (let i = days - 1; i >= 0; i--) {
-      const k = new Date(Date.now() + 3 * 3600000 - i * 86400000).toISOString().slice(0, 10);
+      const k = new Date(nowMs + tzOffMs() - i * 86400000).toISOString().slice(0, 10);
       byDay.push(dayMap[k] || { day: k, dep: 0, wit: 0, users: 0 });
     }
     const peakDepositHour = byHour.reduce((p, c) => c.depCnt > p.depCnt ? c : p, byHour[0]).h;
     const peakWithdrawHour = byHour.reduce((p, c) => c.witCnt > p.witCnt ? c : p, byHour[0]).h;
     const busiestBand = Object.entries(bands).reduce((p, c) => (c[1].dep + c[1].wit) > (p[1].dep + p[1].wit) ? c : p)[0];
 
-    // ── TOMORROW'S ESTIMATE — read from real platform state (who's actually
-    // maturing, who's actually mid-signup-funnel), not just a straight trend
-    // line. Explicitly labelled an estimate to the admin, never a promise.
-    const trailing = byDay.slice(-Math.min(7, byDay.length));
-    const trailN = trailing.length || 1;
-    const witTrend = trailing.reduce((s, d) => s + d.wit, 0) / trailN;
-    const depTrend = trailing.reduce((s, d) => s + d.dep, 0) / trailN;
-    let maturingCount = 0, maturingPayout = 0;
+    // Current live contracts use the terms stored when each member bought
+    // the product. They remain accurate if an admin later changes the catalog.
+    const runningProducts = Object.create(null);
+    const activeMemberIds = new Set();
     activeInvSnap.forEach(d => {
       const inv = d.data();
       if (!mine(inv)) return;
-      const paidOut = finiteMoney(inv.paidOut), dailyPayout = finiteMoney(inv.dailyPayout), expected = finiteMoney(inv.expectedReturn);
-      if (expected > 0 && paidOut + dailyPayout >= expected) { maturingCount++; maturingPayout += Math.max(0, expected - paidOut); }
+      if (inv.userId) activeMemberIds.add(inv.userId);
+      const key = String(inv.tierKey || inv.tierLabel || 'Unknown product');
+      const row = runningProducts[key] || (runningProducts[key] = { key, name: inv.tierLabel || key, count: 0, invested: 0, paidOut: 0, remainingPayout: 0 });
+      row.count++;
+      row.invested += finiteMoney(inv.amount);
+      row.paidOut += finiteMoney(inv.paidOut);
+      row.remainingPayout += Math.max(0, finiteMoney(inv.expectedReturn) - finiteMoney(inv.paidOut));
     });
-    const REINVEST_RATE_PCT = 35;
-    const CONVERSION_RATE_PCT = 20;
-    const pipelineCutoff = Date.now() - 3 * 86400000;
-    let pipelineUserCount = 0;
-    usersSnap.forEach(d => {
-      const u = d.data();
-      if (want && (String(u.regionKey || '').trim().toLowerCase() || DEFAULT_REGION_KEY) !== want) return;
-      if (tsMillis(u.createdAt) >= pipelineCutoff && (u.totalDeposited || 0) === 0) pipelineUserCount++;
+
+    const accounts = new Map();
+    usersSnap.forEach(d => accounts.set(d.id, d.data()));
+    const schedule = { scheduledAmount: 0, unpaidAmount: 0, overdueNowAmount: 0,
+      pausedUnpaidAmount: 0, pausedOverdueAmount: 0, maturingCount: 0, invalidContracts: 0 };
+    // Include matured contracts so selecting a past day does not lose its
+    // schedule merely because the contract has since finished.
+    contractSnap.forEach(d => {
+      const inv = d.data();
+      if (!mine(inv)) return;
+      const day = analyticsContractDay(inv, selectedDayStart, selectedDayEnd, nowMs);
+      if (!day) { schedule.invalidContracts++; return; }
+      schedule.scheduledAmount += day.scheduled;
+      if (day.matures) schedule.maturingCount++;
+      const account = accounts.get(inv.userId);
+      const paused = !account || account.status === 'banned';
+      if (paused) schedule.pausedUnpaidAmount += day.unpaid;
+      else schedule.unpaidAmount += day.unpaid;
     });
-    // This country's own minimum recharge, not the founding country's --
-    // the estimate is in this country's currency.
-    const pipelineSett = want ? await getSettings(want) : sett;
-    const pipelineEstimate = Math.round(pipelineUserCount * (pipelineSett.minDeposit || 0) * (CONVERSION_RATE_PCT / 100));
-    const maturingReinvestEstimate = Math.round(maturingPayout * (REINVEST_RATE_PCT / 100));
-    const forecast = {
-      withdrawals: { estimate: Math.round(witTrend), likelyWithdrawerCount: maturingCount, trendReference: Math.round(witTrend) },
-      deposits: {
-        estimate: Math.round(depTrend + maturingReinvestEstimate + pipelineEstimate),
-        organicTrend: Math.round(depTrend), maturingReinvestEstimate, maturingCount, reinvestRatePct: REINVEST_RATE_PCT,
-        pipelineEstimate, pipelineUserCount, conversionRatePct: CONVERSION_RATE_PCT
-      }
-    };
+    // Current arrears use the separate active scan, not the historical cap.
+    activeInvSnap.forEach(d => {
+      const inv = d.data();
+      if (!mine(inv)) return;
+      const day = analyticsContractDay(inv, selectedDayStart, selectedDayEnd, nowMs);
+      if (!day) return;
+      const account = accounts.get(inv.userId);
+      if (!account || account.status === 'banned') schedule.pausedOverdueAmount += day.overdue;
+      else schedule.overdueNowAmount += day.overdue;
+    });
+    activeInvestors = activeMemberIds.size;
+    const truncated = depSnap.docs.length >= 10000 || witSnap.docs.length >= 10000 || usersSnap.docs.length >= 10000 || activeInvSnap.docs.length >= 10000 || contractSnap.docs.length >= 10000 || rewardsTruncated;
 
     res.json({
       status: 'success', period: days, regionKey: want || 'all',
@@ -9775,7 +9838,8 @@ app.post('/admin/analytics', async (req, res) => {
         netFlow: depAmount - witAmount, totalUsers, newUsers, activeInvestors,
         investedAmount, commissionsPaid, teamRewardsPaid
       },
-      byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand, forecast, staffApprovals,
+      byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand,
+      today, selectedDay: dayTotals, schedule, openRequests, runningProducts: Object.values(runningProducts).sort((a, b) => b.invested - a.invested), truncated, rewardsUnavailable, staffApprovals,
       topReferrers: referrers.slice(0, 10), topDepositors: depositors.slice(0, 10), biggestWithdrawals: bigWits.slice(0, 10)
     });
   } catch (e) { console.error('Analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }

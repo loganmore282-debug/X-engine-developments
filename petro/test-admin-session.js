@@ -11,11 +11,11 @@ const db={collection:col=>({doc:key=>({
   set:async value=>rows.set(key,value),
   updateIf:async(filter,updates)=>{const r=rows.get(key);if(!r||+r.expiresAt<=+filter.expiresAt.$gt||+r.lastActiveAt<=+filter.lastActiveAt.$gt)return false;Object.assign(r,updates);return true;}
 })})};
-const context=vm.createContext({Date:Clock,db,crypto,sessionPolicy:{...sessionPolicy,validSession:s=>sessionPolicy.validSession(s,now)},FieldValue:{serverTimestamp:()=>new Date(now)},ADMIN_SESSION_TTL_MS:sessionPolicy.MAX_MS});
+const context=vm.createContext({Date:Clock,db,crypto,sessionPolicy,FieldValue:{serverTimestamp:()=>new Date(now)},ADMIN_SESSION_TTL_MS:sessionPolicy.MAX_MS});
 vm.runInContext(extract('createSession')+'\n'+extract('resolveSession'),context);
 (async()=>{
  const owner=await context.createSession('owner','owner');assert.match(owner,/^[a-f0-9]{64}$/);assert(await context.resolveSession(owner));
- now+=sessionPolicy.IDLE_MS-1;assert(await context.resolveSession(owner));assert.equal(+rows.get(owner).lastActiveAt,1800000000000,'background admin reads do not renew');
+ now+=15*60*1000-1;assert(await context.resolveSession(owner));assert.equal(+rows.get(owner).lastActiveAt,1800000000000,'background admin reads do not renew');
  now++;assert.equal(await context.resolveSession(owner,true),null,'expired owner token cannot renew');
  const token=await context.createSession('active','staff');now+=60000;assert(await context.resolveSession(token,true));assert.equal(+rows.get(token).lastActiveAt,now);
  staff.get('active').active=false;assert.equal(await context.resolveSession(token),null,'staff deactivation remains effective');

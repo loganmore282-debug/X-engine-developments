@@ -1393,6 +1393,8 @@ var _memberSession = window.createPetroIdleSession('petro_member_session', funct
   // NOT permanently disable Chrome's autofill-then-submit convenience the
   // way a deliberate "Log Out" tap does.
   window.doLogout({ auto: true }).catch(() => {});
+  notify(window._sessionFailureMessage || 'Your session ended. Please log in again. If this repeats, check automatic date and time on your phone.');
+  window._sessionFailureMessage = '';
 }, () => post('/auth/session/activity', {}));
 var _apiPending = new Map();
 function api(path, opts){
@@ -1467,7 +1469,10 @@ async function apiRequest(path, opts){
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
     const resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers, signal: controller.signal }));
     data = await resp.json();
-    if (resp.status === 401 && !isPublicCall && STATE.authEpoch === startEpoch && STATE.user) _memberSession.expire();
+    if (resp.status === 401 && !isPublicCall && STATE.authEpoch === startEpoch && STATE.user) {
+      window._sessionFailureMessage = 'Your login session was rejected. Please log in again. If this continues, contact support.';
+      _memberSession.expire();
+    }
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid response');
   } catch (e) {
     if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', stale: true, message: 'Session changed' };
@@ -1722,6 +1727,10 @@ async function tryAutoSignIn(){
   } catch (_) { return false; }
 }
 window.doLogin = async function(){
+  if (window._loginInProgress) return;
+  window._loginInProgress = true;
+  try {
+  if (window._logoutPromise) await window._logoutPromise;
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
   if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
@@ -1746,6 +1755,8 @@ window.doLogin = async function(){
       }
     }
     if (lastErr) throw lastErr;
+    await handleMemberAuth(window.fbAuth && window.fbAuth.currentUser);
+    if (!STATE.user || !STATE.account) { window._pendingLoginSuccess = false; return; }
     // "Remember me" (Main.dc.html) gates the saved-credential store that
     // drives tryAutoSignIn() on the next visit. Unchecked -> nothing is
     // saved, so the login screen asks again next time.
@@ -1755,6 +1766,11 @@ window.doLogin = async function(){
   catch (e) {
     window._pendingLoginSuccess = false;
     notify(fbErrMsg(e));
+    setBtnLoading('loginBtn', false, 'Log In');
+  }
+  } finally {
+    window._loginInProgress = false;
+    if (!window._suppressAutofillLogin) window._autofillLoginTried = false;
     setBtnLoading('loginBtn', false, 'Log In');
   }
 };
@@ -1993,7 +2009,12 @@ window.doForgotSubmit = async function(){
   $('loginPassword').value = '';
   showAuthTab('login');
 };
-window.doLogout = async function(opts){
+window.doLogout = function(opts){
+  if (window._logoutPromise) return window._logoutPromise;
+  window._logoutPromise = performMemberLogout(opts).finally(() => { window._logoutPromise = null; });
+  return window._logoutPromise;
+};
+async function performMemberLogout(opts){
   // {auto:true} marks an AUTOMATIC sign-out (the idle-session timeout
   // above) rather than the member tapping Log Out themselves. Owner: "auto
   // login when Google details are put, it fails to login automatically, so
@@ -2009,6 +2030,11 @@ window.doLogout = async function(opts){
   // tab" on top of it is friction nobody asked for. Only an explicit call
   // sets the persistent suppression now.
   const auto = !!(opts && opts.auto);
+  // Clear before asynchronous sign-out, never after a new autofill selection.
+  // Keep the phone on automatic expiry so the member can retry.
+  const phoneInput = $('loginPhone'), passwordInput = $('loginPassword');
+  if (!auto && phoneInput) phoneInput.value = '';
+  if (passwordInput) passwordInput.value = '';
   // Revoke the captured session without delaying the UI sign-out. The normal
   // api() epoch guard would intentionally cancel this call during logout.
   const leavingUser = window.fbAuth && window.fbAuth.currentUser;
@@ -2064,13 +2090,7 @@ window.doLogout = async function(opts){
     window._autofillLoginTried = true;
   }
   await window.fbSignOut();
-  // Cleared AFTER the sign-out, so the auth screen is on its way in. Chrome
-  // may refill them again and that is fine -- filled fields are only a
-  // problem when something submits them by itself, which is now blocked.
-  const _lp = $('loginPhone'), _lw = $('loginPassword');
-  if (_lp) _lp.value = '';
-  if (_lw) _lw.value = '';
-};
+}
 
 // ── AUTOFILL AUTO-SUBMIT (Login only) ──
 // This is a SEPARATE case from tryAutoSignIn() above. That covers the one
@@ -2093,17 +2113,24 @@ window.doLogout = async function(opts){
     if (window._autofillLoginTried) return;
     const phone = $('loginPhone'), pass = $('loginPassword'), btn = $('loginBtn');
     if (!phone || !pass || !btn || btn.disabled) return;
-    if (!phone.value || !pass.value) return;
+    if (!cleanPhone(phone.value) || !pass.value || window._loginInProgress || window._logoutPromise) return;
     window._autofillLoginTried = true;
     window.doLogin();
   }
+  ['input', 'change'].forEach(type => document.addEventListener(type, e => {
+    if (e.target.id !== 'loginPhone' && e.target.id !== 'loginPassword') return;
+    clearTimeout(debounce);
+    // Only picker-filled fields auto-submit; ordinary typing still uses Login.
+    if (!e.target.matches(':-webkit-autofill')) return;
+    debounce = setTimeout(maybeAutoSubmit, 160);
+  }));
   document.addEventListener('animationstart', (e) => {
     if (e.animationName !== 'onAutoFillStart') return;
     if (e.target.id !== 'loginPhone' && e.target.id !== 'loginPassword') return;
     // Chrome's picker fills both fields together but not always in the same
     // tick -- give the second field a moment to land before checking.
     clearTimeout(debounce);
-    debounce = setTimeout(maybeAutoSubmit, 80);
+    debounce = setTimeout(maybeAutoSubmit, 160);
   });
 })();
 
@@ -2502,21 +2529,27 @@ async function maybeShowOpeningGate(){
 }
 
 // ── AUTH STATE HANDLER ──
-window.addEventListener('snow-auth', async (ev) => {
-  const user = ev.detail;
-  // Firebase's onAuthStateChanged can genuinely fire more than once for the
-  // SAME already-current user during a single page load/session -- e.g. once
-  // synchronously from cached/persisted auth state, then again once it
-  // round-trips to actually confirm/refresh the session with the backend.
-  // Without this guard, every one of those redundant re-fires re-showed the
-  // loading screen and re-ran enterApp() from scratch: the owner's "a start
-  // up loader can load twice... then again reloads again automatically."
-  // STATE.user is only ever null right after a real sign-out (doLogout()'s
-  // own signOut() re-fires this with user:null and clears STATE.user below),
-  // so a repeat firing with the identical uid here is always a redundant
-  // re-fire, never a genuine new sign-in -- safe to no-op. A real sign-in,
-  // sign-out, or account switch (different uid) still runs the full flow.
-  if (user && STATE.user && user.uid === STATE.user.uid) return;
+var _memberAuthTask = null, _memberAuthTaskUser = null;
+function handleMemberAuth(user){
+  if (_memberAuthTask && _memberAuthTaskUser === user) return _memberAuthTask;
+  _memberAuthTaskUser = user;
+  const task = processMemberAuth(user);
+  _memberAuthTask = task;
+  task.finally(() => { if (_memberAuthTask === task) _memberAuthTask = null; }).catch(() => {});
+  return task;
+}
+window.addEventListener('snow-auth', ev => {
+  handleMemberAuth(ev.detail).catch(() => {
+    notify('Could not open your account. Please try logging in again.');
+    $('loadingScreen').style.display = 'none';
+    $('authScreen').style.display = '';
+    setBtnLoading('loginBtn', false, 'Log In');
+  });
+});
+async function processMemberAuth(user){
+  // Ignore repeated notifications only after the account is actually open.
+  // Failed account setup must remain retryable for the same Firebase uid.
+  if (user && STATE.user && user.uid === STATE.user.uid && STATE.account && $('app').style.display !== 'none') return;
   // Also bump here (not just doLogout()) -- this is what actually fires when
   // a DIFFERENT user logs in right after, and it's the guard that matters if
   // Firebase's own token expiry/refresh ever drops us out without doLogout()
@@ -2530,9 +2563,13 @@ window.addEventListener('snow-auth', async (ev) => {
       const started = Number(token.claims.auth_time) * 1000;
       if (!_memberSession.begin(user.uid + ':' + started, started, false)) return;
       try { sessionStorage.removeItem('petro_relogin_required'); } catch (_) {}
-    } catch (_) { _memberSession.expire(); await window.fbSignOut(); return; }
+    } catch (_) {
+      notify('Could not verify your login session. Please try again.');
+      await window.doLogout({ auto: true }); return;
+    }
   } else { _memberSession.clear(); clearCachedState(); }
   if (await maybeShowOpeningGate()) return;
+  if (STATE.user !== user) return;
   if (!user) {
     window._pendingLoginSuccess = false;
     // Only worth trying once, on the very first "nobody's signed in" we see
@@ -2556,7 +2593,7 @@ window.addEventListener('snow-auth', async (ev) => {
   $('authScreen').style.display = 'none';
   $('loadingScreen').style.display = 'flex';
   await enterApp();
-});
+}
 // Real feature: a returning member used to sit through the loading screen
 // on EVERY app open, even though nothing about their account usually
 // changed since last time. Owner (relaying a friend's advice on instant-

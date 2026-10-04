@@ -1195,7 +1195,10 @@ function statusPill(s){
 
 // ── ANALYTICS ──
 let _anPeriod = 30;
+let _anDate = '';
+let _anRequest = 0;
 async function renderAnalytics(silent){
+  const request = ++_anRequest;
   // silent=true (used by the live-refresh tick) skips the placeholder wipe
   // entirely -- unlike every other tab, this one used to blank the WHOLE
   // panel to "Crunching numbers…" on every single call, including a 5s
@@ -1210,11 +1213,11 @@ async function renderAnalytics(silent){
   // staff outright) -- only even requested when the session is the owner's,
   // so a staff session never sees the request in its own network tab either.
   const [a, ab, sh] = await Promise.all([
-    api('/admin/analytics', { days:_anPeriod }),
+    api('/admin/analytics', { days:_anPeriod, day:_anDate }),
     isOwner ? api('/admin/analytics/abuse', { days:_anPeriod }) : Promise.resolve(null),
     api('/admin/system-health'),
   ]);
-  if(staleTab('analytics')) return;
+  if(staleTab('analytics') || request !== _anRequest) return;
   if(a.status!=='success'){ if(!silent) $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
   const k=a.kpis||{};
   const h12=x=>{const ap=x<12?'am':'pm';let h=x%12;if(h===0)h=12;return h+ap;};
@@ -1230,7 +1233,11 @@ async function renderAnalytics(silent){
        <div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>`;
   const bandCard=(key,label)=>{const b=a.bands[key]||{dep:0,wit:0};const on=a.busiestBand===key;
     return `<div class="stat" style="${on?'outline:2px solid var(--gold);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">recharges</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">withdrawals</div></div>`;};
-  const f=a.forecast||{}; const fw=f.withdrawals||{}; const fd=f.deposits||{};
+  const selected=a.selectedDay||{};
+  const schedule=a.schedule||{};
+  const open=a.openRequests||{};
+  const running=a.runningProducts||[];
+  const runningRows=running.length?running.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${p.count}</td><td>${ugx(p.invested)}</td><td>${ugx(p.paidOut)}</td><td>${ugx(p.remainingPayout)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No active product contracts.</td></tr>';
   const sa=a.staffApprovals||{byStaff:[],timeline:[]};
   // Owner-only suspicious-activity tables. `ab` is null outright for a staff
   // session (never requested -- see above), so this whole block just never
@@ -1311,24 +1318,44 @@ async function renderAnalytics(silent){
     ${healthCard}
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
     <div class="panel-card">
-      <h2 class="sec" style="margin-top:0">Tomorrow's estimate</h2>
-      <p class="muted" style="margin-top:0">Not a guarantee, read member by member from real platform state, not just a trend line.</p>
+      <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap"><h2 class="sec" style="margin:0;flex:1">Transactions for a day</h2><label class="muted">Select day <input id="analytics-day" type="date" value="${esc(selected.day||a.today)}" style="padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text)"></label><button id="analytics-today" class="btn">Today</button></div>
+      <p class="muted" style="margin:8px 0 12px">Uganda time (EAT). Completed amounts use recorded credit or payout times; older records without these times use the request date. Open requests show what is still outstanding now from requests created on the selected date. Arrival times are unconfirmed.</p>
       <div class="cards">
-        <div class="stat"><div class="n" style="color:var(--danger)">${ugx(fw.estimate)}</div><div class="l">Estimated withdrawals to process tomorrow</div>
-          <div class="muted" style="margin-top:4px;font-size:11px">${fw.likelyWithdrawerCount||0} plan(s) likely maturing &nbsp;·&nbsp; trend says ${ugx(fw.trendReference)}</div></div>
-        <div class="stat"><div class="n" style="color:var(--ok)">${ugx(fd.estimate)}</div><div class="l">Estimated recharges tomorrow</div>
-          <div class="muted" style="margin-top:4px;font-size:11px">${ugx(fd.organicTrend)} organic trend + ${ugx(fd.maturingReinvestEstimate)} from ${fd.maturingCount||0} plan(s) maturing (${fd.reinvestRatePct||0}% usually reinvest) + ${ugx(fd.pipelineEstimate)} from ${fd.pipelineUserCount||0} new signup(s) mid-funnel (${fd.conversionRatePct||0}% convert within 3 days)</div></div>
+        <div class="stat"><div class="n" style="color:var(--ok)">${ugx(selected.depositsCompletedAmount)}</div><div class="l">Deposits credited (${selected.depositsCompletedCount||0})</div></div>
+        <div class="stat"><div class="n" style="color:var(--danger)">${ugx(selected.withdrawalsCompletedAmount)}</div><div class="l">Withdrawals paid (${selected.withdrawalsCompletedCount||0})</div></div>
+        <div class="stat"><div class="n">${ugx(selected.depositsOpenAmount)}</div><div class="l">Open deposit requests (${selected.depositsOpenCount||0})</div></div>
+        <div class="stat"><div class="n">${ugx(selected.withdrawalsOpenAmount)}</div><div class="l">Open withdrawal requests (${selected.withdrawalsOpenCount||0})</div></div>
       </div>
     </div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Cashback schedule for ${esc(selected.day||a.today)}</h2>
+      <p class="muted">Saved purchase terms, every 24 hours from purchase, with the same rounding as settlement. Scheduled cashback is credited to wallets; members decide when to withdraw. Future purchases and deposits are unknown.</p>
+      <div class="cards">
+        <div class="stat"><div class="n">${ugx(schedule.scheduledAmount)}</div><div class="l">Contract cashback scheduled for this day</div></div>
+        <div class="stat"><div class="n">${ugx(schedule.unpaidAmount)}</div><div class="l">This day's cashback still unpaid (eligible accounts)</div></div>
+        <div class="stat"><div class="n">${schedule.maturingCount||0}</div><div class="l">Contracts scheduled to finish this day</div></div>
+        <div class="stat"><div class="n">${ugx(schedule.pausedUnpaidAmount)}</div><div class="l">This day's unpaid cashback on banned or unavailable accounts</div></div>
+      </div>
+      <p class="muted">Historical dates show contractual schedules, including contracts that have since matured. Unpaid figures reflect current settlement progress, not a historical balance snapshot. Scheduled returns include the contract's full return; principal is not added again.</p>
+      ${schedule.invalidContracts?`<p class="muted" style="color:var(--gold)">${schedule.invalidContracts} contract(s) have incomplete schedule data and are excluded from these calculations.</p>`:''}
+    </div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Outstanding now (all request dates)</h2>
+      <div class="cards">
+        <div class="stat"><div class="n">${ugx(open.depositsAmount)}</div><div class="l">Unconfirmed deposits / credits awaiting completion (${open.depositsCount||0})</div></div>
+        <div class="stat"><div class="n">${ugx(open.withdrawalsAmount)}</div><div class="l">Requested withdrawals awaiting payout, net (${open.withdrawalsCount||0})</div></div>
+        <div class="stat"><div class="n">${ugx(schedule.overdueNowAmount)}</div><div class="l">Cashback due now, awaiting settlement (eligible accounts)</div></div>
+        <div class="stat"><div class="n">${ugx(schedule.pausedOverdueAmount)}</div><div class="l">Cashback due on banned or unavailable accounts</div></div>
+      </div><p class="muted">Open requests can complete, fail or be cancelled; no completion date is guaranteed. Cashback due and withdrawal requests are separate figures and must not be added as a prediction of today's withdrawals. All withdrawal amounts shown are net payouts.</p>
+    </div>
+    ${a.truncated?'<p class="muted" style="color:var(--gold)">Some totals may be incomplete because an analytics scan reached its record limit. Use transaction records and database reconciliation for a complete total.</p>':''}
     <div class="cards">
-      <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Recharges (${k.depositsCount||0})</div></div>
-      <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Withdrawals (${k.withdrawalsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Deposits credited (${k.depositsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Withdrawals paid (${k.withdrawalsCount||0})</div></div>
       <div class="stat"><div class="n" style="color:${(k.netFlow||0)>=0?'var(--ok)':'var(--danger)'}">${ugx(k.netFlow)}</div><div class="l">Net flow</div></div>
       <div class="stat"><div class="n">${k.newUsers||0}</div><div class="l">New users</div></div>
       <div class="stat"><div class="n">${k.activeInvestors||0}</div><div class="l">Active investors</div></div>
-      <div class="stat"><div class="n">${ugx(k.investedAmount)}</div><div class="l">Invested</div></div>
-      <div class="stat"><div class="n">${ugx(k.commissionsPaid)}</div><div class="l">Commissions paid</div></div>
-      <div class="stat"><div class="n">${ugx(k.teamRewardsPaid)}</div><div class="l">Task Center rewards paid</div></div>
+      <div class="stat"><div class="n">${ugx(k.investedAmount)}</div><div class="l">Invested (all time)</div></div>
+      <div class="stat"><div class="n">${ugx(k.commissionsPaid)}</div><div class="l">Commissions paid (all time)</div></div>
+      <div class="stat"><div class="n">${a.rewardsUnavailable?'Unavailable':ugx(k.teamRewardsPaid)}</div><div class="l">Task Center rewards paid (all time)</div></div>
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">When people transact, by hour of day</h2>
@@ -1343,6 +1370,9 @@ async function renderAnalytics(silent){
       <div class="legend"><span><i style="background:var(--ok)"></i>Recharges</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
       ${dayChart}
     </div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Running products (active contracts)</h2>
+      <p class="muted" style="margin-top:0">Uses each active contract's saved purchase terms, so later catalog price or cashback edits do not rewrite past deals.</p>
+      <div class="table-scroll"><table><thead><tr><th>Product</th><th>Active plans</th><th>Invested</th><th>Paid out</th><th>Contract payout remaining</th></tr></thead><tbody>${runningRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Top referrers</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Direct team</th><th>Commission earned</th></tr></thead>
       <tbody>${(a.topReferrers||[]).length?a.topReferrers.map(r=>`<tr><td>${esc(r.phone)}</td><td>${r.team}</td><td><b>${ugx(r.earned)}</b></td></tr>`).join(''):'<tr><td colspan="3" class="empty">No referrers yet</td></tr>'}</tbody></table></div></div>
@@ -1355,6 +1385,9 @@ async function renderAnalytics(silent){
     ${staffTable}
     ${abuseSection}`;
   document.querySelectorAll('[data-per]').forEach(b=>b.addEventListener('click',()=>{ _anPeriod=parseInt(b.dataset.per); renderAnalytics(); }));
+  $('analytics-today').addEventListener('click',()=>{ _anDate=''; renderAnalytics(); });
+  const dateInput=$('analytics-day');
+  if(dateInput) dateInput.addEventListener('change',()=>{ if(dateInput.value){_anDate=dateInput.value;renderAnalytics();} });
 }
 
 // ── USERS ──
