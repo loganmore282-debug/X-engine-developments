@@ -82,6 +82,9 @@
      what was actually asked. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Warm the existing login/API connections while the sign-in screen loads. -->
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://api.petro-cchnug.com" crossorigin>
 <!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in
      original_module.js) loaded in one request -- Georgia and "System
      default" need no webfont, so they aren't listed here. Loading every
@@ -2615,7 +2618,7 @@ html,body,#app{overscroll-behavior-y:none;}
 <script data-petro-idle>
 // Real interaction renews activity; polling, focus, and visibility never do.
 window.createPetroIdleSession = function(key, onExpire, onActivity){
-  var IDLE = 15 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
+  var IDLE = 60 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
   var state = null, lastPulse = 0, lastSave = 0, timer = null;
   function save(force){
     if (!state || (!force && Date.now() - lastSave < 1000)) return;

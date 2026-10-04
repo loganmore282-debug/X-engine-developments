@@ -6998,3 +6998,44 @@ fix (still shows/auto-dismisses normally), and -- critically -- scroll
 correctly STAYS locked when a real overlay (a genuinely open sheet) is
 still open, confirming the fix narrows the check correctly rather than
 just removing the guard outright. `user/sw.js` bumped `v231` → `v232`.
+
+## 2026-10-04 — Member inactivity extended to one hour; prepared for review
+
+Owner requested a one-hour member inactivity timeout with the eight-hour
+maximum unchanged, no admin/authentication/payment behaviour changes, and
+test results plus the exact file list before any push.
+
+`session-policy.js` now uses `IDLE_MS = 60 * 60 * 1000` for members and a
+separate `ADMIN_IDLE_MS = 15 * 60 * 1000`. `resolveSession()` explicitly
+uses the admin limit for validation and conditional heartbeat updates.
+The member page's inline idle controller uses one hour; the admin page
+remains unchanged. `MAX_MS`, Firebase `auth_time`, revocation checks,
+activity detection and session storage behaviour are unchanged.
+
+For login connection setup, the member HTML adds preconnect hints to its
+existing Identity Toolkit sign-in origin and Petro API origin. Firebase
+sign-in, persistence and token verification code are unchanged. This can
+reduce connection setup delay on a fresh visit; no live timing improvement
+is claimed. No payment or account-settlement logic was changed.
+
+Updated session tests cover member expiry at exactly one hour, renewal
+after 45 minutes, unchanged admin expiry at 15 minutes, the eight-hour
+maximum under continued activity, hidden/suspended tabs, logout and
+revocation. The navigation test had a pre-existing stale assertion that
+idle logout permanently suppressed autofill; corrected it to match
+Follow-up 13 above, and separately checked deliberate logout still sets
+the suppression. Only the test/documentation changed for that behaviour.
+
+Validation: `node build-core.js` round-trip OK; `node test-session-policy.js`
+and `--built`, `node test-session-navigation.js`, `node test-admin-session.js`,
+and all 13 commands in `npm run test:audit` passed. The build regenerates
+both `user/index.html` and the identical `user/share.html`. Member service
+worker cache bumped from `petro-shell-v232` to `petro-shell-v233`; admin
+source, bundle and cache remain unchanged. Server/session-policy syntax
+checks and diff whitespace checks passed. No live Firebase/VPS test was run.
+
+Prepared against remote commit `c3174264f38c0c0fb35f82ebca343c8ba347a2c5`.
+Not pushed in this review step. On later publication, recheck the branch
+head first; pushing this branch triggers the existing Hostinger VPS webhook
+(GitHub pull, production dependency install, PM2 reload). Report delivery
+as verified only if actually checked.

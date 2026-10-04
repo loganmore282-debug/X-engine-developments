@@ -1861,9 +1861,9 @@ async function resolveSession(token, touch = false) {
   const snap = await db.collection('adminSessions').doc(token).get();
   if (!snap.exists) return null;
   const s = snap.data();
-  if (!sessionPolicy.validSession(s)) return null;
+  if (!sessionPolicy.validSession(s, Date.now(), sessionPolicy.ADMIN_IDLE_MS)) return null;
   if (touch && !(await db.collection('adminSessions').doc(token).updateIf({
-    expiresAt: { $gt: new Date() }, lastActiveAt: { $gt: new Date(Date.now() - sessionPolicy.IDLE_MS) }
+    expiresAt: { $gt: new Date() }, lastActiveAt: { $gt: new Date(Date.now() - sessionPolicy.ADMIN_IDLE_MS) }
   }, { lastActiveAt: new Date() }))) return null;
   if (s.role !== 'owner') {
     const uSnap = await db.collection('adminUsers').doc(s.username).get();
