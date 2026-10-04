@@ -880,12 +880,21 @@ const PUSH_VER = '2', PUSH_VER_KEY = 'petro_admin_push_ver';
 const PUSH_KEY_VER_KEY = 'petro_admin_push_key_version';
 const VAPID_KEY = 'BOr_34ry9C1u2db466e-6lca-wrAUBgOXYn-P4Mr5f2vt5I-mNtjbakVVrcaxCZQaNw47jRdMV4vuOimFmUZtdY';
 
+let _pushWhy = '';
 function firebaseMessagingReady(){
-  if (typeof firebase === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return null;
+  _pushWhy = '';
+  if (typeof firebase === 'undefined') { _pushWhy = 'The Google notification script did not load. Check your connection and reload the panel.'; return null; }
+  if (!('Notification' in window)) { _pushWhy = 'This browser has no notification support.'; return null; }
+  if (!('serviceWorker' in navigator)) { _pushWhy = 'This browser has no service worker support (open the panel over HTTPS in Chrome, not inside another app).'; return null; }
   try {
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     return firebase.messaging();
-  } catch(_) { return null; }
+  } catch(e) {
+    _pushWhy = (e && e.code === 'messaging/unsupported-browser')
+      ? 'This browser cannot do push (private mode, or an in-app browser). Open the panel in Chrome and try again.'
+      : 'Push could not start: ' + ((e && (e.code || e.message)) || 'unknown error');
+    return null;
+  }
 }
 function setPushUIState(on){
   const btn = $('pushBtn'); if (!btn) return;
@@ -905,7 +914,7 @@ async function enablePush(){
   if (Notification.permission === 'denied')
     return toast('Notifications are blocked for this site. Allow them in browser Site settings, then tap Notify again.', 'err');
   const messaging = firebaseMessagingReady();
-  if (!messaging) return toast('Push notifications are not supported on this device/browser', 'err');
+  if (!messaging) return toast(_pushWhy || 'Push notifications are not supported on this device/browser', 'err');
 
   const btn = $('pushBtn');
   let enabled = false;

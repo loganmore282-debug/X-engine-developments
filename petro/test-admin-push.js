@@ -259,7 +259,11 @@ async function pageTests() {
   ok(/blocked/.test(P.toast()), 'blocked notifications are explained: ' + P.toast()); eq(P.pathCalls('/admin/push/register').length, 0); ok(!P.asked, 'no pointless permission request'); P.w.close();
   // unsupported
   P = await page(); P.w.firebase = undefined; await P.login(); P.w.document.getElementById('pushBtn').click(); await sleep(150);
-  ok(/not supported/.test(P.toast()), 'unsupported device is explained: ' + P.toast()); P.w.close();
+  ok(/script did not load/.test(P.toast()), 'missing Google script is named: ' + P.toast()); P.w.close();
+  // messaging() itself refusing (private mode / in-app browser) gets its own reason
+  P = await page(); { const f = P.w.firebase; P.w.firebase = Object.assign({}, f, { messaging(){ const e = new Error('x'); e.code = 'messaging/unsupported-browser'; throw e; } }); }
+  await P.login(); P.w.document.getElementById('pushBtn').click(); await sleep(150);
+  ok(/cannot do push/.test(P.toast()), 'unsupported browser is named: ' + P.toast()); P.w.close();
   // a device registered before this version silently registers again, once
   P = await page({ permission: 'granted', stored: { snow_admin_push_token: 'tok1' } }); await P.login(); await sleep(150);
   eq(P.pathCalls('/admin/push/register').length, 1, 'old registration upgraded without a prompt'); eq(P.pathCalls('/admin/push/unregister').length, 0, 'same token is not unregistered');
