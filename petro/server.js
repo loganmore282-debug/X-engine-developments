@@ -3985,12 +3985,13 @@ app.post('/auth/otp/send', async (req, res) => {
   try {
     const purpose = String(req.body.purpose || '');
     if (!OTP_PURPOSES.has(purpose)) return res.status(400).json({ status: 'error', message: 'Invalid verification purpose' });
-    // Master switch off -- none of the three OTP flows have a UI entry point
-    // left once this is off (see applyOtpVerificationUi()), so refuse here
-    // too rather than trust the client alone to never call this directly.
+    // The master switch (otpVerificationEnabled) turns off the OTP requests for
+    // registration and for saving a payout account. Password reset is the one
+    // flow that keeps asking for a code regardless -- it hands an existing
+    // account to whoever asks, and the code is the only proof it is them.
     const sett = await getSettings();
-    if (sett.otpVerificationEnabled === false) {
-      return res.status(503).json({ status: 'error', code: 'OTP_DISABLED', message: 'Verification codes are turned off right now. Contact support for help.' });
+    if (sett.otpVerificationEnabled === false && purpose !== 'reset') {
+      return res.status(503).json({ status: 'error', code: 'OTP_DISABLED', message: 'Verification codes are turned off right now.' });
     }
     let phone;
     if (purpose === 'bank') {
@@ -4089,15 +4090,8 @@ app.post('/auth/otp/verify', async (req, res) => {
 // ticket backs it instead of an owner's say-so.
 app.post('/auth/reset/confirm', async (req, res) => {
   try {
-    // Master switch off -- self-service reset has no substitute identity
-    // check without OTP, so it is refused outright rather than silently
-    // resetting a password with nothing proving who asked. Matches the
-    // client's own applyOtpVerificationUi(), which swaps the whole Forgot
-    // Password form for a support-contact message in this state.
-    const sett = await getSettings();
-    if (sett.otpVerificationEnabled === false) {
-      return res.status(403).json({ status: 'error', code: 'OTP_DISABLED', message: 'Password reset needs a quick check from our team right now. Contact support for help.' });
-    }
+    // Password reset always needs its OTP ticket (checked below), whatever the
+    // master OTP switch says -- see /auth/otp/send.
     const phone = cleanPhone(req.body.phone || '');
     if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
     const newPassword = String(req.body.newPassword || '');

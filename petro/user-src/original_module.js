@@ -2493,23 +2493,12 @@ function otpVerificationEnabled(){
 // Registration just drops its OTP step when the toggle is off (a brand-new
 // account has no existing identity to protect) -- see doRegister()'s own
 // branch. Saving a payout account is also unchanged apart from the code step
-// disappearing -- see submitWallet(). Reset Password is the one flow with no
-// substitute: it redirects an ALREADY-registered member's access, and OTP is
-// the only thing proving it is really them, so with it off it routes to
-// Support instead.
+// disappearing -- see submitWallet(). Forgot Password is the exception: it
+// hands an existing account to whoever asks, so it keeps requesting a code
+// whatever the toggle says.
 function applyOtpVerificationUi(){
-  const on = otpVerificationEnabled();
   const regRow = $('regOtpRow');
-  if (regRow) regRow.style.display = on ? '' : 'none';
-  const formGroup = $('forgotFormGroup'), supportGroup = $('forgotSupportGroup');
-  if (formGroup) formGroup.style.display = on ? '' : 'none';
-  if (supportGroup) supportGroup.style.display = on ? 'none' : '';
-  const link = $('forgotSupportLink');
-  if (link) {
-    const email = String((STATE.settings || {}).supportEmail || '').trim();
-    link.href = email ? 'mailto:' + email : '#';
-    link.textContent = email ? 'Email Support' : 'Contact Support';
-  }
+  if (regRow) regRow.style.display = otpVerificationEnabled() ? '' : 'none';
 }
 // Says out loud whether the box must be filled, instead of leaving members
 // to discover it by being rejected. Runs whenever the auth screen paints.
