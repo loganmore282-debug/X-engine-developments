@@ -7091,3 +7091,23 @@ settlement progress, paused/missing accounts, invalid schedules and old open
 requests. Analytics regression, admin build round-trip, built admin smoke,
 full 13-command audit and whitespace checks passed. Admin cache is v61.
 Publication and live VPS deployment have not yet been verified.
+
+## 2026-10-04 — Member login field-clearing and recovery fixes
+
+Owner supplied a recording showing saved credentials, Logging in, then both
+fields clearing with no app entry. Controlled tests reproduced this via a
+phone clock two seconds behind Firebase auth_time and via session HTTP 401.
+The recording alone does not identify which trigger affected that member.
+
+Member controller accepts at most 60 seconds forward timestamp skew, clamps
+new local start time without extending lifetime, and retains server session
+enforcement. Automatic logout keeps the phone, explains failure, and clears
+the password before asynchronous cleanup so late logout cannot erase a new
+selection. Logout is serialized; login waits for it and for account startup,
+restores its button in finally, and retries same-user initialization when the
+account never opened. Autofill validates complete fields before consuming an
+attempt and handles picker input/change as well as animation events.
+Admin policy and all payment/server logic remain unchanged. User cache v234.
+Regression coverage: test-login-recovery.js (also --built), session-policy
+(source/built), session-navigation, and full audit. Verify results before
+publishing; live member login still requires confirmation on the device.

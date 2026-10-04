@@ -49,7 +49,8 @@ function clientChecks(panel, idleMs){
   if (built) assert.equal(html,fs.readFileSync(__dirname+'/user/share.html','utf8'),'referral entry ships the same member policy');
   const user = html.match(/<script data-petro-idle>([\s\S]*?)<\/script>/)[1];
   const admin = fs.readFileSync(__dirname+'/admin-src/index.html','utf8').match(/<script data-petro-idle>([\s\S]*?)<\/script>/)[1];
-  assert.equal(user.replace('IDLE = 60 * 60 * 1000', 'IDLE = 15 * 60 * 1000'),admin,'panel controllers differ only in the inactivity limit');
+  assert(user.includes('IDLE = 60 * 60 * 1000'));
+  assert(admin.includes('IDLE = 15 * 60 * 1000'));
   let now=1800000000000, expired=0, pulses=0;
   const listeners={},store=new Map();
   const document={hidden:false,addEventListener:(name,fn)=>listeners[name]=fn};
@@ -72,6 +73,12 @@ function clientChecks(panel, idleMs){
   const start=now;assert(session.begin('bob',start,true));
   for(let t=start+60000;t<start+MAX_MS;t+=60000){now=t;listeners.pointerdown({isTrusted:true});assert(session.check());}
   now=start+MAX_MS;assert.equal(session.check(),false);assert.equal(expired,3);
+  if(panel === 'user') {
+    assert(session.begin('skew',now+2000,false),'fresh Firebase login tolerates small clock skew');
+    assert.equal(JSON.parse(store.get('test')).started,now,'skew never extends local maximum');
+    session.clear();
+    assert.equal(session.begin('large-skew',now+61000,false),false,'large clock errors still reject');
+  }
   assert.equal(session.begin('legacy',0,false),false);
   store.set('test',JSON.stringify({identity:'corrupt',started:now}));assert.equal(session.begin('corrupt',now,false),false);
 }

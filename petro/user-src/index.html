@@ -2653,8 +2653,11 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
       clearInterval(timer);
       var saved = null;
       try { saved = JSON.parse(sessionStorage.getItem(key)); } catch (_) {}
+      // Firebase timestamps use the server clock. Allow the same small
+      // forward skew as the backend; clamp locally so no lifetime is added.
+      var localStarted = started > Date.now() && started <= Date.now() + 60000 ? Date.now() : started;
       state = !fresh && saved && saved.identity === identity ? saved :
-        {identity:identity, started:started, last:started};
+        {identity:identity, started:localStarted, last:localStarted};
       if (!check()) return false;
       save(true); timer = setInterval(check, 1000); lastPulse = 0; pulse(); return true;
     },

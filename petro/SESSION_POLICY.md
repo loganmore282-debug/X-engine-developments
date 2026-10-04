@@ -52,3 +52,12 @@ Validation commands:
 
 The member audit scopes its existing Mobile Money instruction check to that
 panel, because newer Card/USDT panels each have their own instructions.
+
+Member login recovery: the browser tolerates Firebase login timestamps up to
+60 seconds ahead of its clock, matching the backend tolerance. It clamps only
+new local session timestamps to local now, never extends an existing session,
+and leaves server enforcement unchanged. Larger clock errors still reject.
+Automatic sign-out retains the phone, clears the password before asynchronous
+cleanup, and explains session rejection. A manual login waits for pending
+logout and account initialization; failed initialization remains retryable.
+Autofill waits for a valid complete phone and password before submitting.
