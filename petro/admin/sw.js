@@ -1,6 +1,6 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'petro-admin-shell-v64';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'petro-admin-shell-v65';
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/vendor/firebase-app-compat.js', '/vendor/firebase-messaging-compat.js'];
 // The uploaded icon, served by Petro backend. manifest.json and index.html's
 // <link rel="icon"> point here too; the local /icon-*.png above stay only as
 // the offline shell copy. Before this, the admin panel read the PNG that
@@ -11,8 +11,11 @@ const BRAND_ICON = 'https://api.petro-cchnug.com/public/app-icon-192.png';
 // Firebase Messaging background handler -- shows a notification for pushes
 // that arrive while the admin panel tab isn't open/focused. Foreground
 // pushes are handled separately by onMessage() in index.html.
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+// Firebase 10.12.0 compat builds are served from this origin (admin/vendor/)
+// rather than gstatic: a blocked or flaky third-party host used to stop both
+// this worker and the page from loading Firebase, so push could not start.
+importScripts('/vendor/firebase-app-compat.js');
+importScripts('/vendor/firebase-messaging-compat.js');
 // Keep this in step with FIREBASE_CONFIG in admin-src/index.html. A service
 // worker cannot import page variables, so the public web config is duplicated
 // here deliberately for background messaging.

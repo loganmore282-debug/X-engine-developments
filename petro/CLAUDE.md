@@ -7388,3 +7388,5 @@ device with notification permission granted). `server.js` reaches the VPS throug
 the existing deploy webhook; the admin bundle and `admin/sw.js` are static files
 pulled by the same `git pull`, then the panel must be reopened once on each
 device.
+
+**Follow-up 56b -- Firebase scripts for admin push are now self-hosted.** Owner's phone showed "The Google notification script did not load": `www.gstatic.com` was not reachable there, and both the panel page and `admin/sw.js` (`importScripts`) depended on it, so push could not start at all. The official Firebase 10.12.0 compat builds (from the `firebase@10.12.0` npm package, unchanged) are now in `admin/vendor/` and loaded from the admin's own origin by `admin-src/index.html` and `admin/sw.js` (also precached; cache v65). `https://www.gstatic.com` stays in the CSP (harmless; the member app still uses it). Upgrading Firebase later means replacing those two files and bumping the cache.
