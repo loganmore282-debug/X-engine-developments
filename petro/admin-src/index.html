@@ -1751,6 +1751,12 @@ async function openUser(uid){
         <td><span class="pill-tag ${iv.status==='active'?'t-warn':iv.status==='matured'?'t-ok':'t-mut'}">${esc(iv.status)}</span></td>
         <td style="white-space:nowrap">${ugx(iv.paidOut)} / ${ugx(iv.expectedReturn)}</td></tr>`).join('')}
     </tbody></table></div>`:'<p class="muted" style="margin:0">No plans purchased yet.</p>'}
+    ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Give an asset</h4>
+    <div class="row">
+      <div style="flex:3"><select id="grantAsset"><option value="">Loading assets…</option></select></div>
+      <button class="btn sky sm" id="grantAssetBtn" disabled>Activate</button>
+    </div>
+    <div class="muted" style="font-size:11.5px;margin-top:4px">Free for the member: nothing is taken from their wallet. It runs like a bought asset and pays its full return.</div>`:''}
     <h4 style="margin:18px 0 8px;font-size:14px">Saved withdrawal accounts</h4>
     ${(r.bankAccounts||[]).length?(r.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holder||'Account')}</span><span>${esc(a.network||'')} · ${esc(a.phone||'')}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
     ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Trade Password</h4>
@@ -1782,6 +1788,28 @@ async function openUser(uid){
   const tx=(r.transactions||[]).slice(0,25);
   $('userTx').innerHTML = tx.length?tx.map(t=>`<tr><td style="white-space:nowrap">${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap;text-align:right">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td class="empty">No transactions</td></tr>';
+  if($('grantAsset')){
+    // One id per opened modal: a double tap or a retry of the same activation
+    // is recognised by the server and creates only one plan.
+    const grantRequestId = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    api('/admin/products').then(pr=>{
+      const sel=$('grantAsset'); if(!sel) return;
+      const list=(pr.products||[]).filter(p=>!p.deleted).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
+      sel.innerHTML = list.length
+        ? '<option value="">Select an asset…</option>' + list.map(p=>`<option value="${esc(p.key)}">${esc(p.name)} · ${ugx(p.price)}</option>`).join('')
+        : '<option value="">No assets available</option>';
+      $('grantAssetBtn').disabled = !list.length;
+    }).catch(()=>{ const sel=$('grantAsset'); if(sel) sel.innerHTML='<option value="">Could not load assets</option>'; });
+    $('grantAssetBtn')?.addEventListener('click', async()=>{
+      const key=$('grantAsset').value; if(!key) return toast('Select an asset first','err');
+      const label=$('grantAsset').selectedOptions[0].textContent;
+      if(!confirm(`Activate ${label} for ${u.phone}? It is free for them (no wallet debit) and will pay its full return.`)) return;
+      const b=$('grantAssetBtn'); if(b.disabled) return; b.disabled=true; const lbl=b.textContent; b.innerHTML=btnBusyHtml('Activating…');
+      const d=await api('/admin/user/grant-asset',{userId:uid,tierKey:key,requestId:grantRequestId});
+      toast(d.message||d.status, d.status==='success'?'ok':'err');
+      if(d.status==='success'){ closeModal(); openUser(uid); } else { b.disabled=false; b.textContent=lbl; }
+    });
+  }
   const amt=()=>parseFloat($('adjAmt').value||0), note=()=>$('adjNote').value.trim();
   // FIXED BUG: neither button disabled itself while the request was in
   // flight, so a double-tap (or a slow connection making it LOOK like the

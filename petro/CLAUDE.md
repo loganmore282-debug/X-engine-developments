@@ -7390,3 +7390,16 @@ pulled by the same `git pull`, then the panel must be reopened once on each
 device.
 
 **Follow-up 56b -- Firebase scripts for admin push are now self-hosted.** Owner's phone showed "The Google notification script did not load": `www.gstatic.com` was not reachable there, and both the panel page and `admin/sw.js` (`importScripts`) depended on it, so push could not start at all. The official Firebase 10.12.0 compat builds (from the `firebase@10.12.0` npm package, unchanged) are now in `admin/vendor/` and loaded from the admin's own origin by `admin-src/index.html` and `admin/sw.js` (also precached; cache v65). `https://www.gstatic.com` stays in the CSP (harmless; the member app still uses it). Upgrading Firebase later means replacing those two files and bumping the cache.
+
+## Follow-up 57 -- give a member an asset from the admin panel; deposit alerts name the member
+
+Owner: *"make sure push notifications also send successful deposits (look at how space8 did it), and in Users, on a specific user, let me select a product and activate it for that user."*
+
+**Deposit alerts**: already wired the way space8 does it -- `_creditDepositNow()` calls `sendAdminPush('Deposit completed', ...)` only on a real new credit (never an idempotent replay), and every rail (MarzPay, PesaJet, USDT, card, admin force-credit) funnels through it. It goes to every registered admin/staff device, without an Approve button (that is withdrawals only), and tapping it opens the Recharges tab. Added: the body now names the member's phone (`UGX 30,000 credited by 07...`), looked up best-effort after the credit so it can never delay or break it.
+
+**Give an asset** (owner only): Users -> a member -> "Give an asset" (selector + Activate). `POST /admin/user/grant-asset {userId, tierKey, requestId}`:
+- Free for the member -- **no wallet debit**. It becomes an ordinary active investment (same cashback schedule, same maturity payout, so it pays its full return), flagged `granted:true, grantedBy`.
+- **Idempotent**: investment doc id is `grant-<requestId>` via `createIfAbsent`; the panel makes one requestId per opened modal, so double taps, retries and simultaneous requests create exactly one plan. A deliberate second gift is a new modal/request.
+- Counts toward `totalInvested` (and `firstInvestmentDone`), deliberately: "Recalculate totals" and `/admin/integrity` add up `investments.amount`, so excluding it would make them "repair" it away, and `requireInvestToWithdraw` (a plan must exist before withdrawing) is satisfied. Consequence: platform-wide "invested" figures include gifted value.
+- No referral commission (commissions are deposit-based; `commissionPending:false`). Refuses non-owners (401), unknown/deleted/zero-price assets, unknown or banned members. Writes a zero-amount "<asset> activated" statement row and an `asset_grant` audit-log entry.
+- Test: `test-admin-grant-asset.js` (34 checks, in `npm run test:audit`; mutation-checked: removing the owner check, ban check, idempotency guard or the totals update each makes it fail). Admin cache v66.

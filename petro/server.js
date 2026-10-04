@@ -5218,7 +5218,12 @@ async function _creditDepositNow(depDoc) {
     // retried webhook/poll must never fire a duplicate push for the same money.
     if (justCredited) {
       markDepositAttemptSucceeded(dep.userId);
-      sendAdminPush('Deposit completed', `${fmtMoney(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id }).catch(() => {});
+      // Names the member so the alert is useful on a lock screen; the lookup is
+      // best-effort and never delays or blocks the credit that already happened.
+      db.collection('users').doc(String(dep.userId)).get().then(u => {
+        const who = u.exists && u.data().phone ? ' by ' + u.data().phone : '';
+        return sendAdminPush('Deposit completed', `${fmtMoney(creditedAmount)} credited${who || ' to a wallet'}`, { type: 'deposit', depositId: depDoc.id });
+      }).catch(() => sendAdminPush('Deposit completed', `${fmtMoney(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id })).catch(() => {});
     }
     return credited;
   } finally { _creditingDeposits.delete(depDoc.id); }
@@ -8755,6 +8760,61 @@ app.post('/admin/user/set-phone', async (req, res) => {
     logAdminAction(req, 'user_phone_set', { userId, phone });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Owner gives a member an asset ("select a product and activate it for this
+// member"). No wallet debit: the member pays nothing, so there is no cash to
+// move and nothing to refund. It is an ordinary active investment from then
+// on (same cashback schedule, same maturity payout as a purchase), flagged
+// `granted` so it is never mistaken for a bought one.
+// - Idempotent: the investment document id is derived from a request id the
+//   panel generates once per open modal, so a double tap, a retry or a replayed
+//   request can only ever create one plan (createIfAbsent).
+// - It counts toward totalInvested like any plan, so "Recalculate totals" and
+//   the integrity audit (which add up investments.amount) keep agreeing with the
+//   member's stored figure, and "Purchase a plan before withdrawing" is met.
+// - No referral commission: commissions are paid on deposits only.
+app.post('/admin/user/grant-asset', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  const requestId = String(req.body.requestId || '');
+  if (!userId || !/^[A-Za-z0-9_-]{8,64}$/.test(requestId))
+    return res.status(400).json({ status: 'error', message: 'userId and a valid requestId are required' });
+  try {
+    const tier = await getProductByKey(String(req.body.tierKey || ''));
+    if (!tier || tier.deleted) return res.status(400).json({ status: 'error', message: 'Unknown asset' });
+    const sett = await getSettings();
+    const invId = 'grant-' + requestId;
+    const invRef = db.collection('investments').doc(invId);
+    let alreadyGiven = false;
+    await withLock('bal:' + userId, async () => {
+      const uRef = db.collection('users').doc(userId);
+      const u = await uRef.get();
+      if (!u.exists) throw new Error('User not found');
+      if (u.data().status === 'banned') throw new Error('This account is suspended. Unban it before giving an asset.');
+      const price = Number(tier.price) || 0;
+      if (!(price > 0)) throw new Error('This asset has no price set');
+      const cycle = Number(tier.cycle) || sett.cycleDays;
+      const expectedReturn = productExpectedReturn(tier, sett);
+      const { date, time } = nowStr();
+      const created = await invRef.createIfAbsent({
+        userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
+        status: 'active', dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+        isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
+        granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
+        date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      if (!created) { alreadyGiven = true; return; }
+      // The plan exists first: if anything below fails, the worst case is a
+      // total that is short by this plan, which "Recalculate totals" repairs.
+      await uRef.update({ totalInvested: FieldValue.increment(price), firstInvestmentDone: true });
+      await db.collection('transactions').doc('grant-asset:' + invId).createIfAbsent({
+        userId, statementId: newStatementId(), type: 'investment', description: `${tier.name} activated`, amount: 0,
+        status: 'success', date, time, investmentId: invId, createdAt: FieldValue.serverTimestamp()
+      }).catch(e => console.warn('grant-asset ledger row failed (plan is active):', e.message));
+    });
+    if (!alreadyGiven) logAdminAction(req, 'asset_grant', { userId, tierKey: tier.key, investmentId: invId, price: Number(tier.price) || 0 });
+    res.json({ status: 'success', alreadyGiven, investmentId: invId, message: alreadyGiven ? 'That asset was already given.' : `${tier.name} activated for this member` });
+  } catch (e) { res.status(400).json({ status: 'error', message: e.message }); }
 });
 // Rebuilds one user's totalDeposited/totalEarned/totalWithdrawn/totalInvested
 // straight from their own transaction ledger — a single-user version of the
