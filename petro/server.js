@@ -308,6 +308,22 @@ function corsHostAllowed(host) {
   if (!h) return false;
   return _corsExtraHosts.some(d => h === d || h.endsWith('.' + d));
 }
+// See _decodeAuth(): when a token could not be CHECKED (as opposed to being
+// found invalid), every route that answers 401 for it is rewritten here, in
+// one place, to a 503 the app reads as "try again" rather than "logged out".
+// Routes need no changes, and nothing is touched unless _decodeAuth() flagged
+// this exact request.
+app.use((req, res, next) => {
+  const send = res.json.bind(res);
+  res.json = function (body) {
+    if (req._authTransient && res.statusCode === 401) {
+      res.status(503);
+      body = { status: 'error', code: 'AUTH_UNAVAILABLE', message: 'We could not check your sign-in just now. Please try again in a moment.' };
+    }
+    return send(body);
+  };
+  next();
+});
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
@@ -1717,14 +1733,81 @@ function withLock2(keyA, keyB, fn) {
 // round-trips to Firebase, and a revoked-token check, on every single
 // authenticated call. The cached value includes the failure: a bad token
 // stays bad for the life of the request.
+// ── WHY A FAILED CHECK IS SPLIT INTO "INVALID" AND "COULD NOT CHECK" ──
+// verifyIdToken(token, true) asks Google whether the token was revoked, so it
+// is a network call on every request -- and the app polls every second. When
+// that call failed for ANY reason (a dropped connection to Google, a quota
+// blip, a Mongo hiccup in checkMember) the request used to be answered 401,
+// and a 401 makes the app end the member's session and send them back to the
+// login screen with "your session was rejected". Our own infrastructure
+// stuttering must not log a member out. So:
+//   - a token Google says is bad (expired, revoked, malformed, disabled user)
+//     stays a plain 401, exactly as before;
+//   - anything that looks transient is retried once, then answered 503
+//     AUTH_UNAVAILABLE (see the response hook below), which the app treats as
+//     "try again", not "you are logged out";
+//   - a verified token is remembered for a few seconds, which collapses the
+//     1-second poll's three requests into one Google call and removes most of
+//     the exposure. Our own logout/idle revocation lives in checkMember()
+//     (Mongo), which still runs on EVERY request, so signing out is still
+//     immediate; only a Google-side revocation can lag, by at most this TTL.
+const AUTH_CACHE_TTL_MS = 15 * 1000;
+const AUTH_CACHE_MAX = 2000;
+const _authTokenCache = new Map();
+const _TRANSIENT_AUTH_CODES = new Set([
+  'app/network-error', 'app/network-timeout', 'auth/internal-error', 'auth/network-request-failed',
+  'auth/service-unavailable', 'auth/quota-exceeded', 'auth/too-many-requests',
+]);
+function isTransientAuthError(e) {
+  const code = String((e && (e.code || (e.errorInfo && e.errorInfo.code))) || '');
+  if (_TRANSIENT_AUTH_CODES.has(code)) return true;
+  if (/^(ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EPIPE|ESOCKETTIMEDOUT|ECONNABORTED)$/.test(code)) return true;
+  const msg = String((e && e.message) || '');
+  // Default is "not transient" (a plain 401, today's behaviour): only
+  // something that clearly describes the connection, and says nothing about
+  // the token itself, is treated as a reason to retry.
+  return /network|timed? ?out|socket hang up|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|fetch failed|temporarily unavailable|service unavailable/i.test(msg)
+    && !/token|signature|expired|revoked|audience|issuer|malformed|decode/i.test(msg);
+}
+async function _verifyFirebaseToken(token) {
+  const now = Date.now();
+  const hit = _authTokenCache.get(token);
+  if (hit && hit.until > now) return { decoded: hit.decoded };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const decoded = await admin.auth().verifyIdToken(token, true); // checkRevoked
+      if (_authTokenCache.size >= AUTH_CACHE_MAX) {
+        for (const [k, v] of _authTokenCache) if (v.until <= now) _authTokenCache.delete(k);
+        if (_authTokenCache.size >= AUTH_CACHE_MAX) _authTokenCache.clear();
+      }
+      _authTokenCache.set(token, { decoded, until: Math.min(now + AUTH_CACHE_TTL_MS, (Number(decoded.exp) || 0) * 1000 || now + AUTH_CACHE_TTL_MS) });
+      return { decoded };
+    } catch (e) {
+      if (!isTransientAuthError(e)) return { decoded: null };
+      if (attempt === 0) await new Promise(r => setTimeout(r, 150));
+    }
+  }
+  return { decoded: null, transient: true };
+}
 async function _decodeAuth(req) {
   if (req && '_authDecoded' in req) return req._authDecoded;
   const header = (req && req.headers.authorization) || '';
   let decoded = null;
   if (header.startsWith('Bearer ')) {
-    try { decoded = await admin.auth().verifyIdToken(header.slice(7), true); } // checkRevoked
-    catch (_) { decoded = null; }
-    if (decoded && !(await sessionPolicy.checkMember(db, decoded, req.path === '/auth/session/activity'))) decoded = null;
+    const verified = await _verifyFirebaseToken(header.slice(7));
+    decoded = verified.decoded;
+    if (verified.transient && req) req._authTransient = true;
+    if (decoded) {
+      try {
+        if (!(await sessionPolicy.checkMember(db, decoded, req.path === '/auth/session/activity'))) decoded = null;
+      } catch (e) {
+        // The session store could not be read: that says nothing about the
+        // member, so it must not read as "your session is invalid".
+        console.error('Session check failed:', e.message);
+        decoded = null;
+        if (req) req._authTransient = true;
+      }
+    }
   }
   if (req) { try { req._authDecoded = decoded; } catch (_) {} }
   return decoded;
@@ -7442,8 +7525,13 @@ app.post('/auth/session/activity', async (req, res) => {
   res.json({ status: 'success' });
 });
 app.post('/auth/session/logout', async (req, res) => {
-  const decoded = await _decodeAuth(req);
-  if (decoded) await db.collection('memberSessions').doc(sessionPolicy.memberKey(decoded)).update({ revoked: true });
+  // update() throws NOT_FOUND for a missing record, and in an async Express 4
+  // handler that left the request hanging with no answer. Signing out must
+  // always answer, whether or not there was a session record to revoke.
+  try {
+    const decoded = await _decodeAuth(req);
+    if (decoded) await db.collection('memberSessions').doc(sessionPolicy.memberKey(decoded)).update({ revoked: true });
+  } catch (e) { console.error('Session logout error:', e.message); }
   res.json({ status: 'success' });
 });
 app.post('/admin/session/activity', (req, res) => {

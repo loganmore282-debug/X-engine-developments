@@ -1683,8 +1683,50 @@ function fbErrMsg(e){
   if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
   if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
   if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
-  return e && e.message ? e.message : 'Something went wrong. Try again.';
+  // A weak connection is the commonest real failure here, and without these
+  // the member was shown Firebase's own developer text, e.g.
+  // "Firebase: Error (auth/network-request-failed)."
+  if (code === 'auth/network-request-failed' || code === 'auth/timeout') return 'Could not reach the sign-in service. Check your connection and try again.';
+  if (code === 'auth/user-disabled') return 'This account has been disabled. Contact support.';
+  if (code === 'auth/invalid-email') return 'Enter a valid mobile number.';
+  if (code === 'auth/operation-not-allowed' || code === 'auth/internal-error' || code === 'auth/quota-exceeded' || code === 'auth/app-not-authorized' || code === 'auth/invalid-api-key')
+    return 'Sign-in is temporarily unavailable. Please try again shortly.';
+  const msg = e && e.message;
+  // Any other Firebase code, or its "Firebase: ..." wording, is not for members.
+  if (code.indexOf('auth/') === 0 || /^Firebase:/i.test(msg || '')) return 'Something went wrong. Try again.';
+  return msg ? msg : 'Something went wrong. Try again.';
 }
+// ── THE SIGN-IN SERVICE MAY NOT BE THERE ──
+// Firebase is a separate <script type="module"> that imports from gstatic
+// and awaits setPersistence() before it defines window.fbSignIn/fbAuth. If
+// that import or call fails (a blocked or flaky connection on a first visit,
+// storage disabled), none of them are ever defined and, worse,
+// onAuthStateChanged never runs -- so nothing ever took the loading screen
+// down: the app sat on its spinner forever and said nothing. Two guards:
+//   - firebaseReady(): login/sign-up wait briefly for it, then say so
+//     instead of throwing "window.fbSignIn is not a function" at a member;
+//   - a watchdog that, if it has still not appeared, hides the spinner,
+//     shows the login screen and says what is wrong. Non-destructive: if
+//     Firebase arrives late, its own snow-auth event carries on as normal.
+function firebaseReady(maxMs, needs){
+  maxMs = Number(window._FIREBASE_READY_MS) || maxMs;
+  return new Promise(resolve => {
+    const t0 = Date.now();
+    (function poll(){
+      if (window.fbAuth && window[needs]) return resolve(true);
+      if (Date.now() - t0 >= maxMs) return resolve(false);
+      setTimeout(poll, 100);
+    })();
+  });
+}
+setTimeout(function(){
+  if (window.fbAuth) return;
+  try {
+    $('loadingScreen').style.display = 'none';
+    if ($('app').style.display === 'none') $('authScreen').style.display = '';
+    notify('Could not load the sign-in service. Check your connection, then reload the app.');
+  } catch (_) {}
+}, Number(window._FIREBASE_WATCHDOG_MS) || 15000);
 // ── SAVED-CREDENTIAL AUTO SIGN-IN ──
 // Chrome (and other Credential Management API browsers) can silently hand
 // back a previously-stored password credential with zero user interaction
@@ -1752,6 +1794,7 @@ window.doLogin = async function(){
     // Tries this region's address, then the other shape for the same region
     // -- see loginAddressCandidates(). The LAST error is the one reported, so
     // a genuinely wrong password still reads as a wrong password.
+    if (!(await firebaseReady(8000, 'fbSignIn'))) throw new Error('Sign-in is not available right now. Check your connection and try again.');
     const tries = loginAddressCandidates(phone);
     let email = tries[0], lastErr = null;
     for (const cand of tries) {
@@ -1901,6 +1944,14 @@ window.doRegister = async function(){
   if (!referral && referralIsRequired())
     return regError('A referral code is required to sign up. Ask the person who invited you for theirs.');
   regError('');
+  // See firebaseReady(): without the sign-in service there is nothing to
+  // create the account with, and the code below would only throw at the member.
+  if (!(window.fbCreateUser && window.fbAuth)) {
+    setBtnLoading('regBtn', true, 'Register', 'Connecting…');
+    const ready = await firebaseReady(8000, 'fbCreateUser');
+    setBtnLoading('regBtn', false, 'Register');
+    if (!ready) return regError('Sign-up is not available right now. Check your connection and try again.');
+  }
   // Owner: "when l disable otp verification system the functions go away
   // completely" -- with the toggle off, registration skips straight to
   // account creation, no /auth/otp/verify call and no ticket. The server's
@@ -1966,6 +2017,12 @@ window.doRegister = async function(){
         return;
       } catch (_) { /* wrong password -- fall through to the real error */ }
     }
+    // No Firebase account came out of this attempt, so what was staged for
+    // finishing it means nothing. Left set, the next thing to sign in on this
+    // tab -- possibly a different member logging in -- would be treated by
+    // bootFromNetwork() as a registration that just happened: a needless
+    // /register call, and a "Registration successful" toast on a plain login.
+    window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
     regError(fbErrMsg(e));
     setBtnLoading('regBtn', false, 'Register');
   }
@@ -2736,6 +2793,36 @@ async function registerCurrentUser(pin, phone, otpTicket){
   }
   return reg;
 }
+// A member signed in to an account whose sign-up never finished (the Firebase
+// account exists but the profile was never completed -- classically a mistyped
+// referral code, or the app closing mid-sign-up). Login cannot finish it: with
+// OTP on it needs a fresh verified code, and the referral code has to be
+// right. Before, they were left on the Log In screen with "Please verify your
+// phone number first." and no way to tell what to do. Now: say what happened,
+// sign them out cleanly, and open Sign Up with their number already filled in.
+// Re-submitting it takes doRegister()'s existing "email already in use" path,
+// which signs in and finishes this same registration.
+var SIGNUP_UNFINISHED_CODES = ['OTP_REQUIRED', 'REFERRAL_REQUIRED', 'BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
+async function abandonUnfinishedSignup(reg){
+  $('loadingScreen').style.display = 'none';
+  if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
+    notify(reg.message || 'Could not complete registration');
+    $('authScreen').style.display = '';
+    setBtnLoading('regBtn', false, 'Register');
+    return;
+  }
+  const local = localDigits(String((STATE.user && STATE.user.email) || '').split('@')[0]);
+  window._pendingLoginSuccess = false;
+  await window.fbSignOut();
+  $('authScreen').style.display = '';
+  showAuthTab('register');
+  if (local && $('regPhone')) $('regPhone').value = '0' + local;
+  if ($('regReferral') && STATE.refCode) $('regReferral').value = STATE.refCode;
+  setBtnLoading('regBtn', false, 'Register');
+  notify(reg.code === 'OTP_REQUIRED'
+    ? 'Your sign-up was not finished. Verify your number below to finish creating your account.'
+    : (reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
+}
 async function bootFromNetwork(uid){
   // Was `!!window._pendingRegOtpTicket` -- broke the moment OTP verification
   // could be off (that ticket is always null then, since no /auth/otp/verify
@@ -2761,6 +2848,11 @@ async function bootFromNetwork(uid){
   if (window._pendingRegPhone) {
     const pin = window._pendingRegPin, phone = window._pendingRegPhone, otpTicket = window._pendingRegOtpTicket;
     const reg = await registerCurrentUser(pin, phone, otpTicket);
+    // The session changed while /register was in flight (a second sign-in
+    // event for the same account, or a logout): whatever replaced it owns the
+    // screen now. Treating this as a failure would sign the member out of the
+    // very session that is opening.
+    if (reg.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       $('loadingScreen').style.display = 'none';
       notify(reg.message || 'Could not complete registration');
@@ -2772,21 +2864,22 @@ async function bootFromNetwork(uid){
     r = await api('/account');
   } else {
     r = await api('/account');
+    if (r.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.code === 'REGISTRATION_REQUIRED' || r.message === 'User not found')) {
       // Ghost account (Firebase user exists, our profile never finished in
       // an earlier session -- e.g. a crash/reload between account creation
       // and /register finishing) -- self-heal the same way.
       const reg = await registerCurrentUser(window._pendingRegPin || '', window._pendingRegPhone || '', window._pendingRegOtpTicket || '');
+      if (reg.stale || !STATE.user || STATE.user.uid !== uid) return;
       if (reg.status !== 'success' && reg.status !== 'already_done') {
-        $('loadingScreen').style.display = 'none';
-        notify(reg.message || 'Could not complete registration');
-        $('authScreen').style.display = '';
-        setBtnLoading('regBtn', false, 'Register');
+        await abandonUnfinishedSignup(reg);
         return;
       }
       r = await api('/account');
     }
   }
+  // Same reasoning as above for the account fetch itself.
+  if (r.stale || !STATE.user || STATE.user.uid !== uid) return;
   if (r.status === 'error') {
     $('loadingScreen').style.display = 'none';
     if (r.code === 'BANNED') { notify(r.message); await window.fbSignOut(); return; }

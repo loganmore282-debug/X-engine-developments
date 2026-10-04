@@ -7227,3 +7227,99 @@ Manager lists `id` and ignores `name`, so the fix never took effect there.
   new-style and old-style saved entries both reach `fbSignIn` with the right
   address, second address shape tried on invalid-credential, network error and
   empty store return false, zero page errors. `user/sw.js` v235 -> v236.
+
+## Follow-up 55 -- login and registration audit: six silent failures found and fixed, permanent end-to-end test added
+
+Owner: *"make sure that login and registration is perfectly wired and green,
+codex made a critical fix of that bug where one tried to login but we're still
+not opening account, so make more audits on authentication functions."* Read
+Codex's login recovery work first (commit `48201f2`), then audited every step
+from the Firebase wrapper through `processMemberAuth` -> `enterApp` ->
+`bootFromNetwork`, and the server's token/session/registration code, looking
+specifically for outcomes where a member is left on a dead screen or signed
+out with nothing said.
+
+**Found and fixed (each reproduced or proven by a test that fails without the fix):**
+1. **Dead spinner forever when Google's sign-in script cannot load.** The
+   Firebase wrapper is a `<script type="module">` that imports from gstatic
+   and awaits `setPersistence()`. If that fails (blocked/flaky first visit),
+   `window.fbSignIn`/`fbAuth` are never defined and `onAuthStateChanged` never
+   fires, so nothing took `#loadingScreen` down: the app showed its spinner
+   forever, no login screen, no message. **Reproduced in real Chromium** with
+   gstatic blocked: the previously shipped build is still on the spinner after
+   18s; the new build shows the login screen with "Could not load the sign-in
+   service. Check your connection, then reload the app." A 15s watchdog
+   (`_FIREBASE_WATCHDOG_MS`) does this, non-destructively (a late-arriving
+   Firebase carries on normally). Login/Sign Up also `await firebaseReady()`
+   (waits up to 8s for `fbSignIn`/`fbCreateUser`) and then say "not available
+   right now" instead of throwing "window.fbSignIn is not a function".
+2. **A transient failure on OUR side logged members out.** `_decodeAuth()`
+   answered 401 for ANY failure of `verifyIdToken(token, true)` -- including a
+   dropped connection to Google or an unreadable session store -- and a 401
+   makes the app end the session ("your login session was rejected"). That
+   check is a Google network call on every request and the app polls every
+   second. Now: a token Google calls bad (expired/revoked/malformed) is still a
+   plain 401; anything transient is retried once, then answered
+   **503 `AUTH_UNAVAILABLE`** by a response hook (so no route changed), which
+   the app treats as "try again". A verified token is cached for 15s
+   (`AUTH_CACHE_TTL_MS`, bounded to 2000 entries) which collapses the 1s
+   poll's requests into one Google call. `checkMember()` (our own
+   logout/idle/revocation store) still runs on EVERY request, so signing out
+   stays immediate; only a Google-side revocation can lag, by at most 15s.
+   `/auth/session/logout` also now always answers (a missing session record
+   threw NOT_FOUND inside an async Express 4 handler and left the request
+   hanging).
+3. **`bootFromNetwork()` signed the member out when its session was replaced.**
+   `api()` returns `{stale:true,"Session changed"}` when a second sign-in event
+   for the same account bumps `authEpoch` mid-boot (this happens in the
+   "email already in use" sign-up recovery path, where `doRegister()` calls
+   `bootFromNetwork()` directly while Firebase also fires `snow-auth`). The
+   boot treated that as a real error: toast "Session changed" and `fbSignOut()`,
+   killing the very session that was opening. Stale responses and a changed
+   `STATE.user` now make the old boot return quietly.
+4. **Unfinished sign-ups were stranded on the login screen.** A Firebase
+   account whose profile never finished (classically a mistyped referral code)
+   logs in to "Please verify your phone number first." with no way forward.
+   `abandonUnfinishedSignup()` now says what happened, signs out cleanly, opens
+   Sign Up with the number (and any referral code) filled in; re-submitting
+   uses the existing "already in use" path to finish the same registration.
+5. **Raw Firebase text reached members.** `fbErrMsg()` fell through to
+   `e.message`, so a weak connection showed "Firebase: Error
+   (auth/network-request-failed)." Added friendly messages for network/timeout,
+   disabled account, invalid number, and a temporary outage; no `auth/...` or
+   "Firebase:" text is ever shown.
+6. **A failed sign-up left staged state behind.** `_pendingRegPhone/Pin/OtpTicket`
+   stayed set after a failed Firebase create, so the next sign-in in that tab
+   -- possibly a different member logging in -- was treated as a registration:
+   a needless `/register` call and a "Registration successful" toast on a plain
+   login. Cleared on failure.
+7. **Idle-session clock step.** `createPetroIdleSession.check()` expired the
+   session whenever `state.last > now`, so a phone clock correction of even a
+   second backwards signed the member out. A step of up to 60s (the same limit
+   the server applies to `auth_time` in `checkMember`) is now absorbed by
+   pulling the stored times back to now; larger steps and genuine idleness
+   still end the session. (Codex's forward-skew rule is unchanged.)
+
+**Checked and found sound, no change:** `loginAddressCandidates` (both address
+shapes), the OTP-ticket reuse for a retried registration, `completeRegistrationCore`
+idempotence, `phoneFromVerifiedEmail`, the 8-hour maximum and 1-hour idle limits
+on both sides, `/register` banned/already-done handling.
+
+**Permanent regression test: `test-auth-flows.js` (source and `--built`), now in
+`npm run test:audit` together with Codex's `test-login-recovery.js`,
+`test-session-policy.js` and `test-session-navigation.js`** (they were not in
+the audit script before). It drives the REAL login/sign-up code through a fake
+Firebase (a fresh user object on every sign-in, like the real SDK) and a fake
+backend behind `fetch()`, asserting that every outcome ends with the app open
+or the login/sign-up screen showing with a message and usable buttons: login
+matrix (success, wrong password, network, disabled, throttled, internal error,
+banned, server unreachable, 503, 500), unfinished sign-ups (4 reply shapes),
+superseded boots, the bad-referral -> corrected-code recovery with a doubled
+sign-in event, plain sign-up, Firebase never/late loading, the watchdog and
+its absence of false alarms, clock steps; plus the server's token check, 401 ->
+503 hook, cache, retry, classifier and logout run from the real `server.js`
+source against mocks. **Mutation-checked**: reverting each fix in turn (12
+mutations) makes the test fail; removing all stale-boot guards together
+reproduces the original symptom (member signed out).
+`user/sw.js` v236 -> v237. Not verifiable from here: a real Firebase/Google
+outage, and Chrome's real password manager.

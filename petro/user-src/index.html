@@ -2627,10 +2627,21 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
   }
   function clear(){ state = null; lastSave = 0; clearInterval(timer); timer = null; try { sessionStorage.removeItem(key); } catch (_) {} }
   function expire(){ if (!state) return false; clear(); onExpire(); return false; }
+  // A phone's clock is corrected by the network now and then and can step
+  // BACK by a few seconds. Treating any backward step as tampering signed
+  // members out for nothing. A small step is absorbed by pulling the stored
+  // times back to now (so it can lengthen a session by no more than SKEW);
+  // a larger one is still refused, as is a clock that has run far ahead.
+  // 60 seconds is the same limit the server applies to a login time that is
+  // ahead of its own clock (checkMember in session-policy.js).
+  var SKEW = 60 * 1000;
   function check(){
     if (!state) return false;
     var now = Date.now();
-    if (!Number.isFinite(state.started) || !Number.isFinite(state.last) || state.last > now || now < state.started || now - state.last >= IDLE || now - state.started >= MAX) return expire();
+    if (!Number.isFinite(state.started) || !Number.isFinite(state.last)) return expire();
+    if (state.last > now && state.last <= now + SKEW) state.last = now;
+    if (state.started > now && state.started <= now + SKEW) state.started = now;
+    if (state.last > now || now < state.started || now - state.last >= IDLE || now - state.started >= MAX) return expire();
     return true;
   }
   function pulse(){
