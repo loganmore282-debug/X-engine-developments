@@ -1863,25 +1863,49 @@ function verifyOwner(req) {
 // Push notifications for admin — deposit/withdrawal alerts. Tokens are keyed
 // by the token string itself (doc id == token) so re-registering the same
 // device is a natural upsert and never creates duplicate rows.
-async function sendAdminPush(title, body, data = {}) {
+//
+// ── DATA-ONLY ON PURPOSE ──
+// These used to carry a `notification` block. The Firebase web SDK shows any
+// message that has one by itself when the page is in the background, and the
+// admin service worker's own onBackgroundMessage ALSO showed one, so a single
+// event produced two notifications on the same phone. (That was blamed on two
+// registered tokens, which can also happen, but this alone doubled every
+// alert.) The title and body now travel in `data`, and the service worker is
+// the only thing that displays them -- which is also what lets it attach an
+// Approve button and a per-event `tag` so a repeat replaces rather than stacks.
+// `Urgency: high` asks the push service to deliver at once even when the phone
+// is idle, and the TTL drops an alert nobody saw within two hours.
+//
+// Messages go out one per device (sendEach), not as one shared multicast,
+// because an owner device's copy of a withdrawal alert carries that device's
+// own quick-approve secret (see /admin/withdraw/quick-approve).
+const ADMIN_PUSH_HEADERS = { Urgency: 'high', TTL: '7200' };
+async function sendAdminPush(title, body, data = {}, opts = {}) {
   try {
     const snap = await db.collection('adminPushTokens').get();
     if (snap.empty) return;
-    const tokens = snap.docs.map(d => d.id);
-    const strData = {};
-    for (const [k, v] of Object.entries(data)) strData[k] = String(v);
-    const resp = await admin.messaging().sendEachForMulticast({
-      tokens,
-      notification: { title, body },
-      data: strData,
-      webpush: { fcmOptions: { link: '/' } }
+    const base = {};
+    for (const [k, v] of Object.entries(data)) base[k] = String(v);
+    base.title = String(title); base.body = String(body);
+    const messages = snap.docs.map(d => {
+      const t = d.data(), dd = Object.assign({}, base);
+      // Only an owner device that has a secret is ever offered the button.
+      // Staff devices get the same alert with no action at all.
+      if (opts.quickApprove && t.role === 'owner' && t.quickApproveSecret) {
+        dd.quickApprove = '1'; dd.pushToken = d.id; dd.secret = String(t.quickApproveSecret);
+      }
+      return { token: d.id, data: dd, webpush: { headers: ADMIN_PUSH_HEADERS } };
     });
     const stale = [];
-    resp.responses.forEach((r, i) => {
-      const code = r.success ? null : (r.error && r.error.code);
-      if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token')
-        stale.push(tokens[i]);
-    });
+    for (let i = 0; i < messages.length; i += 500) {
+      const chunk = messages.slice(i, i + 500);
+      const resp = await admin.messaging().sendEach(chunk);
+      resp.responses.forEach((r, j) => {
+        const code = r.success ? null : (r.error && r.error.code);
+        if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token')
+          stale.push(chunk[j].token);
+      });
+    }
     if (stale.length) await Promise.all(stale.map(t => db.collection('adminPushTokens').doc(t).delete().catch(() => {})));
   } catch (e) { console.warn('sendAdminPush failed (non-critical):', e.message); }
 }
@@ -6006,7 +6030,7 @@ app.post('/withdraw/request', async (req, res) => {
       if (!debited) throw new Error('Your balance or account status changed. Please refresh and try again.');
       await finishWithdrawalCreation(witRef, userId);
     });
-    sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
+    sendAdminPush('New withdrawal request', `${fmtMoney(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }, { quickApprove: true }).catch(() => {});
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Withdrawal requested, processing now' });
   } catch (e) {
     if (witId) return res.status(503).json({ status: 'error', code: 'WITHDRAWAL_RECOVERY_PENDING', withdrawalId: witId, message: 'Your withdrawal request is being checked. Check Transaction Statement before submitting again.' });
@@ -6464,6 +6488,44 @@ app.post('/admin/withdraw/process', async (req, res) => {
   const result = await processWithdrawalCore(withdrawalId, req.adminUser?.username || 'owner');
   if (result.code === 200) logAdminAction(req, 'withdrawal_processed', { withdrawalId, ...result.meta });
   res.status(result.code).json(result.body);
+});
+// Owner-only "Approve" straight from a push notification, with the admin panel
+// closed (no page, no login session). The device's own service worker posts the
+// withdrawal id plus the token/secret pair that arrived inside the push it
+// received (see sendAdminPush and /admin/push/register). It is checked here,
+// constant-time; the credential can reach processWithdrawalCore and nothing
+// else, and dies the moment the device unregisters. The account that
+// registered the device must STILL be an active owner, so removing or
+// demoting an admin cuts this off even though their device is still
+// subscribed. Everything past the credential check is the same code path as
+// the Send button in the panel (one-at-a-time lock, status must be pending,
+// idempotent), so a double tap or a replay cannot pay twice.
+const quickApproveLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+app.post('/admin/withdraw/quick-approve', quickApproveLimiter, async (req, res) => {
+  try {
+    const withdrawalId = String(req.body.withdrawalId || '').trim();
+    const pushToken = String(req.body.pushToken || '').trim();
+    const secret = String(req.body.secret || '');
+    if (!withdrawalId || !pushToken || !secret || pushToken.length > 4096) return res.status(400).json({ status: 'error', message: 'Missing fields' });
+    const tokDoc = await db.collection('adminPushTokens').doc(pushToken).get();
+    const tok = tokDoc.exists ? tokDoc.data() : null;
+    if (!tok || tok.role !== 'owner' || !tok.quickApproveSecret || !safeEqual(String(tok.quickApproveSecret), secret))
+      return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    const username = String(tok.username || 'owner-key');
+    if (username !== 'owner-key') {
+      const u = await db.collection('adminUsers').doc(username).get();
+      if (!u.exists || u.data().active === false || u.data().role !== 'owner')
+        return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    }
+    const result = await processWithdrawalCore(withdrawalId, username + ' (notification)');
+    if (result.code === 200)
+      logAdminAction({ adminUser: { username, role: 'owner' }, ip: req.ip }, 'withdrawal_processed', { withdrawalId, via: 'push', ...result.meta });
+    res.status(result.code).json(result.body);
+  } catch (e) {
+    console.error('Quick-approve error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not approve right now. Open the admin panel to check.' });
+  }
 });
 app.post('/admin/withdraw/verify', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -7617,11 +7679,27 @@ app.get('/admin/audit-log', async (req, res) => {
 app.post('/admin/push/register', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const token = String(req.body.token || '').trim();
-  if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
+  if (!token || token.length > 4096) return res.status(400).json({ status: 'error', message: 'Missing token' });
   try {
-    await db.collection('adminPushTokens').doc(token).set({ token, registeredAt: FieldValue.serverTimestamp() }, { merge: true });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+    const owner = verifyOwner(req);
+    const ref = db.collection('adminPushTokens').doc(token);
+    const prev = await ref.get();
+    const was = prev.exists ? prev.data() : {};
+    // A one-off secret for THIS device's "Approve" button on a withdrawal
+    // alert. It is deliberately not the master ADMIN_KEY or a login session
+    // (so it can only ever reach one route), it is never sent back to the
+    // page, and it exists only for owner devices -- a staff registration
+    // writes the record WITHOUT one (a full replace, so a device that changes
+    // from owner to staff loses it). It survives re-registration of the same
+    // token so it does not rotate on every refresh.
+    const fields = {
+      token, username: req.adminUser?.username || 'owner-key', role: owner ? 'owner' : 'staff',
+      registeredAt: was.registeredAt || FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (owner) fields.quickApproveSecret = was.quickApproveSecret || crypto.randomUUID();
+    await ref.set(fields);
+    res.json({ status: 'success', quickApprove: owner });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not register for notifications' }); }
 });
 app.post('/admin/push/unregister', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -7646,7 +7724,7 @@ app.get('/admin/push/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('adminPushTokens').get();
-    res.json({ status: 'success', count: snap.size, tokens: snap.docs.map(d => ({ token: d.id.slice(0, 16) + '…', registeredAt: d.data().registeredAt || null })) });
+    res.json({ status: 'success', count: snap.size, tokens: snap.docs.map(d => ({ token: d.id.slice(0, 16) + '…', role: d.data().role || null, quickApprove: !!d.data().quickApproveSecret, registeredAt: d.data().registeredAt || null })) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/push/clear-all', async (req, res) => {

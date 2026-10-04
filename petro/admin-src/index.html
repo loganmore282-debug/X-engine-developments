@@ -784,6 +784,12 @@ $('logoutBtn').addEventListener('click', async ()=>{
 function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden');
   let lastTab = 'dashboard';
   try { const saved = sessionStorage.getItem('snow_admin_tab'); if (saved && VALID_TABS.has(saved)) lastTab = saved; } catch (_) {}
+  // Opened by tapping a notification when no panel was open: go straight to
+  // the tab the alert is about (consumed once, so a reload does not repeat it).
+  try {
+    const wanted = new URLSearchParams(location.search).get('tab');
+    if (wanted && VALID_TABS.has(wanted)) { lastTab = wanted; history.replaceState(null, '', location.pathname); }
+  } catch (_) {}
   const isOwner = SESSION_ROLE === 'owner';
   ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
@@ -867,6 +873,11 @@ const FIREBASE_CONFIG = {
   appId: "1:969724557876:web:553284e329bdfd146a2861",
   measurementId: "G-HXG8ZVCMWS"
 };
+// Bumped when what a registration carries changes, so devices registered by an
+// older version silently register again (see resyncPushToken) instead of
+// waiting for someone to switch Notify off and on.
+const PUSH_VER = '2', PUSH_VER_KEY = 'petro_admin_push_ver';
+const PUSH_KEY_VER_KEY = 'petro_admin_push_key_version';
 const VAPID_KEY = 'BOr_34ry9C1u2db466e-6lca-wrAUBgOXYn-P4Mr5f2vt5I-mNtjbakVVrcaxCZQaNw47jRdMV4vuOimFmUZtdY';
 
 function firebaseMessagingReady(){
@@ -882,30 +893,86 @@ function setPushUIState(on){
   btn.textContent = on ? 'Notify: on' : 'Notify';
   btn.title = on ? 'Push notifications on, click to disable' : 'Enable push notifications';
 }
+// Bounded on purpose: an earlier version could appear to do nothing at all
+// when navigator.serviceWorker.ready never resolved (its registration error was
+// swallowed, then this waited forever). Every wait here has a time limit and a
+// message, the worker is registered explicitly, and the real browser/Firebase
+// error is shown rather than a generic one.
 async function enablePush(){
   if (!VAPID_KEY) return toast('Push notifications are not configured yet', 'err');
+  if (typeof Notification === 'undefined' || !('serviceWorker' in navigator))
+    return toast('This browser cannot show notifications. On an iPhone, add the admin panel to the Home Screen first.', 'err');
+  if (Notification.permission === 'denied')
+    return toast('Notifications are blocked for this site. Allow them in browser Site settings, then tap Notify again.', 'err');
   const messaging = firebaseMessagingReady();
   if (!messaging) return toast('Push notifications are not supported on this device/browser', 'err');
+
+  const btn = $('pushBtn');
+  let enabled = false;
+  if (btn) { btn.disabled = true; btn.textContent = 'Enabling…'; }
+  toast('Enabling notifications…', 'ok');
+
+  const withTimeout = (promise, ms, message) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+  ]);
+
   try {
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') return toast('Notification permission was not granted', 'err');
-    const reg = await navigator.serviceWorker.ready;
-    const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
-    if (!token) return toast('Could not get a push token', 'err');
-    // Real bug fixed: a token can rotate (browser/service-worker update) --
-    // without this, the OLD token from this same browser stayed registered
-    // forever, so this one context alone could end up holding two live
-    // tokens and receiving every push twice. If this browser already had a
-    // DIFFERENT token stored, retire it server-side before storing the new
-    // one, so this context only ever keeps one live registration.
-    let prevToken = ''; try { prevToken = localStorage.getItem('snow_admin_push_token') || ''; } catch(_){}
-    if (prevToken && prevToken !== token) await api('/admin/push/unregister', { token: prevToken }).catch(()=>{});
+    const perm = Notification.permission === 'granted'
+      ? 'granted'
+      : await Notification.requestPermission();
+    if (perm !== 'granted') {
+      toast('Notification permission was not granted', 'err');
+      return;
+    }
+
+    const reg = await withTimeout(
+      navigator.serviceWorker.register('/sw.js', { updateViaCache:'none' }),
+      10000,
+      'The notification service worker could not start'
+    );
+    await reg.update().catch(()=>{});
+    const readyReg = await withTimeout(
+      navigator.serviceWorker.ready,
+      10000,
+      'The notification service worker did not become ready'
+    );
+
+    const token = await withTimeout(
+      messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: readyReg }),
+      20000,
+      'Firebase did not return a push token in time'
+    );
+    if (!token) throw new Error('Firebase did not return a push token');
+
+    // A token can rotate (browser/service-worker update). The old one is
+    // retired before the new one is stored, so this browser only ever holds one
+    // live registration and never receives the same alert twice.
+    let prevToken = '';
+    try { prevToken = localStorage.getItem('snow_admin_push_token') || ''; } catch(_){}
+    if (prevToken && prevToken !== token)
+      await api('/admin/push/unregister', { token: prevToken }).catch(()=>{});
+
     const r = await api('/admin/push/register', { token });
-    if (r.status !== 'success') return toast(r.message || 'Could not enable notifications', 'err');
-    try { localStorage.setItem('snow_admin_push_token', token); } catch(_){}
+    if (r.status !== 'success') throw new Error(r.message || 'The server rejected the push token');
+
+    try {
+      localStorage.setItem('snow_admin_push_token', token);
+      // Which VAPID key the token was made with: a token from an older key
+      // must not make the button claim notifications are on.
+      localStorage.setItem(PUSH_KEY_VER_KEY, 'v2');
+      localStorage.setItem(PUSH_VER_KEY, PUSH_VER);
+    } catch(_){}
     setPushUIState(true);
-    toast('Push notifications enabled', 'ok');
-  } catch(e) { toast('Could not enable notifications', 'err'); }
+    enabled = true;
+    toast(r.quickApprove ? 'Notifications on. New withdrawals show an Approve button.' : 'Push notifications enabled', 'ok');
+  } catch(e) {
+    const detail = e && e.message ? e.message : 'Unknown browser error';
+    toast('Could not enable notifications: ' + detail, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+    if (!enabled) setPushUIState(false);
+  }
 }
 // Owner-reported: the same physical admin phone received 2 identical
 // "New withdrawal request" pushes for one real order. sendAdminPush()
@@ -934,10 +1001,11 @@ async function resyncPushToken(){
   try {
     const reg = await navigator.serviceWorker.ready;
     const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
-    if (!token || token === prevToken) return; // unchanged -- the common case, nothing to do
-    await api('/admin/push/unregister', { token: prevToken }).catch(()=>{});
+    let ver = ''; try { ver = localStorage.getItem(PUSH_VER_KEY) || ''; } catch(_){}
+    if (!token || (token === prevToken && ver === PUSH_VER)) return; // unchanged and current -- the common case
+    if (token !== prevToken) await api('/admin/push/unregister', { token: prevToken }).catch(()=>{});
     const r = await api('/admin/push/register', { token });
-    if (r.status === 'success') { try { localStorage.setItem('snow_admin_push_token', token); } catch(_){} }
+    if (r.status === 'success') { try { localStorage.setItem('snow_admin_push_token', token); localStorage.setItem(PUSH_KEY_VER_KEY, 'v2'); localStorage.setItem(PUSH_VER_KEY, PUSH_VER); } catch(_){} }
   } catch(_) {}
 }
 async function disablePush(){
@@ -949,11 +1017,31 @@ async function disablePush(){
 $('pushBtn').addEventListener('click', ()=>{
   ($('pushBtn').classList.contains('ok') ? disablePush : enablePush)();
 });
-try { setPushUIState(!!localStorage.getItem('snow_admin_push_token')); } catch(_){}
+try {
+  const _pushToken = localStorage.getItem('snow_admin_push_token') || '';
+  const _pushKeyVer = localStorage.getItem(PUSH_KEY_VER_KEY) || '';
+  setPushUIState(_pushKeyVer === 'v2' && Notification.permission === 'granted' && !!_pushToken);
+} catch(_) { setPushUIState(false); }
+// A push that arrives while this page is in front is NOT shown by the system
+// (the browser leaves that to the page), so it is shown here, and the badges
+// and open list refresh so the new request is already on screen. Alerts are
+// data-only, so the text is in `data`; `notification` is read for older ones.
+function adminPushRefresh(){ try { refreshBadges().catch(()=>{}); liveTick(); } catch(_){} }
 (() => { const m = firebaseMessagingReady(); if (m) m.onMessage((payload) => {
-  const n = payload.notification || {};
-  toast((n.title ? n.title + ': ' : '') + (n.body || 'New activity'), 'ok');
+  const d = payload.data || {}, n = payload.notification || {};
+  const title = d.title || n.title || '';
+  toast((title ? title + ': ' : '') + (d.body || n.body || 'New activity'), 'ok');
+  adminPushRefresh();
 }); })();
+// What the service worker tells an open panel after a notification is tapped
+// (jump to the withdrawals/deposits tab) or after an Approve from the
+// notification (refresh, the list has changed).
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (ev) => {
+  const m = ev.data || {};
+  if (!SESSION_TOKEN) return;
+  if (m.type === 'petro-admin-open' && VALID_TABS.has(m.tab) && _tab !== m.tab) switchTab(m.tab);
+  else if (m.type === 'petro-admin-open' || m.type === 'petro-admin-refresh') adminPushRefresh();
+});
 
 // ── TABS ──
 const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','banners','admins','auditlog']);

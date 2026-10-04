@@ -67,105 +67,17 @@ if (!/^B[A-Za-z0-9_-]{85,86}$/.test(vapidMatch[1])) {
   process.exit(1);
 }
 
-// The old Notify flow could appear to do absolutely nothing when
-// navigator.serviceWorker.ready never resolved. The initial registration
-// deliberately swallowed its error, then enablePush() waited forever.
-// Replace only that function at build time with a bounded flow that gives
-// immediate feedback, explicitly registers/updates the worker, times out
-// instead of hanging forever, and surfaces the actual browser/Firebase error.
-const pushStart = code.indexOf('async function enablePush(){');
-const pushEnd = code.indexOf('// Owner-reported:', pushStart);
-if (pushStart < 0 || pushEnd < 0 || pushEnd <= pushStart) {
-  console.error('Cannot patch admin push setup -- enablePush() anchors are missing.');
-  process.exit(1);
-}
-const robustEnablePush = `async function enablePush(){
-  if (!VAPID_KEY) return toast('Push notifications are not configured yet', 'err');
-  if (typeof Notification === 'undefined' || !('serviceWorker' in navigator))
-    return toast('Push notifications are not supported on this device/browser', 'err');
-  if (Notification.permission === 'denied')
-    return toast('Notifications are blocked for this site. Allow them in browser Site settings, then tap Notify again.', 'err');
-  const messaging = firebaseMessagingReady();
-  if (!messaging) return toast('Push notifications are not supported on this device/browser', 'err');
-
-  const btn = $('pushBtn');
-  let enabled = false;
-  if (btn) { btn.disabled = true; btn.textContent = 'Enabling…'; }
-  toast('Enabling notifications…', 'ok');
-
-  const withTimeout = (promise, ms, message) => Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
-  ]);
-
-  try {
-    const perm = Notification.permission === 'granted'
-      ? 'granted'
-      : await Notification.requestPermission();
-    if (perm !== 'granted') {
-      toast('Notification permission was not granted', 'err');
-      return;
-    }
-
-    const reg = await withTimeout(
-      navigator.serviceWorker.register('/sw.js', { updateViaCache:'none' }),
-      10000,
-      'The notification service worker could not start'
-    );
-    await reg.update().catch(()=>{});
-    const readyReg = await withTimeout(
-      navigator.serviceWorker.ready,
-      10000,
-      'The notification service worker did not become ready'
-    );
-
-    const token = await withTimeout(
-      messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: readyReg }),
-      20000,
-      'Firebase did not return a push token in time'
-    );
-    if (!token) throw new Error('Firebase did not return a push token');
-
-    let prevToken = '';
-    try { prevToken = localStorage.getItem('snow_admin_push_token') || ''; } catch(_){}
-    if (prevToken && prevToken !== token)
-      await api('/admin/push/unregister', { token: prevToken }).catch(()=>{});
-
-    const r = await api('/admin/push/register', { token });
-    if (r.status !== 'success') throw new Error(r.message || 'The server rejected the push token');
-
-    try {
-      localStorage.setItem('snow_admin_push_token', token);
-      localStorage.setItem('petro_admin_push_key_version', 'v2');
-    } catch(_){}
-    setPushUIState(true);
-    enabled = true;
-    toast('Push notifications enabled', 'ok');
-  } catch(e) {
-    const detail = e && e.message ? e.message : 'Unknown browser error';
-    toast('Could not enable notifications: ' + detail, 'err');
-  } finally {
-    if (btn) btn.disabled = false;
-    if (!enabled) setPushUIState(false);
+// The bounded Notify flow (enablePush) and the button's initial state used to be
+// REWRITTEN into the bundle here, which left admin-src and the shipped panel
+// disagreeing -- the same "constant restated in a second place" trap as the
+// VAPID key above. They live in admin-src/index.html now, so what is edited and
+// tested is exactly what ships; this step only checks they are still there.
+for (const need of ['async function enablePush(){', 'const withTimeout = (promise, ms, message)', "PUSH_KEY_VER_KEY) || ''"]) {
+  if (!code.includes(need)) {
+    console.error(`admin-src/index.html is missing "${need}" -- admin push would not work.`);
+    process.exit(1);
   }
 }
-`;
-code = code.slice(0, pushStart) + robustEnablePush + code.slice(pushEnd);
-
-// A token produced with the old VAPID key must not make the UI claim that
-// notifications are already enabled. Keep the old token available so the
-// new enablePush() can unregister it after obtaining the replacement token.
-const oldPushState = "try { setPushUIState(!!localStorage.getItem('snow_admin_push_token')); } catch(_){}";
-const newPushState = `try {
-  const _pushToken = localStorage.getItem('snow_admin_push_token') || '';
-  const _pushVersion = localStorage.getItem('petro_admin_push_key_version') || '';
-  setPushUIState(_pushVersion === 'v2' && Notification.permission === 'granted' && !!_pushToken);
-} catch(_) { setPushUIState(false); }`;
-if (!code.includes(oldPushState)) {
-  console.error('Cannot patch admin push state -- expected initial state line is missing.');
-  process.exit(1);
-}
-code = code.replace(oldPushState, newPushState);
 
 log('main script source:', code.length, 'bytes');
 

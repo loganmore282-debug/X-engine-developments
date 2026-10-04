@@ -7323,3 +7323,68 @@ mutations) makes the test fail; removing all stale-boot guards together
 reproduces the original symptom (member signed out).
 `user/sw.js` v236 -> v237. Not verifiable from here: a real Firebase/Google
 outage, and Chrome's real password manager.
+
+## Follow-up 56 -- admin push notifications: one alert per event, owner Approve button on the notification, tap opens the right tab
+
+Owner, with two Firebase Console screenshots and the Web Push key: *"Also add
+this push notification key. Make when even in notification l can quick approve
+just like previous projects in some branches, make when push notifications are
+working well in app and browser."*
+
+**Key**: `VAPID_KEY` in `admin-src/index.html` already equals the supplied key
+(it is a public key, not a secret). `build-admin.js` still validates its shape
+(`/^B[A-Za-z0-9_-]{85,86}$/`) and now also checks the three source anchors it
+depends on exist, instead of rewriting `enablePush` at build time.
+
+**Admin push is the only push in the product.** There is no member-app push;
+nothing here sends to members.
+
+**Real defect fixed -- duplicate alerts.** `sendAdminPush()` sent a `notification`
+payload, which the Firebase SDK displays by itself, while `admin/sw.js` also
+showed its own notification, so every event could alert twice. Messages are now
+**data-only**; the service worker is the single place that displays them, with a
+`tag` per event so a repeat replaces rather than stacks. Each device gets its own
+message (`sendEach`, 500 per batch), `Urgency: high` and a 2-hour TTL, and a
+token Firebase reports as unregistered is pruned.
+
+**Quick approve from the notification (owner devices only), designed after
+`space8`'s version:**
+- `/admin/push/register` records username/role/registeredAt per device. For an
+  **owner** it also creates a per-device `quickApproveSecret` (random UUID, kept
+  once made). The secret is only ever put into a message for that same device,
+  never returned to any page, never given to staff.
+- `POST /admin/withdraw/quick-approve` (own rate limiter, placed before
+  `/admin/withdraw/verify`) takes `{token, secret, withdrawalId}`, checks the
+  secret against the stored device, **re-checks the registering admin is still an
+  active owner**, and calls `processWithdrawalCore` -- the existing idempotent
+  path (in-flight lock, status must be `pending`) -- so a second tap or a normal
+  approval cannot pay twice. Every attempt is audit-logged.
+- The withdrawal alert is sent with `{ quickApprove: true }`; only owner devices
+  get an "Approve" action button on it. Staff devices get a plain alert.
+- Existing registered devices upgrade silently: `PUSH_VER` changes make the panel
+  re-register its token once when opened, which is what mints the secret.
+  **An Approve button appears only after the owner's device has re-registered
+  while signed in as owner** -- open the admin panel once on the phone.
+
+**Service worker (`admin/sw.js`, cache v63)**: `onBackgroundMessage` builds the
+notification from `data`; `notificationclick` handles the Approve action (POSTs to
+the quick-approve route, then shows a result notification) and a plain tap, which
+focuses/opens the panel on the matching tab (`?tab=withdrawals` etc.). Open panels
+are told to refresh (`tellPanels`), and a foreground `onMessage` handler refreshes
+the page without a second notification.
+
+**Panel (`admin-src/index.html`)**: bounded `enablePush` (a hung service worker no
+longer hangs the button), correct initial button state, `resyncPushToken`,
+`adminPushRefresh`, `?tab=` handling in `openShell`.
+
+**Test: `test-admin-push.js` (159 checks, source and `--built`) now in
+`npm run test:audit`.** Runs the real server functions against mocks, the service
+worker in a vm sandbox, and the panel in JSDOM. Mutation-checked: reverting each
+fix (including the secret scoping, owner re-check, data-only payload and the
+timeout guard) makes it fail.
+
+**Not verifiable from here**: real FCM delivery to a phone or browser (needs a
+device with notification permission granted). `server.js` reaches the VPS through
+the existing deploy webhook; the admin bundle and `admin/sw.js` are static files
+pulled by the same `git pull`, then the panel must be reopened once on each
+device.
