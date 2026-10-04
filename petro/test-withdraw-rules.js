@@ -331,6 +331,14 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED',
      `and 17:30, the one shut hour, is refused (${r.code})`);
 
+  console.log('\n— the daily limit counts payouts, not refunded failures —');
+  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'declined', amount: 20000, date: '15/01/2026' }] });
+  r = await run(st, REQ);
+  ck(r.code === 200, `a refunded (declined) request today does not use the allowance (${r.code} ${r.replied && r.replied.message})`);
+  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
+  r = await run(st, REQ);
+  ck(r.code === 400 && /limit of 1/.test((r.replied || {}).message || ''), `a paid one today still does (${r.code})`);
+
   console.log('\n— the app no longer promises hours nobody keeps —');
   const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ck(!/Withdrawal time: 06:00:00 - 17:00:00/.test(mod),

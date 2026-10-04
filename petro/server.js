@@ -6018,7 +6018,11 @@ app.post('/withdraw/request', async (req, res) => {
       if (maxPerDay > 0) {
         const today = nowStr().date;
         const todaySnap = await db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today).get();
-        if (todaySnap.size >= maxPerDay)
+        // A declined request was refunded in full and paid nothing, so it must not
+        // use up the member's allowance (a provider failure would otherwise lock
+        // them out of trying again until tomorrow).
+        const usedToday = todaySnap.docs.filter(d => d.data().status !== 'declined').length;
+        if (usedToday >= maxPerDay)
           throw new Error(`You've reached today's limit of ${maxPerDay} withdrawal${maxPerDay === 1 ? '' : 's'}. Try again tomorrow.`);
       }
       const witRef = db.collection('withdrawals').doc();
@@ -6279,6 +6283,14 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
         meta: { amount: wit.net, dest: wit.phone, userId: wit.userId, payoutMethod: 'manual' },
       };
     }
+
+    // A suspended member's pending request is not paid by an automatic send
+    // (one tap on a notification could otherwise pay someone who was banned
+    // after asking). The admin can still Reject (refunds) or unban and send.
+    // Recording a payout already made by hand (manual mode, above) is unaffected.
+    const owner = await db.collection('users').doc(wit.userId).get();
+    if (owner.exists && owner.data().status === 'banned')
+      return { code: 409, body: { status: 'error', message: 'This member is suspended, so the payout was not sent. Reject it to refund them, or unban the account first.' } };
 
     if (isBankNetwork(wit.network)) {
       // Bank transfer payout -- always MarzPay, never PesaJet (bank
@@ -6878,6 +6890,7 @@ app.get('/bank/supported-banks', async (req, res) => {
   const banks = await getSupportedBanks();
   res.json({ status: 'success', banks: banks.map(b => b.name) });
 });
+const MAX_SAVED_PAYOUT_ACCOUNTS = 10;
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -6953,9 +6966,13 @@ app.post('/bank/save', async (req, res) => {
     const dup = await withLock('bank-save:' + userId, async () => {
       const dupSnap = await db.collection('bankAccounts').where('userId', '==', userId).where('phone', '==', destValue).limit(1).get();
       if (!dupSnap.empty) return true;
+      // Bounded so one account cannot fill the table with saved destinations.
+      const mine = await db.collection('bankAccounts').where('userId', '==', userId).limit(MAX_SAVED_PAYOUT_ACCOUNTS + 1).get();
+      if (mine.size >= MAX_SAVED_PAYOUT_ACCOUNTS) return 'limit';
       await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, createdAt: FieldValue.serverTimestamp() });
       return false;
     });
+    if (dup === 'limit') return res.status(400).json({ status: 'error', message: `You can save up to ${MAX_SAVED_PAYOUT_ACCOUNTS} withdrawal accounts. Remove one first.` });
     if (dup) return res.status(400).json({ status: 'error', message: 'This account is already saved as a withdrawal account.' });
     res.json({ status: 'success' });
   } catch (e) {
@@ -10848,6 +10865,8 @@ function sweepEphemeralState() {
   const dropStale = (map, maxAgeMs) => { for (const [k, ts] of map) if (now - ts > maxAgeMs) map.delete(k); };
   try {
     dropStale(_depCreateDebounce, 5 * 60 * 1000);
+    dropStale(_usdtSubmitDebounce, 5 * 60 * 1000);
+    dropStale(_cardSubmitDebounce, 5 * 60 * 1000);
     dropStale(_adminCreditDebounce, 5 * 60 * 1000);
     dropStale(_adminDebitDebounce, 5 * 60 * 1000);
     dropStale(_depAttemptsSucceededAt, 60 * 1000);

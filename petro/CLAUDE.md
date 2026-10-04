@@ -7403,3 +7403,22 @@ Owner: *"make sure push notifications also send successful deposits (look at how
 - Counts toward `totalInvested` (and `firstInvestmentDone`), deliberately: "Recalculate totals" and `/admin/integrity` add up `investments.amount`, so excluding it would make them "repair" it away, and `requireInvestToWithdraw` (a plan must exist before withdrawing) is satisfied. Consequence: platform-wide "invested" figures include gifted value.
 - No referral commission (commissions are deposit-based; `commissionPending:false`). Refuses non-owners (401), unknown/deleted/zero-price assets, unknown or banned members. Writes a zero-amount "<asset> activated" statement row and an `asset_grant` audit-log entry.
 - Test: `test-admin-grant-asset.js` (34 checks, in `npm run test:audit`; mutation-checked: removing the owner check, ban check, idempotency guard or the totals update each makes it fail). Admin cache v66.
+
+## Follow-up 58 -- deposits and withdrawals security/bug review (2026-10-04)
+
+Read end to end: `/deposit/marzpay`, `/deposit/callback`, `_creditDepositNow`/`markDepositFailed`, the reconcilers, `/deposit/usdt/*` + `verifyUsdtTx`, `/deposit/card/submit`, `/withdraw/request`, `processWithdrawalCore`, `/withdraw/callback`, `/admin/withdraw/*` (process, quick-approve, verify, reject), `/admin/deposit/force-credit`, `/bank/*`. The money core (single-writer locks, claim-before-credit, `creditedDepositIds`/`refundedWithdrawalIds` idempotency tokens, webhooks re-checked against the provider, ambiguous payouts held at `sending`) held up; no double-credit/double-pay path found.
+
+**Fixed (test-payment-review.js, test-withdraw-rules.js, both in `test:audit`):**
+- A refunded (declined) withdrawal counted toward `maxWithdrawalsPerDay`, so a provider failure could lock a member out for the day. Declined requests no longer count.
+- An automatic payout (including the one-tap Approve on a notification) could be sent for a member suspended after asking. Now refused with a clear message (Reject refunds; or unban first). Manual "mark as paid" bookkeeping is unaffected.
+- Saved payout accounts were unlimited per member; now capped at 10 (`MAX_SAVED_PAYOUT_ACCOUNTS`).
+- USDT/card debounce maps were never swept (slow memory growth); now swept with the others.
+
+**Open, need an owner decision (not changed):**
+1. HIGH -- USDT claim hijack: a TXID is public on-chain and the first account to submit it is credited. Anyone watching the admin wallet can claim another member's payment before they do (and the real payer then gets "already submitted"). Fix = intent-first flow with a unique per-claim amount (e.g. 25.000417 USDT) matched exactly on-chain, or a per-member deposit address. Until then keep USDT off or set a low limit.
+2. HIGH -- account takeover pays out immediately: with `bankOtpRequired` off (default) anyone with a member's password can bind their own number and withdraw at once; no Trade Password any more. Suggest turning bank OTP on, and/or a hold (e.g. 24h) before a newly bound account can be paid.
+3. MEDIUM -- card/USDT/MoMo-funded balance is withdrawable at once (only a plan must exist). Chargeback/stolen-money risk on card; consider holding withdrawals of recently card-funded balance.
+4. MEDIUM -- self-referral: a person with two accounts earns the L1 commission on their own first deposit. The abuse analytics can surface it; no hard block.
+5. LOW -- MarzPay deposit reconciler scans oldest-first (limit 50) with no age cutoff; 50+ rows that stay `pending` at the provider forever would starve newer ones. Add an age window if it is ever seen.
+6. LOW -- a staff login can approve a withdrawal of any size (owner-only is Reject/force-credit). Consider a staff cap.
+7. Webhooks are unsigned by design for MarzPay (safe: every decision re-reads the provider with our own stored id); PesaJet's is signature-verified.
