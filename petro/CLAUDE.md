@@ -7202,3 +7202,28 @@ the REAL source was extracted from `server.js` and run against mocks):
 carrier passes the `@host #code` line through untouched (WebOTP then simply does
 not trigger and the member types the code as before). `server.js` changes reach
 the VPS via the auto-deploy webhook (`git pull` + `pm2 reload`).
+
+## Follow-up 54 -- Google Password Manager now saves the phone number, not the Firebase email
+
+Owner, with a screenshot of the saved-passwords list showing
+`731880221@petro-platform.com`: *"Why is Google saving authentication data like
+this, l only wanted it to be without @."* Follow-up 37 had set only the cosmetic
+`PasswordCredential.name` and kept the email as `id`; Android's Google Password
+Manager lists `id` and ignores `name`, so the fix never took effect there.
+
+- `storeCredentialIfPossible()` now stores `id` = the member's phone number
+  (`0` + local digits, e.g. `0731880221`; falls back to the email only if no
+  phone is available). The Firebase address is a pure function of the phone
+  (`phoneToEmail()`), so nothing is lost by not storing it.
+- `tryAutoSignIn()` rebuilds the address with `loginAddressCandidates()`. An id
+  containing `@` (saved by an older build) is still used as-is, so existing
+  saved logins keep working.
+- **Cannot be fixed from the page:** entries already saved with the email stay in
+  the member's Google Password Manager until deleted there. While both an old and
+  a new entry exist for the site, Chrome has "more than one saved credential" and
+  will not sign in silently, so each member should delete the `@petro-platform.com`
+  entry once (Chrome > Settings > Password Manager).
+- Verified in headless Chromium against the built bundle: stored id has no `@`,
+  new-style and old-style saved entries both reach `fbSignIn` with the right
+  address, second address shape tried on invalid-credential, network error and
+  empty store return false, zero page errors. `user/sw.js` v235 -> v236.

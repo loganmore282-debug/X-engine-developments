@@ -1696,20 +1696,19 @@ function fbErrMsg(e){
 function credManSupported(){
   return !!(window.PasswordCredential && navigator.credentials && navigator.credentials.get && navigator.credentials.store);
 }
-// id MUST stay the synthetic Firebase email -- tryAutoSignIn() below reads
-// cred.id straight back out and hands it to fbSignIn() as-is, so anything
-// else there breaks silent sign-in outright. `name` is a separate, purely
-// cosmetic field the Credential Management API spec defines for exactly
-// this case (an id that isn't human-friendly) -- Chrome's own "Use saved
-// password?" picker shows `name` in place of `id` when it's set, which is
-// what lets a member see their own phone number there instead of
-// "<digits>@petro-platform.com" without touching what actually signs them
-// in. Owner: "can't you remove it from appearing as that only number, or
-// will it affect Firebase authentication system" -- this does the former
-// without touching the latter at all.
+// The saved username (`id`) is the member's phone number, not the synthetic
+// Firebase address. Owner: "Why is Google saving authentication data like
+// this, l only wanted it to be without @". An earlier attempt set only the
+// cosmetic `name` field and kept the email as `id`, but Android's Google
+// Password Manager lists the `id` and ignores `name`, so the
+// "<digits>@petro-platform.com" kept showing. The Firebase address is a
+// pure function of the phone number, so nothing is lost by not storing it:
+// tryAutoSignIn() rebuilds it with loginAddressCandidates().
 async function storeCredentialIfPossible(email, pass, displayPhone){
   if (!credManSupported()) return;
-  try { await navigator.credentials.store(new PasswordCredential({ id: email, password: pass, name: displayPhone || email })); } catch (_) {}
+  const local = displayPhone ? localDigits(displayPhone) : null;
+  const id = local ? '0' + local : email;
+  try { await navigator.credentials.store(new PasswordCredential({ id, password: pass, name: id })); } catch (_) {}
 }
 // Returns true if a stored credential was found AND a sign-in attempt was
 // kicked off (the resulting snow-auth event -- success or failure -- drives
@@ -1722,8 +1721,20 @@ async function tryAutoSignIn(){
   try {
     const cred = await navigator.credentials.get({ password: true, mediation: 'silent' });
     if (!cred || cred.type !== 'password' || !cred.password) return false;
-    await window.fbSignIn(cred.id, cred.password);
-    return true;
+    // A credential saved by this version has the phone number as its id;
+    // one saved before that still holds the Firebase address (contains "@")
+    // and is used as-is.
+    const phone = String(cred.id).includes('@') ? null : cleanPhone(cred.id);
+    const tries = String(cred.id).includes('@') ? [cred.id] : (phone ? loginAddressCandidates(phone) : []);
+    let signedIn = false;
+    for (const addr of tries) {
+      try { await window.fbSignIn(addr, cred.password); signedIn = true; break; }
+      catch (e) {
+        const code = (e && e.code) || '';
+        if (code !== 'auth/invalid-credential' && code !== 'auth/wrong-password' && code !== 'auth/user-not-found') return false;
+      }
+    }
+    return signedIn;
   } catch (_) { return false; }
 }
 window.doLogin = async function(){
