@@ -96,6 +96,27 @@ const okAccount = { status: 'success', account: { phone: '+256771234567', wallet
 const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t; };
 
 (async () => {
+  // ─── 0. Auth screens use the approved blue frosted-card design ───
+  trace('auth design');
+  {
+    const htmlPath = __dirname + '/user' + (built ? '' : '-src') + '/index.html';
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+    ok(/background:rgba\(255,255,255,var\(--auth-card-opacity,\.78\)\)/.test(html), 'auth card tint stays adjustable');
+    ok(/backdrop-filter:blur\(var\(--auth-card-blur,18px\)\)/.test(html), 'auth card blur stays adjustable');
+    ok(html.includes('id="authHeroBg"') && html.includes('id="loginHeading">Login'), 'login uses the full-screen uploaded image and reference heading');
+    ok(html.includes('id="registerHeading">Sign Up'), 'registration uses the reference heading');
+    ok(admin.includes('id="authCardOp"') && admin.includes('id="authCardBlur"'), 'admin exposes card opacity and blur controls');
+    const dom = load(), w = dom.window;
+    w.eval("STATE.settings={authHeroOpacity:60,authHeroBlur:8,authCardOpacity:25,authCardBlur:3};STATE.authHeroImage='data:image/png;base64,AA==';applyAuthBackgrounds()");
+    eq(w.document.documentElement.style.getPropertyValue('--auth-hero-op'), '0.6', 'background opacity reaches the screen');
+    eq(w.document.documentElement.style.getPropertyValue('--auth-hero-blur'), '8px', 'background blur reaches the screen');
+    eq(w.document.documentElement.style.getPropertyValue('--auth-card-opacity'), '0.25', 'card opacity reaches the glass layer');
+    eq(w.document.documentElement.style.getPropertyValue('--auth-card-blur'), '3px', 'card blur reaches the glass layer');
+    ok(w.document.querySelectorAll('.auth-card svg').length >= 3, 'auth card icons remain inline SVGs');
+    await closeSoon(dom);
+  }
+
   // ─── 1. Firebase error wording: never developer text, always something to do ───
   trace('section 1');
   {
@@ -136,7 +157,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     w._settings = { otpVerificationEnabled: false, referralRequired: false }; w.eval('STATE.settings={otpVerificationEnabled:false,referralRequired:false}');
     t.length = 0; await w.doRegister();
     ok(t.length === 1 && /not available right now/.test(t[0]), 'sign-up says so too: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Sign Up');
     await closeSoon(dom);
   }
   {
@@ -254,7 +275,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     await w.doRegister();
     eq(w.eval('window._pendingRegPhone'), '', 'a failed sign-up stages nothing for the next sign-in');
     ok(t.length === 1 && /Check your connection/.test(t[0]) && !/Firebase/.test(t[0]), 'friendly message: ' + t[0]);
-    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Register');
+    eq($(w, 'regBtn').disabled, false); eq($(w, 'regBtn').textContent, 'Sign Up');
     await closeSoon(dom);
   }
   {

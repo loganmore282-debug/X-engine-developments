@@ -1952,9 +1952,9 @@ window.doRegister = async function(){
   // See firebaseReady(): without the sign-in service there is nothing to
   // create the account with, and the code below would only throw at the member.
   if (!(window.fbCreateUser && window.fbAuth)) {
-    setBtnLoading('regBtn', true, 'Register', 'Connecting…');
+    setBtnLoading('regBtn', true, 'Sign Up', 'Connecting…');
     const ready = await firebaseReady(8000, 'fbCreateUser');
-    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('regBtn', false, 'Sign Up');
     if (!ready) return regError('Sign-up is not available right now. Check your connection and try again.');
   }
   // Owner: "when l disable otp verification system the functions go away
@@ -1969,14 +1969,14 @@ window.doRegister = async function(){
     // been checked yet shows the extra "Verifying code…" step.
     const st = window._regOtp;
     const checked = st.ticket && st.verifiedCode === code && Date.now() - st.verifiedAt < OTP_TICKET_FRESH_MS;
-    if (!checked) setBtnLoading('regBtn', true, 'Register', 'Verifying code…');
+    if (!checked) setBtnLoading('regBtn', true, 'Sign Up', 'Verifying code…');
     const r = await regVerifyOtp(code);
     if (!r.ok) {
-      setBtnLoading('regBtn', false, 'Register');
+      setBtnLoading('regBtn', false, 'Sign Up');
       return regError(r.stale ? 'A new code was sent. Enter the latest code.' : (r.message || 'Incorrect verification code.'));
     }
   }
-  setBtnLoading('regBtn', true, 'Register', 'Creating your account…');
+  setBtnLoading('regBtn', true, 'Sign Up', 'Creating your account…');
   STATE.refCode = referral;
   window._pendingRegPin = '';
   window._pendingRegPhone = phone;
@@ -2029,7 +2029,7 @@ window.doRegister = async function(){
     // /register call, and a "Registration successful" toast on a plain login.
     window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
     regError(fbErrMsg(e));
-    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('regBtn', false, 'Sign Up');
   }
 };
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
@@ -2388,6 +2388,12 @@ function applyAuthBackgrounds(){
       (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
   }
   set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
+  const cardOpacity = Number(s.authCardOpacity);
+  const cardBlur = Number(s.authCardBlur);
+  root.style.setProperty('--auth-card-opacity',
+    String(Number.isFinite(cardOpacity) ? Math.min(100, Math.max(0, cardOpacity)) / 100 : .78));
+  root.style.setProperty('--auth-card-blur',
+    (Number.isFinite(cardBlur) ? Math.min(40, Math.max(0, cardBlur)) : 18) + 'px');
   // The bottom-of-the-banner fade (.auth-hero::after) is switched on only
   // when there is a banner to fade. Owner: "there should be like whites or
   // color bleeding into the image of banner uploaded from admin panel." With
@@ -2802,7 +2808,7 @@ async function abandonUnfinishedSignup(reg){
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
     notify(reg.message || 'Could not complete registration');
     $('authScreen').style.display = '';
-    setBtnLoading('regBtn', false, 'Register');
+    setBtnLoading('regBtn', false, 'Sign Up');
     return;
   }
   const local = localDigits(String((STATE.user && STATE.user.email) || '').split('@')[0]);
@@ -2812,7 +2818,7 @@ async function abandonUnfinishedSignup(reg){
   showAuthTab('register');
   if (local && $('regPhone')) $('regPhone').value = '0' + local;
   if ($('regReferral') && STATE.refCode) $('regReferral').value = STATE.refCode;
-  setBtnLoading('regBtn', false, 'Register');
+  setBtnLoading('regBtn', false, 'Sign Up');
   notify(reg.code === 'OTP_REQUIRED'
     ? 'Your sign-up was not finished. Verify your number below to finish creating your account.'
     : (reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
@@ -2851,7 +2857,7 @@ async function bootFromNetwork(uid){
       $('loadingScreen').style.display = 'none';
       notify(reg.message || 'Could not complete registration');
       $('authScreen').style.display = '';
-      setBtnLoading('regBtn', false, 'Register');
+      setBtnLoading('regBtn', false, 'Sign Up');
       return;
     }
     window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';

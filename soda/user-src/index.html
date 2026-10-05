@@ -1429,10 +1429,11 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 /* ── Auth v2: ONE continuous full-bleed photo (admin-uploadable in the
    existing "authhero" slot) with a centered brand mark and short welcome
    message above the existing glass fields. */
-.auth-screen-v2{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:var(--soda-grad);}
+.auth-screen-v2{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;
+  background:linear-gradient(145deg,#0b2b58 0%,#1769c2 52%,#103863 100%);}
 @supports (min-height:100dvh){.auth-screen-v2{min-height:100dvh;}}
 .auth-screen-v2::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
-  background:linear-gradient(to bottom, rgba(12,7,4,.35) 0%, rgba(12,7,4,.55) 55%, rgba(12,7,4,.8) 100%);}
+  background:linear-gradient(to bottom, rgba(9,35,78,.08) 0%, rgba(9,35,78,.14) 55%, rgba(9,35,78,.24) 100%);}
 /* Owner: "my tabs are boxed and these are round ... login is raised up" --
    fields/buttons were a full 999px pill; the mockup's are a boxed
    (rounded-RECTANGLE, --r-ctl) shape, same radius family every other
@@ -1443,13 +1444,42 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    the scroll container centres whichever single pane is visible; a pane
    too tall to fit still scrolls (overflow-y:auto), so Register is
    unaffected. */
-.auth-scroll-v2{position:relative;z-index:2;flex:1;overflow-y:auto;display:flex;flex-direction:column;justify-content:center;
-  padding:24px 22px calc(30px + env(safe-area-inset-bottom));}
+.auth-scroll-v2{position:relative;z-index:2;flex:1;min-height:100vh;min-height:100dvh;box-sizing:border-box;overflow-y:auto;display:flex;flex-direction:column;justify-content:flex-start;
+  padding:24px 22px calc(22px + env(safe-area-inset-bottom));}
+.auth-pane{width:100%;max-width:660px;min-height:calc(100vh - 46px - env(safe-area-inset-bottom));min-height:calc(100dvh - 46px - env(safe-area-inset-bottom));margin:0 auto;display:flex;flex-direction:column;}
+.auth-pane .auth-intro{flex:1 0 230px;max-width:none;display:flex;flex-direction:column;justify-content:center;margin:0 auto 18px;}
+.auth-card{width:100%;box-sizing:border-box;padding:28px 30px 25px;border:1px solid rgba(255,255,255,.58);
+  border-radius:28px;background:rgba(255,255,255,var(--auth-card-opacity,.78));
+  -webkit-backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);
+  box-shadow:0 18px 46px rgba(4,20,49,.22);color:#18243a;}
+.auth-card h1{margin:0 0 24px;color:#111827;text-align:left;font-size:26px;line-height:1.2;font-weight:700;letter-spacing:-.02em;}
+.auth-card .auth-intro{margin:0 auto 18px;}
+.auth-card .auth-intro h1{text-align:left;}
+.auth-card .af-v2{height:54px;margin-bottom:14px;padding:0 8px;background:transparent;border:0;border-bottom:1.5px solid rgba(28,93,171,.34);border-radius:0;-webkit-backdrop-filter:none;backdrop-filter:none;}
+.auth-card .af-v2:focus-within{border-bottom-color:#1769c2;}
+.auth-card .af-v2 input{color:#17243a;}
+.auth-card .af-v2 input::placeholder{color:#77869b;opacity:1;}
+.auth-card .af-ic{color:#5983b5;}
+.auth-card .af-ic.af-gift{color:#e4b72f;}
+.auth-card .af-prefix{color:#526a88;border-right-color:rgba(28,93,171,.25);}
+.auth-card .af-eye{color:#647b99;}
+.auth-card .af-btn-v2{height:56px;border-radius:16px;background:#1769c2;color:#fff;box-shadow:0 8px 18px rgba(23,105,194,.2);}
+.auth-card .af-btn-v2:active{background:#1057a5;}
+.auth-card .af-switch{color:#59677b;margin-top:18px;}
+.auth-card .af-switch a,.auth-card .af-forgot a{color:#155fae;}
+.auth-card .af-forgot a{color:#155fae;}
+.auth-card .af-inline-btn{background:#1769c2;}
+.auth-card .af-reg-referral-hint{color:#64748b;}
+.auth-card .af-eye svg{color:inherit;}
+.auth-card .auth-subtitle{margin:-16px 0 22px;color:#64748b;font-size:14px;}
+.auth-card .af-forgot{margin:-2px 0 18px;}
+.auth-card .auth-signup-link{display:block;margin:18px 0 0;text-align:center;color:#5d6b7f;font-size:14px;}
+.auth-card .auth-signup-link a{color:#155fae;font-weight:700;text-decoration:none;}
 .auth-intro{text-align:center;color:#fff;margin:0 auto 24px;max-width:320px;}
 .auth-brand-mark{width:82px;height:82px;margin:0 auto 13px;display:flex;align-items:center;justify-content:center;}
 .auth-brand-logo{display:block;max-width:122px;max-height:78px;width:auto;height:auto;object-fit:contain;filter:drop-shadow(0 4px 12px rgba(0,0,0,.28));}
 .auth-brand-fallback{width:66px;height:66px;border-radius:20px;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(145deg,var(--soda-orange),var(--snow-wine));color:#fff;font-size:31px;font-weight:800;
+  background:linear-gradient(145deg,#3285dc,#1456a2);color:#fff;font-size:31px;font-weight:800;
   box-shadow:0 7px 22px rgba(0,0,0,.28);}
 .auth-intro h1{margin:0 0 6px;color:#fff;font-size:25px;line-height:1.2;font-weight:800;letter-spacing:-.02em;}
 .auth-intro p{margin:0;color:rgba(255,255,255,.8);font-size:13.5px;line-height:1.5;font-weight:500;}
@@ -2855,19 +2885,19 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
   <div class="auth-screen-v2" id="authHero">
     <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
     <div class="auth-scroll-v2">
-      <div id="loginPane">
+      <div id="loginPane" class="auth-pane">
         <div class="auth-intro">
           <div class="auth-brand-mark">
             <img class="auth-brand-logo" id="loginBrandLogo" data-auth-brand-logo data-auth-fallback="loginBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('loginBrandFallback');if(f)f.style.display='flex'">
             <span class="auth-brand-fallback" id="loginBrandFallback" aria-hidden="true">P</span>
           </div>
           <p class="auth-tagline" id="authTagline" style="display:none;"></p>
-          <h1>Welcome back</h1>
-          <p>Log in to your Soda account to continue.</p>
         </div>
+        <section class="auth-card" aria-labelledby="loginHeading">
+        <h1 id="loginHeading">Login</h1>
         <div class="af-v2">
           <span class="af-prefix" id="loginDial">+256</span>
-          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <!-- Which country this web address serves. Shown only when the
              platform actually runs in more than one, so a single-country
@@ -2875,16 +2905,16 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
              pointing at the wrong country is visible instead of showing
              up later as "Incorrect phone number or password". Filled by
              paintRegionChrome(). -->
-        <div id="loginRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
+        <div id="loginRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#64748b;text-align:center;"></div>
         <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="loginPassword" type="password" placeholder="Enter your password" autocomplete="current-password">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="3.25"/><path d="m10.4 12.6 8.1-8.1 2 2-2.2 2.2 1.5 1.5-2.1 2.1-1.5-1.5-3.4 3.4"/></svg></span>
+          <input id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
           <button class="af-eye" onclick="togglePw('loginPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <p class="af-forgot"><a href="#" onclick="showAuthTab('forgot');return false;">Forgot Password?</a></p>
-        <button class="af-btn-v2" id="loginBtn" onclick="doLogin()">Log In <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
-        <div class="af-or"><span></span>or<span></span></div>
-        <button class="af-btn-outline" onclick="showAuthTab('register');return false;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg> Create New Account</button>
+        <button class="af-btn-v2" id="loginBtn" onclick="doLogin()">Log In</button>
+        <p class="af-switch" style="margin-top:0"><a href="#" onclick="showAuthTab('register');return false;">Sign Up</a></p>
+        </section>
       </div>
 
       <!-- Sign Up: ONE screen -- phone, verification code (Send Code inline),
@@ -2894,42 +2924,43 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
            is what you should put... remove trade passwords") -- see
            server.js's completeRegistrationCore()/withdraw/request for the
            matching backend removal. -->
-      <div id="registerPane" style="display:none;">
+      <div id="registerPane" class="auth-pane" style="display:none;">
         <div class="auth-intro">
           <div class="auth-brand-mark">
             <img class="auth-brand-logo" id="registerBrandLogo" data-auth-brand-logo data-auth-fallback="registerBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('registerBrandFallback');if(f)f.style.display='flex'">
             <span class="auth-brand-fallback" id="registerBrandFallback" aria-hidden="true">P</span>
           </div>
-          <h1>Create your Soda account</h1>
-          <p>Create your account to get started.</p>
         </div>
+        <section class="auth-card" aria-labelledby="registerHeading">
+        <h1 id="registerHeading">Sign Up</h1>
         <div class="af-v2">
           <span class="af-prefix" id="regDial">+256</span>
-          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
-        <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:rgba(255,255,255,.75);text-align:center;"></div>
+        <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#64748b;text-align:center;"></div>
         <div class="af-v2 with-btn" id="regOtpRow">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
           <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code" oninput="onRegOtpInput(this)">
           <button class="af-inline-btn" id="regSendOtpBtn" onclick="doRegSendOtp()">Send Code</button>
         </div>
         <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="regPassword" type="password" placeholder="Create a password" autocomplete="new-password">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="3.25"/><path d="m10.4 12.6 8.1-8.1 2 2-2.2 2.2 1.5 1.5-2.1 2.1-1.5-1.5-3.4 3.4"/></svg></span>
+          <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
           <button class="af-eye" onclick="togglePw('regPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <div class="af-v2">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="regPassword2" type="password" placeholder="Confirm your password" autocomplete="new-password">
+          <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
           <button class="af-eye" onclick="togglePw('regPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg></span>
-          <input id="regReferral" type="text" placeholder="Enter invitation code (optional)" autocomplete="off" maxlength="12">
+          <span class="af-ic af-gift"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M2 6h20v3H2zM12 6v15M12 6c-1.3 0-4.5-.2-4.5-2.2 0-2.3 4.5-1.8 4.5 2.2Zm0 0c1.3 0 4.5-.2 4.5-2.2C16.5 1.5 12 2 12 6Z"/></svg></span>
+          <input id="regReferral" type="text" placeholder="Invitation Code" autocomplete="off" maxlength="12">
         </div>
         <p class="af-reg-referral-hint" id="regReferralHint"></p>
-        <button class="af-btn-v2" id="regBtn" onclick="doRegister()">Register</button>
+        <button class="af-btn-v2" id="regBtn" onclick="doRegister()">Sign Up</button>
         <p class="af-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
+        </section>
       </div>
 
       <!-- Forgot password, reached from Log In above. No Firebase session
