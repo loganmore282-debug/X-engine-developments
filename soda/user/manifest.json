@@ -9,13 +9,13 @@
   "theme_color": "#f7f7f8",
   "icons": [
     {
-      "src": "https://mysoda.p-colasoda.com/public/app-icon-192.png",
+      "src": "/api/public/app-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://mysoda.p-colasoda.com/public/app-icon-512.png",
+      "src": "/api/public/app-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

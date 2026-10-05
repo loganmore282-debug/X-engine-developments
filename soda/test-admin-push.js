@@ -177,11 +177,12 @@ async function swTests() {
     const clientsList = { list: [] };
     const self = { addEventListener: (t, f) => { listeners[t] = f; }, skipWaiting() {}, clients: { claim() { return Promise.resolve(); }, matchAll: async () => clientsList.list,
         openWindow: async u => { opened.push(u); } },
-      registration: { showNotification: async (title, o) => { shown.push({ title, ...o }); } } };
+      location: { origin: 'https://app.example' },
+      registration: { scope: 'https://app.example/panel/', showNotification: async (title, o) => { shown.push({ title, ...o }); } } };
     const ctx = { self, importScripts() {}, URL, fetch: fetchImpl || (async () => { throw new Error('no network'); }), caches: { open: async () => ({ addAll: async () => {}, put: async () => {} }), keys: async () => [], match: async () => undefined }, console, Promise, JSON, Date,
       firebase: { initializeApp() {}, messaging: () => ({ onBackgroundMessage: f => { bg = f; } }) } };
     vm.runInNewContext(code, ctx);
-    const mkClient = () => ({ postMessage: m => posted.push(m), focus: async () => { focused.push(1); return {}; } });
+    const mkClient = (url) => ({ url: url || 'https://app.example/panel/', postMessage: m => posted.push(m), focus: async () => { focused.push(1); return {}; } });
     return { listeners, shown, posted, opened, focused, clientsList, mkClient, push: p => bg(p),
       click: async (data, action) => { let closed = false, p; const e = { action, notification: { data, close() { closed = true; } }, waitUntil: x => { p = x; } }; listeners.notificationclick(e); await p; return closed; } };
   }
@@ -208,7 +209,7 @@ async function swTests() {
   w.clientsList.list = [w.mkClient()];
   const closed = await w.click(ownerPush.data, 'approve');
   ok(closed, 'notification dismissed'); eq(reqs.length, 1);
-  eq(reqs[0][0], 'https://mysoda.p-colasoda.com/admin/withdraw/quick-approve'); eq(reqs[0][1].method, 'POST');
+  eq(reqs[0][0], 'https://app.example/api/admin/withdraw/quick-approve'); eq(reqs[0][1].method, 'POST');
   eq(JSON.parse(reqs[0][1].body), { withdrawalId: 'W1', pushToken: 'devA', secret: 'S' }, 'sends exactly the three fields');
   ok(!/authorization/i.test(JSON.stringify(reqs[0][1].headers)), 'no login session or master key is sent');
   eq([w.shown[0].title, w.shown[0].body, w.shown[0].tag], ['Withdrawal approved', 'Sending UGX 4,000 to 0771', 'wd-W1'], 'result replaces the alert (same tag)');
@@ -226,9 +227,12 @@ async function swTests() {
   for (const [type, tab] of [['withdrawal', 'withdrawals'], ['deposit', 'deposits']]) {
     w = boot(); w.clientsList.list = [w.mkClient()]; await w.click({ type }, undefined);
     eq(w.posted, [{ type: 'soda-admin-open', tab }], 'open panel told to show ' + tab); eq(w.focused.length, 1, 'and brought to the front'); eq(w.opened.length, 0);
-    w = boot(); await w.click({ type }, undefined); eq(w.opened, ['/?tab=' + tab], 'no panel open: opens straight to ' + tab);
+    w = boot(); await w.click({ type }, undefined); eq(w.opened, ['https://app.example/panel/?tab=' + tab], 'no panel open: opens straight to ' + tab);
   }
-  w = boot(); await w.click({}, undefined); eq(w.opened, ['/'], 'unknown alert opens the panel');
+  w = boot(); await w.click({}, undefined); eq(w.opened, ['https://app.example/panel/'], 'unknown alert opens the panel');
+  // the member app shares the host: its windows are never focused or messaged in place of the panel
+  w = boot(); w.clientsList.list = [w.mkClient('https://app.example/')]; await w.click({ type: 'withdrawal' }, undefined);
+  eq([w.focused.length, w.posted.length, w.opened.length], [0, 0, 1], 'a member-app window is not mistaken for the admin panel');
 }
 
 // ───────────────────────── 3. the admin page ─────────────────────────
@@ -242,7 +246,7 @@ async function pageTests() {
     const S = { calls: [], messageHandlers: {}, onMessage: null, perm: permission, registerReply: { status: 'success', quickApprove: role === 'owner' } };
     const dom = new JSDOM(html, { url, runScripts: 'dangerously', virtualConsole: vc, beforeParse(w) {
       w.fetch = async (u, o = {}) => {
-        const path = String(u).replace(/^https?:\/\/[^/]+/, ''); const body = o.body ? JSON.parse(o.body) : null; S.calls.push([path, body]);
+        const path = String(u).replace(/^https?:\/\/[^/]+/, '').replace(/^\/api(?=\/)/, ''); const body = o.body ? JSON.parse(o.body) : null; S.calls.push([path, body]);
         const base = { status: 'success', token: 't', username: 'owner', role, settings: {}, users: [], products: [], withdrawals: [], deposits: [], transactions: [], stats: {}, pendingWithdrawals: 0 };
         return { status: 200, ok: true, json: async () => (path === '/admin/push/register' ? S.registerReply : base) };
       };

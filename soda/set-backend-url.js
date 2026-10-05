@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 /**
+ * NOT USED BY SODA: the app calls the relative path /api on its own host (step 5),
+ * so there is no backend address to rewrite. Kept only as a Petro leftover; do not run it.
+ *
  * Point the whole project at a different backend, in one command.
  *
  *   node set-backend-url.js https://api.soda-platform.com

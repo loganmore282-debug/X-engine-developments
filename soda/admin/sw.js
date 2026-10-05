@@ -1,12 +1,16 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'soda-admin-shell-v70';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/vendor/firebase-app-compat.js', '/vendor/firebase-messaging-compat.js'];
+const CACHE = 'soda-admin-shell-v71';
+// The panel lives under a secret path on the SAME host as the member app, so
+// everything it owns is addressed relative to this worker (never from '/'),
+// and its cache name has its own prefix so neither worker ever clears the
+// other's cache.
+const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'vendor/firebase-app-compat.js', 'vendor/firebase-messaging-compat.js'];
 // The uploaded icon, served by Soda backend. manifest.json and index.html's
 // <link rel="icon"> point here too; the local /icon-*.png above stay only as
 // the offline shell copy. Before this, the admin panel read the PNG that
 // shipped in the repo, so replacing the icon in Admin -> Brand changed the
 // members' app and left the admin's own icon untouched forever.
-const BRAND_ICON = 'https://mysoda.p-colasoda.com/public/app-icon-192.png';
+const BRAND_ICON = '/api/public/app-icon-192.png';
 
 // Firebase Messaging background handler -- shows a notification for pushes
 // that arrive while the admin panel tab isn't open/focused. Foreground
@@ -14,8 +18,8 @@ const BRAND_ICON = 'https://mysoda.p-colasoda.com/public/app-icon-192.png';
 // Firebase 10.12.0 compat builds are served from this origin (admin/vendor/)
 // rather than gstatic: a blocked or flaky third-party host used to stop both
 // this worker and the page from loading Firebase, so push could not start.
-importScripts('/vendor/firebase-app-compat.js');
-importScripts('/vendor/firebase-messaging-compat.js');
+importScripts('vendor/firebase-app-compat.js');
+importScripts('vendor/firebase-messaging-compat.js');
 // Keep this in step with FIREBASE_CONFIG in admin-src/index.html. A service
 // worker cannot import page variables, so the public web config is duplicated
 // here deliberately for background messaging.
@@ -28,9 +32,8 @@ firebase.initializeApp({
   appId: "1:969724557876:web:553284e329bdfd146a2861",
 });
 const messaging = firebase.messaging();
-// The backend address, derived from BRAND_ICON so there is still exactly one
-// place that moves when the backend does (see set-backend-url.js).
-const API_ORIGIN = new URL(BRAND_ICON).origin;
+// The API is on the same host, under /api.
+const API_ORIGIN = self.location.origin + '/api';
 
 // The server sends DATA-ONLY pushes (title/body live in `data`), so THIS is
 // the only place a notification is created. A message that carries a
@@ -64,7 +67,8 @@ messaging.onBackgroundMessage((payload) => {
 
 // Tells any open admin page to refresh or jump to a tab.
 async function tellPanels(message) {
-  const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  // Only THIS panel's own windows: the member app shares the host now.
+  const list = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).filter(c => c.url.indexOf(self.registration.scope) === 0);
   list.forEach(c => { try { c.postMessage(message); } catch (_) {} });
   return list;
 }
@@ -74,7 +78,7 @@ async function openPanel(d) {
   for (const c of list) {
     if ('focus' in c) return c.focus();
   }
-  if (self.clients.openWindow) return self.clients.openWindow(tab ? '/?tab=' + tab : '/');
+  if (self.clients.openWindow) return self.clients.openWindow(self.registration.scope + (tab ? '?tab=' + tab : ''));
 }
 // One tap on "Approve": the admin panel does not have to be open. The
 // withdrawal id and this device's own token/secret arrived inside the push.
@@ -112,7 +116,7 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    caches.keys().then(keys => Promise.all(keys.filter(k => k.indexOf('soda-admin-shell-') === 0 && k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -123,14 +127,15 @@ self.addEventListener('activate', e => {
 // session on the same device.
 self.addEventListener('fetch', e => {
   const reqUrl = new URL(e.request.url);
-  if (reqUrl.origin !== self.location.origin) {
+  // The API is same-origin now (/api/...): never cached, always the network.
+  if (reqUrl.origin !== self.location.origin || reqUrl.pathname.indexOf('/api/') === 0) {
     e.respondWith(fetch(e.request));
     return;
   }
   if (e.request.mode === 'navigate') {
     e.respondWith(
       fetch(e.request, { cache: 'no-cache' })
-        .catch(() => fetch(e.request).catch(() => caches.match('/index.html')))
+        .catch(() => fetch(e.request).catch(() => caches.match(new URL('index.html', self.registration.scope).href)))
     );
     return;
   }

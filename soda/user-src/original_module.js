@@ -1,7 +1,9 @@
 // Soda backend, on the same Hostinger VPS as this frontend (pm2, port 3000
 // behind nginx). api./app. are still different subdomains -- different
 // browser origins -- so this host must stay in server.js's CORS allowlist.
-var API_BASE = 'https://mysoda.p-colasoda.com';
+// Same host as the page: the server answers under /api (nginx strips the prefix).
+// No domain is baked in, so changing the host never needs a rebuild.
+var API_BASE = '/api';
 
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
 

@@ -2,8 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'soda-shell-v241';
-const VENDOR_CACHE = 'soda-vendor-firebase-v1';
+const CACHE = 'soda-shell-v242';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -13,7 +12,8 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== VENDOR_CACHE && k !== BRAND_CACHE).map(k => caches.delete(k))))
+    // Only this worker's own generations: the admin panel shares the host and keeps its own caches.
+    caches.keys().then(keys => Promise.all(keys.filter(k => (k.indexOf('soda-shell-') === 0 && k !== CACHE) || k === 'soda-vendor-firebase-v1').map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -25,13 +25,6 @@ self.addEventListener('activate', e => {
 // those responses are per-user and must never be shared between
 // sessions/devices on the same phone.
 //
-// ONE deliberate exception: Firebase Auth's SDK script files (imported live
-// from gstatic.com in index.html). Public static library code, no
-// Authorization header, no per-user data, version-pinned right in the URL
-// (.../firebasejs/10.12.0/...) -- cache-first here removes that network
-// round-trip from the second app open onward.
-const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
-
 // ── THE INSTALLED APP'S NAME ──
 //
 // Owner: "let's not make soda to be default name, let's make it to be
@@ -52,7 +45,8 @@ const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 // asleep, malformed JSON -- falls through to the manifest exactly as shipped,
 // because a phone that cannot install the app is a far worse outcome than one
 // that installs it under last week's name.
-const API_ORIGIN = 'https://mysoda.p-colasoda.com';
+// Same host: the API answers under /api.
+const API_ORIGIN = '/api';
 const BRAND_CACHE = 'soda-brand-v1';
 const BRAND_KEY = '/__brand-name';
 
@@ -110,17 +104,11 @@ async function brandedManifest(request) {
 }
 
 self.addEventListener('fetch', e => {
-  if (e.request.url.indexOf(FIREBASE_SDK_PREFIX) === 0) {
-    e.respondWith(
-      caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
-        const copy = resp.clone();
-        caches.open(VENDOR_CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-        return resp;
-      }))
-    );
-    return;
-  }
   const reqUrl = new URL(e.request.url);
+  // The API is same-origin now (/api/...): per-user responses, never cached,
+  // never handled here -- the request goes straight to the network. Same for
+  // the admin panel's own area, which has its own worker.
+  if (reqUrl.pathname.indexOf('/api/') === 0) return;
   if (reqUrl.origin !== self.location.origin) {
     // Do NOT respondWith here. Returning without responding hands the request
     // back to the browser untouched, which is what respondWith(fetch(...))

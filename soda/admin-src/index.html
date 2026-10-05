@@ -41,18 +41,18 @@
      frame-ancestors is NOT here: a meta policy cannot express it (the browser
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://mysoda.p-colasoda.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#e30613">
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="manifest.json">
 <!-- Same server-hosted brand asset the user app installs with, NOT a local
      /icon-192.png. Uploading an icon in Admin -> Brand rewrote the one the
      members' app installs with while the admin panel kept showing the file
      that shipped in the repo, so the icon "never changed" here no matter how
      many times it was replaced. One source of truth now: whatever
      /admin/app-icon/set last wrote. -->
-<link rel="icon" href="https://mysoda.p-colasoda.com/public/app-icon-192.png">
-<link rel="apple-touch-icon" href="https://mysoda.p-colasoda.com/public/app-icon-192.png">
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
+<link rel="icon" href="/api/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="/api/public/app-icon-192.png">
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 window._adminInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window._adminInstallPrompt = e;
   var b = document.getElementById('installBtn'); if (b) b.classList.remove('hidden'); });
@@ -323,7 +323,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
            own icon now: a real file, no network, and the same mark that is on
            the home screen of anyone who installed either app. An uploaded
            Brand logo still replaces it -- see applyAdminBrandLogo(). -->
-      <div class="mk" id="brandMarkLogin"><img src="/icon-192.png" alt="" width="40" height="40"></div>
+      <div class="mk" id="brandMarkLogin"><img src="icon-192.png" alt="" width="40" height="40"></div>
       <b data-brandadmin>Soda Admin</b>
       <!-- The topbar picker lives inside #shell, which nobody has reached yet
            on this screen. An operator who does not read English has to be able
@@ -344,7 +344,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
   <div class="topbar">
     <div class="wrap">
       <div class="topbar-inner">
-        <div class="mk" id="brandMarkTop"><img src="/icon-192.png" alt="" width="34" height="34"></div>
+        <div class="mk" id="brandMarkTop"><img src="icon-192.png" alt="" width="34" height="34"></div>
         <b data-brandadmin>Soda Admin</b>
         <div class="spacer"></div>
         <!-- ── THE PANEL'S OWN LANGUAGE ──
@@ -387,11 +387,13 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
 
 <div class="modal-root hidden" id="modalRoot"></div>
 
-<script src="/vendor/firebase-app-compat.js"></script>
-<script src="/vendor/firebase-messaging-compat.js"></script>
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-messaging-compat.js"></script>
 <script>
 // Soda Admin panel.
-const SERVER = 'https://mysoda.p-colasoda.com';
+// Same host as the page; the panel itself lives under a secret path, so the
+// API is addressed from the root (/api), while the panel's own files are relative.
+const SERVER = '/api';
 
 let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
 try {
@@ -936,7 +938,7 @@ async function enablePush(){
     }
 
     const reg = await withTimeout(
-      navigator.serviceWorker.register('/sw.js', { updateViaCache:'none' }),
+      navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }),
       10000,
       'The notification service worker could not start'
     );
@@ -3909,7 +3911,7 @@ if(SESSION_TOKEN && _adminSession.begin(SESSION_TOKEN, 0, false)){ openShell(); 
 // built for -- reused here for the same reason: don't yank a save/upload/
 // generate action out from under the admin).
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').then(function(reg){
+  navigator.serviceWorker.register('sw.js').then(function(reg){
     function checkForUpdate(){ reg.update().catch(function(){}); }
     setInterval(checkForUpdate, 60 * 60 * 1000);
     document.addEventListener('visibilitychange', function(){ if (!document.hidden) checkForUpdate(); });
@@ -3941,7 +3943,7 @@ if ('serviceWorker' in navigator) {
     var h={};var t=token();if(t)h.Authorization='Bearer '+t;
     var o={method:body?'POST':'GET',headers:h};
     if(body){h['Content-Type']='application/json';o.body=JSON.stringify(body);}
-    var r=await fetch('https://mysoda.p-colasoda.com'+path,o);return r.json();
+    var r=await fetch('/api'+path,o);return r.json();
   }
   async function mount(){
     if(busy)return;

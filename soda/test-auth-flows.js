@@ -80,7 +80,7 @@ function fakeFirebase(w, accounts, initial = true) {
 function fakeServer(w, handle) {
   const calls = [];
   w.fetch = async (url, opts = {}) => {
-    const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+    const path = String(url).replace(/^https?:\/\/[^/]+/, '').replace(/^\/api(?=\/)/, '');
     const body = opts.body ? JSON.parse(opts.body) : {};
     calls.push(path);
     let out = path.startsWith('/public/')
