@@ -128,7 +128,7 @@ async function serverTests() {
       (rq, action, meta) => calls.audit.push([rq.adminUser, action, meta]), { error() {} }, t => !!t.retiredAt && Date.now() - new Date(t.retiredAt).getTime() > 48 * 3600 * 1000);
     return { calls, db, call: async body => { const res = { code: 200, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } }; await handlers['/admin/withdraw/quick-approve']({ body, ip: '1.2.3.4' }, res); return res; } };
   }
-  const seed = { adminPushTokens: { good: { role: 'owner', quickApproveSecret: 'S3CRET', username: 'boss' }, key: { role: 'owner', quickApproveSecret: 'KS', username: 'owner-key' },
+  const seed = { adminPushTokens: { good: { role: 'owner', quickApproveSecret: 'S3CRET', username: 'boss' }, key: { role: 'owner', quickApproveSecret: 'KS', username: 'owner-key' }, masterSession: { role: 'owner', quickApproveSecret: 'MS', username: 'owner' },
     staff: { role: 'staff', username: 'clerk' }, staffSecret: { role: 'staff', quickApproveSecret: 'SS', username: 'boss' }, demoted: { role: 'owner', quickApproveSecret: 'D', username: 'ex' }, gone: { role: 'owner', quickApproveSecret: 'G', username: 'ghost' }, off: { role: 'owner', quickApproveSecret: 'O', username: 'off' } },
     adminUsers: { boss: { role: 'owner', active: true }, ex: { role: 'staff', active: true }, off: { role: 'owner', active: false } } };
   let q = quickApprove(seed);
@@ -136,6 +136,7 @@ async function serverTests() {
   eq(res.code, 200); eq(q.calls.core, [['W9', 'boss (notification)']], 'goes through the same processWithdrawalCore as the Send button, named for the person');
   eq([q.calls.audit[0][1], q.calls.audit[0][2].via, q.calls.audit[0][0].username], ['withdrawal_processed', 'push', 'boss'], 'audit-logged as a push approval by that admin');
   q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'key', secret: 'KS' }); eq(res.code, 200, 'master-key owner device works without an adminUsers row');
+  q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'masterSession', secret: 'MS' }); eq(res.code, 200, "the owner signed in with the master key (session name 'owner', no adminUsers row) is accepted");
   const denied = async (body, why) => { const x = quickApprove(seed); const r2 = await x.call(body); eq(r2.code, r2.code === 400 ? 400 : 401, why); eq(x.calls.core.length, 0, why + ': nothing was paid'); return r2; };
   const why = async (body, code, m) => { const r2 = await denied(body, m); eq(r2.body.code, code, m + ' says why'); ok(r2.body.message.length > 40 && !/^Unauthorized$/.test(r2.body.message), m + ': a message the owner can act on'); };
   await why({ withdrawalId: 'W9', pushToken: 'nope', secret: 'S3CRET' }, 'DEVICE_NOT_REGISTERED', 'unknown/rotated device');

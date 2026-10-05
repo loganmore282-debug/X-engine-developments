@@ -6651,7 +6651,14 @@ app.post('/admin/withdraw/quick-approve', quickApproveLimiter, async (req, res) 
     if (!safeEqual(String(tok.quickApproveSecret), secret))
       return refuse('ALERT_OUT_OF_DATE', 'This alert is out of date. Approve it in the admin panel; the next alert will have a working button.');
     const username = String(tok.username || 'owner-key');
-    if (username !== 'owner-key') {
+    // The owner signing in with the master key gets a session named 'owner'
+    // (see /admin/check-key; a device registered without a session is
+    // 'owner-key'). Neither has an adminUsers row -- looking one up refused the
+    // real owner as "no longer an owner". Those names are reserved (staff can
+    // not be created with them), so a record with one of them can only have
+    // come from the master-key owner. Any other name is a staff-table account
+    // and must still be an active owner there.
+    if (username !== 'owner-key' && username !== 'owner') {
       const u = await db.collection('adminUsers').doc(username).get();
       if (!u.exists || u.data().active === false || u.data().role !== 'owner')
         return refuse('NOT_OWNER_ANYMORE', 'The account this device was registered with is no longer an active owner. Sign in to the admin panel to check.');
@@ -7760,6 +7767,7 @@ app.post('/admin/admins/create', async (req, res) => {
   const username = String(req.body.username || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   if (!/^[a-z0-9._-]{3,32}$/.test(username)) return res.status(400).json({ status: 'error', message: 'Username must be 3-32 characters (letters, digits, . _ -).' });
+  if (username === 'owner' || username === 'owner-key') return res.status(400).json({ status: 'error', message: 'That username is reserved.' });
   if (password.length < 8) return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters.' });
   try {
     const existing = await db.collection('adminUsers').doc(username).get();
