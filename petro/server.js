@@ -1880,10 +1880,21 @@ function verifyOwner(req) {
 // because an owner device's copy of a withdrawal alert carries that device's
 // own quick-approve secret (see /admin/withdraw/quick-approve).
 const ADMIN_PUSH_HEADERS = { Urgency: 'high', TTL: '7200' };
+// How long an Approve button on an alert that was delivered before the device's
+// push token rotated keeps working (the secret is tied to the retired token).
+const PUSH_RETIRED_GRACE_MS = 48 * 60 * 60 * 1000;
+function pushRetiredExpired(t) { return !!t.retiredAt && Date.now() - tsMillis(t.retiredAt) > PUSH_RETIRED_GRACE_MS; }
 async function sendAdminPush(title, body, data = {}, opts = {}) {
   try {
-    const snap = await db.collection('adminPushTokens').get();
-    if (snap.empty) return;
+    const all = await db.collection('adminPushTokens').get();
+    if (all.empty) return;
+    // A token the browser replaced is "retired", not deleted: alerts already on
+    // the phone keep working for a while (see PUSH_RETIRED_GRACE_MS) but nothing
+    // new is sent to it, and it is purged once the grace is over.
+    const snap = { docs: all.docs.filter(d => !d.data().retiredAt) };
+    const purge = all.docs.filter(d => d.data().retiredAt && pushRetiredExpired(d.data()));
+    if (purge.length) Promise.all(purge.map(d => db.collection('adminPushTokens').doc(d.id).delete().catch(() => {}))).catch(() => {});
+    if (!snap.docs.length) return;
     const base = {};
     for (const [k, v] of Object.entries(data)) base[k] = String(v);
     base.title = String(title); base.body = String(body);
@@ -6626,15 +6637,24 @@ app.post('/admin/withdraw/quick-approve', quickApproveLimiter, async (req, res) 
     const pushToken = String(req.body.pushToken || '').trim();
     const secret = String(req.body.secret || '');
     if (!withdrawalId || !pushToken || !secret || pushToken.length > 4096) return res.status(400).json({ status: 'error', message: 'Missing fields' });
+    // Each refusal says WHY (still a 401, no money moves), because a bare
+    // "Unauthorized" on a lock screen gives the owner nothing to act on. None of
+    // these is a login expiry: this route does not use the panel's login at all,
+    // only the per-device credential that came inside the notification.
+    const refuse = (code, message) => res.status(401).json({ status: 'error', code, message });
     const tokDoc = await db.collection('adminPushTokens').doc(pushToken).get();
-    const tok = tokDoc.exists ? tokDoc.data() : null;
-    if (!tok || tok.role !== 'owner' || !tok.quickApproveSecret || !safeEqual(String(tok.quickApproveSecret), secret))
-      return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    const tok = tokDoc.exists && !pushRetiredExpired(tokDoc.data()) ? tokDoc.data() : null;
+    if (!tok)
+      return refuse('DEVICE_NOT_REGISTERED', 'This device is no longer registered for quick approve (its notification token changed). Open the admin panel once to turn it back on, then approve from the next alert. You can approve this one in the panel.');
+    if (tok.role !== 'owner' || !tok.quickApproveSecret)
+      return refuse('DEVICE_NOT_OWNER', 'Quick approve is only on for devices signed in as the owner. Open the admin panel signed in as owner, then approve from the next alert.');
+    if (!safeEqual(String(tok.quickApproveSecret), secret))
+      return refuse('ALERT_OUT_OF_DATE', 'This alert is out of date. Approve it in the admin panel; the next alert will have a working button.');
     const username = String(tok.username || 'owner-key');
     if (username !== 'owner-key') {
       const u = await db.collection('adminUsers').doc(username).get();
       if (!u.exists || u.data().active === false || u.data().role !== 'owner')
-        return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+        return refuse('NOT_OWNER_ANYMORE', 'The account this device was registered with is no longer an active owner. Sign in to the admin panel to check.');
     }
     const result = await processWithdrawalCore(withdrawalId, username + ' (notification)');
     if (result.code === 200)
@@ -7829,7 +7849,13 @@ app.post('/admin/push/unregister', async (req, res) => {
   const token = String(req.body.token || '').trim();
   if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
   try {
-    await db.collection('adminPushTokens').doc(token).delete();
+    const ref = db.collection('adminPushTokens').doc(token);
+    // `rotated`: the browser replaced this token with a new one (service-worker
+    // update, routine rotation). Keep the record, retired, so an alert that was
+    // already delivered with its Approve button still works; switching Notify
+    // off sends a plain unregister, which deletes it at once.
+    if (req.body.rotated === true && (await ref.get()).exists) await ref.update({ retiredAt: new Date() });
+    else await ref.delete();
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });

@@ -125,7 +125,8 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     await sleep(200);
     eq(shown(w, 'loadingScreen'), false, 'watchdog takes the spinner down');
     eq(shown(w, 'authScreen'), true, 'watchdog shows the login screen');
-    ok(/Could not load the sign-in service/.test($(w, 'notifyMsg').textContent), 'watchdog says what is wrong');
+    // Timing-proof: whether the watchdog fired before or after toasts() swapped notify for a collector, the message is either recorded or on screen.
+    ok(/Could not load the sign-in service/.test($(w, 'notifyMsg').textContent) || t.some(m => /Could not load the sign-in service/.test(m)), 'watchdog says what is wrong');
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1';
     t.length = 0; await w.doLogin();
     eq(t.length, 1); ok(/not available right now/.test(t[0]) && !/not a function/.test(t[0]), 'login says so instead of throwing: ' + t[0]);

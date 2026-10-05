@@ -960,7 +960,7 @@ async function enablePush(){
     let prevToken = '';
     try { prevToken = localStorage.getItem('snow_admin_push_token') || ''; } catch(_){}
     if (prevToken && prevToken !== token)
-      await api('/admin/push/unregister', { token: prevToken }).catch(()=>{});
+      await api('/admin/push/unregister', { token: prevToken, rotated: true }).catch(()=>{});
 
     const r = await api('/admin/push/register', { token });
     if (r.status !== 'success') throw new Error(r.message || 'The server rejected the push token');
@@ -1012,7 +1012,7 @@ async function resyncPushToken(){
     const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
     let ver = ''; try { ver = localStorage.getItem(PUSH_VER_KEY) || ''; } catch(_){}
     if (!token || (token === prevToken && ver === PUSH_VER)) return; // unchanged and current -- the common case
-    if (token !== prevToken) await api('/admin/push/unregister', { token: prevToken }).catch(()=>{});
+    if (token !== prevToken) await api('/admin/push/unregister', { token: prevToken, rotated: true }).catch(()=>{});
     const r = await api('/admin/push/register', { token });
     if (r.status === 'success') { try { localStorage.setItem('snow_admin_push_token', token); localStorage.setItem(PUSH_KEY_VER_KEY, 'v2'); localStorage.setItem(PUSH_VER_KEY, PUSH_VER); } catch(_){} }
   } catch(_) {}

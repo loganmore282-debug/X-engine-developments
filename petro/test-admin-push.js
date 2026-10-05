@@ -43,7 +43,7 @@ async function serverTests() {
     const db = fakeDb({ adminPushTokens: tokens }); const sent = []; const failWith = {};
     const admin = { messaging: () => ({ sendEach: async msgs => { sent.push(msgs);
       return { responses: msgs.map(m => failWith[m.token] ? { success: false, error: { code: failWith[m.token] } } : { success: true }) }; } }) };
-    const fn = new Function('db', 'admin', 'console', sendSrc + '\nreturn sendAdminPush;')(db, admin, { warn() {} });
+    const fn = new Function('db', 'admin', 'console', 'tsMillis', sendSrc + '\nreturn sendAdminPush;')(db, admin, { warn() {} }, v => new Date(v).getTime());
     return { run: () => fn(title, body, data, opts), sent, db, failWith };
   }
   let t = await send({
@@ -100,6 +100,22 @@ async function serverTests() {
   r = await register({ owner: true, token: 'devB', username: undefined, db }); eq(db.store.get('adminPushTokens').get('devB').username, 'owner-key', 'master-key owner recorded as owner-key');
   r = await register({ owner: true, token: '', db }); eq(r.code, 400); r = await register({ owner: true, token: 'x'.repeat(5000), db }); eq(r.code, 400);
 
+  // retired tokens get no new alerts, expired retired ones are purged
+  t = await send({ live: { role: 'owner', quickApproveSecret: 'A' }, retiredNow: { role: 'owner', quickApproveSecret: 'B', retiredAt: new Date().toISOString() },
+    retiredOld: { role: 'owner', quickApproveSecret: 'C', retiredAt: new Date(Date.now() - 60 * 3600 * 1000).toISOString() } }, 'New withdrawal request', 'x', { type: 'withdrawal', withdrawalId: 'W5' }, { quickApprove: true });
+  await t.run();
+  eq(t.sent.flat().map(m => m.token), ['live'], 'a rotated (retired) token gets no alert, so no duplicates');
+  await sleep(10); eq([...t.db.store.get('adminPushTokens').keys()].sort(), ['live', 'retiredNow'], 'a retired token past its grace is purged');
+  // unregister: rotation retires, switching off deletes
+  const unregSrc = slice("app.post('/admin/push/unregister'", '// Real bug fixed: owner reported the SAME push notification');
+  async function unreg(body, seedTok) {
+    const store = new Map([[seedTok, { role: 'owner' }]]); let handler; const app = { post: (p, h) => { if (p === '/admin/push/unregister') handler = h; } };
+    const db = { collection: () => ({ doc: id => ({ get: async () => ({ exists: store.has(id) }), update: async d => { store.set(id, { ...store.get(id), ...d }); }, delete: async () => { store.delete(id); } }) }) };
+    new Function('app', 'db', 'verifyAdmin', unregSrc)(app, db, () => true);
+    const r = { code: 200, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } }; await handler({ body }, r); return { r, store };
+  }
+  let u = await unreg({ token: 'T1', rotated: true }, 'T1'); ok(u.store.has('T1') && u.store.get('T1').retiredAt, 'rotation keeps the record, retired');
+  u = await unreg({ token: 'T1' }, 'T1'); ok(!u.store.has('T1'), 'switching notifications off deletes it at once');
   // ── quick-approve ──
   const qaSrc = slice('const quickApproveLimiter', "app.post('/admin/withdraw/verify'");
   function quickApprove(dbSeed) {
@@ -107,9 +123,9 @@ async function serverTests() {
     const app = { post: (p, ...a) => { handlers[p] = a[a.length - 1]; } };
     const safeEqual = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length === y.length && crypto.timingSafeEqual(x, y); };
     const db = fakeDb(dbSeed);
-    new Function('app', 'rateLimit', 'db', 'safeEqual', 'processWithdrawalCore', 'logAdminAction', 'console', qaSrc)(
+    new Function('app', 'rateLimit', 'db', 'safeEqual', 'processWithdrawalCore', 'logAdminAction', 'console', 'pushRetiredExpired', qaSrc)(
       app, () => (q, s, n) => n(), db, safeEqual, async (id, by) => { calls.core.push([id, by]); return { code: 200, body: { status: 'success', message: 'Sending UGX 4,000 to 0771' }, meta: { amount: 4000 } }; },
-      (rq, action, meta) => calls.audit.push([rq.adminUser, action, meta]), { error() {} });
+      (rq, action, meta) => calls.audit.push([rq.adminUser, action, meta]), { error() {} }, t => !!t.retiredAt && Date.now() - new Date(t.retiredAt).getTime() > 48 * 3600 * 1000);
     return { calls, db, call: async body => { const res = { code: 200, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } }; await handlers['/admin/withdraw/quick-approve']({ body, ip: '1.2.3.4' }, res); return res; } };
   }
   const seed = { adminPushTokens: { good: { role: 'owner', quickApproveSecret: 'S3CRET', username: 'boss' }, key: { role: 'owner', quickApproveSecret: 'KS', username: 'owner-key' },
@@ -121,6 +137,11 @@ async function serverTests() {
   eq([q.calls.audit[0][1], q.calls.audit[0][2].via, q.calls.audit[0][0].username], ['withdrawal_processed', 'push', 'boss'], 'audit-logged as a push approval by that admin');
   q = quickApprove(seed); res = await q.call({ withdrawalId: 'W9', pushToken: 'key', secret: 'KS' }); eq(res.code, 200, 'master-key owner device works without an adminUsers row');
   const denied = async (body, why) => { const x = quickApprove(seed); const r2 = await x.call(body); eq(r2.code, r2.code === 400 ? 400 : 401, why); eq(x.calls.core.length, 0, why + ': nothing was paid'); return r2; };
+  const why = async (body, code, m) => { const r2 = await denied(body, m); eq(r2.body.code, code, m + ' says why'); ok(r2.body.message.length > 40 && !/^Unauthorized$/.test(r2.body.message), m + ': a message the owner can act on'); };
+  await why({ withdrawalId: 'W9', pushToken: 'nope', secret: 'S3CRET' }, 'DEVICE_NOT_REGISTERED', 'unknown/rotated device');
+  await why({ withdrawalId: 'W9', pushToken: 'staff', secret: 'x' }, 'DEVICE_NOT_OWNER', 'staff device');
+  await why({ withdrawalId: 'W9', pushToken: 'good', secret: 'wrong' }, 'ALERT_OUT_OF_DATE', 'wrong secret');
+  await why({ withdrawalId: 'W9', pushToken: 'demoted', secret: 'D' }, 'NOT_OWNER_ANYMORE', 'demoted admin');
   await denied({ withdrawalId: 'W9', pushToken: 'good', secret: 'wrong' }, 'wrong secret');
   await denied({ withdrawalId: 'W9', pushToken: 'good', secret: 'S3CRET ' }, 'secret must match exactly');
   await denied({ withdrawalId: 'W9', pushToken: 'nope', secret: 'S3CRET' }, 'unknown device');
@@ -133,6 +154,11 @@ async function serverTests() {
   await denied({ pushToken: 'good', secret: 'S3CRET' }, 'missing withdrawal id');
   await denied({ withdrawalId: 'W9' }, 'missing credential');
   await denied({ withdrawalId: 'W9', pushToken: { $ne: null }, secret: { $ne: null } }, 'object payloads are coerced to strings, not query operators');
+  // a token the browser rotated is retired, not deleted: an alert delivered before the rotation still works for 48h, then it does not
+  const hrs = h => new Date(Date.now() - h * 3600 * 1000).toISOString();
+  const rseed = { adminPushTokens: { fresh: { role: 'owner', quickApproveSecret: 'F', username: 'owner-key', retiredAt: hrs(2) }, stale: { role: 'owner', quickApproveSecret: 'T', username: 'owner-key', retiredAt: hrs(60) } }, adminUsers: {} };
+  q = quickApprove(rseed); res = await q.call({ withdrawalId: 'W9', pushToken: 'fresh', secret: 'F' }); eq(res.code, 200, 'an alert delivered before the token rotated still approves (retired 2h ago)');
+  q = quickApprove(rseed); res = await q.call({ withdrawalId: 'W9', pushToken: 'stale', secret: 'T' }); eq([res.code, res.body.code], [401, 'DEVICE_NOT_REGISTERED'], 'but not after the grace period'); eq(q.calls.core.length, 0);
   // an unexpected failure never leaks details
   const bad = quickApprove(seed); bad.db.collection = () => { throw new Error('secret internal detail'); };
   res = await bad.call({ withdrawalId: 'W9', pushToken: 'good', secret: 'S3CRET' }); eq(res.code, 500); ok(!/internal detail/.test(res.body.message), 'no internals in the error');
@@ -272,7 +298,7 @@ async function pageTests() {
   eq(P.pathCalls('/admin/push/register').length, 0, 'an up-to-date device is left alone'); P.w.close();
   // a rotated token replaces the old one
   P = await page({ permission: 'granted', token: 'tok2', stored: { snow_admin_push_token: 'tok1', petro_admin_push_ver: '2' } }); await P.login(); await sleep(150);
-  eq(P.pathCalls('/admin/push/unregister')[0][1], { token: 'tok1' }); eq(P.pathCalls('/admin/push/register')[0][1], { token: 'tok2' }); P.w.close();
+  eq(P.pathCalls('/admin/push/unregister')[0][1], { token: 'tok1', rotated: true }); eq(P.pathCalls('/admin/push/register')[0][1], { token: 'tok2' }); P.w.close();
   // an alert while the panel is in front
   P = await page({ permission: 'granted', stored: { snow_admin_push_token: 'tok1', petro_admin_push_ver: '2' } }); await P.login();
   ok(typeof P.onMessage === 'function' || typeof P.w.firebase.messaging().onMessage === 'function', 'foreground handler registered');
