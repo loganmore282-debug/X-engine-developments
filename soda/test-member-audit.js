@@ -71,6 +71,8 @@ async function main(){
   const payment=deferred();let posts=0;
   w.post=()=>{posts++;return payment.promise};w.notify=()=>{};w.refreshAfterWithdraw=()=>{};
   d.querySelector('#witAmount').value='5000';
+  d.querySelector('#witPin').value='12345';await w.submitWithdraw();assert.equal(posts,0,'a Trade Password that is not 6 digits must not reach the server');
+  d.querySelector('#witPin').value='123456';
   const first=w.submitWithdraw();await w.submitWithdraw();assert.equal(posts,1,'duplicate tap must not issue a second withdrawal');
   w.openChangeLoginPasswordSheet();
   payment.resolve({status:'success',net:5000});await first;

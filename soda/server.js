@@ -5983,15 +5983,14 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(400).json({ status: 'error',
         message: `Withdraw must be a multiple of ${fmtMoney(wMult)}. Try ${fmtMoney(Math.max(low, sett.minWithdraw))} or ${fmtMoney(high)}.` });
     }
-    // Trade Password / withdrawal PIN gate REMOVED here (owner: "what I am
-    // giving you is what you should put... remove trade passwords" -- the
-    // mockups have no PIN field anywhere, registration or withdrawal). The
-    // OTP-verified Bind Bank Account step is what now stands between a
-    // withdrawal and an unbound/unauthenticated caller -- see the
-    // UNBOUND_ACCOUNT check right below, and /bank/save's own OTP
-    // requirement. pinCheck()/transactionPinHash are left in place
-    // (dead code, not deleted) -- see soda/CLAUDE.md's "Design system"
-    // section for the reasoning already established for similar removals.
+    // Trade Password gate. The six-digit Trade Password chosen at sign-up is asked
+    // on the Withdraw screen and checked HERE, before anything is charged:
+    // pinCheck() verifies the scrypt hash and locks the account for 15 minutes
+    // after 5 wrong tries (a 6-digit code has only a million values, so the
+    // lock is what makes it a real gate). The app's own check is a courtesy.
+    const pinResult = await pinCheck(userId, req.body.pin);
+    if (!pinResult.ok)
+      return res.status(pinResult.code === 'LOCKED' ? 429 : 400).json({ status: 'error', code: pinResult.code, message: pinResult.message });
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
     if (boundSnap.empty)

@@ -6474,6 +6474,9 @@ function paintWithdrawSheet(s){
       <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minWithdraw) || 0}" oninput="syncWithdrawReceiveAmt()">
     </div>
 
+    <div class="pw-head"><span class="bar"></span><span>Trade Password</span></div>
+    ${pwFieldHtml('witPin', 'Enter trade password', true)}
+
     <div class="wit-fee">Fee: ${fee}%</div>
     <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
 
@@ -6558,11 +6561,14 @@ window.submitWithdraw = async function(){
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open)
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
+  const witPin = $('witPin') ? $('witPin').value.trim() : '';
+  if (!/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');
   _withdrawSubmitting = true;
   submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
   let r;
-  try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone }); }
+  try { r = await post('/withdraw/request', { amount, network: acct.network, phone: acct.phone, pin: witPin }); }
   finally {
+    if ($('witPin')) $('witPin').value = '';
     _withdrawSubmitting = false;
     submitBtn.disabled = false; submitBtn.textContent = 'Confirm Withdraw';
     // A background /bank/list landing mid-request can have repainted the
