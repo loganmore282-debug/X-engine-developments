@@ -3393,7 +3393,7 @@ function maybeShowAnnouncement(){
   if (!bg || !sheet) return;
   const ctas = [];
   if (s.whatsappGroup) ctas.push(`<a class="whatsapp" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">${ICONS.whatsapp}<span>WhatsApp Channel</span></a>`);
-  if (s.supportEmail) ctas.push(`<a class="mail" href="mailto:${esc(s.supportEmail)}">${ICONS.envelope}<span>Email us</span></a>`);
+  if (s.telegramGroup) ctas.push(`<a class="telegram" href="${esc(s.telegramGroup)}" target="_blank" rel="noopener">${ICONS.telegram}<span>Telegram Group</span></a>`);
   sheet.innerHTML = `
     <button class="ann-close" onclick="closeAnnouncement()" aria-label="Close">${ICONS.x}</button>
     <div class="ann-mark">${ICONS.megaphone}</div>
@@ -5363,6 +5363,8 @@ window.openSupportSheet = function(){
   const s = STATE.settings || {};
   const rows = [];
   if (s.whatsappGroup) rows.push(supportRowHtml('whatsapp', ICONS.whatsapp, 'WhatsApp Channel', 'Chat with us', s.whatsappGroup));
+  if (s.telegramGroup) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Telegram Group', 'Join our group', s.telegramGroup));
+  if (s.supportTelegram) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Telegram Customer Service', 'Chat with an agent', s.supportTelegram));
   if (s.supportEmail) rows.push(supportRowHtml('mail', ICONS.emailPetro, 'Email Support', s.supportEmail, 'mailto:' + s.supportEmail));
   openSheet('Support', `<div class="reveal-in">
     ${rows.length ? rows.join('') : `<p style="line-height:1.6;color:var(--snow-muted);">${esc(t('Contact support for help with your account.'))}</p>`}
