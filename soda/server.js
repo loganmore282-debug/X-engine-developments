@@ -686,6 +686,8 @@ const DEFAULT_SETTINGS = {
   // banners: a base64 image doesn't belong bloating the /public/settings
   // payload every client fetches on every boot.
   annEnabled: false, annTitle: '', annBody: '',
+  // The line that scrolls across the Home screen under the four buttons. Empty = the built-in sentence.
+  tickerText: '',
   // When annTitle/annBody last actually changed -- stamped by
   // /admin/settings/update below, never set directly by an admin. Backs the
   // Home screen's inline "Latest Announcement" row (its own preview of this
@@ -960,7 +962,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const SODA_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner'];
+const SODA_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo'];
 const _sodaImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getSodaImage(slot) {
@@ -3244,6 +3246,16 @@ app.get('/team/stats', async (req, res) => {
     const rewardTxSnap = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').get();
     let teamRewards = 0;
     rewardTxSnap.forEach(d => { teamRewards += finiteMoney(d.data().amount); });
+    // What each level has paid this member, for the three Level cards on the
+    // Team screen. commissionLevel is 0-based (0 = Level 1) on every row.
+    const levelCommission = { l1: 0, l2: 0, l3: 0 };
+    try {
+      const commSnap = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'commission').get();
+      commSnap.forEach(d => {
+        const v = d.data(), n = Number(v.commissionLevel);
+        if (n >= 0 && n <= 2) levelCommission['l' + (n + 1)] += finiteMoney(v.amount);
+      });
+    } catch (_) { /* the cards then read 0.00; the rest of the stats still load */ }
     res.json({
       status: 'success',
       referralCode: u.referralCode || null,
@@ -3251,7 +3263,7 @@ app.get('/team/stats', async (req, res) => {
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
       totalTeam: (u.teamL1Count || 0) + (u.teamL2Count || 0) + (u.teamL3Count || 0),
       teamCommission: finiteMoney(u.teamCommission),
-      teamDeposits: deposits, l1ActiveCount, milestones, teamRewards,
+      teamDeposits: deposits, l1ActiveCount, milestones, teamRewards, levelCommission,
     });
   } catch (e) {
     console.error('Team stats error:', e.message);
@@ -3670,12 +3682,12 @@ app.get('/public/announcement-image', async (req, res) => {
 // Soda artwork needed by the current member surfaces, fetched together.
 app.get('/public/soda-images', async (req, res) => {
   try {
-    const [logo, authhero, banner2, banner3, checkinbanner] = await Promise.all([
+    const [logo, authhero, banner2, banner3, checkinbanner, profilelogo] = await Promise.all([
       getSodaImage('logo'),
       getSodaImage('authhero'), getSodaImage('banner2'),
-      getSodaImage('banner3'), getSodaImage('checkinbanner'),
+      getSodaImage('banner3'), getSodaImage('checkinbanner'), getSodaImage('profilelogo'),
     ]);
-    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner }, IMAGE_CACHE);
+    publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -8125,12 +8137,12 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/soda-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, banner2, banner3, checkinbanner] = await Promise.all([
+    const [logo, authhero, banner2, banner3, checkinbanner, profilelogo] = await Promise.all([
       getSodaImage('logo'),
       getSodaImage('authhero'), getSodaImage('banner2'),
-      getSodaImage('banner3'), getSodaImage('checkinbanner'),
+      getSodaImage('banner3'), getSodaImage('checkinbanner'), getSodaImage('profilelogo'),
     ]);
-    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner });
+    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/soda-image/set', async (req, res) => {

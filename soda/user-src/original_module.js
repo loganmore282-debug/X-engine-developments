@@ -316,7 +316,7 @@ var LANG_ROWS = [
   ['Old Login Password', 'Ekisumuluzo Ekikadde eky\'Okuyingira', 'Nenosiri la Zamani la Kuingia', 'Ancien mot de passe de connexion', 'Ijambobanga rya kera ryo kwinjira', 'Ekisumuruzo Ekikuru ky\'Okutaaha'],
   ['Old Trade Password', 'Ekisumuluzo Ekikadde eky\'Okusuubula', 'Nenosiri la Zamani la Malipo', 'Ancien mot de passe de transaction', 'Ijambobanga rya kera ry\'ubucuruzi', 'Ekisumuruzo Ekikuru ky\'Okushuubura'],
   ['Open treasure chest', 'Ggulawo essanduku ly\'obugagga', 'Fungua sanduku la hazina', 'Ouvrir le coffre au tr\u00e9sor', 'Fungura agasanduku k\'ubutunzi', 'Igura esanduuku y\'obugaiga'],
-  ['Processing your recharge', 'Tukola ku ssente zo', 'Tunashughulikia malipo yako', 'Traitement de votre recharge', 'Turimo gutunganya ubwishyu bwawe', 'Nitukora aha sente zaawe'],
+  ['Processing your deposit', 'Tukola ku ssente zo', 'Tunashughulikia malipo yako', 'Traitement de votre recharge', 'Turimo gutunganya ubwishyu bwawe', 'Nitukora aha sente zaawe'],
   // Owner asked directly why the deposit-status screen "only changes small
   // things" under a non-English language -- these three status titles are
   // the reason: the screen was rewritten (numbered steps, new copy) without
@@ -373,7 +373,7 @@ var LANG_ROWS = [
   ['Recharges are not available right now.', 'Okuteeka ssente tekusoboka kati.', 'Kuweka pesa hakupatikani kwa sasa.', 'Les recharges ne sont pas disponibles pour le moment.', 'Kubitsa ntibishoboka muri iki gihe.', 'Okuta sente tikirikubaasika hati.'],
   ['to check if it is successful', 'okukebera oba kigenze bulungi', 'ili kuangalia kama imefanikiwa', 'pour v\u00e9rifier si le paiement a r\u00e9ussi', 'kugira ngo urebe niba byagenze neza', 'kureeba yaaba kigyenzire gye'],
   ['Winnings go straight into your wallet.', 'Ebiwangulwa bigenda butereevu mu nsawo yo.', 'Ushindi huingia moja kwa moja kwenye pochi yako.', 'Les gains vont directement dans votre portefeuille.', 'Ibyo watsindiye bijya ako kanya mu mufuka wawe.', 'Ebi osiingwire nibigyenda butunu omu nsaho yaawe.'],
-  ['Approve the payment to complete your recharge.', 'Kkiriza okusasula omalirize okuteeka ssente.', 'Idhinisha malipo ili kukamilisha kuweka pesa.', 'Approuvez le paiement pour terminer votre recharge.', 'Emeza ubwishyu kugira ngo urangize kubitsa.', 'Ikiriza okushashura omarizeho okuta sente.'],
+  ['Approve the payment to complete your deposit.', 'Kkiriza okusasula omalirize okuteeka ssente.', 'Idhinisha malipo ili kukamilisha kuweka pesa.', 'Approuvez le paiement pour terminer votre recharge.', 'Emeza ubwishyu kugira ngo urangize kubitsa.', 'Ikiriza okushashura omarizeho okuta sente.'],
   ['Check your phone for the payment prompt.', 'Kebera essimu yo olabe obubaka bw\'okusasula.', 'Angalia simu yako kwa ujumbe wa malipo.', 'V\u00e9rifiez votre t\u00e9l\u00e9phone pour la demande de paiement.', 'Reba kuri telefone yawe ubutumwa bwo kwishyura.', 'Reeba esimu yaawe oreebe obutumwa bw\'okushashura.'],
   ['Enter the mobile money number to charge.', 'Wandiika ennamba ya mobile money gy\'oggyako ssente.', 'Weka namba ya mobile money itakayotozwa.', 'Entrez le num\u00e9ro mobile money \u00e0 d\u00e9biter.', 'Andika nimero ya mobile money izakurwaho amafaranga.', 'Handiika enamba ya mobile money ei orikwihaho sente.'],
   ['Enter your key to unlock the reward', 'Wandiika ekisumuluzo kyo oggulewo empeera', 'Weka ufunguo wako ili kufungua zawadi', 'Entrez votre cl\u00e9 pour d\u00e9bloquer la r\u00e9compense', 'Andika urufunguzo rwawe ufungure igihembo', 'Handiika ekishumuruzo kyaawe oshumuurure empeera'],
@@ -462,7 +462,7 @@ var LANG_ROWS = [
   ['Could not load your account', 'Tetusobodde kuzuula akawunti yo', 'Imeshindwa kupakia akaunti yako', 'Impossible de charger votre compte', 'Ntibyashobotse gupakira konti yawe', 'Tikibaasiikire kureeta akaunti yaawe'],
   ['Could not complete registration', 'Tetusobodde kumaliriza kwewandiisa', 'Imeshindwa kukamilisha usajili', 'Impossible de finaliser l\'inscription', 'Ntibyashobotse kurangiza kwiyandikisha', 'Tikibaasiikire kumaliriza okwehandiisa'],
   ['Could not save your wallet.', 'Tetusobodde kutereka nsawo yo.', 'Imeshindwa kuhifadhi pochi yako.', 'Impossible d\'enregistrer votre portefeuille.', 'Ntibyashobotse kubika umufuka wawe.', 'Tikibaasiikire kubiika ensaho yaawe.'],
-  ['Could not start recharge', 'Tetusobodde kutandika kuteeka ssente', 'Imeshindwa kuanza kuweka pesa', 'Impossible de démarrer la recharge', 'Ntibyashobotse gutangira kubitsa', 'Tikibaasiikire kutandika kuta sente'],
+  ['Could not start deposit', 'Tetusobodde kutandika kuteeka ssente', 'Imeshindwa kuanza kuweka pesa', 'Impossible de démarrer la recharge', 'Ntibyashobotse gutangira kubitsa', 'Tikibaasiikire kutandika kuta sente'],
   ['Could not request withdrawal.', 'Tetusobodde kusaba kuggyamu ssente.', 'Imeshindwa kuomba kutoa pesa.', 'Impossible de demander le retrait.', 'Ntibyashobotse gusaba kubikuza.', 'Tikibaasiikire kushaba okwihamu sente.'],
   ['Could not complete purchase', 'Tetusobodde kumaliriza kugula', 'Imeshindwa kukamilisha ununuzi', 'Impossible de finaliser l\'achat', 'Ntibyashobotse kurangiza kugura', 'Tikibaasiikire kumaliriza okugura'],
   ['Could not check in', 'Tetusobodde kukyalira', 'Imeshindwa kuhudhuria', 'Impossible de pointer', 'Ntibyashobotse kwiyandikisha', 'Tikibaasiikire kwoleka'],
@@ -1071,7 +1071,7 @@ var ICONS = {
   envelope: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 6l8 7 8-7"/></svg>',
   // Full-size support-email badge, rebuilt from the supplied red envelope
   // reference with Soda's red, orange and yellow palette (no white fill).
-  emailSoda: '<svg class="email-soda-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#E30613"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  emailSoda: '<svg class="email-soda-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#1457e8"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
   // ── Soda re-theme additions: the Home mockup's own icon set (Deposit/
   // Withdraw/Invite/Support tiles, the notification bell, the gift-box
   // Daily Check-in card, the wallet-balance eye toggle, the 3 stat-card
@@ -1163,6 +1163,37 @@ var ICONS = {
   refresh: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5.5h5.5"/><path d="M20 20v-5.5h-5.5"/><path d="M5.2 9.5A8 8 0 0 1 19 8.2"/><path d="M18.8 14.5A8 8 0 0 1 5 15.8"/></svg>',
   idCard: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-1.6 1.9-2.4 3-2.4s2.5.8 3 2.4"/><path d="M14 9.5h4.5M14 13h4.5"/></svg>',
   bulb: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 18h5"/><path d="M10.3 21h3.4"/><path d="M12 3a6 6 0 0 0-3.3 11c.6.4.9.9.9 1.6v.4h4.8v-.4c0-.7.3-1.2.9-1.6A6 6 0 0 0 12 3Z"/></svg>',
+};
+
+// ── Soda v2 design helpers ──
+// Money the way the screens print it: currency glued to the figure, no
+// spaces. vMoney drops the decimals ("UGX11,000"), vMoney2 always shows them
+// ("UGX2,200.00"), which is how balances and totals read.
+function vMoney(n){
+  const v = Number(n) || 0;
+  const hasCents = Math.round(v * 100) % 100 !== 0;
+  return cur() + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
+}
+function vMoney2(n){ return cur() + (Number(n) || 0).toLocaleString('en-UG', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+function vSvg(body, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + body + '</svg>'; }
+var VI = {
+  bottle: vSvg('<path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/>'),
+  cell: vSvg('<rect x="8" y="3" width="8" height="18" rx="2.4"/><path d="M11 7.5h2M11 11.5h2M11 15.5h2"/>'),
+  people: vSvg('<circle cx="9" cy="8" r="3.2"/><path d="M3.4 19.5a5.6 5.6 0 0 1 11.2 0"/><circle cx="17" cy="9" r="2.6"/><path d="M16.2 14.4a4.8 4.8 0 0 1 4.9 4.6"/>'),
+  person: vSvg('<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
+  headset: vSvg('<path d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.2" y="13.5" width="4" height="6.2" rx="1.8"/><rect x="16.8" y="13.5" width="4" height="6.2" rx="1.8"/>'),
+  megaphone: vSvg('<path d="M4 9.6v4.8h3.2L14 18.5v-13L7.2 9.6H4z"/><path d="M17.2 9a4.2 4.2 0 0 1 0 6"/><path d="M7.4 14.4l1.2 4.6"/>'),
+  plane: vSvg('<path d="M21 3 3 10.2l7.2 2.8 2.8 7.2z"/><path d="M21 3 10.2 13"/>'),
+  clipboard: vSvg('<rect x="5" y="4.5" width="14" height="16.5" rx="2.6"/><path d="M9 4.5V3.3h6v1.2"/><path d="M9 10h.01M12 10h3M9 14h.01M12 14h3M9 18h.01M12 18h3"/>'),
+  download: vSvg('<path d="M12 3.8v11"/><path d="m7.6 10.6 4.4 4.4 4.4-4.4"/><path d="M4.2 15.5v2.7a2 2 0 0 0 2 2h11.6a2 2 0 0 0 2-2v-2.7"/>'),
+  logout: vSvg('<path d="M9.5 4H6.2A2.2 2.2 0 0 0 4 6.2v11.6A2.2 2.2 0 0 0 6.2 20h3.3"/><path d="m16 8 4 4-4 4"/><path d="M20 12H9.5"/>'),
+  copy: vSvg('<rect x="9" y="9" width="11" height="11" rx="2.4"/><path d="M15 9V6.4A2.4 2.4 0 0 0 12.6 4H6.4A2.4 2.4 0 0 0 4 6.4v6.2A2.4 2.4 0 0 0 6.4 15H9"/>'),
+  errCircle: vSvg('<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>'),
+  okCircle: vSvg('<circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.9 2.9 5.2-5.6"/>'),
+  back: vSvg('<path d="m15 5-7 7 7 7"/>', ' stroke-width="2.4"'),
+  x: vSvg('<path d="M6 6l12 12M18 6 6 18"/>', ' stroke-width="2.2"'),
+  eye: vSvg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff: vSvg('<path d="M3 3l18 18"/><path d="M10.6 5.7A9.7 9.7 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.3 7.3A16 16 0 0 0 2.5 12S6 18.5 12 18.5a9.6 9.6 0 0 0 4-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'),
 };
 
 // Exact member-supplied action and navigation silhouettes. Their raster
@@ -2197,6 +2228,7 @@ function applyBootArtwork(ai, ci){
   // Same reasoning once more for the two Soda-only slots: the Referral
   // page banner and the brand logo on the Account profile card.
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
+  STATE.profileLogo = (ci.status === 'success' && ci.profilelogo) ? ci.profilelogo : null;
   syncBrandLogoImages();
   // Home's banner carousel, slides 2 and 3 (slide 1 is STATE.homeBanner,
   // fetched separately above -- it predates the carousel). Filtered to
@@ -2878,10 +2910,10 @@ async function refreshAppDataInBackground(uid){
 // some of them as an interim measure) even though nothing on the bottom
 // bar links to them directly any more.
 var NAV_ICON_SVG = {
-  home: suppliedMemberIcon('navHome'),
-  assets: suppliedMemberIcon('navAssets'),
-  network: suppliedMemberIcon('navNetwork'),
-  account: suppliedMemberIcon('navAccount'),
+  home: VI.bottle,
+  assets: VI.cell,
+  network: VI.people,
+  account: VI.person,
 };
 // Owner: "the icon fades in and out when tapped not static and selector
 // doesn't disappear." The selector BOX is pure CSS off .navitem.active and
@@ -3328,9 +3360,11 @@ function maybeShowAnnouncement(){
 async function renderHome(){
   const hadCache = !!STATE.account;
   const hadInvestments = Array.isArray(STATE.investments);
-  if (hadCache) paintHome();
-  const [accR, invR] = await Promise.all([ api('/account'), api('/investments') ]);
+  const shownProducts = JSON.stringify(STATE.products || []);
+  paintHome();
+  const [accR, invR, prR] = await Promise.all([ api('/account'), api('/investments'), api('/public/products') ]);
   if (accR.status === 'success') STATE.account = accR.account;
+  if (prR.status === 'success' && Array.isArray(prR.products)) STATE.products = prR.products;
   if (invR.status === 'success' && Array.isArray(invR.investments)) {
     STATE.investments = invR.investments;
     _investmentsLoadFailed = false;
@@ -3338,8 +3372,9 @@ async function renderHome(){
     _investmentsLoadFailed = true;
   }
   if (STATE.page !== 'home') return; // navigated away while awaiting
-  if (hadCache) patchHomeBalances(); else paintHome();
-  paintMyAssetsInner();
+  // Repaint only when the catalog really changed: a rebuild restarts the
+  // banner carousel, the ticker and the Buy glow and throws away the scroll position.
+  if (JSON.stringify(STATE.products || []) !== shownProducts) paintHome();
   // The envelope button's unread dot. Fetched once per Home entry, AFTER
   // the paint (never blocking it) and patched in place via
   // updateMessageBadge() so it can't tear down the ticker/chest animation.
@@ -3414,61 +3449,62 @@ function startHomeCarousel(){
     preload.src = slides[nextIdx];
   }, 4500);
 }
-function paintHome(){
-  const a = STATE.account || {};
+function vProductCardHtml(p){
+  const { cycle, daily, expected } = planFigures(p);
+  const initial = esc(String(p.name || '?').trim()[0] || '?');
+  const img = p.image
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.outerHTML='&lt;span class=&quot;v-glyph&quot;&gt;${initial}&lt;/span&gt;'">`
+    : `<span class="v-glyph">${initial}</span>`;
+  return `
+  <article class="v-card">
+    <h3 class="v-card-h">${esc(p.name)}</h3>
+    <div class="v-card-b">
+      <div class="v-card-img">${img}</div>
+      <dl class="v-rows">
+        <div><dt>Price</dt><dd>${esc(vMoney(p.price))}</dd></div>
+        <div><dt>Days</dt><dd>${cycle}</dd></div>
+        <div><dt>Daily</dt><dd>${esc(vMoney(daily))}</dd></div>
+        <div><dt>Total</dt><dd>${esc(vMoney(expected))}</dd></div>
+      </dl>
+    </div>
+    <div class="v-card-f">${vBuyHtml(p)}</div>
+  </article>`;
+}
+// The Buy button keeps every state productCtaHtml() had (open, coming soon,
+// ticking countdown); only the markup is new. A closed product is a plain
+// disabled button, the glow is for the one that can be bought.
+function vBuyHtml(p){
+  const open = p.isOpen !== false && !p.comingSoon;
+  if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>BUY NOW</span></button>`;
+  const at = Number(p.opensAt) || 0;
+  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy" disabled><span>COMING SOON</span></button>';
+  return `<button class="v-buy" disabled data-opens-at="${at}">Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
+}
+function vBannerHtml(){
   const st = STATE.settings || {};
-  const unread = (STATE.messages || []).filter(m => !m.read).length;
-  const bal = Number(a.walletBalance) || 0;
-  const balText = fmtUGX(bal);
-  // Owner's mockup: logo + tagline header, a 3-stat/wallet block and an
-  // inline Daily Check-in card all live on Home now (previously the balance
-  // lived on Account only, and Daily Check-in was sheet-only). The
-  // Home now renders only the surfaces that belong to Soda's current design.
-  let html = `
-<div class="home-brand-title"><img id="homeBrandLogo" class="home-brand-logo" alt=""${STATE.brandLogo ? ` src="${esc(STATE.brandLogo)}"` : ''} style="display:${STATE.brandLogo ? 'block' : 'none'}" onerror="this.style.display='none'"><span>${esc(brandName())}</span></div>
-${homeBannerBlockHtml(st)}
-<div class="home-actions">
-  <button class="home-action" onclick="openDepositSheet()">
-    <span class="badge">${suppliedMemberIcon('deposit')}</span><span class="lbl">Recharge</span>
-  </button>
-  <button class="home-action" onclick="openWithdrawSheet()">
-    <span class="badge">${suppliedMemberIcon('withdraw')}</span><span class="lbl">Withdraw</span>
-  </button>
-  <button class="home-action" onclick="navigatePage('network')">
-    <span class="badge">${suppliedMemberIcon('invite')}</span><span class="lbl">Invite</span>
-  </button>
-  <button class="home-action" onclick="openSupportMail()">
-    <span class="badge">${suppliedMemberIcon('support')}</span><span class="lbl">Support</span>
-  </button>
-</div>
-<div class="wallet-bal-card">
-  <div class="wbc-row1">
-    <span class="wbc-lbl">Total Wallet Balance</span>
+  return STATE.homeBanner || homeCarouselSlides()
+    ? homeBannerBlockHtml(st)
+    : '<div class="home-banner v-banner-empty"></div>';
+}
+function paintHome(){
+  const st = STATE.settings || {};
+  const products = STATE.products || [];
+  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance at midnight 00:00.');
+  const html = `
+<div class="v-page v-home">
+  ${vBannerHtml()}
+  <div class="v-quick">
+    <button onclick="openDepositSheet()"><span class="v-ic">${VI.bottle}</span><b>Deposit</b></button>
+    <button onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottle}</span><b>Withdraw</b></button>
+    <button onclick="openHelpDialog('Help Me')"><span class="v-ic">${VI.headset}</span><b>Help Me</b></button>
+    <button onclick="openChestSheet()"><span class="v-ic">${VI.bottle}</span><b>Gift Code</b></button>
   </div>
-  <div class="wbc-row2">
-    <span class="mono wbc-amt" id="homeWalletBalance">${esc(balText)}</span>
-  </div>
-</div>
-<div class="home-stat-row">
-  <div class="home-stat"><span class="hs-ic hs-gold">${ICONS.coinsStack}</span><div class="hs-lbl">Cumulative Earnings</div><div class="mono hs-val hs-gold-txt" id="homeTotalEarned">${esc(fmtUGX(Number(a.totalEarned) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-red">${ICONS.arrowDownCircle}</span><div class="hs-lbl">Total Recharges</div><div class="mono hs-val hs-red-txt" id="homeTotalDeposited">${esc(fmtUGX(Number(a.totalDeposited) || 0))}</div></div>
-  <div class="home-stat"><span class="hs-ic hs-dark">${ICONS.arrowUpCircle}</span><div class="hs-lbl">Total Withdrawals</div><div class="mono hs-val" id="homeTotalWithdrawn">${esc(fmtUGX(Number(a.totalWithdrawn) || 0))}</div></div>
-</div>
-<div class="checkin-card">
-  <span class="cic-gift">${ICONS.checkinCalendar}</span>
-  <div class="cic-text">
-    <div class="cic-title">Daily Check-in</div>
-    <div class="cic-sub">Check in daily to receive rewards and grow your earnings!</div>
-  </div>
-  <button class="cic-btn" onclick="openCheckinSheet()">Check In</button>
-</div>
-<section class="home-my-assets" aria-label="My Assets">
-  <h2>My Assets</h2>
-  <div id="myAssetsInner">${myAssetsInnerHtml()}</div>
-</section>
-<div style="height:8px;"></div>`;
-  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  <div class="v-ticker"><span class="v-ticker-ic">${VI.megaphone}</span><div class="v-ticker-win"><span class="v-ticker-txt">${esc(ticker)}</span></div></div>
+  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : '<div class="v-empty">No assets yet.</div>'}</div>
+</div>`;
+  $('pageHost').innerHTML = html;
   startHomeCarousel();
+  startProductCountdowns();
 }
 function patchHomeBalances(){
   const account = STATE.account || {};
@@ -3601,7 +3637,7 @@ async function refreshCatalogNow(){
   const r = await api('/public/products');
   if (r.status === 'success') {
     STATE.products = r.products;
-    if (STATE.page === 'assets') paintAssets();
+    if (STATE.page === 'home') paintHome();
   }
 }
 // Opens whichever community channel the admin configured. Kept separate
@@ -3627,46 +3663,64 @@ window.switchAssetsTab = function(tab){
   showPage(tab === 'mine' ? 'home' : 'assets');
 };
 async function renderAssets(){
-  const previousProducts = JSON.stringify(STATE.products);
-  const hadProducts = (STATE.products || []).length > 0;
-  if (hadProducts) paintAssets();
+  const hadCache = Array.isArray(STATE.investments);
+  if (hadCache) paintAssets();
   else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
-  const pr = await api('/public/products');
+  const [pr, ir, ar] = await Promise.all([api('/public/products'), api('/investments'), api('/account')]);
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
+  if (ir.status === 'success' && Array.isArray(ir.investments)) STATE.investments = ir.investments;
+  else if (!hadCache) STATE.investments = [];
+  if (ar.status === 'success') STATE.account = ar.account;
   if (STATE.page !== 'assets') return; // navigated away while awaiting
-  if (!hadProducts || previousProducts !== JSON.stringify(STATE.products)) paintAssets();
+  paintAssets();
 }
-function assetRowHtml(p){
-  const { expected, cycle, daily } = planFigures(p);
-  const initial = esc(String(p.name || '?').trim()[0] || '?');
+// One card per asset the member owns. Expiry is the purchase moment plus the
+// asset's own cycle length (the same planStats() figure every progress bar uses).
+function vOwnedCardHtml(inv){
+  const st = planStats(inv);
+  const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
+  const name = inv.tierLabel || p.name || 'Asset';
+  const initial = esc(String(name || '?').trim()[0] || '?');
   const img = p.image
-    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.outerHTML='&lt;div class=&quot;ar-glyph&quot;&gt;${initial}&lt;/div&gt;'">`
-    : `<div class="ar-glyph">${initial}</div>`;
+    ? `<img src="${esc(p.image)}" alt="" onerror="this.outerHTML='&lt;span class=&quot;v-glyph&quot;&gt;${initial}&lt;/span&gt;'">`
+    : `<span class="v-glyph">${initial}</span>`;
+  const startMs = st.createdMs;
+  const endMs = startMs + st.total * 86400000;
   return `
-  <div class="asset-row">
-    <div class="asset-thumb">${img}</div>
-    <div class="asset-body">
-      <div class="asset-name">${esc(p.name)}</div>
-      <div class="asset-stats">
-        <span>Cost <b class="mono">${fmtUGX(Number(p.price) || 0)}</b></span>
-        <span>Term <b>${cycle} Days</b></span>
-        <span>Daily Yield <b class="mono">${fmtUGX(daily)}</b></span>
-        <span>Expected Return <b class="mono">${fmtUGX(expected)}</b></span>
-      </div>
-      ${productCtaHtml(p)}
+  <article class="v-card${inv.granted ? ' v-gift' : ''}">
+    <h3 class="v-card-h">${esc(name)}${inv.granted ? '<i class="v-ribbon">GIFT</i>' : ''}</h3>
+    <div class="v-card-b">
+      <div class="v-card-img">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
+      <dl class="v-rows">
+        <div><dt>Price</dt><dd>${esc(vMoney(st.amount))}</dd></div>
+        <div><dt>Days</dt><dd>${st.total}</dd></div>
+        <div><dt>Daily</dt><dd>${esc(vMoney(st.daily))}</dd></div>
+        <div><dt>Total</dt><dd>${esc(vMoney(st.expected))}</dd></div>
+      </dl>
     </div>
-  </div>`;
+    <div class="v-dates">
+      <div><span>Purchase</span><b>${esc(statementStampMs(startMs))}</b></div>
+      <div><span>Expire</span><b>${esc(statementStampMs(endMs))}</b></div>
+    </div>
+  </article>`;
+}
+function statementStampMs(ms){
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return '—';
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function paintAssets(){
-  const products = STATE.products || [];
+  const a = STATE.account || {};
+  const owned = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured');
   const html = `
-<div class="member-page-title">Assets</div>
-<div id="assetsBody" style="padding:0 10px;">
-  ${products.length ? products.map(assetRowHtml).join('') : '<div class="list-empty">No assets yet.</div>'}
-</div>
-<div style="height:20px;"></div>`;
-  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
-  startProductCountdowns();
+<div class="v-page v-income">
+  ${vBannerHtml()}
+  <div class="v-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
+  <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty">No assets yet.</div>'}</div>
+</div>`;
+  $('pageHost').innerHTML = html;
+  startHomeCarousel();
 }
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
@@ -3806,25 +3860,8 @@ function paintMyAssetsInner(){
 var _activeTeamLevel = null;
 window.switchTeamLevel = async function(level){
   _activeTeamLevel = level;
-  document.querySelectorAll('.lv-switcher .lv').forEach(s => s.classList.toggle('on', Number(s.dataset.level)===level));
-  // Keep the Commission Rate card in step with the selected level -- it
-  // shows that level's own rate and member count in the mockup, not L1's.
-  const t = STATE.teamStats || {}, rates = t.commRates || {}, team = t.team || {};
-  const setTxt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-  setTxt('teamCommLevelLabel', 'Level ' + level);
-  setTxt('teamCommPct', (rates['l' + level] != null ? rates['l' + level] : 0) + '%');
-  setTxt('teamCommMembers', ((team['l' + level]) || 0) + ' Members');
+  document.querySelectorAll('.v-level').forEach(el => el.classList.toggle('on', Number(el.dataset.level) === level));
   if (!STATE.teamMembers[level]) {
-    // The downline for a level that has not been fetched yet takes a real
-    // round trip, and until this the box simply stayed as whatever the
-    // PREVIOUS level had rendered -- so tapping Level 2 looked like Level 1's
-    // members had been re-listed under a different heading, which is worse
-    // than looking slow. Owner: "add the other loader ... while Loading users
-    // on team of specific level ... it will be 4 triangles not Loading...".
-    //
-    // Painted BEFORE the await, and only for a level with nothing cached: a
-    // level already in STATE.teamMembers renders instantly and a spinner that
-    // flashes for one frame reads as a glitch.
     const box = $('teamMembersBox');
     if (box) box.innerHTML = teamLoadingHtml();
     const r = await api('/team/members?level=' + level);
@@ -3847,19 +3884,22 @@ function teamLoadingHtml(){ return '<div class="list-loading">' + MINI_RING_LOAD
 // while its own ancestor isn't display:none, and #loadingScreen usually is.
 var MINI_RING_LOADER = '<svg class="mini-ring-loader" viewBox="0 0 120 120" aria-hidden="true">'
   + '<defs><linearGradient id="miniRingGrad" x1="24" y1="104" x2="96" y2="16" gradientUnits="userSpaceOnUse">'
-  + '<stop offset="0%" stop-color="#ff3b44"/><stop offset="55%" stop-color="#e30613"/><stop offset="100%" stop-color="#ffb000"/>'
+  + '<stop offset="0%" stop-color="#3d8bff"/><stop offset="55%" stop-color="#1457e8"/><stop offset="100%" stop-color="#ffb000"/>'
   + '</linearGradient></defs>'
   + '<circle class="ring-arc ring-arc-1" cx="60" cy="60" r="52" pathLength="100"/>'
   + '<circle class="ring-arc ring-arc-2" cx="60" cy="60" r="45" pathLength="100"/>'
   + '<circle class="ring-arc ring-arc-3" cx="60" cy="60" r="38" pathLength="100"/>'
   + '</svg>';
 function maskPhone(phone){
-  const s = String(phone||'').replace(/\D/g,'');
-  if (s.length < 7) return phone || '';
-  // "756****0296" -- Team.dc.html's own shape: a few leading digits, four
-  // stars, the last four. Enough to recognise your own referral, not enough
-  // to be a usable number.
-  return s.slice(0, s.length - 7) + '****' + s.slice(-4);
+  // "706****1455": the first three and last four digits of the local number
+  // (country code and leading zero dropped), enough to recognise your own
+  // referral and not a usable number.
+  let d = String(phone||'').replace(/\D/g,'');
+  const dc = dial();
+  if (d.slice(0, dc.length) === dc) d = d.slice(dc.length);
+  d = d.replace(/^0+/, '');
+  if (d.length < 7) return phone || '';
+  return d.slice(0, 3) + '****' + d.slice(-4);
 }
 // The exact date and time a member joined, as his mockup prints it:
 // "07/09/2026 01:21" -- day/month/year and a 24-hour clock.
@@ -3886,30 +3926,14 @@ function joinedStamp(ts){
 function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
   const box = $('teamMembersBox');
-  if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">No members at this level yet.</div>'; return; }
-  // Owner: "a profile logo like one uploaded from admin, number and active
-  // or inactive nothing else to put" -- a deliberate strip-down of the
-  // richer Team.dc.html mockup card (amount/joined-date/footer) this list
-  // used to carry. Every member is still deliberately anonymous (the phone
-  // is masked, so one member cannot harvest another's number) -- only what
-  // was actually asked for renders now.
-  //
-  // Same chain as the Account profile card, so uploading a Brand logo once
-  // lands here too: the uploaded logo, else the wordmark. The alternating
-  // gradient stays as the backdrop behind both.
-  const avatar = STATE.brandLogo
-    ? `<img src="${esc(STATE.brandLogo)}" alt="" onerror="this.outerHTML=brandTextMark(44)">`
-    : brandTextMark(44);
-  box.innerHTML = '<div class="reveal-in">' + members.map((m,idx) => `
-  <div class="team-member">
-    <div class="top">
-      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#ffb000,#e30613)' : 'var(--soda-grad)'};">${avatar}</div>
-      <div class="phone mono">${esc(maskPhone(m.phone))}</div>
-      <span class="status-pill ${m.active ? 'active' : 'inactive'}">${m.active ? 'Active' : 'Inactive'}</span>
-    </div>
-  </div>`).join('') + '</div>';
+  if (!box) return;
+  if (!members.length) { box.innerHTML = '<div class="v-empty">No members at this level yet.</div>'; return; }
+  box.innerHTML = members.map(m => `
+  <div class="v-member">
+    <div class="v-member-top"><span class="v-mphone">${esc(maskPhone(m.phone))}</span><b>${esc(vMoney2(m.invested))}</b></div>
+    <div class="v-member-join">Joined ${esc(joinedStamp(m.createdAt))}</div>
+  </div>`).join('');
 }
-
 // ── NETWORK (owner's 3rd mockup round) ──
 // Combines what used to be two separate tabs (Referral: code/link/rates;
 // Team: stats/level-switcher/member list) into the one screen the mockup
@@ -3929,78 +3953,49 @@ window.toggleEarningsVisibility = function(){
 };
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
-  const shareReady = refreshShareHost();
   if (hadCache) paintNetwork();
   else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
-  const [r] = await Promise.all([api('/team/stats'), shareReady]);
+  const r = await api('/team/stats');
   if (r.status === 'success') STATE.teamStats = r;
-  else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
+  else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0, levelCommission:{l1:0,l2:0,l3:0} };
   if (STATE.page !== 'network') return;
   paintNetwork();
 }
-// Client-side mirror of the server's own tsMillis() -- createdAt arrives as
-// an ISO string (see server.js's Date -> JSON serialization), and this file
-// has no existing "parse either shape" helper for it outside joinedStamp(),
-// which returns a formatted STRING, not a sortable number.
 function paintNetwork(){
-  const t = STATE.teamStats || { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
-  const rates = t.commRates || {};
+  const t = STATE.teamStats || { referralCode:'', commRates:{}, team:{}, totalTeam:0, teamDeposits:0, levelCommission:{} };
+  const rates = t.commRates || {}, team = t.team || {}, lc = t.levelCommission || {};
   const a = STATE.account || {};
   const code = a.referralCode || t.referralCode || '';
-  // Owner: "l wanted my link to look like .../share.html?v=<timestamp>&code=<code>".
-  // share.html is a literal copy of this app's own index.html (see
-  // build-core.js), so it boots identically and reaches captureReferralFromUrl()'s
-  // new `code` branch. `v` is a fresh Unix-seconds timestamp on every paint of
-  // this screen (not a fixed build version) -- it's never read by the app
-  // itself, its only job is making each rendered link a slightly different
-  // URL so a link-preview cache (WhatsApp, Telegram, etc.) can't quietly
-  // reuse a stale preview from an earlier share.
   const link = code ? `${shareOrigin()}/share.html?v=${Math.floor(Date.now() / 1000)}&code=${encodeURIComponent(code)}` : '';
-  const earnText = _earningsHidden ? 'UGX ••••••' : fmtUGX(Number(t.teamCommission) || 0);
+  const level = _activeTeamLevel || 1;
+  _activeTeamLevel = level;
+  const levels = [1, 2, 3].map(n => `
+    <button class="v-level${level === n ? ' on' : ''}" data-level="${n}" onclick="switchTeamLevel(${n})">
+      <span class="v-lv-l"><b>Level ${n}</b><small>${team['l' + n] || 0} Members</small></span>
+      <span class="v-lv-r"><small>Rate</small><i>${rates['l' + n] != null ? rates['l' + n] : 0}%</i></span>
+      <span class="v-lv-sep"></span>
+      <span class="v-lv-c"><small>Commission</small><b>${esc(vMoney2(lc['l' + n]))}</b></span>
+    </button>`).join('');
   const html = `
-<div class="member-page-title">Network</div>
-<div class="net-simple">
-  <section class="net-section net-invite-section">
-    <div class="net-section-title">Invite</div>
-  <div class="net-invite-line">
-    <div><span>Invitation code</span><b class="mono">${esc(code || '—')}</b></div>
-    <button onclick="copyText('${esc(code)}')" aria-label="Copy invitation code">${ICONS.copy}</button>
+<div class="v-page v-team">
+  <div class="v-tcard">
+    <div class="v-tcard-top"><span class="v-tc-ic">${VI.people}</span><span class="v-tc-lbl">Total Team</span><b class="v-tc-num">${Number(t.totalTeam) || 0}</b></div>
+    <div class="v-tc-line"></div>
+    <div class="v-tc-money">${esc(vMoney2(t.teamDeposits))}</div>
+    <div class="v-tc-cap">Purchase</div>
   </div>
-  <div class="net-invite-line">
-    <div><span>Invitation link</span><b class="net-link">${esc(link || '—')}</b></div>
-    <button onclick="copyText('${esc(link)}')" aria-label="Copy invitation link">${ICONS.copy}</button>
+  <div class="v-share">
+    <div class="v-share-l">Share URL</div>
+    <div class="v-share-box"><span class="v-share-url">${esc(link || '—')}</span><button type="button" onclick="copyText('${esc(link)}')" aria-label="Copy invite link">${VI.copy}</button></div>
+    <button class="v-btn" type="button" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
   </div>
-  </section>
-
-  <section class="net-section">
-    <div class="net-section-title">Team</div>
-  <div class="net-levels">
-    <div><b class="mono">${(t.team && t.team.l1) || 0}</b><span>Level 1</span><small>${rates.l1 != null ? rates.l1 : 27}%</small></div>
-    <div><b class="mono">${(t.team && t.team.l2) || 0}</b><span>Level 2</span><small>${rates.l2 != null ? rates.l2 : 2}%</small></div>
-    <div><b class="mono">${(t.team && t.team.l3) || 0}</b><span>Level 3</span><small>${rates.l3 != null ? rates.l3 : 1}%</small></div>
-  </div>
-  </section>
-
-  <section class="net-section net-earn-section">
-    <div class="net-section-title">Earnings</div>
-  <div class="net-earn-simple">
-    <div>
-      <span>Referral earnings</span>
-      <b class="mono" id="netEarnAmt">${esc(earnText)}</b>
-    </div>
-    <div class="net-earn-actions">
-      <button id="netEarnEyeBtn" onclick="toggleEarningsVisibility()" aria-label="Show or hide earnings">${_earningsHidden ? ICONS.eyeOff : ICONS.eyeOpen}</button>
-      <button onclick="openAllReferralsSheet()">View team</button>
-    </div>
-  </div>
-  </section>
-
-  ${taskCenterHtml(t)}
-</div>
-<div style="height:20px;"></div>`;
-  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  <div class="v-levels">${levels}</div>
+  <div id="teamMembersBox"></div>
+</div>`;
+  $('pageHost').innerHTML = html;
+  if (STATE.teamMembers[level]) renderTeamMembers(level);
+  else switchTeamLevel(level);
 }
-
 function taskCenterCardsHtml(type, progress, milestones){
   const isDeposit = type === 'deposit';
   return (milestones || []).filter(m => m.type === type).map(m => {
@@ -4274,38 +4269,45 @@ window.openSecuritySettingsSheet = function(){
 // mockup's "Membership Level / VIP 1" card -- there is no tier system
 // anywhere in this codebase (thresholds, benefits, what "View Benefits"
 // would even show), so it is not invented here; flagged in CLAUDE.md.
+function vTileHtml(icon, label, onclick, tone){
+  return `<button class="v-tile" onclick="${onclick}"><span class="v-tile-ic ${tone || ''}">${icon}</span><b>${label}</b></button>`;
+}
 async function renderAccount(){
   const a = STATE.account || {};
+  const avatar = STATE.profileLogo
+    ? `<img src="${esc(STATE.profileLogo)}" alt="" onerror="this.style.display='none'">`
+    : `<span class="v-av-fb">${VI.person}</span>`;
   const html = `
-<div class="account-page" style="padding:0 10px;">
-  <div class="member-page-title">Profile</div>
-  <div class="acct-card">
-    <div class="acct-avatar">
-      <span id="accountBrandFallback" class="acct-avatar-fallback" style="display:${STATE.brandLogo ? 'none' : 'flex'}">${ICONS.peopleGroup}</span>
-      <img id="accountBrandLogo" class="acct-avatar-logo" alt=""${STATE.brandLogo ? ` src="${esc(STATE.brandLogo)}"` : ''} style="display:${STATE.brandLogo ? 'block' : 'none'}" onerror="this.style.display='none';var f=document.getElementById('accountBrandFallback');if(f)f.style.display='flex'">
+<div class="v-page v-my">
+  <div class="v-me">
+    <div class="v-me-top">
+      <div class="v-avatar">${avatar}</div>
+      <div class="v-me-id"><div class="v-me-phone">${esc(walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone))}</div><span class="v-vip">VIP ${Number(a.vipLevel) || 0}</span></div>
     </div>
-    <div class="acct-idbox">
-      <div class="acct-phone-row">${esc(formatPhoneDisplay(a.phone))}</div>
+    <div class="v-me-line"></div>
+    <div class="v-me-lbl">TOTAL BALANCE</div>
+    <div class="v-me-bal" id="myBalance">${esc(vMoney2(a.walletBalance))}</div>
+    <div class="v-me-btns">
+      <button class="v-me-dep" onclick="openDepositSheet()"><span class="v-ic">${VI.bottle}</span>Deposit</button>
+      <button class="v-me-wit" onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottle}</span>Withdraw</button>
     </div>
   </div>
-  <div class="account-money-actions">
-    <button class="account-money-action" onclick="openDepositSheet()"><span>${suppliedMemberIcon('deposit')}</span>Recharge</button>
-    <button class="account-money-action" onclick="openWithdrawSheet()"><span>${suppliedMemberIcon('withdraw')}</span>Withdraw</button>
+  <div class="v-sec"><span class="bar"></span><h2>Account</h2><i></i></div>
+  <div class="v-tiles">
+    ${vTileHtml(VI.bottle, 'Wallet', 'openWalletSheet()')}
+    ${vTileHtml(VI.bottle, 'Messages', 'openMessagesSheet()', 'gold')}
+    ${vTileHtml(VI.clipboard, 'Details', "openTransactionStatement('income')", 'gold')}
+    ${vTileHtml(VI.download, 'APP', 'promptInstallApp()')}
   </div>
-  <div class="account-action-list">
-    ${acctListCardHtml('accountWallet', 'Bind bank card', 'openWalletSheet()')}
-    ${acctListCardHtml('accountStatement', 'Transaction Statement', "openTransactionStatement('income')")}
-    ${acctListCardHtml('accountGift', 'Redeem Gift', 'openChestSheet()')}
-    ${acctListCardHtml('accountRules', 'Rules and Regulations', 'openRulesSheet()')}
-    ${acctListCardHtml('accountSecurity', 'Security Settings', 'openChangeLoginPasswordSheet()')}
-    ${acctListCardHtml('support', 'Support', 'openSupportSheet()')}
-    ${acctListCardHtml('accountAbout', 'About Us', 'openAboutSheet()')}
-    ${downloadAppRowHtml()}
+  <div class="v-sec"><span class="bar"></span><h2>Security</h2><i></i></div>
+  <div class="v-tiles">
+    ${vTileHtml(VI.bottle, 'Login Password', 'openChangeLoginPasswordSheet()')}
+    ${vTileHtml(VI.bottle, 'Trade Password', 'openChangeTradePasswordSheet()')}
   </div>
-  <button class="logout-btn-v2" onclick="doLogout()">${ICONS.logoutArrow} Log Out</button>
-  <div style="height:20px;"></div>
+  <button class="v-wide" onclick="openHelpDialog('Help Me')"><span class="v-ic">${VI.headset}</span>Help Me</button>
+  <button class="v-logout" onclick="doLogout()"><span class="v-ic">${VI.logout}</span>Log Out</button>
 </div>`;
-  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  $('pageHost').innerHTML = html;
 }
 // "+256 742 730 382" -- the shape the mockups show, from whatever the
 // server stored (0742730382 / 256742730382 / +256742730382 all normalise).
@@ -4375,15 +4377,17 @@ function maskedTail(phone){
   const d = String(phone || '').replace(/\D/g, '');
   return d ? '****' + d.slice(-4) : '****';
 }
-function walletCardHtml(w){
-  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '') : 'Mobile Money';
-  return `<div class="wallet-card"><div class="wallet-kicker">Payout Wallet</div>
-    <div class="num"${w ? '' : ' style="font-size:18px"'}>${w ? esc(walletDestDisplay(w)) : 'No payout wallet linked'}</div>
-    <div class="wallet-meta">
-      ${w ? `<div class="meta-item"><span>Account holder</span><b>${esc(String(w.holder || '').toUpperCase())}</b></div>` : ''}
-      <div class="meta-item"><span>Network</span><b>${w ? esc(provider) : '—'}</b></div>
-    </div></div>`;
+function vWalletCardHtml(w){
+  const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '').toUpperCase() : 'MOBILE MONEY';
+  return `<div class="v-wcard">
+    <div class="v-wcard-top"><b>${esc(provider)}</b><span class="v-wcard-ic">${VI.bottle}</span></div>
+    <div class="v-chip-art" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div class="v-wcard-num">${w ? esc(walletDestDisplay(w)) : 'No wallet linked'}</div>
+    <div class="v-wcard-l">ACCOUNT HOLDER</div>
+    <div class="v-wcard-n">${w ? esc(String(w.holder || '').toUpperCase()) : '—'}</div>
+  </div>`;
 }
+function walletCardHtml(w){ return vWalletCardHtml(w); }
 function walletLocalPhone(phone){
   let d = String(phone || '').replace(/\D/g, '');
   const dc = dial();
@@ -4429,8 +4433,8 @@ function renderWalletSheet(){
     // own delete button already worked per-row, it just never had more than
     // one row to act on before this round. "Add another wallet" reuses the
     // exact same add-form toggleWalletEdit() already drives.
-    const rows = (STATE.bankAccounts || []).map(walletPlainRowHtml).join('');
-    const addBtn = '<button class="btn-bind" type="button" style="margin:6px 0 0;" onclick="toggleWalletEdit(true)">+ Add another wallet</button>';
+    const rows = (STATE.bankAccounts || []).map(a => `<div class="v-wrow">${vWalletCardHtml(a)}<button class="v-wdel" type="button" onclick="deleteWallet('${esc(a.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button></div>`).join('');
+    const addBtn = '<button class="v-bind" type="button" onclick="toggleWalletEdit(true)">Bind Wallet</button>';
     $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + rows + addBtn + '</div>';
     return;
   }
@@ -4641,6 +4645,11 @@ function dismissNotify(){
 }
 window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
+  // Good news gets the tick, everything else (errors and "please do this first")
+  // the circled cross, as in the screens.
+  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong/i.test(String(message || ''));
+  const ic = $('notifyIc');
+  if (ic) { ic.innerHTML = good ? VI.okCircle : VI.errCircle; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
   $('notifyBg').classList.add('show');
   // Auto-dismisses on its own (a toast, not a dialog the member must
@@ -4657,25 +4666,44 @@ window.closeNotify = function(){
   if (fn) fn();
 };
 
+// The Help dialog (Home "Help Me", My "Help Me"): the two contact links the
+// admin already sets -- Channel = the Telegram group, Service = Telegram
+// customer service -- in a centred dialog.
+window.openHelpDialog = function(title){
+  const s = STATE.settings || {};
+  const btn = (url, label) => url
+    ? `<a class="v-help-b" href="${esc(url)}" target="_blank" rel="noopener">${VI.plane}<span>${label}</span></a>`
+    : `<button class="v-help-b" type="button" onclick="notify('No ${label.toLowerCase()} link is set yet.')">${VI.plane}<span>${label}</span></button>`;
+  $('helpCard').innerHTML = `
+    <span class="v-help-ic">${VI.headset}</span>
+    <h3>${esc(title || 'Help')}</h3>
+    <div class="v-help-btns">${btn(s.telegramGroup || s.telegramChannel, 'Channel')}${btn(s.supportTelegram, 'Service')}</div>
+    <button class="v-help-close" type="button" onclick="closeHelpDialog()">Close</button>`;
+  $('helpBg').classList.add('show');
+  lockBodyScroll();
+};
+window.closeHelpDialog = function(){
+  $('helpBg').classList.remove('show');
+  if (!isScrollLockOverlayOpen()) unlockBodyScroll();
+};
+
 // ── TRANSACTION STATEMENT ──
 // One professional statement surface. Categories stay horizontal at the top;
 // no balance hero, avatar discs, record cards or separate deposit/withdraw/
 // earnings screens.
-var _statementCat = 'income';
-var STATEMENT_INCOME_TYPES = new Set([
-  'cashback','commission','team_reward','promocode','checkin','welcome_bonus',
-  'mission_salary','mission_deposit_reward','turntable','spin','spin_bonus',
-  'admin_credit'
-]);
+var _statementCat = 'all';
+var _statementShown = 10;
+var STATEMENT_TURNTABLE_TYPES = new Set(['turntable','spin','spin_bonus']);
 function statementCategoryMatch(cat, t){
   if (cat === 'deposit') return t.type === 'deposit';
   if (cat === 'withdraw') return t.type === 'withdraw';
-  return STATEMENT_INCOME_TYPES.has(t.type);
+  if (cat === 'turntable') return STATEMENT_TURNTABLE_TYPES.has(t.type);
+  return true;
 }
 function statementDescription(t){
-  if (t.type === 'deposit') return 'Recharge';
+  if (t.type === 'deposit') return 'Deposit';
   if (t.type === 'withdraw') return 'Withdraw';
-  if (t.type === 'cashback') return 'Daily Income';
+  if (t.type === 'cashback') return 'Daily Earnings';
   if (t.type === 'commission') return 'Referral Commission';
   if (t.type === 'promocode') return 'Gift Code';
   if (t.type === 'checkin') return 'Check-in Reward';
@@ -4683,82 +4711,70 @@ function statementDescription(t){
   if (t.type === 'team_reward') return 'Team Reward';
   if (t.type === 'mission_salary') return 'Mission Salary';
   if (t.type === 'mission_deposit_reward') return 'Mission Reward';
-  if (t.type === 'turntable' || t.type === 'spin' || t.type === 'spin_bonus') return 'Reward';
-  if (t.type === 'admin_credit') return brandName() + ' Credit';
+  if (STATEMENT_TURNTABLE_TYPES.has(t.type)) return 'Turntable';
+  if (t.type === 'admin_credit') return 'Deposit';
+  if (t.type === 'invest' || t.type === 'investment') return 'Purchase';
   return 'Transaction';
 }
-function statementStatus(t){
-  const rawStatus = String(t.status || '').toLowerCase();
-  const desc = String(t.description || '').toLowerCase();
-  const raw = rawStatus + ' ' + desc;
-  if (/fail|declin|reject|cancel|error/.test(raw)) return { text:'Failed', cls:'failed' };
-  if (/pend|process|await|initiating/.test(raw)) return { text:'Pending', cls:'pending' };
-  return { text:'Completed', cls:'completed' };
+// The pill under a row: orange while it is still moving, green once paid,
+// red when it failed. A finished credit shows a plain blue description line
+// instead (the screens do the same for "Daily Earnings").
+function statementChip(t){
+  const raw = String(t.status || '').toLowerCase() + ' ' + String(t.description || '').toLowerCase();
+  if (/fail|declin|reject|cancel|error/.test(raw)) return { text: 'Failed', cls: 'bad' };
+  if (/pend|process|await|initiating|creating|sending/.test(raw)) return { text: t.type === 'deposit' ? 'Pending Deposit' : t.type === 'withdraw' ? 'Processing Payment' : 'Pending', cls: 'wait' };
+  if (t.type === 'withdraw') return { text: 'Paid', cls: 'ok' };
+  return null;
 }
 function statementDate(t){
   const d = String(t.date || '');
-  const parts = d.split('/');
-  const date = parts.length === 3 ? parts[1] + '/' + parts[0] + '/' + parts[2] : d;
-  return (date + (t.time ? ' · ' + t.time : '')).trim();
+  return (d + (t.time ? ' ' + t.time : '')).trim();
 }
 function statementAmountText(t){
   const amt = recordsRowAmount(t);
-  const sign = amt < 0 ? '−' : '+';
-  return sign + fmtUGXCents(Math.abs(amt));
+  return (amt < 0 ? '-' : '+') + vMoney2(Math.abs(amt));
 }
 function renderStatement(){
   const body = $('statementBody');
   if (!body) return;
-  const rows = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
-  if (!rows.length) {
-    body.innerHTML = '<div class="statement-empty">No transactions in this category.</div>';
-    return;
-  }
-  const footer = STATE.transactionsTruncated
-    ? '<div class="statement-end">Showing your most recent transactions</div>'
-    : '<div class="statement-end">End of statement</div>';
+  const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
+  if (!all.length) { body.innerHTML = '<div class="v-empty">No records yet.</div>'; return; }
+  const rows = all.slice(0, _statementShown);
+  const more = all.length > rows.length;
   body.innerHTML = rows.map(t => {
-    const st = statementStatus(t);
+    const title = statementDescription(t);
+    const chip = statementChip(t);
     const amt = recordsRowAmount(t);
+    const line = chip ? `<span class="v-chip ${chip.cls}">${esc(chip.text)}</span>` : `<span class="v-rdesc">${esc(cleanDesc(t.description) || title)}</span>`;
     return `
-      <article class="statement-row">
-        <div class="statement-meta">
-          <span class="statement-id mono">${esc(t.statementId || t.id || '—')}</span>
-          <span class="statement-date">${esc(statementDate(t))}</span>
-        </div>
-        <div class="statement-main">
-          <div class="statement-desc">${esc(statementDescription(t))}</div>
-          <div class="statement-amount ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</div>
-        </div>
-        <div class="statement-status ${st.cls}">${st.text}</div>
+      <article class="v-rec">
+        <span class="v-rav ${amt < 0 ? 'out' : ''}">${esc(title.charAt(0).toUpperCase())}</span>
+        <div class="v-rmid"><b>${esc(title)}</b><small>${esc(statementDate(t))}</small>${line}</div>
+        <span class="v-ramt ${amt < 0 ? 'out' : 'in'}">${esc(statementAmountText(t))}</span>
       </article>`;
-  }).join('') + footer;
+  }).join('') + (more ? '<div class="v-more"><button type="button" onclick="statementLoadMore()">Load More</button></div>' : '');
 }
+window.statementLoadMore = function(){ _statementShown += 10; renderStatement(); };
 window.switchStatementCategory = function(cat){
-  if (!['income','deposit','withdraw'].includes(cat)) return;
-  _statementCat = cat;
+  if (!['all','deposit','withdraw','turntable'].includes(cat)) return;
+  _statementCat = cat; _statementShown = 10;
   const tabs = $('statementTabs');
   if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
   renderStatement();
 };
 window.openTransactionStatement = async function(cat){
-  _statementCat = ['income','deposit','withdraw'].includes(cat) ? cat : 'income';
+  _statementCat = ['all','deposit','withdraw','turntable'].includes(cat) ? cat : 'all';
+  _statementShown = 10;
   const hadCache = Array.isArray(STATE.transactions);
-  openSheet('Transaction Statement', `
-    <div class="statement-download-row">
-      <button type="button" class="statement-download-btn" id="statementDownloadBtn" onclick="downloadStatementPdf()">${ICONS.download}<span>Download Statement</span></button>
-    </div>
-    <div class="statement-tabs" id="statementTabs">
-      <button data-cat="income" class="${_statementCat==='income'?'on':''}" onclick="switchStatementCategory('income')">Income</button>
-      <button data-cat="deposit" class="${_statementCat==='deposit'?'on':''}" onclick="switchStatementCategory('deposit')">Recharges</button>
-      <button data-cat="withdraw" class="${_statementCat==='withdraw'?'on':''}" onclick="switchStatementCategory('withdraw')">Withdrawals</button>
-    </div>
-    <div class="statement-head" aria-hidden="true">
-      <span>Transaction</span><span>Amount</span>
+  const bal = (STATE.account && STATE.account.walletBalance) || 0;
+  openSheet('Balance Record', `
+    <div class="v-recbal"><span>CURRENT BALANCE</span><b id="recBalance">${esc(vMoney2(bal))}</b></div>
+    <div class="v-rectabs" id="statementTabs">
+      ${[['all','All'],['deposit','Deposit'],['withdraw','Withdraw'],['turntable','Turntable']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
     </div>
     <div id="statementBody"></div>`);
   if (hadCache) renderStatement();
-  else $('statementBody').innerHTML = '<div class="statement-empty">Loading statement…</div>';
+  else $('statementBody').innerHTML = '<div class="v-empty">Loading…</div>';
   const r = await api('/transactions');
   if (r.status === 'success') {
     STATE.transactions = r.transactions;
@@ -4766,7 +4782,7 @@ window.openTransactionStatement = async function(cat){
   } else if (!hadCache) {
     STATE.transactions = [];
   }
-  if (_openSheetTitle === 'Transaction Statement') renderStatement();
+  if (_openSheetTitle === 'Balance Record') renderStatement();
 };
 // Owner: "put a server side advanced feature called download statement, so
 // it downloads statement of the account as pdf." The PDF itself is built
@@ -4812,7 +4828,7 @@ window.downloadStatementPdf = async function(){
 };
 // Compatibility for post-withdraw flows and any stale call sites.
 window.openBalanceRecordSheet = function(tab){
-  const cat = tab === 'deposit' ? 'deposit' : tab === 'withdraw' ? 'withdraw' : 'income';
+  const cat = tab === 'deposit' ? 'deposit' : tab === 'withdraw' ? 'withdraw' : 'all';
   return openTransactionStatement(cat);
 };
 
@@ -4992,7 +5008,7 @@ window.submitTradePasswordChange = async function(){
 // full-screen win state with the amount won and the new balance.
 window.openChestSheet = function(){
   openSheet('Gift Codes', `<div class="reveal-in gift-code-stage">
-    <div class="gift-code-mark" aria-hidden="true">${GIFT_CODE_REFERENCE_SVG}</div>
+    <div class="gift-code-mark" aria-hidden="true">${VI.bottle}</div>
     <h2>Redeem Gift Code</h2>
     <p class="sub">Enter a valid gift code to add its reward to your balance.</p>
     <div style="width:100%;">
@@ -5392,7 +5408,7 @@ window.openRulesSheet = async function(){
   await new Promise(resolve => setTimeout(resolve, 100));
   const wrap = $('rulesArticle');
   if (wrap !== article) return;
-  const fallback = s.rulesText || ('Minimum recharge ' + fmtUGX(s.minDeposit) + '. Minimum withdraw ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed recharge: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
+  const fallback = s.rulesText || ('Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdraw ' + fmtUGX(s.minWithdraw) + ', a ' + withdrawalFeePct(s) + '% fee applies. Referral commission is paid once, after the first confirmed recharge: Level 1 ' + (s.commL1 ?? 30) + '%, Level 2 ' + (s.commL2 ?? 3) + '%, Level 3 ' + (s.commL3 ?? 2) + '%.');
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
     : [{ type: 'text', text: fallback }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
@@ -5528,7 +5544,7 @@ function cleanDesc(d){ return d || ''; }
 // only deposit path: one screen, no method choice to make.
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
-  if (s.depositAvailable === false) return notify('Recharges are not available right now.');
+  if (s.depositAvailable === false) return notify('Deposits are not available right now.');
   openDepositFormSheet();
 };
 var _depChosenAmount = 0;
@@ -5553,128 +5569,41 @@ window.selectDepMethod = function(m){
 };
 function openDepositFormSheet(){
   const s = STATE.settings || {};
-  const usdtOn = s.usdtEnabled === true;
-  const cardOn = s.cardDepositEnabled === true;
-  _depMethod = 'mm';
-  // Owner: "when you had selected and gone back you come back when it
-  // shows selected but no figure input in amount card." #depAmount/
-  // #cardAmount are FRESH inputs every time this sheet opens (no value=
-  // carried over from before) -- but _depChosenAmount/_cardChosenAmount
-  // are plain module-level vars that never reset, so depositChipsHtml()
-  // below kept marking last time's chip .sel against an input that had
-  // gone back to empty. Reset both here, the same place _depMethod above
-  // already resets on every open, so the chips and the inputs start back
-  // in agreement instead of the chip alone remembering a stale pick.
   _depChosenAmount = 0;
-  _cardChosenAmount = 0; _usdtIntent = null;
-  // Owner: "let the registered number also appear as a default deposit
-  // number for mobile money" -- pre-filled, not locked: a deposit can
-  // genuinely come from a different mobile-money number than the one the
-  // account was registered with (a past round deliberately left this
-  // field blank for exactly that reason), so this is a starting point the
-  // member can still edit, not a forced value. localDigits() is the same
-  // parser phoneToEmail() uses -- it returns null for a stored phone that
-  // doesn't match this region's expected shape, so a malformed or
-  // legacy-format number never gets shoved into the field as if it were
-  // valid.
+  // The screens ask for no phone number: the payment prompt goes to the
+  // number the member signed up with (still the same field submitDeposit()
+  // reads and validates, now carried quietly).
   const defaultPhone = localDigits((STATE.account || {}).phone) || '';
-  // Tab row is built from whichever rails are actually on -- Mobile Money
-  // is always first/default and always present; USDT and Card each add
-  // their own tab only when the admin has enabled them, so a fresh deploy
-  // with neither on shows no tab row at all (byte-for-byte the same single
-  // Mobile Money form this sheet always was, same as before either rail
-  // existed).
-  const methodTabs = [['mm', 'Mobile Money']];
-  if (usdtOn) methodTabs.push(['usdt', 'USDT (TRC20)']);
-  if (cardOn) methodTabs.push(['card', 'Card']);
-  const tabsHtml = methodTabs.length > 1
-    ? `<div class="dep-method-tabs" id="depMethodRow">
-      ${methodTabs.map(([k, l]) => `<button type="button" data-dm="${k}" class="${k === 'mm' ? 'on' : ''}" onclick="selectDepMethod('${k}')">${l}</button>`).join('')}
-    </div>` : '';
-  openSheet('Recharge', `<div class="reveal-in" style="padding-top:18px;">
-    ${tabsHtml}
-    <div id="depMmPanel">
-    <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
-    <div class="dep-amt"><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncDepositQuickAmt()"></div>
-    <div class="dep-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
-
-    <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Payment Phone</span></div>
-    <div class="dep-phone">
-      <span class="prefix">${esc(dialPlus())}</span>
-      <input id="depPhone" type="tel" inputmode="numeric" placeholder="Your payment number (${esc(phoneHintBody())})" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
+  const min = Number(s.minDeposit) || 0;
+  openSheet('Deposit', `<div class="v-form">
+    <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
+    <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
+    <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="syncDepositQuickAmt()" autocomplete="off">
+    <input id="depPhone" type="hidden" value="${esc(defaultPhone)}">
+    <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
+    <div class="v-pays" id="depPays">
+      <button type="button" class="on" onclick="pickPayLabel(this)">PAY-A</button>
+      <button type="button" onclick="pickPayLabel(this)">PAY-B</button>
+      <button type="button" onclick="pickPayLabel(this)">PAY-C</button>
     </div>
-    <div class="dep-hint">Phone number must start with 0 and be ${localLen() + 1} digits</div>
-
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="submitDeposit()">Confirm Recharge</button>
-
-    <div class="dep-instr deposit-guide">
-      <h3>How to add funds</h3>
-      <ol class="deposit-steps">
-        <li><b>Choose your amount</b><span>Enter at least ${fmtUGX(s.minDeposit)} and the mobile money number to charge.</span></li>
-        <li><b>Approve on your phone</b><span>Tap Confirm Recharge, then approve the payment prompt using your mobile money PIN on your phone.</span></li>
-        <li><b>Follow the payment status</b><span>Wait for confirmation. This checks itself automatically. If money leaves your phone but the balance has not updated, keep the transaction reference and contact Customer Support.</span></li>
+    <button class="v-cta" id="depSubmitBtn" onclick="submitDeposit()">Confirm Deposit</button>
+    <div class="v-info">
+      <h3>Deposit Instructions</h3>
+      <ol>
+        <li>Recharge time: 7*24 hours.</li>
+        <li>If deposit is not received, please contact TG customer service.</li>
+        <li>Minimum deposit amount: ${esc(cur())}${min}</li>
+        <li>Please do not save old account recharge.</li>
       </ol>
-    </div>
-    </div>
-
-    <div id="depUsdtPanel" style="display:none;">
-      <div class="dep-sec"><span class="bar"></span><span>Amount (USDT)</span></div>
-      <div class="dep-amt"><input id="usdtAmt" type="number" step="0.01" inputmode="decimal" placeholder="0" oninput="updateUsdtConversion()"></div>
-      <div class="dep-hint">1 USDT = ${fmtUGX(Number(s.usdtRate) || 0)} &middot; you will receive <b id="usdtUgxPreview">${fmtUGX(0)}</b></div>
-
-      <button class="primary-button" id="usdtIntentBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0 8px;" onclick="doUsdtIntent()">Get payment amount</button>
-
-      <div id="usdtPayBox" style="display:none;">
-        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Send exactly this amount</span></div>
-        <div class="dep-phone" style="height:auto;padding:12px 0;">
-          <span id="usdtExactDisplay" style="font-size:22px;font-weight:800;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;flex:1;"></span>
-          <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtExact()">Copy</button>
-        </div>
-        <div class="dep-hint">Send every digit, exactly. A different amount cannot be credited automatically. <span id="usdtExpiryHint"></span></div>
-
-        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>To this address (TRC20 only)</span></div>
-        <div class="dep-phone" style="height:auto;padding:12px 0;">
-          <span id="usdtAddrDisplay" style="word-break:break-all;font-size:12.5px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;letter-spacing:.2px;flex:1;">${esc(s.usdtWalletAddress || '')}</span>
-          <button type="button" class="secondary-button" style="height:34px;padding:0 14px;font-size:12.5px;flex-shrink:0;" onclick="copyUsdtAddress()">Copy</button>
-        </div>
-        <div class="dep-hint">TRC20 (Tron) network only &mdash; any other network permanently loses the funds.</div>
-
-        <div class="dep-sec" style="margin-top:24px;"><span class="bar"></span><span>Transaction Hash (TXID)</span></div>
-        <div class="dep-phone">
-          <input id="usdtTxid" type="text" placeholder="Paste your transaction hash" style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;">
-        </div>
-
-        <button class="primary-button" id="usdtGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doUsdtDeposit()">Submit USDT Payment</button>
-      </div>
-
-      <div class="dep-instr deposit-guide">
-        <h3>How USDT recharges work</h3>
-        <ol class="deposit-steps">
-          <li><b>Get your payment amount</b><span>Minimum ${fmtUGX(s.minDeposit)}${Number(s.usdtRate) > 0 ? ` (about ${(Number(s.minDeposit) / Number(s.usdtRate)).toFixed(2)} USDT)` : ''}. Enter it and tap Get payment amount. You are given an exact amount with extra digits that belong only to you.</span></li>
-          <li><b>Send exactly that amount</b><span>On the TRC20 (Tron) network only, to the address shown. Then copy the TXID from your wallet app, paste it here and tap Submit.</span></li>
-          <li><b>Wait for verification</b><span>Most payments confirm within a minute, automatically. If yours is still pending, reopen Transaction Statement later to check.</span></li>
-        </ol>
-      </div>
-    </div>
-
-    <div id="depCardPanel" style="display:none;">
-      <div class="dep-sec"><span class="bar"></span><span>Select Amount</span></div>
-      <div class="dep-amt"><input id="cardAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minDeposit) || 0}" oninput="syncCardQuickAmt()"></div>
-      <div class="dep-chips" id="cardChips">${depositChipsHtml(s, 'cardAmount')}</div>
-
-      <button class="primary-button" id="cardGoBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:22px 0;" onclick="doCardDeposit()">Pay with Card</button>
-
-      <div class="dep-instr deposit-guide">
-        <h3>How card payments work</h3>
-        <ol class="deposit-steps">
-          <li><b>Enter your amount</b><span>At least ${fmtUGX(s.minDeposit)}.</span></li>
-          <li><b>Pay on the secure card page</b><span>Tap Pay with Card and enter your card details on MarzPay's own payment page.</span></li>
-          <li><b>Return to the app</b><span>Your balance updates automatically once the payment is confirmed.</span></li>
-        </ol>
-      </div>
     </div>
   </div>`);
 }
+// PAY-A / PAY-B / PAY-C are one gateway, three labels: the choice is only
+// the highlight, nothing else reads it.
+window.pickPayLabel = function(btn){
+  const box = $('depPays');
+  if (box) box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+};
 var _cardChosenAmount = 0;
 window.syncCardQuickAmt = function(){
   const val = parseMoneyInput(($('cardAmount') || {}).value);
@@ -5815,7 +5744,7 @@ window.doUsdtDeposit = async function(){
   btn.disabled = true; btn.textContent = 'Checking payment…';
   const r = await post('/deposit/usdt/submit', { intentId: _usdtIntent.id, txid: txid });
   btn.disabled = false; btn.textContent = label;
-  if (r.status !== 'success') return notify(r.message || 'Could not submit your recharge');
+  if (r.status !== 'success') return notify(r.message || 'Could not submit your deposit');
 
   if (r.state === 'rejected') {
     // The hash stays as typed so the member can see what was declined.
@@ -5879,7 +5808,7 @@ function depositChipsHtml(s, inputId){
     .map(p => Number(p.price) || 0)
     .filter(p => p >= (Number(s.minDeposit) || 0))))
     .sort((a, b) => a - b)
-    .slice(0, 5);
+    .slice(0, 6);
   const chosen = _chosenAmountFor(inputId);
   return amounts.map(a =>
     `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${Number(a).toLocaleString('en-US')}</button>`
@@ -6009,7 +5938,7 @@ function setDepositStatusPending(amount, phone, network){
   $('depStatusIcon').className = 'dep-status-icon';
   // Dedicated Soda rings replace the payment provider's old loader artwork.
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
-  $('depStatusTitle').textContent = 'Processing your recharge';
+  $('depStatusTitle').textContent = 'Processing your deposit';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
   const displayPhone = cleanPhone(phone) || (dialPlus() + String(phone || '').replace(/\D/g, ''));
@@ -6039,7 +5968,7 @@ function setDepositStatusPending(amount, phone, network){
     '<ol class="pay-steps">'
     + '<li>A payment request for ' + esc(fmtUGX(amount)) + ' has been sent to ' + esc(displayPhone) + '.</li>'
     + '<li>Check your phone for the payment prompt.</li>'
-    + '<li>Approve the payment to complete your recharge.</li>'
+    + '<li>Approve the payment to complete your deposit.</li>'
     + '<li>Your balance will be updated automatically once the payment is confirmed.</li>'
     + '</ol>'
     // Kept from the earlier round, and deliberately NOT dropped when the four
@@ -6101,7 +6030,7 @@ function fireConfetti(){
     window.addEventListener('resize', resize);
     // Amber/red/gold, plus white -- Soda's own palette, not generic
     // party colours, so this still looks like it belongs to the app.
-    const COLORS = ['#e30613', '#f5a000', '#ffb000', '#1a7a3e', '#2f6fd6', '#ffffff'];
+    const COLORS = ['#1457e8', '#f5a000', '#ffb000', '#1a7a3e', '#2f6fd6', '#ffffff'];
     const particles = [];
     function makePiece(x, y, vx, vy, burst){
       return {
@@ -6172,7 +6101,7 @@ function setDepositStatusSuccess(){
   // brandName(), not the literal: the app's name is admin-settable.
   const amountLine = _depPendingAmount
     ? 'Payment received — ' + esc(fmtUGX(_depPendingAmount)) + ' has been added to your wallet.'
-    : 'Payment received — your recharge has been added to your ' + esc(brandName()) + ' wallet.';
+    : 'Payment received — your deposit has been added to your ' + esc(brandName()) + ' wallet.';
   $('depStatusBody').innerHTML = '<p>' + amountLine + '</p><p class="pay-note" id="depRedirectCountdown"></p>';
   // Close doubles as "Back to Home" here -- available immediately so a
   // member who does not want to wait the 5 seconds out can leave right
@@ -6219,7 +6148,7 @@ function setDepositStatusFailed(msg){
   // `msg` is server-supplied on the normal path; this fallback only fires
   // for a purely client-side failure that never reached the server at all.
   $('depStatusBody').innerHTML = '<p>' + esc(msg
-    || 'This recharge did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
+    || 'This deposit did not go through. This can happen if you did not approve the prompt in time, cancelled it, or had insufficient funds. Your ' + brandName() + ' balance has not changed.') + '</p>';
   // Undoes setDepositStatusSuccess()'s own "Back to Home" relabel -- this
   // button means plain Close here, on a modal a later deposit attempt can
   // reuse without a fresh page load in between.
@@ -6267,7 +6196,7 @@ window.submitDeposit = async function(){
   // other two.
   const s = STATE.settings || {};
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
-  if (!phone) return notify('Enter the mobile money number to charge.');
+  if (!phone) return notify('Your account has no mobile money number to charge. Contact support.');
   submitBtn.disabled = true; submitBtn.textContent = 'Sending request…';
   let r;
   try {
@@ -6280,15 +6209,15 @@ window.submitDeposit = async function(){
     // match whatever submitBtn actually reads at rest (see the sheet's own
     // button above), or a member whose recharge failed is left looking at a
     // button that silently renamed itself.
-    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Recharge';
+    submitBtn.disabled = false; submitBtn.textContent = 'Confirm Deposit';
   }
   if (r && r.stale) return;
-  if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start recharge');
+  if (!r || r.status !== 'success') return notify((r && r.message) || 'Could not start deposit');
   // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
   refreshTransactionsCache().catch(() => {});
-  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Recharge') closeSheet({ fromAction: true });
+  if ($('depSubmitBtn') === submitBtn && _openSheetTitle === 'Deposit') closeSheet({ fromAction: true });
   openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
 };
@@ -6429,14 +6358,14 @@ function witWalletBlockHtml(s){
   const w = witSelectedWallet();
   const switcher = accounts.length > 1 ? `
     <div class="prov-pick" id="witWalletPick">
-      <button class="btn-bind" type="button" style="margin:0 0 10px;" onclick="toggleWitWalletPicker()">Switch wallet</button>
+      <button class="v-bind" type="button" style="margin:0 0 10px;" onclick="toggleWitWalletPicker()">Switch wallet</button>
       <div class="prov-list" id="witWalletList">
         ${accounts.map(a => `<button type="button" class="prov-opt${w && a.id === w.id ? ' on' : ''}" onclick="selectWitWallet('${esc(a.id)}')">${esc(walletDestDisplay(a))} — ${esc(String(a.network || '').replace(/\s*(Mobile )?Money$/i, ''))}</button>`).join('')}
       </div>
     </div>` : '';
   return `<div id="witWallet">${walletCardHtml(w)}</div>
     ${switcher}
-    <button id="witBindBtn" class="btn-bind" type="button" onclick="openWalletSheet()">${accounts.length ? 'Manage Wallets' : 'Bind Wallet'}</button>`;
+    <button id="witBindBtn" class="v-bind" type="button" onclick="openWalletSheet()">Bind Wallet</button>`;
 }
 window.toggleWitWalletPicker = function(){
   const box = $('witWalletPick');
@@ -6460,56 +6389,46 @@ document.addEventListener('click', function(e){
 // trade-password field, the fee line, and the instruction card.
 function paintWithdrawSheet(s){
   const balance = (STATE.account && STATE.account.walletBalance) || 0;
-  const w = witSelectedWallet();
   const fee = withdrawalFeePct(s);
-  $('sheetBody').innerHTML = `<div class="reveal-in" style="padding-top:18px;">
+  const win = withdrawWindow(s);
+  const secs = v => v ? v + ':00' : '';
+  const min = Number(s.minWithdraw) || 0, max = Number(s.maxWithdraw) || 0, mult = Number(s.withdrawMultiple) || 0;
+  const perDay = Number(s.maxWithdrawalsPerDay) || 0;
+  $('sheetBody').innerHTML = `<div class="v-form">
+    <div class="v-bal"><span>AVAILABLE BALANCE</span><b>${esc(vMoney2(balance))}</b></div>
+    <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="syncWithdrawReceiveAmt()" autocomplete="off"></div>
+    <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
-
-    <div class="wit-bal">
-      <div class="lbl">Available Balance</div>
-      <div class="val">${fmtUGX(balance)}</div>
-    </div>
-    <div class="wit-amt">
-      <span>${esc(cur())}</span>
-      <input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${Number(s.minWithdraw) || 0}" oninput="syncWithdrawReceiveAmt()">
-    </div>
-
-    <div class="pw-head"><span class="bar"></span><span>Trade Password</span></div>
-    ${pwFieldHtml('witPin', 'Enter trade password', true)}
-
-    <div class="wit-fee">Fee: ${fee}%</div>
-    <div class="form-hint" id="witReceiveHint" style="margin:0 0 8px;display:none;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
-
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;height:54px;padding:0;font-size:17px;margin:14px 0 22px;" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
-
-    <div class="wit-instr withdrawal-guide">
-      <h3>Before you withdraw</h3>
-      <dl>
-        <div><dt>Receiving account</dt><dd>Check the name and ${w && !isMobileMoneyNetwork(w.network) ? 'bank account number' : 'mobile money number'} above. Your payout goes to this linked wallet.</dd></div>
-        <div><dt>Amount to request</dt><dd>Minimum ${fmtUGX(s.minWithdraw)}${Number(s.maxWithdraw) > 0 ? `; maximum ${fmtUGX(s.maxWithdraw)}` : ''}. Review the fee and the amount you will receive before confirming.${Number(s.withdrawMultiple) > 0 ? ` Use a multiple of ${fmtUGX(s.withdrawMultiple)}.` : ''}</dd></div>
-        <div><dt>Availability</dt><dd>${withdrawHoursLine(s)}${Number(s.maxWithdrawalsPerDay) > 0 ? ` Up to ${Number(s.maxWithdrawalsPerDay)} requests per day.` : ''}</dd></div>
-        <div><dt>After submitting</dt><dd>Follow the payout in Transaction Statement → Withdrawals. Wait for a pending request to finish before submitting another.</dd></div>
-      </dl>
+    <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
+    <div class="v-pin"><input id="witPin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="one-time-code"><button type="button" onclick="toggleWitPin(this)" aria-label="Show or hide">${VI.eye}</button></div>
+    <div class="v-fee">Fee: ${fee}%</div>
+    <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
+    <div class="v-info">
+      <h3>Withdrawal Instructions</h3>
+      <ol>
+        <li>Fee: ${fee}%</li>
+        <li>Withdrawal amounts should be between ${min}${max ? ' and ' + max : ' and your available balance'}${mult ? ', in multiples of ' + mult : ''}.</li>
+        <li>${perDay ? 'You can make up to ' + perDay + ' withdrawals per day.' : 'One cash-out at a time. Wait for a pending request to finish before the next.'}</li>
+        <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}</li>
+      </ol>
     </div>
   </div>`;
 }
+window.toggleWitPin = function(btn){
+  const el = $('witPin');
+  if (!el) return;
+  const show = el.type === 'password';
+  el.type = show ? 'text' : 'password';
+  btn.innerHTML = show ? VI.eyeOff : VI.eye;
+};
 function withdrawalFeePct(s){
   const value = Number(s && s.withdrawFeePct);
   return s && s.withdrawFeePct != null && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 15;
 }
 window.syncWithdrawReceiveAmt = function(){
-  const el = $('witReceiveAmt');
-  if (!el) return;
-  const s = STATE.settings || {};
-  const amount = parseMoneyInput($('witAmount').value);
-  const fee = Math.round(amount * withdrawalFeePct(s) / 100);
-  const net = Math.max(0, amount - fee);
-  el.textContent = fmtUGX(net);
-  // Hidden until there is an amount, so the resting screen shows just
-  // "Fee: 15%" like the mockup, and the net figure appears exactly when it
-  // becomes meaningful.
-  const hint = $('witReceiveHint');
-  if (hint) hint.style.display = amount > 0 ? '' : 'none';
+  const amount = parseMoneyInput(($('witAmount') || {}).value);
+  const btn = $('witSubmitBtn');
+  if (btn) btn.classList.toggle('fade', !(amount > 0));
 };
 // Transaction Statement (openBalanceRecordSheet()) is cache-first: it paints from
 // whatever STATE.transactions already holds, and per Round 55's own fix,
@@ -6654,7 +6573,7 @@ window.openInvestConfirm = function(tierKey, btn){
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
       if (short) {
         closeConfirm();
-        notify('Insufficient balance, redirecting to recharge…', () => openDepositSheet());
+        notify('Insufficient balance, redirecting to deposit...', () => openDepositSheet());
         setTimeout(() => { if (_notifyOnClose) closeNotify(); }, 1800);
         return;
       }
@@ -6663,7 +6582,7 @@ window.openInvestConfirm = function(tierKey, btn){
     }
     closeConfirm();
     showPage('home');
-    notify(`${p.name} is now running. See it in My Assets below Daily Check-in.`);
+    notify(`${p.name} is now running. See it under Income.`);
   };
   $('confirmBg').classList.add('show');
   lockBodyScroll();

@@ -32,7 +32,7 @@ from chipz_test_api import API
 STEPS = [
     "A payment request for UGX 20,000 has been sent to +256742730382.",
     "Check your phone for the payment prompt.",
-    "Approve the payment to complete your recharge.",
+    "Approve the payment to complete your deposit.",
     "Your balance will be updated automatically once the payment is confirmed.",
 ]
 # The wording being replaced. None of it may survive anywhere on the page --
