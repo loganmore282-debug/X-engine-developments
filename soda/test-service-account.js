@@ -152,14 +152,13 @@ console.log('\n— it still refuses to boot, which is the point —');
   ck(initAt > callAt, 'and does it BEFORE initialising Firebase');
   ck(endAt > initAt, 'and the auth block ends where the Mongo block begins');
   if (callAt > -1 && initAt > callAt && endAt > initAt) {
-    ck(/process\.exit\(1\)/.test(src.slice(callAt, initAt)),
-       'a fatal verdict exits the process rather than carrying on');
-    // Bounded to THIS block, not the rest of the file. Searched file-wide, the
-    // regex matched an unrelated `catch (e)` 682,867 characters further on --
-    // beside the MONGODB_URI exit -- so deleting this block's own exit went
-    // undetected. Check inside the block, not across the file.
-    ck(/catch \(e\) \{[\s\S]{0,400}?process\.exit\(1\)/.test(src.slice(initAt, endAt)),
-       'and a cert() rejection exits too, instead of throwing an unhandled error');
+    // Soda does not use Firebase for sign-in. The service account is only for
+    // the optional admin push, so a bad or missing one must NOT stop the server:
+    // it only disables push (a warning), never exits.
+    ck(!/process\.exit\(1\)/.test(src.slice(callAt - 600, endAt)),
+       'a missing or invalid service account no longer exits the server (push is optional)');
+    ck(/pushAdminReady = true/.test(src.slice(callAt - 600, endAt)) && /Admin push \(FCM\) disabled/.test(src),
+       'it only turns the admin push off, with a warning');
   }
   ck(!/FIREBASE_SERVICE_ACCOUNT \|\| '\{\}'/.test(src),
      "the `|| '{}'` that caused all this is gone");

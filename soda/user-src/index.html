@@ -3065,45 +3065,72 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
 </div>
 
 <script type="module">
-  import { initializeApp, getApps }
-    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut,
-           updatePassword, reauthenticateWithCredential, EmailAuthProvider, setPersistence, browserSessionPersistence }
-    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
-  const firebaseConfig = {
-    // PLACEHOLDER -- this is NOT a real Firebase project. It must be replaced
-    // with Soda's own project's web config before anything can sign in.
-    // Deliberately broken rather than left pointing at Soda's real project:
-    // a copy-pasted deploy must fail loudly here, not authenticate Soda's
-    // members into Soda's live user pool. See soda/CLAUDE.md.
-    apiKey: "AIzaSyCOij0DRicI7MKDEibIlFfm0n3dl_faOnM",
-    authDomain: "chnpetrol.firebaseapp.com",
-    projectId: "chnpetrol",
-    storageBucket: "chnpetrol.firebasestorage.app",
-    messagingSenderId: "969724557876",
-    appId: "1:969724557876:web:553284e329bdfd146a2861",
-    measurementId: "G-HXG8ZVCMWS"
+  // Soda's own sign-in. No Firebase: passwords and sessions live in our
+  // database and this talks to /auth/* on our server. It keeps the small
+  // surface the app was written against (window.fbSignIn / fbCreateUser /
+  // fbSignOut / fbChangePassword / fbAuth.currentUser and the 'snow-auth'
+  // event), so the rest of the app did not have to change. The origin below is
+  // rewritten by set-backend-url.js together with the app's other copies.
+  const SODA_AUTH_API = 'https://mysoda.p-colasoda.com';
+  const KEY = 'soda_auth_session';
+  // sessionStorage on purpose: closing the tab ends the login, exactly as the
+  // previous sign-in did (browserSessionPersistence).
+  const read = () => {
+    try {
+      const s = JSON.parse(sessionStorage.getItem(KEY));
+      return s && s.token && s.uid && Number(s.expiresAt) > Date.now() ? s : null;
+    } catch (_) { return null; }
   };
-  const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  await setPersistence(auth, browserSessionPersistence);
-
-  window.fbCreateUser = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
-  window.fbSignIn     = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
-  window.fbSignOut    = () => signOut(auth);
+  const write = s => { try { sessionStorage.setItem(KEY, JSON.stringify(s)); } catch (_) {} };
+  const wipe = () => { try { sessionStorage.removeItem(KEY); } catch (_) {} };
+  const CODES = {
+    INVALID_CREDENTIAL: 'auth/invalid-credential', TOO_MANY_ATTEMPTS: 'auth/too-many-requests', TOO_MANY_REQUESTS: 'auth/too-many-requests',
+    PHONE_IN_USE: 'auth/email-already-in-use', WEAK_PASSWORD: 'auth/weak-password', INVALID_PHONE: 'auth/invalid-email',
+  };
+  async function call(path, body, token) {
+    let resp, data;
+    try {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 20000);
+      try {
+        resp = await fetch(SODA_AUTH_API + path, { method: 'POST', signal: ctl.signal,
+          headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}),
+          body: JSON.stringify(body || {}) });
+        data = await resp.json().catch(() => ({}));
+      } finally { clearTimeout(timer); }
+    } catch (_) { throw { code: 'auth/network-request-failed', message: 'network' }; }
+    if (resp.ok && data && data.status === 'success') return data;
+    const code = CODES[data && data.code] || (resp.status === 429 ? 'auth/too-many-requests' : resp.status >= 500 || resp.status === 503 ? 'auth/internal-error' : 'auth/invalid-credential');
+    throw { code, message: (data && data.message) || 'Request failed' };
+  }
+  const phoneOf = email => String(email || '').split('@')[0];
+  // The shape the app reads off a signed-in user (it was Firebase's User).
+  const makeUser = s => ({
+    uid: s.uid, email: s.email || '',
+    getIdToken: async () => (read() || s).token,
+    getIdTokenResult: async () => ({ claims: { auth_time: (read() || s).authTime } }),
+  });
+  const auth = { currentUser: null };
+  const announce = user => { auth.currentUser = user; window.dispatchEvent(new CustomEvent('snow-auth', { detail: user })); };
+  const open = (data, email) => {
+    const s = { token: data.token, uid: data.uid, authTime: data.authTime, expiresAt: data.expiresAt, email };
+    write(s); const u = makeUser(s); announce(u); return { user: u };
+  };
+  window.fbCreateUser = async (email, pass) => open(await call('/auth/signup', { phone: phoneOf(email), password: pass }), email);
+  window.fbSignIn     = async (email, pass) => open(await call('/auth/login', { phone: phoneOf(email), password: pass }), email);
+  window.fbSignOut    = async () => { wipe(); announce(null); };
   window.fbAuth       = auth;
-  // Change Login Password (Account -> Login Password). Firebase requires a
-  // recent sign-in before updatePassword(), so the old password the member
-  // types is used to reauthenticate first -- that also doubles as the
-  // "is this really you" check, which is why the screen asks for it.
+  // Change Login Password (Account -> Login Password): the server checks the
+  // current password itself and ends the member's other sessions.
   window.fbChangePassword = async (email, oldPass, newPass) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error('not-signed-in');
-    await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, oldPass));
-    await updatePassword(user, newPass);
+    const s = read();
+    if (!s) throw new Error('not-signed-in');
+    await call('/auth/password/change', { oldPassword: oldPass, newPassword: newPass }, s.token);
   };
-  onAuthStateChanged(auth, (user) => { window.dispatchEvent(new CustomEvent('snow-auth', { detail: user })); });
+  // Like onAuthStateChanged: say once, at startup, who (if anyone) is signed
+  // in. A stored session is only "signed in" until the server says otherwise
+  // (its first request answers 401 if it was ended or timed out).
+  const restored = read();
+  if (restored) announce(makeUser(restored)); else { wipe(); announce(null); }
 </script>
 
 <script data-nx-core></script>

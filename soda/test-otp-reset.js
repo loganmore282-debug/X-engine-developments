@@ -14,9 +14,9 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   let settings = { otpVerificationEnabled: false };
   let ticketOk = false, counted = 0;
   const db = { collection: () => ({ where() { return this; }, limit() { return this; }, get: async () => ({ docs: [{ data: () => ({ registrationDone: true }), id: 'u1' }], empty: false }) }) };
-  new Function('app', 'db', 'OTP_PURPOSES', 'getSettings', 'cleanPhone', 'badPhoneMessage', 'verifyAuth', 'MARZSMS_KEY', 'otpCheckAndBumpDailyLimit', 'consumeOtpTicket', 'admin', 'logSecurityEvent', 'console',
+  new Function('app', 'db', 'OTP_PURPOSES', 'getSettings', 'cleanPhone', 'badPhoneMessage', 'verifyAuth', 'MARZSMS_KEY', 'otpCheckAndBumpDailyLimit', 'consumeOtpTicket', 'setMemberPassword', 'logSecurityEvent', 'console',
     sendSrc + '\n' + confirmSrc)(app, db, new Set(['register', 'reset', 'bank']), async () => settings, p => String(p || '').replace(/\D/g, ''), () => 'bad phone', async () => null,
-    '', async () => { counted++; return null; }, async () => ticketOk, { auth: () => ({ updateUser: async () => {} }) }, () => {}, { error() {} });
+    '', async () => { counted++; return null; }, async () => ticketOk, async () => {}, () => {}, { error() {} });
   const send = async purpose => { const r = res(); await handlers['/auth/otp/send']({ body: { purpose, phone: '0770000001' }, headers: {} }, r); return r; };
   // OTP off: registration and bank are refused as turned off...
   let r = await send('register'); ok(r.code === 503 && r.body.code === 'OTP_DISABLED', 'register: codes are off');

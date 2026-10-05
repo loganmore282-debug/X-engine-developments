@@ -63,6 +63,7 @@ const SITES = [
     [/fetch\('https?:\/\/[^']*'\+path/g, `fetch('${o}'+path`],
   ]],
   ['user-src/index.html', o => [
+    [/const SODA_AUTH_API = '[^']*'/g, `const SODA_AUTH_API = '${o}'`],
     [/(connect-src 'self' )https?:\/\/[^\s;]+/g, `$1${o}`],
     [/(<link rel="(?:icon|apple-touch-icon)" href=")https?:\/\/[^/]+(\/public\/)/g, `$1${o}$2`],
     // og:image/twitter:image REMOVED (see user-src/index.html's own
@@ -101,7 +102,7 @@ function originsIn(text) {
                     /href="(https?:\/\/[^/]+)\/public\//g,
                     /content="(https?:\/\/[^/]+)\/public\//g,
                     /"(https?:\/\/[^/]+)\/public\/app-icon-/g,
-                    /const API_ORIGIN = '([^']*)'/g,
+                    /const API_ORIGIN = '([^']*)'/g, /const SODA_AUTH_API = '([^']*)'/g,
                     /const BRAND_ICON = '(https?:\/\/[^/]+)\/public\//g,
                     /process\.env\.SODA_API_ORIGIN \|\| '([^']*)'/g,
                     /fetch\('(https?:\/\/[^']*)'\+path/g]) {

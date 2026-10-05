@@ -151,6 +151,8 @@ async function ensureIndexes() {
     // send-money one immediately above.
     ['withdrawals',     { status: 1, isBankTransfer: 1, marzReference: 1, createdAt: 1 }],
     ['pendingDeposits', { userId: 1 }],
+    ['authAccounts', { uid: 1 }], // member login: lookup by uid (password change/reset, registration)
+    ['memberSessions', { uid: 1 }], // revoke every session of one member
     ['usdtIntents', { userId: 1, status: 1 }], // /deposit/usdt/intent: a member's open payment requests
     ['pendingDeposits', { marzReference: 1 }],
     ['pendingDeposits', { status: 1 }],

@@ -383,22 +383,19 @@ function stripMongoOperators(obj, depth = 0) {
 }
 app.use((req, _res, next) => { try { stripMongoOperators(req.body); } catch (_) {} next(); });
 
-// ── FIREBASE AUTH (auth only — data lives in MongoDB) ──
-// The validation lives in ./service-account so a test can require it; see that
-// file for why each failure state gets its own sentence. Refusing to boot is
-// right for every one of them: a server with no way to verify a member's ID
-// token must not serve requests.
-const { loadServiceAccount } = require('./service-account');
-const { sa: serviceAccount, fatal: serviceAccountFatal } =
-  loadServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
-if (serviceAccountFatal) { console.error(serviceAccountFatal); process.exit(1); }
-try {
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-} catch (e) {
-  // Reached when every field is present and one of them is wrong -- most often
-  // a private_key whose line breaks did not survive the paste.
-  console.error('Firebase rejected the service account: ' + e.message);
-  process.exit(1);
+// ── FIREBASE: NOT USED FOR SIGN-IN ANY MORE ──
+// Member login is our own (see "MEMBER LOGIN" below): passwords and sessions
+// live in MongoDB. firebase-admin is kept ONLY for the admin push alerts (FCM)
+// until Web Push replaces them, and only when a service account is supplied --
+// the server starts and members sign in with no Firebase at all.
+let pushAdminReady = false;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    const { sa: pushSa, fatal: pushFatal } = require('./service-account').loadServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
+    if (pushFatal) throw new Error(pushFatal);
+    admin.initializeApp({ credential: admin.credential.cert(pushSa) });
+    pushAdminReady = true;
+  } catch (e) { console.warn('Admin push (FCM) disabled:', e.message); }
 }
 
 // ── MONGODB ──
@@ -1726,87 +1723,27 @@ function withLock2(keyA, keyB, fn) {
   return withLock(first, () => withLock(second, fn));
 }
 
-// Verifies the caller's Firebase token ONCE per request and remembers the
-// answer on the request object. The region middleware needs the caller's uid
-// before any handler runs (to pick the member's own region), and every
-// handler then asks again -- without this cache that would be two network
-// round-trips to Firebase, and a revoked-token check, on every single
-// authenticated call. The cached value includes the failure: a bad token
-// stays bad for the life of the request.
-// ── WHY A FAILED CHECK IS SPLIT INTO "INVALID" AND "COULD NOT CHECK" ──
-// verifyIdToken(token, true) asks Google whether the token was revoked, so it
-// is a network call on every request -- and the app polls every second. When
-// that call failed for ANY reason (a dropped connection to Google, a quota
-// blip, a Mongo hiccup in checkMember) the request used to be answered 401,
-// and a 401 makes the app end the member's session and send them back to the
-// login screen with "your session was rejected". Our own infrastructure
-// stuttering must not log a member out. So:
-//   - a token Google says is bad (expired, revoked, malformed, disabled user)
-//     stays a plain 401, exactly as before;
-//   - anything that looks transient is retried once, then answered 503
-//     AUTH_UNAVAILABLE (see the response hook below), which the app treats as
-//     "try again", not "you are logged out";
-//   - a verified token is remembered for a few seconds, which collapses the
-//     1-second poll's three requests into one Google call and removes most of
-//     the exposure. Our own logout/idle revocation lives in checkMember()
-//     (Mongo), which still runs on EVERY request, so signing out is still
-//     immediate; only a Google-side revocation can lag, by at most this TTL.
-const AUTH_CACHE_TTL_MS = 15 * 1000;
-const AUTH_CACHE_MAX = 2000;
-const _authTokenCache = new Map();
-const _TRANSIENT_AUTH_CODES = new Set([
-  'app/network-error', 'app/network-timeout', 'auth/internal-error', 'auth/network-request-failed',
-  'auth/service-unavailable', 'auth/quota-exceeded', 'auth/too-many-requests',
-]);
-function isTransientAuthError(e) {
-  const code = String((e && (e.code || (e.errorInfo && e.errorInfo.code))) || '');
-  if (_TRANSIENT_AUTH_CODES.has(code)) return true;
-  if (/^(ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EPIPE|ESOCKETTIMEDOUT|ECONNABORTED)$/.test(code)) return true;
-  const msg = String((e && e.message) || '');
-  // Default is "not transient" (a plain 401, today's behaviour): only
-  // something that clearly describes the connection, and says nothing about
-  // the token itself, is treated as a reason to retry.
-  return /network|timed? ?out|socket hang up|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|fetch failed|temporarily unavailable|service unavailable/i.test(msg)
-    && !/token|signature|expired|revoked|audience|issuer|malformed|decode/i.test(msg);
-}
-async function _verifyFirebaseToken(token) {
-  const now = Date.now();
-  const hit = _authTokenCache.get(token);
-  if (hit && hit.until > now) return { decoded: hit.decoded };
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const decoded = await admin.auth().verifyIdToken(token, true); // checkRevoked
-      if (_authTokenCache.size >= AUTH_CACHE_MAX) {
-        for (const [k, v] of _authTokenCache) if (v.until <= now) _authTokenCache.delete(k);
-        if (_authTokenCache.size >= AUTH_CACHE_MAX) _authTokenCache.clear();
-      }
-      _authTokenCache.set(token, { decoded, until: Math.min(now + AUTH_CACHE_TTL_MS, (Number(decoded.exp) || 0) * 1000 || now + AUTH_CACHE_TTL_MS) });
-      return { decoded };
-    } catch (e) {
-      if (!isTransientAuthError(e)) return { decoded: null };
-      if (attempt === 0) await new Promise(r => setTimeout(r, 150));
-    }
-  }
-  return { decoded: null, transient: true };
-}
+// Verifies the caller's login token ONCE per request and remembers the answer
+// on the request object (the region middleware needs the member's uid before
+// any handler runs, and every handler then asks again).
+//
+// Our own tokens: the app sends the random token it was given at login; the
+// server looks up its SHA-256 in `memberSessions` (see session-policy.js). A
+// token that is unknown, revoked, idle too long or past 8 hours is a plain
+// 401. If the session store itself cannot be read, that says nothing about the
+// member, so the request is flagged and answered 503 AUTH_UNAVAILABLE (see the
+// response hook above) -- the app reads that as "try again", never "you are
+// logged out".
 async function _decodeAuth(req) {
   if (req && '_authDecoded' in req) return req._authDecoded;
   const header = (req && req.headers.authorization) || '';
   let decoded = null;
   if (header.startsWith('Bearer ')) {
-    const verified = await _verifyFirebaseToken(header.slice(7));
-    decoded = verified.decoded;
-    if (verified.transient && req) req._authTransient = true;
-    if (decoded) {
-      try {
-        if (!(await sessionPolicy.checkMember(db, decoded, req.path === '/auth/session/activity'))) decoded = null;
-      } catch (e) {
-        // The session store could not be read: that says nothing about the
-        // member, so it must not read as "your session is invalid".
-        console.error('Session check failed:', e.message);
-        decoded = null;
-        if (req) req._authTransient = true;
-      }
+    try { decoded = await sessionPolicy.checkMemberSession(db, header.slice(7), req.path === '/auth/session/activity'); }
+    catch (e) {
+      console.error('Session check failed:', e.message);
+      decoded = null;
+      if (req) req._authTransient = true;
     }
   }
   if (req) { try { req._authDecoded = decoded; } catch (_) {} }
@@ -1816,21 +1753,12 @@ async function verifyAuth(req) {
   const decoded = await _decodeAuth(req);
   return decoded ? decoded.uid : null;
 }
+// `phone` is the phone number the account was created with (kept on the
+// session), so /register and /account/create-profile never trust a phone the
+// caller types in.
 async function verifyAuthWithEmail(req) {
   const decoded = await _decodeAuth(req);
-  return decoded ? { uid: decoded.uid, email: decoded.email || '' } : null;
-}
-// Prefers the phone derivable from the caller's OWN verified Firebase email
-// over the client-supplied body value — an authenticated caller can't label
-// their own profile with a phone number unrelated to the account they
-// actually signed up with.
-function phoneFromVerifiedEmail(email, bodyPhone) {
-  const address = String(email || '').toLowerCase();
-  const derived = cleanPhone(address.split('@')[0]);
-  if (!derived) return null;
-  const allowed = [phoneToEmail(derived)];
-  if (regionUsesBareLocal()) allowed.push(derived.replace(/\D/g, '') + '@soda-platform.com');
-  return allowed.includes(address) ? derived : null;
+  return decoded ? { uid: decoded.uid, phone: cleanPhone(decoded.phone || '') || null, key: decoded.key } : null;
 }
 function paymentAmount(value) {
   if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value))) return NaN;
@@ -1885,6 +1813,7 @@ const ADMIN_PUSH_HEADERS = { Urgency: 'high', TTL: '7200' };
 const PUSH_RETIRED_GRACE_MS = 48 * 60 * 60 * 1000;
 function pushRetiredExpired(t) { return !!t.retiredAt && Date.now() - tsMillis(t.retiredAt) > PUSH_RETIRED_GRACE_MS; }
 async function sendAdminPush(title, body, data = {}, opts = {}) {
+  if (typeof pushAdminReady !== 'undefined' && !pushAdminReady) return; // admin push needs its own setup (see the FIREBASE note near the top)
   try {
     const all = await db.collection('adminPushTokens').get();
     if (all.empty) return;
@@ -3800,7 +3729,7 @@ app.post('/account/create-profile', async (req, res) => {
   const auth = await verifyAuthWithEmail(req);
   if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = auth.uid;
-  const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
+  const phone = auth.phone;
   if (!phone) return res.status(400).json({ status: 'error', message: 'Sign in with your Soda phone account.' });
   try {
     // Locked on the same 'reg:'+userId key as registration itself -- an
@@ -4112,7 +4041,7 @@ app.post('/auth/reset/confirm', async (req, res) => {
     const uSnap = await db.collection('users').where('phone', '==', phone).where('registrationDone', '==', true).limit(1).get();
     if (uSnap.empty) return res.status(404).json({ status: 'error', message: 'No account found with this phone number.' });
     const userId = uSnap.docs[0].id;
-    await admin.auth().updateUser(userId, { password: newPassword });
+    await setMemberPassword(userId, newPassword);
     logSecurityEvent(userId, 'password_reset_self_service', null);
     res.json({ status: 'success', message: 'Password reset. You can now sign in.' });
   } catch (e) {
@@ -4125,7 +4054,7 @@ app.post('/register', async (req, res) => {
   if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = auth.uid;
   try {
-    const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
+    const phone = auth.phone;
     if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
     // Skip the ticket check on a retry of an ALREADY-completed registration
     // (network drop after success, client resubmits) -- completeRegistrationCore
@@ -7732,6 +7661,121 @@ app.post('/admin/login', async (req, res) => {
     res.json({ status: 'success', token, username, role });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not log in right now' }); }
 });
+// ═══════════════════════════════════════════
+// MEMBER LOGIN (MongoDB only -- no Firebase)
+// ═══════════════════════════════════════════
+// `authAccounts`: one document per member login. The document id is the phone
+// ("p" + digits), so a phone can only ever have one account: createIfAbsent()
+// is the whole uniqueness guarantee, with no index to forget. The password is
+// scrypt-hashed (same helper as admin passwords); the plain password is never
+// stored or logged. Sessions are in `memberSessions` (see session-policy.js).
+const LOGIN_MAX_FAILS = 6;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const MEMBER_PASSWORD_MIN = 6, MEMBER_PASSWORD_MAX = 128;
+const DUMMY_MEMBER_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
+const memberAccountId = phone => 'p' + String(phone).replace(/\D/g, '');
+const newMemberUid = () => crypto.randomBytes(12).toString('hex');
+async function findAccountByUid(uid) {
+  const snap = await db.collection('authAccounts').where('uid', '==', String(uid)).limit(1).get();
+  return snap.empty ? null : { ref: snap.docs[0].ref, id: snap.docs[0].id, ...snap.docs[0].data() };
+}
+// Sets a new password, clears any lockout and ends the member's sessions
+// (except the one that made the change). Used by self-service change, the
+// SMS-code reset and the owner's reset.
+async function setMemberPassword(uid, newPassword, exceptKey) {
+  const acct = await findAccountByUid(uid);
+  if (!acct) { const e = new Error('No login exists for this member'); e.code = 'NO_ACCOUNT'; throw e; }
+  await acct.ref.update({ passwordHash: scryptHash(newPassword), failCount: 0, lockedUntil: FieldValue.delete(), passwordChangedAt: FieldValue.serverTimestamp() });
+  await sessionPolicy.revokeAllMemberSessions(db, uid, exceptKey);
+}
+async function deleteMemberLogin(uid) {
+  const acct = await findAccountByUid(uid);
+  if (acct) await acct.ref.delete();
+  await sessionPolicy.revokeAllMemberSessions(db, uid);
+}
+async function recordLoginFailure(id) {
+  await withLock('login:' + id, async () => {
+    const ref = db.collection('authAccounts').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return;
+    const fails = (Number(snap.data().failCount) || 0) + 1;
+    if (fails >= LOGIN_MAX_FAILS) await ref.update({ failCount: 0, lockedUntil: new Date(Date.now() + LOGIN_LOCK_MS) });
+    else await ref.update({ failCount: fails });
+  });
+}
+// Brute-force limits: this per-IP ceiling on top of the per-phone lockout in
+// the document (which survives a restart). Generous because many members share
+// one mobile-carrier address.
+const memberAuthLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
+const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
+const sessionReply = (res, uid, sess) => res.json({ status: 'success', token: sess.token, uid, authTime: sess.authTime, expiresAt: sess.expiresAt });
+app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
+  try {
+    const phone = cleanPhone(req.body.phone || '');
+    if (!phone) return res.status(400).json({ status: 'error', code: 'INVALID_PHONE', message: badPhoneMessage() });
+    const password = String(req.body.password || '');
+    if (password.length < MEMBER_PASSWORD_MIN || password.length > MEMBER_PASSWORD_MAX)
+      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
+    const uid = newMemberUid();
+    const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({
+      uid, phone, passwordHash: scryptHash(password), failCount: 0, createdAt: FieldValue.serverTimestamp()
+    });
+    if (!created) return res.status(409).json({ status: 'error', code: 'PHONE_IN_USE', message: 'An account with this phone number already exists.' });
+    sessionReply(res, uid, await sessionPolicy.createMemberSession(db, uid, phone));
+  } catch (e) {
+    console.error('Signup error:', e.message);
+    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Could not create your account right now. Please try again.' });
+  }
+});
+app.post('/auth/login', memberAuthLimiter, async (req, res) => {
+  try {
+    const phone = cleanPhone(req.body.phone || '');
+    const password = String(req.body.password || '');
+    const bad = () => res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Incorrect phone number or password.' });
+    if (!phone || !password || password.length > MEMBER_PASSWORD_MAX) return bad();
+    const id = memberAccountId(phone);
+    const snap = await db.collection('authAccounts').doc(id).get();
+    const acct = snap.exists ? snap.data() : null;
+    if (acct && acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now()) {
+      const wait = Math.ceil((tsMillis(acct.lockedUntil) - Date.now()) / 1000);
+      return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: wait,
+        message: `Too many wrong attempts. Try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}.` });
+    }
+    // The dummy hash makes an unknown phone cost the same as a wrong password,
+    // so the answer's timing cannot be used to find which numbers have accounts.
+    const ok = scryptVerify(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
+    if (!acct || !ok) { if (acct) await recordLoginFailure(id); return bad(); }
+    if (Number(acct.failCount) > 0) await snap.ref.update({ failCount: 0 }).catch(() => {});
+    sessionReply(res, acct.uid, await sessionPolicy.createMemberSession(db, acct.uid, acct.phone));
+  } catch (e) {
+    console.error('Login error:', e.message);
+    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Could not sign you in right now. Please try again.' });
+  }
+});
+app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
+  try {
+    const decoded = await _decodeAuth(req);
+    if (!decoded) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+    const oldPassword = String(req.body.oldPassword || ''), newPassword = String(req.body.newPassword || '');
+    if (newPassword.length < MEMBER_PASSWORD_MIN || newPassword.length > MEMBER_PASSWORD_MAX)
+      return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
+    const acct = await findAccountByUid(decoded.uid);
+    if (!acct) return res.status(404).json({ status: 'error', message: 'Account not found' });
+    if (acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now())
+      return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', message: 'Too many wrong attempts. Try again in a few minutes.' });
+    if (!scryptVerify(oldPassword, acct.passwordHash)) {
+      await recordLoginFailure(acct.id);
+      return res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Your current password is incorrect.' });
+    }
+    await setMemberPassword(decoded.uid, newPassword, decoded.key);
+    res.json({ status: 'success', message: 'Password changed.' });
+  } catch (e) {
+    console.error('Password change error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not change your password right now.' });
+  }
+});
 app.post('/auth/session/activity', async (req, res) => {
   if (!(await verifyAuth(req))) return res.status(401).json({ status: 'error', message: 'Session expired. Log in again.' });
   res.json({ status: 'success' });
@@ -7742,7 +7786,7 @@ app.post('/auth/session/logout', async (req, res) => {
   // always answer, whether or not there was a session record to revoke.
   try {
     const decoded = await _decodeAuth(req);
-    if (decoded) await db.collection('memberSessions').doc(sessionPolicy.memberKey(decoded)).update({ revoked: true });
+    if (decoded) await db.collection('memberSessions').doc(decoded.key).update({ revoked: true });
   } catch (e) { console.error('Session logout error:', e.message); }
   res.json({ status: 'success' });
 });
@@ -8897,7 +8941,7 @@ app.post('/admin/user/reset-password', async (req, res) => {
   const newPassword = String(req.body.newPassword || '');
   if (!userId || newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'userId and a password of at least 6 characters required' });
   try {
-    await admin.auth().updateUser(userId, { password: newPassword });
+    await setMemberPassword(userId, newPassword);
     logAdminAction(req, 'user_password_reset', { userId });
     res.json({ status: 'success', message: 'Password reset' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -9086,7 +9130,7 @@ app.post('/admin/user/complete-registration', async (req, res) => {
     // through so the lock-protected check-then-create inside
     // completeRegistrationCore does the actual creation safely.
     let phone = '';
-    try { const rec = await admin.auth().getUser(userId); phone = cleanPhone((rec.email || '').split('@')[0]) || ''; } catch (_) {}
+    try { const acct = await findAccountByUid(userId); phone = acct ? (cleanPhone(acct.phone) || '') : ''; } catch (_) {}
     const result = await completeRegistrationCore(userId, req.body.referralCode, pin, phone);
     if (result.code === 200) logAdminAction(req, 'user_registration_completed', { userId });
     res.status(result.code).json(result.body);
@@ -9372,7 +9416,7 @@ app.post('/admin/user/delete', async (req, res) => {
       ...depSnap.docs.map(d => d.ref.delete()),
     ]);
     await db.collection('users').doc(userId).delete();
-    try { await admin.auth().deleteUser(userId); } catch (_) {}
+    try { await deleteMemberLogin(userId); } catch (_) {}
     // Codex-caught real bug: recomputeTeamCounts(parentId) alone only fixes
     // parentId's OWN L1/L2/L3 -- but reparenting the deleted user's children
     // up to parentId also changes what sits at levels 2/3 BELOW parentId's

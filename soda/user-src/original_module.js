@@ -1580,8 +1580,11 @@ function loginAddressFor(phone, bare){
 // THIS region -- never another country's -- so it cannot become a way to
 // sign in to a Kenyan account on the Ugandan site.
 function loginAddressCandidates(phone){
-  const list = [loginAddressFor(phone, true), loginAddressFor(phone, false)];
-  return list.filter((e, i) => list.indexOf(e) === i);
+  // One address is enough now: the server reduces whatever it is given
+  // (national or international shape) to the same canonical number, so there
+  // is no second spelling to try. Trying two would also count every wrong
+  // password twice toward the server's lockout.
+  return [loginAddressFor(phone, true)];
 }
 function cleanPhone(raw){
   const local = localDigits(raw);

@@ -300,80 +300,32 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     await closeSoon(dom);
   }
 
-  // ─── 7. Server: token checks distinguish "invalid" from "could not check" ───
+  // ─── 7. Server: "could not check" is a 503 "try again", never a 401 "logged out" ───
+  // (The login itself -- signup, login, lockout, sessions, password change -- is
+  // covered end to end by test-member-auth.js.)
   trace('section 7');
   {
     const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
-    const a = src.indexOf('const AUTH_CACHE_TTL_MS'), b = src.indexOf('async function verifyAuth(req)');
     const hookA = src.indexOf('app.use((req, res, next) => {\n  const send = res.json.bind(res);'), hookB = src.indexOf('app.use(cors({', hookA);
     const logoutA = src.indexOf("app.post('/auth/session/logout'"), logoutB = src.indexOf("app.post('/admin/session/activity'", logoutA);
-    ok(a > 0 && b > a && hookA > 0 && hookB > hookA && logoutA > 0 && logoutB > logoutA, 'server markers found');
-    const decodeSrc = src.slice(a, b), hookSrc = src.slice(hookA, hookB), logoutSrc = src.slice(logoutA, logoutB);
-    function world(verify, check) {
-      const state = { verifyCalls: 0, now: 1000000 };
-      const admin = { auth: () => ({ verifyIdToken: async (tok, rev) => { state.verifyCalls++; assert.ok(rev === true, 'revocation is still checked'); return verify(tok, state.verifyCalls); } }) };
-      const sessionPolicy = { checkMember: async (...x) => check(...x), memberKey: d => 'k-' + d.uid };
-      const db = { collection: () => ({ doc: () => ({ update: async () => { if (state.noDoc) { const e = new Error('no doc'); e.code = 'NOT_FOUND'; throw e; } } }) }) };
-      const Date2 = { now: () => state.now };
-      const mod = new Function('admin', 'sessionPolicy', 'db', 'Date', 'console', 'setTimeout',
-        decodeSrc + '\nconst fn = {_decodeAuth, isTransientAuthError, cache:_authTokenCache, TTL:AUTH_CACHE_TTL_MS, MAX:AUTH_CACHE_MAX};\n' +
-        'const logoutHandler = ' + logoutSrc.replace(/^app\.post\('\/auth\/session\/logout', /, '').replace(/\);\s*$/, '') + ';\nreturn {fn, logoutHandler};')(
-        admin, sessionPolicy, db, Date2, { error() {} }, f => setTimeout(f, 1));
-      return { ...mod, state };
-    }
-    const req = (tok, path = '/account') => ({ headers: { authorization: 'Bearer ' + tok }, path });
+    ok(hookA > 0 && hookB > hookA && logoutA > 0 && logoutB > logoutA, 'server markers found');
+    const hookSrc = src.slice(hookA, hookB), logoutSrc = src.slice(logoutA, logoutB);
     const res = () => { const r = { statusCode: 200, status(c) { r.statusCode = c; return r; }, json(b) { r.body = b; return r; } }; return r; };
     const hook = () => { let installed; const fakeApp = { use: f => { installed = f; } }; new Function('app', hookSrc)(fakeApp); return installed; };
     const through = (h, rq, rs) => new Promise(done => h(rq, rs, done));
-
-    // valid + cached
-    let W = world((t) => ({ uid: 'u1', auth_time: 1, exp: 2000 }), async () => true);
-    let d = await W.fn._decodeAuth(req('A')); eq(d.uid, 'u1'); eq(W.state.verifyCalls, 1);
-    d = await W.fn._decodeAuth(req('A')); eq(W.state.verifyCalls, 1, 'second request within the TTL reuses the check');
-    W.state.now += W.fn.TTL + 1; d = await W.fn._decodeAuth(req('A')); eq(W.state.verifyCalls, 2, 'asks Google again after the TTL');
-    await W.fn._decodeAuth(req('B')); eq(W.state.verifyCalls, 3, 'another token is checked on its own');
-    // the cache never bypasses our own session store (logout is immediate)
-    let live = true; W = world(() => ({ uid: 'u1', auth_time: 1, exp: 99999 }), async () => live);
-    ok(await W.fn._decodeAuth(req('A')), 'valid'); live = false;
-    eq(await W.fn._decodeAuth(req('A')), null, 'after sign-out the cached token no longer passes'); eq(W.state.verifyCalls, 1);
-    // definitive failures: plain 401, no retry
-    for (const err of [{ code: 'auth/id-token-expired' }, { code: 'auth/id-token-revoked' }, { code: 'auth/argument-error', message: 'Decoding Firebase ID token failed' }, { message: 'Firebase ID token has invalid signature' }]) {
-      W = world(() => { throw Object.assign(new Error(err.message || 'x'), err); }, async () => true);
-      const rq = req('A'); eq(await W.fn._decodeAuth(rq), null); eq(W.state.verifyCalls, 1, 'no retry for ' + (err.code || err.message)); ok(!rq._authTransient, 'not flagged transient');
-      const rs = res(), h = hook(); rs.status(401); await through(h, rq, rs); rs.json({ status: 'error', message: 'Unauthorized' });
-      eq(rs.statusCode, 401, 'stays a 401'); eq(rs.body.message, 'Unauthorized');
-    }
-    // transient then success: the member never notices
-    W = world((t, n) => { if (n === 1) throw Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }); return { uid: 'u1', auth_time: 1, exp: 99999 }; }, async () => true);
-    let rq = req('A'); d = await W.fn._decodeAuth(rq); eq(d.uid, 'u1', 'one retry rescues a dropped connection'); eq(W.state.verifyCalls, 2); ok(!rq._authTransient);
-    // transient twice: 503 AUTH_UNAVAILABLE instead of 401
-    W = world(() => { throw Object.assign(new Error('network error'), { code: 'app/network-error' }); }, async () => true);
-    rq = req('A'); eq(await W.fn._decodeAuth(rq), null); eq(W.state.verifyCalls, 2, 'retried exactly once'); ok(rq._authTransient, 'flagged transient');
-    let rs = res(), h = hook(); rs.status(401); await through(h, rq, rs); rs.json({ status: 'error', message: 'Unauthorized' });
+    // the session store could not be read: the 401 is rewritten to a 503
+    let rq = { headers: {}, path: '/account', _authTransient: true }, rs = res(), h = hook();
+    rs.status(401); await through(h, rq, rs); rs.json({ status: 'error', message: 'Unauthorized' });
     eq(rs.statusCode, 503, 'answered 503, so the app does not end the session'); eq(rs.body.code, 'AUTH_UNAVAILABLE');
     ok(!/401|expired|rejected/i.test(rs.body.message), 'message does not say logged out');
-    // the same hook leaves other responses alone
-    rs = res(); await through(h, req('A'), rs); rs.status(400); rs.json({ status: 'error', message: 'Bad input' }); eq(rs.statusCode, 400); eq(rs.body.message, 'Bad input');
+    // a genuinely invalid session stays a plain 401, other statuses are left alone
     rs = res(); await through(h, { headers: {}, path: '/x' }, rs); rs.status(401); rs.json({ status: 'error', message: 'Unauthorized' }); eq(rs.statusCode, 401, 'ordinary 401 untouched');
-    // session store unreadable: not "your session is invalid"
-    W = world(() => ({ uid: 'u1', auth_time: 1, exp: 99999 }), async () => { throw new Error('mongo down'); });
-    rq = req('A'); eq(await W.fn._decodeAuth(rq), null); ok(rq._authTransient, 'store failure is flagged transient');
-    // a session the store says is invalid is a real 401
-    W = world(() => ({ uid: 'u1', auth_time: 1, exp: 99999 }), async () => false);
-    rq = req('A'); eq(await W.fn._decodeAuth(rq), null); ok(!rq._authTransient, 'invalid/expired session is a plain 401');
-    // classifier
-    for (const e of [{ code: 'ETIMEDOUT' }, { code: 'EAI_AGAIN' }, { code: 'auth/internal-error' }, { message: 'fetch failed' }, { message: 'Request timed out' }, { code: 'auth/quota-exceeded' }])
-      ok(W.fn.isTransientAuthError(e), 'transient: ' + JSON.stringify(e));
-    for (const e of [{ code: 'auth/id-token-expired' }, { message: 'Firebase ID token has expired. network' }, { message: 'invalid signature' }, null, {}])
-      ok(!W.fn.isTransientAuthError(e), 'not transient: ' + JSON.stringify(e));
-    // cache is bounded
-    W = world((t) => ({ uid: t, auth_time: 1, exp: 99999 }), async () => true);
-    for (let i = 0; i < W.fn.MAX + 50; i++) await W.fn._decodeAuth(req('t' + i));
-    ok(W.fn.cache.size <= W.fn.MAX, 'token cache cannot grow without bound');
-    // logout always answers
+    rs = res(); await through(h, { headers: {}, path: '/x', _authTransient: true }, rs); rs.status(400); rs.json({ status: 'error', message: 'Bad input' }); eq(rs.statusCode, 400); eq(rs.body.message, 'Bad input');
+    // logout always answers, whether or not the session record still exists
     for (const noDoc of [false, true]) {
-      W = world(() => ({ uid: 'u1', auth_time: 1, exp: 99999 }), async () => true); W.state.noDoc = noDoc;
-      rs = res(); await W.logoutHandler(req('A', '/auth/session/logout'), rs);
+      const db = { collection: () => ({ doc: () => ({ update: async () => { if (noDoc) { const e = new Error('no doc'); e.code = 'NOT_FOUND'; throw e; } } }) }) };
+      const handler = new Function('db', '_decodeAuth', 'console', 'return ' + logoutSrc.replace(/^app\.post\('\/auth\/session\/logout', /, '').replace(/\);\s*$/, ''))(db, async () => ({ key: 'k1', uid: 'u1' }), { error() {} });
+      rs = res(); await handler({ headers: { authorization: 'Bearer abc' }, path: '/auth/session/logout' }, rs);
       eq(rs.body && rs.body.status, 'success', 'logout answers even when the session record is missing=' + noDoc);
     }
   }
