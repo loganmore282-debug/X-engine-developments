@@ -3433,7 +3433,7 @@ app.get('/health', async (_req, res) => {
 // a pull+reload on demand, but only of whatever is actually sitting on
 // DEPLOY_BRANCH in this repo -- it cannot run an arbitrary command.
 const DEPLOY_WEBHOOK_SECRET = process.env.DEPLOY_WEBHOOK_SECRET || '';
-const DEPLOY_BRANCH = process.env.DEPLOY_BRANCH || 'claude/soda-platform-build';
+const DEPLOY_BRANCH = process.env.DEPLOY_BRANCH || 'claude/soda-build';
 // The sparse checkout root (git lives here) vs. the actual soda/ app
 // directory inside it (npm/pm2 commands run from here) -- see
 // soda/CLAUDE.md's "Hosting" section for why these are two different
