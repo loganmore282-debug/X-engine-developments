@@ -33,6 +33,12 @@ ok(!/register\('\/sw\.js'/.test(admin) && /register\('sw\.js'/.test(admin), 'the
 eq([JSON.parse(read('admin/manifest.json')).start_url, JSON.parse(read('admin/manifest.json')).scope], ['./', './'], 'panel manifest is scoped to its own path');
 eq([JSON.parse(read('user/manifest.json')).start_url, JSON.parse(read('user/manifest.json')).scope], ['/', '/'], 'member manifest keeps the root');
 
+// the generated file is included next to other sites' files in one http block: a top-level
+// server_tokens there is a duplicate-directive error that stops every reload (seen live)
+for (const args of [['dev', 'Panel7x9k'], ['prod', 'mysoda.example.com', 'Panel7x9k']]) {
+  const out = require('child_process').execFileSync('node', ['deploy/make-nginx.js', ...args], { encoding: 'utf8' });
+  ok(!/^server_tokens/m.test(out), `${args[0]} nginx file has no top-level server_tokens (it clashes with other sites)`);
+}
 // 3. the two service workers share a host without trampling each other
 function boot(file, scope) {
   const L = {}, cacheOps = { deleted: [] }; let responded = 0, respondedWith;
