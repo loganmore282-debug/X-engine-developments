@@ -3064,7 +3064,6 @@ async function renderSettings(){
            each) -- capped per phone number, resetting daily. 0 means send
            none, not unlimited; see otpDailyLimit()'s own comment in server.js. -->
       <div class="row" style="margin-top:6px">
-        <div><label>OTP codes/day &middot; registration</label><input id="sOtpReg" type="number" min="0" value="${v('otpDailyLimitRegister',2)}"></div>
         <div><label>OTP codes/day &middot; password reset</label><input id="sOtpReset" type="number" min="0" value="${v('otpDailyLimitReset',3)}"></div>
         <div><label>OTP codes/day &middot; add bank account</label><input id="sOtpBank" type="number" min="0" value="${v('otpDailyLimitBank',2)}"></div>
       </div>
@@ -3075,7 +3074,7 @@ async function renderSettings(){
       <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Recharge, Withdraw, Wallet and other inner pages. Authentication screens are unchanged.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>OTP verification (registration, reset, add wallet)</b> <span class="muted">(off: registration and payout accounts save without a code; Forgot Password still asks for one)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>OTP verification (add wallet)</b> <span class="muted">(Forgot Password always asks for a code)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sOtpVerification" ${s.otpVerificationEnabled!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require OTP to add a payout account</b> <span class="muted">(off by default; ignored while OTP verification above is off)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sBankOtp" ${s.bankOtpRequired===true?'checked':''} style="width:auto"></label></div>
@@ -3224,7 +3223,7 @@ async function renderSettings(){
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       innerBgOpacity:+$('sInnerBgOpacity').value, innerBgBlur:+$('sInnerBgBlur').value,
-      otpDailyLimitRegister:+$('sOtpReg').value, otpDailyLimitReset:+$('sOtpReset').value, otpDailyLimitBank:+$('sOtpBank').value,
+      otpDailyLimitReset:+$('sOtpReset').value, otpDailyLimitBank:+$('sOtpBank').value,
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
       otpVerificationEnabled:$('sOtpVerification').checked,
       bankOtpRequired:$('sBankOtp').checked,

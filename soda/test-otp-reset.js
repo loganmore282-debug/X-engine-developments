@@ -1,6 +1,6 @@
 'use strict';
-// With the master OTP switch OFF, registration and payout-account OTP stay off,
-// but Forgot Password still requests (and requires) a code.
+// Registration no longer uses OTP. Payout-account OTP stays switchable, but
+// Forgot Password still requests (and requires) a code.
 // Real server.js route source against stubs.
 const fs = require('node:fs'), assert = require('node:assert/strict');
 let checks = 0; const ok = (c, m) => { checks++; assert.ok(c, m); }; const eq = (a, b, m) => { checks++; assert.deepEqual(a, b, m); };
@@ -15,17 +15,17 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   let ticketOk = false, counted = 0;
   const db = { collection: () => ({ where() { return this; }, limit() { return this; }, get: async () => ({ docs: [{ data: () => ({ registrationDone: true }), id: 'u1' }], empty: false }) }) };
   new Function('app', 'db', 'OTP_PURPOSES', 'getSettings', 'cleanPhone', 'badPhoneMessage', 'verifyAuth', 'MARZSMS_KEY', 'otpCheckAndBumpDailyLimit', 'consumeOtpTicket', 'setMemberPassword', 'logSecurityEvent', 'console',
-    sendSrc + '\n' + confirmSrc)(app, db, new Set(['register', 'reset', 'bank']), async () => settings, p => String(p || '').replace(/\D/g, ''), () => 'bad phone', async () => null,
+    sendSrc + '\n' + confirmSrc)(app, db, new Set(['reset', 'bank']), async () => settings, p => String(p || '').replace(/\D/g, ''), () => 'bad phone', async () => null,
     '', async () => { counted++; return null; }, async () => ticketOk, async () => {}, () => {}, { error() {} });
   const send = async purpose => { const r = res(); await handlers['/auth/otp/send']({ body: { purpose, phone: '0770000001' }, headers: {} }, r); return r; };
-  // OTP off: registration and bank are refused as turned off...
-  let r = await send('register'); ok(r.code === 503 && r.body.code === 'OTP_DISABLED', 'register: codes are off');
+  // Registration no longer accepts OTP. Bank is refused when OTP is off...
+  let r = await send('register'); ok(r.code === 400 && r.body.message === 'Invalid verification purpose', 'registration OTP purpose was removed');
   r = await send('bank'); ok(r.code === 503 && r.body.code === 'OTP_DISABLED', 'bank: codes are off');
   // ...but reset goes ahead (it reaches the SMS-provider check, which is unset in this test)
   r = await send('reset'); ok(r.body.code !== 'OTP_DISABLED', 'reset: not blocked by the switch (' + JSON.stringify(r.body) + ')');
   ok(/SMS verification is not available/.test(r.body.message), 'reset proceeds as far as the SMS provider');
-  // switch on: unchanged
-  settings = { otpVerificationEnabled: true }; r = await send('register'); ok(r.body.code !== 'OTP_DISABLED', 'switch on: register proceeds');
+  // switch on: payout codes remain enabled
+  settings = { otpVerificationEnabled: true }; r = await send('bank'); ok(r.body.code !== 'OTP_DISABLED', 'switch on: bank code proceeds');
   // reset confirm still requires a ticket with the switch off
   settings = { otpVerificationEnabled: false };
   const confirm = async b => { const x = res(); await handlers['/auth/reset/confirm']({ body: b }, x); return x; };

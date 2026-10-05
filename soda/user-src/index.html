@@ -380,36 +380,8 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
-/* Rebuilt entirely per the owner's own reference GIF, frame-by-frame
-   (a 167-frame loop): three concentric rings, whose visible arc
-   continuously grows/shrinks AND travels around the circle (not a fixed
-   spinner), glowing, with a plain numeric counter climbing 0-100 dead
-   centre -- no wordmark, no background image, no gradient backdrop, pure
-   black. Owner (quoted verbatim -- a since-corrected rename pass had
-   mangled "chipz" to "soda" inside this quote itself; restored to what
-   was actually said): "remove it even it has background image like that
-   of chipz, remove it entirely, only put that loader everywhere for
-   loading pages... check that loader in gif carefully how it works and use
-   it." The old dark-red gradient backdrop and the Chipz wordmark/wave
-   treatment are gone, not just restyled -- there is nothing left here that
-   came from Chipz.
-   Gradient recoloured this round: the reference GIF's own top stop was
-   blue/violet, kept that way through several rounds for fidelity to the
-   reference -- but the owner named it directly ("the start up loader ...
-   should be having red, and Yellow-orange colour"), and blue was never
-   part of this app's palette to begin with (the one blue token,
-   --chipz-link, was removed outright early on -- see soda/CLAUDE.md's
-   design-system section, "not the typical blue/green fintech look").
-   Red-to-gold now, using the same Corporate Red / Golden Orange stops the
-   rest of the app already uses (--snow-wine / --soda-gold), not new
-   colours picked for this one mark. */
-#loadingScreen{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;z-index:500;}
+#loadingScreen{position:fixed;inset:0;background:linear-gradient(rgba(3,12,32,.28),rgba(3,12,32,.38)),var(--auth-hero-img);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;z-index:500;}
 #openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
-.ring-loader-wrap{position:relative;width:min(38vw,150px);height:min(38vw,150px);display:flex;align-items:center;justify-content:center;}
-.ring-loader{position:absolute;inset:0;width:100%;height:100%;overflow:visible;
-  filter:drop-shadow(0 0 7px rgba(227,6,19,.55)) drop-shadow(0 0 16px rgba(255,176,0,.4));}
-/* The mini loader retains its compact stroke treatment. The startup mark
-   below uses closely spaced hairline rings and staggered arc phases. */
 .ring-arc{fill:none;stroke:url(#ringGrad);stroke-linecap:round;
   stroke-dasharray:2 98;stroke-dashoffset:0;transform-origin:60px 60px;
   animation:ringSweep 2.4s ease-in-out infinite;}
@@ -420,21 +392,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   0%{stroke-dasharray:2 98;stroke-dashoffset:0;}
   50%{stroke-dasharray:78 22;stroke-dashoffset:-38;}
   100%{stroke-dasharray:2 98;stroke-dashoffset:-100;}
-}
-#loadingScreen .ring-loader-wrap{width:min(38vw,140px);height:min(38vw,140px);}
-#loadingScreen .ring-arc{stroke-width:1.4;stroke-dasharray:100 0;
-  animation:startupRingChase 1.5s cubic-bezier(.4,0,.2,1) infinite both;}
-#loadingScreen .ring-arc-2{animation-delay:.10s;}
-#loadingScreen .ring-arc-3{animation-delay:.20s;}
-@keyframes startupRingChase{
-  0%{stroke-dasharray:100 0;stroke-dashoffset:0;}
-  45%{stroke-dasharray:3 97;stroke-dashoffset:-90;}
-  100%{stroke-dasharray:100 0;stroke-dashoffset:-200;}
-}
-.ls-percent{position:relative;z-index:1;font-weight:800;font-size:clamp(16px,5vw,20px);color:#ff3b44;letter-spacing:.02em;
-  text-shadow:0 0 10px rgba(227,6,19,.85),0 0 22px rgba(227,6,19,.4);}
-@media(prefers-reduced-motion:reduce){
-  #loadingScreen .ring-arc{animation:none;stroke-dasharray:100 0;}
 }
 /* Download APP screen (openDownloadSheet(), its 'downloadbg' admin backdrop,
    and this CSS) removed -- see original_module.js's own comment above
@@ -2705,21 +2662,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
 <body>
 
 <div id="loadingScreen">
-  <div class="ring-loader-wrap">
-    <svg class="ring-loader" viewBox="0 0 120 120" aria-hidden="true">
-      <defs>
-        <linearGradient id="ringGrad" x1="24" y1="104" x2="96" y2="16" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="#ff3b44"/>
-          <stop offset="55%" stop-color="#e30613"/>
-          <stop offset="100%" stop-color="#ffb000"/>
-        </linearGradient>
-      </defs>
-      <circle class="ring-arc ring-arc-1" cx="60" cy="60" r="52" pathLength="100"/>
-      <circle class="ring-arc ring-arc-2" cx="60" cy="60" r="48" pathLength="100"/>
-      <circle class="ring-arc ring-arc-3" cx="60" cy="60" r="44" pathLength="100"/>
-    </svg>
-    <div class="ls-percent" id="lsPercent" role="status" aria-label="Loading">0</div>
-  </div>
+  <span class="sr-only" role="status" aria-live="polite">Loading</span>
 </div>
 
 <script>
@@ -2772,31 +2715,6 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
   };
   window.__paintBrandMarks();
   document.addEventListener('DOMContentLoaded', window.__paintBrandMarks);
-})();
-
-/* Estimated visual progress: ease toward 99 while loading; complete only
-   when the app hides this screen. No artificial wait and no wrap back to 0. */
-(function(){
-  var ls = document.getElementById('loadingScreen');
-  var el = ls && ls.querySelector('.ls-percent');
-  if (!ls || !el) return;
-  var started = 0, timer = null;
-  function tick(){
-    var elapsed = Math.max(0, performance.now() - started);
-    el.textContent = Math.min(99, Math.floor(100 * (1 - Math.exp(-elapsed / 1050))));
-  }
-  function sync(){
-    var shown = ls.style.display !== 'none';
-    if (shown && timer === null) {
-      started = performance.now(); el.textContent = '0';
-      el.setAttribute('aria-label', 'Loading, estimated progress');
-      timer = setInterval(tick, 50);
-    } else if (!shown && timer !== null) {
-      clearInterval(timer); timer = null; el.textContent = '100';
-    }
-  }
-  sync();
-  new MutationObserver(sync).observe(ls, {attributes:true, attributeFilter:['style']});
 })();
 
 /* Older browsers lack lvh. Ignore height-only resize events (address bar
@@ -2917,13 +2835,8 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
         </section>
       </div>
 
-      <!-- Sign Up: ONE screen -- phone, verification code (Send Code inline),
-           password, confirm password, invitation code -- exactly the owner's
-           mockup, not the earlier 3-step wizard. Trade Password/PIN field
-           REMOVED entirely per explicit instruction ("what I am giving you
-           is what you should put... remove trade passwords") -- see
-           server.js's completeRegistrationCore()/withdraw/request for the
-           matching backend removal. -->
+      <!-- Sign Up mirrors the supplied screen: phone, login password,
+           confirmation, trade PIN and invitation code. -->
       <div id="registerPane" class="auth-pane" style="display:none;">
         <div class="auth-intro">
           <div class="auth-brand-mark">
@@ -2938,11 +2851,6 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
           <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#64748b;text-align:center;"></div>
-        <div class="af-v2 with-btn" id="regOtpRow">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
-          <input id="regOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code" oninput="onRegOtpInput(this)">
-          <button class="af-inline-btn" id="regSendOtpBtn" onclick="doRegSendOtp()">Send Code</button>
-        </div>
         <div class="af-v2">
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="3.25"/><path d="m10.4 12.6 8.1-8.1 2 2-2.2 2.2 1.5 1.5-2.1 2.1-1.5-1.5-3.4 3.4"/></svg></span>
           <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
@@ -2952,6 +2860,11 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
           <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
           <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
           <button class="af-eye" onclick="togglePw('regPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
+        <div class="af-v2">
+          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1"/></svg></span>
+          <input id="regTradePin" type="password" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="new-password">
+          <button class="af-eye" onclick="togglePw('regTradePin',this)" aria-label="Show trade password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <div class="af-v2">
           <span class="af-ic af-gift"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M2 6h20v3H2zM12 6v15M12 6c-1.3 0-4.5-.2-4.5-2.2 0-2.3 4.5-1.8 4.5 2.2Zm0 0c1.3 0 4.5-.2 4.5-2.2C16.5 1.5 12 2 12 6Z"/></svg></span>

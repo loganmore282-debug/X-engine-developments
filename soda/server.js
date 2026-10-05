@@ -143,7 +143,7 @@ app.use('/admin/', async (req, _res, next) => {
 // otp requests I think 10 requests, the ip should be said too many
 // requests, not ip being banned." A real money risk, not just abuse --
 // every successful send is a real MarzSms charge (~30 UGX). The existing
-// otpDailyLimitRegister/Reset/Bank caps (see DEFAULT_SETTINGS) are keyed
+// otpDailyLimitReset/Bank caps (see DEFAULT_SETTINGS) are keyed
 // per PHONE NUMBER, so they do nothing against one source spamming SMS
 // requests across many DIFFERENT numbers -- apiLimiter's blanket 60/min
 // above already covers this route too, but 60 real sends a minute left
@@ -638,13 +638,9 @@ const DEFAULT_SETTINGS = {
   bankOtpRequired: false,
   // Owner: "when I disable otp verification system the functions go away
   // completely" -- one master switch, separate from bankOtpRequired above.
-  // Default ON (today's live behavior: registration/reset/bank-bind OTP all
-  // still work exactly as before). Off stops every code request: registration
-  // skips the OTP step outright (a brand-new account has no existing identity
-  // to protect), Reset Password refuses self-service and points the member at
-  // support (there is no substitute check for it), and saving a payout
-  // account simply saves with no code step, exactly as it does when
-  // bankOtpRequired is off -- off always wins over bankOtpRequired.
+  // Default ON for payout-account verification. Registration uses the
+  // screenshot fields and no longer requests an OTP. Reset Password always
+  // requires its code; disabling this switch turns off payout-account codes.
   otpVerificationEnabled: true,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
@@ -729,12 +725,9 @@ const DEFAULT_SETTINGS = {
   // payoutIsManual() -- never read this field raw.
   withdrawMethod: 'follow',
   // ── OTP (SMS one-time codes via MarzSms) ──
-  // Owner-specified: registration 2/day, password reset 3/day, per phone
-  // number, resetting daily. Bank/withdrawal-account linking wasn't given an
-  // explicit number -- defaults conservatively (same cost, 30 UGX/SMS) and
-  // is admin-editable like the other two. See otpDailyLimit() in the OTP
-  // section above: 0 here means "send none", not "unlimited".
-  otpDailyLimitRegister: 2, otpDailyLimitReset: 3, otpDailyLimitBank: 2,
+  // Used by password reset and payout-account verification. Daily limits
+  // are per phone; 0 means send none, not unlimited.
+  otpDailyLimitReset: 3, otpDailyLimitBank: 2,
   // ── USDT (TRC20) DEPOSIT ── a third deposit rail alongside the automatic
   // MarzPay mobile-money flow (untouched by this) -- see the "USDT (TRC20)
   // DEPOSIT" section below /deposit/marzpay/status for the actual route.
@@ -2357,7 +2350,7 @@ async function marzSmsSend(recipients, message) {
   }
 }
 // ── OTP (SMS one-time codes, via MarzSms above) ──
-// Owner: registration goes phone -> OTP -> password -> confirm password;
+// Owner: registration goes phone -> password -> confirm -> trade PIN;
 // login stays phone/password with a "forgot password" link that also uses
 // OTP; adding a withdrawal bank/mobile-money account requires OTP too (a
 // member's own phone re-verifying it's really them, not the new payout
@@ -2374,8 +2367,8 @@ const OTP_CODE_LENGTH = 6;
 const OTP_EXPIRES_MS = 10 * 60 * 1000;
 const OTP_TICKET_EXPIRES_MS = 15 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
-const OTP_PURPOSES = new Set(['register', 'reset', 'bank']);
-const OTP_SETTINGS_FIELD = { register: 'otpDailyLimitRegister', reset: 'otpDailyLimitReset', bank: 'otpDailyLimitBank' };
+const OTP_PURPOSES = new Set(['reset', 'bank']);
+const OTP_SETTINGS_FIELD = { reset: 'otpDailyLimitReset', bank: 'otpDailyLimitBank' };
 function generateOtpCode() {
   return String(crypto.randomInt(0, 10 ** OTP_CODE_LENGTH)).padStart(OTP_CODE_LENGTH, '0');
 }
@@ -3810,12 +3803,11 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     if (userData.registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userData.referralCode || null } };
 
-    // Trade Password (PIN) requirement REMOVED (owner: registration is
-    // exactly phone/OTP/password/confirm/referral, nothing else -- see
-    // /withdraw/request's own comment for the full reasoning). `pin` is
-    // still accepted as a parameter -- unused now -- rather than reworking
-    // every call site's argument list for a field that may as well stay
-    // silently ignored if an old client still sends one.
+    // Registration saves the six-digit Trade Password as a server-side
+    // scrypt hash. It is never returned to the client.
+    const tradePin = String(pin || '');
+    if (!/^\d{6}$/.test(tradePin))
+      return { code: 400, body: { status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' } };
     const code = String(referralCode || '').trim();
     let referrerId = null;
     // The "referral code is a must" rule lives HERE, not only in the app --
@@ -3865,6 +3857,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
         registrationDone: true, referralCode: myRefCode, publicId: myPublicId,
         walletBalance: FieldValue.increment(WELCOME),
       };
+      if (/^\d{6}$/.test(tradePin)) update.transactionPinHash = scryptHash(tradePin);
       if (referrerId) update.referredBy = referrerId;
       // The user's own doc is written FIRST, in one atomic single-document
       // update — a crash right after this leaves the member fully and
@@ -3915,9 +3908,8 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
 }
 // ── OTP endpoints ──
 // /auth/otp/send is deliberately reachable WITHOUT a Firebase session for
-// 'register' and 'reset' -- a phone verifying itself before an account
-// exists (register) or while its owner cannot sign in (reset) is exactly
-// what OTP is for. 'bank' is the one purpose that DOES require a session:
+// 'reset' -- a phone verifying itself while its owner cannot sign in -- is
+// exactly what OTP is for. 'bank' requires a session:
 // the phone texted is resolved from the caller's own account on file, never
 // from the request body, so a logged-in member cannot use this to spam an
 // arbitrary number.
@@ -3925,9 +3917,8 @@ app.post('/auth/otp/send', async (req, res) => {
   try {
     const purpose = String(req.body.purpose || '');
     if (!OTP_PURPOSES.has(purpose)) return res.status(400).json({ status: 'error', message: 'Invalid verification purpose' });
-    // The master switch (otpVerificationEnabled) turns off the OTP requests for
-    // registration and for saving a payout account. Password reset is the one
-    // flow that keeps asking for a code regardless -- it hands an existing
+    // The master switch turns off OTP requests for saving a payout account.
+    // Password reset keeps asking for a code regardless: it hands an existing
     // account to whoever asks, and the code is the only proof it is them.
     const sett = await getSettings();
     if (sett.otpVerificationEnabled === false && purpose !== 'reset') {
@@ -4064,16 +4055,8 @@ app.post('/register', async (req, res) => {
     // already succeeded.
     const already = await db.collection('users').doc(userId).get();
     if (!already.exists || !already.data().registrationDone) {
-      // Master switch off -- a brand-new account has no existing identity to
-      // protect, so registration simply skips the OTP step (see
-      // DEFAULT_SETTINGS.otpVerificationEnabled and doRegister()'s own
-      // matching client-side branch). On, unchanged: a valid ticket is
-      // required exactly as before.
-      const sett = await getSettings();
-      if (sett.otpVerificationEnabled !== false) {
-        const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), phone, 'register', userId);
-        if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
-      }
+      const tradePin = String(req.body.pin || '');
+      if (!/^\d{6}$/.test(tradePin)) return res.status(400).json({ status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' });
     }
     const result = await completeRegistrationCore(userId, req.body.referralCode, req.body.pin, phone);
     const { referrerId, ...memberBody } = result.body;
@@ -7971,7 +7954,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
-  otpDailyLimitRegister: [0, 50], otpDailyLimitReset: [0, 50], otpDailyLimitBank: [0, 50],
+  otpDailyLimitReset: [0, 50], otpDailyLimitBank: [0, 50],
   // UGX per 1 USDT. Upper bound is a sanity cap (nobody's rate is anywhere
   // near this), not a business one -- same reasoning as withdrawMultiple.
   usdtRate: [0, MAX_MONEY_AMOUNT],

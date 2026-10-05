@@ -1627,11 +1627,6 @@ function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
   $('forgotPane').style.display = tab === 'forgot' ? '' : 'none';
-  // Clears any OTP already sent/verified for whichever pane is being
-  // switched INTO -- a member who backs out of Sign Up partway through and
-  // later taps it again should not have doRegister() silently reuse a
-  // stale ticket from a previous attempt.
-  if (tab === 'register') window._regOtp = { otpId: null, ticket: null, phone: '' };
   if (tab === 'forgot') window._forgotOtp = { otpId: null, ticket: null, phone: '' };
   stopSmsCodeListener();
 }
@@ -1835,13 +1830,7 @@ window.doLogin = async function(){
 };
 // ── SIGN UP: phone -> OTP -> password -> confirm password ──
 // Rebuilt to the owner's exact mockup: ONE screen -- phone, verification
-// code (with an inline Send Code button), password, confirm password,
-// invitation code -- not the earlier 3-step wizard. Send Code just fills
-// otpId; the actual OTP verify happens inside doRegister() itself, right
-// before Firebase account creation, so the whole flow is still exactly two
-// taps (Send Code, then Register) with no separate "step" screens to
-// navigate through.
-window._regOtp = { otpId: null, ticket: null, phone: '' };
+// phone, password, confirmation, trade PIN and invitation code.
 // Owner: "l nolonger need such notifies of in page... all notifies in
 // middle not bottom" -- was an inline pink box written into #regError,
 // sitting inside the form itself. Routed through the same app-wide
@@ -1871,76 +1860,20 @@ function listenForSmsCode(inputId){
     }).catch(() => {});
   } catch (_) {}
 }
-// The ticket from a successful verify stays valid for 15 minutes but the
-// code it came from expires after 10, so a ticket older than this is checked
-// again rather than trusted -- the server then says plainly if the code ran out.
-var OTP_TICKET_FRESH_MS = 9 * 60 * 1000;
-// Verifies the code the member typed, once. Called the instant the sixth
-// digit lands (onRegOtpInput) and again from doRegister(); whichever asks
-// second reuses the first one's result (or its still-running request)
-// instead of spending another of the code's five attempts.
-function regVerifyOtp(code){
-  const st = window._regOtp;
-  if (!st.otpId) return Promise.resolve({ ok: false, message: 'Please tap Send Code first.' });
-  if (st.ticket && st.verifiedCode === code && Date.now() - st.verifiedAt < OTP_TICKET_FRESH_MS) return Promise.resolve({ ok: true });
-  if (st.pending && st.pendingCode === code) return st.pending;
-  st.pendingCode = code;
-  const p = post('/auth/otp/verify', { otpId: st.otpId, code }).then(v => {
-    // A resend (or leaving the pane) replaced this state while the request
-    // was in flight -- its answer belongs to a code that is no longer current.
-    if (window._regOtp !== st) return { ok: false, stale: true };
-    st.pending = null;
-    if (v.status === 'success') {
-      st.ticket = v.ticket; st.verifiedCode = code; st.verifiedAt = Date.now();
-      return { ok: true };
-    }
-    return { ok: false, message: v.message || 'Incorrect verification code.' };
-  });
-  st.pending = p;
-  return p;
-}
-window.onRegOtpInput = function(el){
-  if (/\D/.test(el.value)) el.value = el.value.replace(/\D/g, '');
-  const code = el.value;
-  const st = window._regOtp;
-  if (code.length !== 6 || !otpVerificationEnabled() || !st.otpId) return;
-  if (st.phone !== cleanPhone($('regPhone').value)) return;
-  regVerifyOtp(code).then(r => { if (!r.ok && !r.stale) notify(r.message); });
-};
-window.doRegSendOtp = async function(){
-  const phone = cleanPhone($('regPhone').value);
-  if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
-  regError('');
-  setBtnLoading('regSendOtpBtn', true, 'Send Code', 'Sending…');
-  const d = await post('/auth/otp/send', { purpose: 'register', phone });
-  setBtnLoading('regSendOtpBtn', false, 'Send Code');
-  if (d.status !== 'success') return regError(d.message || 'Could not send the code');
-  window._regOtp = { otpId: d.otpId, ticket: null, phone };
-  const otpInput = $('regOtp');
-  if (otpInput) { otpInput.value = ''; try { otpInput.focus(); } catch (_) {} }
-  notify('Verification code sent. It can take a moment to arrive.');
-  startOtpResendCooldown('regSendOtpBtn', 30);
-  listenForSmsCode('regOtp');
-};
 window.doRegister = async function(){
   const phone = cleanPhone($('regPhone').value);
-  const code = ($('regOtp').value || '').trim();
   const pass = $('regPassword').value;
   const pass2 = $('regPassword2').value;
+  const tradePin = ($('regTradePin').value || '').trim();
   // Referral code box is prefilled from ?ref= (see captureReferralFromUrl)
   // but stays editable -- whatever's in the box at submit time wins,
   // whether that's the link's code, untouched, or something typed by hand.
   // Soda makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
-  const otpOn = otpVerificationEnabled();
-  if (otpOn) {
-    if (!window._regOtp.otpId || window._regOtp.phone !== phone)
-      return regError('Please tap Send Code first.');
-    if (!/^\d{6}$/.test(code)) return regError('Enter the 6-digit verification code sent to your phone.');
-  }
   if (!pass || pass.length < 6) return regError('Password must be at least 6 characters.');
   if (pass !== pass2) return regError('The two passwords do not match.');
+  if (!/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
   // Required or not is the SERVER's call (settings.referralRequired), which
   // already accounts for the founder case: on a platform with no members yet
   // there is no code in existence to type, so the first account is let
@@ -1957,30 +1890,10 @@ window.doRegister = async function(){
     setBtnLoading('regBtn', false, 'Sign Up');
     if (!ready) return regError('Sign-up is not available right now. Check your connection and try again.');
   }
-  // Owner: "when l disable otp verification system the functions go away
-  // completely" -- with the toggle off, registration skips straight to
-  // account creation, no /auth/otp/verify call and no ticket. The server's
-  // own /register mirrors this (see completeRegistrationCore()'s caller):
-  // it only demands otpTicket when settings.otpVerificationEnabled is true.
-  if (otpOn) {
-    // Usually already done: the code is verified as soon as its sixth digit
-    // is entered (onRegOtpInput), so this resolves instantly and the button
-    // goes straight to "Creating your account…". Only a code that has not
-    // been checked yet shows the extra "Verifying code…" step.
-    const st = window._regOtp;
-    const checked = st.ticket && st.verifiedCode === code && Date.now() - st.verifiedAt < OTP_TICKET_FRESH_MS;
-    if (!checked) setBtnLoading('regBtn', true, 'Sign Up', 'Verifying code…');
-    const r = await regVerifyOtp(code);
-    if (!r.ok) {
-      setBtnLoading('regBtn', false, 'Sign Up');
-      return regError(r.stale ? 'A new code was sent. Enter the latest code.' : (r.message || 'Incorrect verification code.'));
-    }
-  }
   setBtnLoading('regBtn', true, 'Sign Up', 'Creating your account…');
   STATE.refCode = referral;
-  window._pendingRegPin = '';
+  window._pendingRegPin = tradePin;
   window._pendingRegPhone = phone;
-  window._pendingRegOtpTicket = window._regOtp.ticket;
   try {
     const email = phoneToEmail(phone);
     await window.fbCreateUser(email, pass);
@@ -2027,7 +1940,7 @@ window.doRegister = async function(){
     // tab -- possibly a different member logging in -- would be treated by
     // bootFromNetwork() as a registration that just happened: a needless
     // /register call, and a "Registration successful" toast on a plain login.
-    window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
+    window._pendingRegPin = ''; window._pendingRegPhone = '';
     regError(fbErrMsg(e));
     setBtnLoading('regBtn', false, 'Sign Up');
   }
@@ -2483,7 +2396,6 @@ async function loadAuthSettings(){
     if (s && s.status === 'success') { STATE.settings = s.settings || {}; applyRegion(); applyBrandName(); }
   } catch (_) {}
   updateReferralFieldHint();
-  applyOtpVerificationUi();
 }
 function referralIsRequired(){
   const st = STATE.settings || {};
@@ -2507,10 +2419,6 @@ function otpVerificationEnabled(){
 // disappearing -- see submitWallet(). Forgot Password is the exception: it
 // hands an existing account to whoever asks, so it keeps requesting a code
 // whatever the toggle says.
-function applyOtpVerificationUi(){
-  const regRow = $('regOtpRow');
-  if (regRow) regRow.style.display = otpVerificationEnabled() ? '' : 'none';
-}
 // Says out loud whether the box must be filled, instead of leaving members
 // to discover it by being rejected. Runs whenever the auth screen paints.
 function updateReferralFieldHint(){
@@ -2776,8 +2684,8 @@ async function enterApp(){
 // ghost-account trap Round-something-earlier already fixed once). Retry
 // once with the referral dropped instead; everything else (PIN, welcome
 // bonus) still goes through.
-async function registerCurrentUser(pin, phone, otpTicket){
-  let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '', otpTicket: otpTicket || '' });
+async function registerCurrentUser(pin, phone){
+  let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '' });
   // Dropping the code and carrying on is only valid while a code is
   // OPTIONAL. Once it is required (the normal state, as soon as the platform
   // has members) retrying with an empty code just earns a REFERRAL_REQUIRED
@@ -2789,7 +2697,7 @@ async function registerCurrentUser(pin, phone, otpTicket){
   if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode && !referralIsRequired()) {
     notify(reg.message || t('That referral code is invalid. Continuing without it.'));
     STATE.refCode = '';
-    reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '', otpTicket: otpTicket || '' });
+    reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
   }
   return reg;
 }
@@ -2802,7 +2710,7 @@ async function registerCurrentUser(pin, phone, otpTicket){
 // sign them out cleanly, and open Sign Up with their number already filled in.
 // Re-submitting it takes doRegister()'s existing "email already in use" path,
 // which signs in and finishes this same registration.
-var SIGNUP_UNFINISHED_CODES = ['OTP_REQUIRED', 'REFERRAL_REQUIRED', 'BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
+var SIGNUP_UNFINISHED_CODES = ['REFERRAL_REQUIRED', 'BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
 async function abandonUnfinishedSignup(reg){
   $('loadingScreen').style.display = 'none';
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
@@ -2819,17 +2727,11 @@ async function abandonUnfinishedSignup(reg){
   if (local && $('regPhone')) $('regPhone').value = '0' + local;
   if ($('regReferral') && STATE.refCode) $('regReferral').value = STATE.refCode;
   setBtnLoading('regBtn', false, 'Sign Up');
-  notify(reg.code === 'OTP_REQUIRED'
-    ? 'Your sign-up was not finished. Verify your number below to finish creating your account.'
-    : (reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
+  notify((reg.message || 'Your sign-up was not finished.') + ' Complete your sign-up below.');
 }
 async function bootFromNetwork(uid){
-  // Was `!!window._pendingRegOtpTicket` -- broke the moment OTP verification
-  // could be off (that ticket is always null then, since no /auth/otp/verify
-  // call ever happens). _pendingRegPhone is set unconditionally by
-  // doRegister() right before Firebase account creation, regardless of the
-  // OTP toggle, so it's the correct "did I just register in this tab"
-  // signal for both the fast-path skip below and the signupFlow toast.
+  // _pendingRegPhone identifies a signup started in this tab; it works
+  // without an OTP ticket.
   const signupFlow = !!window._pendingRegPhone;
   let r;
   // subagent-audit-caught: a brand-new registration always paid for a
@@ -2846,8 +2748,8 @@ async function bootFromNetwork(uid){
   // a later re-login in the same tab session (no page reload) never
   // wrongly takes this shortcut again.
   if (window._pendingRegPhone) {
-    const pin = window._pendingRegPin, phone = window._pendingRegPhone, otpTicket = window._pendingRegOtpTicket;
-    const reg = await registerCurrentUser(pin, phone, otpTicket);
+    const pin = window._pendingRegPin, phone = window._pendingRegPhone;
+    const reg = await registerCurrentUser(pin, phone);
     // The session changed while /register was in flight (a second sign-in
     // event for the same account, or a logout): whatever replaced it owns the
     // screen now. Treating this as a failure would sign the member out of the
@@ -2860,7 +2762,7 @@ async function bootFromNetwork(uid){
       setBtnLoading('regBtn', false, 'Sign Up');
       return;
     }
-    window._pendingRegPin = ''; window._pendingRegPhone = ''; window._pendingRegOtpTicket = '';
+    window._pendingRegPin = ''; window._pendingRegPhone = '';
     r = await api('/account');
   } else {
     r = await api('/account');
@@ -2869,7 +2771,7 @@ async function bootFromNetwork(uid){
       // Ghost account (Firebase user exists, our profile never finished in
       // an earlier session -- e.g. a crash/reload between account creation
       // and /register finishing) -- self-heal the same way.
-      const reg = await registerCurrentUser(window._pendingRegPin || '', window._pendingRegPhone || '', window._pendingRegOtpTicket || '');
+      const reg = await registerCurrentUser(window._pendingRegPin || '', window._pendingRegPhone || '');
       if (reg.stale || !STATE.user || STATE.user.uid !== uid) return;
       if (reg.status !== 'success' && reg.status !== 'already_done') {
         await abandonUnfinishedSignup(reg);
