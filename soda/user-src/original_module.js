@@ -3360,7 +3360,7 @@ function maybeShowAnnouncement(){
 async function renderHome(){
   const hadCache = !!STATE.account;
   const hadInvestments = Array.isArray(STATE.investments);
-  const shownProducts = JSON.stringify(STATE.products || []);
+  const shownProducts = homeSignature();
   paintHome();
   const [accR, invR, prR] = await Promise.all([ api('/account'), api('/investments'), api('/public/products') ]);
   if (accR.status === 'success') STATE.account = accR.account;
@@ -3374,7 +3374,7 @@ async function renderHome(){
   if (STATE.page !== 'home') return; // navigated away while awaiting
   // Repaint only when the catalog really changed: a rebuild restarts the
   // banner carousel, the ticker and the Buy glow and throws away the scroll position.
-  if (JSON.stringify(STATE.products || []) !== shownProducts) paintHome();
+  if (homeSignature() !== shownProducts) paintHome();
   // The envelope button's unread dot. Fetched once per Home entry, AFTER
   // the paint (never blocking it) and patched in place via
   // updateMessageBadge() so it can't tear down the ticker/chest animation.
@@ -3449,6 +3449,8 @@ function startHomeCarousel(){
     preload.src = slides[nextIdx];
   }, 4500);
 }
+function vOwnedCount(key){ return (STATE.investments || []).filter(i => i.tierKey === key).length; }
+function homeSignature(){ return JSON.stringify(STATE.products || []) + '|' + (STATE.investments || []).map(i => i.tierKey).join(','); }
 function vProductCardHtml(p){
   const { cycle, daily, expected } = planFigures(p);
   const initial = esc(String(p.name || '?').trim()[0] || '?');
@@ -3459,7 +3461,7 @@ function vProductCardHtml(p){
   <article class="v-card">
     <h3 class="v-card-h">${esc(p.name)}</h3>
     <div class="v-card-b">
-      <div class="v-card-img">${img}</div>
+      <div class="v-card-img">${img}${Number(p.buyLimit) > 0 ? `<em class="v-badge">${vOwnedCount(p.key)}/${Number(p.buyLimit)}</em>` : ''}</div>
       <dl class="v-rows">
         <div><dt>Price</dt><dd>${esc(vMoney(p.price))}</dd></div>
         <div><dt>Days</dt><dd>${cycle}</dd></div>
@@ -3474,6 +3476,8 @@ function vProductCardHtml(p){
 // ticking countdown); only the markup is new. A closed product is a plain
 // disabled button, the glow is for the one that can be bought.
 function vBuyHtml(p){
+  const limit = Number(p.buyLimit) || 0;
+  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>LIMIT REACHED</span></button>';
   const open = p.isOpen !== false && !p.comingSoon;
   if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>BUY NOW</span></button>`;
   const at = Number(p.opensAt) || 0;
@@ -3496,7 +3500,7 @@ function paintHome(){
   <div class="v-quick">
     <button onclick="openDepositSheet()"><span class="v-ic">${VI.bottle}</span><b>Deposit</b></button>
     <button onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottle}</span><b>Withdraw</b></button>
-    <button onclick="openHelpDialog('Help Me')"><span class="v-ic">${VI.headset}</span><b>Help Me</b></button>
+    <button onclick="openHelpDialog('Help')"><span class="v-ic">${VI.headset}</span><b>Help Me</b></button>
     <button onclick="openChestSheet()"><span class="v-ic">${VI.bottle}</span><b>Gift Code</b></button>
   </div>
   <div class="v-ticker"><span class="v-ticker-ic">${VI.megaphone}</span><div class="v-ticker-win"><span class="v-ticker-txt">${esc(ticker)}</span></div></div>
@@ -3686,21 +3690,25 @@ function vOwnedCardHtml(inv){
     : `<span class="v-glyph">${initial}</span>`;
   const startMs = st.createdMs;
   const endMs = startMs + st.total * 86400000;
+  const two = ms => { const t = statementStampMs(ms).split(' '); return esc(t[0] || '') + '<br>' + esc(t[1] || ''); };
   return `
-  <article class="v-card${inv.granted ? ' v-gift' : ''}">
-    <h3 class="v-card-h">${esc(name)}${inv.granted ? '<i class="v-ribbon">GIFT</i>' : ''}</h3>
+  <article class="v-card v-owned${inv.granted ? ' v-gift' : ''}">
+    <h3 class="v-card-h">${esc(name)}</h3>
+    ${inv.granted ? '<i class="v-ribbon"><b>GIFT</b></i>' : ''}
     <div class="v-card-b">
       <div class="v-card-img">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
-      <dl class="v-rows">
-        <div><dt>Price</dt><dd>${esc(vMoney(st.amount))}</dd></div>
-        <div><dt>Days</dt><dd>${st.total}</dd></div>
-        <div><dt>Daily</dt><dd>${esc(vMoney(st.daily))}</dd></div>
-        <div><dt>Total</dt><dd>${esc(vMoney(st.expected))}</dd></div>
-      </dl>
-    </div>
-    <div class="v-dates">
-      <div><span>Purchase</span><b>${esc(statementStampMs(startMs))}</b></div>
-      <div><span>Expire</span><b>${esc(statementStampMs(endMs))}</b></div>
+      <div class="v-side">
+        <dl class="v-rows">
+          <div><dt>Price</dt><dd>${esc(vMoney(st.amount))}</dd></div>
+          <div><dt>Days</dt><dd>${st.total}</dd></div>
+          <div><dt>Daily</dt><dd>${esc(vMoney(st.daily))}</dd></div>
+          <div><dt>Total</dt><dd>${esc(vMoney(st.expected))}</dd></div>
+        </dl>
+        <div class="v-dates">
+          <div><span>Purchase</span><b>${two(startMs)}</b></div>
+          <div><span>Expire</span><b>${two(endMs)}</b></div>
+        </div>
+      </div>
     </div>
   </article>`;
 }
@@ -4694,10 +4702,12 @@ window.closeHelpDialog = function(){
 var _statementCat = 'all';
 var _statementShown = 10;
 var STATEMENT_TURNTABLE_TYPES = new Set(['turntable','spin','spin_bonus']);
+var STATEMENT_FRUIT_TYPES = new Set(['fruit','fruit_win','fruit_bet']);
 function statementCategoryMatch(cat, t){
   if (cat === 'deposit') return t.type === 'deposit';
   if (cat === 'withdraw') return t.type === 'withdraw';
   if (cat === 'turntable') return STATEMENT_TURNTABLE_TYPES.has(t.type);
+  if (cat === 'fruit') return STATEMENT_FRUIT_TYPES.has(t.type);
   return true;
 }
 function statementDescription(t){
@@ -4756,23 +4766,24 @@ function renderStatement(){
 }
 window.statementLoadMore = function(){ _statementShown += 10; renderStatement(); };
 window.switchStatementCategory = function(cat){
-  if (!['all','deposit','withdraw','turntable'].includes(cat)) return;
+  if (!['all','deposit','withdraw','turntable','fruit'].includes(cat)) return;
   _statementCat = cat; _statementShown = 10;
   const tabs = $('statementTabs');
   if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
   renderStatement();
 };
 window.openTransactionStatement = async function(cat){
-  _statementCat = ['all','deposit','withdraw','turntable'].includes(cat) ? cat : 'all';
+  _statementCat = ['all','deposit','withdraw','turntable','fruit'].includes(cat) ? cat : 'all';
   _statementShown = 10;
   const hadCache = Array.isArray(STATE.transactions);
   const bal = (STATE.account && STATE.account.walletBalance) || 0;
   openSheet('Balance Record', `
     <div class="v-recbal"><span>CURRENT BALANCE</span><b id="recBalance">${esc(vMoney2(bal))}</b></div>
     <div class="v-rectabs" id="statementTabs">
-      ${[['all','All'],['deposit','Deposit'],['withdraw','Withdraw'],['turntable','Turntable']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
+      ${[['all','All'],['deposit','Deposit'],['withdraw','Withdraw'],['turntable','Turntable'],['fruit','Fruit']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
     </div>
     <div id="statementBody"></div>`);
+  $('sheetBg').classList.add('v-rec-page');
   if (hadCache) renderStatement();
   else $('statementBody').innerHTML = '<div class="v-empty">Loading…</div>';
   const r = await api('/transactions');
@@ -5179,6 +5190,7 @@ function maybeAnnounceOnEntry(){
 }
 function openSheet(title, bodyHtml){
   dismissNotify();
+  $('sheetBg').classList.remove('v-rec-page');
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal

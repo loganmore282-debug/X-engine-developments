@@ -52,3 +52,39 @@ function runStats(rows) {
   ok(/id="sTickerText"/.test(adm) && /tickerText:\$\('sTickerText'\)\.value\.trim\(\)/.test(adm), 'the admin saves it');
   console.log(`PASS: screen data (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
+
+// 4. purchase limit per member ("0/3" on the card): real /invest/create + real sanitizer
+const sanSrc = (() => { let st = src.indexOf('function sanitizeProductInput('), d = 0; for (let k = src.indexOf('{', st); ; k++) { if (src[k] === '{') d++; else if (src[k] === '}' && --d === 0) return src.slice(st, k + 1); } })();
+const sanitize = new Function('MAX_MONEY_AMOUNT', 'hhmmToMin', sanSrc + '; return sanitizeProductInput;')(1e9, () => 0);
+const out0 = {};
+const base = { key: 'a1', name: 'A', price: 1000 };
+ok(sanitize(base, 0, out0).buyLimit === 0, 'no limit by default');
+ok(sanitize({ ...base, buyLimit: '3' }, 0, {}).buyLimit === 3, 'the admin can set 3');
+ok(sanitize({ ...base, buyLimit: '0' }, 0, {}).buyLimit === 0 && sanitize({ ...base, buyLimit: '' }, 0, {}).buyLimit === 0, '0 or blank = no limit');
+for (const bad of ['-1', '2.5', 'abc', '5000']) ok(sanitize({ ...base, buyLimit: bad }, 0, {}) === null, 'refuses ' + bad);
+
+const invRoute = grab("app.post('/invest/create'", "app.get('/investments'");
+async function buy(limit, owned) {
+  let handler; const app = { post: (p, h) => { if (p === '/invest/create') handler = h; }, get() {} };
+  const user = { walletBalance: 100000, totalInvested: 0, status: 'active' };
+  const investments = Array.from({ length: owned }, (_, i) => ({ userId: 'u1', tierKey: 'a1', id: 'i' + i }))
+    .concat([{ userId: 'u1', tierKey: 'other' }, { userId: 'u2', tierKey: 'a1' }]);
+  const tier = { key: 'a1', name: 'A', price: 10000, cycle: 30, buyLimit: limit, active: true };
+  const q = coll => { const c = []; const o = { where(f, _op, v) { c.push([f, v]); return o; }, get: async () => { const rows = coll.filter(r => c.every(([f, v]) => r[f] === v)); return { size: rows.length, docs: rows.map(r => ({ data: () => r })) }; } }; return o; };
+  const db = { collection: n => n === 'users' ? { doc: () => ({ get: async () => ({ exists: true, data: () => user }), update: async u => { for (const [k, v] of Object.entries(u)) user[k] = v && v.__inc !== undefined ? (user[k] || 0) + v.__inc : v; } }) }
+    : n === 'investments' ? { ...q(investments), doc: () => ({ id: 'new', set: async d => { investments.push(d); }, delete: async () => {} }) }
+    : { add: async () => ({}) } };
+  new Function('app', 'db', 'verifyAuth', 'getProductByKey', 'productOpenState', 'getSettings', 'withLock', 'productExpectedReturn', 'FieldValue', 'nowStr', 'newStatementId', 'fmtMoney', 'grantTurntableSpins', 'console',
+    invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
+    { increment: n => ({ __inc: n }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console);
+  let code = 200, body; const res = { status: c => { code = c; return res; }, json: b => { body = b; } };
+  await handler({ headers: {}, body: { tierKey: 'a1' } }, res);
+  return { code, body, user, count: investments.filter(i => i.userId === 'u1' && i.tierKey === 'a1').length };
+}
+(async () => {
+  let r = await buy(2, 1); ok(r.body.status === 'success' && r.count === 2 && r.user.walletBalance === 90000, 'under the limit: bought and charged once');
+  r = await buy(2, 2); ok(r.code === 400 && r.body.code === 'PURCHASE_LIMIT' && r.user.walletBalance === 100000 && r.count === 2, 'at the limit: refused, nothing charged, nothing created');
+  r = await buy(0, 9); ok(r.body.status === 'success', 'no limit means no restriction');
+  r = await buy(1, 0); ok(r.body.status === 'success', 'the first one of a limit-1 asset is fine');
+  console.log(`PASS: purchase limit (${n} checks so far)`);
+})().catch(e => { console.error(e); process.exit(1); });

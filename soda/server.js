@@ -4688,6 +4688,17 @@ app.post('/invest/create', async (req, res) => {
       if (!fresh.exists) throw new Error('User not found');
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       const bal = fresh.data().walletBalance || 0;
+      // Per-member purchase limit (admin-set per asset; 0 = none). Counted inside the
+      // balance lock, from the investments themselves, so two quick taps cannot both pass.
+      const limit = Number(liveTier.buyLimit) || 0;
+      if (limit > 0) {
+        const ownedSnap = await db.collection('investments').where('userId', '==', userId).where('tierKey', '==', liveTier.key).get();
+        if (ownedSnap.size >= limit) {
+          const limErr = new Error(`You can own at most ${limit} of this asset and already have ${ownedSnap.size}.`);
+          limErr.code = 'PURCHASE_LIMIT';
+          throw limErr;
+        }
+      }
       // Carries a code so the app can react to this specific failure (send
       // the member to Deposit) instead of string-matching the message.
       if (bal < liveTier.price) {
@@ -8477,7 +8488,13 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     return refuse('Open daily from / until', 'a daily window cannot start and end at the same minute');
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
   const order = p?.order != null ? Number(p.order) : fallbackOrder;
-  return { key, name, price, cycle, expectedReturn, multiplier, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  // How many of this asset one member may own (the "0/3" badge on the card). 0 or blank = no limit.
+  let buyLimit = 0;
+  if (p?.buyLimit != null && p.buyLimit !== '') {
+    buyLimit = Number(p.buyLimit);
+    if (!Number.isInteger(buyLimit) || buyLimit < 0 || buyLimit > 1000) return refuse('Purchase limit', 'must be a whole number from 0 to 1000 (0 = no limit)');
+  }
+  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,

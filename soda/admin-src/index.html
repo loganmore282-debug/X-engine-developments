@@ -2294,6 +2294,8 @@ function editProduct(p, order){
       <div><label>Total payout (${adminCur()})</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
       <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||180}"></div>
     </div>
+    <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see it on the card as owned/limit, for example 0/3.</p>
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
     <div class="row">
       <div><label>Display position (lower appears first)</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
@@ -2376,7 +2378,7 @@ function editProduct(p, order){
     const typedKey = $('pKey').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'').slice(0,24);
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
-      expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, order:$('pOrder').value,
+      expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
