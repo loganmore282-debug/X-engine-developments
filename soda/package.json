@@ -1,0 +1,28 @@
+{
+  "name": "petro-server",
+  "version": "1.0.0",
+  "description": "Petro investment platform backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test:audit": "node test-payment-recovery.js && node test-member-audit.js && node test-member-audit.js --built && node test-checkin-idempotency.js && node test-withdraw-rules.js && node test-spin-sources.js && node test-uganda-only.js && node test-deposit-phone.js && node test-audit-money-regressions.js && node test-admin-smoke.js && node test-touch-edges.js && node test-usdt-claim-race.js && node test-index-coverage.js && node test-auth-flows.js && node test-auth-flows.js --built && node test-login-recovery.js && node test-session-policy.js && node test-session-navigation.js && node test-admin-push.js && node test-admin-push.js --built && node test-admin-grant-asset.js && node test-payment-review.js && node test-usdt-intent.js && node test-otp-reset.js && node test-contact-links.js && node test-contact-links.js --built"
+  },
+  "dependencies": {
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.4.0",
+    "firebase-admin": "^12.0.0",
+    "helmet": "^7.1.0",
+    "mongodb": "^6.3.0",
+    "pdfkit": "^0.20.2"
+  },
+  "devDependencies": {
+    "acorn": "^8.15.0",
+    "javascript-obfuscator": "^5.5.0",
+    "jsdom": "^30.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
