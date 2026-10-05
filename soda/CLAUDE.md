@@ -20,7 +20,8 @@
 
 ## Status log
 1. (done) Branch `claude/soda-build` created; `soda/` is a file copy of `petro/` at its latest commit (186 tracked files). Still entirely Petro inside (names, Firebase, design) -- the steps below change that.
-2. (next) VPS prep: secrets file + folder + pm2 entry (owner runs commands). Atlas user `sodaapp` created by owner.
+2. (done) Atlas user `sodaapp` created; `/srv/soda-secrets/secrets.local.js` written on the VPS (PORT 3001, MONGODB_URI, ADMIN_KEY) and the database login verified. NOTE: the admin key printed during setup appeared in screenshots -- re-roll it (rerun the save command) before go-live. `deploy/ecosystem.config.js` now names the process `soda-server` and reads `/srv/soda-secrets/`.
+2b. (next) Install the code on the VPS (sparse clone of `soda/` from `claude/soda-build` into `/srv/soda-src`, `npm install --omit=dev`). The server cannot START yet: it exits without `FIREBASE_SERVICE_ACCOUNT` until step 4 removes Firebase.
 3. Rename pass: one-place brand name, remove Petro names/hosts/ids, new package name.
 4. Replace Firebase auth with MongoDB auth (server + client + tests).
 5. Single-host routing (/api, secret admin path), admin-editable host.

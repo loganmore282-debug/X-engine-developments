@@ -1,4 +1,4 @@
-// pm2 process definition for the Petro backend on the Hostinger VPS.
+// pm2 process definition for the Soda backend on the Hostinger VPS (shared with Petro).
 //
 // Chosen over a raw systemd unit because this VPS deploys by SSH + rsync,
 // not a package manager: pm2 gives `pm2 reload` (zero-downtime, the process
@@ -8,7 +8,7 @@
 // alternative if the owner prefers it; nothing else in this pipeline
 // depends on pm2 specifically.
 //
-// Run from petro/deploy/ on the VPS: `pm2 start ecosystem.config.js`.
+// Run from soda/deploy/ on the VPS: `pm2 start ecosystem.config.js`.
 // The working directory is set explicitly so pm2 can be started from any
 // cwd (a cron entry, a fresh SSH session) and still find server.js.
 // Secrets live in secrets.local.js, next to this file, on the VPS ONLY --
@@ -18,19 +18,22 @@
 // than assumed to exist -- pm2 still starts (server.js's own env validation,
 // e.g. service-account.js's loadServiceAccount, is what reports a missing
 // secret loudly, not a crash here).
+// Soda's secrets live OUTSIDE the git checkout, in /srv/soda-secrets/, so a
+// pull can never overwrite them and Petro's own secrets file is never read.
 let secrets = {};
-try { secrets = require('./secrets.local.js'); } catch (e) { secrets = {}; }
+try { secrets = require('/srv/soda-secrets/secrets.local.js'); }
+catch (e) { try { secrets = require('./secrets.local.js'); } catch (e2) { secrets = {}; } }
 
 module.exports = {
   apps: [
     {
-      name: 'petro-server',
+      name: 'soda-server',
       script: '../server.js',
       cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
       // The whole point of runTransaction being a fake, non-locking shim
-      // (see petro/CLAUDE.md, "Money-safety invariants") is that money
+      // (see soda/CLAUDE.md, "Money-safety invariants") is that money
       // credits are guarded by IN-PROCESS locks (withLock()). Cluster mode
       // or more than one instance would put two Node processes each holding
       // their own lock table, and the very race those locks exist to close
@@ -44,8 +47,8 @@ module.exports = {
       max_restarts: 10,
       min_uptime: '15s',
       restart_delay: 2000,
-      out_file: '/root/.pm2/logs/petro-server-out.log',
-      error_file: '/root/.pm2/logs/petro-server-error.log',
+      out_file: '/root/.pm2/logs/soda-server-out.log',
+      error_file: '/root/.pm2/logs/soda-server-error.log',
       time: true,
     },
   ],
