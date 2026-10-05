@@ -29,8 +29,8 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'same-site' }
 }));
 
-// This process is reached ONLY via api.PETRO_DOMAIN now (see
-// deploy/nginx-petro.conf.template -- app./qumx. each get their own nginx
+// This process is reached ONLY via api.SODA_DOMAIN now (see
+// deploy/nginx-soda.conf.template -- app./qumx. each get their own nginx
 // `root`, straight off disk, independent of this backend). Serving the
 // member app's static files here too was a leftover from the bare-IP-only
 // era, before that split existed, when this process had to double as the
@@ -181,7 +181,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // route once, before that route was added here too.
 // /admin/app-icon/set carries TWO PNGs (512 and 192) in one body, so it
 // needs the image parser even though each one on its own is small.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/petro-image/set', '/admin/app-icon/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set', '/admin/soda-image/set', '/admin/app-icon/set']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set', '/admin/rules-content/set']);
 // PesaJet signs the RAW REQUEST PAYLOAD -- their dashboard says so in as many
 // words ("computing an HMAC-SHA256 digest of the raw request payload using
@@ -197,7 +197,7 @@ const rawJsonParser = express.json({ limit: '64kb', verify: keepRawBody });
 app.use((req, res, next) => (RAW_BODY_ROUTES.has(req.path) ? rawJsonParser : HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 
-// Petro runs entirely on one Hostinger VPS -- backend (pm2, :3000) and both
+// Soda runs entirely on one Hostinger VPS -- backend (pm2, :3000) and both
 // static frontends (nginx, app./admin. subdomains) on the same box. The
 // browser still treats app./admin. as cross-origin from api. (different
 // subdomains are different origins), so their exact origins must be listed
@@ -205,32 +205,32 @@ app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 // middleware answers an unlisted origin with NO CORS headers at all, the
 // browser blocks the response, and the app reports its own generic "Network
 // error. Check your connection." -- identical to a real connectivity
-// problem, on a backend that is actually up and healthy. If a Petro screen
+// problem, on a backend that is actually up and healthy. If a Soda screen
 // ever reports a network error while the server is fine, check this list
 // FIRST.
 //
 // Snow's own live domain (chn-snow2beer.com) was deliberately dropped from
-// this copy -- it has no business reaching Petro's database.
+// this copy -- it has no business reaching Soda's database.
 const CORS_ALLOWED_ORIGINS = new Set([
-  'https://petro-platform.com', 'https://www.petro-platform.com',
+  'https://soda-platform.com', 'https://www.soda-platform.com',
   // The real domain the owner actually bought (2026-09-29). app./qumx.
-  // are the two frontend subdomains nginx-petro.conf.template serves;
+  // are the two frontend subdomains nginx-soda.conf.template serves;
   // api. itself never needs to be in this list (a same-origin API call
   // carries no Origin header requiring a CORS allowance). qumx. is the
   // admin panel's own subdomain -- deliberately a random 4-letter string,
   // not "admin", per the owner's own request once the domain went public
-  // (see nginx-petro.conf.template's matching comment); if it's ever
+  // (see nginx-soda.conf.template's matching comment); if it's ever
   // regenerated, this entry, the template, and the live certbot cert all
   // have to agree.
-  'https://app.petro-cchnug.com', 'https://qumx.petro-cchnug.com',
-  // Direct VPS frontend used while Petro is served/tested on port 8080.
+  'https://mysoda.p-colasoda.com', 'https://mysoda.p-colasoda.com',
+  // Direct VPS frontend used while Soda is served/tested on port 8080.
   // Different ports are different browser origins, so without this exact
   // entry the member page loads but every API call to :3000 is blocked by CORS.
-  'http://179.198.197.114:8080',
+  'http://179.198.197.114:8090',
 ]);
 // Suffix-matched hosts, for a platform that hands out subdomains under one
 // shared suffix (Vercel's *.vercel.app, Cloudflare Pages' *.pages.dev,
-// etc.) rather than a fixed origin -- not needed for Petro's own fixed VPS
+// etc.) rather than a fixed origin -- not needed for Soda's own fixed VPS
 // domains, which live in CORS_ALLOWED_ORIGINS/_corsExtraHosts above/below
 // instead, but kept here (empty) as the mechanism to add one back through
 // if this ever moves off a single fixed VPS again.
@@ -247,8 +247,8 @@ const CORS_ALLOWED_SUFFIXES = [];
 // undo it is... the admin panel. The baseline guarantees a way back in.
 let _corsExtraHosts = [];
 // One hostname, as the CORS check will compare it: lowercased, scheme and any
-// path/port stripped, so the owner can paste "https://petro-platform.com/" or
-// type "petro-platform.com" and get the same result.
+// path/port stripped, so the owner can paste "https://soda-platform.com/" or
+// type "soda-platform.com" and get the same result.
 // Matching is EXACT hostname only -- no wildcards, no suffix matching. A
 // suffix entry typed as ".com" would hand every site on the internet access
 // to this backend, and there is no phrasing of that field that makes the
@@ -257,11 +257,11 @@ function normalizeAllowedHost(raw) {
   let s = String(raw == null ? '' : raw).trim().toLowerCase();
   if (!s) return { skip: true };
   s = s.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
-  if (!s) return { error: 'Enter a domain such as petro-platform.com' };
+  if (!s) return { error: 'Enter a domain such as soda-platform.com' };
   if (s.length > 253) return { error: `"${raw}" is too long to be a domain.` };
   if (s.includes('*')) return { error: `Wildcards are not allowed ("${raw}"). Add each domain on its own line.` };
   const labels = s.split('.');
-  if (labels.length < 2) return { error: `"${raw}" is not a full domain. Use something like petro-platform.com.` };
+  if (labels.length < 2) return { error: `"${raw}" is not a full domain. Use something like soda-platform.com.` };
   if (!labels.every(l => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(l)))
     return { error: `"${raw}" is not a valid domain name.` };
   return { host: s };
@@ -297,8 +297,8 @@ function sanitizeAllowedOrigins(raw) {
 // So a host the owner allowed now covers its SUBDOMAINS too. That is the
 // whole premise of a wildcard DNS record: every label under his domain is
 // his. Matched on '.' + domain, which cannot be spoofed from outside --
-// "petro-platform.com.evil.com" ends with ".evil.com", not
-// ".petro-platform.com".
+// "soda-platform.com.evil.com" ends with ".evil.com", not
+// ".soda-platform.com".
 //
 // Deliberately NOT dependent on the base domain being set correctly: that
 // is a separate setting for a separate job (deciding which COUNTRY a label
@@ -442,7 +442,7 @@ const DEFAULT_REGION = Object.freeze({
   active: true, isDefault: true, languages: ['en'], defaultLang: 'en',
 });
 let _mainAllowedHosts = [];
-let _baseDomain = 'petro-platform.com';
+let _baseDomain = 'soda-platform.com';
 let _blockRootDomain = true;
 let _parkedHosts = [];
 function refreshCorsSnapshot() {
@@ -505,7 +505,7 @@ app.use((req, res, next) => {
   if (!hostIsParked(requestHost(req))) return next();
   return res.status(403).json({
     status: 'error', code: 'HOST_PARKED',
-    message: 'This address does not serve the app. Please open the correct Petro link.',
+    message: 'This address does not serve the app. Please open the correct Soda link.',
   });
 });
 
@@ -613,7 +613,7 @@ const DEFAULT_SETTINGS = {
   // LABELS ('g26e', 'shy') and the server builds the hostname from them and
   // this, so adding an address is four characters typed, not a full domain
   // spelled out in two places.
-  baseDomain: 'petro-platform.com',
+  baseDomain: 'soda-platform.com',
   // The bare domain and its www. form serve nobody: every member arrives on
   // their own country's subdomain. With this on, a request from the root
   // domain is refused with HOST_PARKED and the app shows a short notice
@@ -670,7 +670,7 @@ const DEFAULT_SETTINGS = {
   autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', supportEmail: '',
   rulesText: '', aboutText: '',
-  // Owner: "l would like to also to edit the app name petro, so make it when
+  // Owner: "l would like to also to edit the app name soda, so make it when
   // it can be editable everywhere." The platform's own name, previously
   // written into about a dozen strings across the client by hand. It has a
   // real DEFAULT (unlike brandTagline, which is stored only if set) because
@@ -678,7 +678,7 @@ const DEFAULT_SETTINGS = {
   // paint an app with no name on it during the first boot after a bad save.
   // Length is capped in the update route -- the name goes into the Home
   // wordmark and the Account profile mark, where a long one wraps the layout.
-  brandName: 'Petro',
+  brandName: 'Soda',
   // Home announcement dialog, owner: "put it back... opens from middle...
   // background as that of activity checker [ticker]... OK button... triggers
   // link and joins telegram group... X button top right." A real feature
@@ -762,7 +762,7 @@ const NUMBER_FONT_OPTIONS = ['Bodoni Moda', 'Playfair Display', 'DM Serif Displa
 // Daily Cashback × 150 = Total Return = Investment × 30, per tier — every
 // figure below is stamped explicitly rather than derived, matching the
 // owner-supplied table exactly.
-// Placeholder catalog — Petro has no confirmed product names/images yet (see
+// Placeholder catalog — Soda has no confirmed product names/images yet (see
 // CLAUDE.md "Product config"). Formula reused from Snow: expectedReturn = price * 30
 // over a 150-day cycle. Rename/replace images once the owner supplies real ones.
 const DEFAULT_PRODUCTS = [
@@ -824,7 +824,7 @@ function depositAutomaticProvider(sett) {
 // (payout) uses. 'follow' defers to depositProvider() -- everything else
 // ('marzpay'/'pesajet'/'manual', or the legacy 'automatic' alias) pins the
 // payout side independently of the deposit side.
-// Petro accepts Uganda mobile money only.
+// Soda accepts Uganda mobile money only.
 const MARZPAY_MARKETS = Object.freeze({
   '256': { code: 'UG', currency: 'UGX' },
 });
@@ -926,10 +926,10 @@ async function getHelpBanner() {
   _helpBannerCacheTs = Date.now();
   return _helpBannerCache;
 }
-// Two Petro-only image slots -- the Referral page banner and the brand logo
+// Two Soda-only image slots -- the Referral page banner and the brand logo
 // shown on the Account profile card. Same 'banners' collection and same
 // 60s cache shape as getHomeBanner()/getHelpBanner() above, but written
-// once generically rather than copy-pasted per slot: `petro-<slot>` doc ids
+// once generically rather than copy-pasted per slot: `soda-<slot>` doc ids
 // keep them from colliding with Snow's inherited 'home'/'help' docs.
 // 'authhero' and 'authcard' back the two halves of the Login / Sign Up
 // screen (owner: "2 different images so one image will appear on login and
@@ -970,21 +970,21 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const PETRO_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner'];
-const _petroImageCache = {};
+const SODA_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner'];
+const _sodaImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
-async function getPetroImage(slot) {
-  if (!PETRO_IMAGE_SLOTS.includes(slot)) return null;
-  const cached = _petroImageCache[slot];
+async function getSodaImage(slot) {
+  if (!SODA_IMAGE_SLOTS.includes(slot)) return null;
+  const cached = _sodaImageCache[slot];
   if (cached && Date.now() - cached.ts < 60 * 1000) return cached.image;
   let image = null;
   try {
-    const ref = db.collection('banners').doc('petro-' + slot);
+    const ref = db.collection('banners').doc('soda-' + slot);
     const snap = await ref.get();
     image = (snap.exists && snap.data().image) || null;
     // One-time data migration only: older uploads lived under the fork's
-    // document prefix. If Petro has no value yet, copy that image into the
-    // Petro document and delete the obsolete source document.
+    // document prefix. If Soda has no value yet, copy that image into the
+    // Soda document and delete the obsolete source document.
     if (!snap.exists) {
       const legacyRef = db.collection('banners').doc(LEGACY_IMAGE_PREFIX + slot);
       const legacy = await legacyRef.get();
@@ -996,7 +996,7 @@ async function getPetroImage(slot) {
       }
     }
   } catch (_) { image = cached ? cached.image : null; }
-  _petroImageCache[slot] = { image, ts: Date.now() };
+  _sodaImageCache[slot] = { image, ts: Date.now() };
   return image;
 }
 // ── BRAND ASSETS: the installed-app icon ──
@@ -1006,7 +1006,7 @@ async function getPetroImage(slot) {
 // when a member installs the app. That consumer can't use a data: URI and
 // runs no line of our code, so it has to be a real image FILE at a fixed,
 // permanent URL. That is what this serves, and it is why it can't just be
-// one more slot on /public/petro-images.
+// one more slot on /public/soda-images.
 //
 // The bytes live in their own document and are never part of any per-boot
 // payload, for the same two reasons the banner video isn't: Mongo caps a
@@ -1024,8 +1024,8 @@ const BRAND_ASSET_SLOTS = {
   'app-icon-192': { mime: 'image/png',  w: 192,  h: 192, max: 300 * 1024, file: 'icon-192.png' },
 };
 const _brandAssetCache = {}, _bundledAssetCache = {};
-// The icon that ships inside the static build, read off disk. petro-server's
-// rootDir is `petro/`, so `user/icon-512.png` is right there beside this
+// The icon that ships inside the static build, read off disk. soda-server's
+// rootDir is `soda/`, so `user/icon-512.png` is right there beside this
 // file. It exists so the manifest's icon URL ALWAYS resolves to a real PNG:
 // before the owner has ever uploaded one, and if the database is unreachable.
 // An install prompt with a broken icon is worse than one with the old icon.
@@ -1403,7 +1403,7 @@ function regionUsesBareLocal(region) {
 function phoneToEmail(phone, region) {
   const r = region || currentRegion();
   const local = localDigits(phone, r) || String(phone).replace(/\D/g, '').replace(/^0+/, '');
-  return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@petro-platform.com';
+  return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@soda-platform.com';
 }
 // STRICT on purpose — for Uganda every real mobile number is 256 + exactly 9
 // digits starting with 7, and each other region declares its own length and
@@ -1829,7 +1829,7 @@ function phoneFromVerifiedEmail(email, bodyPhone) {
   const derived = cleanPhone(address.split('@')[0]);
   if (!derived) return null;
   const allowed = [phoneToEmail(derived)];
-  if (regionUsesBareLocal()) allowed.push(derived.replace(/\D/g, '') + '@petro-platform.com');
+  if (regionUsesBareLocal()) allowed.push(derived.replace(/\D/g, '') + '@soda-platform.com');
   return allowed.includes(address) ? derived : null;
 }
 function paymentAmount(value) {
@@ -2502,7 +2502,7 @@ function otpOriginHost(req) {
   return '';
 }
 function otpSmsText(code, sett, req) {
-  const brand = String((sett && sett.brandName) || 'Petro').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 20) || 'Petro';
+  const brand = String((sett && sett.brandName) || 'Soda').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 20) || 'Soda';
   const host = otpOriginHost(req);
   return `${code} is your ${brand} verification code. It expires in 10 minutes. Never share it with anyone.` +
     (host ? `\n\n@${host} #${code}` : '');
@@ -2665,14 +2665,14 @@ function pesajetPhone(raw) {
 }
 // PesaJet's `provider` is OPTIONAL, and that is load-bearing here: its own
 // SDK says 073 spans both networks and returns null rather than guessing, so
-// sending a wrong operator is worse than sending none. Petro stores the
+// sending a wrong operator is worse than sending none. Soda stores the
 // network as NETWORK_NAMES ('MTN Mobile Money' / 'Airtel Money') when the
 // member picked one; when it did not, this returns null and the field is
 // omitted from the payload so PesaJet resolves it itself.
 //
 // NOTE the prefix lists differ: PesaJet's SDK maps 77/78/76/79/39 -> mtn and
-// 70/75/74 -> airtel, while Petro's own UGANDA_MOBILE_PREFIXES does not carry
-// 39. Deliberately NOT reconciled by widening Petro's list -- that list
+// 70/75/74 -> airtel, while Soda's own UGANDA_MOBILE_PREFIXES does not carry
+// 39. Deliberately NOT reconciled by widening Soda's list -- that list
 // governs which numbers this platform accepts at all, and quietly admitting a
 // new prefix because a payment provider happens to recognise it is a
 // different decision from this one. The stored network wins where there is
@@ -3417,7 +3417,7 @@ app.get('/health', async (_req, res) => {
 // ── AUTO-DEPLOY (GitHub webhook -> git pull + npm install + pm2 reload) ──
 // Owner: doing this by hand over Termux/SSH every single time is "tiresome"
 // -- this closes that loop. A Claude Code session in this environment cannot
-// SSH out (see petro/CLAUDE.md's "Hosting" section), so the only direction
+// SSH out (see soda/CLAUDE.md's "Hosting" section), so the only direction
 // that ever worked here is the VPS pulling; this just makes the VPS do that
 // pull BY ITSELF the moment something lands on the deploy branch, instead of
 // a human running the same three commands over SSH every time.
@@ -3433,13 +3433,13 @@ app.get('/health', async (_req, res) => {
 // a pull+reload on demand, but only of whatever is actually sitting on
 // DEPLOY_BRANCH in this repo -- it cannot run an arbitrary command.
 const DEPLOY_WEBHOOK_SECRET = process.env.DEPLOY_WEBHOOK_SECRET || '';
-const DEPLOY_BRANCH = process.env.DEPLOY_BRANCH || 'claude/petro-platform-build';
-// The sparse checkout root (git lives here) vs. the actual petro/ app
+const DEPLOY_BRANCH = process.env.DEPLOY_BRANCH || 'claude/soda-platform-build';
+// The sparse checkout root (git lives here) vs. the actual soda/ app
 // directory inside it (npm/pm2 commands run from here) -- see
-// petro/CLAUDE.md's "Hosting" section for why these are two different
+// soda/CLAUDE.md's "Hosting" section for why these are two different
 // directories on this VPS.
-const DEPLOY_GIT_DIR = process.env.DEPLOY_GIT_DIR || '/srv/petro-src';
-const DEPLOY_APP_DIR = process.env.DEPLOY_APP_DIR || (DEPLOY_GIT_DIR + '/petro');
+const DEPLOY_GIT_DIR = process.env.DEPLOY_GIT_DIR || '/srv/soda-src';
+const DEPLOY_APP_DIR = process.env.DEPLOY_APP_DIR || (DEPLOY_GIT_DIR + '/soda');
 function verifyGithubWebhookSignature(rawBody, headerSig) {
   if (!DEPLOY_WEBHOOK_SECRET || !rawBody) return false;
   const sig = String(headerSig || '');
@@ -3474,7 +3474,7 @@ async function runAutoDeploy() {
     // the `pm2` CLI call only has to reach the separate pm2 daemon (a
     // systemd service, not a child of this process) before this process
     // itself goes away.
-    await runDeployCmd('pm2', ['reload', 'petro-server'], DEPLOY_APP_DIR);
+    await runDeployCmd('pm2', ['reload', 'soda-server'], DEPLOY_APP_DIR);
     console.log('Auto-deploy: pulled + reloaded successfully');
   } catch (e) {
     console.error('Auto-deploy failed:', e.message, e.stderr || e.stdout || '');
@@ -3643,7 +3643,7 @@ function publicProductView(p, sett) {
 //
 // MEASURED, not assumed (test-boot-speed.py): the loading screen waits for
 // about 1.3 MB of JSON on a first open, and 900 KB of that is
-// /public/petro-images alone -- every admin-uploaded image travels as a
+// /public/soda-images alone -- every admin-uploaded image travels as a
 // base64 data: URL inside JSON, and none of these replies carried a single
 // cache header, so every launch re-downloaded the lot.
 //
@@ -3745,13 +3745,13 @@ app.get('/public/announcement-image', async (req, res) => {
   try { publicJson(req, res, { status: 'success', image: await getAnnouncementImage() }, IMAGE_CACHE); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Petro artwork needed by the current member surfaces, fetched together.
-app.get('/public/petro-images', async (req, res) => {
+// Soda artwork needed by the current member surfaces, fetched together.
+app.get('/public/soda-images', async (req, res) => {
   try {
     const [logo, authhero, banner2, banner3, checkinbanner] = await Promise.all([
-      getPetroImage('logo'),
-      getPetroImage('authhero'), getPetroImage('banner2'),
-      getPetroImage('banner3'), getPetroImage('checkinbanner'),
+      getSodaImage('logo'),
+      getSodaImage('authhero'), getSodaImage('banner2'),
+      getSodaImage('banner3'), getSodaImage('checkinbanner'),
     ]);
     publicJson(req, res, { status: 'success', logo, authhero, banner2, banner3, checkinbanner }, IMAGE_CACHE);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -3770,7 +3770,7 @@ app.get('/public/rules-content', async (_req, res) => {
 // ═══════════════════════════════════════════
 // REGISTRATION / ACCOUNT
 // ═══════════════════════════════════════════
-// A 6-digit trade password, per Petro's registration spec (Snow used 5) —
+// A 6-digit trade password, per Soda's registration spec (Snow used 5) —
 // rejects the weakest shape
 // (all-same-digit) whenever a NEW PIN is being chosen, never when an
 // existing one is being verified.
@@ -3801,7 +3801,7 @@ app.post('/account/create-profile', async (req, res) => {
   if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = auth.uid;
   const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
-  if (!phone) return res.status(400).json({ status: 'error', message: 'Sign in with your Petro phone account.' });
+  if (!phone) return res.status(400).json({ status: 'error', message: 'Sign in with your Soda phone account.' });
   try {
     // Locked on the same 'reg:'+userId key as registration itself -- an
     // unconditional .set() here without the lock (the old behaviour) could
@@ -4335,7 +4335,7 @@ app.post('/checkin', async (req, res) => {
 // ═══════════════════════════════════════════
 // TURNTABLE (daily spin wheel)
 // ═══════════════════════════════════════════
-// A Petro-only feature -- Snow has no equivalent, so none of this is a port.
+// A Soda-only feature -- Snow has no equivalent, so none of this is a port.
 //
 // Two spin sources, deliberately kept as separate concepts because they pay
 // differently and must not be able to subsidise each other:
@@ -5252,7 +5252,7 @@ async function _creditDepositNow(depDoc) {
 // credit creditDeposit() every other deposit path on this platform uses,
 // so this never adds a second way to move money, only a second way to
 // DECIDE to. A conclusively wrong claim is declined through the same
-// markDepositFailed() every other deposit path uses too (Petro's own
+// markDepositFailed() every other deposit path uses too (Soda's own
 // hardened version -- locked, checks for a concurrent credit before
 // overwriting, flips the ledger row, zeroes displayAmount correctly --
 // not a bespoke status write). Anything inconclusive (no key configured,
@@ -5966,7 +5966,7 @@ app.post('/deposit/callback', async (req, res) => {
 // ═══════════════════════════════════════════
 const _withdrawInFlight = new Set();
 const _witRequestInFlight = new Set();
-// The Trade Password set at registration is the ONLY PIN in Petro -- it
+// The Trade Password set at registration is the ONLY PIN in Soda -- it
 // gates every actual money-moving withdrawal request. It no longer gates
 // binding/removing a withdrawal account (owner, Round 39: "remove pin
 // putting here, only it will be on Withdrawals") -- saving/removing a
@@ -6078,7 +6078,7 @@ app.post('/withdraw/request', async (req, res) => {
     // withdrawal and an unbound/unauthenticated caller -- see the
     // UNBOUND_ACCOUNT check right below, and /bank/save's own OTP
     // requirement. pinCheck()/transactionPinHash are left in place
-    // (dead code, not deleted) -- see petro/CLAUDE.md's "Design system"
+    // (dead code, not deleted) -- see soda/CLAUDE.md's "Design system"
     // section for the reasoning already established for similar removals.
     const boundSnap = await db.collection('bankAccounts')
       .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
@@ -7432,12 +7432,12 @@ app.get('/statement/pdf', async (req, res) => {
       db.collection('users').doc(uid).get(),
       getSettings(),
       db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(STATEMENT_TX_LIMIT).get(),
-      getPetroImage('logo'),
+      getSodaImage('logo'),
     ]);
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = userSnap.data();
     if (u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended.' });
-    const brand = sett.brandName || 'Petro';
+    const brand = sett.brandName || 'Soda';
     const currency = currentRegion().currency || 'UGX';
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     // Same admin-uploaded 'logo' slot the app itself shows on Home/Account/
@@ -7625,7 +7625,7 @@ app.get('/withdrawals', async (req, res) => {
 // ═══════════════════════════════════════════
 // MESSAGES (member inbox)
 // ═══════════════════════════════════════════
-// Petro has a real inbox -- Snow deliberately does not (see petro/CLAUDE.md's
+// Soda has a real inbox -- Snow deliberately does not (see soda/CLAUDE.md's
 // "Structural differences from Snow"). Messages are admin-authored
 // BROADCASTS stored once in `messages`; per-member read state lives in
 // `messageReads` keyed `<uid>_<messageId>` so a broadcast never has to be
@@ -8096,39 +8096,39 @@ app.post('/admin/settings/update', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save settings' }); }
 });
-app.get('/admin/petro-images', async (req, res) => {
+app.get('/admin/soda-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const [logo, authhero, banner2, banner3, checkinbanner] = await Promise.all([
-      getPetroImage('logo'),
-      getPetroImage('authhero'), getPetroImage('banner2'),
-      getPetroImage('banner3'), getPetroImage('checkinbanner'),
+      getSodaImage('logo'),
+      getSodaImage('authhero'), getSodaImage('banner2'),
+      getSodaImage('banner3'), getSodaImage('checkinbanner'),
     ]);
     res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.post('/admin/petro-image/set', async (req, res) => {
+app.post('/admin/soda-image/set', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const slot = String(req.body.slot || '');
-  if (!PETRO_IMAGE_SLOTS.includes(slot)) return res.status(400).json({ status: 'error', message: 'Unknown image slot' });
+  if (!SODA_IMAGE_SLOTS.includes(slot)) return res.status(400).json({ status: 'error', message: 'Unknown image slot' });
   const image = String(req.body.image || '');
   if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
     return res.status(400).json({ status: 'error', message: 'Invalid image' });
   try {
-    await db.collection('banners').doc('petro-' + slot).set({ image });
-    delete _petroImageCache[slot];
-    logAdminAction(req, 'petro_image_set', { slot });
+    await db.collection('banners').doc('soda-' + slot).set({ image });
+    delete _sodaImageCache[slot];
+    logAdminAction(req, 'soda_image_set', { slot });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save this image' }); }
 });
-app.post('/admin/petro-image/clear', async (req, res) => {
+app.post('/admin/soda-image/clear', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const slot = String(req.body.slot || '');
-  if (!PETRO_IMAGE_SLOTS.includes(slot)) return res.status(400).json({ status: 'error', message: 'Unknown image slot' });
+  if (!SODA_IMAGE_SLOTS.includes(slot)) return res.status(400).json({ status: 'error', message: 'Unknown image slot' });
   try {
-    await db.collection('banners').doc('petro-' + slot).set({ image: null });
-    delete _petroImageCache[slot];
-    logAdminAction(req, 'petro_image_cleared', { slot });
+    await db.collection('banners').doc('soda-' + slot).set({ image: null });
+    delete _sodaImageCache[slot];
+    logAdminAction(req, 'soda_image_cleared', { slot });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear this image' }); }
 });
@@ -8785,7 +8785,7 @@ app.post('/admin/promocodes/deactivate', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// Legacy rows may carry a currency tag, but all new Petro activity is UGX.
+// Legacy rows may carry a currency tag, but all new Soda activity is UGX.
 function adminRegionFilter() { return null; }
 async function adminUserRegions() { return new Map(); }
 function rowRegionKey() { return DEFAULT_REGION_KEY; }
@@ -9704,10 +9704,10 @@ app.get('/admin/marzpay/balance', async (req, res) => {
 // file does not do.
 //
 // So this answers the question a balance is actually asked for -- "how much
-// has gone in and out through this gateway" -- from PETRO'S OWN RECORDS,
+// has gone in and out through this gateway" -- from SODA'S OWN RECORDS,
 // which are exact for what we sent and received. It is NOT their float: it
 // cannot see settlements to a bank account, their fees, or anything moved
-// outside Petro, and the panel says so in those words rather than letting a
+// outside Soda, and the panel says so in those words rather than letting a
 // number imply more than it knows.
 //
 // The moment PesaJet give us a balance path this becomes a real reading and
@@ -9757,7 +9757,7 @@ app.get('/admin/pesajet/summary', async (req, res) => {
       selected: depositProvider(sett) === 'pesajet' || withdrawProvider(sett) === 'pesajet',
       // Said here rather than only in the panel, so an operator reading the
       // raw response is not misled either.
-      note: 'Petro\'s own record of money moved through PesaJet. PesaJet publishes no balance endpoint, so this is not the float in their account.',
+      note: 'Soda\'s own record of money moved through PesaJet. PesaJet publishes no balance endpoint, so this is not the float in their account.',
     });
   } catch (e) {
     console.error('PesaJet summary error:', e.message);
@@ -11022,7 +11022,7 @@ const MONGODB_URI = process.env.MONGODB_URI || '';
 if (!MONGODB_URI) { console.error('MONGODB_URI env var is required'); process.exit(1); }
 connectMongo(MONGODB_URI)
   .then(() => {
-    app.listen(PORT, () => console.log(`Petro backend listening on :${PORT}`));
+    app.listen(PORT, () => console.log(`Soda backend listening on :${PORT}`));
     setInterval(runReconciler, 30 * 1000);
     setTimeout(runReconciler, 15 * 1000);
     // Owner: "make sure there is perfect timing on maturity check, so cron

@@ -27,7 +27,7 @@ function load(panel){
   w.fbAuth={currentUser:account};w.fbSignOut=async()=>{signedOut++;w.fbAuth.currentUser=null;w.dispatchEvent(new w.CustomEvent('snow-auth',{detail:null}));};
   w.enterApp=async()=>entered++;
   w.dispatchEvent(new w.CustomEvent('snow-auth',{detail:account}));await tick();
-  assert.equal(entered,1);assert(w.sessionStorage.getItem('petro_member_session'));
+  assert.equal(entered,1);assert(w.sessionStorage.getItem('soda_member_session'));
   const request=w.api,wait=deferred();let calls=0;
   w.fetch=async()=>{calls++;return wait.promise;};
   const one=request('/account'),two=request('/account');assert.equal(one,two);
@@ -39,19 +39,19 @@ function load(panel){
   w.navigatePage('network');assert.equal(navigations,1);
   now+=16*60*1000;w.dispatchEvent(new w.Event('pageshow'));await tick();
   assert.equal(signedOut,0,'member remains signed in past the old 15-minute limit');
-  assert(w.sessionStorage.getItem('petro_member_session'));
+  assert(w.sessionStorage.getItem('soda_member_session'));
   now+=44*60*1000-1;w.dispatchEvent(new w.Event('pageshow'));await tick();
   assert.equal(signedOut,0,'member remains signed in immediately before one hour');
   now++;w.dispatchEvent(new w.Event('pageshow'));await tick();
-  assert.equal(signedOut,1);assert.equal(w.sessionStorage.getItem('petro_member_session'),null);
+  assert.equal(signedOut,1);assert.equal(w.sessionStorage.getItem('soda_member_session'),null);
   assert.equal(w._suppressAutofillLogin,false,'idle expiry preserves existing picker-assisted login');
-  assert.equal(w.sessionStorage.getItem('petro_relogin_required'),null);
+  assert.equal(w.sessionStorage.getItem('soda_relogin_required'),null);
   assert.equal(w._triedAutoSignIn,true,'silent stored-password login stays disabled');
   assert.equal(w.document.querySelector('#app').style.display,'none');
   assert.equal(w.document.querySelector('#authScreen').style.display,'');
   await w.doLogout();
   assert.equal(w._suppressAutofillLogin,true,'deliberate logout still suppresses autofill auto-submit');
-  assert.equal(w.sessionStorage.getItem('petro_relogin_required'),'1');
+  assert.equal(w.sessionStorage.getItem('soda_relogin_required'),'1');
   await tick(); // Let the existing auth-settings refresh settle before closing the DOM.
   user.window.close();
   const admin=load('admin'), a=admin.window;await tick();

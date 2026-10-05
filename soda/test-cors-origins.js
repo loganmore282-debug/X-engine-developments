@@ -12,7 +12,7 @@ const consts = src.slice(src.indexOf('const CORS_ALLOWED_ORIGINS'), src.indexOf(
 const cb = src.slice(src.indexOf('origin: (origin, cb) =>'), src.indexOf('}));', src.indexOf('origin: (origin, cb) =>')));
 const originFn = eval(`(() => { ${consts}\n return function(origin){ let out; const cb=(_e,v)=>{out=v;}; const f = { ${cb} }.origin; f(origin, cb); return out; }; })()`);
 
-// Petro runs entirely on one Hostinger VPS: backend (pm2, :3000) and both
+// Soda runs entirely on one Hostinger VPS: backend (pm2, :3000) and both
 // static frontends (nginx, app./admin. subdomains) on the same box, so
 // CORS_ALLOWED_SUFFIXES is empty (no PaaS-generated platform subdomains to
 // suffix-match anymore -- see server.js's own comment on that constant).
@@ -20,27 +20,27 @@ const originFn = eval(`(() => { ${consts}\n return function(origin){ let out; co
 // CORS_ALLOWED_ORIGINS, plus localhost/127.0.0.1 for local dev, checked
 // unconditionally by the real code regardless of the suffix list.
 const cases = [
-  ['https://petro-platform.com',           true,  'the live app domain'],
-  ['https://www.petro-platform.com',       true,  'the live app domain, www'],
-  ['http://179.198.197.114:8080',          true,  'direct VPS frontend, port 8080'],
-  ['http://179.198.197.114:3000',          false, 'the VPS backend origin itself is not a frontend'],
+  ['https://soda-platform.com',           true,  'the live app domain'],
+  ['https://www.soda-platform.com',       true,  'the live app domain, www'],
+  ['http://179.198.197.114:8090',          true,  'direct VPS frontend, port 8080'],
+  ['http://179.198.197.114:3001',          false, 'the VPS backend origin itself is not a frontend'],
   ['http://localhost:3000',                true,  'local dev'],
   ['http://127.0.0.1:5173',                true,  'local dev, loopback IP'],
   [undefined,                              true,  'same-origin / no Origin header'],
-  ['https://chn-snow2beer.com',            false, "Snow's live site (must NOT reach Petro)"],
+  ['https://chn-snow2beer.com',            false, "Snow's live site (must NOT reach Soda)"],
   ['https://evil-attacker.com',            false, 'random attacker'],
-  ['https://petro-platform.com.evil.test', false, 'suffix-spoofing attacker on the real domain'],
-  ['https://notpetro-platform.com',        false, 'lookalike domain'],
+  ['https://soda-platform.com.evil.test', false, 'suffix-spoofing attacker on the real domain'],
+  ['https://notsoda-platform.com',        false, 'lookalike domain'],
   // No PaaS platform suffix should match anything anymore -- these must all
   // be refused now that CORS_ALLOWED_SUFFIXES is empty. If any of these
   // start passing, something re-added a platform suffix that has no
   // business being there on a single fixed VPS.
   ['https://anything.pages.dev',                    false, 'Cloudflare Pages, no longer used'],
-  ['https://petro-server.onrender.com',             false, 'Render, no longer used'],
-  ['https://petro-app-production.up.railway.app',   false, 'Railway, no longer used'],
-  ['https://petro.railway.app',                     false, 'Railway bare domain, no longer used'],
-  ['https://petro-app.edgeone.app',                 false, 'EdgeOne, no longer used'],
-  ['https://petro-admin.edgeone.dev',               false, 'EdgeOne .dev, no longer used'],
+  ['https://soda-server.onrender.com',             false, 'Render, no longer used'],
+  ['https://soda-app-production.up.railway.app',   false, 'Railway, no longer used'],
+  ['https://soda.railway.app',                     false, 'Railway bare domain, no longer used'],
+  ['https://soda-app.edgeone.app',                 false, 'EdgeOne, no longer used'],
+  ['https://soda-admin.edgeone.dev',               false, 'EdgeOne .dev, no longer used'],
 ];
 
 let failed = 0;

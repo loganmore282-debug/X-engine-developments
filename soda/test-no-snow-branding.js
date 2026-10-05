@@ -93,7 +93,7 @@ ck(!/Join Snow/.test(stripComments(mod)), 'and no "Join Snow" anywhere');
 // The About sheet's title used to be the literal 'About Chipz'. It is now
 // built from the admin-set app name, which is the stronger property: it
 // cannot go stale when the owner renames the platform, and the fallback
-// inside brandName() means it still reads "About Petro" out of the box. So
+// inside brandName() means it still reads "About Soda" out of the box. So
 // what is checked here is that it is BUILT from the name, and -- separately
 // -- that nothing in the file spells a platform name out by hand any more.
 ck(/openSheet\('About ' \+ brandName\(\)/.test(mod),
@@ -106,8 +106,8 @@ ck(/openSheet\('About ' \+ brandName\(\)/.test(mod),
 ck(/function brandNameKnown\(\)/.test(mod), 'brandNameKnown() exists');
 ck(/return cached \|\| ''/.test(mod),
    'and it is allowed to return nothing rather than guess a name');
-ck(/function brandName\(\)\s*\{\s*return brandNameKnown\(\) \|\| 'Petro';/.test(mod),
-   "brandName() keeps Petro as the last-resort sentence fallback");
+ck(/function brandName\(\)\s*\{\s*return brandNameKnown\(\) \|\| 'Soda';/.test(mod),
+   "brandName() keeps Soda as the last-resort sentence fallback");
 ck(/const n = brandNameKnown\(\)\.toUpperCase\(\);\s*\n\s*return n \? esc\(n\) : '';/.test(mod),
    'and the wordmark renders nothing at all when the name is not known yet');
 // No hardcoded name left anywhere in the module's actual CODE. Comments are
@@ -117,7 +117,7 @@ ck(/const n = brandNameKnown\(\)\.toUpperCase\(\);\s*\n\s*return n \? esc\(n\) :
 // and the same fallback inside brandTextMark()'s caller chain.
 {
   const code = stripComments(mod);
-  const hits = (code.match(/'Petro'|"Petro"|Petro /g) || []);
+  const hits = (code.match(/'Soda'|"Soda"|Soda /g) || []);
   ck(hits.length <= 1,
      `the module hardcodes the app name at most once -- brandName()'s own fallback (${hits.length} hit${hits.length === 1 ? '' : 's'}: ${hits.join(', ') || 'none'})`);
   ck(!/CHIPZ/.test(code.replace(/chipz-grad|chipzMarkHtml|chipz-images|chipz-image/g, '')),

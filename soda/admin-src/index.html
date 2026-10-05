@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Petro Admin</title>
+<title>Soda Admin</title>
 <!-- The SAME policy nginx sends as a header, carried in the file itself too.
      A host header cannot follow a file to another host, so this meta tag is
      what keeps the page covered even if it were ever served from somewhere
@@ -41,7 +41,7 @@
      frame-ancestors is NOT here: a meta policy cannot express it (the browser
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://api.petro-cchnug.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://mysoda.p-colasoda.com https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#e30613">
 <link rel="manifest" href="/manifest.json">
 <!-- Same server-hosted brand asset the user app installs with, NOT a local
@@ -50,8 +50,8 @@
      that shipped in the repo, so the icon "never changed" here no matter how
      many times it was replaced. One source of truth now: whatever
      /admin/app-icon/set last wrote. -->
-<link rel="icon" href="https://api.petro-cchnug.com/public/app-icon-192.png">
-<link rel="apple-touch-icon" href="https://api.petro-cchnug.com/public/app-icon-192.png">
+<link rel="icon" href="https://mysoda.p-colasoda.com/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="https://mysoda.p-colasoda.com/public/app-icon-192.png">
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
 window._adminInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window._adminInstallPrompt = e;
@@ -105,7 +105,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .brand .mk svg{width:24px;height:24px}
   /* The mark is an <img> now (see the comment on #brandMarkLogin). It fills
      the round badge rather than sitting inside it as a glyph would, so the
-     Petro tile IS the badge -- same shape an uploaded Brand logo gets from
+     Soda tile IS the badge -- same shape an uploaded Brand logo gets from
      applyAdminBrandLogo(), so the two tiers cannot look different. */
   .mk img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
   .brand b{font-size:20px}
@@ -261,9 +261,9 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .chart-bars i{display:block;width:7px;border-radius:3px 3px 0 0;min-height:2px}
   .chart-x{font-size:9px;color:var(--sub);white-space:nowrap}
 </style>
-<script data-petro-idle>
+<script data-soda-idle>
 // Real interaction renews activity; polling, focus, and visibility never do.
-window.createPetroIdleSession = function(key, onExpire, onActivity){
+window.createSodaIdleSession = function(key, onExpire, onActivity){
   var IDLE = 15 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
   var state = null, lastPulse = 0, lastSave = 0, timer = null;
   function save(force){
@@ -316,7 +316,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
   <div class="login-card">
     <div class="brand">
       <!-- Owner: "in admin panel still has old svgs and icons ie that slanting
-           8 and that ladder svg on the home, please let it be petro logo."
+           8 and that ladder svg on the home, please let it be soda logo."
            This was Snow's inherited swoosh -- a slanting infinity mark drawn
            in a hardcoded <path>, which is exactly the "slanting 8". The
            topbar's was a hand-drawn grid, the "ladder". Both are the app's
@@ -324,7 +324,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
            the home screen of anyone who installed either app. An uploaded
            Brand logo still replaces it -- see applyAdminBrandLogo(). -->
       <div class="mk" id="brandMarkLogin"><img src="/icon-192.png" alt="" width="40" height="40"></div>
-      <b data-brandadmin>Petro Admin</b>
+      <b data-brandadmin>Soda Admin</b>
       <!-- The topbar picker lives inside #shell, which nobody has reached yet
            on this screen. An operator who does not read English has to be able
            to change the language BEFORE signing in, or the one screen standing
@@ -345,7 +345,7 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
     <div class="wrap">
       <div class="topbar-inner">
         <div class="mk" id="brandMarkTop"><img src="/icon-192.png" alt="" width="34" height="34"></div>
-        <b data-brandadmin>Petro Admin</b>
+        <b data-brandadmin>Soda Admin</b>
         <div class="spacer"></div>
         <!-- ── THE PANEL'S OWN LANGUAGE ──
              Owner: "also make when in admin, you can change its language too,
@@ -390,8 +390,8 @@ window.createPetroIdleSession = function(key, onExpire, onActivity){
 <script src="/vendor/firebase-app-compat.js"></script>
 <script src="/vendor/firebase-messaging-compat.js"></script>
 <script>
-// Petro Admin panel.
-const SERVER = 'https://api.petro-cchnug.com';
+// Soda Admin panel.
+const SERVER = 'https://mysoda.p-colasoda.com';
 
 let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
 try {
@@ -399,7 +399,7 @@ try {
   SESSION_USER  = sessionStorage.getItem('snow_admin_user')  || '';
   SESSION_ROLE  = sessionStorage.getItem('snow_admin_role')  || '';
 } catch (_) {}
-var _adminSession = window.createPetroIdleSession('petro_admin_session', expireAdminSession, () => api('/admin/session/activity', {}));
+var _adminSession = window.createSodaIdleSession('soda_admin_session', expireAdminSession, () => api('/admin/session/activity', {}));
 function expireAdminSession(){
   clearSession();
   $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden');
@@ -816,13 +816,13 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
 // so uploading a Brand logo changed the member app and left the panel showing
 // something else entirely.
 //
-// Those two SVGs are gone; the markup now ships the built-in Petro app icon
+// Those two SVGs are gone; the markup now ships the built-in Soda app icon
 // (icon-192.png), so the panel is on-brand even with nothing uploaded and
 // even offline. This still overrides it when a Brand logo IS uploaded,
 // which is what he asked for -- it is the second of two tiers now, not the
 // only one.
 //
-// /public/petro-images is used rather than the admin API on purpose: the LOGIN
+// /public/soda-images is used rather than the admin API on purpose: the LOGIN
 // screen has to draw this before anyone has signed in, so it cannot depend on
 // a session. Failure is silent and the existing SVG simply stays -- a panel
 // that will not paint its own header because a logo fetch failed would be a
@@ -830,7 +830,7 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
 async function applyAdminBrandLogo(){
   let logo = '';
   try {
-    const r = await fetch(SERVER + '/public/petro-images');
+    const r = await fetch(SERVER + '/public/soda-images');
     const d = await r.json();
     logo = (d && d.status === 'success' && d.logo) || '';
   } catch (_) { return; }
@@ -861,10 +861,10 @@ $('installBtn').addEventListener('click', async ()=>{
 // ── PUSH NOTIFICATIONS ──
 const FIREBASE_CONFIG = {
   // PLACEHOLDER -- this is NOT a real Firebase project. It must be replaced
-  // with Petro's own project's web config before anything can sign in.
-  // Deliberately broken rather than left pointing at Petro's real project:
-  // a copy-pasted deploy must fail loudly here, not authenticate Petro's
-  // members into Petro's live user pool. See petro/CLAUDE.md.
+  // with Soda's own project's web config before anything can sign in.
+  // Deliberately broken rather than left pointing at Soda's real project:
+  // a copy-pasted deploy must fail loudly here, not authenticate Soda's
+  // members into Soda's live user pool. See soda/CLAUDE.md.
   apiKey: "AIzaSyCOij0DRicI7MKDEibIlFfm0n3dl_faOnM",
   authDomain: "chnpetrol.firebaseapp.com",
   projectId: "chnpetrol",
@@ -876,8 +876,8 @@ const FIREBASE_CONFIG = {
 // Bumped when what a registration carries changes, so devices registered by an
 // older version silently register again (see resyncPushToken) instead of
 // waiting for someone to switch Notify off and on.
-const PUSH_VER = '2', PUSH_VER_KEY = 'petro_admin_push_ver';
-const PUSH_KEY_VER_KEY = 'petro_admin_push_key_version';
+const PUSH_VER = '2', PUSH_VER_KEY = 'soda_admin_push_ver';
+const PUSH_KEY_VER_KEY = 'soda_admin_push_key_version';
 const VAPID_KEY = 'BOr_34ry9C1u2db466e-6lca-wrAUBgOXYn-P4Mr5f2vt5I-mNtjbakVVrcaxCZQaNw47jRdMV4vuOimFmUZtdY';
 
 let _pushWhy = '';
@@ -1048,8 +1048,8 @@ function adminPushRefresh(){ try { refreshBadges().catch(()=>{}); liveTick(); } 
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (ev) => {
   const m = ev.data || {};
   if (!SESSION_TOKEN) return;
-  if (m.type === 'petro-admin-open' && VALID_TABS.has(m.tab) && _tab !== m.tab) switchTab(m.tab);
-  else if (m.type === 'petro-admin-open' || m.type === 'petro-admin-refresh') adminPushRefresh();
+  if (m.type === 'soda-admin-open' && VALID_TABS.has(m.tab) && _tab !== m.tab) switchTab(m.tab);
+  else if (m.type === 'soda-admin-open' || m.type === 'soda-admin-refresh') adminPushRefresh();
 });
 
 // ── TABS ──
@@ -1214,7 +1214,7 @@ async function renderDashboard(){
     </div>
     <!-- PesaJet. Deliberately NOT called a balance: PesaJet publishes no
          balance endpoint (neither of their official SDKs has one), so this is
-         what Petro itself has moved through them, which is exact for that and
+         what Soda itself has moved through them, which is exact for that and
          silent about their float. The card is hidden entirely unless PesaJet
          is actually in the payment path or has history, so it does not clutter
          a panel for an operator who does not use it. -->
@@ -2402,7 +2402,7 @@ function editProduct(p, order){
 }
 
 // ── MESSAGES (member inbox broadcasts) ──
-// Petro has a real in-app inbox (Snow does not). Anything written here is
+// Soda has a real in-app inbox (Snow does not). Anything written here is
 // broadcast to every member's Messages screen; read state is tracked per
 // member server-side, so editing a message does not re-mark it unread.
 async function renderMessages(){
@@ -2417,7 +2417,7 @@ async function renderMessages(){
         ? 'This message will go to <b>every country</b>. Pick one country in the switch above to write for that country only &mdash; useful when the wording names an amount, a currency or a payment operator.'
         : `This message will go to <b>${esc(regionByKeyAdmin().name)}</b> members only.`}</div>`:''}
       <div class="row">
-        <div style="flex:2"><label>Title</label><input id="mTitle" type="text" maxlength="200" placeholder="Welcome to Petro"></div>
+        <div style="flex:2"><label>Title</label><input id="mTitle" type="text" maxlength="200" placeholder="Welcome to Soda"></div>
         <div><label>ID (blank = new)</label><input id="mId" type="text" placeholder="new"></div>
       </div>
       <div style="margin-top:6px"><label>Message</label><textarea id="mBody" rows="5" maxlength="4000" placeholder="Write the message members will read..."></textarea></div>
@@ -2539,8 +2539,8 @@ async function renderPromoCodes(){
 // ── COUNTRIES (REGIONS) ──
 //
 // Owner: "l wanted other subdomain to fetch other country code and
-// currency, ie fgdr.petro-platform.com in ugx, and country code changeable
-// to other country or created, and another can be sfhd.petro-platform in
+// currency, ie fgdr.soda-platform.com in ugx, and country code changeable
+// to other country or created, and another can be sfhd.soda-platform in
 // KES shs, or any country created."
 //
 // One row per country. A country owns the subdomain(s) it is served from,
@@ -2548,7 +2548,7 @@ async function renderPromoCodes(){
 // and number shape its members type, and the clock its withdraw hours and
 // product windows are judged against. Its RATES and its PRODUCT PRICES are
 // edited on the Settings and Products tabs, with this country picked there.
-var ADMIN_BASE_DOMAIN = 'petro-platform.com';
+var ADMIN_BASE_DOMAIN = 'soda-platform.com';
 async function renderAdmins(){
   const r = await api('/admin/admins/list');
   if(staleTab('admins')) return;
@@ -2798,7 +2798,7 @@ window.addEventListener('beforeunload', (e) => {
 // unauthenticated visitor has no business being told anything, the name
 // included.
 function applyAdminBrandName(name){
-  const n = (typeof name === 'string' ? name.trim() : '') || 'Petro';
+  const n = (typeof name === 'string' ? name.trim() : '') || 'Soda';
   document.querySelectorAll('[data-brandadmin]').forEach(el => { el.textContent = n + ' Admin'; });
   try { document.title = n + ' Admin'; } catch (_) {}
 }
@@ -2810,7 +2810,7 @@ function applyAdminBrandName(name){
 // tabs, in exchange for not threading one function's closure across two.
 async function renderBanners(){
   const [r, br, cir, bar] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/petro-images'), api('/admin/brand-assets')
+    api('/admin/settings'), api('/admin/banner'), api('/admin/soda-images'), api('/admin/brand-assets')
   ]);
   if (staleTab('banners')) return;
   const s = r.settings||{};
@@ -2926,9 +2926,9 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  // The two Petro-only slots share one endpoint pair, so they share one
+  // The two Soda-only slots share one endpoint pair, so they share one
   // wiring helper rather than repeating the upload/clear pair per slot.
-  function wirePetroImageSlot(slot, fileId, clearId, savedMsg, clearedMsg){
+  function wireSodaImageSlot(slot, fileId, clearId, savedMsg, clearedMsg){
     const file = $(fileId);
     if (file) file.addEventListener('change', async e=>{
       const f=e.target.files[0]; if(!f) return;
@@ -2941,7 +2941,7 @@ function wireBannerHandlers(){
                        : slot==='authhero' ? 1600
                        : 1280;
           const image = await fileToDataUrl(f, maxDim, 0.82);
-          const d = await api('/admin/petro-image/set', { slot, image });
+          const d = await api('/admin/soda-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
           if (d.status==='success') renderBanners();
         } catch(err){ toast(err.message||'Could not read image','err'); }
@@ -2950,7 +2950,7 @@ function wireBannerHandlers(){
     const clear = $(clearId);
     if (clear) clear.addEventListener('click', async()=>{
       await withTabBusy((async()=>{
-        const d = await api('/admin/petro-image/clear', { slot });
+        const d = await api('/admin/soda-image/clear', { slot });
         toast(d.status==='success'?clearedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
         if (d.status==='success') renderBanners();
       })());
@@ -2980,10 +2980,10 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
-  wirePetroImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Background image saved, live on Log In and Sign Up', 'Background image removed');
-  wirePetroImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
-  wirePetroImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
-  wirePetroImageSlot('checkinbanner', 'checkinBannerFile', 'checkinBannerClear', 'Check-in banner saved, live for every user', 'Check-in banner removed');
+  wireSodaImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Background image saved, live on Log In and Sign Up', 'Background image removed');
+  wireSodaImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
+  wireSodaImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
+  wireSodaImageSlot('checkinbanner', 'checkinBannerFile', 'checkinBannerClear', 'Check-in banner saved, live for every user', 'Check-in banner removed');
   const brandLogoFile = $('brandLogoFile');
   if (brandLogoFile) brandLogoFile.addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
@@ -2992,7 +2992,7 @@ function wireBannerHandlers(){
       try{
         toast('Processing logo…','ok');
         const result=await fileToLogoPng(f);
-        const d=await api('/admin/petro-image/set',{slot:'logo',image:result.image});
+        const d=await api('/admin/soda-image/set',{slot:'logo',image:result.image});
         toast(d.status==='success'?(result.cleared?'Background removed; transparent logo saved':result.backgroundFound?'Logo saved as transparent PNG':'Logo saved unchanged; no clear edge background was detected'):(d.message||'Failed'),d.status==='success'?'ok':'err');
         if(d.status==='success')renderBanners();
       }catch(err){toast(err.message||'Could not process the logo','err');}
@@ -3001,7 +3001,7 @@ function wireBannerHandlers(){
   const brandLogoClear=$('brandLogoClear');
   if(brandLogoClear)brandLogoClear.addEventListener('click',async()=>{
     await withTabBusy((async()=>{
-      const d=await api('/admin/petro-image/clear',{slot:'logo'});
+      const d=await api('/admin/soda-image/clear',{slot:'logo'});
       toast(d.status==='success'?'Brand logo removed':(d.message||'Failed'),d.status==='success'?'ok':'err');
       if(d.status==='success')renderBanners();
     })());
@@ -3095,8 +3095,8 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
       <label style="margin-top:14px">Allowed website domains</label>
-      <textarea id="sAllowedOrigins" rows="4" placeholder="petro-platform.com&#10;www.petro-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. petro-platform.com and this VPS's own address are always allowed.</p>
+      <textarea id="sAllowedOrigins" rows="4" placeholder="soda-platform.com&#10;www.soda-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. soda-platform.com and this VPS's own address are always allowed.</p>
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Automatic recharge is the only recharge method. Every withdrawal waits as Pending until you act on it in Withdrawals.</p>
       <button class="btn block" id="saveRates">Save rates</button>
@@ -3160,7 +3160,7 @@ async function renderSettings(){
     <h2 class="sec">App name</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Renames the app everywhere inside it &mdash; Home, profile, About, browser tab. Up to 24 characters.</p>
-      <label>App name</label><input id="brandNameInput" maxlength="24" value="${esc(v('brandName','Petro'))}" placeholder="Petro">
+      <label>App name</label><input id="brandNameInput" maxlength="24" value="${esc(v('brandName','Soda'))}" placeholder="Soda">
       <button class="btn block" id="saveBrandName" style="margin-top:6px">Save app name</button>
     </div>
 
@@ -3398,7 +3398,7 @@ var LANG = 'en';
 // Per device, like the country switch beside it. Whoever sits at this browser
 // reads one language; re-picking it on every reload is how a panel ends up
 // being used in a language nobody chose.
-const ADMIN_LANG_KEY = 'petro_admin_lang';
+const ADMIN_LANG_KEY = 'soda_admin_lang';
 
 // ── THE PANEL'S OWN WORDS ──
 // [english, lg, sw, fr, rw, nyn], exactly the app's table shape, and the same
@@ -3941,7 +3941,7 @@ if ('serviceWorker' in navigator) {
     var h={};var t=token();if(t)h.Authorization='Bearer '+t;
     var o={method:body?'POST':'GET',headers:h};
     if(body){h['Content-Type']='application/json';o.body=JSON.stringify(body);}
-    var r=await fetch('https://api.petro-cchnug.com'+path,o);return r.json();
+    var r=await fetch('https://mysoda.p-colasoda.com'+path,o);return r.json();
   }
   async function mount(){
     if(busy)return;

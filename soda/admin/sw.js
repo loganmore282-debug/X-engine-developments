@@ -1,12 +1,12 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'petro-admin-shell-v70';
+const CACHE = 'soda-admin-shell-v70';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/vendor/firebase-app-compat.js', '/vendor/firebase-messaging-compat.js'];
-// The uploaded icon, served by Petro backend. manifest.json and index.html's
+// The uploaded icon, served by Soda backend. manifest.json and index.html's
 // <link rel="icon"> point here too; the local /icon-*.png above stay only as
 // the offline shell copy. Before this, the admin panel read the PNG that
 // shipped in the repo, so replacing the icon in Admin -> Brand changed the
 // members' app and left the admin's own icon untouched forever.
-const BRAND_ICON = 'https://api.petro-cchnug.com/public/app-icon-192.png';
+const BRAND_ICON = 'https://mysoda.p-colasoda.com/public/app-icon-192.png';
 
 // Firebase Messaging background handler -- shows a notification for pushes
 // that arrive while the admin panel tab isn't open/focused. Foreground
@@ -59,7 +59,7 @@ messaging.onBackgroundMessage((payload) => {
     options.actions = [{ action: 'approve', title: 'Approve' }];
     options.requireInteraction = true;
   }
-  return self.registration.showNotification(d.title || 'Petro Admin', options);
+  return self.registration.showNotification(d.title || 'Soda Admin', options);
 });
 
 // Tells any open admin page to refresh or jump to a tab.
@@ -70,7 +70,7 @@ async function tellPanels(message) {
 }
 async function openPanel(d) {
   const tab = d.type === 'withdrawal' ? 'withdrawals' : d.type === 'deposit' ? 'deposits' : '';
-  const list = await tellPanels(tab ? { type: 'petro-admin-open', tab } : { type: 'petro-admin-refresh' });
+  const list = await tellPanels(tab ? { type: 'soda-admin-open', tab } : { type: 'soda-admin-refresh' });
   for (const c of list) {
     if ('focus' in c) return c.focus();
   }
@@ -93,7 +93,7 @@ async function approveFromNotification(d) {
   } catch (_) {
     await result('Could not approve', 'No connection. Open the admin panel to check.');
   }
-  await tellPanels({ type: 'petro-admin-refresh' });
+  await tellPanels({ type: 'soda-admin-refresh' });
 }
 self.addEventListener('notificationclick', (e) => {
   const d = e.notification.data || {};

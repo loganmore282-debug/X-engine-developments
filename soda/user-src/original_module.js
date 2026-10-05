@@ -1,7 +1,7 @@
-// Petro backend, on the same Hostinger VPS as this frontend (pm2, port 3000
+// Soda backend, on the same Hostinger VPS as this frontend (pm2, port 3000
 // behind nginx). api./app. are still different subdomains -- different
 // browser origins -- so this host must stay in server.js's CORS allowlist.
-var API_BASE = 'https://api.petro-cchnug.com';
+var API_BASE = 'https://mysoda.p-colasoda.com';
 
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
 
@@ -14,8 +14,8 @@ function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:
 // ── REGION (which country this app is running as) ──
 //
 // Owner: "l wanted other subdomain to fetch other country code and
-// currency, ie fgdr.petro-platform.com in ugx, and country code changeable
-// to other country or created, and another can be sfhd.petro-platform in
+// currency, ie fgdr.soda-platform.com in ugx, and country code changeable
+// to other country or created, and another can be sfhd.soda-platform in
 // KES shs, or any country created, also make when l can edit prices of each
 // product and all settings as these of ugx."
 //
@@ -130,7 +130,7 @@ var LANG = 'en';
 // English alone -- one option is not a choice, so the button stays hidden
 // rather than flashing a list that is about to change.
 var LANG_ALLOWED = ['en'];
-var LANG_STORE_KEY = 'petro_lang';
+var LANG_STORE_KEY = 'soda_lang';
 // ── THE TABLE ──
 // One row per English string: [english, lg, sw, fr, rw, nyn].
 //
@@ -884,7 +884,7 @@ try {
 // own localStorage-cached, pre-core-painted translation fix, since the
 // screen is on-screen precisely while the core is still inflating and
 // there is no translator yet to ask). Removed along with the rest of that
-// Petro-specific loader treatment -- the replacement loader shows a plain
+// Soda-specific loader treatment -- the replacement loader shows a plain
 // numeric percentage only, which needs no translation at all.
 function applyLanguage(){
   try {
@@ -1063,21 +1063,21 @@ function toLocalPhoneDisplay(num){
 // mangling it down to a wrong, truncated value.
 var GIFT_CODE_REFERENCE_SVG = '<svg class="gift-reference-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gift box"><defs><linearGradient id="giftGold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff3bf"/><stop offset="1" stop-color="#dba344"/></linearGradient><linearGradient id="giftRed" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff5c2c"/><stop offset=".5" stop-color="#e70618"/><stop offset="1" stop-color="#af0012"/></linearGradient><linearGradient id="giftSide" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e20a1a"/><stop offset="1" stop-color="#9c0010"/></linearGradient></defs><rect x="4" y="4" width="112" height="112" rx="2" fill="url(#giftGold)"/><g fill="none" stroke-linecap="round"><path d="M60 12v17M36 21l8 12M83 21l-8 12M21 42l15 6M99 42l-15 6M24 69l11-3M96 69l-11-3" stroke="#cf2620" stroke-width="2.6"/><path d="M47 16l1 5M74 16l-1 5M17 56l5 1M103 56l-5 1M39 36l-3-3M81 36l3-3" stroke="#fff7d6" stroke-width="2"/></g><path d="m42 52 18-8 20 8-19 9Z" fill="#ffba32"/><path d="M42 53v37l19 10V61Z" fill="url(#giftRed)"/><path d="M61 61v39l19-10V53Z" fill="url(#giftSide)"/><path d="m41 52 20 9 20-9v10l-20 9-20-9Z" fill="#fb3025"/><path d="m55 58 8 4v37l-8-4Z" fill="#ffbd31"/><path d="m63 62 7-3v36l-7 4Z" fill="#ffcc48"/><path d="m55 46 8-3 7 3-7 3Z" fill="#ffe16c"/><path d="M61 46c-9-1-15-5-13-10 2-5 11 0 13 10Zm2 0c9-1 15-5 13-10-2-5-11 0-13 10Z" fill="#ffbd31" stroke="#d87016" stroke-width="1.5" stroke-linejoin="round"/><circle cx="62" cy="46" r="3.6" fill="#ffe56e"/><path d="m27 28 2 3 3-2-2 3 3 3-4-1-2 3v-4l-3-2 4-1Zm66 5 2 2 2-2-1 3 3 2-4-1-2 3v-4l-3-2 3-1Z" fill="#fff8db"/></svg>';
 var ICONS = {
-  // ── Petro additions ──────────────────────────────────────────────────
+  // ── Soda additions ──────────────────────────────────────────────────
   grid: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>',
   megaphone: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1Z"/><path d="M14.5 8.5a4.5 4.5 0 0 1 0 7"/><path d="M17.5 5.5a8.5 8.5 0 0 1 0 13"/></svg>',
   envelope: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 6l8 7 8-7"/></svg>',
   // Full-size support-email badge, rebuilt from the supplied red envelope
-  // reference with Petro's red, orange and yellow palette (no white fill).
-  emailPetro: '<svg class="email-petro-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#E30613"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  // ── Petro re-theme additions: the Home mockup's own icon set (Deposit/
+  // reference with Soda's red, orange and yellow palette (no white fill).
+  emailSoda: '<svg class="email-soda-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#E30613"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  // ── Soda re-theme additions: the Home mockup's own icon set (Deposit/
   // Withdraw/Invite/Support tiles, the notification bell, the gift-box
   // Daily Check-in card, the wallet-balance eye toggle, the 3 stat-card
-  // glyphs) -- replacing the old Petro raster PNGs (/act-deposit.png etc.,
-  // the owner's own uploaded artwork for Petro, never Petro's) with real
+  // glyphs) -- replacing the old Soda raster PNGs (/act-deposit.png etc.,
+  // the owner's own uploaded artwork for Soda, never Soda's) with real
   // SVG, same 24x24/currentColor/1.8-1.9 stroke convention as every icon
   // above. White-on-red circle badges are painted by .home-action .badge's
-  // own CSS (background var(--petro-grad)), not baked into these paths.
+  // own CSS (background var(--soda-grad)), not baked into these paths.
   bell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5Z"/><path d="M9.5 18.5a2.5 2.5 0 0 0 5 0"/></svg>',
   headset: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="13" width="4" height="6" rx="1.6"/><rect x="17" y="13" width="4" height="6" rx="1.6"/><path d="M20 19a4 4 0 0 1-4 3h-2.5"/></svg>',
   cardPlus: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.4"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/><path d="M17.2 3.6v5.2M14.6 6.2h5.2"/></svg>',
@@ -1085,7 +1085,7 @@ var ICONS = {
   peoplePlus: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.4"/><path d="M2.8 19c.7-3.3 3.2-5.2 6.2-5.2s5.5 1.9 6.2 5.2"/><path d="M18 4.6v5.2M15.4 7.2h5.2"/></svg>',
   giftBox: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9.5" width="18" height="10.5" rx="1.6"/><path d="M3 13.5h18"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.6 0-4-.7-4-3 0-1.5 1.2-2.5 2.5-2.5C12.2 4 12 7 12 9.5Z"/><path d="M12 9.5c1.6 0 4-.7 4-3 0-1.5-1.2-2.5-2.5-2.5C11.8 4 12 7 12 9.5Z"/></svg>',
   rulesGavel: '<svg width="34" height="34" viewBox="0 0 384 333" fill="currentColor" fill-rule="evenodd" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M125.5,0.0 126.0,-0.5 133.0,-0.5 134.0,0.5 136.0,0.5 137.0,1.5 139.0,1.5 140.0,2.5 141.0,2.5 142.0,3.5 144.0,3.5 145.0,4.5 147.0,4.5 148.0,5.5 149.0,5.5 150.0,6.5 152.0,6.5 153.0,7.5 154.0,7.5 155.0,8.5 157.0,8.5 158.0,9.5 160.0,9.5 161.0,10.5 162.0,10.5 163.0,11.5 165.0,11.5 166.0,12.5 168.0,12.5 169.0,13.5 170.0,13.5 171.0,14.5 173.0,14.5 174.0,15.5 176.0,15.5 177.0,16.5 178.0,16.5 179.0,17.5 181.0,17.5 182.0,18.5 183.0,18.5 184.0,19.5 186.0,19.5 187.0,20.5 189.0,20.5 190.0,21.5 191.0,21.5 192.0,22.5 194.0,22.5 195.0,23.5 197.0,23.5 198.0,24.5 199.0,24.5 200.0,25.5 202.0,25.5 203.0,26.5 205.0,26.5 206.0,27.5 207.0,27.5 208.0,28.5 210.0,28.5 211.0,29.5 212.0,29.5 213.0,30.5 215.0,30.5 216.0,31.5 218.0,31.5 219.0,32.5 220.0,32.5 221.0,33.5 223.0,33.5 224.0,34.5 226.0,34.5 227.0,35.5 228.0,35.5 229.0,36.5 231.0,36.5 232.0,37.5 233.0,37.5 234.0,38.5 235.0,38.5 236.0,39.5 237.0,39.5 239.5,42.0 239.5,43.0 241.5,45.0 241.5,46.0 242.5,47.0 242.5,57.0 241.5,58.0 241.5,60.0 240.5,61.0 240.5,63.0 239.5,64.0 239.5,65.0 238.5,66.0 238.5,68.0 237.5,69.0 237.5,71.0 236.5,72.0 236.5,73.0 235.5,74.0 235.5,75.0 234.5,76.0 234.5,77.0 233.5,78.0 233.5,79.0 231.0,81.5 230.0,81.5 228.0,83.5 226.0,83.5 225.0,84.5 218.0,84.5 216.5,86.0 216.5,87.0 215.5,88.0 215.5,90.0 214.5,91.0 214.5,92.0 213.5,93.0 213.5,95.0 212.5,96.0 212.5,98.0 211.5,99.0 211.5,100.0 210.5,101.0 210.5,103.0 209.5,104.0 209.5,106.0 208.5,107.0 208.5,108.0 207.5,109.0 207.5,111.0 206.5,112.0 206.5,113.0 205.5,114.0 205.5,116.0 204.5,117.0 204.5,120.0 205.0,120.5 207.0,120.5 208.0,121.5 210.0,121.5 211.0,122.5 214.0,122.5 215.0,123.5 217.0,123.5 218.0,124.5 221.0,124.5 222.0,125.5 224.0,125.5 225.0,126.5 227.0,126.5 230.0,123.5 232.0,123.5 233.0,122.5 236.0,122.5 237.0,123.5 239.0,123.5 240.0,124.5 242.0,124.5 243.0,125.5 244.0,125.5 245.0,126.5 247.0,126.5 248.0,127.5 250.0,127.5 251.0,128.5 252.0,128.5 253.0,129.5 255.0,129.5 256.0,130.5 258.0,130.5 259.0,131.5 260.0,131.5 261.0,132.5 263.0,132.5 264.0,133.5 266.0,133.5 267.0,134.5 268.0,134.5 269.0,135.5 271.0,135.5 272.0,136.5 273.0,136.5 274.0,137.5 276.0,137.5 277.0,138.5 279.0,138.5 280.0,139.5 281.0,139.5 282.0,140.5 284.0,140.5 285.0,141.5 287.0,141.5 288.0,142.5 289.0,142.5 290.0,143.5 292.0,143.5 293.0,144.5 294.0,144.5 295.0,145.5 297.0,145.5 298.0,146.5 300.0,146.5 301.0,147.5 302.0,147.5 303.0,148.5 305.0,148.5 306.0,149.5 308.0,149.5 309.0,150.5 310.0,150.5 311.0,151.5 313.0,151.5 314.0,152.5 316.0,152.5 317.0,153.5 318.0,153.5 319.0,154.5 321.0,154.5 322.0,155.5 323.0,155.5 324.0,156.5 326.0,156.5 327.0,157.5 329.0,157.5 330.0,158.5 331.0,158.5 332.0,159.5 334.0,159.5 335.0,160.5 337.0,160.5 338.0,161.5 339.0,161.5 340.0,162.5 342.0,162.5 343.0,163.5 345.0,163.5 346.0,164.5 347.0,164.5 348.0,165.5 350.0,165.5 351.0,166.5 352.0,166.5 353.0,167.5 355.0,167.5 356.0,168.5 358.0,168.5 359.0,169.5 360.0,169.5 361.0,170.5 363.0,170.5 364.0,171.5 366.0,171.5 367.0,172.5 368.0,172.5 369.0,173.5 371.0,173.5 372.0,174.5 374.0,174.5 375.0,175.5 376.0,175.5 377.0,176.5 378.0,176.5 379.0,177.5 380.0,177.5 381.5,179.0 381.5,180.0 382.5,181.0 382.5,182.0 383.5,183.0 383.5,187.0 382.5,188.0 382.5,190.0 381.5,191.0 381.5,193.0 380.5,194.0 380.5,195.0 379.5,196.0 379.5,198.0 378.5,199.0 378.5,201.0 377.5,202.0 377.5,203.0 376.5,204.0 376.5,206.0 375.5,207.0 375.5,208.0 374.5,209.0 374.5,211.0 373.5,212.0 373.5,213.0 372.5,214.0 372.5,215.0 369.0,218.5 366.0,218.5 365.0,219.5 364.0,219.5 363.0,218.5 360.0,218.5 359.0,217.5 358.0,217.5 357.0,216.5 355.0,216.5 354.0,215.5 352.0,215.5 351.0,214.5 350.0,214.5 349.0,213.5 347.0,213.5 346.0,212.5 345.0,212.5 344.0,211.5 342.0,211.5 341.0,210.5 339.0,210.5 338.0,209.5 337.0,209.5 336.0,208.5 334.0,208.5 333.0,207.5 331.0,207.5 330.0,206.5 329.0,206.5 328.0,205.5 326.0,205.5 325.0,204.5 323.0,204.5 322.0,203.5 321.0,203.5 320.0,202.5 318.0,202.5 317.0,201.5 316.0,201.5 315.0,200.5 313.0,200.5 312.0,199.5 310.0,199.5 309.0,198.5 308.0,198.5 307.0,197.5 305.0,197.5 304.0,196.5 302.0,196.5 301.0,195.5 300.0,195.5 299.0,194.5 297.0,194.5 296.0,193.5 295.0,193.5 294.0,192.5 292.0,192.5 291.0,191.5 289.0,191.5 288.0,190.5 287.0,190.5 286.0,189.5 284.0,189.5 283.0,188.5 281.0,188.5 280.0,187.5 279.0,187.5 278.0,186.5 276.0,186.5 275.0,185.5 273.0,185.5 272.0,184.5 271.0,184.5 270.0,183.5 268.0,183.5 267.0,182.5 266.0,182.5 265.0,181.5 263.0,181.5 262.0,180.5 260.0,180.5 259.0,179.5 258.0,179.5 257.0,178.5 255.0,178.5 254.0,177.5 252.0,177.5 251.0,176.5 250.0,176.5 249.0,175.5 247.0,175.5 246.0,174.5 244.0,174.5 243.0,173.5 242.0,173.5 241.0,172.5 239.0,172.5 238.0,171.5 237.0,171.5 236.0,170.5 234.0,170.5 233.0,169.5 231.0,169.5 230.0,168.5 229.0,168.5 228.0,167.5 226.0,167.5 225.0,166.5 223.0,166.5 222.0,165.5 221.0,165.5 216.5,161.0 216.5,159.0 215.5,158.0 215.5,156.0 214.0,154.5 213.0,154.5 212.0,153.5 210.0,153.5 209.0,152.5 208.0,152.5 207.0,151.5 206.0,151.5 205.0,150.5 204.0,150.5 203.0,149.5 202.0,149.5 201.0,148.5 200.0,148.5 199.0,147.5 198.0,147.5 197.0,146.5 196.0,146.5 195.0,145.5 194.0,145.5 193.5,146.0 193.5,148.0 192.5,149.0 192.5,150.0 191.5,151.0 191.5,153.0 190.5,154.0 190.5,156.0 189.5,157.0 189.5,158.0 188.5,159.0 188.5,161.0 187.5,162.0 187.5,163.0 186.5,164.0 186.5,166.0 185.5,167.0 185.5,169.0 184.5,170.0 184.5,171.0 183.5,172.0 183.5,174.0 182.5,175.0 182.5,177.0 181.5,178.0 181.5,179.0 180.5,180.0 180.5,181.0 181.0,181.5 182.0,181.5 186.5,186.0 186.5,187.0 187.5,188.0 187.5,189.0 188.5,190.0 188.5,199.0 187.5,200.0 187.5,202.0 186.5,203.0 186.5,205.0 185.5,206.0 185.5,207.0 184.5,208.0 184.5,210.0 183.5,211.0 183.5,213.0 182.5,214.0 182.5,215.0 181.5,216.0 181.5,218.0 180.5,219.0 180.5,220.0 176.0,224.5 175.0,224.5 173.0,226.5 170.0,226.5 169.0,227.5 165.0,227.5 164.0,226.5 161.0,226.5 160.0,225.5 158.0,225.5 157.0,224.5 156.0,224.5 155.0,223.5 153.0,223.5 152.0,222.5 150.0,222.5 149.0,221.5 148.0,221.5 147.0,220.5 145.0,220.5 144.0,219.5 143.0,219.5 142.0,218.5 140.0,218.5 139.0,217.5 137.0,217.5 136.0,216.5 135.0,216.5 134.0,215.5 132.0,215.5 131.0,214.5 129.0,214.5 128.0,213.5 127.0,213.5 126.0,212.5 124.0,212.5 123.0,211.5 121.0,211.5 120.0,210.5 119.0,210.5 118.0,209.5 116.0,209.5 115.0,208.5 114.0,208.5 113.0,207.5 111.0,207.5 110.0,206.5 108.0,206.5 107.0,205.5 106.0,205.5 105.0,204.5 103.0,204.5 102.0,203.5 100.0,203.5 99.0,202.5 98.0,202.5 97.0,201.5 95.0,201.5 94.0,200.5 93.0,200.5 92.0,199.5 90.0,199.5 89.0,198.5 87.0,198.5 86.0,197.5 85.0,197.5 84.0,196.5 82.0,196.5 81.0,195.5 79.0,195.5 78.0,194.5 77.0,194.5 76.0,193.5 74.0,193.5 73.0,192.5 71.0,192.5 70.0,191.5 69.0,191.5 68.0,190.5 66.0,190.5 65.0,189.5 64.0,189.5 63.0,188.5 61.0,188.5 55.5,183.0 55.5,182.0 54.5,181.0 54.5,180.0 53.5,179.0 53.5,170.0 54.5,169.0 54.5,167.0 55.5,166.0 55.5,165.0 56.5,164.0 56.5,162.0 57.5,161.0 57.5,159.0 58.5,158.0 58.5,157.0 59.5,156.0 59.5,154.0 60.5,153.0 60.5,152.0 61.5,151.0 61.5,150.0 62.5,149.0 62.5,148.0 66.0,144.5 67.0,144.5 68.0,143.5 69.0,143.5 70.0,142.5 73.0,142.5 74.0,141.5 77.0,141.5 78.0,142.5 79.0,142.5 79.5,142.0 79.5,141.0 80.5,140.0 80.5,139.0 81.5,138.0 81.5,136.0 82.5,135.0 82.5,133.0 83.5,132.0 83.5,131.0 84.5,130.0 84.5,128.0 85.5,127.0 85.5,126.0 86.5,125.0 86.5,123.0 87.5,122.0 87.5,120.0 88.5,119.0 88.5,118.0 89.5,117.0 89.5,115.0 90.5,114.0 90.5,112.0 91.5,111.0 91.5,110.0 92.5,109.0 92.5,107.0 92.0,106.5 90.0,106.5 89.0,105.5 88.0,105.5 87.0,104.5 86.0,104.5 82.5,101.0 82.5,100.0 81.5,99.0 81.5,97.0 80.5,96.0 80.5,91.0 81.5,90.0 81.5,88.0 82.5,87.0 82.5,86.0 88.0,80.5 89.0,80.5 90.0,79.5 98.0,79.5 99.0,80.5 101.0,80.5 102.0,81.5 103.5,80.0 103.5,78.0 104.5,77.0 104.5,76.0 105.5,75.0 105.5,73.0 106.5,72.0 106.5,70.0 107.5,69.0 107.5,68.0 108.5,67.0 108.5,65.0 109.5,64.0 109.5,62.0 110.5,61.0 110.5,60.0 111.5,59.0 111.5,57.0 112.5,56.0 112.5,54.0 113.5,53.0 113.5,52.0 114.5,51.0 114.5,49.0 115.5,48.0 115.5,46.0 113.0,43.5 112.0,43.5 110.5,42.0 110.5,41.0 109.5,40.0 109.5,39.0 108.5,38.0 108.5,37.0 107.5,36.0 107.5,28.0 108.5,27.0 108.5,25.0 109.5,24.0 109.5,22.0 110.5,21.0 110.5,20.0 111.5,19.0 111.5,17.0 112.5,16.0 112.5,15.0 113.5,14.0 113.5,12.0 114.5,11.0 114.5,9.0 115.5,8.0 115.5,7.0 121.0,1.5 122.0,1.5 123.0,0.5 125.0,0.5 125.5,0.0Z M127.0,6.5 126.0,7.5 125.0,7.5 121.5,11.0 121.5,12.0 120.5,13.0 120.5,15.0 119.5,16.0 119.5,18.0 118.5,19.0 118.5,20.0 117.5,21.0 117.5,23.0 116.5,24.0 116.5,26.0 115.5,27.0 115.5,28.0 114.5,29.0 114.5,35.0 116.5,37.0 116.5,38.0 118.0,39.5 119.0,39.5 120.0,40.5 122.0,40.5 123.0,41.5 125.0,41.5 126.0,42.5 127.0,42.5 128.0,43.5 130.0,43.5 131.0,44.5 133.0,44.5 134.0,45.5 135.0,45.5 136.0,46.5 138.0,46.5 139.0,47.5 141.0,47.5 142.0,48.5 143.0,48.5 144.0,49.5 146.0,49.5 147.0,50.5 148.0,50.5 149.0,51.5 151.0,51.5 152.0,52.5 154.0,52.5 155.0,53.5 156.0,53.5 157.0,54.5 159.0,54.5 160.0,55.5 162.0,55.5 163.0,56.5 164.0,56.5 165.0,57.5 167.0,57.5 168.0,58.5 169.0,58.5 170.0,59.5 172.0,59.5 173.0,60.5 175.0,60.5 176.0,61.5 177.0,61.5 178.0,62.5 180.0,62.5 181.0,63.5 183.0,63.5 184.0,64.5 185.0,64.5 186.0,65.5 188.0,65.5 189.0,66.5 191.0,66.5 192.0,67.5 193.0,67.5 194.0,68.5 196.0,68.5 197.0,69.5 198.0,69.5 199.0,70.5 201.0,70.5 202.0,71.5 204.0,71.5 205.0,72.5 206.0,72.5 207.0,73.5 209.0,73.5 210.0,74.5 212.0,74.5 213.0,75.5 214.0,75.5 215.0,76.5 217.0,76.5 218.0,77.5 224.0,77.5 226.0,75.5 227.0,75.5 227.5,75.0 227.5,74.0 229.5,72.0 229.5,70.0 230.5,69.0 230.5,67.0 231.5,66.0 231.5,65.0 232.5,64.0 232.5,62.0 233.5,61.0 233.5,59.0 234.5,58.0 234.5,57.0 235.5,56.0 235.5,49.0 233.5,47.0 233.5,46.0 233.0,45.5 232.0,45.5 231.0,44.5 230.0,44.5 229.0,43.5 227.0,43.5 226.0,42.5 225.0,42.5 224.0,41.5 222.0,41.5 221.0,40.5 220.0,40.5 219.0,39.5 217.0,39.5 216.0,38.5 214.0,38.5 213.0,37.5 211.0,37.5 210.0,36.5 209.0,36.5 208.0,35.5 206.0,35.5 205.0,34.5 204.0,34.5 203.0,33.5 201.0,33.5 200.0,32.5 199.0,32.5 198.0,31.5 196.0,31.5 195.0,30.5 193.0,30.5 192.0,29.5 191.0,29.5 190.0,28.5 188.0,28.5 187.0,27.5 185.0,27.5 184.0,26.5 183.0,26.5 182.0,25.5 180.0,25.5 179.0,24.5 177.0,24.5 176.0,23.5 175.0,23.5 174.0,22.5 172.0,22.5 171.0,21.5 170.0,21.5 169.0,20.5 167.0,20.5 166.0,19.5 164.0,19.5 163.0,18.5 162.0,18.5 161.0,17.5 159.0,17.5 158.0,16.5 156.0,16.5 155.0,15.5 154.0,15.5 153.0,14.5 151.0,14.5 150.0,13.5 148.0,13.5 147.0,12.5 146.0,12.5 145.0,11.5 143.0,11.5 142.0,10.5 141.0,10.5 140.0,9.5 138.0,9.5 137.0,8.5 135.0,8.5 134.0,7.5 133.0,7.5 132.0,6.5 127.0,6.5Z M122.0,50.5 121.5,51.0 121.5,52.0 120.5,53.0 120.5,55.0 119.5,56.0 119.5,58.0 118.5,59.0 118.5,60.0 117.5,61.0 117.5,63.0 116.5,64.0 116.5,66.0 115.5,67.0 115.5,68.0 114.5,69.0 114.5,71.0 113.5,72.0 113.5,73.0 112.5,74.0 112.5,76.0 111.5,77.0 111.5,79.0 110.5,80.0 110.5,81.0 109.5,82.0 109.5,84.0 108.5,85.0 108.5,87.0 107.5,88.0 107.5,89.0 106.5,90.0 106.5,92.0 105.5,93.0 105.5,94.0 104.5,95.0 104.5,97.0 103.5,98.0 103.5,100.0 102.5,101.0 102.5,102.0 101.5,103.0 101.5,105.0 100.5,106.0 100.5,108.0 99.5,109.0 99.5,110.0 98.5,111.0 98.5,113.0 97.5,114.0 97.5,116.0 96.5,117.0 96.5,118.0 95.5,119.0 95.5,121.0 94.5,122.0 94.5,123.0 93.5,124.0 93.5,126.0 92.5,127.0 92.5,129.0 91.5,130.0 91.5,131.0 90.5,132.0 90.5,134.0 89.5,135.0 89.5,137.0 88.5,138.0 88.5,139.0 87.5,140.0 87.5,142.0 86.5,143.0 88.0,144.5 89.0,144.5 90.0,145.5 92.0,145.5 93.0,146.5 94.0,146.5 95.0,147.5 97.0,147.5 98.0,148.5 100.0,148.5 101.0,149.5 102.0,149.5 103.0,150.5 105.0,150.5 106.0,151.5 107.0,151.5 108.0,152.5 110.0,152.5 111.0,153.5 113.0,153.5 114.0,154.5 115.0,154.5 116.0,155.5 118.0,155.5 119.0,156.5 121.0,156.5 122.0,157.5 123.0,157.5 124.0,158.5 126.0,158.5 127.0,159.5 129.0,159.5 130.0,160.5 131.0,160.5 132.0,161.5 134.0,161.5 135.0,162.5 136.0,162.5 137.0,163.5 139.0,163.5 140.0,164.5 142.0,164.5 143.0,165.5 145.0,165.5 146.0,166.5 147.0,166.5 148.0,167.5 150.0,167.5 151.0,168.5 152.0,168.5 153.0,169.5 155.0,169.5 156.0,170.5 158.0,170.5 159.0,171.5 160.0,171.5 161.0,172.5 163.0,172.5 164.0,173.5 165.0,173.5 166.0,174.5 168.0,174.5 169.0,175.5 171.0,175.5 172.0,176.5 174.0,176.5 175.5,175.0 175.5,173.0 176.5,172.0 176.5,171.0 177.5,170.0 177.5,168.0 178.5,167.0 178.5,165.0 179.5,164.0 179.5,163.0 180.5,162.0 180.5,160.0 181.5,159.0 181.5,158.0 182.5,157.0 182.5,155.0 183.5,154.0 183.5,152.0 184.5,151.0 184.5,150.0 185.5,149.0 185.5,147.0 186.5,146.0 186.5,144.0 187.5,143.0 187.5,142.0 188.5,141.0 188.5,139.0 189.5,138.0 189.5,137.0 190.5,136.0 190.5,134.0 191.5,133.0 191.5,131.0 192.5,130.0 192.5,129.0 193.5,128.0 193.5,126.0 194.5,125.0 194.5,123.0 195.5,122.0 195.5,121.0 196.5,120.0 196.5,118.0 197.5,117.0 197.5,115.0 198.5,114.0 198.5,113.0 199.5,112.0 199.5,110.0 200.5,109.0 200.5,108.0 201.5,107.0 201.5,105.0 202.5,104.0 202.5,102.0 203.5,101.0 203.5,100.0 204.5,99.0 204.5,97.0 205.5,96.0 205.5,94.0 206.5,93.0 206.5,92.0 207.5,91.0 207.5,89.0 208.5,88.0 208.5,87.0 209.5,86.0 209.5,83.0 209.0,82.5 208.0,82.5 207.0,81.5 205.0,81.5 204.0,80.5 202.0,80.5 201.0,79.5 200.0,79.5 199.0,78.5 197.0,78.5 196.0,77.5 194.0,77.5 193.0,76.5 192.0,76.5 191.0,75.5 189.0,75.5 188.0,74.5 187.0,74.5 186.0,73.5 184.0,73.5 183.0,72.5 181.0,72.5 180.0,71.5 179.0,71.5 178.0,70.5 176.0,70.5 175.0,69.5 173.0,69.5 172.0,68.5 171.0,68.5 170.0,67.5 168.0,67.5 167.0,66.5 166.0,66.5 165.0,65.5 163.0,65.5 162.0,64.5 160.0,64.5 159.0,63.5 158.0,63.5 157.0,62.5 155.0,62.5 154.0,61.5 152.0,61.5 151.0,60.5 150.0,60.5 149.0,59.5 147.0,59.5 146.0,58.5 144.0,58.5 143.0,57.5 142.0,57.5 141.0,56.5 139.0,56.5 138.0,55.5 137.0,55.5 136.0,54.5 134.0,54.5 133.0,53.5 131.0,53.5 130.0,52.5 129.0,52.5 128.0,51.5 126.0,51.5 125.0,50.5 122.0,50.5Z M72.0,149.5 71.0,150.5 70.0,150.5 68.5,152.0 68.5,153.0 67.5,154.0 67.5,155.0 66.5,156.0 66.5,157.0 65.5,158.0 65.5,160.0 64.5,161.0 64.5,162.0 63.5,163.0 63.5,165.0 62.5,166.0 62.5,168.0 61.5,169.0 61.5,170.0 60.5,171.0 60.5,178.0 65.0,182.5 67.0,182.5 68.0,183.5 69.0,183.5 70.0,184.5 72.0,184.5 73.0,185.5 74.0,185.5 75.0,186.5 77.0,186.5 78.0,187.5 80.0,187.5 81.0,188.5 82.0,188.5 83.0,189.5 85.0,189.5 86.0,190.5 88.0,190.5 89.0,191.5 90.0,191.5 91.0,192.5 93.0,192.5 94.0,193.5 96.0,193.5 97.0,194.5 98.0,194.5 99.0,195.5 101.0,195.5 102.0,196.5 103.0,196.5 104.0,197.5 106.0,197.5 107.0,198.5 109.0,198.5 110.0,199.5 111.0,199.5 112.0,200.5 114.0,200.5 115.0,201.5 117.0,201.5 118.0,202.5 119.0,202.5 120.0,203.5 122.0,203.5 123.0,204.5 125.0,204.5 126.0,205.5 127.0,205.5 128.0,206.5 130.0,206.5 131.0,207.5 132.0,207.5 133.0,208.5 135.0,208.5 136.0,209.5 138.0,209.5 139.0,210.5 140.0,210.5 141.0,211.5 143.0,211.5 144.0,212.5 146.0,212.5 147.0,213.5 148.0,213.5 149.0,214.5 151.0,214.5 152.0,215.5 154.0,215.5 155.0,216.5 156.0,216.5 157.0,217.5 159.0,217.5 160.0,218.5 161.0,218.5 162.0,219.5 164.0,219.5 165.0,220.5 168.0,220.5 169.0,219.5 171.0,219.5 174.5,216.0 174.5,215.0 175.5,214.0 175.5,212.0 176.5,211.0 176.5,209.0 177.5,208.0 177.5,207.0 178.5,206.0 178.5,204.0 179.5,203.0 179.5,202.0 180.5,201.0 180.5,199.0 181.5,198.0 181.5,192.0 180.5,191.0 180.5,190.0 178.0,187.5 177.0,187.5 176.0,186.5 175.0,186.5 174.0,185.5 172.0,185.5 171.0,184.5 169.0,184.5 168.0,183.5 167.0,183.5 166.0,182.5 164.0,182.5 163.0,181.5 161.0,181.5 160.0,180.5 159.0,180.5 158.0,179.5 156.0,179.5 155.0,178.5 154.0,178.5 153.0,177.5 151.0,177.5 150.0,176.5 148.0,176.5 147.0,175.5 146.0,175.5 145.0,174.5 143.0,174.5 142.0,173.5 140.0,173.5 139.0,172.5 138.0,172.5 137.0,171.5 135.0,171.5 134.0,170.5 132.0,170.5 131.0,169.5 130.0,169.5 129.0,168.5 127.0,168.5 126.0,167.5 125.0,167.5 124.0,166.5 122.0,166.5 121.0,165.5 119.0,165.5 118.0,164.5 117.0,164.5 116.0,163.5 114.0,163.5 113.0,162.5 111.0,162.5 110.0,161.5 109.0,161.5 108.0,160.5 106.0,160.5 105.0,159.5 104.0,159.5 103.0,158.5 101.0,158.5 100.0,157.5 98.0,157.5 97.0,156.5 96.0,156.5 95.0,155.5 93.0,155.5 92.0,154.5 91.0,154.5 90.0,153.5 88.0,153.5 87.0,152.5 85.0,152.5 84.0,151.5 83.0,151.5 82.0,150.5 80.0,150.5 79.0,149.5 72.0,149.5Z M61.5,252.0 62.0,251.5 183.0,251.5 184.0,252.5 191.0,252.5 192.0,253.5 196.0,253.5 197.0,254.5 198.0,254.5 199.0,255.5 201.0,255.5 202.0,256.5 203.0,256.5 204.0,257.5 205.0,257.5 206.0,258.5 207.0,258.5 208.0,259.5 209.0,259.5 212.0,262.5 213.0,262.5 222.5,272.0 222.5,273.0 224.5,275.0 224.5,276.0 225.5,277.0 225.5,278.0 226.5,279.0 226.5,280.0 227.5,281.0 227.5,282.0 228.5,283.0 228.5,284.0 229.5,285.0 229.5,287.0 230.5,288.0 230.5,291.0 231.5,292.0 231.5,297.0 232.5,298.0 232.5,302.0 233.0,302.5 235.0,302.5 236.0,303.5 237.0,303.5 238.0,304.5 239.0,304.5 242.5,308.0 242.5,309.0 244.5,311.0 244.5,313.0 245.5,314.0 245.5,321.0 244.5,322.0 244.5,323.0 243.5,324.0 243.5,325.0 242.5,326.0 242.5,327.0 241.0,328.5 240.0,328.5 238.0,330.5 237.0,330.5 236.0,331.5 235.0,331.5 234.0,332.5 11.0,332.5 10.0,331.5 9.0,331.5 8.0,330.5 7.0,330.5 5.0,328.5 4.0,328.5 3.5,328.0 3.5,327.0 1.5,325.0 1.5,324.0 0.5,323.0 0.5,321.0 -0.5,320.0 -0.5,314.0 0.5,313.0 0.5,312.0 1.5,311.0 1.5,310.0 2.5,309.0 2.5,308.0 5.0,305.5 6.0,305.5 8.0,303.5 10.0,303.5 11.0,302.5 13.0,302.5 13.5,302.0 13.5,295.0 14.5,294.0 14.5,290.0 15.5,289.0 15.5,287.0 16.5,286.0 16.5,284.0 17.5,283.0 17.5,282.0 18.5,281.0 18.5,280.0 19.5,279.0 19.5,278.0 20.5,277.0 20.5,276.0 22.5,274.0 22.5,273.0 27.5,268.0 27.5,267.0 30.0,264.5 31.0,264.5 34.0,261.5 35.0,261.5 37.0,259.5 38.0,259.5 40.0,257.5 41.0,257.5 42.0,256.5 43.0,256.5 44.0,255.5 46.0,255.5 47.0,254.5 49.0,254.5 50.0,253.5 53.0,253.5 54.0,252.5 61.0,252.5 61.5,252.0Z M57.0,259.5 56.0,260.5 53.0,260.5 52.0,261.5 50.0,261.5 49.0,262.5 47.0,262.5 46.0,263.5 45.0,263.5 44.0,264.5 43.0,264.5 42.0,265.5 41.0,265.5 39.0,267.5 38.0,267.5 29.5,276.0 29.5,277.0 27.5,279.0 27.5,280.0 26.5,281.0 26.5,282.0 24.5,284.0 24.5,286.0 23.5,287.0 23.5,288.0 22.5,289.0 22.5,292.0 21.5,293.0 21.5,298.0 20.5,299.0 20.5,301.0 22.0,302.5 224.0,302.5 224.5,302.0 224.5,295.0 223.5,294.0 223.5,291.0 222.5,290.0 222.5,288.0 221.5,287.0 221.5,285.0 220.5,284.0 220.5,283.0 218.5,281.0 218.5,280.0 217.5,279.0 217.5,278.0 214.5,275.0 214.5,274.0 211.0,270.5 210.0,270.5 206.0,266.5 205.0,266.5 203.0,264.5 202.0,264.5 201.0,263.5 200.0,263.5 199.0,262.5 197.0,262.5 196.0,261.5 194.0,261.5 193.0,260.5 190.0,260.5 189.0,259.5 57.0,259.5Z"/></svg>',
-  // Vector redraw of the supplied sparkly Petro gift: warm red box, golden
+  // Vector redraw of the supplied sparkly Soda gift: warm red box, golden
   // ribbon and bow, plus the alternating red/yellow/white celebration marks.
   checkinCalendar: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="1.4" y="2.5" width="21.2" height="20" rx="3.1" stroke="currentColor" stroke-width="2.6"/><path d="M7.3 1v3.2m9.4-3.2v3.2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M8.3 9.1h2.8v2.8H8.3zm4.3 0h2.8v2.8h-2.8zm4.3 0h2.8v2.8h-2.8zM4 13.6h2.8v2.8H4zm4.3 0h2.8v2.8H8.3zm8.6 0h2.8v2.8h-2.8zM4 17.9h2.8v2.8H4zm4.3 0h2.8v2.8H8.3zm4.3 0h2.8v2.8h-2.8z" fill="currentColor"/><path d="m12.5 14.9 1.2 1.2 2.7-3.2" stroke="currentColor" stroke-width="2.1" stroke-linecap="square" stroke-linejoin="miter"/></svg>',
   coinsStack: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v5c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 11v5c0 1.66 3.13 3 7 3s7-1.34 7-3v-5"/></svg>',
@@ -1095,7 +1095,7 @@ var ICONS = {
   eyeOff: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7c2.3 0 4.3.6 6 1.5M23 12s-1.4 2.5-4 4.5M14.1 14.1a3 3 0 0 1-4.2-4.2"/><path d="M3 3l18 18"/></svg>',
   chevronRight: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
   // ── Account/Network/Assets screen icon set (owner's 2nd/3rd/4th mockup
-  // round) -- same real-SVG replacement of the old Petro raster row icons. ──
+  // round) -- same real-SVG replacement of the old Soda raster row icons. ──
   layers: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 8 12 13l9.5-5L12 3Z"/><path d="m2.5 13 9.5 5 9.5-5"/><path d="m2.5 18 9.5 5 9.5-5"/></svg>',
   trendUp: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9.5 10l4.5 4.5L21 6"/><path d="M15 6h6v6"/></svg>',
   peopleGroup: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.6"/><path d="M2.6 19c.7-3.1 3-4.9 6.4-4.9s5.7 1.8 6.4 4.9"/><path d="M15.4 14.7c2.5.4 4 1.9 4.5 4.1"/></svg>',
@@ -1206,7 +1206,7 @@ function suppliedMemberIcon(name){
 // -- a value outside this map falls back to Bodoni Moda's stack rather than
 // rendering with no font-family at all.
 // Snow's beer-bottle illustration (ICONS.box) came across with the fork and
-// was still the artwork on Petro's empty My Products screen -- a different
+// was still the artwork on Soda's empty My Products screen -- a different
 // company's product, in a different brand's style. Replaced with a neutral
 // outline box in the app's own ink colour.
 var EMPTY_ICON = '<svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M2 8h20l-1.5-3.2A1.5 1.5 0 0 0 19.1 4H4.9a1.5 1.5 0 0 0-1.4.8Z"/><path d="M10 12h4"/></svg>';
@@ -1221,7 +1221,7 @@ var NUMBER_FONT_STACKS = {
   'System default': "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
 };
 // ── THE APP'S NAME ──
-// Owner: "l would like to also to edit the app name petro, so make it when it
+// Owner: "l would like to also to edit the app name soda, so make it when it
 // can be editable everywhere." It is one admin setting (Settings -> App name)
 // and every screen reads it from here. Nothing in this file spells the name
 // out any more, so a rename cannot half-land -- which is precisely how the
@@ -1236,7 +1236,7 @@ var NUMBER_FONT_STACKS = {
 // script, which runs before this file inflates), then nothing.
 //
 // "Nothing" is a real answer and callers must handle it. Owner: "let's not
-// make petro to be default name" -- a hardcoded default is exactly what made
+// make soda to be default name" -- a hardcoded default is exactly what made
 // the loading screen keep saying the old name after he had renamed the app,
 // because the loader is on screen while the settings request is still in
 // flight, so the default was all it could ever show.
@@ -1250,20 +1250,20 @@ function brandNameKnown(){
 // For SENTENCES, where a blank would read as a broken string ("Welcome to
 // the  app"). The wordmark deliberately does NOT use this -- see
 // brandWordmarkHtml().
-// Was `|| 'Petro'` -- a real bug, not a design choice: with no
-// admin-set brandName yet (a fresh Petro deploy, before the owner has
+// Was `|| 'Soda'` -- a real bug, not a design choice: with no
+// admin-set brandName yet (a fresh Soda deploy, before the owner has
 // opened Admin -> Settings), every sentence-form use of the brand name
-// literally rendered the word "Petro". Petro is this app's own real name,
+// literally rendered the word "Soda". Soda is this app's own real name,
 // not an inherited-fork placeholder, so it is the correct fallback here --
 // unlike the wordmark below, which stays blank on purpose.
 function brandName(){
-  return brandNameKnown() || 'Petro';
+  return brandNameKnown() || 'Soda';
 }
-var BRAND_CACHE_KEY = 'petro_brand_name';
+var BRAND_CACHE_KEY = 'soda_brand_name';
 // The wordmark: just the name, in caps. Used to split off the LAST letter
-// into an accent colour ("CHIP+Z") -- a pun specific to Petro's own name
+// into an accent colour ("CHIP+Z") -- a pun specific to Soda's own name
 // that means nothing for any other brand, dropped per the owner's "don't
-// use anything that was Petro" instruction rather than carried over as a
+// use anything that was Soda" instruction rather than carried over as a
 // rule that happens to have one letter highlighted for no reason.
 // The wordmark shows the name or NOTHING. It is the one place a guess is
 // worse than a blank: a blank for the half-second before settings land reads
@@ -1276,7 +1276,7 @@ function brandWordmarkHtml(){
 // Paints the name into the places that are NOT re-rendered from JavaScript:
 // index.html's own static markup (the pre-launch countdown gate is the only
 // [data-brandmark] left -- the loading screen's own wordmark was dropped
-// along with the rest of its Petro-derived design) and the browser/tab
+// along with the rest of its Soda-derived design) and the browser/tab
 // title. Called once the settings land, and safe to call again -- it only
 // ever writes.
 //
@@ -1292,7 +1292,7 @@ function applyBrandName(){
   document.querySelectorAll('.home-brand-title').forEach(el => { el.textContent = known; });
   try { document.title = known; } catch (_) {}
   // Remember it for the next launch. This is the whole fix for "on start up
-  // loader it was still saying petro": the loading screen paints long before
+  // loader it was still saying soda": the loading screen paints long before
   // /public/settings answers, so the only way it can show the right name is
   // to already know it. Written on every apply, so a rename reaches the
   // loader on the boot AFTER the one that learned it -- there is no earlier
@@ -1307,7 +1307,7 @@ function applyBrandName(){
 // The name as plain text inside the round profile badge on Account. On
 // `window` because two inline onerror="" attributes call it -- see
 // renderAccount(). Font size divides by the name's length for the same reason
-// petroMarkHtml()'s does: the badge is a fixed 68px circle with overflow
+// sodaMarkHtml()'s does: the badge is a fixed 68px circle with overflow
 // hidden, so a longer name at 19px would simply have its ends cut off.
 // Uses brandName(), not brandNameKnown(): this is the fallback shown when the
 // profile image itself failed to load, so an empty badge would be a hole in
@@ -1330,11 +1330,11 @@ window.brandTextMark = function(box){
 // The font size divides by the NAME'S OWN length rather than the constant 3.4
 // that suited five letters: at a fixed size a longer name simply ran out past
 // the rounded square it sits in.
-function petroMarkHtml(size){
+function sodaMarkHtml(size){
   const px = Number(size) || 44;
   const name = brandName().toUpperCase();
   const fs = Math.max(7, Math.round(px / (0.68 * Math.max(3, name.length))));
-  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--petro-grad);color:#fff;font-weight:800;font-size:${fs}px;letter-spacing:.02em;">${esc(name)}</span>`;
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${px}px;height:${px}px;border-radius:${Math.round(px/4)}px;background:var(--soda-grad);color:#fff;font-weight:800;font-size:${fs}px;letter-spacing:.02em;">${esc(name)}</span>`;
 }
 function sanitizePhoneInput(el){
   let digits = el.value.replace(/\D/g, '');
@@ -1381,8 +1381,8 @@ var STATE = { user: null, account: null, settings: null, products: null, investm
 // every unqualified call in this file.
 
 // A session ends on real inactivity, even when background polls still succeed.
-try { window._suppressAutofillLogin = sessionStorage.getItem('petro_relogin_required') === '1'; } catch (_) {}
-var _memberSession = window.createPetroIdleSession('petro_member_session', function(){
+try { window._suppressAutofillLogin = sessionStorage.getItem('soda_relogin_required') === '1'; } catch (_) {}
+var _memberSession = window.createSodaIdleSession('soda_member_session', function(){
   window._triedAutoSignIn = true;
   document.querySelectorAll('.sheet-bg.show,.modal-bg.show,.pay-page.show,#msgDetailBg.show').forEach(el => el.classList.remove('show'));
   unlockBodyScroll();
@@ -1566,7 +1566,7 @@ function phoneToEmail(phone){
 }
 function loginAddressFor(phone, bare){
   const local = localDigits(phone) || String(phone).replace(/\D/g,'').replace(/^0+/, '');
-  return (bare ? local : dial() + local) + '@petro-platform.com';
+  return (bare ? local : dial() + local) + '@soda-platform.com';
 }
 // Every address this number could have been registered under, most likely
 // first. Firebase folds "no such account" into the same
@@ -1743,7 +1743,7 @@ function credManSupported(){
 // this, l only wanted it to be without @". An earlier attempt set only the
 // cosmetic `name` field and kept the email as `id`, but Android's Google
 // Password Manager lists the `id` and ignores `name`, so the
-// "<digits>@petro-platform.com" kept showing. The Firebase address is a
+// "<digits>@soda-platform.com" kept showing. The Firebase address is a
 // pure function of the phone number, so nothing is lost by not storing it:
 // tryAutoSignIn() rebuilds it with loginAddressCandidates().
 async function storeCredentialIfPossible(email, pass, displayPhone){
@@ -1925,7 +1925,7 @@ window.doRegister = async function(){
   // Referral code box is prefilled from ?ref= (see captureReferralFromUrl)
   // but stays editable -- whatever's in the box at submit time wins,
   // whether that's the link's code, untouched, or something typed by hand.
-  // Petro makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
+  // Soda makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
   if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
   const otpOn = otpVerificationEnabled();
@@ -1983,7 +1983,7 @@ window.doRegister = async function(){
   }
   catch (e) {
     // Owner-reported real bug: a Firebase Auth account can exist with no
-    // matching Petro profile -- e.g. an earlier registration attempt whose
+    // matching Soda profile -- e.g. an earlier registration attempt whose
     // account-creation step succeeded but the network call to /register
     // never finished (closed tab, lost connection, a crash) -- the classic
     // "ghost account" this file already self-heals ON LOGIN
@@ -2088,7 +2088,7 @@ async function performMemberLogout(opts){
   // login when Google details are put, it fails to login automatically, so
   // l have to press button, why" -- traced to this function: every logout,
   // idle-triggered or not, was permanently setting the SAME
-  // petro_relogin_required flag that blocks Chrome's autofill-then-submit
+  // soda_relogin_required flag that blocks Chrome's autofill-then-submit
   // convenience (see the big comment lower down) for the rest of the tab's
   // life. That is exactly right for a DELIBERATE "log me out" ("l don't
   // want to use that very account" -- the original owner quote this was
@@ -2111,7 +2111,7 @@ async function performMemberLogout(opts){
   })).catch(() => {});
   _memberSession.clear();
   window._triedAutoSignIn = true;
-  if (!auto) { try { sessionStorage.setItem('petro_relogin_required', '1'); } catch (_) {} }
+  if (!auto) { try { sessionStorage.setItem('soda_relogin_required', '1'); } catch (_) {} }
   stopLiveRefresh();
   // Defense in depth alongside the _openSheetTitle fix on the checkin
   // countdown's own tick: a sign-out that happens to land while Daily
@@ -2218,7 +2218,7 @@ async function performMemberLogout(opts){
 // Owner: "l also need faster loading."
 //
 // MEASURED (test-boot-speed.py, against the real built app): the loader used
-// to wait on about 1.3 MB of JSON, and 900 KB of it was /public/petro-images
+// to wait on about 1.3 MB of JSON, and 900 KB of it was /public/soda-images
 // -- SEVEN admin-uploaded images, base64'd inside one reply. Of those seven,
 // exactly two can appear on the first screen (Home's spin banner and the
 // profile GIF); the rest belong to screens nobody has opened yet -- the
@@ -2240,7 +2240,7 @@ async function boot(){
   // client-side so the ticker never invents financial events.
   const pSettings = api('/public/settings'), pProducts = api('/public/products');
   const pBanner = api('/public/banner');
-  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/petro-images') ])
+  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/soda-images') ])
     .then(([ai, ci]) => { applyBootArtwork(ai, ci); })
     .catch(() => {});
   const [s, p, b] = await Promise.all([ pSettings, pProducts, pBanner ]);
@@ -2276,7 +2276,7 @@ function applyBootArtwork(ai, ci){
   // `ai` (the removed announcement dialog's own image) is no longer read
   // here -- kept as a parameter only because its caller's Promise.all still
   // fetches it; not worth touching that sequence just to drop one entry.
-  // Same reasoning once more for the two Petro-only slots: the Referral
+  // Same reasoning once more for the two Soda-only slots: the Referral
   // page banner and the brand logo on the Account profile card.
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   syncBrandLogoImages();
@@ -2619,7 +2619,7 @@ async function processMemberAuth(user){
       if (STATE.user !== user) return;
       const started = Number(token.claims.auth_time) * 1000;
       if (!_memberSession.begin(user.uid + ':' + started, started, false)) return;
-      try { sessionStorage.removeItem('petro_relogin_required'); } catch (_) {}
+      try { sessionStorage.removeItem('soda_relogin_required'); } catch (_) {}
     } catch (_) {
       notify('Could not verify your login session. Please try again.');
       await window.doLogout({ auto: true }); return;
@@ -3064,9 +3064,9 @@ function updateNavIcons(){
     // simply unnecessary work on every single tab switch.
     // Stamp the slot so an installed page which receives an updated supplied
     // icon replaces its old markup once, without re-writing it on every tab.
-    if (slot && slot.dataset.petroNavIcon !== key) {
+    if (slot && slot.dataset.sodaNavIcon !== key) {
       slot.innerHTML = NAV_ICON_SVG[key] || '';
-      slot.dataset.petroNavIcon = key;
+      slot.dataset.sodaNavIcon = key;
     }
     btn.classList.toggle('active', active);
   });
@@ -3089,11 +3089,11 @@ function updateNavIcons(){
 // A NOTE ON FIREBASE LISTENERS, because he asked for those by name: they are
 // not available to this data. Firebase here is Auth only -- who you are. Every
 // figure in the app (balances, plans, records, team, messages, settings) lives
-// in MongoDB behind petro-server, so there is no Firestore document to attach onSnapshot
+// in MongoDB behind soda-server, so there is no Firestore document to attach onSnapshot
 // to. The equivalent behaviour without rebuilding the backend is this: a short
 // poll that repaints IN PLACE. Nothing reloads, nothing navigates, and the
 // member cannot tell the difference. (A genuine server push would be SSE from
-// petro-server off a Mongo change stream -- a real option, and a much bigger
+// soda-server off a Mongo change stream -- a real option, and a much bigger
 // change than this.)
 //
 // What it does, and the reasons each part is not optional:
@@ -3374,7 +3374,7 @@ window.showPage = async function(name){
 // and glowing, the cancel X sign will be top right... it opens from middle
 // as usual and also just like mechanism of previous chipz clicking back to
 // home stimulates it"). Was removed entirely in an earlier round (see
-// petro/CLAUDE.md's "Design system" section) -- maybeShowAnnouncement() was
+// soda/CLAUDE.md's "Design system" section) -- maybeShowAnnouncement() was
 // deliberately kept as a no-op rather than deleted specifically so
 // maybeAnnounceAfterSheet()'s five call sites never needed touching either
 // time; this round just gives it a real body again. Content (annTitle/
@@ -3510,7 +3510,7 @@ function paintHome(){
   // Owner's mockup: logo + tagline header, a 3-stat/wallet block and an
   // inline Daily Check-in card all live on Home now (previously the balance
   // lived on Account only, and Daily Check-in was sheet-only). The
-  // Home now renders only the surfaces that belong to Petro's current design.
+  // Home now renders only the surfaces that belong to Soda's current design.
   let html = `
 <div class="home-brand-title"><img id="homeBrandLogo" class="home-brand-logo" alt=""${STATE.brandLogo ? ` src="${esc(STATE.brandLogo)}"` : ''} style="display:${STATE.brandLogo ? 'block' : 'none'}" onerror="this.style.display='none'"><span>${esc(brandName())}</span></div>
 ${homeBannerBlockHtml(st)}
@@ -3788,7 +3788,7 @@ function fmtDay(value){
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
-// Petro's compact triangle activity mark. It remains because the live payment
+// Soda's compact triangle activity mark. It remains because the live payment
 // polling screen still uses it as its processing indicator.
 var PLAN_SPIN = '<span class="pspin" aria-hidden="true">'
   + '<span class="pspin-orbit"><i class="pspin-chip"></i><i class="pspin-chip"></i><i class="pspin-chip"></i></span>'
@@ -3990,7 +3990,7 @@ function renderTeamMembers(level){
   box.innerHTML = '<div class="reveal-in">' + members.map((m,idx) => `
   <div class="team-member">
     <div class="top">
-      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#ffb000,#e30613)' : 'var(--petro-grad)'};">${avatar}</div>
+      <div class="avatar" style="background:${idx % 2 ? 'linear-gradient(135deg,#ffb000,#e30613)' : 'var(--soda-grad)'};">${avatar}</div>
       <div class="phone mono">${esc(maskPhone(m.phone))}</div>
       <span class="status-pill ${m.active ? 'active' : 'inactive'}">${m.active ? 'Active' : 'Inactive'}</span>
     </div>
@@ -4005,10 +4005,10 @@ function renderTeamMembers(level){
 // is still 6 tabs, not yet the mockup's 4) -- this reuses their same data
 // (STATE.teamStats, STATE.teamMembers, /team/members) rather than
 // duplicating the fetch logic, and reuses maskPhone()/joinedStamp() as-is.
-var _earningsHidden = (function(){ try { return localStorage.getItem('petroEarnHidden') === '1'; } catch (_) { return false; } })();
+var _earningsHidden = (function(){ try { return localStorage.getItem('sodaEarnHidden') === '1'; } catch (_) { return false; } })();
 window.toggleEarningsVisibility = function(){
   _earningsHidden = !_earningsHidden;
-  try { localStorage.setItem('petroEarnHidden', _earningsHidden ? '1' : '0'); } catch (_) {}
+  try { localStorage.setItem('sodaEarnHidden', _earningsHidden ? '1' : '0'); } catch (_) {}
   const amt = document.getElementById('netEarnAmt');
   if (amt) amt.textContent = _earningsHidden ? 'UGX ••••••' : fmtUGX(Number((STATE.teamStats || {}).teamCommission) || 0);
   const eye = document.getElementById('netEarnEyeBtn');
@@ -4274,7 +4274,7 @@ window.copyText = function(text){
 // screen only), which is why patchHomeBalances()'s live tick targets
 // #acctWallet.
 // New Account/Network row style (owner's mockups): a coloured CIRCLE with a
-// real SVG glyph, not settingRowHtml()'s coloured SQUARE + Petro raster PNG.
+// real SVG glyph, not settingRowHtml()'s coloured SQUARE + Soda raster PNG.
 // Kept as its own helper rather than changing settingRowHtml() in place --
 // that one still backs whatever of the old settings list isn't part of the
 // new Account screen (nothing, as of this round, but changing a shared
@@ -4345,10 +4345,10 @@ window.openSecuritySettingsSheet = function(){
 };
 // Rebuilt to the owner's Account mockup -- a profile card over a refinery
 // photo (the account screen's own 'profilecard' image slot was removed by
-// the owner -- see server.js's PETRO_IMAGE_SLOTS comment -- so the card
+// the owner -- see server.js's SODA_IMAGE_SLOTS comment -- so the card
 // falls back to the shared auth-hero photo via .acct-card's own
 // --acct-card-image default) and a plain row list with coloured-circle SVG
-// icons replacing the old settings list's coloured squares + Petro raster
+// icons replacing the old settings list's coloured squares + Soda raster
 // PNGs.
 //
 // Deliberately NOT built into this round: a per-member profile PHOTO upload
@@ -4523,7 +4523,7 @@ function renderWalletSheet(){
   }
   // Only prefill when this IS still the old single-wallet "edit my one
   // wallet" case (no saved wallets yet, or the account was JUST deleted
-  // down to none). "+ Add another wallet" also lands here now that Petro
+  // down to none). "+ Add another wallet" also lands here now that Soda
   // allows saving more than one, but that's a genuinely NEW entry, not an
   // edit of an existing row -- prefilling it with the first saved wallet's
   // own details would read as if adding a duplicate of it by accident.
@@ -4682,7 +4682,7 @@ window.confirmWalletOtp = async function(){
 // Shared tail of a successful /bank/save, whether it came from the OTP flow
 // above or straight from submitWallet() when bankOtpRequired is off.
 async function finishWalletSave(){
-  // Just re-read the real list and show it -- Petro now allows saving more
+  // Just re-read the real list and show it -- Soda now allows saving more
   // than one wallet, so the old "delete every other row" collapse is gone.
   const fresh = await api('/bank/list');
   STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (STATE.bankAccounts || []);
@@ -4697,7 +4697,7 @@ window.deleteWallet = function(id){
     if (r.status !== 'success') { notify(r.message || 'Could not remove the wallet.'); return false; }
     STATE.bankAccounts = (STATE.bankAccounts || []).filter(x => x.id !== id);
     // Was unconditional -- correct back when a delete always emptied the
-    // list entirely (Petro's old one-wallet rule), wrong now that deleting
+    // list entirely (Soda's old one-wallet rule), wrong now that deleting
     // ONE of several should return to the remaining list, not jump straight
     // into "add a new wallet". Same "editing only when genuinely empty"
     // rule openWalletSheet() itself already uses.
@@ -5042,7 +5042,7 @@ window.submitLoginPasswordChange = async function(){
 };
 
 // ── CHANGE TRADE PASSWORD (ChangePassword.dc.html) ──
-// The 6-digit PIN that confirms withdrawals. Petro uses 6 digits where Snow
+// The 6-digit PIN that confirms withdrawals. Soda uses 6 digits where Snow
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
 window.openChangeTradePasswordSheet = function(){
   openSheet('Trade Password', `<div class="reveal-in" style="padding-top:22px;">
@@ -5365,7 +5365,7 @@ window.openSupportSheet = function(){
   if (s.whatsappGroup) rows.push(supportRowHtml('whatsapp', ICONS.whatsapp, 'WhatsApp Channel', 'Chat with us', s.whatsappGroup));
   if (s.telegramGroup) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Telegram Group', 'Join our group', s.telegramGroup));
   if (s.supportTelegram) rows.push(supportRowHtml('telegram', ICONS.telegram, 'Telegram Customer Service', 'Chat with an agent', s.supportTelegram));
-  if (s.supportEmail) rows.push(supportRowHtml('mail', ICONS.emailPetro, 'Email Support', s.supportEmail, 'mailto:' + s.supportEmail));
+  if (s.supportEmail) rows.push(supportRowHtml('mail', ICONS.emailSoda, 'Email Support', s.supportEmail, 'mailto:' + s.supportEmail));
   openSheet('Support', `<div class="reveal-in">
     ${rows.length ? rows.join('') : `<p style="line-height:1.6;color:var(--snow-muted);">${esc(t('Contact support for help with your account.'))}</p>`}
     ${s.supportHours ? `<div class="support-hours-card"><span class="support-hours-icon">${ICONS.clock}</span><span class="support-row-txt"><span class="t1">Support hours</span><span class="t2">${esc(s.supportHours)}</span></span></div>` : ''}
@@ -5779,7 +5779,7 @@ window.syncCardQuickAmt = function(){
 // is that place; resumePendingCardDeposit() (called from enterApp() on
 // every app open) is what picks it back up once the member returns from
 // MarzPay's page, however many minutes or app-relaunches later that is.
-var CARD_DEPOSIT_STORAGE_KEY = 'petro_pending_card_deposit';
+var CARD_DEPOSIT_STORAGE_KEY = 'soda_pending_card_deposit';
 window.doCardDeposit = async function(){
   const btn = $('cardGoBtn');
   if (!btn || btn.disabled) return;
@@ -6094,7 +6094,7 @@ window.verifyDepositNow = async function(){
 };
 function setDepositStatusPending(amount, phone, network){
   $('depStatusIcon').className = 'dep-status-icon';
-  // Dedicated Petro rings replace the payment provider's old loader artwork.
+  // Dedicated Soda rings replace the payment provider's old loader artwork.
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
   $('depStatusTitle').textContent = 'Processing your recharge';
   // Owner asked for the specifics shown here, not a generic message --
@@ -6186,7 +6186,7 @@ function fireConfetti(){
     }
     resize();
     window.addEventListener('resize', resize);
-    // Amber/red/gold, plus white -- Petro's own palette, not generic
+    // Amber/red/gold, plus white -- Soda's own palette, not generic
     // party colours, so this still looks like it belongs to the app.
     const COLORS = ['#e30613', '#f5a000', '#ffb000', '#1a7a3e', '#2f6fd6', '#ffffff'];
     const particles = [];
@@ -6622,7 +6622,7 @@ window.submitWithdraw = async function(){
   if (!submitBtn || submitBtn.disabled || _withdrawSubmitting || !$('witAmount')) return;
   const amount = parseMoneyInput($('witAmount').value);
   // Whichever saved wallet is currently selected on screen -- may be one of
-  // several now that Petro allows saving more than one (see
+  // several now that Soda allows saving more than one (see
   // witSelectedWallet()'s own comment).
   const acct = witSelectedWallet();
   if (!amount || amount <= 0) return notify('Enter a valid amount.');

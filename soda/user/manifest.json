@@ -1,7 +1,7 @@
 {
-  "name": "Petro",
-  "short_name": "Petro",
-  "description": "Petro — invest, earn daily income, and grow your team.",
+  "name": "Soda",
+  "short_name": "Soda",
+  "description": "Soda — invest, earn daily income, and grow your team.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -9,13 +9,13 @@
   "theme_color": "#f7f7f8",
   "icons": [
     {
-      "src": "https://api.petro-cchnug.com/public/app-icon-192.png",
+      "src": "https://mysoda.p-colasoda.com/public/app-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://api.petro-cchnug.com/public/app-icon-512.png",
+      "src": "https://mysoda.p-colasoda.com/public/app-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

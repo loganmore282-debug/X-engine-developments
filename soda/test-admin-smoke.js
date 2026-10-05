@@ -14,7 +14,7 @@ const errors = [];
 const consoleBridge = new VirtualConsole();
 consoleBridge.on('jsdomError', e => errors.push(e.message));
 const dom = new JSDOM(html, {
-  url: 'https://petro-platform.com/admin/', runScripts: 'dangerously', virtualConsole: consoleBridge,
+  url: 'https://soda-platform.com/admin/', runScripts: 'dangerously', virtualConsole: consoleBridge,
   beforeParse(window) {
     window.fetch = async () => ({ status: 200, ok: true, json: async () => ({ status: 'success', token:'test-admin-token', username:'owner', role:'owner', settings: {}, users: [], products: [], stats:{totalUsers:1,walletTotal:12345,depositAmount:20000,withdrawAmount:5000,investedAmount:15000} }) });
     window.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });

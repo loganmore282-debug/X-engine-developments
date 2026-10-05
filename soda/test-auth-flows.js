@@ -142,7 +142,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
   {
     // Firebase arriving LATE (slow network) is waited for, not failed.
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; w._FIREBASE_READY_MS = 2000; }), w = dom.window; await sleep(20);
-    const t = toasts(w); const accounts = { '771234567@petro-platform.com': { pass: 'secret1', uid: 'u1' } };
+    const t = toasts(w); const accounts = { '771234567@soda-platform.com': { pass: 'secret1', uid: 'u1' } };
     fakeServer(w, async p => p === '/account' ? { status: 200, body: okAccount } : null);
     $(w, 'loginPhone').value = '0771234567'; $(w, 'loginPassword').value = 'secret1';
     setTimeout(() => fakeFirebase(w, accounts, false), 300);
@@ -162,7 +162,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
 
   // ─── 3. Login: every outcome ends in "app open" or "login screen + message" ───
   trace('section 3');
-  const phone = '0771234567', email = '771234567@petro-platform.com';
+  const phone = '0771234567', email = '771234567@soda-platform.com';
   async function loginScenario(setup, { expectOpen, expectMsg, expectSignOut = null }) {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w);
@@ -229,7 +229,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
   {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 100000; }), w = dom.window; await sleep(20);
     const t = toasts(w); const log = fakeFirebase(w, {});
-    w.eval('STATE.user={uid:"u1",email:"x@petro-platform.com"}');
+    w.eval('STATE.user={uid:"u1",email:"x@soda-platform.com"}');
     w.fbAuth.currentUser = { getIdToken: async () => 'tok' };
     ok(w.eval('_memberSession.begin("u1:1", Date.now(), true)'), 'session started');
     fakeServer(w, async p => p === '/account' ? { status: 200, body: okAccount } : null);
@@ -238,7 +238,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     await w.bootFromNetwork('u1'); await sleep(20);
     eq(log.signOuts, 0, 'a superseded boot does not sign the member out'); ok(!t.some(m => /Session changed/.test(m)), 'and says nothing: ' + JSON.stringify(t));
     // a different member now owns the session: the old boot leaves quietly
-    w.fetch = base; w.eval('STATE.user={uid:"u2",email:"y@petro-platform.com"}');
+    w.fetch = base; w.eval('STATE.user={uid:"u2",email:"y@soda-platform.com"}');
     await w.bootFromNetwork('u1'); eq(log.signOuts, 0); eq(t.length, 0);
     await closeSoon(dom);
   }

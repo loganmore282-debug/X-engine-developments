@@ -1,4 +1,4 @@
-// pm2 process definition for the Soda backend on the Hostinger VPS (shared with Petro).
+// pm2 process definition for the Soda backend on the Hostinger VPS (shared with Soda).
 //
 // Chosen over a raw systemd unit because this VPS deploys by SSH + rsync,
 // not a package manager: pm2 gives `pm2 reload` (zero-downtime, the process
@@ -19,7 +19,7 @@
 // e.g. service-account.js's loadServiceAccount, is what reports a missing
 // secret loudly, not a crash here).
 // Soda's secrets live OUTSIDE the git checkout, in /srv/soda-secrets/, so a
-// pull can never overwrite them and Petro's own secrets file is never read.
+// pull can never overwrite them and Soda's own secrets file is never read.
 let secrets = {};
 try { secrets = require('/srv/soda-secrets/secrets.local.js'); }
 catch (e) { try { secrets = require('./secrets.local.js'); } catch (e2) { secrets = {}; } }

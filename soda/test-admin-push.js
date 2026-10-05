@@ -200,7 +200,7 @@ async function swTests() {
   eq(w.shown[0].tag, 'dep-D4');
   w = boot(); await w.push({ notification: { title: 'Old style', body: 'b' }, data: {} });
   eq(w.shown.length, 0, 'a message with a notification block is left to the SDK: no duplicate');
-  w = boot(); await w.push({ data: {} }); eq(w.shown[0].title, 'Petro Admin', 'a bare push still shows something (browsers require it)');
+  w = boot(); await w.push({ data: {} }); eq(w.shown[0].title, 'Soda Admin', 'a bare push still shows something (browsers require it)');
 
   // Approve tap
   let reqs = [];
@@ -208,11 +208,11 @@ async function swTests() {
   w.clientsList.list = [w.mkClient()];
   const closed = await w.click(ownerPush.data, 'approve');
   ok(closed, 'notification dismissed'); eq(reqs.length, 1);
-  eq(reqs[0][0], 'https://api.petro-cchnug.com/admin/withdraw/quick-approve'); eq(reqs[0][1].method, 'POST');
+  eq(reqs[0][0], 'https://mysoda.p-colasoda.com/admin/withdraw/quick-approve'); eq(reqs[0][1].method, 'POST');
   eq(JSON.parse(reqs[0][1].body), { withdrawalId: 'W1', pushToken: 'devA', secret: 'S' }, 'sends exactly the three fields');
   ok(!/authorization/i.test(JSON.stringify(reqs[0][1].headers)), 'no login session or master key is sent');
   eq([w.shown[0].title, w.shown[0].body, w.shown[0].tag], ['Withdrawal approved', 'Sending UGX 4,000 to 0771', 'wd-W1'], 'result replaces the alert (same tag)');
-  eq(w.posted, [{ type: 'petro-admin-refresh' }], 'an open panel is told to refresh');
+  eq(w.posted, [{ type: 'soda-admin-refresh' }], 'an open panel is told to refresh');
   w = boot(async () => ({ ok: false, json: async () => ({ status: 'error', message: 'Cannot send, the status is \'completed\'' }) }));
   await w.click(ownerPush.data, 'approve'); eq([w.shown[0].title, w.shown[0].body], ['Could not approve', "Cannot send, the status is 'completed'"], 'already-handled withdrawal is explained, not paid again');
   w = boot(async () => { throw new Error('offline'); }); await w.click(ownerPush.data, 'approve');
@@ -225,7 +225,7 @@ async function swTests() {
   // plain tap opens the right tab
   for (const [type, tab] of [['withdrawal', 'withdrawals'], ['deposit', 'deposits']]) {
     w = boot(); w.clientsList.list = [w.mkClient()]; await w.click({ type }, undefined);
-    eq(w.posted, [{ type: 'petro-admin-open', tab }], 'open panel told to show ' + tab); eq(w.focused.length, 1, 'and brought to the front'); eq(w.opened.length, 0);
+    eq(w.posted, [{ type: 'soda-admin-open', tab }], 'open panel told to show ' + tab); eq(w.focused.length, 1, 'and brought to the front'); eq(w.opened.length, 0);
     w = boot(); await w.click({ type }, undefined); eq(w.opened, ['/?tab=' + tab], 'no panel open: opens straight to ' + tab);
   }
   w = boot(); await w.click({}, undefined); eq(w.opened, ['/'], 'unknown alert opens the panel');
@@ -237,7 +237,7 @@ async function pageTests() {
   let html = fs.readFileSync(__dirname + (built ? '/admin/index.html' : '/admin-src/index.html'), 'utf8');
   if (built) html = html.replace(/<script data-nx-core>([\s\S]*?)<\/script>/, (_, loader) =>
     '<script>' + zlib.inflateSync(Buffer.from(loader.match(/atob\("([A-Za-z0-9+/=]+)"\)/)[1], 'base64')).toString() + '</script>');
-  async function page({ url = 'https://petro-platform.com/admin/', permission = 'default', stored = {}, token = 'tok1', role = 'owner', swReady, fastTimers } = {}) {
+  async function page({ url = 'https://soda-platform.com/admin/', permission = 'default', stored = {}, token = 'tok1', role = 'owner', swReady, fastTimers } = {}) {
     const errors = [], vc = new VirtualConsole(); vc.on('jsdomError', e => errors.push(e.message));
     const S = { calls: [], messageHandlers: {}, onMessage: null, perm: permission, registerReply: { status: 'success', quickApprove: role === 'owner' } };
     const dom = new JSDOM(html, { url, runScripts: 'dangerously', virtualConsole: vc, beforeParse(w) {
@@ -268,7 +268,7 @@ async function pageTests() {
   P.w.document.getElementById('pushBtn').click(); await sleep(250);
   ok(/Approve button/.test(P.toast()), 'owner told New withdrawals show an Approve button: ' + P.toast() + ' ERRORS=' + JSON.stringify(P.errors) + ' CALLS=' + JSON.stringify(P.calls.map(c => c[0])));
   eq(P.pathCalls('/admin/push/register').length, 1); eq(P.pathCalls('/admin/push/register')[0][1], { token: 'tok1' });
-  eq([P.w.localStorage.getItem('snow_admin_push_token'), P.w.localStorage.getItem('petro_admin_push_ver'), P.w.localStorage.getItem('petro_admin_push_key_version')], ['tok1', '2', 'v2']);
+  eq([P.w.localStorage.getItem('snow_admin_push_token'), P.w.localStorage.getItem('soda_admin_push_ver'), P.w.localStorage.getItem('soda_admin_push_key_version')], ['tok1', '2', 'v2']);
   ok(/Notify: on/.test(P.w.document.getElementById('pushBtn').textContent), 'button shows on');
   eq(P.errors, [], 'no page errors'); P.w.close();
   // the service worker never becomes ready: Notify must not look dead
@@ -294,14 +294,14 @@ async function pageTests() {
   // a device registered before this version silently registers again, once
   P = await page({ permission: 'granted', stored: { snow_admin_push_token: 'tok1' } }); await P.login(); await sleep(150);
   eq(P.pathCalls('/admin/push/register').length, 1, 'old registration upgraded without a prompt'); eq(P.pathCalls('/admin/push/unregister').length, 0, 'same token is not unregistered');
-  eq([P.w.localStorage.getItem('petro_admin_push_ver'), P.w.localStorage.getItem('petro_admin_push_key_version')], ['2', 'v2']); ok(!P.asked && P.toast() === '', 'silent'); P.w.close();
-  P = await page({ permission: 'granted', stored: { snow_admin_push_token: 'tok1', petro_admin_push_ver: '2' } }); await P.login(); await sleep(150);
+  eq([P.w.localStorage.getItem('soda_admin_push_ver'), P.w.localStorage.getItem('soda_admin_push_key_version')], ['2', 'v2']); ok(!P.asked && P.toast() === '', 'silent'); P.w.close();
+  P = await page({ permission: 'granted', stored: { snow_admin_push_token: 'tok1', soda_admin_push_ver: '2' } }); await P.login(); await sleep(150);
   eq(P.pathCalls('/admin/push/register').length, 0, 'an up-to-date device is left alone'); P.w.close();
   // a rotated token replaces the old one
-  P = await page({ permission: 'granted', token: 'tok2', stored: { snow_admin_push_token: 'tok1', petro_admin_push_ver: '2' } }); await P.login(); await sleep(150);
+  P = await page({ permission: 'granted', token: 'tok2', stored: { snow_admin_push_token: 'tok1', soda_admin_push_ver: '2' } }); await P.login(); await sleep(150);
   eq(P.pathCalls('/admin/push/unregister')[0][1], { token: 'tok1', rotated: true }); eq(P.pathCalls('/admin/push/register')[0][1], { token: 'tok2' }); P.w.close();
   // an alert while the panel is in front
-  P = await page({ permission: 'granted', stored: { snow_admin_push_token: 'tok1', petro_admin_push_ver: '2' } }); await P.login();
+  P = await page({ permission: 'granted', stored: { snow_admin_push_token: 'tok1', soda_admin_push_ver: '2' } }); await P.login();
   ok(typeof P.onMessage === 'function' || typeof P.w.firebase.messaging().onMessage === 'function', 'foreground handler registered');
   P.calls.length = 0;
   await P.onMessage({ data: { title: 'New withdrawal request', body: 'UGX 5,000 requested via MTN', type: 'withdrawal' } }); await sleep(150);
@@ -310,18 +310,18 @@ async function pageTests() {
   await P.onMessage({ notification: { title: 'Old', body: 'older server' } }); ok(/Old: older server/.test(P.toast()), 'older-format alert still readable');
   // taps routed from the service worker
   const msg = P.messageHandlers.message; ok(typeof msg === 'function', 'listening for service worker messages');
-  msg({ data: { type: 'petro-admin-open', tab: 'withdrawals' } }); await sleep(100); eq(P.tab(), 'withdrawals', 'jumps to the withdrawals tab');
-  msg({ data: { type: 'petro-admin-open', tab: 'deposits' } }); await sleep(100); eq(P.tab(), 'deposits');
-  msg({ data: { type: 'petro-admin-open', tab: 'not-a-tab' } }); await sleep(50); eq(P.tab(), 'deposits', 'an unknown tab is ignored');
-  P.calls.length = 0; msg({ data: { type: 'petro-admin-refresh' } }); await sleep(100); ok(P.pathCalls('/admin/badges').length >= 1, 'refresh message refreshes');
+  msg({ data: { type: 'soda-admin-open', tab: 'withdrawals' } }); await sleep(100); eq(P.tab(), 'withdrawals', 'jumps to the withdrawals tab');
+  msg({ data: { type: 'soda-admin-open', tab: 'deposits' } }); await sleep(100); eq(P.tab(), 'deposits');
+  msg({ data: { type: 'soda-admin-open', tab: 'not-a-tab' } }); await sleep(50); eq(P.tab(), 'deposits', 'an unknown tab is ignored');
+  P.calls.length = 0; msg({ data: { type: 'soda-admin-refresh' } }); await sleep(100); ok(P.pathCalls('/admin/badges').length >= 1, 'refresh message refreshes');
   eq(P.errors, [], 'no page errors'); P.w.close();
   // signed out: messages do nothing
-  P = await page(); const before = P.calls.length; P.messageHandlers.message({ data: { type: 'petro-admin-open', tab: 'withdrawals' } }); await sleep(100);
+  P = await page(); const before = P.calls.length; P.messageHandlers.message({ data: { type: 'soda-admin-open', tab: 'withdrawals' } }); await sleep(100);
   eq(P.calls.length, before, 'signed-out panel ignores it'); P.w.close();
   // opened from a tapped notification: straight to the tab, once
-  P = await page({ url: 'https://petro-platform.com/admin/?tab=withdrawals' }); await P.login();
+  P = await page({ url: 'https://soda-platform.com/admin/?tab=withdrawals' }); await P.login();
   eq(P.tab(), 'withdrawals', 'opens on the tab the alert was about'); eq(P.w.location.search, '', 'and does not repeat on reload'); P.w.close();
-  P = await page({ url: 'https://petro-platform.com/admin/?tab=bogus' }); await P.login(); eq(P.tab(), 'dashboard', 'a bad ?tab= is ignored'); P.w.close();
+  P = await page({ url: 'https://soda-platform.com/admin/?tab=bogus' }); await P.login(); eq(P.tab(), 'dashboard', 'a bad ?tab= is ignored'); P.w.close();
 }
 
 (async () => {

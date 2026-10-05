@@ -6,7 +6,7 @@ const {JSDOM} = require('jsdom');
 const built = process.argv.includes('--built');
 const html = fs.readFileSync(__dirname + (built ? '/user/index.html' : '/user-src/index.html'),'utf8');
 const source = fs.readFileSync(__dirname + '/user-src/original_module.js','utf8');
-const dom = new JSDOM(html,{url:'http://179.198.197.114:8080/',runScripts:'outside-only',pretendToBeVisual:true});
+const dom = new JSDOM(html,{url:'http://179.198.197.114:8090/',runScripts:'outside-only',pretendToBeVisual:true});
 const w=dom.window, d=w.document;
 w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
 w.matchMedia=()=>({matches:true,addListener(){},removeListener(){}});

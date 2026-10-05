@@ -47,8 +47,8 @@ function clientChecks(panel, idleMs){
   const built = process.argv.includes('--built');
   const html = fs.readFileSync(__dirname+(built?'/user/index.html':'/user-src/index.html'),'utf8');
   if (built) assert.equal(html,fs.readFileSync(__dirname+'/user/share.html','utf8'),'referral entry ships the same member policy');
-  const user = html.match(/<script data-petro-idle>([\s\S]*?)<\/script>/)[1];
-  const admin = fs.readFileSync(__dirname+'/admin-src/index.html','utf8').match(/<script data-petro-idle>([\s\S]*?)<\/script>/)[1];
+  const user = html.match(/<script data-soda-idle>([\s\S]*?)<\/script>/)[1];
+  const admin = fs.readFileSync(__dirname+'/admin-src/index.html','utf8').match(/<script data-soda-idle>([\s\S]*?)<\/script>/)[1];
   assert(user.includes('IDLE = 60 * 60 * 1000'));
   assert(admin.includes('IDLE = 15 * 60 * 1000'));
   let now=1800000000000, expired=0, pulses=0;
@@ -57,7 +57,7 @@ function clientChecks(panel, idleMs){
   const window={addEventListener:(name,fn)=>listeners[name]=fn};
   const context={window,document,Date:{now:()=>now},Number,JSON,Promise,setInterval:()=>1,clearInterval:()=>{},sessionStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)}};
   vm.runInNewContext(panel === 'user' ? user : admin,context);
-  const session=window.createPetroIdleSession('test',()=>expired++,()=>pulses++);
+  const session=window.createSodaIdleSession('test',()=>expired++,()=>pulses++);
   assert(session.begin('alice',now,true));assert.equal(pulses,1);
   now+=idleMs-1;assert(session.check());assert.equal(pulses,1,'timer checks do not create activity');
   now++;listeners.pointerdown({isTrusted:true});assert.equal(expired,1,'first tap after sleeping cannot revive the session');

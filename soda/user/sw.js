@@ -2,8 +2,8 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'petro-shell-v240';
-const VENDOR_CACHE = 'petro-vendor-firebase-v1';
+const CACHE = 'soda-shell-v240';
+const VENDOR_CACHE = 'soda-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -34,7 +34,7 @@ const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 
 // ── THE INSTALLED APP'S NAME ──
 //
-// Owner: "let's not make petro to be default name, let's make it to be
+// Owner: "let's not make soda to be default name, let's make it to be
 // backend such that the set name abides every functions ... system visuals
 // should be backend." The name Android prints under the installed icon, and
 // the one in Chrome's "Install app" sheet, come from manifest.json's `name` --
@@ -52,8 +52,8 @@ const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 // asleep, malformed JSON -- falls through to the manifest exactly as shipped,
 // because a phone that cannot install the app is a far worse outcome than one
 // that installs it under last week's name.
-const API_ORIGIN = 'https://api.petro-cchnug.com';
-const BRAND_CACHE = 'petro-brand-v1';
+const API_ORIGIN = 'https://mysoda.p-colasoda.com';
+const BRAND_CACHE = 'soda-brand-v1';
 const BRAND_KEY = '/__brand-name';
 
 async function rememberedBrandName() {
@@ -126,7 +126,7 @@ self.addEventListener('fetch', e => {
     // back to the browser untouched, which is what respondWith(fetch(...))
     // was approximating anyway -- minus a service-worker round trip, and
     // minus the worker sitting in the middle of media streaming. The Home
-    // banner video is served from Petro backend with byte ranges; a worker
+    // banner video is served from Soda backend with byte ranges; a worker
     // relaying 206 responses is a known source of stalled video, and there is
     // nothing to gain here since none of this is cached.
     return;

@@ -21,9 +21,11 @@
 ## Status log
 1. (done) Branch `claude/soda-build` created; `soda/` is a file copy of `petro/` at its latest commit (186 tracked files). Still entirely Petro inside (names, Firebase, design) -- the steps below change that.
 2. (done) Atlas user `sodaapp` created; `/srv/soda-secrets/secrets.local.js` written on the VPS (PORT 3001, MONGODB_URI, ADMIN_KEY) and the database login verified. NOTE: the admin key printed during setup appeared in screenshots -- re-roll it (rerun the save command) before go-live. `deploy/ecosystem.config.js` now names the process `soda-server` and reads `/srv/soda-secrets/`.
-2b. (next) Install the code on the VPS (sparse clone of `soda/` from `claude/soda-build` into `/srv/soda-src`, `npm install --omit=dev`). The server cannot START yet: it exits without `FIREBASE_SERVICE_ACCOUNT` until step 4 removes Firebase.
+2b. (done) Code installed on the VPS: sparse clone at `/srv/soda-src` (only `soda/`), `npm install --omit=dev` ran (217 packages).
+3. (done) Rename pass: every Petro/petro/PETRO name, identifier, storage key, cache name and package name in the readable sources is now Soda/soda/SODA (29 files + `deploy/nginx-soda.conf.template`); built bundles rebuilt. Petro's hosts are gone: every backend/CORS/manifest reference now says the planned single host `mysoda.p-colasoda.com` (not bought, does not resolve yet) and the dev ports are 3001 (API), 8090 (app), 8091 (admin) instead of Petro's 3000/8080/8081. The full `npm run test:audit` passes. **New tool `node set-brand.js "New Name"`** (reads `brand.config.json`) renames the app everywhere in the sources again later; a name with spaces becomes PascalCase inside code identifiers (verified by renaming a copy to "Fizz Drinks" and running the whole suite). The visible name is also the live admin setting. STILL Petro's: the Firebase project config (`chnpetrol`) in the client and the Firebase calls in the server -- removed in step 4. Do not give members access before step 4.
+2c. (superseded) Install the code on the VPS (sparse clone of `soda/` from `claude/soda-build` into `/srv/soda-src`, `npm install --omit=dev`). The server cannot START yet: it exits without `FIREBASE_SERVICE_ACCOUNT` until step 4 removes Firebase.
 3. Rename pass: one-place brand name, remove Petro names/hosts/ids, new package name.
-4. Replace Firebase auth with MongoDB auth (server + client + tests).
+4. (next) Replace Firebase auth with MongoDB auth (server + client + tests).
 5. Single-host routing (/api, secret admin path), admin-editable host.
 6. Design from the owner's images.
 7. Web Push (own VAPID) for admin alerts.
