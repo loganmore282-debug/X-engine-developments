@@ -3382,9 +3382,9 @@ window.switchTeamLevel = async function(level){
 };
 // The "Loading . . ." word, centred, while a list is in flight.
 function teamLoadingHtml(){ return '<div class="list-loading">' + NAV_LOADER + '</div>'; }
-// The "Loading . . ." word shown inside a page while its data arrives (same word and
+// The small "Loading..." word shown inside a page while its data arrives (same word and
 // font as the start-up loader, bouncing a little).
-var NAV_LOADER = '<span class="nav-loading">Loading . . .</span>';
+var NAV_LOADER = '<span class="nav-loading">Loading...</span>';
 function maskPhone(phone){
   // "706****1455": the first three and last four digits of the local number
   // (country code and leading zero dropped), enough to recognise your own

@@ -1314,8 +1314,8 @@ body.deposit-status-open .bottom-nav{display:none;}
    triangles not Loading..."). */
 .list-loading{padding:34px 4px;display:flex;justify-content:center;align-items:center;}
 .list-loading .pspin{--s:56px;}
-.nav-loading{display:inline-block;color:var(--v-blue,#1739b8);font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:22px;font-weight:700;letter-spacing:.16em;animation:navBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
-@keyframes navBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-14px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
+.nav-loading{display:inline-block;color:var(--v-blue,#1739b8);font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:15px;font-weight:700;letter-spacing:.03em;animation:navBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
+@keyframes navBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-8px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
 @media (prefers-reduced-motion:reduce){.nav-loading{animation:none;}}
 @media(prefers-reduced-motion:reduce){}
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
@@ -1771,7 +1771,7 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 <script data-soda-idle>
 // Real interaction renews activity; polling, focus, and visibility never do.
 window.createSodaIdleSession = function(key, onExpire, onActivity){
-  var IDLE = 60 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
+  var IDLE = 4 * 60 * 60 * 1000, MAX = 4 * 60 * 60 * 1000;
   var state = null, lastPulse = 0, lastSave = 0, timer = null;
   function save(force){
     if (!state || (!force && Date.now() - lastSave < 1000)) return;

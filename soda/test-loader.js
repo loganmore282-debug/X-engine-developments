@@ -25,7 +25,7 @@ ok(!/id="sOtpVerification"|id="sBankOtp"|id="sAnnEnabled"|id="sReturnMult"/.test
 ok(/setTimeout\(startArtwork, 8000\)/.test(mod) && !/_artPromise = Promise\.all\(\[ api\('\/public\/announcement-image'\), api\('\/public\/soda-images'\) \]\)\n/.test(mod.split('async function boot()')[1].split('async function')[0]), 'pictures are fetched after the loading screen, not beside the account request');
 ok(/const s = await pSettings;/.test(mod) && !/Promise\.all\(\[ pSettings, pProducts, pBanner \]\)/.test(mod), 'the loading screen waits for the settings only, not for the asset pictures or the banner');
 ok(!/fileToLogoPng|background connected to the image edge/.test(admin) && /wireSodaImageSlot\('logo', 'brandLogoFile'/.test(admin), 'the brand logo is uploaded as it is (no background removal)');
-ok(/var NAV_LOADER = '<span class="nav-loading">Loading \. \. \.<\/span>'/.test(mod) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show the same "Loading . . ." word while data arrives, no ring spinner is left');
+ok(/var NAV_LOADER = '<span class="nav-loading">Loading\.\.\.<\/span>'/.test(mod) && /\.nav-loading\{[^}]*font-size:15px[^}]*letter-spacing:\.03em/.test(html) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show a small "Loading..." word while data arrives, no ring spinner is left');
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);

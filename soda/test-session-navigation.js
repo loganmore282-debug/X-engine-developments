@@ -40,8 +40,8 @@ function load(panel){
   now+=16*60*1000;w.dispatchEvent(new w.Event('pageshow'));await tick();
   assert.equal(signedOut,0,'member remains signed in past the old 15-minute limit');
   assert(w.sessionStorage.getItem('soda_member_session'));
-  now+=44*60*1000-1;w.dispatchEvent(new w.Event('pageshow'));await tick();
-  assert.equal(signedOut,0,'member remains signed in immediately before one hour');
+  now+=(4*60-16)*60*1000-1;w.dispatchEvent(new w.Event('pageshow'));await tick();
+  assert.equal(signedOut,0,'member remains signed in immediately before four hours');
   now++;w.dispatchEvent(new w.Event('pageshow'));await tick();
   assert.equal(signedOut,1);assert.equal(w.sessionStorage.getItem('soda_member_session'),null);
   assert.equal(w._suppressAutofillLogin,false,'idle expiry preserves existing picker-assisted login');
