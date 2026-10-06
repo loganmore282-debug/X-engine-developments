@@ -2043,7 +2043,7 @@ body.sheet-open .bottom-nav{display:flex;}
 /* ── secondary pages (Deposit, Withdraw, Balance Record, Wallet ...) ── */
 .sheet-bg{background:var(--v-bg);bottom:var(--nav-h);}
 .sheet-head{background:#fff;border-bottom:1px solid #e3e8fa;padding:16px 16px;box-shadow:0 8px 18px -18px rgba(14,42,142,.5);}
-.sheet-head h2{color:var(--v-ink);font-size:21px;font-weight:800;letter-spacing:.12em;}
+.sheet-head h2{color:var(--v-ink);font-size:19px;font-weight:800;letter-spacing:.09em;white-space:nowrap;}
 .sheet-head .back{border:0;background:transparent;width:36px;height:36px;color:var(--v-ink);}
 .sheet-head .back svg{width:22px;height:22px;}
 .sheet-head .back svg path{stroke:var(--v-ink)!important;}
@@ -2211,6 +2211,39 @@ body.sheet-open .bottom-nav{display:flex;}
 .list-empty{color:#8a94a8;font-size:15px;padding:34px 10px;text-align:center;}
 .pw-field svg,.pw-field svg *{stroke:var(--v-blue);}
 .msg-detail-bg{background:rgba(22,33,63,.34)!important;-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
+
+/* ── screens built from the owner's Wallet / password / Messages screenshots ── */
+.v-edit{margin-top:16px;background:linear-gradient(135deg,#fff 0%,#f3f5fd 100%);border:1.5px solid #cdd6f4;border-radius:22px;padding:20px 20px 22px;box-shadow:0 14px 28px -24px rgba(14,42,142,.6);}
+.v-card-only .v-edit{margin-top:0;}
+.v-flabel{display:block;margin:18px 0 10px;font-size:16px;color:#5b6b8c;}
+.v-edit>.v-flabel:first-child,#walFormGroup>.v-flabel:first-child{margin-top:12px;}
+.v-uline{display:flex;align-items:center;border-bottom:1.5px solid #c9d3f5;min-height:50px;}
+.v-uline input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:18px;color:var(--v-ink);padding:8px 0;}
+.v-uline input::placeholder{color:#8a94a8;}
+.v-uline:focus-within{border-bottom-color:var(--v-blue);}
+.v-pbox{background:#eef1fd;border:1.5px solid #c9d3f5;border-radius:16px;height:54px;display:flex;align-items:center;padding:0 16px;}
+.v-pbox input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:17px;color:var(--v-ink);}
+.v-pbox input::placeholder{color:#6c7488;}
+.v-pbox:focus-within{border-color:var(--v-blue);box-shadow:0 0 0 3px rgba(23,57,184,.12);}
+.v-edit .v-cta{margin:22px 0 0;}
+.v-two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px;}
+.v-ghost,.v-solid{height:52px;border-radius:16px;font:inherit;font-size:18px;font-weight:800;}
+.v-ghost{background:#fff;color:var(--v-blue);border:2px solid var(--v-card-line);}
+.v-solid{background:var(--v-grad);color:#fff;border:0;box-shadow:0 14px 24px -18px rgba(14,42,142,.9);}
+.v-solid:disabled{opacity:.55;}
+.v-yours{margin:26px 0 12px;font-size:17px;font-weight:800;color:var(--v-ink);}
+.v-wal-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:12px;background:#fff;border:1.5px solid #d4dcf7;border-radius:16px;padding:16px 14px;margin-bottom:10px;}
+.v-wal-row b{font-size:17px;font-weight:800;color:var(--v-blue-2);}
+.v-wal-row span{font-size:16px;color:var(--v-ink);text-align:center;letter-spacing:.04em;}
+.v-wal-row em{font-style:normal;font-size:16px;color:#5b6b8c;text-align:right;line-height:1.35;max-width:130px;}
+.v-wdel2{width:34px;height:34px;border:0;background:transparent;color:#8a94a8;display:flex;align-items:center;justify-content:center;}
+.v-wdel2 svg{width:18px;height:18px;}
+.v-edit .prov-list{top:56px;border:0;border-radius:18px;background:#fff;box-shadow:0 14px 32px -14px rgba(14,42,142,.55);overflow:hidden;}
+.v-edit .prov-opt{padding:20px 22px;font-size:20px;border-bottom:1px solid #eceffa;}
+.v-nomsg{display:flex;flex-direction:column;align-items:center;padding-top:60px;gap:18px;}
+.v-nomsg span{width:92px;height:92px;border-radius:50%;background:#dde3fa;border:1.5px solid #b9c5f1;display:flex;align-items:center;justify-content:center;color:var(--v-ink);}
+.v-nomsg span svg{width:36px;height:36px;}
+.v-nomsg p{margin:0;font-size:22px;letter-spacing:.12em;color:var(--v-blue-2);}
 /* V2-END */
 </style>
 <script data-soda-idle>

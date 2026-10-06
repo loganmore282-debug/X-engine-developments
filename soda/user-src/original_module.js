@@ -3477,7 +3477,7 @@ function vProductCardHtml(p){
 // disabled button, the glow is for the one that can be bought.
 function vBuyHtml(p){
   const limit = Number(p.buyLimit) || 0;
-  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>LIMIT REACHED</span></button>';
+  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>BUY NOW</span></button>';
   const open = p.isOpen !== false && !p.comingSoon;
   if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>BUY NOW</span></button>`;
   const at = Number(p.opensAt) || 0;
@@ -3493,7 +3493,7 @@ function vBannerHtml(){
 function paintHome(){
   const st = STATE.settings || {};
   const products = STATE.products || [];
-  const ticker = String(st.tickerText || 'Each asset pays its daily earnings into your balance every 24 hours after you buy it.');
+  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance.');
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}
@@ -4343,36 +4343,31 @@ function formatPhoneDisplay(phone){
 // server change at all. "Edit Wallet"/the add form is unchanged; saving now
 // simply adds another row instead of deleting every other one first.
 var _walletEditing = false;
+// Short names the Wallet page shows ("MTN", "Airtel"); the server still gets the full provider name.
+function walShort(n){ n = String(n || ''); return n === 'MTN Mobile Money' ? 'MTN' : n === 'Airtel Money' ? 'Airtel' : n; }
+function walProviders(){ return ['MTN Mobile Money', 'Airtel Money'].concat(STATE.supportedBanks || []); }
+function walFull(label){
+  const t = String(label || '').trim().toLowerCase();
+  if (!t) return '';
+  return walProviders().find(p => p.toLowerCase() === t || walShort(p).toLowerCase() === t) || '';
+}
+function walNetwork(){ const inp = $('walProvider'); return inp ? (inp.dataset.network || walFull(inp.value)) : ''; }
 window.openWalletSheet = async function(){
-  const hadCache = Array.isArray(STATE.bankAccounts);
-  _walletEditing = hadCache ? !(STATE.bankAccounts || []).length : false;
-  openSheet('Wallet', hadCache ? '' : '<div class="list-empty">Loading&hellip;</div>');
-  if (hadCache) renderWalletSheet();
-  // Fetched alongside the bound-wallet list, not awaited together with it --
-  // a slow/failed bank list must never hold up showing the existing wallet
-  // (or the empty-state add form); it only widens the provider picker once
-  // it lands. Cached on STATE for the lifetime of the tab, same as
-  // products/settings -- this rarely changes and re-fetching on every
-  // sheet open buys nothing.
+  _walletEditing = true;
+  openSheet('Wallet', '');
+  renderWalletSheet();
+  // The provider list only widens once the bank list lands; the form is never repainted under the member's finger.
   if (!Array.isArray(STATE.supportedBanks)) {
     api('/bank/supported-banks').then(br => {
       STATE.supportedBanks = br.status === 'success' && Array.isArray(br.banks) ? br.banks : [];
-      if (_openSheetTitle === 'Wallet' && _walletEditing) renderWalletSheet();
+      const list = $('walProviderList');
+      if (_openSheetTitle === 'Wallet' && list) list.innerHTML = walProviderOptionsHtml();
     }).catch(() => { STATE.supportedBanks = STATE.supportedBanks || []; });
   }
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
-  else if (!hadCache) STATE.bankAccounts = [];
-  if (!hadCache) {
-    _walletEditing = !(STATE.bankAccounts || []).length;
-    if (_openSheetTitle === 'Wallet') renderWalletSheet();
-  } else if (!_walletEditing && _openSheetTitle === 'Wallet') {
-    // A linked-wallet display has no focused input to destroy, so it is safe
-    // to refresh. When the add form is visible, do NOT repaint it under the
-    // member's finger: replacing #walPhone after focus is exactly what makes
-    // Android's keyboard appear late or fail to stay open.
-    renderWalletSheet();
-  }
+  else if (!Array.isArray(STATE.bankAccounts)) STATE.bankAccounts = [];
+  if (_openSheetTitle === 'Wallet') paintWalletParts();
 };
 function currentWallet(){ return (STATE.bankAccounts || [])[0] || null; }
 // The only two mobile-money names this app has ever offered -- anything
@@ -4426,65 +4421,54 @@ function walletPlainRowHtml(w){
     <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button>
   </div>`;
 }
+function walProviderOptionsHtml(){
+  return walProviders().map(p => `<button type="button" class="prov-opt" onclick="pickProvider('${esc(p)}')">${esc(walShort(p))}</button>`).join('');
+}
+function walRowsHtml(){
+  return (STATE.bankAccounts || []).map(a => `
+    <div class="v-wal-row"><b>${esc(walShort(a.network))}</b><span>${esc(maskedTail(a.phone))}</span><em>${esc(String(a.holder || '').toUpperCase())}</em><button class="v-wdel2" type="button" onclick="deleteWallet('${esc(a.id)}')" aria-label="Delete wallet">${ICONS.trash}</button></div>`).join('');
+}
+// Only the card, the heading and the "Your Wallet" rows: the typed fields are never touched.
+function paintWalletParts(){
+  const card = $('walCardBox'); if (card) card.innerHTML = vWalletCardHtml(currentWallet());
+  const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Edit Wallet' : 'Bind Wallet';
+  const rows = $('walRows'); if (rows) rows.innerHTML = walRowsHtml();
+  const own = $('walYours'); if (own) own.style.display = (STATE.bankAccounts || []).length ? '' : 'none';
+  const holder = $('walHolder'); const w = currentWallet();
+  if (holder && !holder.value && w) holder.value = String(w.holder || '').toUpperCase();
+}
 function renderWalletSheet(){
   const w = currentWallet();
-  // Owner: "add all supported banks so withdrawals will also be processed
-  // through banks... mtn and airtel will also be there." Banks are appended
-  // after the two mobile-money options, not in place of them -- fetched
-  // live by openWalletSheet() and cached on STATE.supportedBanks; empty
-  // until that lands (or if MarzPay's bank-transfer product isn't
-  // reachable/subscribed), in which case the picker just shows the two
-  // mobile-money options exactly as it always has.
-  const providers = ['MTN Mobile Money', 'Airtel Money', ...(STATE.supportedBanks || [])];
-  if (w && !_walletEditing) {
-    // One row per saved wallet, not just the first -- walletPlainRowHtml()'s
-    // own delete button already worked per-row, it just never had more than
-    // one row to act on before this round. "Add another wallet" reuses the
-    // exact same add-form toggleWalletEdit() already drives.
-    const rows = (STATE.bankAccounts || []).map(a => `<div class="v-wrow">${vWalletCardHtml(a)}<button class="v-wdel" type="button" onclick="deleteWallet('${esc(a.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button></div>`).join('');
-    const addBtn = '<button class="v-bind" type="button" onclick="toggleWalletEdit(true)">Bind Wallet</button>';
-    $('sheetBody').innerHTML = '<div class="wallet-minimal reveal-in">' + rows + addBtn + '</div>';
-    return;
-  }
-  // Only prefill when this IS still the old single-wallet "edit my one
-  // wallet" case (no saved wallets yet, or the account was JUST deleted
-  // down to none). "+ Add another wallet" also lands here now that Soda
-  // allows saving more than one, but that's a genuinely NEW entry, not an
-  // edit of an existing row -- prefilling it with the first saved wallet's
-  // own details would read as if adding a duplicate of it by accident.
-  const prefill = (STATE.bankAccounts || []).length ? null : w;
-  const editingBank = prefill && !isMobileMoneyNetwork(prefill.network);
-  $('sheetBody').innerHTML = `<div class="wallet-minimal reveal-in">
-    <div class="wallet-add-form" id="walFormGroup">
-      <div class="v-sec" style="margin-top:6px"><span class="bar"></span><h2>Network or Bank</h2></div>
-      <div class="prov-pick" id="walProviderPick">
-        <div class="wallet-line-field prov-input" onclick="toggleProviderList()">
-          <input id="walProvider" type="text" readonly placeholder="Select network or bank" value="${prefill && prefill.network ? esc(prefill.network) : ''}">
-          <svg class="prov-caret" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+  $('sheetBody').innerHTML = `<div class="v-form reveal-in">
+    <div id="walCardBox">${vWalletCardHtml(w)}</div>
+    <div class="v-edit">
+      <div class="v-sec" style="margin-top:2px"><span class="bar"></span><h2 id="walEditHead">${w ? 'Edit Wallet' : 'Bind Wallet'}</h2></div>
+      <div id="walFormGroup">
+        <label class="v-flabel" for="walProvider">Wallet Provider</label>
+        <div class="prov-pick" id="walProviderPick">
+          <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type wallet provider to search" oninput="filterProviders()" onfocus="openProviderList()"></div>
+          <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
         </div>
-        <div class="prov-list" id="walProviderList">
-          ${providers.map(p => `<button type="button" class="prov-opt${prefill && prefill.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
-        </div>
+        <label class="v-flabel" for="walPhone">Phone Number</label>
+        <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="${esc(phoneHintBody())}" oninput="handleWalDestInput(this)"></div>
+        <label class="v-flabel" for="walHolder">Account Holder Name</label>
+        <div class="v-uline"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
+        <div class="v-two"><button class="v-ghost" type="button" onclick="closeSheet()">Cancel</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Submit</button></div>
       </div>
-      <div class="v-sec"><span class="bar"></span><h2 id="walPhoneHead">Phone Number</h2></div>
-      <div class="wallet-line-field">
-        <input id="walPhone" type="${editingBank ? 'text' : 'tel'}" inputmode="${editingBank ? 'text' : 'numeric'}" autocomplete="${editingBank ? 'off' : 'tel'}" enterkeyhint="next" placeholder="${editingBank ? 'Account number' : 'Phone number'}" value="${prefill ? esc(walletDestDisplay(prefill)) : ''}" oninput="handleWalDestInput(this)">
+      <div id="walOtpGroup" style="display:none;">
+        <label class="v-flabel" for="walOtp">6-digit code</label>
+        <div class="v-uline"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></div>
+        <div class="v-two"><button class="v-ghost" type="button" onclick="cancelWalletOtp()">Back</button><button class="v-solid" id="walConfirmBtn" type="button" onclick="confirmWalletOtp()">Confirm</button></div>
+        <a href="#" id="walResendBtn" onclick="submitWallet();return false;">Resend code</a>
       </div>
-      <div class="v-sec"><span class="bar"></span><h2>Account Holder</h2></div>
-      <div class="wallet-line-field"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" placeholder="Account holder name" value="${prefill ? esc(prefill.holder || '') : ''}"></div>
-      <button class="v-cta" id="walSaveBtn" onclick="submitWallet()">Bind Wallet</button>
-    </div>
-    <div id="walOtpGroup" style="display:none;">
-      <div class="wallet-line-field"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"></div>
-      <div class="wallet-otp-actions">
-        <button type="button" onclick="cancelWalletOtp()">Back</button>
-        <button class="v-cta" id="walConfirmBtn" onclick="confirmWalletOtp()">Confirm</button>
+      <div id="walYours" style="${(STATE.bankAccounts || []).length ? '' : 'display:none'}">
+        <h3 class="v-yours">Your Wallet</h3>
+        <div id="walRows">${walRowsHtml()}</div>
       </div>
-      <a href="#" id="walResendBtn" onclick="submitWallet();return false;">Resend code</a>
     </div>
   </div>`;
 }
-window.toggleWalletEdit = function(on){ _walletEditing = !!on; _walletPending = null; _walletOtpId = null; renderWalletSheet(); };
+window.toggleWalletEdit = function(on){ _walletPending = null; _walletOtpId = null; renderWalletSheet(); };
 // The provider list from the mockup: tap the field, a plain list drops under
 // it, tap a row, it closes. Deliberately small and self-contained -- the
 // alternative was a native <select>, which on Android replaces the screen
@@ -4493,41 +4477,35 @@ window.toggleProviderList = function(){
   const box = $('walProviderPick');
   if (box) box.classList.toggle('open');
 };
+window.openProviderList = function(){ const box = $('walProviderPick'); if (box) box.classList.add('open'); };
+window.filterProviders = function(){
+  const inp = $('walProvider'); if (!inp) return;
+  inp.dataset.network = '';
+  const q = inp.value.trim().toLowerCase();
+  document.querySelectorAll('#walProviderList .prov-opt').forEach(b => { b.style.display = !q || b.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+  openProviderList();
+};
 window.pickProvider = function(name){
   const inp = $('walProvider');
-  const prevValue = inp ? inp.value : '';
-  if (inp) inp.value = name;
+  const prev = inp ? (inp.dataset.network || walFull(inp.value)) : '';
+  if (inp) { inp.value = walShort(name); inp.dataset.network = name; }
   const box = $('walProviderPick');
   if (box) box.classList.remove('open');
-  document.querySelectorAll('#walProviderList .prov-opt').forEach(b => {
-    b.classList.toggle('on', b.textContent.trim() === name);
-  });
+  document.querySelectorAll('#walProviderList .prov-opt').forEach(b => { b.style.display = ''; });
   const nowBank = !isMobileMoneyNetwork(name);
   const dest = $('walPhone');
   if (dest) {
     dest.type = nowBank ? 'text' : 'tel';
     dest.inputMode = nowBank ? 'text' : 'numeric';
     dest.autocomplete = nowBank ? 'off' : 'tel';
-    dest.placeholder = nowBank ? 'Account number' : 'Phone number';
-    // Crossing the mobile-money/bank boundary means whatever was already
-    // typed can never be valid for the new type (a phone number is not a
-    // bank account number, and vice versa) -- cleared so a member cannot
-    // accidentally submit one as the other. Switching within the same type
-    // (MTN <-> Airtel, or one bank <-> another) leaves it alone, unchanged
-    // from how this already worked before banks existed here.
-    const wasBank = prevValue ? !isMobileMoneyNetwork(prevValue) : nowBank;
+    dest.placeholder = nowBank ? 'Account number' : phoneHintBody();
+    // Crossing the mobile-money/bank boundary clears what was typed: a phone number is never a bank account number.
+    const wasBank = prev ? !isMobileMoneyNetwork(prev) : nowBank;
     if (wasBank !== nowBank) dest.value = '';
   }
 };
-// The one oninput handler for #walPhone regardless of what is currently
-// selected -- checks the CURRENT provider each keystroke rather than
-// needing pickProvider() to swap handlers. Mobile money still gets the
-// digit-only, region-length-capped treatment sanitizePhoneInput() already
-// did; a bank account number gets neither (owner: "some bank account
-// exceed character limit so no capping of characters please") -- just
-// trimmed of accidental whitespace, everything else passed through as typed.
 window.handleWalDestInput = function(el){
-  if (isMobileMoneyNetwork(($('walProvider') || {}).value)) { sanitizePhoneInput(el); return; }
+  if (isMobileMoneyNetwork(walNetwork())) { sanitizePhoneInput(el); return; }
   if (/\s/.test(el.value)) el.value = el.value.replace(/\s+/g, '');
 };
 // Tapping anywhere else closes it, the way a real picker behaves. Bound once
@@ -4549,7 +4527,7 @@ document.addEventListener('click', function(e){
 var _walletPending = null;
 var _walletOtpId = null;
 window.submitWallet = async function(){
-  const network = $('walProvider').value;
+  const network = walNetwork();
   const phone = $('walPhone').value;
   const holder = $('walHolder').value.trim();
   if (!network) return notify('Select your wallet provider.');
@@ -4570,13 +4548,13 @@ window.submitWallet = async function(){
   if (!otpVerificationEnabled() || !(STATE.settings || {}).bankOtpRequired) {
     btn.disabled = true; btn.textContent = 'Saving…';
     const r = await post('/bank/save', { holder, network, phone });
-    btn.disabled = false; btn.textContent = 'Bind Wallet';
+    btn.disabled = false; btn.textContent = 'Submit';
     if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
     return finishWalletSave();
   }
   btn.disabled = true; btn.textContent = 'Sending code…';
   const d = await post('/auth/otp/send', { purpose: 'bank' });
-  btn.disabled = false; btn.textContent = 'Bind Wallet';
+  btn.disabled = false; btn.textContent = 'Submit';
   if (d.status !== 'success') return notify(d.message || 'Could not send a verification code.');
   _walletPending = { holder, network, phone };
   _walletOtpId = d.otpId;
@@ -4614,7 +4592,6 @@ async function finishWalletSave(){
   // than one wallet, so the old "delete every other row" collapse is gone.
   const fresh = await api('/bank/list');
   STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (STATE.bankAccounts || []);
-  _walletEditing = false;
   notify('Wallet saved');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
 }
@@ -4629,8 +4606,7 @@ window.deleteWallet = function(id){
     // ONE of several should return to the remaining list, not jump straight
     // into "add a new wallet". Same "editing only when genuinely empty"
     // rule openWalletSheet() itself already uses.
-    _walletEditing = !(STATE.bankAccounts || []).length;
-    if (_openSheetTitle === 'Wallet') renderWalletSheet();
+    if (_openSheetTitle === 'Wallet') paintWalletParts();
     // The Withdraw screen may have had exactly this wallet selected --
     // clear a now-dangling selection so it falls back to whatever is left.
     if (_witSelectedWalletId === id) _witSelectedWalletId = null;
@@ -4869,7 +4845,7 @@ function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = '<div class="list-empty">No messages yet.</div>'; return; }
+  if (!list.length) { box.innerHTML = `<div class="v-nomsg"><span>${VI.bottle}</span><p>No messages</p></div>`; return; }
   box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
     <button class="msg-row${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
       <span class="av">${VI.bottle}</span>
@@ -4944,17 +4920,16 @@ function pwLockSvg(){
 function pwFieldHtml(id, placeholder, pin){
   return `<div class="pw-field${pin ? ' pin' : ''}">${pwLockSvg()}<input id="${id}" type="password" placeholder="${placeholder}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
 }
+function vPwBox(id, placeholder, pin){
+  return `<div class="v-pbox"><input id="${id}" type="password" placeholder="${esc(placeholder)}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
+}
 window.openChangeLoginPasswordSheet = function(){
-  openSheet('Login Password', `<div class="v-form reveal-in">
-    <p class="pw-note">Protect your ${esc(brandName())} account with a new password.</p>
-    <div class="v-sec"><span class="bar"></span><h2>Current Password</h2></div>
-    ${pwFieldHtml('lpOld', 'Enter old password')}
-    <div class="v-sec"><span class="bar"></span><h2>New Password</h2></div>
-    ${pwFieldHtml('lpNew', 'Enter new password')}
-    <div class="v-sec"><span class="bar"></span><h2>Confirm New Password</h2></div>
-    ${pwFieldHtml('lpNew2', 'Re-enter new password')}
-    <button class="v-cta" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Save Login Password</button>
-  </div>`);
+  openSheet('Change Login Password', `<div class="v-form reveal-in"><div class="v-edit">
+    <label class="v-flabel" for="lpOld">Old Password</label>${vPwBox('lpOld', 'Enter old password')}
+    <label class="v-flabel" for="lpNew">New Password</label>${vPwBox('lpNew', 'Enter new password (at least 6 characters)')}
+    <label class="v-flabel" for="lpNew2">Confirm New Password</label>${vPwBox('lpNew2', 'Confirm new password')}
+    <button class="v-cta" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Change Password</button>
+  </div></div>`);
 };
 window.submitLoginPasswordChange = async function(){
   const oldPass = $('lpOld').value;
@@ -4965,14 +4940,14 @@ window.submitLoginPasswordChange = async function(){
   if (newPass !== confirm) return notify('The two new passwords do not match.');
   if (newPass === oldPass) return notify('Your new password must be different from the old one.');
   const btn = $('lpSaveBtn');
-  btn.disabled = true; btn.textContent = 'SAVING…';
+  btn.disabled = true; btn.textContent = 'Saving…';
   try {
     await window.fbChangePassword(phoneToEmail((STATE.account || {}).phone), oldPass, newPass);
-    btn.disabled = false; btn.textContent = 'SAVE LOGIN PASSWORD';
+    btn.disabled = false; btn.textContent = 'Change Password';
     closeSheet({ fromAction: true });
     notify('Login password changed');
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'SAVE LOGIN PASSWORD';
+    btn.disabled = false; btn.textContent = 'Change Password';
     // fbErrMsg's wrong-credential copy names the phone number, which only
     // makes sense on the login screen -- here the only thing that can be
     // wrong is the old password itself.
@@ -4987,17 +4962,14 @@ window.submitLoginPasswordChange = async function(){
 // The 6-digit PIN that confirms withdrawals. Soda uses 6 digits where Snow
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
 window.openChangeTradePasswordSheet = function(){
+  // An account with no Trade Password yet is asked only for the new one.
   const first = (STATE.account || {}).hasTradePin === false;
-  openSheet('Trade Password', `<div class="v-form reveal-in">
-    <p class="pw-note">${first ? 'You have not set a Trade Password yet. Choose a 6-digit one: you will enter it every time you withdraw.' : 'Your trade password is your 6-digit PIN used to confirm cash outs and other sensitive actions.'}</p>
-    ${first ? '' : `<div class="pw-head"><span class="bar"></span><span>Old Trade Password</span></div>
-    ${pwFieldHtml('tpOld', 'Enter old 6-digit PIN', true)}`}
-    <div class="pw-head"><span class="bar"></span><span>${first ? 'Trade Password' : 'New Trade Password'}</span></div>
-    ${pwFieldHtml('tpNew', first ? 'Enter 6-digit PIN' : 'Enter new 6-digit PIN', true)}
-    <div class="pw-head"><span class="bar"></span><span>${first ? 'Confirm Trade Password' : 'Confirm New Password'}</span></div>
-    ${pwFieldHtml('tpNew2', first ? 'Re-enter 6-digit PIN' : 'Re-enter new 6-digit PIN', true)}
-    <button class="v-cta" id="tpSaveBtn" onclick="submitTradePasswordChange()">Save Trade Password</button>
-  </div>`);
+  openSheet('Change Trade Password', `<div class="v-form reveal-in"><div class="v-edit">
+    ${first ? '' : `<label class="v-flabel" for="tpOld">Old Password</label>${vPwBox('tpOld', 'Enter old password', true)}`}
+    <label class="v-flabel" for="tpNew">New Password</label>${vPwBox('tpNew', 'Enter new password (6 digits)', true)}
+    <label class="v-flabel" for="tpNew2">Confirm New Password</label>${vPwBox('tpNew2', 'Confirm new password', true)}
+    <button class="v-cta" id="tpSaveBtn" onclick="submitTradePasswordChange()">Change Password</button>
+  </div></div>`);
 };
 window.submitTradePasswordChange = async function(){
   const first = (STATE.account || {}).hasTradePin === false;
@@ -5011,7 +4983,7 @@ window.submitTradePasswordChange = async function(){
   const btn = $('tpSaveBtn');
   btn.disabled = true; btn.textContent = 'Saving…';
   const r = await post('/account/transaction-pin/change', first ? { newPin } : { oldPin, newPin });
-  btn.disabled = false; btn.textContent = 'Save Trade Password';
+  btn.disabled = false; btn.textContent = 'Change Password';
   if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
   if (STATE.account) STATE.account.hasTradePin = true;
   closeSheet({ fromAction: true });
@@ -6417,7 +6389,7 @@ function paintWithdrawSheet(s){
     <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
     <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
- ${(STATE.account || {}).hasTradePin === false ? '<div class="v-fee" style="margin:0 0 10px;color:var(--v-blue-2)">You have not set a Trade Password yet. Set it first under My, then Trade Password.</div>' : ''}
+ 
     <div class="v-pin"><input id="witPin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="one-time-code"><button type="button" onclick="toggleWitPin(this)" aria-label="Show or hide">${VI.eye}</button></div>
     <div class="v-fee">Fee: ${fee}%</div>
     <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
