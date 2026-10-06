@@ -3037,19 +3037,32 @@ function startHomeCarousel(){
     preload.src = slides[nextIdx];
   }, 4500);
 }
+// An asset picture is shown whole, in its own shape (nothing cropped). A portrait picture sits in
+// the left column; a square or wide one goes across the top of the card with the figures below.
+function vFitCard(img){
+  const card = img.closest('.v-card');
+  if (card && img.naturalWidth && img.naturalHeight) card.classList.toggle('v-flat', img.naturalWidth / img.naturalHeight > 0.85);
+}
+function vNoPicture(img, initial){
+  const frame = img.parentNode;
+  if (frame && frame.classList) frame.classList.remove('has-img');
+  const card = img.closest('.v-card'); if (card) card.classList.remove('v-flat');
+  img.outerHTML = '<span class="v-glyph">' + initial + '</span>';
+}
+window.vFitCard = vFitCard; window.vNoPicture = vNoPicture;
 function vOwnedCount(key){ return (STATE.investments || []).filter(i => i.tierKey === key).length; }
 function homeSignature(){ return JSON.stringify(STATE.products || []) + '|' + (STATE.investments || []).map(i => i.tierKey).join(','); }
 function vProductCardHtml(p){
   const { cycle, daily, expected } = planFigures(p);
   const initial = esc(String(p.name || '?').trim()[0] || '?');
   const img = p.image
-    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.outerHTML='&lt;span class=&quot;v-glyph&quot;&gt;${initial}&lt;/span&gt;'">`
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" onload="vFitCard(this)" onerror="vNoPicture(this,'${initial}')">`
     : `<span class="v-glyph">${initial}</span>`;
   return `
   <article class="v-card">
     <h3 class="v-card-h">${esc(p.name)}</h3>
     <div class="v-card-b">
-      <div class="v-card-img">${img}${Number(p.buyLimit) > 0 ? `<em class="v-badge">${vOwnedCount(p.key)}/${Number(p.buyLimit)}</em>` : ''}</div>
+      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${Number(p.buyLimit) > 0 ? `<em class="v-badge">${vOwnedCount(p.key)}/${Number(p.buyLimit)}</em>` : ''}</div>
       <dl class="v-rows">
         <div><dt>Price</dt><dd>${esc(vMoney(p.price))}</dd></div>
         <div><dt>Days</dt><dd>${cycle}</dd></div>
@@ -3194,7 +3207,7 @@ function vOwnedCardHtml(inv){
   const name = inv.tierLabel || p.name || 'Asset';
   const initial = esc(String(name || '?').trim()[0] || '?');
   const img = p.image
-    ? `<img src="${esc(p.image)}" alt="" onerror="this.outerHTML='&lt;span class=&quot;v-glyph&quot;&gt;${initial}&lt;/span&gt;'">`
+    ? `<img src="${esc(p.image)}" alt="" onload="vFitCard(this)" onerror="vNoPicture(this,'${initial}')">`
     : `<span class="v-glyph">${initial}</span>`;
   const startMs = st.createdMs;
   const endMs = startMs + st.total * 86400000;
@@ -3204,7 +3217,7 @@ function vOwnedCardHtml(inv){
     <h3 class="v-card-h">${esc(name)}</h3>
     ${inv.granted ? '<i class="v-ribbon"><b>GIFT</b></i>' : ''}
     <div class="v-card-b">
-      <div class="v-card-img">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
+      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
       <div class="v-side">
         <dl class="v-rows">
           <div><dt>Price</dt><dd>${esc(vMoney(st.amount))}</dd></div>

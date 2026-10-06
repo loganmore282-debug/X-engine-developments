@@ -1432,6 +1432,13 @@ body.sheet-open .bottom-nav{display:flex;}
 .v-card-img{position:relative;border-radius:11px;overflow:hidden;background:var(--v-grad);height:200px;display:flex;align-items:center;justify-content:center;}
 .v-owned .v-card-img{height:227px;}
 .v-card-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.v-card-img.has-img,.v-owned .v-card-img.has-img{height:auto;background:none;overflow:visible;}
+.v-card-img.has-img img{position:static;display:block;width:100%;height:auto;border-radius:11px;}
+.v-card-img.has-img .v-badge{z-index:2;}
+.v-card.v-flat .v-card-b{grid-template-columns:1fr;gap:12px;}
+.v-card.v-flat .v-rows,.v-card.v-flat.v-owned .v-rows{height:auto;}
+.v-card.v-flat .v-rows>div{flex:none;min-height:38px;}
+.v-card.v-flat .v-card-img{align-self:stretch;}
 .v-glyph{font-size:40px;font-weight:700;color:rgba(255,255,255,.9);}
 .v-badge{position:absolute;top:8px;right:6px;background:var(--v-blue-2);color:#fff;font-style:normal;font-size:10px;font-weight:700;height:14.5px;line-height:14.5px;padding:0 6px;border-radius:6px;z-index:1;}
 .v-owned .v-badge{top:8px;right:8px;height:20px;line-height:20px;padding:0 9px;font-size:10.3px;font-weight:500;}

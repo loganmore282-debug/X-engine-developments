@@ -29,4 +29,6 @@ ok(/var NAV_LOADER = '<span class="nav-loading">Loading\.\.\.<\/span>'/.test(mod
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
 ok(/\.v-ann-img\{[^}]*object-fit:contain[^}]*\}/.test(html) && !/\.v-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole (contain), never cropped');
+ok(/function vFitCard\(img\)/.test(mod) && /onload="vFitCard\(this\)"/.test(mod) && /\.v-card-img\.has-img img\{[^}]*height:auto/.test(html) && !/\.v-card-img\.has-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures are shown whole in their own shape (portrait in the column, wide or square across the top)');
+ok(!/fileToFramedDataUrl|PRODUCT_IMG_W/.test(admin) && /fileToDataUrl\(f,900,0\.82\)/.test(admin), 'the admin no longer crops asset pictures to 16:9');
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);
