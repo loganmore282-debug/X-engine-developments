@@ -1,6 +1,5 @@
 'use strict';
 // Announcement dialog: one admin-uploaded portrait picture with Join Channel + Close.
-// Support page: WhatsApp, Telegram group, Telegram customer service, email.
 // Drives the real source in JSDOM (and the built bundle with --built).
 const fs = require('node:fs'), zlib = require('node:zlib'), assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
@@ -37,15 +36,6 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(!d.getElementById('annBg').classList.contains('show'), 'no picture uploaded -> no dialog');
   w.eval('STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings.annEnabled=false'); w.maybeShowAnnouncement();
   ok(!d.getElementById('annBg').classList.contains('show'), 'announcement switched off -> no dialog');
-  w.eval('STATE.settings.whatsappGroup="https://chat.whatsapp.com/abc"');
-  w.eval('STATE.settings.telegramGroup="https://t.me/grp"'); w.openSupportSheet();
-  const rows = [...d.querySelectorAll('.support-row')];
-  assert.deepEqual(rows.map(r => r.querySelector('.t1').textContent), ['WhatsApp Channel', 'Telegram Group', 'Telegram Customer Service', 'Email Support'], 'support page rows'); n++;
-  assert.deepEqual(rows.map(r => r.getAttribute('href')), ['https://chat.whatsapp.com/abc', 'https://t.me/grp', 'https://t.me/agent', 'mailto:help@x.com']); n++;
-  ok(rows[1].querySelector('.support-row-icon.telegram svg') && rows[2].querySelector('.support-row-icon.telegram svg'), 'both Telegram rows carry the Telegram icon');
-  ok(rows[1].target === '_blank' && rows[2].target === '_blank', 'Telegram links open outside the app');
-  w.closeSheet && w.closeSheet();
-  w.eval('STATE.settings.supportTelegram="";STATE.settings.telegramGroup=""'); w.openSupportSheet();
-  assert.deepEqual([...d.querySelectorAll('.support-row .t1')].map(e => e.textContent), ['WhatsApp Channel', 'Email Support'], 'blank links are hidden'); n++;
-  console.log(`PASS: announcement and support contact links (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
+  ok(typeof w.openSupportSheet === 'undefined', 'the old Support page is gone (Help dialog replaces it)');
+  console.log(`PASS: announcement dialog (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

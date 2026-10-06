@@ -2870,7 +2870,7 @@ async function renderBanners(){
 
     <h2 class="sec">Announcement picture</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The portrait picture members see when they open the app (with Join Channel and Close under it). Portrait, about 800&times;1200. Shown only while the announcement is enabled in Settings.</p>
+      <p class="muted" style="margin-top:0">The portrait picture members see when they open the app (with Join Channel and Close under it). Tall portrait (for example 1080&times;2200); it is shown as tall as the screen allows. Shown only while the announcement is enabled in Settings.</p>
       <div class="banner-row">
         ${announcementImage?`<img class="img-thumb" src="${esc(announcementImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set</span>'}</div>
@@ -3010,7 +3010,7 @@ function wireBannerHandlers(){
     await withTabBusy((async()=>{
       try {
         toast('Uploading…','ok');
-        const image = await fileToDataUrl(f, 1200, 0.82);
+        const image = await fileToDataUrl(f, 1600, 0.85);
         const d = await api('/admin/announcement-image/set', { image });
         toast(d.status==='success'?'Announcement picture saved, live for every member':(d.message||'Failed'), d.status==='success'?'ok':'err');
         if (d.status==='success') renderBanners();

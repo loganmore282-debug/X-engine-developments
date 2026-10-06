@@ -215,7 +215,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.35);}
 ::-webkit-scrollbar-corner{background:transparent;}
 
-.app-card{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);box-shadow:var(--sh-card);}
 /* Owner: "l also need 3d buttons" -- a solid darker shelf under every primary
    CTA plus a real press-down :active state, applied once here so every button
    in the app picks it up. */
@@ -228,9 +227,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   box-shadow:0 4px 0 var(--snow-border);transform:translateY(0);transition:transform .1s,box-shadow .1s;}
 .secondary-button:active:not(:disabled){opacity:.85;}
 /* Dark variant used for Log Out / Edit Wallet, per the Account + Wallet mockups. */
-.dark-button{background:var(--snow-ink);color:#fff;border:none;border-radius:var(--r-ctl);font-weight:700;letter-spacing:.04em;
-  box-shadow:none;transition:opacity .1s;}
-.dark-button:active:not(:disabled){opacity:.85;}
 /* Soda CTAs stay visually stable at rest. The old perpetual highlight sweep
    was inherited interaction choreography; only deliberate press/focus states
    move now, which keeps the industrial interface quiet and predictable. */
@@ -240,9 +236,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    status wherever it appears. Pending stays deliberately quiet: it is the
    absence of a thing, and shouting it would make every new referral look like
    a problem. */
-.status-pill{display:inline-block;border-radius:var(--r-pill);font-size:12.5px;font-weight:700;letter-spacing:.03em;padding:5px 13px;}
-.status-pill.active{background:linear-gradient(135deg,#35c46c,#12894a);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.18);box-shadow:0 5px 12px -6px rgba(18,137,74,.7);}
-.status-pill.pending{background:var(--snow-neutral-soft);color:var(--snow-muted);border:1px solid var(--line-soft);font-weight:600;}
 
 /* --nav-h is the ONE place the bar's height is written. Four other rules
    depend on it (the page's bottom padding, the sheet overlay's bottom
@@ -274,14 +267,8 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 
 
 .wordmark{display:flex;align-items:center;gap:9px;}
-.wordmark .wm-text{font-weight:700;letter-spacing:2px;}
 
-.stat-label{font-size:10px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.35px;}
-.stat-val{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--snow-ink);margin-top:2px;}
-.section-title{font-size:17px;font-weight:700;color:var(--snow-ink);}
 
-.stat-tile{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:12px;box-shadow:var(--sh-card);}
-.icon-tile{border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 
 /* Product card, per the owner's reference screenshot: the NAME sits on top,
    centred and large, then the full-width image, then a 2x2 grid of tinted
@@ -337,15 +324,8 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   68%{transform:scale(1.008);}  /* out */
   100%{transform:scale(1);}}
 @media (prefers-reduced-motion:reduce){.p-card.card-tap{animation:none;}}
-.p-card .p-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#ffd9a0,#f5a000);display:flex;align-items:center;justify-content:center;overflow:hidden;}
-.p-card .p-img img{width:100%;height:100%;object-fit:cover;display:block;}
-.p-card .p-img .glyph{width:52px;height:52px;border-radius:var(--r-ctl);background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;}
 /* A scrim, not a solid bar -- the name has to stay readable over whatever
    photo is uploaded without hiding the top of it. */
-.p-card .p-name{position:absolute;left:0;right:0;bottom:0;padding:24px 13px 10px;color:#fff;font-weight:700;font-size:19px;letter-spacing:.01em;
-  background:linear-gradient(to top,rgba(20,8,4,.72) 0%,rgba(20,8,4,.42) 55%,rgba(20,8,4,0) 100%);text-shadow:0 1px 4px rgba(0,0,0,.5);}
-.p-card .p-body{padding:10px;}
-.p-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:9px;}
 .p-stat{background:var(--snow-green-soft);border-radius:var(--r-ctl);padding:8px 6px;text-align:center;}
 .p-stat.warm{background:var(--snow-wine-soft);}
 .p-stat .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);font-weight:600;}
@@ -358,25 +338,12 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    ellipsis is a pure safety net: it changes nothing for any value that
    already fits, which every real one does. */
 .p-stat .v{font-size:16px;font-weight:700;color:var(--snow-ink);margin-top:2px;font-family:var(--number-font,inherit);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
-.p-card .p-cta{width:100%;height:44px;padding:0;font-size:16px;letter-spacing:.04em;border-radius:var(--r-ctl);}
-.product-card__stats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:10px 16px;}
-.product-card__cta{width:100%;min-height:44px;margin-top:16px;border-radius:var(--r-ctl);font-size:14px;}
-
-.plan-card{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:18px;box-shadow:var(--sh-card);}
-
-.segmented-control,.team-level-switcher{display:flex;background:var(--snow-neutral-soft);border-radius:var(--r-ctl);padding:4px;gap:4px;}
-.segmented-control .seg,.team-level-switcher .seg{flex:1;text-align:center;padding:9px 0;border-radius:var(--r-ctl);font-size:13px;font-weight:500;color:var(--snow-muted);background:none;border:none;}
-.segmented-control .seg.active,.team-level-switcher .seg.active{background:#fff;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -8px rgba(17,17,17,.3);}
-
-.settings-list{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:4px 16px;box-shadow:var(--sh-card);}
-.list-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
-.list-row:last-child{border-bottom:none;}
 
 
 
-.team-referral-card{position:relative;overflow:hidden;min-height:210px;padding:22px;border-radius:var(--r-card);color:#fff;background:var(--soda-hero);box-shadow:0 16px 32px -22px rgba(17,17,17,.35);}
-.team-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
-.team-deposits-card{grid-column:1 / -1;position:relative;overflow:hidden;border-radius:var(--r-card);padding:20px;color:#fff;background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));box-shadow:0 14px 28px -22px rgba(17,17,17,.3);}
+
+
+
 
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
@@ -408,7 +375,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    nothing for 400ms before the next screen appeared. Real gap, not just
    too subtle; same white-on-wine spinner style as .primary-button already
    uses elsewhere, sized to sit cleanly inside a button. */
-.mini-spin{width:18px;height:18px;margin:0 auto;border-radius:50%;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;animation:sp .7s linear infinite;}
 /* Owner: "establish a timer ie like saying snow opening in 23:59:34... so it
    will be after the start up loader" -- a pre-launch gate shown instead of
    the login/app once the loading screen would otherwise hand off, admin-
@@ -418,15 +384,8 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 #openingGate .og-label{font-size:13px;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-top:18px;}
 #openingGate .og-countdown{font-size:40px;font-weight:700;margin-top:10px;font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,inherit);}
 #openingGate .og-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:14px;max-width:320px;line-height:1.5;}
-@keyframes tickerFlow{from{transform:translateX(0);}to{transform:translateX(-50%);}}
-@keyframes chestSwing{0%,100%{transform:rotate(-6deg);}50%{transform:rotate(6deg);}}
-.chest-hang{animation:chestSwing 2.6s ease-in-out infinite;transform-origin:50% -6px;}
 
 /* ── Home / Products / Referral (Soda mockups) ───────────────────── */
-.home-topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 8px;}
-.icon-btn{width:38px;height:38px;border-radius:50%;background:var(--snow-surface);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px -8px rgba(20,10,5,.3);position:relative;flex-shrink:0;color:var(--snow-ink);}
-.icon-btn .dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--snow-wine);border:2px solid var(--snow-surface);}
-.top-wordmark{font-weight:800;font-size:20px;letter-spacing:.03em;color:var(--snow-ink);}
 /* Soda's own rule here was edge-to-edge, no rounding, no side gutters
    (owner, at the time: "it should complete the margin"). The new mockup
    shows the opposite -- a rounded, inset card with visible white margin
@@ -434,7 +393,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    preference; .ref-banner (the Referral page's own banner, not shown in
    any mockup yet) keeps the original edge-to-edge treatment. */
 .home-banner{margin:0 18px 14px;height:190px;border-radius:var(--r-card);position:relative;overflow:hidden;background:var(--soda-hero);}
-.ref-banner{margin:0 0 14px;height:190px;border-radius:0;position:relative;overflow:hidden;background:var(--soda-hero);}
 /* ── SKELETON LOADERS ──
    Owner: "use skeleton loaders exactly how the screen contents will appear
    after load." So these are not generic grey bars -- each one is built from
@@ -453,32 +411,10 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);
   animation:skShimmer 1.25s ease-in-out infinite;}
 @keyframes skShimmer{100%{transform:translateX(100%);}}
-.sk-line{height:12px;margin-bottom:8px;}
-.sk-line.sm{height:10px;}
-.sk-line.lg{height:22px;}
 /* Product card: image block at 4:3, then the 2x2 stat grid and the CTA, laid
    out by the real .p-card rules so the swap is invisible. */
-.sk-pcard{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);overflow:hidden;}
-.sk-pcard .sk-img{aspect-ratio:16/9;border-radius:0;}
-.sk-pcard .sk-body{padding:10px;}
-.sk-pcard .sk-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
-.sk-pcard .sk-stat{height:44px;}
-.sk-pcard .sk-cta{height:38px;}
 /* My Products: the full-bleed band, the filter row, then plan rows. */
-.sk-band{height:150px;border-radius:0;margin-bottom:14px;}
-.sk-filters{display:flex;gap:8px;margin:0 16px 12px;}
-.sk-filters .sk{flex:1;height:34px;}
-.sk-row{background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:13px 14px;}
-.sk-row .sk-top{display:flex;align-items:center;gap:11px;margin-bottom:13px;}
-.sk-row .sk-thumb{width:38px;height:38px;flex-shrink:0;}
-.sk-row .sk-bar{height:5px;margin-bottom:6px;}
-.sk-row .sk-figs{display:flex;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--snow-border);}
-.sk-row .sk-figs > div{flex:1;}
 /* Team: two stat cards over the level switcher and member rows. */
-.sk-tcards{display:flex;gap:12px;margin:0 18px 16px;}
-.sk-tcards .sk{flex:1;height:104px;}
-.sk-member{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--snow-border);}
-.sk-member .sk-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;}
 
 /* ── THE ONGOING MARK ──
    Owner sent this as a 180px standalone loader ("put this animation on aside of
@@ -533,7 +469,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 }
 
 .home-banner img{display:block;width:100%;height:100%;object-fit:cover;}
-.home-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:0 18px;margin:-42px 18px 16px;position:relative;z-index:3;}
 .home-action{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;color:var(--snow-ink);}
 /* Solid red circle, white glyph -- the mockup's Deposit/Withdraw/Invite/
    Support tiles. Real SVG (see ICONS.cardPlus etc.) replacing the old
@@ -542,8 +477,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .home-action .badge{width:56px;height:56px;border-radius:50%;background:var(--soda-grad);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px -10px rgba(23,57,184,.55);}
 .home-action .badge svg{width:22px;height:22px;}
 .home-action .badge img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 6px 8px rgba(30,10,5,.28));}
-.supplied-icon{display:block;background:currentColor;-webkit-mask:var(--supplied-icon) center/contain no-repeat;mask:var(--supplied-icon) center/contain no-repeat;}
-.home-action .badge .supplied-icon{width:26px;height:26px;}
 .home-action .lbl{font-size:12px;font-weight:600;}
 /* ── Home top bar v2 (logo + tagline + Notifications/Support) ──
    Was a solid Corporate Red band on every screen that reuses this class
@@ -553,123 +486,23 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    solid red circle (rather than translucent-white-on-red) so the logo
    still carries the brand color even though the bar itself no longer
    does. */
-.home-topbar-v2{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px 18px 10px;background:var(--snow-surface);color:var(--snow-ink);border-bottom:1px solid var(--snow-border);}
-.htb-brand{display:flex;align-items:center;gap:10px;min-width:0;}
-.htb-logo{width:40px;height:40px;border-radius:50%;background:var(--snow-wine);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;}
-.htb-logo img{width:100%;height:100%;object-fit:cover;}
-.htb-text{min-width:0;}
-.htb-title{font-size:15.5px;font-weight:800;line-height:1.2;}
-.htb-sub{font-size:11.5px;font-weight:600;opacity:.7;letter-spacing:.02em;margin-top:2px;}
-.htb-icons{display:flex;gap:16px;flex-shrink:0;}
-.htb-icon-btn{background:none;border:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--snow-ink);font-family:inherit;}
-.htb-ic{position:relative;width:26px;height:26px;display:flex;align-items:center;justify-content:center;}
-.htb-ic .dot{position:absolute;top:-1px;right:-1px;width:8px;height:8px;border-radius:50%;background:var(--soda-gold);border:2px solid var(--snow-surface);}
-.htb-ic-lbl{font-size:10.5px;font-weight:600;}
 /* ── Banner carousel dots ── */
-.hb-dots{display:flex;justify-content:center;gap:6px;margin:-6px 0 14px;}
-.hb-dot{width:6px;height:6px;border-radius:50%;background:var(--snow-border);transition:background .2s,width .2s;}
-.hb-dot.on{background:var(--snow-wine);width:16px;border-radius:var(--r-pill);}
 /* ── Total Wallet Balance card ── */
-.wallet-bal-card{margin:0 18px 16px;padding:18px 20px;border-radius:var(--r-card);background:var(--soda-grad);color:#fff;box-shadow:0 16px 30px -18px rgba(23,57,184,.5);}
-.wbc-row1{display:flex;align-items:center;justify-content:space-between;}
-.wbc-lbl{font-size:13.5px;font-weight:600;opacity:.9;}
-.wbc-eye{background:none;border:none;padding:2px;color:#fff;opacity:.85;display:flex;}
-.wbc-row2{display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:10px;}
-.wbc-amt{font-size:27px;font-weight:800;letter-spacing:.01em;}
-.wbc-details{background:rgba(255,255,255,.18);border:none;color:#fff;font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 14px;border-radius:var(--r-pill);display:flex;align-items:center;gap:3px;flex-shrink:0;}
-.wbc-details svg{width:13px;height:13px;}
 /* ── 3-up stat row (Cumulative Earnings / Total Deposits / Total Withdrawals) ── */
-.home-stat-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:0 18px;margin-bottom:16px;}
-.home-stat{background:var(--snow-surface);border-radius:var(--r-card);padding:14px 10px;box-shadow:var(--sh-card);text-align:center;}
-.hs-ic{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;}
-.hs-ic svg{width:16px;height:16px;}
-.hs-ic.hs-gold{background:var(--snow-wave-on-wine);color:var(--soda-gold);}
-.hs-ic.hs-red{background:var(--snow-wine-soft);color:var(--snow-wine);}
-.hs-ic.hs-dark{background:var(--snow-neutral-soft);color:var(--snow-ink);}
-.hs-lbl{font-size:10.5px;color:var(--snow-muted);font-weight:600;line-height:1.3;min-height:26px;}
-.hs-val{font-size:14px;font-weight:800;margin-top:4px;}
-.hs-gold-txt{color:var(--soda-gold);}
-.hs-red-txt{color:var(--snow-wine);}
 /* ── Daily Check-in card ── */
-.checkin-card{margin:0 18px 16px;padding:16px 16px;border-radius:var(--r-card);background:linear-gradient(100deg,#fff6e0 0%,#ffe9bd 100%);display:flex;align-items:center;gap:12px;box-shadow:var(--sh-card);}
-.cic-gift{width:44px;height:44px;flex-shrink:0;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;}
-.cic-text{flex:1;min-width:0;}
-.cic-title{font-size:14.5px;font-weight:800;color:var(--snow-ink);}
-.cic-sub{font-size:11.5px;color:var(--snow-muted);font-weight:500;line-height:1.35;margin-top:2px;}
-.cic-btn{flex-shrink:0;background:var(--soda-grad);color:#fff;border:none;font-family:inherit;font-weight:700;font-size:13px;padding:10px 18px;border-radius:var(--r-pill);}
 .home-brand-title{display:flex;align-items:center;gap:8px;margin:13px 10px 9px;color:var(--snow-ink);font-size:21px;line-height:1.2;font-weight:800;letter-spacing:.01em;}
-.home-brand-logo{width:30px;height:30px;object-fit:contain;display:block;flex:0 0 auto;}
 /* ── Account screen (owner's mockup) ── */
 .acct-card{position:relative;border-radius:var(--r-card);padding:16px;display:flex;align-items:center;gap:14px;background:var(--snow-surface);background-size:cover;background-position:center;box-shadow:var(--sh-card);overflow:hidden;}
-.acct-avatar{width:56px;height:56px;border-radius:50%;background:var(--snow-neutral-soft);color:var(--snow-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.acct-avatar svg{width:26px;height:26px;}
-.acct-avatar-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
-.acct-avatar-logo{width:100%;height:100%;object-fit:contain;display:block;}
-.acct-idbox{min-width:0;}
-.acct-phone-row{font-size:16px;font-weight:800;color:var(--snow-ink);}
-.acct-id-row{font-size:12.5px;color:var(--snow-muted);font-weight:600;margin-top:4px;display:flex;align-items:center;gap:6px;}
-.ar-copy-btn{background:none;border:none;padding:2px;color:var(--snow-wine);display:flex;}
-.ar-copy-btn svg{width:14px;height:14px;}
 /* Coloured-circle row icons -- three tones, cycled per row to match the
    mockup (it alternates red/gold/dark rather than using one colour for
    every row, which is what made the old .setting-row squares read as flat). */
-.profile-section{margin:18px 0 0;}
-.profile-section-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin:0 2px 8px;}
-.acct-row-list{display:flex;flex-direction:column;gap:10px;margin:0;}
-.acct-row{display:flex;align-items:center;gap:13px;background:var(--snow-surface);border:none;border-radius:var(--r-card);padding:13px 14px;box-shadow:var(--sh-card);width:100%;text-align:left;font-family:inherit;color:var(--snow-ink);}
-.acct-row .txt{flex:1;min-width:0;}
-.acct-row .t1{display:block;font-size:14px;font-weight:800;}
-.acct-row .t2{display:block;font-size:11.5px;color:var(--snow-muted);font-weight:500;margin-top:2px;}
-.acct-row svg:last-child{width:16px;height:16px;color:var(--snow-muted);flex-shrink:0;}
-.ar-ic{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.ar-ic svg{width:19px;height:19px;}
-.ar-ic.ar-red{background:var(--snow-wine-soft);color:var(--snow-wine);}
-.ar-ic.ar-gold{background:var(--snow-wave-on-wine);color:var(--soda-gold);}
-.ar-ic.ar-dark{background:var(--snow-neutral-soft);color:var(--snow-ink);}
-.account-action-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0;}
-.acct-grid-card{min-width:0;min-height:100px;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:7px;padding:11px 9px;border:none;border-radius:16px;background:var(--snow-surface);box-shadow:var(--sh-card);text-align:left;font-family:inherit;color:var(--snow-ink);}
-.acct-grid-icon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:var(--snow-wine-soft);color:var(--snow-wine);flex-shrink:0;}
-.acct-grid-icon .supplied-icon{width:27px;height:27px;}
-.acct-grid-card .txt{min-width:0;}
-.acct-grid-card .t1{display:block;font-size:11px;line-height:1.15;font-weight:800;}
-.acct-grid-card .t2{display:block;margin-top:3px;font-size:9px;line-height:1.25;color:var(--snow-muted);font-weight:500;}
-.logout-btn-v2{width:100%;height:52px;border-radius:var(--r-pill);border:none;background:var(--snow-wine-soft);color:var(--snow-wine);font-family:inherit;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;}
-.logout-btn-v2 svg{width:18px;height:18px;}
 /* ── Network: compact Soda view ──
    The old mockup pass stacked a hero, slogans, two invite cards, three member
    cards, an earnings card, three commission cards, a trophy card and recent
    referrals. The owner explicitly rejected that density. Keep only the facts
    and actions needed on this screen. */
-.net-simple{padding:0 18px;}
-.net-section{padding:16px 0;}
-.net-section+.net-section{border-top:1px solid var(--snow-border);}
-.net-section-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--snow-muted);margin-bottom:6px;}
-.net-invite-line{display:flex;align-items:center;gap:12px;padding:10px 0;}
-.net-invite-line>div{flex:1;min-width:0;}
-.net-invite-line span{display:block;font-size:11px;color:var(--snow-muted);font-weight:550;margin-bottom:4px;}
-.net-invite-line b{display:block;font-size:16px;color:var(--snow-ink);font-weight:700;}
-.net-invite-line .net-link{font-size:12px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--snow-ink);}
-.net-invite-line button{width:34px;height:34px;border:0;background:transparent;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
-.net-invite-line button svg{width:18px;height:18px;}
-.net-levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0;}
-.net-levels>div{text-align:center;padding:16px 8px;position:relative;}
-.net-levels>div+div::before{content:'';position:absolute;left:0;top:14px;bottom:14px;width:1px;background:var(--snow-border);}
-.net-levels b{display:block;font-size:23px;color:var(--snow-ink);font-weight:700;}
-.net-levels span{display:block;font-size:11px;color:var(--snow-muted);margin-top:3px;}
-.net-levels small{display:block;font-size:12px;color:var(--snow-wine);font-weight:700;margin-top:5px;}
-.net-earn-simple{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0;}
-.net-earn-simple>div:first-child{min-width:0;}
-.net-earn-simple span{display:block;font-size:11px;color:var(--snow-muted);margin-bottom:4px;}
-.net-earn-simple b{display:block;font-size:24px;color:var(--snow-ink);font-weight:700;}
-.net-earn-actions{display:flex;align-items:center;gap:8px;}
-.net-earn-actions button{border:0;background:transparent;color:var(--snow-wine);font-family:inherit;font-weight:700;font-size:12px;padding:8px;}
-.net-earn-actions button:last-child{background:var(--snow-wine);color:#fff;border-radius:var(--r-pill);padding:9px 13px;}
-.net-earn-actions button svg{width:18px;height:18px;display:block;}
 
 /* ── Assets ── */
-.assets-tabs{display:flex;gap:24px;padding:18px 18px 8px;margin:0 0 14px;border-bottom:1px solid var(--snow-border);}
-.assets-tabs .at{flex:0 0 auto;text-align:left;padding:0 0 10px;border-radius:0;font-weight:650;font-size:13.5px;border:none;border-bottom:2px solid transparent;font-family:inherit;background:transparent;color:var(--snow-muted);}
-.assets-tabs .at.on{background:transparent;color:var(--snow-wine);border-bottom-color:var(--snow-wine);}
 .my-assets-list{display:flex;flex-direction:column;}
 .my-asset-row{padding:16px 0;border-bottom:1px solid var(--snow-border);}
 .my-asset-row:last-child{border-bottom:0;}
@@ -694,18 +527,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .mar-foot span:last-child{text-align:right;}
 .my-assets-empty{padding:70px 0;text-align:center;color:var(--snow-muted);font-size:13px;}
 .asset-row{display:grid;grid-template-columns:112px minmax(0,1fr);gap:0;background:var(--snow-surface);border-radius:var(--r-card);padding:0;margin-bottom:14px;overflow:hidden;box-shadow:var(--sh-card);}
-.asset-thumb{width:112px;height:112px;border-radius:0;overflow:hidden;align-self:start;background:var(--snow-neutral-soft);}
-.asset-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
-.ar-glyph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:var(--snow-muted);}
-.asset-body{min-width:0;padding:13px 14px 14px;}
-.asset-name{font-size:15px;font-weight:800;color:var(--snow-ink);margin-bottom:7px;}
-.asset-stats{display:grid;grid-template-columns:1fr 1fr;gap:5px 9px;margin-bottom:11px;}
-.asset-stats span{font-size:10px;color:var(--snow-muted);font-weight:600;display:flex;align-items:baseline;gap:3px;}
-.asset-stats b{color:var(--snow-ink);font-weight:800;margin-left:2px;}
-.asset-row .p-cta{width:100%;height:40px;padding:0;font-size:13px;margin:0;}
-.page-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 18px 12px;}
-.page-head h2{margin:0;font-size:23px;font-weight:400;letter-spacing:.02em;}
-.page-head span{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
 .url-row{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);padding:0 14px;min-height:66px;margin-bottom:18px;}
 .url-row span{flex:1;min-width:0;font-size:12px;line-height:1.45;color:var(--snow-muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;}
 .url-row .copy-ic{width:45px;height:42px;border-radius:var(--r-ctl);background:var(--snow-wine-soft);color:var(--snow-wine);border:none;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;}
@@ -716,7 +537,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    which swaps its text to "Copied" instead of its icon. */
 .copy-ic.copied,.mp-copybtn.copied{background:var(--snow-green-soft);color:var(--snow-green);}
 .primary-button.copied{pointer-events:none;}
-.lv-line{font-size:13px;font-weight:700;color:var(--snow-ink);margin:4px 0;}
 
 /* ── The member card, measured off his mockup ──────────────────────────
    Owner: "l need that exactly what you're seeing, all the arrangements, have
@@ -737,41 +557,23 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
      card height   244 dev = 132.2 CSS   (ours was 129)
      gap           28 dev  =  15.2 CSS   (ours was 12)
      side margin   32 dev  =  17.3 CSS   (ours 18 -- unchanged) */
-.team-member{background:var(--snow-surface);border:1px solid #dceadd;border-radius:var(--r-card);padding:16px;margin-bottom:15px;
-  box-shadow:0 6px 24px rgba(74,170,108,.34),0 2px 8px rgba(74,170,108,.20);}
 /* Owner: "a profile logo like one uploaded from admin, number and active or
    inactive nothing else to put" -- avatar, phone, status pill, one row, no
    card content beneath it. Replaces the earlier mockup-matched card (amount/
    joined-date/footer, with its own measured-ink-height sizing) entirely. */
-.team-member .top{display:flex;align-items:center;gap:12px;}
 /* The disc holds a mark now (owner: "why the logo is empty?"), so it needs to
    centre one. Mirrors .acct-logo's rules at 44px instead of 68px: cover for an
    uploaded logo so a square upload fills the circle rather than letterboxing,
    and overflow:hidden so it is clipped to the circle either way. */
-.team-member .avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;overflow:hidden;}
-.team-member .avatar img{width:100%;height:100%;object-fit:cover;display:block;}
-.team-member .avatar span{color:#fff;font-weight:800;letter-spacing:.04em;line-height:1;}
-.team-member .phone{font-size:15px;font-weight:600;color:var(--snow-ink);flex:1;min-width:0;}
-.team-member .status-pill{margin-left:auto;flex-shrink:0;}
-.status-pill.inactive{background:var(--snow-neutral-soft);color:var(--snow-muted);border:1px solid var(--line-soft);font-weight:600;}
 
 /* Team.dc.html's level switcher: three separate pills, the active one filled
    with the brand gradient and its own 3D shelf -- not the soft segmented
    control inherited from Snow. */
-.lv-switcher{display:flex;gap:10px;margin:16px 18px 14px;}
-.lv-switcher .lv{flex:1;text-align:center;padding:11px 0;border-radius:var(--r-pill);font-weight:700;font-size:14px;border:1.5px solid var(--snow-border);color:var(--snow-muted);background:var(--snow-surface);font-family:inherit;}
-.lv-switcher .lv.on{background:var(--soda-grad);color:#fff;border-color:transparent;box-shadow:none;}
 
 /* ── Account (Account.dc.html) ──
    A profile card (logo / ID / phone / wallet balance / Deposit+Withdraw)
    above a plain white SETTINGS list, then a black Log Out button. This
    replaces Snow's coloured card matrix entirely. */
-.acct-profile{background:var(--snow-surface);border-radius:var(--r-card);padding:22px;border:1px solid var(--line-soft);box-shadow:var(--sh-card);}
-.acct-profile .p-top{display:flex;align-items:center;gap:14px;}
-.acct-logo{width:68px;height:68px;border-radius:50%;background:var(--soda-grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;box-shadow:0 10px 20px -12px rgba(226,27,42,.5);}
-.acct-logo img{width:100%;height:100%;object-fit:cover;}
-.acct-logo span{color:#fff;font-weight:800;font-size:19px;letter-spacing:.06em;}
 /* When an animated logo is set it becomes the profile mark itself, and the
    circle has to give way: the source is 300x220 landscape, and cropping that
    to a 60px circle would cut roughly a quarter of its width off the sides.
@@ -781,12 +583,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    Resolution: 66px tall renders at 132-198 device pixels on a 2x/3x phone,
    comfortably inside the source's 220px height, so it is always downscaled
    and stays crisp -- it is never blown up past its native size. */
-.acct-logo.has-gif{width:auto;height:66px;aspect-ratio:300/220;border-radius:var(--r-ctl);background:none;box-shadow:none;}
-.acct-logo.has-gif img{width:100%;height:100%;object-fit:contain;image-rendering:auto;}
-.acct-profile .p-id{font-weight:600;font-size:20px;}
-.acct-profile .p-phone{color:var(--snow-muted);font-size:16px;font-weight:500;}
-.acct-divider{height:1px;background:var(--snow-border);margin:18px 0;}
-.acct-profile .bal-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--snow-muted);font-weight:500;text-align:center;}
 /* Owner, against a reference screenshot: "the number of account balance is
    large and UGX and colored in the colour of site, so ours should be that
    orange." So the whole figure -- the UGX too, not just the digits -- is the
@@ -796,19 +592,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    Size is capped by the longest figure that has to fit on a 390px phone
    without wrapping (see test-balance-style.py, which measures the real
    rendered width rather than trusting the number here). */
-.acct-profile .bal-value{font-size:44px;font-weight:700;color:var(--soda-orange);
-  text-align:center;line-height:1.1;letter-spacing:-.01em;
-  /* Pinned to one line on purpose: a balance broken across two lines reads
-     as two numbers. fitBalanceText() steps the size down only as far as the
-     measured width actually demands, so an ordinary balance keeps all 44px
-     and only a very large one shrinks. */
-  white-space:nowrap;
-  /* fit-content so the box HUGS the digits, which is what makes the gradient
-     below span the figure itself instead of the full-width card. max-width
-     keeps the overflow test (scrollWidth > clientWidth) working: the box is
-     capped at the card's width, so a too-long figure still reports overflow
-     and gets stepped down. */
-  width:fit-content;max-width:100%;margin:2px auto 18px;}
 /* Owner: "but has no gradient just like you see buttons, other side is conc
    another is half conc" -- the Deposit button runs deep red on one end into
    orange on the other, and the figure was a single flat orange next to it.
@@ -818,10 +601,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    the fallback, and only browsers that can actually clip to text get the
    gradient. -webkit-text-fill-color is the one WebKit honours. */
 @supports ((-webkit-background-clip:text) or (background-clip:text)){
-  .acct-profile .bal-value{background:var(--soda-grad);
-    -webkit-background-clip:text;background-clip:text;
-    color:transparent;-webkit-text-fill-color:transparent;}
-}
+  }
 /* Every number below is measured off the owner's own mockup, not chosen.
    His screenshot and ours are both 1080 device px wide on the same phone, so
    device pixels compare directly; 1080/390 = 2.769 device px per CSS px.
@@ -836,29 +616,13 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    exactly the size of mock up, even see button size of withdrawal and
    deposit." Row pitch is tile + 2x padding + the 1px rule: 41 + 28 + 1 = 70,
    which is his 69.7 to within a pixel. */
-.acct-btnrow{display:flex;gap:10px;}
-.acct-btnrow button{flex:1;height:51px;font-size:16px;padding:0;}
-.sec-head{display:flex;align-items:center;gap:9px;margin:26px 0 12px;}
-.sec-head .bar{width:4px;height:21px;border-radius:var(--r-pill);background:var(--soda-grad);flex-shrink:0;}
-.sec-head h2{font-size:22px;font-weight:400;margin:0;flex-shrink:0;}
-.sec-head .ln{flex:1;height:1px;background:var(--snow-border);}
 /* The Invitation Reward heading's accent bar. Same shape and gradient as
    .sec-head .bar so the two read as one device, sized to this smaller 17px
    heading rather than Account's 22px one. */
-.inv-bar{width:4px;height:17px;border-radius:var(--r-pill);background:var(--soda-grad);flex-shrink:0;display:block;}
 /* Owner: "see the settings card is having green line." It is the CARD's own
    border, not the rule beside the heading -- sampled down his left edge it
    holds rgb(236,243,235) from the top of the card to the bottom, G-R = +7,
    a green-tinted hairline rather than the neutral one we had. */
-.setting-list{background:var(--snow-surface);border-radius:var(--r-card);overflow:hidden;border:1px solid #dceadd;box-shadow:var(--sh-card);}
-.setting-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--snow-border);width:100%;background:none;border-left:0;border-right:0;border-top:0;text-align:left;color:var(--snow-ink);font-family:inherit;}
-.setting-row:last-child{border-bottom:0;}
-.setting-row .sq{width:41px;height:41px;border-radius:var(--r-ctl);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--snow-neutral-soft);}
-.setting-row .sq svg{width:22px;height:22px;display:block;}
-.setting-row .txt{flex:1;min-width:0;}
-.setting-row .t1{font-weight:600;font-size:15px;}
-.setting-row .t2{font-size:12.5px;color:var(--snow-muted);font-weight:500;}
-.setting-row .chev{flex-shrink:0;color:var(--snow-muted);}
 /* Each tile carries its OWN background, sampled top-left to bottom-right off
    his mockup -- they are gradients, not flat fills. Two stops were his
    theme's purple and are translated to the brand's orange per the standing
@@ -875,61 +639,23 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    Turntable has no counterpart in his mockup (that row does not exist there),
    so it takes a warm coral that sits between the gold above it and the green
    below rather than inventing a seventh hue out of sequence. */
-.setting-row .sq.ic-download{background:linear-gradient(145deg,#b34700,#8a3600);}
-.setting-row .sq.ic-wallet  {background:linear-gradient(145deg,#ffd10c,#e8c34e);}
-.setting-row .sq.ic-turntable{background:linear-gradient(145deg,#f4a06a,#efc0a2);}
-.setting-row .sq.ic-balance {background:linear-gradient(145deg,#b1caac,#e0eee1);}
-.setting-row .sq.ic-messages{background:linear-gradient(145deg,#fef4d0,#faf4e6);}
-.setting-row .sq.ic-loginpw {background:linear-gradient(145deg,#a8480e,#e9d8bc);}
-.setting-row .sq.ic-tradepw {background:linear-gradient(145deg,#c0a160,#f6ca0f);}
 /* Language has no counterpart in the owner's mockup (that row does not exist
    there), so like Turntable it takes a tone that sits inside the sequence
    already measured off it rather than introducing a hue of its own -- a
    deeper burnt orange, one step darker than Download APP's so the two do not
    read as the same tile. Its glyph is stroked white, hence the light end
    stays dark enough to keep it legible. */
-.setting-row .sq.ic-language{background:linear-gradient(145deg,#8f4a12,#c4763a);
-  display:flex;align-items:center;justify-content:center;}
-.logout-btn{display:flex;width:100%;height:53px;align-items:center;justify-content:center;gap:8px;margin-top:22px;font-size:16px;letter-spacing:.08em;padding:0;}
 /* The owner's own door artwork, at the size his mockup draws it: his
    glyph measures 31x47 device px, which is 17 CSS px tall. Width is left
    auto so the door keeps its own proportions instead of being squashed
    into a square. */
-.logout-btn img{height:17px;width:auto;display:block;flex-shrink:0;}
 
 /* ── Payout Wallet hero ──
    Withdrawal gets one deliberate surface: the linked mobile-money wallet.
    The phone number is the hero value; everything around it stays secondary. */
-.wallet-card{position:relative;border-radius:var(--r-card);padding:20px;color:#fff;overflow:hidden;margin:0 0 10px;background:rgba(20,12,8,.58);border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 28px -18px rgba(0,0,0,.7);}
-.wallet-card .row1{position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
-.wallet-ident{display:flex;align-items:center;gap:10px;min-width:0;}
-.wallet-card .wc-mark{width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.09);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.wallet-card .wc-mark svg{width:20px;height:20px;}
-.wallet-card .wallet-kicker{font-size:9.5px;line-height:1.2;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.58);font-weight:700;margin-bottom:3px;}
-.wallet-card .provider{font-size:15px;font-weight:650;letter-spacing:0;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;}
-.wallet-card .wallet-status{font-size:10px;font-weight:750;letter-spacing:.03em;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);padding:5px 9px;border-radius:var(--r-pill);white-space:nowrap;}
-.wallet-card .wallet-status.empty{color:rgba(255,255,255,.62);background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);}
-.wallet-card .wallet-number-label{position:relative;z-index:1;margin-top:26px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:650;}
-.wallet-card .num{position:relative;z-index:1;font-size:28px;line-height:1.15;letter-spacing:.025em;margin-top:6px;font-weight:720;color:#fff;font-variant-numeric:tabular-nums;}
-.wallet-card .wallet-meta{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:22px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1);}
-.wallet-card .meta-item{min-width:0;}
-.wallet-card .meta-item span{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:650;margin-bottom:4px;}
-.wallet-card .meta-item b{display:block;font-size:12.5px;color:#fff;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.wallet-minimal{padding-top:8px;}
-.wallet-add-form{padding-top:4px;}
-.wallet-line-field{height:58px;display:flex;align-items:center;border-bottom:1.5px solid var(--snow-border);margin-bottom:14px;gap:8px;}
-.wallet-line-field:focus-within{border-bottom-color:var(--snow-wine);}
-.wallet-line-field input{border:0;outline:0;background:transparent;font-size:16px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;padding:0 2px;}
-.wallet-save{width:100%;height:52px;margin-top:10px;}
-.wallet-otp-actions{display:flex;gap:12px;margin-top:12px;}
-.wallet-otp-actions button{flex:1;height:48px;border:0;border-radius:var(--r-ctl);font-family:inherit;font-weight:650;}
-.wallet-otp-actions button:first-child{background:var(--snow-neutral-soft);color:var(--snow-ink);}
-.wallet-minimal #walResendBtn{display:block;text-align:center;margin-top:12px;color:var(--snow-wine);font-size:12px;text-decoration:none;}
 .prov-pick{position:relative;}
 .prov-pick .prov-input{cursor:pointer;}
 .prov-pick .prov-input input{cursor:pointer;}
-.prov-caret{color:var(--snow-muted);flex-shrink:0;transition:transform .15s;}
-.prov-pick.open .prov-caret{transform:rotate(180deg);}
 /* max-height+overflow-y:auto added once this list could hold ~25+ banks on
    top of the original 2 mobile-money rows -- overflow:hidden alone (fine
    when there were only ever 2 rows) would silently clip every bank past
@@ -940,18 +666,10 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .prov-opt:last-child{border-bottom:0;}
 .prov-opt:active{background:var(--snow-neutral-soft);}
 .prov-opt.on{color:var(--snow-wine);font-weight:650;}
-.plain-h2{font-size:17px;font-weight:700;margin:0 0 12px;}
-.wallet-summary{display:flex;align-items:center;justify-content:space-between;background:var(--snow-surface);border:1.5px solid var(--snow-border);border-radius:var(--r-card);padding:16px 18px;gap:10px;}
-.wallet-summary .prov{font-weight:600;font-size:14px;flex-shrink:0;}
-.wallet-summary .masked{font-size:14px;color:var(--snow-muted);}
-.wallet-summary .holder{font-size:13px;font-weight:500;text-align:right;line-height:1.3;}
 
 /* ── Deposit: flat transaction form ──
    One hierarchy, no secondary cards: amount first, quick values as shortcuts,
    then payment phone. Inputs stay controls; instructions sit directly on page. */
-.dep-sec{display:flex;align-items:center;margin:0 0 10px;}
-.dep-sec .bar{display:none;}
-.dep-sec span{font-size:13px;font-weight:650;letter-spacing:.02em;color:var(--snow-muted);}
 /* Owner: "l said these are lines why even on other methods" -- pointing at
    the amount and phone fields' own bottom-border-only underline, the same
    Chipz "line" look already fixed once on the method tabs and the chips.
@@ -961,10 +679,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    methods"). Boxed to match .auth-field, the app's own established boxed-
    input convention (Login/Sign Up), rather than inventing a fourth input
    style: full border + var(--r-ctl) radius instead of border-bottom only. */
-.dep-amt{height:64px;display:flex;align-items:center;padding:0 16px;margin-bottom:8px;background:transparent;border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);}
-.dep-amt:focus-within{border-color:var(--snow-wine);}
-.dep-amt input{border:0;outline:0;background:transparent;font-size:30px;font-weight:650;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;font-variant-numeric:tabular-nums;}
-.dep-chips{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 30px;}
 .dep-chip{flex:0 0 auto;text-align:center;padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;border:1.5px solid var(--snow-border);background:transparent;color:var(--snow-ink);font-family:inherit;box-shadow:none;transition:background .15s,border-color .15s,color .15s;}
 .dep-chip.sel{background:var(--snow-wine);color:#fff;border-color:var(--snow-wine);box-shadow:none;font-weight:700;}
 /* Owner: "why did you put lines instead of tabs, l nolonger need chipz
@@ -976,38 +690,10 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    than inventing a third tab style for one sheet. Kept its own class,
    not a restyle of .statement-tabs itself -- that class is still Records'
    real tab row, a separate screen nobody asked to change here. */
-.dep-method-tabs{display:flex;gap:8px;margin-bottom:18px;}
-.dep-method-tabs button{flex:1;text-align:center;padding:10px 6px;border-radius:999px;font-weight:600;font-size:13px;border:1.5px solid var(--snow-border);background:transparent;color:var(--snow-ink);font-family:inherit;transition:background .15s,border-color .15s,color .15s;}
-.dep-method-tabs button.on{background:var(--snow-wine);color:#fff;border-color:var(--snow-wine);font-weight:700;}
-.dep-phone{display:flex;align-items:center;height:58px;border-radius:var(--r-ctl);overflow:visible;border:1.6px solid var(--snow-border);margin-bottom:8px;background:transparent;padding:0 14px 0 16px;}
-.dep-phone:focus-within{border-color:var(--snow-wine);}
-.dep-phone .prefix{background:transparent;color:var(--snow-ink);font-weight:700;display:flex;align-items:center;padding:0 12px 0 0;font-size:15px;flex-shrink:0;border-right:1px solid var(--snow-border);}
-.dep-phone input{border:0;outline:0;background:transparent;flex:1;padding:0 0 0 12px;font-family:inherit;font-size:16px;color:var(--snow-ink);min-width:0;}
-.dep-hint{font-size:11.5px;color:var(--snow-muted);font-weight:450;margin:0 0 8px;}
-.dep-instr{background:transparent;border:0;border-top:1px solid var(--line-soft);border-radius:0;padding:20px 0 0;}
-.dep-instr .ih{display:flex;align-items:center;margin-bottom:8px;}
-.dep-instr .ih span{font-weight:700;font-size:15px;}
-.dep-instr .ln{display:none;}
-.dep-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:12.5px;font-weight:450;line-height:1.8;}
 
 /* ── Withdraw: wallet-led, flat form ──
    The payout wallet is the only hero card. Balance, amount, fee and guidance
    are intentionally page-level information instead of stacked cards. */
-.wit-bal{background:transparent;border:0;border-radius:0;padding:18px 0 10px;margin:0;box-shadow:none;border-bottom:1px solid var(--line-soft);}
-.wit-bal .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--snow-muted);font-weight:650;}
-.wit-bal .val{font-size:24px;font-weight:650;color:var(--snow-ink);margin-top:5px;font-variant-numeric:tabular-nums;}
-.wit-amt{background:transparent;border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:68px;display:flex;align-items:center;padding:0 16px;margin-bottom:16px;gap:10px;}
-.wit-amt:focus-within{border-color:var(--snow-wine);}
-.wit-amt span{color:var(--snow-muted);font-weight:650;font-size:15px;}
-.wit-amt input{border:0;outline:0;background:transparent;font-size:30px;font-weight:650;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;font-variant-numeric:tabular-nums;}
-.btn-bind{display:block;width:auto;height:auto;border:0;border-radius:0;background:transparent;color:var(--snow-wine);font-weight:700;font-size:12.5px;margin:0 0 10px auto;padding:8px 0;font-family:inherit;}
-.wit-pw{background:transparent;border:1.6px solid var(--snow-border);border-radius:var(--r-ctl);height:62px;display:flex;align-items:center;padding:0 16px;margin-bottom:12px;}
-.wit-pw input{border:0;outline:0;background:transparent;font-size:22px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.wit-fee{font-size:12px;color:var(--snow-muted);font-weight:500;margin:0 0 8px;}
-.wit-instr{background:transparent;border:0;border-top:1px solid var(--line-soft);border-radius:0;padding:20px 0 0;}
-.wit-instr h3{font-size:15px;font-weight:700;margin:0 0 8px;}
-.wit-instr .ln{display:none;}
-.wit-instr ol{margin:0;padding-left:18px;color:var(--snow-muted);font-size:12.5px;font-weight:450;line-height:1.8;}
 
 /* ── Notify dialog (Notify.dc.html) ── */
 /* A dark, small, centred toast -- owner: "don't send the same notify design
@@ -1044,15 +730,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 /* ── Gift Codes: Soda energy-voucher treatment ──
    The old treasure-chest scene was Soda artwork and metaphor. Soda keeps
    the same redeem flow but presents it as a clean code/voucher utility. */
-.gift-code-stage{display:flex;flex-direction:column;align-items:center;padding:28px 0 4px;}
-.gift-code-mark{width:104px;height:104px;border-radius:28px;background:linear-gradient(145deg,var(--snow-wine-soft),#fff3d8);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;position:relative;border:1px solid #f3d9c5;box-shadow:0 18px 34px -28px rgba(37,38,43,.55);}
-.gift-code-mark::after{content:'';position:absolute;right:14px;top:14px;width:12px;height:12px;border-radius:50%;background:var(--soda-gold);box-shadow:0 0 0 5px rgba(245,160,0,.12);}
-.gift-code-mark .gift-reference-svg{display:block;width:84px;height:84px;}
-.gift-code-stage h2{font-size:24px;font-weight:750;text-align:center;margin:22px 0 7px;color:#fff;}
-.gift-code-stage .sub{color:var(--snow-muted);font-size:13.5px;font-weight:500;line-height:1.5;text-align:center;margin:0 8px 24px;max-width:290px;}
-.key-field{width:100%;height:54px;border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);background:var(--snow-surface);display:flex;align-items:center;padding:0 18px;margin-bottom:14px;box-shadow:inset 4px 0 0 rgba(245,160,0,.32);}
-.key-field:focus-within{border-color:var(--snow-wine);box-shadow:inset 4px 0 0 var(--soda-gold),0 0 0 3px rgba(23,57,184,.08);}
-.key-field input{border:0;outline:0;background:transparent;font-size:16px;text-align:center;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;letter-spacing:.05em;}
 /* The full-screen "Congratulations! You won..." win card (chest-win-bg/
    chest-win-card/gift-win-mark, ChestSuccess.dc.html) is removed entirely --
    owner: "remove this stuff completely, only just put a notify 'giftcode
@@ -1065,35 +742,11 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    Professional ledger presentation: categories are one horizontal tab row at
    the top, and transactions read like a statement rather than a stack of
    decorative cards. */
-.statement-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--snow-border);margin:0 0 8px;background:var(--snow-canvas);}
-.statement-tabs button{height:48px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--snow-muted);font-family:inherit;font-size:13px;font-weight:650;padding:0 4px;}
-.statement-tabs button.on{color:var(--snow-ink);border-bottom-color:var(--snow-wine);}
 /* Owner: "put a server side advanced feature called download statement, so
    it downloads statement of the account as pdf very well organized
    statement with all data." Solid red, same as .primary-button's own
    colour -- opaque against any backdrop, so it needs no dark-glass override
    the way the tabs/rows above it do. */
-.statement-download-row{display:flex;justify-content:flex-end;margin:0 0 14px;}
-.statement-download-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border:0;border-radius:var(--r-pill);
-  background:var(--snow-wine);color:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;}
-.statement-download-btn svg{width:15px;height:15px;flex-shrink:0;}
-.statement-download-btn.busy{opacity:.6;pointer-events:none;}
-.statement-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:10px 2px 8px;border-bottom:1px solid var(--snow-border);font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--snow-muted);}
-.statement-head span:last-child{text-align:right;}
-.statement-row{padding:15px 2px 14px;border-bottom:1px solid var(--snow-border);}
-.statement-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px;}
-.statement-id{font-size:10.5px;color:var(--snow-muted);font-weight:600;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.statement-date{font-size:10.5px;color:var(--snow-muted);font-weight:500;text-align:right;white-space:nowrap;}
-.statement-main{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:14px;}
-.statement-desc{font-size:14.5px;line-height:1.35;font-weight:650;color:var(--snow-ink);min-width:0;}
-.statement-amount{font-size:13.5px;font-weight:700;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--snow-green);}
-.statement-amount.out{color:var(--soda-neg);}
-.statement-status{display:inline-block;margin-top:6px;font-size:10.5px;font-weight:650;letter-spacing:.02em;}
-.statement-status.completed{color:var(--snow-green);}
-.statement-status.pending{color:#b36b00;}
-.statement-status.failed{color:var(--snow-wine);}
-.statement-empty{padding:64px 0;text-align:center;color:var(--snow-muted);font-size:13px;}
-.statement-end{text-align:center;color:var(--snow-muted);font-size:10.5px;padding:18px 0 8px;}
 
 /* ── Messages (MessagesList.dc.html / Messages.dc.html) ── */
 /* Owner: "they have design ... the mock up has a very clean css, high
@@ -1205,13 +858,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .msg-detail .content{font-size:14px;line-height:1.75;color:var(--snow-ink);font-weight:500;white-space:pre-line;}
 
 /* ── Change Login / Trade Password (ChangeLoginPassword.dc.html, ChangePassword.dc.html) ── */
-.pw-note{font-size:13px;color:var(--snow-muted);font-weight:500;line-height:1.6;margin:0 0 24px;}
-.pw-label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--snow-muted);margin:0 0 7px;}
-.pw-field{background:transparent;border:0;border-bottom:1.5px solid var(--snow-border);border-radius:0;height:56px;display:flex;align-items:center;padding:0 2px;margin:0 0 24px;gap:10px;}
-.pw-field:focus-within{border-bottom-color:var(--snow-wine);}
-.pw-field input{border:0;outline:0;background:transparent;font-size:15px;color:var(--snow-ink);flex:1;min-width:0;font-family:inherit;}
-.pw-field.pin input{letter-spacing:.2em;}
-.pw-field.pin input::placeholder{letter-spacing:normal;}
 
 /* ── Auth (Login / Sign Up) ──────────────────────────────────────────
    Matches the approved Main.dc.html / Register.dc.html mockups: a hero
@@ -1284,8 +930,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .auth-tri{position:absolute;}
 .auth-tri.t1{width:0;height:0;border-left:90px solid transparent;border-right:90px solid transparent;border-bottom:150px solid rgba(0,0,0,.16);top:-60px;left:-40px;transform:rotate(18deg);}
 .auth-tri.t2{width:0;height:0;border-left:70px solid transparent;border-right:70px solid transparent;border-bottom:120px solid rgba(255,255,255,.14);bottom:-50px;right:-30px;transform:rotate(-12deg);}
-.mark-row{display:flex;align-items:center;gap:8px;position:relative;z-index:2;}
-.mark-tri{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-bottom:20px solid #14100d;flex-shrink:0;}
 .auth-wordmark{position:relative;font-size:36px;letter-spacing:.02em;transform:skewX(-7deg);color:#fff;}
 .auth-wordmark b{color:#14100d;font-weight:400;}
 .auth-card{background:var(--snow-surface);margin-top:-28px;border-radius:var(--r-card);position:relative;z-index:3;padding:32px 22px 30px;box-shadow:0 22px 44px -26px rgba(40,10,4,.5);overflow:hidden;}
@@ -1355,9 +999,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 }
 .auth-card > *{position:relative;z-index:1;}
 .auth-card h1{margin:0 0 6px;font-size:26px;text-align:center;letter-spacing:.08em;font-weight:400;}
-.dot-divider{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 26px;}
-.dot-divider .ln{width:34px;height:2px;background:var(--snow-border);}
-.dot-divider .dot{width:7px;height:7px;border-radius:50%;background:var(--soda-orange);}
 .auth-field{display:flex;align-items:center;gap:10px;background:var(--snow-neutral-soft);border:1.5px solid var(--snow-border);border-radius:var(--r-ctl);padding:0 16px;height:54px;margin-bottom:14px;}
 .auth-field input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:var(--snow-ink);text-overflow:ellipsis;}
 .auth-field input::placeholder{color:var(--snow-muted);}
@@ -1365,9 +1006,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .auth-field .prefix{font-weight:700;color:var(--snow-ink);border-right:1.5px solid var(--snow-border);padding-right:12px;margin-right:2px;}
 .auth-field.referral{background:#fff3e0;border-color:#ffd9a8;}
 .auth-field .eye{background:none;border:none;padding:4px;color:var(--snow-muted);display:flex;align-items:center;flex-shrink:0;}
-.row-check{display:flex;align-items:center;gap:9px;margin:2px 0 22px;}
-.row-check input{width:18px;height:18px;accent-color:var(--snow-wine);}
-.row-check span{font-size:14px;color:var(--snow-muted);font-weight:500;}
 .auth-hint{font-size:12px;color:var(--snow-muted);font-weight:500;margin:-10px 0 16px 4px;}
 .auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--snow-muted);font-weight:500;}
 .auth-switch a{font-weight:600;color:var(--soda-link);text-decoration:none;}
@@ -1489,28 +1127,14 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
   color:#fff;border:0;border-radius:var(--r-ctl);height:54px;font:inherit;font-size:16px;font-weight:700;
   cursor:pointer;letter-spacing:.01em;}
 .af-btn-v2:disabled{opacity:.6;cursor:default;}
-.af-or{display:flex;align-items:center;gap:12px;margin:20px 0;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;}
-.af-or span{flex:1;height:1px;background:rgba(255,255,255,.22);}
-.af-btn-outline{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,.07);
-  color:#fff;border:1.5px solid rgba(255,255,255,.42);border-radius:var(--r-ctl);height:54px;font:inherit;font-size:15px;
-  font-weight:700;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .af-switch{text-align:center;margin-top:18px;font-size:13.5px;color:rgba(255,255,255,.72);}
 .af-switch a{color:#fff;text-decoration:none;font-weight:700;}
-.form-field{margin:0 0 14px;}
-.form-field label{display:block;font-size:15px;font-weight:500;color:var(--snow-ink);margin-bottom:8px;}
-.form-field .input-wrap{position:relative;}
-.form-field input{width:100%;padding:17px 44px 17px 16px;border:1px solid var(--snow-border);border-radius:var(--r-ctl);font-size:17px;background:var(--snow-surface);color:var(--snow-ink);}
-.form-field input:focus{outline:none;border-color:var(--snow-wine);}
-.form-field .eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--snow-muted);background:none;border:none;padding:4px;display:flex;align-items:center;justify-content:center;}
 /* Owner: "make (+256) static, so one can type 07xxxxxxxx or 7xxxxxxxx... just
    the system understand it" -- every phone field is now a static, fixed
    "+256" chip next to a local-number-only input, instead of one free-text
    field where the country code had to be typed (and could be typed several
    different ways). See sanitizePhoneInput()'s own comment for why this is
    safe for already-registered accounts. */
-.phone-field{display:flex;gap:8px;}
-.phone-prefix{flex-shrink:0;padding:15px 12px;border:1px solid var(--snow-border);border-radius:var(--r-ctl);background:var(--snow-neutral-soft);color:var(--snow-ink);font-size:15px;font-weight:500;display:flex;align-items:center;}
-.phone-field input{flex:1;min-width:0;width:auto;padding:15px 16px;}
 /* Chrome's own "Use saved password?" picker fills #loginPhone/#loginPassword
    with zero JS-visible events -- there's no input/change to listen for. The
    browser DOES tag autofilled fields with the :-webkit-autofill pseudo-class
@@ -1523,23 +1147,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 #loginPhone:not(:-webkit-autofill){ animation-name:onAutoFillCancel; animation-duration:.01s; }
 #loginPassword:-webkit-autofill{ animation-name:onAutoFillStart; animation-duration:.01s; }
 #loginPassword:not(:-webkit-autofill){ animation-name:onAutoFillCancel; animation-duration:.01s; }
-.form-hint{font-size:11.5px;color:var(--snow-muted);margin-top:6px;}
-.instr-card{background:var(--snow-wine-soft);border-radius:var(--r-card);padding:18px;margin-top:24px;}
-.instr-card .instr-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
-.instr-card .instr-head .instr-title{font-size:14.5px;font-weight:700;color:var(--snow-ink);}
-.instr-card ol{margin:0;padding-left:19px;color:var(--snow-muted);font-size:12.5px;line-height:2;}
-.instr-card ol li{margin-bottom:3px;}
-.milestone-card{display:flex;align-items:stretch;background:var(--snow-surface);border:1px solid var(--line-soft);border-radius:var(--r-card);overflow:hidden;margin-top:14px;box-shadow:var(--sh-card);}
-.milestone-rail{width:52px;flex-shrink:0;background:linear-gradient(165deg,var(--snow-wine),var(--snow-wine-deep));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:14.5px;}
-.milestone-rail.done{background:linear-gradient(165deg,var(--snow-green),#1F4E33);}
-.milestone-body{flex:1;min-width:0;padding:16px 18px;}
-.milestone-title{font-size:13.5px;font-weight:600;color:var(--snow-ink);line-height:1.45;}
-.milestone-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:14px;text-align:center;}
-.milestone-stats .stat-num{font-size:13.5px;font-weight:700;color:var(--snow-ink);}
-.milestone-stats .stat-lbl{font-size:9.5px;color:var(--snow-muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px;}
-.milestone-track{height:5px;border-radius:var(--r-pill);background:var(--snow-border);margin-top:10px;overflow:hidden;}
-.milestone-fill{height:100%;border-radius:var(--r-pill);background:var(--snow-wine);}
-.milestone-fill.done{background:var(--snow-green);}
 
 /* Keep the scrollable form layer untransformed. The earlier translateZ(0) fix
    was based on a diagnosis later disproved by the real CSS-token bug; on
@@ -1625,49 +1232,17 @@ body.sheet-open .sheet-bg{bottom:0;}
 .chest-modal img{width:96px;height:auto;display:block;margin:0 auto 10px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.28));}
 .chest-modal h3{margin:0 0 6px;font-size:18px;font-weight:700;}
 .chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
-/* Announcement dialog -- reintroduced per owner: "channel and email buttons
-   shaking and glowing, the cancel X sign will be top right... it opens from
-   middle as usual... let it have a good appearing animation not just
-   appearing abruptly." Same centred scale+fade "gentle settle" entrance as
-   .confirm-sheet/.chest-modal above (own comment explains the curve/timing),
-   reused rather than invented a third time -- only the card's own content
-   and the CTA buttons' shake+glow are new. Trigger mechanism (the phone Back
-   button / tapping back to Home from Deposit/Withdraw/Wallet stimulating it)
-   is maybeAnnounceAfterSheet() in original_module.js, unchanged from Chipz. */
-.ann-bg{position:fixed;inset:0;background:rgba(20,10,5,.55);z-index:320;display:none;align-items:center;justify-content:center;padding:20px;}
+/* Announcement: one tall portrait picture (admin upload) filling most of the
+   screen, Join Channel + Close under it. */
+.ann-bg{position:fixed;inset:0;background:rgba(8,16,48,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:320;display:none;align-items:center;justify-content:center;padding:14px;}
 .ann-bg.show{display:flex;}
-.ann-sheet{position:relative;background:var(--snow-surface);color:var(--snow-ink);width:100%;max-width:340px;border-radius:var(--r-card);padding:32px 22px 24px;text-align:center;box-shadow:0 30px 60px -20px rgba(0,0,0,.45);transform:scale(.92);opacity:0;transition:transform .52s cubic-bezier(.22,1,.36,1) .1s,opacity .52s cubic-bezier(.22,1,.36,1) .1s;}
+.ann-sheet{width:100%;max-width:420px;display:flex;flex-direction:column;align-items:center;gap:12px;transform:scale(.94);opacity:0;transition:transform .45s cubic-bezier(.22,1,.36,1),opacity .45s cubic-bezier(.22,1,.36,1);}
 .ann-bg.show .ann-sheet{transform:scale(1);opacity:1;}
-.ann-close{position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:50%;border:none;background:rgba(37,38,43,.08);color:var(--snow-ink);display:flex;align-items:center;justify-content:center;padding:0;}
-.ann-mark{width:56px;height:56px;border-radius:50%;background:var(--soda-grad);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 10px 20px -10px rgba(23,57,184,.5);}
-.ann-title{margin:0 0 8px;font-size:19px;font-weight:800;color:var(--snow-ink);}
-.ann-body{margin:0 0 20px;font-size:13.5px;line-height:1.6;color:var(--snow-muted);white-space:pre-line;}
-.ann-cta{display:flex;flex-direction:column;gap:10px;}
-/* A periodic wiggle+glow near the end of each cycle -- not constant jitter,
-   which would be unreadable and annoying on a button carrying real text --
-   reads as "alive" while still restful most of the time. --ann-glow lets
-   one shared keyframe pair serve both brand colors (WhatsApp green, email
-   red) without duplicating the animation. .mail is offset half a cycle
-   (animation-delay) so the two never pulse in perfect lockstep. */
-.ann-cta a{--ann-glow:rgba(23,57,184,.6);display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;border-radius:var(--r-ctl);color:#fff;font-weight:700;font-size:14px;text-decoration:none;box-sizing:border-box;animation:annShake 2.6s ease-in-out infinite,annGlow 2.6s ease-in-out infinite;}
-.ann-cta a svg{flex:0 0 auto;}
-.ann-cta a.whatsapp{background:#25d366;--ann-glow:rgba(37,211,102,.65);}
-.ann-cta a.telegram{background:#2aabee;--ann-glow:rgba(42,171,238,.65);animation-delay:1.3s;}
-@keyframes annShake{
-  0%,92%,100%{transform:rotate(0deg) scale(1);}
-  93%{transform:rotate(-4deg) scale(1.02);}
-  94.5%{transform:rotate(4deg) scale(1.02);}
-  96%{transform:rotate(-3deg) scale(1.02);}
-  97.5%{transform:rotate(3deg) scale(1.02);}
-  99%{transform:rotate(0deg) scale(1);}
-}
-@keyframes annGlow{
-  0%,78%,100%{box-shadow:0 0 0 0 var(--ann-glow);}
-  90%{box-shadow:0 0 16px 6px var(--ann-glow);}
-}
-@media(prefers-reduced-motion:reduce){
-  .ann-cta a{animation:none;}
-}
+.v-ann-img{display:block;width:100%;height:auto;max-height:calc(100vh - 118px);max-height:calc(100dvh - 118px);object-fit:contain;border-radius:20px;box-shadow:0 24px 48px -18px rgba(0,0,0,.6);}
+.v-ann-btns{display:flex;gap:12px;width:100%;}
+.v-ann-join,.v-ann-close{flex:1;height:50px;border-radius:999px;font:inherit;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;text-decoration:none;cursor:pointer;}
+.v-ann-join{background:var(--v-grad);color:#fff;border:0;}
+.v-ann-close{background:#fff;color:var(--v-blue-2);border:2px solid #fff;}
 /* Deposit poll and its brief handoff are dedicated full-screen states. They
    use the app's light paper surface and brand-colored motion, with no bottom
    navigation behind them. */
@@ -1811,18 +1386,8 @@ body.deposit-status-open .bottom-nav{display:none;}
    self-contained def has no dependency on #loadingScreen's visibility. */
 .mini-ring-loader{width:34px;height:34px;overflow:visible;filter:drop-shadow(0 0 4px rgba(23,57,184,.4));}
 .mini-ring-loader .ring-arc{stroke:url(#miniRingGrad);}
-.article-loading{min-height:160px;display:flex;align-items:center;justify-content:center;}
-.article-ring-wrap{position:relative;width:96px;height:96px;display:flex;align-items:center;justify-content:center;}
-.article-loading .mini-ring-loader{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 0 7px rgba(23,57,184,.55)) drop-shadow(0 0 12px rgba(255,176,0,.35));}
-.article-loading .article-percent{font-size:18px;}
-.article-loading .ring-arc{stroke-width:1.4;stroke-dasharray:100 0;animation:startupRingChase 1.5s cubic-bezier(.4,0,.2,1) infinite both;}
-.article-loading .ring-arc-2{animation-delay:.10s;}
-.article-loading .ring-arc-3{animation-delay:.20s;}
-@media(prefers-reduced-motion:reduce){.article-loading .ring-arc{animation:none;stroke-dasharray:100 0;}}
+@media(prefers-reduced-motion:reduce){}
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
-.list-empty .empty-icon{display:flex;justify-content:center;margin-bottom:14px;opacity:.85;}
-.list-empty .empty-icon svg{width:64px;height:64px;}
-.list-end{padding:18px 4px 4px;text-align:center;color:var(--snow-muted);font-size:14px;}
 
 /* Real content fades/lifts into place once it's ready -- no shimmer
    placeholders. Freshly-inserted DOM (a fresh innerHTML assignment) always
@@ -1842,10 +1407,6 @@ body.deposit-status-open .bottom-nav{display:none;}
    The .reveal-in rules are deleted rather than set to `animation:none`,
    because that rule sits later in the file at the same specificity as
    .chest-float and would go straight back to killing the chest's bounce. */
-.scroll-reveal,.scroll-reveal.about-image,.scroll-reveal.in-view{opacity:1;transform:none;transition:none;}
-.reveal-word{display:inline-block;opacity:1;transform:none;}
-.about-block{margin-bottom:18px;}
-.about-block:last-child{margin-bottom:0;}
 /* The stale `.reveal-word{opacity:0}` that used to sit here is DELETED, not
    overridden. It was the old animation's starting frame, left behind when the
    reveal was removed -- and because it came AFTER the replacement rule at the
@@ -2136,15 +1697,6 @@ body.sheet-open .bottom-nav{display:flex;}
 .v-help-x svg{width:24px;height:24px;}
 
 /* ── pages that keep their old markup, brought into the same look ── */
-.gift-code-mark{background:var(--v-grad);color:#fff;border-radius:28px;box-shadow:0 16px 28px -18px rgba(14,42,142,.9);}
-.gift-code-mark::after{display:none;}
-.gift-code-mark svg{width:54px;height:54px;}
-.gift-code-stage h2{color:var(--v-ink);}
-.key-field{box-shadow:none;border:2px solid var(--v-card-line);background:#fff;}
-.key-field:focus-within{box-shadow:0 0 0 3px rgba(23,57,184,.12);}
-.v-wrow{position:relative;margin-bottom:16px;}
-.v-wdel{position:absolute;right:14px;bottom:16px;width:40px;height:40px;border:0;border-radius:12px;background:rgba(255,255,255,.2);color:#fff;display:flex;align-items:center;justify-content:center;}
-.v-wdel svg{width:20px;height:20px;}
 .confirm-sheet h3{color:var(--v-blue-2);}
 .confirm-sheet .secondary-button{background:#eaeefc;color:var(--v-blue-2);}
 
@@ -2170,27 +1722,10 @@ body.sheet-open .bottom-nav{display:flex;}
 .primary-button{height:52px;border-radius:16px;background:var(--v-grad);color:#fff;font-weight:800;font-size:18px;letter-spacing:0;text-transform:none;border:0;box-shadow:0 14px 24px -18px rgba(14,42,142,.9);}
 .primary-button:active:not(:disabled){transform:scale(.99);box-shadow:none;}
 .secondary-button{background:#fff;color:var(--v-blue);border:2px solid var(--v-card-line);border-radius:16px;font-weight:800;}
-.wallet-minimal{padding-top:6px;}
-.wallet-add-form{padding-top:0;}
-.wallet-line-field{height:54px;display:flex;align-items:center;border:1.5px solid #cdd6f4;border-bottom-width:1.5px;border-radius:16px;background:#fff;padding:0 16px;margin-bottom:6px;}
-.wallet-line-field:focus-within{border-color:var(--v-blue);box-shadow:0 0 0 3px rgba(23,57,184,.12);}
-.wallet-line-field input{font-size:17px;color:var(--v-ink);}
-.wallet-line-field input::placeholder{color:#8a94a8;}
 .prov-list{top:60px;border:1.5px solid #cdd6f4;border-radius:16px;overflow:hidden;box-shadow:0 18px 30px -20px rgba(14,42,142,.5);}
 .prov-opt{padding:15px 16px;font-size:16px;color:var(--v-ink);border-bottom:1px solid #e3e8fa;}
 .prov-opt.on{color:var(--v-blue-2);font-weight:800;background:#eaeefc;}
 .prov-opt:active{background:#eaeefc;}
-.wallet-otp-actions button:first-child{background:#eaeefc;color:var(--v-blue-2);border-radius:16px;font-weight:800;}
-.wallet-minimal #walResendBtn{color:var(--v-blue);font-weight:700;}
-#walOtpGroup .wallet-line-field{margin-bottom:12px;}
-.pw-note{font-size:14px;color:#5b6b8c;line-height:1.6;margin:6px 0 4px;}
-.pw-field{background:#fff;border:1.5px solid #cdd6f4;border-radius:16px;height:54px;padding:0 14px;margin-bottom:4px;display:flex;align-items:center;gap:10px;}
-.pw-field:focus-within{border-color:var(--v-blue);box-shadow:0 0 0 3px rgba(23,57,184,.12);}
-.pw-field input{font-size:17px;color:var(--v-ink);}
-.pw-field svg{color:var(--v-blue);}
-.pw-head{display:flex;align-items:center;gap:10px;margin:22px 0 12px;}
-.pw-head .bar{width:5px;height:22px;border-radius:3px;background:var(--v-blue);}
-.pw-head span:last-child{font-size:19px;font-weight:800;letter-spacing:.08em;color:var(--v-ink);}
 .msg-row{gap:14px;align-items:center;padding:16px;border-radius:20px;border:1.5px solid #d0d8f6;border-left-width:1.5px;background:#fff;}
 .msg-row:not(.read){box-shadow:0 12px 24px -20px rgba(14,42,142,.8);}
 .msg-row .av,.msg-detail .av{width:46px;height:46px;border-radius:14px;background:var(--v-grad);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px -10px rgba(14,42,142,.8);}
@@ -2203,12 +1738,10 @@ body.sheet-open .bottom-nav{display:flex;}
 .msg-detail h2{font-size:18px;font-weight:800;color:var(--v-ink);}
 .msg-detail .ln{background:#d9e0f7;}
 .list-empty{color:#8a94a8;font-size:15px;padding:34px 10px;text-align:center;}
-.pw-field svg,.pw-field svg *{stroke:var(--v-blue);}
 .msg-detail-bg{background:rgba(22,33,63,.34)!important;-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
 
 /* ── screens built from the owner's Wallet / password / Messages screenshots ── */
 .v-edit{margin-top:16px;background:linear-gradient(135deg,#fff 0%,#f3f5fd 100%);border:1.5px solid #cdd6f4;border-radius:22px;padding:20px 20px 22px;box-shadow:0 14px 28px -24px rgba(14,42,142,.6);}
-.v-card-only .v-edit{margin-top:0;}
 .v-flabel{display:block;margin:18px 0 10px;font-size:16px;color:#5b6b8c;}
 .v-edit>.v-flabel:first-child,#walFormGroup>.v-flabel:first-child{margin-top:12px;}
 .v-uline{display:flex;align-items:center;border-bottom:1.5px solid #c9d3f5;min-height:50px;}
@@ -2236,15 +1769,6 @@ body.sheet-open .bottom-nav{display:flex;}
 .v-nomsg span{width:92px;height:92px;border-radius:50%;background:#dde3fa;border:1.5px solid #b9c5f1;display:flex;align-items:center;justify-content:center;color:var(--v-ink);}
 .v-nomsg span svg{width:36px;height:36px;}
 .v-nomsg p{margin:0;font-size:22px;letter-spacing:.12em;color:var(--v-blue-2);}
-
-/* ── announcement: one portrait picture, Join Channel + Close under it ── */
-.ann-bg{background:rgba(8,16,48,.6);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);}
-.ann-sheet{background:transparent;box-shadow:none;padding:0;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:14px;}
-.v-ann-img{display:block;width:100%;max-height:68vh;object-fit:contain;border-radius:20px;background:#fff;box-shadow:0 24px 48px -18px rgba(0,0,0,.6);}
-.v-ann-btns{display:flex;gap:12px;width:100%;}
-.v-ann-join,.v-ann-close{flex:1;height:50px;border-radius:999px;font:inherit;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;text-decoration:none;cursor:pointer;}
-.v-ann-join{background:var(--v-grad);color:#fff;border:0;}
-.v-ann-close{background:#fff;color:var(--v-blue-2);border:2px solid #fff;}
 
 /* ── Treasure Chest ── */
 .v-chest{display:flex;flex-direction:column;align-items:center;padding:30px 4px 6px;}

@@ -99,7 +99,7 @@ const cut = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i + 1); ass
   // wiring
   ok(/dep\.exactMicros \? \{ exactMicros: dep\.exactMicros/.test(src), 'resolveUsdtDeposit passes the exact amount to the verifier');
   const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-  ok(/\/deposit\/usdt\/intent/.test(mod) && /intentId: _usdtIntent\.id/.test(mod), 'the app asks for a payment amount and submits with it');
+  ok(!/\/deposit\/usdt/.test(mod), 'the member app no longer carries a USDT deposit flow (removed from the design; the server routes stay)');
   ok(!/post\('\/deposit\/usdt\/submit', \{ amountUsdt/.test(mod), 'and no longer submits the old amount-and-hash form');
   console.log(`PASS: USDT payment requests (${checks} checks)`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });
