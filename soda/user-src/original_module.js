@@ -3308,19 +3308,15 @@ function fmtDay(value){
   const t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
-// Payment polling has its own branded mark so the provider's legacy artwork
-// can never leak onto this page. Keep the motion self-contained in CSS and
-// leave the product-row PLAN_SPIN unchanged.
-var DEPOSIT_POLL_SPIN = '<svg class="dep-poll-loader" viewBox="0 0 120 120" role="img" aria-label="Processing payment">'
-  + '<circle class="dep-poll-track" cx="60" cy="60" r="50"/>'
-  + '<circle class="dep-poll-arc dep-poll-arc-one" cx="60" cy="60" r="50"/>'
-  + '<circle class="dep-poll-track" cx="60" cy="60" r="40"/>'
-  + '<circle class="dep-poll-arc dep-poll-arc-two" cx="60" cy="60" r="40"/>'
-  + '<circle class="dep-poll-track" cx="60" cy="60" r="30"/>'
-  + '<circle class="dep-poll-arc dep-poll-arc-three" cx="60" cy="60" r="30"/>'
-  + '<path class="dep-poll-drop" d="M60 41c-6.1 9-14 17.2-14 25.8a14 14 0 0 0 28 0C74 58.2 66.1 50 60 41Z"/>'
-  + '<path class="dep-poll-highlight" d="M54.5 66.2c.5 3.7 2.7 5.8 6.4 6.2-1.3 1.7-3.2 2.6-5.2 2.3-3.4-.6-5.5-3.6-5.1-7 .2-1.6 1.2-3.2 2.8-4.7.2 1.1.6 2.2 1.1 3.2Z"/>'
-  + '</svg>';
+// Deposit result marks, traced from the owner's two pictures (green tick badge, red cross badge).
+var PAY_OK_SVG = '<svg viewBox="0 0 696 696" aria-hidden="true"><circle cx="348.0" cy="348.0" r="348.0" fill="#fff"/><path fill="#42af3c" fill-rule="evenodd" d="M316.5 694.5C292.9 692.3 268.0 687.5 246.5 680.9C233.9 677.0 210.0 668.0 210.0 667.1C210.0 666.7 209.1 666.4 207.9 666.3C204.1 666.0 170.5 647.8 156.5 638.4C-27.6 515.5 -53.7 256.8 102.4 101.7C239.3 -34.4 458.9 -33.7 595.3 103.3C601.7 109.8 607.0 115.4 607.0 115.8C607.0 116.2 603.0 118.9 598.1 121.7L589.2 126.8L578.3 116.1C417.3 -42.0 151.0 3.9 53.4 206.5C-40.2 400.9 78.7 632.9 291.0 669.9C317.8 674.6 360.4 676.1 383.5 673.2C488.4 659.9 575.7 603.8 628.7 515.5C647.9 483.6 665.7 436.2 669.6 406.9C670.0 404.2 670.7 402.0 671.2 402.0C671.7 402.0 671.8 401.5 671.5 401.0C671.2 400.4 671.7 394.2 672.6 387.2C674.8 371.7 675.1 327.9 673.2 312.5C667.0 263.5 652.8 220.9 628.9 180.8L622.9 170.6L630.3 163.2L637.8 155.9L640.3 159.2C648.7 170.3 665.9 204.8 673.9 226.1C683.0 250.6 691.8 286.1 692.3 300.2C692.4 303.4 692.8 306.0 693.1 306.0C693.4 306.0 694.2 312.9 694.8 321.2C711.2 535.8 530.6 714.0 316.5 694.5ZM334.0 645.3C299.1 642.8 272.5 637.4 244.5 627.0C113.2 578.2 33.9 444.8 53.5 305.7C71.8 175.7 174.8 72.5 305.0 53.6C394.8 40.5 489.0 70.3 551.9 131.6L563.5 142.9L550.0 152.2C481.4 199.6 411.8 266.8 340.6 354.0C334.1 362.0 328.4 368.9 328.0 369.3C327.6 369.8 302.7 357.8 272.6 342.8L217.9 315.5L208.7 315.5C194.1 315.5 183.9 321.6 177.3 334.2C174.8 338.9 174.5 340.6 174.5 349.0C174.5 363.3 175.4 364.8 203.0 395.0C267.6 465.8 311.7 506.8 335.4 518.1C354.3 527.1 376.0 523.7 390.3 509.7C398.6 501.6 396.2 505.5 444.8 418.5C484.5 347.4 528.4 280.5 565.5 234.5C579.5 217.1 600.1 194.0 601.6 194.0C604.3 194.0 619.1 223.3 626.9 244.4C667.7 353.9 641.1 475.0 558.1 558.1C518.1 598.1 471.5 624.4 417.7 637.5C393.3 643.4 356.0 646.9 334.0 645.3ZM350.0 501.6C330.0 495.8 285.8 455.4 218.1 381.1C198.2 359.3 194.0 353.7 194.0 349.3C194.0 346.0 198.2 338.9 201.1 337.5C208.4 333.7 208.5 333.8 273.0 366.0L332.9 396.0L343.2 383.2C432.1 272.6 514.0 196.0 596.0 146.8C615.1 135.3 618.5 133.7 620.8 134.9C625.9 137.6 624.8 139.5 607.2 157.5C534.7 231.3 488.3 297.9 404.5 448.5C384.6 484.2 383.1 486.8 378.4 492.6C371.7 500.8 360.0 504.5 350.0 501.6Z"/></svg>';
+var PAY_FAIL_SVG = '<svg viewBox="0 0 313 313" aria-hidden="true"><circle cx="156.5" cy="156.5" r="156.5" fill="#ea2c2c"/><g fill="#fff"><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(45 156.5 156.5)"/><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(-45 156.5 156.5)"/></g></svg>';
+// Waiting for the payment: a dot travels from the phone to the wallet (nothing rotates).
+var DEPOSIT_POLL_FLOW = '<div class="dep-flow" role="img" aria-label="Processing payment">'
+  + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></span>'
+  + '<span class="dep-flow-track"><i></i><i></i><i></i><i></i></span>'
+  + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6.8A2.3 2.3 0 0 1 6.3 4.5H17v3.5"/><rect x="3" y="7.5" width="18" height="12.5" rx="2.6"/><path d="M16 13.8h5"/></svg></span>'
+  + '</div>';
 // Every figure this screen shows about one plan, worked out in one place so
 // the summary band and the row can never disagree.
 function planStats(inv){
@@ -4778,8 +4774,7 @@ window.verifyDepositNow = async function(){
 };
 function setDepositStatusPending(amount, phone, network){
   $('depStatusIcon').className = 'dep-status-icon';
-  // Dedicated Soda rings replace the payment provider's old loader artwork.
-  $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
+  $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
   $('depStatusTitle').textContent = 'Processing your deposit';
   // Owner asked for the specifics shown here, not a generic message --
   // the actual number the prompt was sent to and the actual amount.
@@ -4931,11 +4926,11 @@ function setDepositStatusSuccess(){
   fireConfetti();
   $('depStatusIcon').className = 'dep-status-icon success';
   // The owner's own artwork, cut out of the images he supplied.
-  $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-green-soft)" stroke="var(--snow-green)" stroke-width="4"/><path d="M36 61l15 15 34-36" stroke="var(--snow-green)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  $('depStatusIcon').innerHTML = PAY_OK_SVG;
   // Owner: "let me think that on payment success it says congratulations
   // payment has been received {added to your wallet} redirecting back home
   // in 5 seconds or you can say so back the button should be available."
-  $('depStatusTitle').textContent = 'Congratulations! 🎉';
+  $('depStatusTitle').textContent = 'Congratulations!';
   // Names the actual figure when it is known (it always is on the automatic
   // path, since the pending state set it moments earlier) and falls back to
   // wording that reads properly without one -- the manual-deposit path lands
@@ -4977,7 +4972,7 @@ function setDepositStatusFailed(msg){
   // (same --snow-wine-soft/--snow-wine tokens this circle already had) --
   // only the mark inside changed, matching image 2's outlined style over
   // image 3's solid-filled one, for visual consistency with that sibling.
-  $('depStatusIcon').innerHTML = '<svg viewBox="0 0 120 120" fill="none" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="var(--snow-wine-soft)" stroke="var(--snow-wine)" stroke-width="4"/><line x1="60" y1="34" x2="60" y2="70" stroke="var(--snow-wine)" stroke-width="9" stroke-linecap="round"/><circle cx="60" cy="86" r="5.5" fill="var(--snow-wine)"/></svg>';
+  $('depStatusIcon').innerHTML = PAY_FAIL_SVG;
   $('depStatusTitle').textContent = 'Payment not completed';
   // Owner asked for "due to insufficient funds" here -- checked against
   // MarzPay's own integration guide first rather than guessing at a field
@@ -4999,7 +4994,7 @@ function setDepositStatusFailed(msg){
 }
 function setDepositStatusUnknown(){
   $('depStatusIcon').className = 'dep-status-icon';
-  $('depStatusIcon').innerHTML = DEPOSIT_POLL_SPIN;
+  $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
   $('depStatusTitle').textContent = 'Still waiting for the provider';
   $('depStatusBody').innerHTML = '<p>The payment has not been confirmed yet, and nothing is lost. '
     + 'If it goes through, your balance updates on its own automatically, '
