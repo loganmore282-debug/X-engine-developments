@@ -81,7 +81,7 @@ function harness() {
     FieldValue: { increment: n => ({ op: 'inc', n }), arrayUnion: (...items) => ({ op: 'union', items }), serverTimestamp: () => new Date() },
     tsMillis: value => value instanceof Date ? value.getTime() : Date.parse(value),
     nowStr: () => ({ date: '2026-10-06', time: '13:00' }), newStatementId: () => 'statement',
-    withLock: async (_key, work) => work(), _creditingPayouts: new Set(), _sweepingCashback: false,
+    withLock: async (_key, work) => work(), _creditingPayouts: new Set(), _sweepingCashback: false, _lastFullCashbackSweep: 0,
   });
   vm.runInContext([fn('settleInvestmentIfDue'), fn('_settleDueInvestmentNow'), fn('reconcileCashback')].join('\n'), c);
   return { state, c };

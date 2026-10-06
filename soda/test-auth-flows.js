@@ -114,7 +114,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     ok(!admin.includes('id="sOtpReg"'), 'admin no longer exposes a registration OTP setting');
     const registerRoute = server.slice(server.indexOf("app.post('/register'"), server.indexOf("app.get('/account'", server.indexOf("app.post('/register'")));
     ok(registerRoute && !registerRoute.includes('consumeOtpTicket') && registerRoute.includes('INVALID_TRADE_PIN'), 'server registration accepts no OTP and validates the trade PIN');
-    ok(/update\.transactionPinHash\s*=\s*scryptHash\(tradePin\)/.test(server), 'server saves only a hash of the new trade PIN');
+    ok(/update\.transactionPinHash\s*=\s*(await )?scryptHash(Async)?\(tradePin\)/.test(server), 'server saves only a hash of the new trade PIN');
     const dom = load(), w = dom.window;
     w.eval("STATE.settings={authHeroOpacity:60,authHeroBlur:8,authCardOpacity:25,authCardBlur:3};STATE.authHeroImage='data:image/png;base64,AA==';applyAuthBackgrounds()");
     eq(w.document.documentElement.style.getPropertyValue('--auth-hero-op'), '0.6', 'background opacity reaches the screen');

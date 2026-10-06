@@ -102,3 +102,24 @@ function clientChecks(panel, idleMs, maxMs){
   store.set('test',JSON.stringify({identity:'corrupt',started:now}));assert.equal(session.begin('corrupt',now,false),false);
 }
 (async()=>{await serverChecks();clientChecks('user',4*60*60*1000,4*60*60*1000);clientChecks('admin',15*60*1000,8*60*60*1000);console.log('PASS: member 4-hour idle and maximum / admin 15-minute idle, 8-hour maximum, activity-only renewal, refresh/hidden tabs, revocation, migration and account isolation');})().catch(e=>{console.error(e);process.exitCode=1;});
+// ── remembered sessions (speed): one read serves many requests, but revocation and expiry still bite at once ──
+(async () => {
+  const rows = new Map(); let reads = 0;
+  const db = { collection: () => ({ doc: id => ({
+    get: async () => { reads++; return { exists: rows.has(id), data: () => rows.get(id) }; },
+    set: async d => { rows.set(id, d); }, update: async d => { rows.set(id, Object.assign({}, rows.get(id), d)); },
+    updateIf: async (_c, d) => { rows.set(id, Object.assign({}, rows.get(id), d)); return true; } }),
+    where: () => ({ get: async () => ({ docs: [...rows].map(([id, d]) => ({ id, data: () => d, ref: { update: async x => rows.set(id, Object.assign({}, rows.get(id), x)) } })) }) }) }) };
+  const sp = require('./session-policy');
+  const a = await sp.createMemberSession(db, 'speed-member', '0770000009');
+  reads = 0;
+  for (let i = 0; i < 20; i++) assert(await sp.checkMemberSession(db, a.token), 'recognised');
+  assert.equal(reads, 1, '20 requests with one session cost ONE database read');
+  await sp.revokeMemberSession(db, a.token);
+  assert.equal(await sp.checkMemberSession(db, a.token), null, 'a revoked session stops working at once, not after the cache');
+  const b = await sp.createMemberSession(db, 'speed-member', '0770000009');
+  assert(await sp.checkMemberSession(db, b.token));
+  await sp.revokeAllMemberSessions(db, 'speed-member');
+  assert.equal(await sp.checkMemberSession(db, b.token), null, 'ending all sessions of a member also clears the remembered copies');
+  console.log('PASS: remembered sessions read the database once and still end at once when revoked');
+})().catch(e => { console.error(e); process.exitCode = 1; });

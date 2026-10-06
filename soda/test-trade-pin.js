@@ -19,8 +19,11 @@ const build = db => new Function('crypto', 'db', 'withLock', 'tsMillis', `
   const PIN_LOCK_MS = 15 * 60 * 1000, PIN_MAX_FAILS = 5;
   ${fnSource('scryptHash')}
   ${fnSource('scryptVerify')}
+  const _scrypt = (password, salt) => new Promise((resolve, reject) => crypto.scrypt(String(password), salt, 64, (e, k) => e ? reject(e) : resolve(k)));
+  ${fnSource('scryptHashAsync')}
+  ${fnSource('scryptVerifyAsync')}
   ${fnSource('pinCheck')}
-  return { scryptHash, pinCheck };`)(crypto, db, (_k, fn) => fn(), v => v instanceof Date ? v.getTime() : Number(v) || 0);
+  return { scryptHash, scryptHashAsync, pinCheck };`)(crypto, db, (_k, fn) => fn(), v => v instanceof Date ? v.getTime() : Number(v) || 0);
 (async () => {
   const { doc, db } = mk(); const { scryptHash, pinCheck } = build(db);
   doc.transactionPinHash = scryptHash('123456');
@@ -40,7 +43,7 @@ const build = db => new Function('crypto', 'db', 'withLock', 'tsMillis', `
   ok((await c2.pinCheck('u', '123456')).code === 'NO_PIN', 'an account with no Trade Password is refused, not waved through');
   // registration stores it hashed and requires 6 digits
   const reg = src.slice(src.indexOf('async function completeRegistrationCore'), src.indexOf('// ── OTP endpoints ──'));
-  ok(/INVALID_TRADE_PIN/.test(reg) && /transactionPinHash = scryptHash\(tradePin\)/.test(reg), 'sign-up requires and hashes the 6-digit Trade Password');
+  ok(/INVALID_TRADE_PIN/.test(reg) && /transactionPinHash = (await )?scryptHash(Async)?\(tradePin\)/.test(reg), 'sign-up requires and hashes the 6-digit Trade Password');
   console.log(`PASS: trade password (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
 
@@ -51,7 +54,7 @@ const build = db => new Function('crypto', 'db', 'withLock', 'tsMillis', `
     let handler; const app = { post: (p, h) => { if (p === '/account/transaction-pin/change') handler = h; } };
     const db = { collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => doc }), update: async u => { Object.assign(doc, u); } }) }) };
     const lib = build(db);
-    new Function('app', 'db', 'verifyAuth', 'pinCheck', 'scryptHash', 'isWeakPin', 'console', route)(app, db, async () => 'u1', lib.pinCheck, lib.scryptHash, v => /^(\d)\1{5}$/.test(v), console);
+    new Function('app', 'db', 'verifyAuth', 'pinCheck', 'scryptHash', 'scryptHashAsync', 'isWeakPin', 'console', route)(app, db, async () => 'u1', lib.pinCheck, lib.scryptHash, lib.scryptHashAsync, v => /^(\d)\1{5}$/.test(v), console);
     let code = 200, out; const res = { status: c => { code = c; return res; }, json: b => { out = b; } };
     await handler({ headers: {}, body }, res); return { code, out, doc };
   };

@@ -1829,6 +1829,22 @@ function scryptHash(password) {
   const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
   return `${salt}:${hash}`;
 }
+// Non-blocking versions for everything a member waits on (log in, sign up, passwords, Trade Password): the
+// hashing runs on the libuv thread pool, so one login no longer freezes every other request for ~50 ms.
+// Same algorithm and parameters as the synchronous pair, so existing hashes verify unchanged.
+const _scrypt = (password, salt) => new Promise((resolve, reject) => crypto.scrypt(String(password), salt, 64, (e, k) => e ? reject(e) : resolve(k)));
+async function scryptHashAsync(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return `${salt}:${(await _scrypt(password, salt)).toString('hex')}`;
+}
+async function scryptVerifyAsync(password, stored) {
+  const [salt, hash] = String(stored || '').split(':');
+  if (!salt || !hash) return false;
+  const check = await _scrypt(password || '', salt);
+  const a = Buffer.from(hash, 'hex');
+  if (a.length !== check.length) return false;
+  return crypto.timingSafeEqual(a, check);
+}
 function scryptVerify(password, stored) {
   const [salt, hash] = String(stored || '').split(':');
   if (!salt || !hash) return false;
@@ -2903,7 +2919,11 @@ async function _settleDueInvestmentNow(doc) {
       // catches up naturally the moment the account is unbanned, no
       // special-case resume logic needed.
       const uSnap = await db.collection('users').doc(f.userId).get();
-      if (!uSnap.exists || uSnap.data().status === 'banned') return;
+      if (!uSnap.exists || uSnap.data().status === 'banned') {
+        // Look again in 10 minutes rather than on every 0.5 s tick (the full pass every 5 minutes still sees it).
+        await doc.ref.update({ nextPayoutAt: new Date(Date.now() + 10 * 60 * 1000) }).catch(() => {});
+        return;
+      }
       const fMade = Number(f.payoutsMade) || 0;
       const fTotal = Number(f.payoutsTotal) || 0;
       const fElapsed = Math.floor((Date.now() - (tsMillis(f.createdAt) || Date.now())) / 86400000);
@@ -2953,9 +2973,11 @@ async function _settleDueInvestmentNow(doc) {
         // source ledger while holding that same lock, so it cannot snapshot
         // between the wallet increment and this deterministic transaction row.
         // Advancing the cursor comes only after both are durable.
+        const createdMs = tsMillis(f.createdAt);
         await doc.ref.update({
           payoutsMade: newMade, paidOut: FieldValue.increment(amount),
-          status: willComplete ? 'matured' : 'active'
+          status: willComplete ? 'matured' : 'active',
+          nextPayoutAt: willComplete || !createdMs ? null : new Date(createdMs + (newMade + 1) * 86400000),
         });
       });
       if (payoutBlocked) return;
@@ -3225,35 +3247,29 @@ app.get('/team/stats', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [uSnap, sett, deposits] = await Promise.all([
-      db.collection('users').doc(userId).get(), getSettings(), wholeTeamDeposits(userId)
+    // All the reads this screen needs go out together (they used to run one after another).
+    const [uSnap, sett, deposits, l1ActiveCount, rewardTxSnap, commSnap] = await Promise.all([
+      db.collection('users').doc(userId).get(), getSettings(), wholeTeamDeposits(userId), activeL1Count(userId),
+      db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').get(),
+      db.collection('transactions').where('userId', '==', userId).where('type', '==', 'commission').get().catch(() => null),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = uSnap.data();
-    // subagent-audit-caught: was missing the banned check every sibling
-    // data-reading route has.
     if (u.status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    const l1ActiveCount = await activeL1Count(userId);
     const milestones = [
       ...TEAM_MILESTONES.map(m => ({ type: 'count', target: m.target, reward: m.reward,
         current: l1ActiveCount, achieved: l1ActiveCount >= m.target, claimed: !!u['milestoneClaimed_' + m.target] })),
       ...TEAM_DEPOSIT_MILESTONES.map(m => ({ type: 'deposit', target: m.target, reward: m.reward,
         current: deposits, achieved: deposits >= m.target, claimed: !!u['depositMilestoneClaimed_' + m.target] })),
     ];
-    const rewardTxSnap = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').get();
     let teamRewards = 0;
     rewardTxSnap.forEach(d => { teamRewards += finiteMoney(d.data().amount); });
-    // What each level has paid this member, for the three Level cards on the
-    // Team screen. commissionLevel is 0-based (0 = Level 1) on every row.
     const levelCommission = { l1: 0, l2: 0, l3: 0 };
-    try {
-      const commSnap = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'commission').get();
-      commSnap.forEach(d => {
-        const v = d.data(), n = Number(v.commissionLevel);
-        if (n >= 0 && n <= 2) levelCommission['l' + (n + 1)] += finiteMoney(v.amount);
-      });
-    } catch (_) { /* the cards then read 0.00; the rest of the stats still load */ }
+    if (commSnap) commSnap.forEach(d => {
+      const v = d.data(), n = Number(v.commissionLevel);
+      if (n >= 0 && n <= 2) levelCommission['l' + (n + 1)] += finiteMoney(v.amount);
+    });   // if that read failed the cards read 0.00 and the rest still loads
     res.json({
       status: 'success',
       referralCode: u.referralCode || null,
@@ -3832,7 +3848,7 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
         registrationDone: true, referralCode: myRefCode, publicId: myPublicId,
         walletBalance: FieldValue.increment(WELCOME),
       };
-      if (/^\d{6}$/.test(tradePin)) update.transactionPinHash = scryptHash(tradePin);
+      if (/^\d{6}$/.test(tradePin)) update.transactionPinHash = await scryptHashAsync(tradePin);
       if (referrerId) update.referredBy = referrerId;
       // The user's own doc is written FIRST, in one atomic single-document
       // update — a crash right after this leaves the member fully and
@@ -3936,7 +3952,7 @@ app.post('/auth/otp/send', async (req, res) => {
     // instead of for their sum.
     const [saved, sent] = await Promise.allSettled([
       otpRef.set({
-        phone, purpose, codeHash: scryptHash(code), attempts: 0, verified: false,
+        phone, purpose, codeHash: await scryptHashAsync(code), attempts: 0, verified: false,
         ticket: null, ticketExpiresAt: null, consumedAt: null,
         expiresAt: new Date(Date.now() + OTP_EXPIRES_MS), createdAt: FieldValue.serverTimestamp(),
       }),
@@ -3976,7 +3992,7 @@ app.post('/auth/otp/verify', async (req, res) => {
       // Reserve an attempt atomically before checking the hash.
       const attempted = await ref.updateIf({ consumedAt: null, attempts: { $lt: OTP_MAX_ATTEMPTS } }, { attempts: FieldValue.increment(1) });
       if (!attempted) return res.status(429).json({ status: 'error', message: 'Code unavailable. Request a new code.' });
-      if (!scryptVerify(code, o.codeHash)) return res.status(400).json({ status: 'error', message: 'Incorrect code.' });
+      if (!(await scryptVerifyAsync(code, o.codeHash))) return res.status(400).json({ status: 'error', message: 'Incorrect code.' });
       if (o.verified && o.ticket && tsMillis(o.ticketExpiresAt) > now)
         return res.json({ status: 'success', ticket: o.ticket, expiresInSec: Math.ceil((tsMillis(o.ticketExpiresAt) - now) / 1000) });
       const ticket = crypto.randomUUID();
@@ -4054,6 +4070,16 @@ async function memberVipLevel(userId) {
   snap.forEach(d => { best = Math.max(best, vipByKey.get(d.data().tierKey) || 0); });
   return best;
 }
+const _vipCache = new Map();               // uid -> { v, at }; dropped on a purchase, a gift or an asset edit
+async function memberVipLevelCached(userId) {
+  const hit = _vipCache.get(userId);
+  if (hit && Date.now() - hit.at < 60 * 1000) return hit.v;
+  const v = await memberVipLevel(userId).catch(() => null);
+  if (v === null) return hit ? hit.v : 0;
+  if (_vipCache.size > 20000) _vipCache.clear();
+  _vipCache.set(userId, { v, at: Date.now() });
+  return v;
+}
 app.get('/account', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -4070,12 +4096,9 @@ app.get('/account', async (req, res) => {
     if (preSnap.data().status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (preSnap.data().registrationDone === false) return res.status(409).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Please finish signing up and verify your phone.' });
-    await settleAllForUser(uid);
-    const snap = await db.collection('users').doc(uid).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
-    const u = snap.data();
-    if (u.status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    // Cashback that fell due is paid by the 0.5-second sweep, so this read no longer settles it first
+    // (that cost an investments query and a second user read on every refresh of every phone).
+    const u = preSnap.data();
     // Owner: "no incomplete registration saying code not set." A finished
     // registration always assigns a referral code, but a member could still
     // be left without one -- an account created before codes existed, or a
@@ -4089,7 +4112,7 @@ app.get('/account', async (req, res) => {
         console.warn(`Backfilled missing referral code for ${uid}: ${u.referralCode}`);
       } catch (e) { console.error('Referral code backfill failed:', e.message); }
     }
-    const vipLevel = await memberVipLevel(uid).catch(() => 0);
+    const vipLevel = await memberVipLevelCached(uid);
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
@@ -4571,7 +4594,7 @@ app.post('/invest/create', async (req, res) => {
       try {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
-          status: 'active', dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+          status: 'active', nextPayoutAt: new Date(Date.now() + 86400000), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
           isFirstInvestment, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -4598,6 +4621,7 @@ app.post('/invest/create', async (req, res) => {
     // a bonus, and failing to grant one must never fail a purchase the member
     // has already paid for.
     grantTurntableSpins(userId, liveTier, invId);
+    _vipCache.delete(userId);
     res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -4617,7 +4641,6 @@ app.get('/investments', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
     if (uSnap.data().status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    await settleAllForUser(uid);
     const [snap, products] = await Promise.all([
       db.collection('investments').where('userId', '==', uid).get(), getProducts()
     ]);
@@ -5776,7 +5799,7 @@ async function pinCheck(userId, pin) {
       return { ok: false, code: 'LOCKED', message: `Too many wrong Trade Password attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
     }
     if (!u.transactionPinHash) return { ok: false, code: 'NO_PIN', message: 'No Trade Password is set on this account.' };
-    if (!scryptVerify(pin, u.transactionPinHash)) {
+    if (!(await scryptVerifyAsync(pin, u.transactionPinHash))) {
       const fails = (u.pinFailCount || 0) + 1;
       const update = { pinFailCount: fails };
       let locked = false;
@@ -6930,7 +6953,7 @@ app.post('/account/transaction-pin/change', async (req, res) => {
       const check = await pinCheck(userId, req.body.oldPin);
       if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
     }
-    await db.collection('users').doc(userId).update({ transactionPinHash: scryptHash(newPin), pinFailCount: 0, pinLockedUntil: null });
+    await db.collection('users').doc(userId).update({ transactionPinHash: await scryptHashAsync(newPin), pinFailCount: 0, pinLockedUntil: null });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not change your PIN' }); }
 });
@@ -7487,7 +7510,7 @@ app.post('/admin/login', async (req, res) => {
     const snap = await db.collection('adminUsers').doc(username).get();
     const validAccount = snap.exists && snap.data().active !== false;
     const hashToCheck = validAccount ? snap.data().passwordHash : DUMMY_PASSWORD_HASH;
-    const passwordOk = scryptVerify(password, hashToCheck);
+    const passwordOk = await scryptVerifyAsync(password, hashToCheck);
     if (!validAccount || !passwordOk) {
       recordLoginFail('staff:' + username);
       return res.status(401).json({ status: 'error', message: 'Invalid username or password' });
@@ -7526,7 +7549,7 @@ async function findAccountByUid(uid) {
 async function setMemberPassword(uid, newPassword, exceptKey) {
   const acct = await findAccountByUid(uid);
   if (!acct) { const e = new Error('No login exists for this member'); e.code = 'NO_ACCOUNT'; throw e; }
-  await acct.ref.update({ passwordHash: scryptHash(newPassword), failCount: 0, lockedUntil: FieldValue.delete(), passwordChangedAt: FieldValue.serverTimestamp() });
+  await acct.ref.update({ passwordHash: await scryptHashAsync(newPassword), failCount: 0, lockedUntil: FieldValue.delete(), passwordChangedAt: FieldValue.serverTimestamp() });
   await sessionPolicy.revokeAllMemberSessions(db, uid, exceptKey);
 }
 async function deleteMemberLogin(uid) {
@@ -7561,7 +7584,7 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
     const uid = newMemberUid();
     const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({
-      uid, phone, passwordHash: scryptHash(password), failCount: 0, createdAt: FieldValue.serverTimestamp()
+      uid, phone, passwordHash: await scryptHashAsync(password), failCount: 0, createdAt: FieldValue.serverTimestamp()
     });
     if (!created) return res.status(409).json({ status: 'error', code: 'PHONE_IN_USE', message: 'An account with this phone number already exists.' });
     sessionReply(res, uid, await sessionPolicy.createMemberSession(db, uid, phone));
@@ -7586,7 +7609,7 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
     }
     // The dummy hash makes an unknown phone cost the same as a wrong password,
     // so the answer's timing cannot be used to find which numbers have accounts.
-    const ok = scryptVerify(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
+    const ok = await scryptVerifyAsync(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
     if (!acct || !ok) { if (acct) await recordLoginFailure(id); return bad(); }
     if (Number(acct.failCount) > 0) await snap.ref.update({ failCount: 0 }).catch(() => {});
     sessionReply(res, acct.uid, await sessionPolicy.createMemberSession(db, acct.uid, acct.phone));
@@ -7606,7 +7629,7 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
     if (!acct) return res.status(404).json({ status: 'error', message: 'Account not found' });
     if (acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now())
       return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', message: 'Too many wrong attempts. Try again in a few minutes.' });
-    if (!scryptVerify(oldPassword, acct.passwordHash)) {
+    if (!(await scryptVerifyAsync(oldPassword, acct.passwordHash))) {
       await recordLoginFailure(acct.id);
       return res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Your current password is incorrect.' });
     }
@@ -7627,7 +7650,7 @@ app.post('/auth/session/logout', async (req, res) => {
   // always answer, whether or not there was a session record to revoke.
   try {
     const decoded = await _decodeAuth(req);
-    if (decoded) await db.collection('memberSessions').doc(decoded.key).update({ revoked: true });
+    if (decoded) { sessionPolicy.forgetSession(db, decoded.key); await db.collection('memberSessions').doc(decoded.key).update({ revoked: true }); }
   } catch (e) { console.error('Session logout error:', e.message); }
   res.json({ status: 'success' });
 });
@@ -8372,7 +8395,7 @@ async function createStarterAssets() {
     await ref.set(clean);                                    // missing, or deleted earlier: bring it back
     created++;
   }
-  _productsCacheTs = 0;
+  _productsCacheTs = 0; _vipCache.clear();
   return created;
 }
 async function seedStarterAssetsOnce() {
@@ -8445,7 +8468,7 @@ app.post('/admin/products/save', async (req, res) => {
       }
     });
     await batch.commit();
-    _productsCacheTs = 0;
+    _productsCacheTs = 0; _vipCache.clear();
     logAdminAction(req, 'products_saved', { count: sanitized.length });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save products' }); }
@@ -8456,7 +8479,7 @@ app.post('/admin/products/delete', async (req, res) => {
   if (!key) return res.status(400).json({ status: 'error', message: 'key required' });
   try {
     await db.collection('products').doc(key).set({ key, deleted: true }, { merge: false });
-    _productsCacheTs = 0;
+    _productsCacheTs = 0; _vipCache.clear();
     logAdminAction(req, 'product_deleted', { key });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this product' }); }
@@ -8480,7 +8503,7 @@ app.post('/admin/products/clear', async (req, res) => {
     // to its DEFAULT_PRODUCTS entry again.
     snap.forEach(d => { batch.delete(d.ref); removed++; });
     await batch.commit();
-    _productsCacheTs = 0;
+    _productsCacheTs = 0; _vipCache.clear();
     logAdminAction(req, 'products_cleared', { removed });
     res.json({ status: 'success', removed });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear products' }); }
@@ -8780,7 +8803,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       const { date, time } = nowStr();
       const created = await invRef.createIfAbsent({
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
-        status: 'active', dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+        status: 'active', nextPayoutAt: new Date(Date.now() + 86400000), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
         granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
@@ -8795,6 +8818,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       }).catch(e => console.warn('grant-asset ledger row failed (plan is active):', e.message));
     });
     if (!alreadyGiven) logAdminAction(req, 'asset_grant', { userId, tierKey: tier.key, investmentId: invId, price: Number(tier.price) || 0 });
+    _vipCache.delete(userId);
     res.json({ status: 'success', alreadyGiven, investmentId: invId, message: alreadyGiven ? 'That asset was already given.' : `${tier.name} activated for this member` });
   } catch (e) { res.status(400).json({ status: 'error', message: e.message }); }
 });
@@ -10732,15 +10756,34 @@ async function reconcileBlockedCommissions() {
     }
   } catch (e) { console.error('Reconcile blocked commissions error:', e.message); }
 }
-let _sweepingCashback = false;
+let _sweepingCashback = false, _lastFullCashbackSweep = 0;
+// Every 0.5 s only the investments whose next payout time has come are looked at (a handful), instead of
+// reading every running investment twice a second. A full pass still runs every 5 minutes as a safety net
+// for any investment without a `nextPayoutAt`; settleInvestmentIfDue() does the real due-date arithmetic
+// either way, so a wrong or missing `nextPayoutAt` can only delay a payout, never cause a wrong one.
 async function reconcileCashback() {
   if (_sweepingCashback) return;
   _sweepingCashback = true;
   try {
-    const snap = await db.collection('investments').where('status', '==', 'active').orderBy('createdAt', 'asc').limit(5000).get();
+    const full = Date.now() - _lastFullCashbackSweep > 5 * 60 * 1000;
+    const snap = full
+      ? await db.collection('investments').where('status', '==', 'active').orderBy('createdAt', 'asc').limit(5000).get()
+      : await db.collection('investments').where('status', '==', 'active').where('nextPayoutAt', '<=', new Date()).orderBy('nextPayoutAt', 'asc').limit(1000).get();
+    if (full) _lastFullCashbackSweep = Date.now();
     for (const doc of snap.docs) { await settleInvestmentIfDue(doc).catch(e => console.error('Reconcile cashback error:', e.message)); }
   } catch (e) { console.error('Reconcile cashback error:', e.message); }
   finally { _sweepingCashback = false; }
+}
+// One-time catch-up at start: running investments created before `nextPayoutAt` existed get it.
+async function backfillNextPayoutAt() {
+  const snap = await db.collection('investments').where('status', '==', 'active').where('nextPayoutAt', '==', null).limit(5000).get();
+  let n = 0;
+  for (const d of snap.docs) {
+    const x = d.data(), createdMs = tsMillis(x.createdAt);
+    if (!createdMs) continue;
+    await d.ref.update({ nextPayoutAt: new Date(createdMs + ((Number(x.payoutsMade) || 0) + 1) * 86400000) }); n++;
+  }
+  return n;
 }
 function runReconciler() {
   reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileStuckWithdrawalRefunds).then(reconcileCommissions).then(reconcileUsdtDeposits).catch(() => {});
@@ -10818,7 +10861,11 @@ const MONGODB_URI = process.env.MONGODB_URI || '';
 if (!MONGODB_URI) { console.error('MONGODB_URI env var is required'); process.exit(1); }
 connectMongo(MONGODB_URI)
   .then(() => {
-    app.listen(PORT, () => console.log(`Soda backend listening on :${PORT}`));
+    const httpServer = app.listen(PORT, () => console.log(`Soda backend listening on :${PORT}`));
+    // nginx keeps connections to Node open (upstream keepalive); Node's own 5-second default would close them
+    // under nginx's feet and now and then turn a request into a 502.
+    httpServer.keepAliveTimeout = 65 * 1000;
+    httpServer.headersTimeout = 66 * 1000;
     seedStarterAssetsOnce().then(n => { if (n) console.log(`Created ${n} starter assets (Soda A to J)`); }).catch(e => console.error('Starter assets:', e.message));
     setInterval(runReconciler, 30 * 1000);
     setTimeout(runReconciler, 15 * 1000);
@@ -10832,8 +10879,7 @@ connectMongo(MONGODB_URI)
     // (still a single lightweight query -- .where('status','==','active'),
     // not a full-ledger scan) -- worth knowing on the M0 free tier, not
     // expected to be a real problem at Snow's current scale.
-    setInterval(reconcileCashback, 500);
-    setTimeout(reconcileCashback, 500);
+    backfillNextPayoutAt().then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); });
     setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);

@@ -29,7 +29,7 @@ function setup({ users, products }) {
   let handler; const app = { post: (p, h) => { if (p === '/admin/user/grant-asset') handler = h; } };
   const audit = [];
   const factory = new Function('app', 'db', 'FieldValue', 'verifyOwner', 'getProductByKey', 'getSettings', 'productExpectedReturn', 'nowStr', 'newStatementId', 'logAdminAction', 'console',
-    'const _lockTails = new Map();\n' + lockSrc + '\n' + routeSrc + '\nreturn withLock;');
+    'const _lockTails = new Map(); const _vipCache = new Map();\n' + lockSrc + '\n' + routeSrc + '\nreturn withLock;');
   factory(app, db, FieldValue, req => req.__owner === true, async k => products[k] || null, async () => ({ cycleDays: 8 }),
     (p, s) => Math.round(p.price * (p.multiplier || 3)), () => ({ date: '2026-10-04', time: '10:00' }), () => 'B2TEST', (req, a, m) => audit.push([a, m]), { warn() {} });
   const call = async (body, owner = true) => { const res = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };

@@ -97,6 +97,7 @@ async function ensureIndexes() {
     ['investments',     { userId: 1 }],
     ['investments',     { status: 1 }],
     ['investments',     { status: 1, createdAt: 1 }],
+    ['investments',     { status: 1, nextPayoutAt: 1 }],
     ['investments',     { commissionPending: 1 }],
     ['investments',     { commissionPending: 1, createdAt: 1 }],
     // Round 104 -- reconcileCommissions()'s real query filters on

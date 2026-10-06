@@ -90,7 +90,7 @@ async function buy(limit, owned) {
     : n === 'investments' ? { ...q(investments), doc: () => ({ id: 'new', set: async d => { investments.push(d); }, delete: async () => {} }) }
     : { add: async () => ({}) } };
   new Function('app', 'db', 'verifyAuth', 'getProductByKey', 'productOpenState', 'getSettings', 'withLock', 'productExpectedReturn', 'FieldValue', 'nowStr', 'newStatementId', 'fmtMoney', 'grantTurntableSpins', 'console',
-    invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
+    'const _vipCache = new Map();\n' + invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
     { increment: n => ({ __inc: n }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console);
   let code = 200, body; const res = { status: c => { code = c; return res; }, json: b => { body = b; } };
   await handler({ headers: {}, body: { tierKey: 'a1' } }, res);
