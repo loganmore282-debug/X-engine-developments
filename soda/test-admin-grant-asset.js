@@ -82,7 +82,7 @@ function setup({ users, products }) {
   // admin panel wiring
   const page = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
   ok(/id="grantAsset"/.test(page) && /\/admin\/user\/grant-asset/.test(page), 'panel has the selector and calls the route');
-  ok(/SESSION_ROLE==='owner'\?`<h4[^`]*Give an asset/.test(page), 'only shown to owners');
+  ok(/SESSION_ROLE==='owner'\?`<h4[^`]*Give a product/.test(page), 'only shown to owners');
   ok(/requestId:grantRequestId/.test(page), 'sends one request id per opened modal');
   console.log(`PASS: give an asset to a member (${checks} checks)`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

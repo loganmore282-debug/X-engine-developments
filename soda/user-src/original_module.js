@@ -3131,7 +3131,7 @@ function paintHome(){
     <button onclick="openChestSheet()"><span class="v-ic">${VI.bottle}</span><b>Gift Code</b></button>
   </div>
   <div class="v-ticker"><span class="v-ticker-ic">${VI.megaphone}</span><div class="v-ticker-win"><span class="v-ticker-txt">${esc(ticker)}</span></div></div>
-  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No assets yet.</div>' : '')}</div>
+  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : '')}</div>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3230,7 +3230,7 @@ async function renderAssets(){
 function vOwnedCardHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
-  const name = inv.tierLabel || p.name || 'Asset';
+  const name = inv.tierLabel || p.name || 'Product';
   const initial = esc(String(name || '?').trim()[0] || '?');
   // Fenced: the picture lives in a fixed-size frame (see .v-owned .v-card-img) and is scaled to fit
   // inside it, so its shape or load time can never move the figures or spill over the card.
@@ -3274,7 +3274,7 @@ function paintAssets(){
 <div class="v-page v-income">
   ${vBannerHtml()}
   <div class="v-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>
-  <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty">No assets yet.</div>'}</div>
+  <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty">No products yet.</div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();
@@ -3355,7 +3355,7 @@ function planStats(inv){
 function myAssetRowHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
-  const name = inv.tierLabel || p.name || 'Asset';
+  const name = inv.tierLabel || p.name || 'Product';
   const initial = esc(String(name || '?').trim()[0] || '?');
   const thumb = p.image
     ? `<img src="${esc(p.image)}" alt="" onerror="this.outerHTML='&lt;span&gt;${initial}&lt;/span&gt;'">`
@@ -3386,9 +3386,9 @@ function myAssetRowHtml(inv){
 function myAssetsInnerHtml(){
   const investments = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured');
   if (!Array.isArray(STATE.investments) && _investmentsLoadFailed) {
-    return '<div class="my-assets-empty">Could not load your assets.</div>';
+    return '<div class="my-assets-empty">Could not load your products.</div>';
   }
-  if (!investments.length) return '<div class="my-assets-empty">No investments yet. Browse Assets to get started.</div>';
+  if (!investments.length) return '<div class="my-assets-empty">No investments yet. Browse Products to get started.</div>';
   return '<div class="my-assets-list">' + investments.map(myAssetRowHtml).join('') + '</div>';
 }
 function paintMyAssetsInner(){
@@ -5356,13 +5356,13 @@ window.openInvestConfirm = function(tierKey, btn){
   const fig = planFigures(p);
   $('confirmSheet').innerHTML = `
     <h3>Confirm Investment</h3>
-    <p class="confirm-sub">Review this asset before investing.</p>
-    <div class="confirm-row"><span>Asset</span><b class="mono">${esc(p.name || 'Asset')}</b></div>
+    <p class="confirm-sub">Review this product before investing.</p>
+    <div class="confirm-row"><span>Product</span><b class="mono">${esc(p.name || 'Product')}</b></div>
     <div class="confirm-row"><span>Cost</span><b class="mono">${fmtUGX(Number(p.price) || 0)}</b></div>
     <div class="confirm-row"><span>Term</span><b>${fig.cycle} Days</b></div>
     <div class="confirm-row"><span>Daily Yield</span><b class="mono">${fmtUGX(fig.daily)}</b></div>
     <div class="confirm-row"><span>Expected Return</span><b class="mono">${fmtUGX(fig.expected)}</b></div>
-    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Buy Asset</button>
+    <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Buy Product</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
   const actionBtn = $('confirmActionBtn');
   actionBtn.onclick = async () => {
@@ -5370,7 +5370,7 @@ window.openInvestConfirm = function(tierKey, btn){
     actionBtn.disabled = true; actionBtn.textContent = 'Buying…';
     const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey }) });
     if (result.status !== 'success') {
-      actionBtn.disabled = false; actionBtn.textContent = 'Buy Asset';
+      actionBtn.disabled = false; actionBtn.textContent = 'Buy Product';
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));
       if (short) {
         closeConfirm();

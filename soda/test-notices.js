@@ -48,5 +48,8 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   const bgRule = sel => { const m = [...css.matchAll(new RegExp('(?:^|\\n|\\})\\s*' + sel.replace(/\./g, '\\.') + '\\{([^}]*)\\}', 'g'))].map(x => x[1]).filter(r => /backdrop-filter/.test(r)).pop() || ''; return (r => [(r.match(/rgba\([^)]*\)/) || [''])[0], (r.match(/(?<!-webkit-)backdrop-filter:\s*([^;]*)/) || ['', ''])[1]])(m); };
   const nb = bgRule('.notify-bg'), cb = bgRule('.confirm-bg');
   ok(nb[1] && nb[1] === cb[1] && nb[0] === cb[0], 'confirm backdrop has the same blur and tint as notify: ' + nb + ' vs ' + cb);
+  // The owner's word is "product": the old word must not come back in anything a member reads.
+  ok(!/Buy Asset|Review this asset|No assets yet|Browse Assets|Could not load your assets|<span>Asset<\/span>|\|\| 'Asset'/.test(source), 'member text says product, not asset');
+  ok(/Buy Product/.test(source) && /No products yet/.test(source), 'and the product wording is there');
   console.log('test-notices: ' + n + ' checks passed' + (built ? ' (built)' : ''));
 })().catch(e => { console.error(e); process.exit(1); });

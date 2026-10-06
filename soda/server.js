@@ -4579,7 +4579,7 @@ app.post('/invest/create', async (req, res) => {
       if (limit > 0) {
         const ownedSnap = await db.collection('investments').where('userId', '==', userId).where('tierKey', '==', liveTier.key).get();
         if (ownedSnap.size >= limit) {
-          const limErr = new Error(`You can own at most ${limit} of this asset and already have ${ownedSnap.size}.`);
+          const limErr = new Error(`You can own at most ${limit} of this product and already have ${ownedSnap.size}.`);
           limErr.code = 'PURCHASE_LIMIT';
           throw limErr;
         }
@@ -8420,19 +8420,19 @@ app.post('/admin/products/add-starters', async (req, res) => {
     const created = await createStarterAssets();
     logAdminAction(req, 'starter_assets_added', { created });
     res.json({ status: 'success', created });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not add the starter assets' }); }
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not add the starter products' }); }
 });
 app.get('/admin/products', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { res.json({ status: 'success', products: await getProducts() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load assets' }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load products' }); }
 });
 app.post('/admin/products/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
     if (req.body.region && req.body.region !== DEFAULT_REGION_KEY)
-      return res.status(400).json({ status: 'error', message: 'Only Uganda assets are supported.' });
+      return res.status(400).json({ status: 'error', message: 'Only Uganda products are supported.' });
     const sanitized = [];
     // Owner: "make sure all 2 asset name fields are editable" -- Key is no
     // longer locked once an asset exists, so a save can now be a RENAME
@@ -8462,7 +8462,7 @@ app.post('/admin/products/save', async (req, res) => {
     // failure mode this whole mechanism exists to prevent, just backwards.
     for (const { oldKey, newKey } of renames) {
       const collision = await db.collection('products').doc(newKey).get();
-      if (collision.exists) return res.status(400).json({ status: 'error', message: `"${newKey}" is already another asset's key. Choose a different one.` });
+      if (collision.exists) return res.status(400).json({ status: 'error', message: `"${newKey}" is already another product's key. Choose a different one.` });
       const old = await db.collection('products').doc(oldKey).get();
       if (!old.exists) return res.status(400).json({ status: 'error', message: `"${oldKey}" is not a real existing key.` });
     }
@@ -8795,7 +8795,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
     return res.status(400).json({ status: 'error', message: 'userId and a valid requestId are required' });
   try {
     const tier = await getProductByKey(String(req.body.tierKey || ''));
-    if (!tier || tier.deleted) return res.status(400).json({ status: 'error', message: 'Unknown asset' });
+    if (!tier || tier.deleted) return res.status(400).json({ status: 'error', message: 'Unknown product' });
     const sett = await getSettings();
     const invId = 'grant-' + requestId;
     const invRef = db.collection('investments').doc(invId);
@@ -8804,9 +8804,9 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       const uRef = db.collection('users').doc(userId);
       const u = await uRef.get();
       if (!u.exists) throw new Error('User not found');
-      if (u.data().status === 'banned') throw new Error('This account is suspended. Unban it before giving an asset.');
+      if (u.data().status === 'banned') throw new Error('This account is suspended. Unban it before giving a product.');
       const price = Number(tier.price) || 0;
-      if (!(price > 0)) throw new Error('This asset has no price set');
+      if (!(price > 0)) throw new Error('This product has no price set');
       const cycle = Number(tier.cycle) || sett.cycleDays;
       const expectedReturn = productExpectedReturn(tier, sett);
       const { date, time } = nowStr();
@@ -8828,7 +8828,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
     });
     if (!alreadyGiven) logAdminAction(req, 'asset_grant', { userId, tierKey: tier.key, investmentId: invId, price: Number(tier.price) || 0 });
     _vipCache.delete(userId);
-    res.json({ status: 'success', alreadyGiven, investmentId: invId, message: alreadyGiven ? 'That asset was already given.' : `${tier.name} activated for this member` });
+    res.json({ status: 'success', alreadyGiven, investmentId: invId, message: alreadyGiven ? 'That product was already given.' : `${tier.name} activated for this member` });
   } catch (e) { res.status(400).json({ status: 'error', message: e.message }); }
 });
 // Rebuilds one user's totalDeposited/totalEarned/totalWithdrawn/totalInvested
