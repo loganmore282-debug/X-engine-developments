@@ -43,5 +43,10 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   w.eval(dl.querySelector('button').getAttribute('onclick')); ok(!dl.classList.contains('show'), 'Confirm closes it');
   w._installPrompt = { prompt() {}, userChoice: Promise.resolve({ outcome: 'dismissed' }) };
   await w.promptInstallApp(); ok(!dl.classList.contains('show'), 'a dismissed install shows no Download dialog');
+  // The Buy Now confirm popup blurs its backdrop by exactly the notify dialog's amount.
+  const css = html.match(/<style[\s\S]*?<\/style>/g).join('\n');
+  const bgRule = sel => { const m = [...css.matchAll(new RegExp('(?:^|\\n|\\})\\s*' + sel.replace(/\./g, '\\.') + '\\{([^}]*)\\}', 'g'))].map(x => x[1]).filter(r => /backdrop-filter/.test(r)).pop() || ''; return (r => [(r.match(/rgba\([^)]*\)/) || [''])[0], (r.match(/(?<!-webkit-)backdrop-filter:\s*([^;]*)/) || ['', ''])[1]])(m); };
+  const nb = bgRule('.notify-bg'), cb = bgRule('.confirm-bg');
+  ok(nb[1] && nb[1] === cb[1] && nb[0] === cb[0], 'confirm backdrop has the same blur and tint as notify: ' + nb + ' vs ' + cb);
   console.log('test-notices: ' + n + ' checks passed' + (built ? ' (built)' : ''));
 })().catch(e => { console.error(e); process.exit(1); });

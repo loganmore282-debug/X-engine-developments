@@ -104,4 +104,6 @@
 
 6ak. (Claude, owner: "why does the frame now have blank spaces up and down") My 6aj frame was 133 x 227 but a 2:3 picture at 133 px wide is only 200 px high, so 13 px of tint showed above and below it. The frame is now 133 x 200 (exactly 2:3) with no tint, so a 2:3 picture (the owner's bottle photos, 1024x1536) fills it edge to edge; a differently shaped picture is still shown whole inside the same frame. Verified with a 1024x1536 picture at 360 px. SW `soda-shell-v276`.
 
+6al. (Claude, owner: "after tapping Buy Now the background should blur like the notify, the exact amount") The Buy Now confirm popup (`.confirm-bg`) now has the notify dialog's backdrop: `rgba(22,33,63,.28)` tint + `blur(6px)` (it had a plain brown tint, no blur). Test: `test-notices.js` compares the two rules. SW `soda-shell-v277`.
+
 7. Web Push (own VAPID) for admin alerts.

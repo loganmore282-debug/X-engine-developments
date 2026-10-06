@@ -1587,6 +1587,8 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 /* ── dialogs ── */
 .notify-bg{background:rgba(22,33,63,.28);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);padding:0 22px;opacity:0;visibility:hidden;transition:opacity .18s;}
 .notify-bg.show{opacity:1;visibility:visible;}
+/* The Buy Now confirm popup blurs what is behind it by exactly the notify dialog's amount. */
+.confirm-bg{background:rgba(22,33,63,.28);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
 .notify-card{width:100%;max-width:314px;background:#fff;color:#4a5878;border:1.5px solid #16213f;border-radius:22px;padding:27.5px 16px 28px;font-size:13px;font-weight:400;line-height:1.4;display:flex;flex-direction:column;align-items:center;gap:13px;box-shadow:0 26px 60px -26px rgba(14,42,142,.55);}
 .notify-ic{width:45px;height:45px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
 .notify-ic svg{width:24px;height:24px;stroke-width:2;}
