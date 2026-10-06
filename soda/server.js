@@ -8349,6 +8349,47 @@ function sanitizeProductInput(p, fallbackOrder, out) {
 // can show which figures are its own and which are still inherited.
 // Without a region it returns the RAW documents exactly as before, which is
 // the founding region's own editor.
+// ── STARTER ASSETS: Soda A to Soda J ──
+// Owner: "name them Soda A, B, C, D ... so they will be 10, I will come and edit the
+// existing prices from the admin panel, and the names are editable too." They are
+// ordinary saved assets (name, price, cycle, multiplier, VIP, picture all editable or
+// deletable in Admin > Assets). The prices below are only placeholders for the owner to
+// replace. Created once ever, on the first start with an empty asset list, and on demand
+// by the admin button "Add Soda A to J" (which never touches an asset that already exists).
+const STARTER_ASSETS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].map((letter, i) => ({
+  key: 'soda' + letter.toLowerCase(), name: 'Soda ' + letter,
+  price: [30000, 60000, 90000, 120000, 150000, 200000, 300000, 500000, 700000, 1000000][i],
+  cycle: 8, multiplier: 3, buyLimit: 0, vip: 0, order: i,
+}));
+async function createStarterAssets() {
+  let created = 0;
+  for (let i = 0; i < STARTER_ASSETS.length; i++) {
+    const clean = sanitizeProductInput(STARTER_ASSETS[i], i);
+    if (!clean) continue;
+    const ref = db.collection('products').doc(clean.key);
+    const snap = await ref.get();
+    if (snap.exists && !snap.data().deleted) continue;      // an existing asset is never touched
+    await ref.set(clean);                                    // missing, or deleted earlier: bring it back
+    created++;
+  }
+  _productsCacheTs = 0;
+  return created;
+}
+async function seedStarterAssetsOnce() {
+  const marker = await db.collection('meta').doc('starterAssets').createIfAbsent({ at: new Date() });
+  if (!marker) return 0;                                   // already decided on an earlier start
+  const existing = await db.collection('products').limit(1).get();
+  if (!existing.empty) return 0;                           // the owner already has assets: leave them alone
+  return createStarterAssets();
+}
+app.post('/admin/products/add-starters', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const created = await createStarterAssets();
+    logAdminAction(req, 'starter_assets_added', { created });
+    res.json({ status: 'success', created });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not add the starter assets' }); }
+});
 app.get('/admin/products', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { res.json({ status: 'success', products: await getProducts() }); }
@@ -10778,6 +10819,7 @@ if (!MONGODB_URI) { console.error('MONGODB_URI env var is required'); process.ex
 connectMongo(MONGODB_URI)
   .then(() => {
     app.listen(PORT, () => console.log(`Soda backend listening on :${PORT}`));
+    seedStarterAssetsOnce().then(n => { if (n) console.log(`Created ${n} starter assets (Soda A to J)`); }).catch(e => console.error('Starter assets:', e.message));
     setInterval(runReconciler, 30 * 1000);
     setTimeout(runReconciler, 15 * 1000);
     // Owner: "make sure there is perfect timing on maturity check, so cron

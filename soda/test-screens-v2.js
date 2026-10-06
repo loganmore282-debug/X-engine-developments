@@ -69,6 +69,9 @@ ok(sanitize({ key: 'a1', name: 'A', price: 1000, multiplier: 3 }, 0, {}) === nul
 ok(sanitize({ key: 'a1', name: 'A', price: 1000, cycle: 8 }, 0, {}) === null, 'an asset with no multiplier or total payout is refused, not given a hidden x30');
 ok(sanitize({ key: 'a1', name: 'A', price: 1000, cycle: 8, expectedReturn: 3000 }, 0, {}) !== null, 'a total payout alone is enough');
 ok(sanitize(base, 0, out0).buyLimit === 0, 'no limit by default');
+ok(/const STARTER_ASSETS = \['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'\]\.map/.test(src) && /name: 'Soda ' \+ letter/.test(src), 'ten starter assets named Soda A to Soda J exist');
+ok(/seedStarterAssetsOnce\(\)\.then/.test(src) && /createIfAbsent\(\{ at: new Date\(\) \}\)/.test(src), 'they are created once, on the first start only (never again after the owner edits or deletes them)');
+ok(/\/admin\/products\/add-starters/.test(src) && /id="addStarters"/.test(adm), 'the admin has an Add Soda A to J button for any that are missing');
 ok(sanitize({ ...base, vip: '3' }, 0, {}).vip === 3 && sanitize(base, 0, {}).vip === 0 && sanitize({ ...base, vip: '' }, 0, {}).vip === 0, 'an asset has a VIP number, 0 by default');
 ok(sanitize({ ...base, vip: '-1' }, 0, {}) === null && sanitize({ ...base, vip: '1.5' }, 0, {}) === null && sanitize({ ...base, vip: '101' }, 0, {}) === null, 'a VIP number must be a whole number from 0 to 100');
 ok(sanitize({ ...base, buyLimit: '3' }, 0, {}).buyLimit === 3, 'the admin can set 3');
