@@ -42,7 +42,7 @@
      ignores it), which is exactly why render.yaml keeps sending the header
      version too. The two are not redundant. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="theme-color" content="#e30613">
+<meta name="theme-color" content="#1739b8">
 <link rel="manifest" href="manifest.json">
 <!-- Same server-hosted brand asset the user app installs with, NOT a local
      /icon-192.png. Uploading an icon in Admin -> Brand rewrote the one the
@@ -72,8 +72,8 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
        for three re-themes running; renaming it here would mean re-reading
        every rule that touches it to confirm nothing assumes the old value,
        for a cosmetic variable name no one but this file's own source reads). */
-    --bg:#f7f7f8; --card:#ffffff; --ink:#25262b; --sub:#6b6d76; --line:#ececee; --line2:#f5f5f6;
-    --gold:#e30613; --gold-deep:#b10510; --gold-ink:#ffffff; --ok:#0f9d58; --ok-bg:rgba(15,157,88,.12);
+    --bg:#f2f4fd; --card:#ffffff; --ink:#25262b; --sub:#6b6d76; --line:#ececee; --line2:#f5f5f6;
+    --gold:#1739b8; --gold-deep:#0e2a8e; --gold-ink:#ffffff; --ok:#0f9d58; --ok-bg:rgba(15,157,88,.12);
     --danger:#d1293e; --danger-bg:rgba(209,41,62,.1); --warn:#b45309; --warn-bg:rgba(180,83,9,.12); --sky:#f5a000;
   }
   /* Neutral, unobtrusive scrollbar. Two properties because they cover
@@ -369,7 +369,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="analytics">Analytics</button>
         <button class="tab" data-tab="users">Users</button>
-        <button class="tab" data-tab="deposits">Recharges</button>
+        <button class="tab" data-tab="deposits">Deposits</button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Assets</button>
         <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
@@ -1351,9 +1351,6 @@ async function renderAnalytics(silent){
     const insufficientRows = rowsOr(ab.repeatedInsufficientWithdrawals,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(s=>`tried ${ugx(s.attempted)} with ${ugx(s.balance)}`).join('; ')}</td>${lastCol(r)}</tr>`,
       'No accounts repeatedly trying to withdraw more than their balance.');
-    const checkinRows = rowsOr(ab.repeatedCheckinAlreadyClaimed,
-      r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td>${lastCol(r)}</tr>`,
-      'No accounts repeatedly re-tapping check-in after already claiming.');
     const giftcodeRows = rowsOr(ab.giftcodeGuessing,
       r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(esc).join(', ')}</td>${lastCol(r)}</tr>`,
       'No accounts trying gift/promo codes that don\'t exist.');
@@ -1364,8 +1361,6 @@ async function renderAnalytics(silent){
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Failures</th><th>Recent amounts</th><th>Last seen</th></tr></thead><tbody>${failedDepRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated insufficient-funds withdraw attempts</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Recent tries</th><th>Last seen</th></tr></thead><tbody>${insufficientRows}</tbody></table></div></div>
-    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated "already checked in" taps</h2>
-      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Last seen</th></tr></thead><tbody>${checkinRows}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Gift/promo code guessing</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Codes tried</th><th>Last seen</th></tr></thead><tbody>${giftcodeRows}</tbody></table></div></div>`;
   })() : '';
@@ -1713,7 +1708,6 @@ async function openUser(uid){
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
     <div class="kv"><span class="k">Team's total recharges</span><b>${ugx(r.teamDeposits)}</b></div>
     <button class="btn ghost sm" id="viewChainBtn" title="Full upline-to-root and downline tree, not just L1/L2/L3" style="margin:4px 0 6px">View referral chain</button>
-    <div class="kv"><span class="k">Check-in streak</span><span id="streakVal">${u.checkinStreak||0}</span>${SESSION_ROLE==='owner'?` <button class="btn ghost sm" id="reconcileStreakBtn" title="Recompute this member's streak from their real check-in history right now" style="margin-left:8px">Reconcile</button>`:''}</div>
     ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned</div>`:''}
     <label>Amount (${adminCur()})</label><input id="adjAmt" type="number" placeholder="0">
     <label>Note (optional)</label><input id="adjNote" placeholder="Reason">
@@ -1887,14 +1881,6 @@ async function openUser(uid){
     toast(d.status==='success'?'New PIN set':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); } else { b.disabled=false; b.textContent=lbl; }
   });
-  $('reconcileStreakBtn')?.addEventListener('click', async()=>{
-    const b=$('reconcileStreakBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Checking…';
-    const d=await api('/admin/user/reconcile-checkin',{userId:uid});
-    b.disabled=false; b.textContent=lbl;
-    if(d.status!=='success') return toast(d.message||'Failed','err');
-    $('streakVal').textContent=d.after.checkinStreak;
-    toast(d.changed?`Streak corrected: ${d.before.checkinStreak} → ${d.after.checkinStreak}`:`Streak was already correct (${d.after.checkinStreak})`, 'ok');
-  });
   $('delBtn')?.addEventListener('click', async()=>{
     const typed = prompt(`This PERMANENTLY deletes ${u.phone}'s login and personal data (bound withdrawal accounts, gift-code history, security log, any unmatched pending deposit). Their investments, transactions and withdrawals are KEPT as financial records, orphaned from any login. This cannot be undone.\n\nType DELETE to confirm:`);
     if (typed === null) return;
@@ -1936,9 +1922,9 @@ async function renderDeposits(){
     <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Recharges processed</th><th>Amount received</th></tr></thead>
     <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Recharges</h2>
+    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync payments</button></div>
-    <p class="muted" style="margin:0 0 12px">Every recharge attempt, all time — the automatic gateway (MarzPay or PesaJet), MarzPay card payments, and USDT TRC20. A stuck automatic or card recharge can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain when a TronGrid key is configured (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for one still Awaiting Review.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — through the automatic gateway (MarzPay or PesaJet). A stuck deposit can be force-credited once you've verified the money landed.</p>
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_deps.length+' recharges only. The platform has more history than this list can currently display.</div>':''}
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
@@ -1960,8 +1946,6 @@ function drawDeps(){
   );
   $('depRows').innerHTML = list.length?list.map(d=>{
     const isManual = d.method==='manual';
-    const isUsdt = d.method==='usdt';
-    const isCard = d.method==='card';
     const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed' || d.status==='review' || d.status==='awaiting_verification';
     const code = d.referralCode;
     // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
@@ -1974,21 +1958,8 @@ function drawDeps(){
     let actions = '';
     if (SESSION_ROLE === 'owner' && stuck) {
       actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
-      if (isUsdt && d.status === 'awaiting_verification') {
-        actions += ` <button class="btn danger sm" data-usdt-reject="${esc(d.id)}">Reject</button>`;
-      }
     }
-    const usdtBadge = d.autoVerified ? ' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>'
-      : d.autoDeclined ? ' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>' : '';
-    const methodLabel = isUsdt
-      ? `USDT (TRC20)${usdtBadge}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>${d.exactMicros?`<br><span style="font-size:11px" title="The transfer must be exactly this amount">${esc((Number(d.exactMicros)/1e6).toFixed(6))} USDT exact</span>`:''}`
-      : isCard
-      ? 'Card (MarzPay)'
-      : isManual
-      // data-no-i18n: the network and the collection number are DATA, and the
-      // cell flattens to "Manualmtn · 0770000001", which is not a sentence in
-      // any language. Marking it says so once instead of leaving every sweep
-      // to rediscover it.
+    const methodLabel = isManual
       ? `Manual<br><span class="muted" style="font-size:11px" data-no-i18n>${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
       // provider is only set on deposits created since Round 102 -- an
       // older row with none falls back to the same plain "Automatic" label
@@ -2052,13 +2023,6 @@ function drawDeps(){
     e.stopPropagation();
     if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
-  }));
-  document.querySelectorAll('[data-usdt-reject]').forEach(b=>b.addEventListener('click',async(e)=>{
-    e.stopPropagation();
-    const reason=prompt('Reason for rejecting this USDT deposit (shown to no one but kept in the audit log):','Could not verify this transaction');
-    if(reason===null)return;
-    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/usdt/reject',{depositId:b.dataset.usdtReject,reason});
     toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
   }));
 }
@@ -2673,7 +2637,7 @@ async function renderTransactions(){
   const { merged, truncated } = await loadTxnsAndStatements(1000);
   if(staleTab('transactions')) return;
   _txns = merged;
-  const subs=[['all','All'],['deposit','Recharges'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Plans'],['checkin','Check-in'],['promocode','Codes'],['statement','Statements']];
+  const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Plans'],['promocode','Codes'],['statement','Statements']];
   $('content').innerHTML = `
     <h2 class="sec">Transactions</h2>
     <div class="panel-card"><input id="txSearch" placeholder="Search description, type, user id, or a reference"></div>
@@ -2777,21 +2741,6 @@ async function quietRefreshReferrals(){
 }
 
 // ── SETTINGS ──
-// Real bug fixed: switching to another tab and back re-ran renderSettings(),
-// which always overwrote _aboutBlocks with whatever was last SAVED on the
-// server -- silently discarding any text/images the admin had added but not
-// yet saved (owner: "l can be writing, but when l go back it doesn't go
-// back, again l start afresh"). _aboutBlocksDirty tracks whether the local
-// draft has unsaved changes; while dirty, a re-render keeps the in-memory
-// draft instead of refetching over it. Cleared back to false only once the
-// draft is actually saved (or the tab is left and the app is reloaded fresh).
-let _aboutBlocks = [];
-let _aboutBlocksDirty = false;
-let _rulesBlocks = [];
-let _rulesBlocksDirty = false;
-window.addEventListener('beforeunload', (e) => {
-  if (_aboutBlocksDirty || _rulesBlocksDirty) { e.preventDefault(); e.returnValue = ''; }
-});
 // The panel wears the platform's name too, so renaming the app renames this.
 // The <title> and the two "<name> Admin" headings are the whole surface --
 // everything else in here is admin vocabulary, not brand.
@@ -2831,7 +2780,7 @@ async function renderBanners(){
   $('content').innerHTML = `
     <h2 class="sec">Brand logo</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Upload the logo used across the member app. Only the background connected to the image edge is cleared; white details inside the logo are preserved.</p>
+      <p class="muted" style="margin-top:0">The round picture on the Treasure Chest page. Only the background connected to the image edge is cleared; white details inside the logo are preserved.</p>
       <div class="banner-row">
         ${logoImage?`<div style="width:58px;height:58px;flex-shrink:0;display:grid;place-items:center;border-radius:8px;background-color:#fff;background-image:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%);background-size:12px 12px;overflow:hidden"><img src="${esc(logoImage)}" alt="" style="max-width:100%;max-height:100%;object-fit:contain"></div>`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px">${logoImage?'Transparent PNG saved':'<span class="muted">No custom logo uploaded</span>'}</div>
@@ -3065,13 +3014,9 @@ async function renderSettings(){
   // Image/banner uploads all moved to their own tab, see renderBanners() --
   // this fetch only needs what Rates/Payments/Support/App name/About
   // actually render now.
-  const [r, abr, rbr] = await Promise.all([
-    api('/admin/settings'), api('/admin/about-content'), api('/admin/rules-content')
-  ]);
+  const [r] = await Promise.all([ api('/admin/settings') ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
-  if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
-  if (!_rulesBlocksDirty) _rulesBlocks = Array.isArray(rbr.blocks) ? rbr.blocks : [];
   applyAdminBrandName(s.brandName);
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
@@ -3082,7 +3027,6 @@ async function renderSettings(){
         <div><label>Min recharge</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
         <div><label>Min withdraw</label><input id="sMinWit" type="number" value="${v('minWithdraw',8000)}"></div>
         <div><label>Welcome bonus</label><input id="sWelcome" type="number" value="${v('welcomeBonus',5000)}"></div>
-        <div><label>Check-in bonus</label><input id="sCheckin" type="number" value="${v('dailyCheckin',500)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
         <div><label>Withdraw fee (%)</label><input id="sFee" type="number" step="1" value="${v('withdrawFeePct',15)}"></div>
@@ -3099,17 +3043,13 @@ async function renderSettings(){
            each) -- capped per phone number, resetting daily. 0 means send
            none, not unlimited; see otpDailyLimit()'s own comment in server.js. -->
       <div class="row" style="margin-top:6px">
-        <div><label>OTP codes/day &middot; password reset</label><input id="sOtpReset" type="number" min="0" value="${v('otpDailyLimitReset',3)}"></div>
         <div><label>OTP codes/day &middot; add bank account</label><input id="sOtpBank" type="number" min="0" value="${v('otpDailyLimitBank',2)}"></div>
       </div>
       <div class="row" style="margin-top:10px">
-        <div><label>Inner pages background opacity (%)</label><input id="sInnerBgOpacity" type="number" min="0" max="100" value="${v('innerBgOpacity',100)}"></div>
-        <div><label>Inner pages background blur (px)</label><input id="sInnerBgBlur" type="number" min="0" max="40" value="${v('innerBgBlur',0)}"></div>
       </div>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Applies only after login: Home, Assets, Network, Profile, Recharge, Withdraw, Wallet and other inner pages. Authentication screens are unchanged.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>OTP verification (add wallet)</b> <span class="muted">(Forgot Password always asks for a code)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>OTP verification (add wallet)</b> </span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sOtpVerification" ${s.otpVerificationEnabled!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require OTP to add a payout account</b> <span class="muted">(off by default; ignored while OTP verification above is off)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sBankOtp" ${s.bankOtpRequired===true?'checked':''} style="width:auto"></label></div>
@@ -3160,76 +3100,28 @@ async function renderSettings(){
       <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save payment method</button>
     </div>
 
-    <h2 class="sec">Crypto recharges (USDT TRC20)</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">A third recharge rail alongside MarzPay/PesaJet above (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission &mdash; a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject in the Recharges tab &mdash; nothing here ever forces automatic mode on you.</p>
-      <div class="switch-row"><span><b>Enable USDT recharges</b> <span class="muted">(shows the option in the app)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sUsdtEnabled" ${s.usdtEnabled?'checked':''} style="width:auto"></label></div>
-      <label>Receiving wallet address (TRC20)</label><input id="sUsdtAddr" value="${esc(v('usdtWalletAddress',''))}" placeholder="T...">
-      <label>Exchange rate (UGX per 1 USDT)</label><input id="sUsdtRate" type="number" step="1" min="0" value="${v('usdtRate',0)}" placeholder="e.g. 3750">
-      <button class="btn block" id="saveUsdt" style="margin-top:10px">Save crypto recharge settings</button>
-    </div>
-
-    <h2 class="sec">Card recharges (MarzPay)</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">A fourth recharge rail, through MarzPay's own card gateway -- always MarzPay regardless of which gateway is picked for mobile money above. A member is sent to MarzPay's hosted card page to pay, then returns to the app; the recharge resolves the same way a mobile-money one does (webhook + this app's own live re-check), no separate review needed. Requires an active Card Payments subscription on your MarzPay business account -- without one, MarzPay will refuse every attempt even with this switched on.</p>
-      <div class="switch-row"><span><b>Enable card recharges</b> <span class="muted">(shows the option in the app)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sCardEnabled" ${s.cardDepositEnabled?'checked':''} style="width:auto"></label></div>
-      <button class="btn block" id="saveCard" style="margin-top:10px">Save card recharge setting</button>
-    </div>
-
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
       <label>Customer Service (Telegram)</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/youragent">
-      <label>WhatsApp group or channel</label><input id="spWaGroup" value="${esc(v('whatsappGroup',''))}" placeholder="https://chat.whatsapp.com/yourgroup">
-      <label>Support email</label><input id="spEmail" type="email" value="${esc(v('supportEmail',''))}" placeholder="support@yourdomain.com">
-      <p class="muted" style="margin:4px 0 10px">Home's Support tile opens this address directly in the member's mail app. Account &gt; Support shows it alongside the WhatsApp link and the working hours below.</p>
-      <label>Working hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Mon-Sat, 9am-6pm EAT">
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
     <h2 class="sec">Home announcement dialog</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A popup shown every time a member logs in or completes registration, and also when they navigate back to Home. It shows the picture uploaded under Banners (Announcement picture), with Join Channel (the Telegram group link, else the WhatsApp group link set in Support contacts above) and Close under it.</p>
+      <p class="muted" style="margin-top:0">A popup shown every time a member logs in or completes registration, and also when they navigate back to Home. It shows the picture uploaded under Banners (Announcement picture), with Join Channel (the Telegram group link set in Support contacts above) and Close under it.</p>
       <div class="switch-row"><span><b>Enable announcement</b></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAnnEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
-      <label>Title</label><input id="sAnnTitle" maxlength="80" value="${esc(v('annTitle',''))}" placeholder="e.g. New assets are live">
-      <label>Message</label><textarea id="sAnnBody" rows="3" maxlength="400" placeholder="What you want members to see when they open the app.">${esc(v('annBody',''))}</textarea>
       <label>Scrolling line on Home</label><input id="sTickerText" maxlength="200" value="${esc(v('tickerText',''))}" placeholder="Leave empty for the built-in sentence">
       <button class="btn block" id="saveAnn" style="margin-top:10px">Save announcement</button>
     </div>
 
     <h2 class="sec">App name</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Renames the app everywhere inside it &mdash; Home, profile, About, browser tab. Up to 24 characters.</p>
+      <p class="muted" style="margin-top:0">Renames the app everywhere inside it &mdash; the browser tab and the app name. Up to 24 characters.</p>
       <label>App name</label><input id="brandNameInput" maxlength="24" value="${esc(v('brandName','Soda'))}" placeholder="Soda">
       <button class="btn block" id="saveBrandName" style="margin-top:6px">Save app name</button>
-    </div>
-
-    <h2 class="sec">About page</h2>
-    <div class="panel-card">
-      <label>App tagline (shown under the logo on Login)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Energy for a Better Tomorrow">
-      <button class="btn block" id="saveTagline" style="margin-top:6px">Save tagline</button>
-    </div>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">An ordered list of text and image blocks, shown with a scroll-reveal animation.</p>
-      <div id="aboutBlocksList"></div>
-      <button class="btn block" id="abAddText">+ Add text block</button>
-      <label class="btn block file-btn">+ Add image block<input type="file" id="abAddImageFile" accept="image/*" hidden></label>
-      <button class="btn block" id="saveAbout">Save about page</button>
-    </div>
-
-    <h2 class="sec">Rules and Regulations</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">Build the member-facing Rules and Regulations page with ordered text and image blocks. Changes appear in Account after saving.</p>
-      <div id="rulesBlocksList"></div>
-      <button class="btn block" id="rrAddText">+ Add text block</button>
-      <label class="btn block file-btn">+ Add image block<input type="file" id="rrAddImageFile" accept="image/*" hidden></label>
-      <button class="btn block" id="saveRulesContent">Save Rules and Regulations</button>
     </div>`;
-  renderAboutBlocksEditor();
-  renderRulesBlocksEditor();
   $('saveDepMethod').addEventListener('click', async()=>{
     const gateway = document.querySelector('input[name="depGateway"]:checked').value;
     const witMethod = (document.querySelector('input[name="witMethod"]:checked')||{}).value || 'follow';
@@ -3241,25 +3133,14 @@ async function renderSettings(){
       ? `Saved. Recharges: ${PROVIDER_LABEL[normalizeProv(gateway)]}. Payouts: ${PROVIDER_LABEL[normalizeProv(payoutProv)]}.`
       : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  $('saveUsdt').addEventListener('click', async()=>{
-    const upd = { usdtEnabled:$('sUsdtEnabled').checked,
-      usdtWalletAddress:$('sUsdtAddr').value.trim(), usdtRate:Number($('sUsdtRate').value)||0 };
-    const d = await api('/admin/settings/update', { settings: upd });
-    toast(d.status==='success' ? 'Crypto deposit settings saved' : (d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveCard').addEventListener('click', async()=>{
-    const d = await api('/admin/settings/update', { settings: { cardDepositEnabled:$('sCardEnabled').checked } });
-    toast(d.status==='success' ? 'Card deposit setting saved' : (d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
-      dailyCheckin:+$('sCheckin').value, withdrawFeePct:+$('sFee').value,
+      withdrawFeePct:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
-      innerBgOpacity:+$('sInnerBgOpacity').value, innerBgBlur:+$('sInnerBgBlur').value,
-      otpDailyLimitReset:+$('sOtpReset').value, otpDailyLimitBank:+$('sOtpBank').value,
+      otpDailyLimitBank:+$('sOtpBank').value,
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
       otpVerificationEnabled:$('sOtpVerification').checked,
       bankOtpRequired:$('sBankOtp').checked,
@@ -3274,14 +3155,11 @@ async function renderSettings(){
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveSupport').addEventListener('click', async()=>{
-    const upd = { supportTelegram:$('spTg').value.trim(),
-      telegramGroup:$('spTgGroup').value.trim(), whatsappGroup:$('spWaGroup').value.trim(),
-      supportEmail:$('spEmail').value.trim(), supportHours:$('spHours').value.trim() };
+    const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveAnn').addEventListener('click', async()=>{
-    const upd = { annEnabled:$('sAnnEnabled').checked,
-      annTitle:$('sAnnTitle').value.trim(), annBody:$('sAnnBody').value.trim(), tickerText:$('sTickerText').value.trim() };
+    const upd = { annEnabled:$('sAnnEnabled').checked, tickerText:$('sTickerText').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveBrandName').addEventListener('click', async()=>{
@@ -3294,115 +3172,6 @@ async function renderSettings(){
     toast(d.status==='success'?'App name saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if (d.status==='success') applyAdminBrandName(name);
   });
-  $('saveTagline').addEventListener('click', async()=>{
-    const d=await api('/admin/settings/update', { settings: { brandTagline:$('abTag').value.trim() } });
-    toast(d.status==='success'?'Tagline saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('abAddText').addEventListener('click', ()=>{
-    _aboutBlocks.push({ type:'text', text:'' });
-    _aboutBlocksDirty = true;
-    renderAboutBlocksEditor();
-    const areas = document.querySelectorAll('#aboutBlocksList textarea');
-    if (areas.length) areas[areas.length-1].focus();
-  });
-  $('abAddImageFile').addEventListener('change', async e=>{
-    const f=e.target.files[0]; e.target.value=''; if(!f) return;
-    try {
-      const image = await fileToDataUrl(f,1280,0.82);
-      _aboutBlocks.push({ type:'image', image });
-      _aboutBlocksDirty = true;
-      renderAboutBlocksEditor();
-    } catch(err){ toast(err.message||'Could not read image','err'); }
-  });
-  $('saveAbout').addEventListener('click', async()=>{
-    await withTabBusy((async()=>{
-      const d = await api('/admin/about-content/set', { blocks: _aboutBlocks });
-      toast(d.status==='success'?'About page saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') _aboutBlocksDirty = false;
-    })());
-  });
-  $('rrAddText').addEventListener('click', ()=>{
-    _rulesBlocks.push({ type:'text', text:'' });
-    _rulesBlocksDirty = true;
-    renderRulesBlocksEditor();
-    const areas = document.querySelectorAll('#rulesBlocksList textarea');
-    if (areas.length) areas[areas.length-1].focus();
-  });
-  $('rrAddImageFile').addEventListener('change', async e=>{
-    const f=e.target.files[0]; e.target.value=''; if(!f) return;
-    try {
-      const image = await fileToDataUrl(f,1280,0.82);
-      _rulesBlocks.push({ type:'image', image });
-      _rulesBlocksDirty = true;
-      renderRulesBlocksEditor();
-    } catch(err){ toast(err.message||'Could not read image','err'); }
-  });
-  $('saveRulesContent').addEventListener('click', async()=>{
-    await withTabBusy((async()=>{
-      const d = await api('/admin/rules-content/set', { blocks:_rulesBlocks });
-      toast(d.status==='success'?'Rules and Regulations saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') _rulesBlocksDirty = false;
-    })());
-  });
-}
-// About page block editor -- a plain ordered array of {type:'text',text} /
-// {type:'image',image} kept in _aboutBlocks while the tab is open, redrawn
-// in full on every add/move/delete/edit (small list, cheap to re-render).
-function renderAboutBlocksEditor(){
-  const box = $('aboutBlocksList'); if (!box) return;
-  if (!_aboutBlocks.length) { box.innerHTML = '<p class="muted" style="margin:8px 0">No blocks yet, add a text block or an image below.</p>'; return; }
-  box.innerHTML = _aboutBlocks.map((b,i)=>`
-    <div class="panel-card" style="margin-bottom:8px;padding:10px;">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-        <span class="muted" style="font-size:11px;flex:1;">${i+1}. ${b.type==='image'?'Image':'Text'}</span>
-        <button class="btn sm" data-ab-up="${i}" ${i===0?'disabled':''}>↑</button>
-        <button class="btn sm" data-ab-down="${i}" ${i===_aboutBlocks.length-1?'disabled':''}>↓</button>
-        <button class="btn danger sm" data-ab-del="${i}">Delete</button>
-      </div>
-      ${b.type==='image'
-        ? `<img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;">`
-        : `<textarea data-ab-text="${i}" rows="4" placeholder="Write a paragraph…">${esc(b.text)}</textarea>`}
-    </div>`).join('');
-  box.querySelectorAll('[data-ab-up]').forEach(btn=>btn.addEventListener('click', ()=>{
-    const i=+btn.dataset.abUp; [_aboutBlocks[i-1],_aboutBlocks[i]]=[_aboutBlocks[i],_aboutBlocks[i-1]]; _aboutBlocksDirty=true; renderAboutBlocksEditor();
-  }));
-  box.querySelectorAll('[data-ab-down]').forEach(btn=>btn.addEventListener('click', ()=>{
-    const i=+btn.dataset.abDown; [_aboutBlocks[i+1],_aboutBlocks[i]]=[_aboutBlocks[i],_aboutBlocks[i+1]]; _aboutBlocksDirty=true; renderAboutBlocksEditor();
-  }));
-  box.querySelectorAll('[data-ab-del]').forEach(btn=>btn.addEventListener('click', ()=>{
-    _aboutBlocks.splice(+btn.dataset.abDel,1); _aboutBlocksDirty=true; renderAboutBlocksEditor();
-  }));
-  box.querySelectorAll('[data-ab-text]').forEach(ta=>ta.addEventListener('input', ()=>{
-    _aboutBlocks[+ta.dataset.abText].text = ta.value; _aboutBlocksDirty=true;
-  }));
-}
-function renderRulesBlocksEditor(){
-  const box = $('rulesBlocksList'); if (!box) return;
-  if (!_rulesBlocks.length) { box.innerHTML = '<p class="muted" style="margin:8px 0">No rules content yet. Add text and image blocks below.</p>'; return; }
-  box.innerHTML = _rulesBlocks.map((b,i)=>`
-    <div class="panel-card" style="margin-bottom:8px;padding:10px;">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-        <span class="muted" style="font-size:11px;flex:1;">${i+1}. ${b.type==='image'?'Image':'Text'}</span>
-        <button class="btn sm" data-rr-up="${i}" ${i===0?'disabled':''}>↑</button>
-        <button class="btn sm" data-rr-down="${i}" ${i===_rulesBlocks.length-1?'disabled':''}>↓</button>
-        <button class="btn danger sm" data-rr-del="${i}">Delete</button>
-      </div>
-      ${b.type==='image'
-        ? `<img src="${esc(b.image)}" style="width:100%;display:block;border-radius:8px;">`
-        : `<textarea data-rr-text="${i}" rows="4" maxlength="4000" placeholder="Write a rule or regulation…">${esc(b.text)}</textarea>`}
-    </div>`).join('');
-  box.querySelectorAll('[data-rr-up]').forEach(btn=>btn.addEventListener('click', ()=>{
-    const i=+btn.dataset.rrUp; [_rulesBlocks[i-1],_rulesBlocks[i]]=[_rulesBlocks[i],_rulesBlocks[i-1]]; _rulesBlocksDirty=true; renderRulesBlocksEditor();
-  }));
-  box.querySelectorAll('[data-rr-down]').forEach(btn=>btn.addEventListener('click', ()=>{
-    const i=+btn.dataset.rrDown; [_rulesBlocks[i+1],_rulesBlocks[i]]=[_rulesBlocks[i],_rulesBlocks[i+1]]; _rulesBlocksDirty=true; renderRulesBlocksEditor();
-  }));
-  box.querySelectorAll('[data-rr-del]').forEach(btn=>btn.addEventListener('click', ()=>{
-    _rulesBlocks.splice(+btn.dataset.rrDel,1); _rulesBlocksDirty=true; renderRulesBlocksEditor();
-  }));
-  box.querySelectorAll('[data-rr-text]').forEach(ta=>ta.addEventListener('input', ()=>{
-    _rulesBlocks[+ta.dataset.rrText].text=ta.value; _rulesBlocksDirty=true;
-  }));
 }
 
 // ── MODAL ──
@@ -3975,52 +3744,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
-<script data-inner-bg-admin>
-(function(){
-  var busy=false,lastRegion='';
-  function token(){try{return sessionStorage.getItem('snow_admin_token')||'';}catch(_){return '';}}
-  function region(){return 'ug';}
-  async function req(path,body){
-    var h={};var t=token();if(t)h.Authorization='Bearer '+t;
-    var o={method:body?'POST':'GET',headers:h};
-    if(body){h['Content-Type']='application/json';o.body=JSON.stringify(body);}
-    var r=await fetch('/api'+path,o);return r.json();
-  }
-  async function mount(){
-    if(busy)return;
-    var settingsTab=document.querySelector('[data-tab="settings"].active');
-    var content=document.getElementById('content');
-    if(!settingsTab||!content)return;
-    var reg=region();
-    if(document.getElementById('innerBgAdminPanel')&&lastRegion===reg)return;
-    busy=true;lastRegion=reg;
-    try{
-      var path='/admin/settings'+(reg!=='ug'?'?region='+encodeURIComponent(reg):'');
-      var d=await req(path),s=(d&&d.settings)||{};
-      var old=document.getElementById('innerBgAdminPanel');if(old)old.remove();
-      var box=document.createElement('div');
-      box.id='innerBgAdminPanel';
-      box.innerHTML='<h2 class="sec">Signed-in page background</h2>'
-        +'<div class="panel-card"><p class="muted" style="margin-top:0">Controls only Home, Assets, Network, Profile, Recharge, Withdraw, Wallet and other pages after login. Login, Sign Up and Forgot Password are not changed.</p>'
-        +'<div class="row"><div><label>Background opacity (0–100%)</label><input id="innerBgOpAdmin" type="number" min="0" max="100" value="'+(s.innerBgOpacity!=null?s.innerBgOpacity:100)+'"></div>'
-        +'<div><label>Background blur (0–40 px)</label><input id="innerBgBlurAdmin" type="number" min="0" max="40" value="'+(s.innerBgBlur!=null?s.innerBgBlur:0)+'"></div></div>'
-        +'<button class="btn block" id="saveInnerBgAdmin" style="margin-top:12px">Save inner background</button></div>';
-      content.appendChild(box);
-      document.getElementById('saveInnerBgAdmin').onclick=async function(){
-        var op=Number(document.getElementById('innerBgOpAdmin').value);
-        var bl=Number(document.getElementById('innerBgBlurAdmin').value);
-        if(!Number.isFinite(op)||op<0||op>100||!Number.isFinite(bl)||bl<0||bl>40){alert('Opacity must be 0–100 and blur 0–40.');return;}
-        var btn=this;btn.disabled=true;btn.textContent='Saving…';
-        var out=await req('/admin/settings/update',{region:reg,settings:{innerBgOpacity:op,innerBgBlur:bl}});
-        btn.disabled=false;btn.textContent=out&&out.status==='success'?'Saved':'Save inner background';
-        if(!(out&&out.status==='success'))alert((out&&out.message)||'Could not save');
-      };
-    }catch(_){}
-    busy=false;
-  }
-  var obs=new MutationObserver(function(){setTimeout(mount,20);});
-  document.addEventListener('DOMContentLoaded',function(){var c=document.getElementById('content');if(c)obs.observe(c,{childList:true,subtree:false});document.addEventListener('click',function(){setTimeout(mount,50);});mount();});
-})();
-</script>
+
 </body>
 </html>
