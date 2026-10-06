@@ -6943,7 +6943,7 @@ app.get('/bank/supported-banks', async (req, res) => {
   const banks = await getSupportedBanks();
   res.json({ status: 'success', banks: banks.map(b => b.name) });
 });
-const MAX_SAVED_PAYOUT_ACCOUNTS = 10;
+const MAX_SAVED_PAYOUT_ACCOUNTS = 1; // one wallet per member; /bank/save edits it in place
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -7016,17 +7016,17 @@ app.post('/bank/save', async (req, res) => {
     }
     // Saving/removing a payout destination here doesn't move any money by
     // itself -- see /withdraw/request for the actual money-moving path.
-    const dup = await withLock('bank-save:' + userId, async () => {
-      const dupSnap = await db.collection('bankAccounts').where('userId', '==', userId).where('phone', '==', destValue).limit(1).get();
-      if (!dupSnap.empty) return true;
-      // Bounded so one account cannot fill the table with saved destinations.
-      const mine = await db.collection('bankAccounts').where('userId', '==', userId).limit(MAX_SAVED_PAYOUT_ACCOUNTS + 1).get();
-      if (mine.size >= MAX_SAVED_PAYOUT_ACCOUNTS) return 'limit';
+    // One payout wallet per member: saving EDITS it in place (any older extra rows are dropped), it never adds a second.
+    await withLock('bank-save:' + userId, async () => {
+      const mine = await db.collection('bankAccounts').where('userId', '==', userId).get();
+      const rows = mine.docs || [];
+      if (rows.length) {
+        await rows[0].ref.update({ holder: verifiedHolder, network: rawNetwork, phone: destValue, updatedAt: FieldValue.serverTimestamp() });
+        for (const extra of rows.slice(1)) await extra.ref.delete();
+        return;
+      }
       await db.collection('bankAccounts').add({ userId, holder: verifiedHolder, network: rawNetwork, phone: destValue, createdAt: FieldValue.serverTimestamp() });
-      return false;
     });
-    if (dup === 'limit') return res.status(400).json({ status: 'error', message: `You can save up to ${MAX_SAVED_PAYOUT_ACCOUNTS} withdrawal accounts. Remove one first.` });
-    if (dup) return res.status(400).json({ status: 'error', message: 'This account is already saved as a withdrawal account.' });
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save the withdrawal account' });
@@ -7095,7 +7095,8 @@ app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const raw = String(req.body.code || '').trim().slice(0, 32);
-  if (!raw || !/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Enter a gift code' });
+  if (!raw) return res.status(400).json({ status: 'error', message: 'Please enter the treasure chest key' });
+  if (!/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Wrong treasure chest password' });
   try {
     let result = null;
     // Lock on the lowercased code, not the raw input: two members submitting

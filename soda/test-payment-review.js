@@ -28,27 +28,32 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
   eq(t.r.code, 200, 'manual mark-as-paid for an already-made payment still records'); eq(t.calls[0][1], 'processed');
   // (an active member in automatic mode proceeds past the guard to the gateway code, covered by the existing payout tests)
 
-  // 2. saved-account cap
-  ok(/const MAX_SAVED_PAYOUT_ACCOUNTS = 10;/.test(src), 'cap is defined');
+  // 2. one payout wallet per member: saving edits it in place
+  ok(/const MAX_SAVED_PAYOUT_ACCOUNTS = 1;/.test(src), 'one wallet per member');
   async function save(existing, phone) {
-    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p })); let added = 0, code = 200, body;
+    const rows = existing.map((p, i) => ({ id: 'b' + i, userId: 'u1', phone: p, holder: 'OLD', network: 'MTN Mobile Money' }));
+    const log = { added: 0, updated: [], deleted: [] }; let code = 200, body;
+    const mkDoc = r => ({ id: r.id, data: () => r, ref: { update: async u => { log.updated.push([r.id, u]); }, delete: async () => { log.deleted.push(r.id); } } });
     const chain = (list, f = []) => ({ where: (k, o, v) => chain(list, [...f, [k, v]]), limit: () => chain(list, f),
-      get: async () => { const got = list.filter(r => f.every(([k, v]) => r[k] === v)); return { empty: !got.length, size: got.length, docs: got.map(r => ({ id: r.id, data: () => r })) }; } });
-    const db = { collection: n => n === 'bankAccounts' ? { ...chain(rows), add: async () => { added++; } } : { doc: () => ({ get: async () => ({ exists: true, data: () => ({ phone: '0700000000', status: 'active' }) }) }) } };
+      get: async () => { const got = list.filter(r => f.every(([k, v]) => r[k] === v)); return { empty: !got.length, size: got.length, docs: got.map(mkDoc) }; } });
+    const db = { collection: n => n === 'bankAccounts' ? { ...chain(rows), add: async () => { log.added++; } } : { doc: () => ({ get: async () => ({ exists: true, data: () => ({ phone: '0700000000', status: 'active' }) }) }) } };
     let handler; const app = { post: (p, h) => { if (p === '/bank/save') handler = h; } };
-    const i = src.indexOf('const MAX_SAVED_PAYOUT_ACCOUNTS'), j = src.indexOf('app.get(\'/bank/list\'');
-    new Function('app', 'db', 'verifyAuth', 'stripHtml', 'NETWORK_NAMES', 'cleanPhone', 'badPhoneMessage', 'getSettings', 'getSupportedBanks', 'consumeOtpTicket', 'marzValidateBankAccount', 'marzUserMsg', 'withLock', 'FieldValue',
+    const i = src.indexOf('const MAX_SAVED_PAYOUT_ACCOUNTS'), j = src.indexOf("app.get('/bank/list'");
+    new Function('app', 'db', 'verifyAuth', 'stripHtml', 'NETWORK_NAMES', 'cleanPhone', 'badPhoneMessage', 'getSettings', 'getSupportedBanks', 'consumeOtpTicket', 'marzValidateBankAccount', 'marzUserMsg', 'withLock', 'FieldValue', 'console',
       src.slice(i, j))(app, db, async () => 'u1', s => String(s || '').trim(), new Set(['MTN Mobile Money']), p => String(p).replace(/\D/g, ''), () => 'bad phone',
-      async () => ({ otpVerificationEnabled: false }), async () => [], async () => true, async () => ({}), () => '', (k, g) => g(), { serverTimestamp: () => 1 });
+      async () => ({ otpVerificationEnabled: false }), async () => [], async () => true, async () => ({}), () => '', (k, g) => g(), { serverTimestamp: () => 1 }, console);
     const res = { status(c) { code = c; return this; }, json(b) { body = b; return this; } };
-    await handler({ body: { holder: 'A B', network: 'MTN Mobile Money', phone } }, res); return { code, body, added };
+    await handler({ body: { holder: 'A B', network: 'MTN Mobile Money', phone } }, res); return { code, body, ...log };
   }
-  let r = await save(Array.from({ length: 9 }, (_, i) => '07000000' + (10 + i)), '0770000099');
-  eq([r.code, r.added], [200, 1], 'the 10th account is accepted');
-  r = await save(Array.from({ length: 10 }, (_, i) => '07000000' + (10 + i)), '0770000099');
-  ok(r.code === 400 && /up to 10/.test(r.body.message) && r.added === 0, 'the 11th is refused: ' + r.body.message);
-  r = await save(Array.from({ length: 10 }, (_, i) => '07000000' + (10 + i)), '0700000010');
-  ok(r.code === 400 && /already saved/.test(r.body.message), 'a duplicate still gets the duplicate message');
+  let r = await save([], '0770000099');
+  eq([r.code, r.added, r.updated.length], [200, 1, 0], 'the first wallet is added');
+  r = await save(['0700000010'], '0770000099');
+  eq([r.code, r.added, r.updated.length, r.deleted.length], [200, 0, 1, 0], 'saving again edits the one wallet in place, no second row');
+  ok(r.updated[0][1].phone === '0770000099' && r.updated[0][1].holder === 'A B', 'with the new number and holder');
+  r = await save(['0700000010', '0700000011', '0700000012'], '0770000099');
+  eq([r.added, r.updated.length, r.deleted.length], [0, 1, 2], 'any older extra wallets are removed');
+  r = await save(['0770000099'], '0770000099');
+  eq([r.code, r.added, r.updated.length], [200, 0, 1], 'saving the same number again just updates the holder');
 
   // 3. sweep
   const sweep = fn('sweepEphemeralState');

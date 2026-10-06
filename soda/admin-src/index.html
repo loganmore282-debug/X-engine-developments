@@ -2813,8 +2813,8 @@ function applyAdminBrandName(name){
 // already uses -- one extra round of these 4 small fetches on switching
 // tabs, in exchange for not threading one function's closure across two.
 async function renderBanners(){
-  const [r, br, cir, bar] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/soda-images'), api('/admin/brand-assets')
+  const [r, br, cir, bar, annr] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/soda-images'), api('/admin/brand-assets'), api('/admin/announcement-image')
   ]);
   if (staleTab('banners')) return;
   const s = r.settings||{};
@@ -2825,6 +2825,7 @@ async function renderBanners(){
   const homeSlide3Image = cir.banner3||'';
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
+  const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
   $('content').innerHTML = `
@@ -2865,6 +2866,17 @@ async function renderBanners(){
         ${homeSlide3Image?`<button class="btn danger sm" id="homeSlide3Clear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload slide 3 image<input type="file" id="homeSlide3File" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Announcement picture</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The portrait picture members see when they open the app (with Join Channel and Close under it). Portrait, about 800&times;1200. Shown only while the announcement is enabled in Settings.</p>
+      <div class="banner-row">
+        ${announcementImage?`<img class="img-thumb" src="${esc(announcementImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        ${announcementImage?`<button class="btn danger sm" id="annImageClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="annImageFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Profile logo</h2>
@@ -2992,6 +3004,27 @@ function wireBannerHandlers(){
   wireSodaImageSlot('authhero', 'authHeroFile', 'authHeroClear', 'Background image saved, live on Log In and Sign Up', 'Background image removed');
   wireSodaImageSlot('banner2', 'homeSlide2File', 'homeSlide2Clear', 'Slide 2 saved, live on Home', 'Slide 2 removed');
   wireSodaImageSlot('banner3', 'homeSlide3File', 'homeSlide3Clear', 'Slide 3 saved, live on Home', 'Slide 3 removed');
+  const annImageFile = $('annImageFile');
+  if (annImageFile) annImageFile.addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const image = await fileToDataUrl(f, 1200, 0.82);
+        const d = await api('/admin/announcement-image/set', { image });
+        toast(d.status==='success'?'Announcement picture saved, live for every member':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderBanners();
+      } catch(err){ toast(err.message||'Could not read image','err'); }
+    })());
+  });
+  const annImageClear = $('annImageClear');
+  if (annImageClear) annImageClear.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/announcement-image/clear', {});
+      toast(d.status==='success'?'Announcement picture removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderBanners();
+    })());
+  });
   wireSodaImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   const brandLogoFile = $('brandLogoFile');
   if (brandLogoFile) brandLogoFile.addEventListener('change', async e=>{
@@ -3158,7 +3191,7 @@ async function renderSettings(){
 
     <h2 class="sec">Home announcement dialog</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A popup shown every time a member logs in or completes registration, and also when they navigate back to Home from Assets, Network or Account. Its WhatsApp and Telegram group buttons use the links set in Support contacts above.</p>
+      <p class="muted" style="margin-top:0">A popup shown every time a member logs in or completes registration, and also when they navigate back to Home. It shows the picture uploaded under Banners (Announcement picture), with Join Channel (the Telegram group link, else the WhatsApp group link set in Support contacts above) and Close under it.</p>
       <div class="switch-row"><span><b>Enable announcement</b></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAnnEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
       <label>Title</label><input id="sAnnTitle" maxlength="80" value="${esc(v('annTitle',''))}" placeholder="e.g. New assets are live">

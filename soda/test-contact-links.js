@@ -1,5 +1,5 @@
 'use strict';
-// Announcement dialog: WhatsApp + Telegram group buttons (no email).
+// Announcement dialog: one admin-uploaded portrait picture with Join Channel + Close.
 // Support page: WhatsApp, Telegram group, Telegram customer service, email.
 // Drives the real source in JSDOM (and the built bundle with --built).
 const fs = require('node:fs'), zlib = require('node:zlib'), assert = require('node:assert/strict');
@@ -19,16 +19,25 @@ for (const s of d.scripts) {
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
-  w.eval('STATE.page="home";STATE.settings={annEnabled:true,annTitle:"Hello",annBody:"Body",whatsappGroup:"https://chat.whatsapp.com/abc",telegramGroup:"https://t.me/grp",supportTelegram:"https://t.me/agent",supportEmail:"help@x.com",supportHours:"8-5"}');
+  w.eval('STATE.page="home";STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings={annEnabled:true,annTitle:"Hello",annBody:"Body",whatsappGroup:"https://chat.whatsapp.com/abc",telegramGroup:"https://t.me/grp",supportTelegram:"https://t.me/agent",supportEmail:"help@x.com",supportHours:"8-5"}');
   w.maybeShowAnnouncement();
-  const links = [...d.querySelectorAll('#annSheet .ann-cta a')];
-  assert.deepEqual(links.map(a => a.className), ['whatsapp', 'telegram'], 'dialog: WhatsApp and Telegram group, nothing else'); n++;
-  assert.equal(links[1].getAttribute('href'), 'https://t.me/grp'); n++;
-  ok(/Telegram Group/.test(links[1].textContent) && links[1].querySelector('svg'), 'Telegram button has its label and icon');
-  ok(!/mailto|Email/i.test(d.getElementById('annSheet').innerHTML), 'no email in the dialog');
+  const sheet = d.getElementById('annSheet');
+  ok(d.getElementById('annBg').classList.contains('show'), 'dialog opens with an admin picture');
+  ok(sheet.querySelector('img.v-ann-img') && sheet.querySelector('img').getAttribute('src') === 'data:image/png;base64,AAAA', 'the picture is the admin upload');
+  assert.deepEqual([...sheet.querySelectorAll('.v-ann-btns a, .v-ann-btns button')].map(e => e.textContent.trim()), ['Join Channel', 'Close'], 'buttons: Join Channel, Close, nothing else'); n++;
+  assert.equal(sheet.querySelector('.v-ann-join').getAttribute('href'), 'https://t.me/grp', 'Join Channel = Telegram group'); n++;
+  ok(!/Hello|Body|mailto|Email|WhatsApp/i.test(sheet.innerHTML), 'only the picture and the two buttons');
   w.eval('STATE.settings.telegramGroup=""'); w.maybeShowAnnouncement();
-  assert.deepEqual([...d.querySelectorAll('#annSheet .ann-cta a')].map(a => a.className), ['whatsapp'], 'a blank Telegram group hides its button'); n++;
+  assert.equal(d.querySelector('#annSheet .v-ann-join').getAttribute('href'), 'https://chat.whatsapp.com/abc', 'no Telegram group -> WhatsApp group'); n++;
+  w.eval('STATE.settings.whatsappGroup=""'); w.maybeShowAnnouncement();
+  assert.deepEqual([...d.querySelectorAll('#annSheet .v-ann-btns > *')].map(e => e.textContent.trim()), ['Close'], 'no link -> only Close'); n++;
   w.closeAnnouncement();
+  ok(!d.getElementById('annBg').classList.contains('show'), 'Close hides it');
+  w.eval('STATE.announcementImage=null'); d.getElementById('annSheet').innerHTML = ''; w.maybeShowAnnouncement();
+  ok(!d.getElementById('annBg').classList.contains('show'), 'no picture uploaded -> no dialog');
+  w.eval('STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings.annEnabled=false'); w.maybeShowAnnouncement();
+  ok(!d.getElementById('annBg').classList.contains('show'), 'announcement switched off -> no dialog');
+  w.eval('STATE.settings.whatsappGroup="https://chat.whatsapp.com/abc"');
   w.eval('STATE.settings.telegramGroup="https://t.me/grp"'); w.openSupportSheet();
   const rows = [...d.querySelectorAll('.support-row')];
   assert.deepEqual(rows.map(r => r.querySelector('.t1').textContent), ['WhatsApp Channel', 'Telegram Group', 'Telegram Customer Service', 'Email Support'], 'support page rows'); n++;

@@ -1189,6 +1189,7 @@ var VI = {
   logout: vSvg('<path d="M9.5 4H6.2A2.2 2.2 0 0 0 4 6.2v11.6A2.2 2.2 0 0 0 6.2 20h3.3"/><path d="m16 8 4 4-4 4"/><path d="M20 12H9.5"/>'),
   copy: vSvg('<rect x="9" y="9" width="11" height="11" rx="2.4"/><path d="M15 9V6.4A2.4 2.4 0 0 0 12.6 4H6.4A2.4 2.4 0 0 0 4 6.4v6.2A2.4 2.4 0 0 0 6.4 15H9"/>'),
   errCircle: vSvg('<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>'),
+  key: vSvg('<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16.5 6.5l2.5 2.5M14 9l2 2"/>'),
   okCircle: vSvg('<circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.9 2.9 5.2-5.6"/>'),
   back: vSvg('<path d="m15 5-7 7 7 7"/>', ' stroke-width="2.4"'),
   x: vSvg('<path d="M6 6l12 12M18 6 6 18"/>', ' stroke-width="2.2"'),
@@ -2222,11 +2223,8 @@ async function boot(){
 // replies land -- which may be before or after the app becomes visible, so
 // it repaints whatever is currently on screen rather than assuming.
 function applyBootArtwork(ai, ci){
-  // `ai` (the removed announcement dialog's own image) is no longer read
-  // here -- kept as a parameter only because its caller's Promise.all still
-  // fetches it; not worth touching that sequence just to drop one entry.
-  // Same reasoning once more for the two Soda-only slots: the Referral
-  // page banner and the brand logo on the Account profile card.
+  // `ai` = the announcement picture; `ci` = the other admin images.
+  STATE.announcementImage = (ai && ai.status === 'success' && ai.image) ? ai.image : null;
   STATE.brandLogo = (ci.status === 'success' && ci.logo) ? ci.logo : null;
   STATE.profileLogo = (ci.status === 'success' && ci.profilelogo) ? ci.profilelogo : null;
   syncBrandLogoImages();
@@ -3331,21 +3329,21 @@ window.closeAnnouncement = function(){
   if (bg) bg.classList.remove('show');
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
 };
+// The announcement is one portrait picture (uploaded in the admin panel) with
+// Join Channel and Close under it. Join Channel opens the Telegram group link,
+// or the WhatsApp group link when no Telegram group is set.
 function maybeShowAnnouncement(){
   const s = STATE.settings || {};
-  if (!s.annEnabled || !(s.annTitle || s.annBody)) return;
+  if (!s.annEnabled || !STATE.announcementImage) return;
   const bg = $('annBg'), sheet = $('annSheet');
   if (!bg || !sheet) return;
-  const ctas = [];
-  if (s.whatsappGroup) ctas.push(`<a class="whatsapp" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">${ICONS.whatsapp}<span>WhatsApp Channel</span></a>`);
-  if (s.telegramGroup) ctas.push(`<a class="telegram" href="${esc(s.telegramGroup)}" target="_blank" rel="noopener">${ICONS.telegram}<span>Telegram Group</span></a>`);
+  const link = s.telegramGroup || s.whatsappGroup || '';
   sheet.innerHTML = `
-    <button class="ann-close" onclick="closeAnnouncement()" aria-label="Close">${ICONS.x}</button>
-    <div class="ann-mark">${ICONS.megaphone}</div>
-    ${s.annTitle ? `<h3 class="ann-title">${esc(s.annTitle)}</h3>` : ''}
-    ${s.annBody ? `<p class="ann-body">${esc(s.annBody)}</p>` : ''}
-    ${ctas.length ? `<div class="ann-cta">${ctas.join('')}</div>` : ''}
-  `;
+    <img class="v-ann-img" src="${esc(STATE.announcementImage)}" alt="">
+    <div class="v-ann-btns">
+      ${link ? `<a class="v-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()">Join Channel</a>` : ''}
+      <button class="v-ann-close" type="button" onclick="closeAnnouncement()">Close</button>
+    </div>`;
   bg.classList.add('show');
   lockBodyScroll();
 }
@@ -4408,25 +4406,21 @@ function walletDestDisplay(w){
   if (!w) return '';
   return isMobileMoneyNetwork(w.network) ? walletLocalPhone(w.phone) : String(w.phone || '');
 }
-function walletPlainRowHtml(w){
-  if (!w) return '';
-  const network = String(w.network || 'Mobile Money').replace(/\s*(Mobile )?Money$/i, '') || 'Mobile Money';
-  return `
-  <div class="wallet-plain-row">
-    <div class="wallet-plain-copy">
-      <div class="wallet-plain-number mono">${esc(walletDestDisplay(w))}</div>
-      <div class="wallet-plain-name">${esc(String(w.holder || '').toUpperCase())}</div>
-      <div class="wallet-plain-network">${esc(network)}</div>
-    </div>
-    <button class="wallet-delete" type="button" onclick="deleteWallet('${esc(w.id)}')" aria-label="Delete payout wallet">${ICONS.trash}</button>
-  </div>`;
-}
 function walProviderOptionsHtml(){
   return walProviders().map(p => `<button type="button" class="prov-opt" onclick="pickProvider('${esc(p)}')">${esc(walShort(p))}</button>`).join('');
 }
 function walRowsHtml(){
-  return (STATE.bankAccounts || []).map(a => `
-    <div class="v-wal-row"><b>${esc(walShort(a.network))}</b><span>${esc(maskedTail(a.phone))}</span><em>${esc(String(a.holder || '').toUpperCase())}</em><button class="v-wdel2" type="button" onclick="deleteWallet('${esc(a.id)}')" aria-label="Delete wallet">${ICONS.trash}</button></div>`).join('');
+  return (STATE.bankAccounts || []).slice(0, 1).map(a => `
+    <div class="v-wal-row"><b>${esc(walShort(a.network))}</b><span>${esc(maskedTail(a.phone))}</span><em>${esc(String(a.holder || '').toUpperCase())}</em></div>`).join('');
+}
+// The one saved wallet is edited in place: its provider, number and holder
+// fill the form (only into empty fields, so nothing the member typed is lost).
+function prefillWallet(){
+  const w = currentWallet(); if (!w) return;
+  const prov = $('walProvider'), ph = $('walPhone'), holder = $('walHolder');
+  if (prov && !prov.value) { prov.value = walShort(w.network); prov.dataset.network = w.network; }
+  if (ph && !ph.value) ph.value = walletDestDisplay(w);
+  if (holder && !holder.value) holder.value = String(w.holder || '').toUpperCase();
 }
 // Only the card, the heading and the "Your Wallet" rows: the typed fields are never touched.
 function paintWalletParts(){
@@ -4434,8 +4428,7 @@ function paintWalletParts(){
   const head = $('walEditHead'); if (head) head.textContent = currentWallet() ? 'Edit Wallet' : 'Bind Wallet';
   const rows = $('walRows'); if (rows) rows.innerHTML = walRowsHtml();
   const own = $('walYours'); if (own) own.style.display = (STATE.bankAccounts || []).length ? '' : 'none';
-  const holder = $('walHolder'); const w = currentWallet();
-  if (holder && !holder.value && w) holder.value = String(w.holder || '').toUpperCase();
+  prefillWallet();
 }
 function renderWalletSheet(){
   const w = currentWallet();
@@ -4467,6 +4460,7 @@ function renderWalletSheet(){
       </div>
     </div>
   </div>`;
+  prefillWallet();
 }
 window.toggleWalletEdit = function(on){ _walletPending = null; _walletOtpId = null; renderWalletSheet(); };
 // The provider list from the mockup: tap the field, a plain list drops under
@@ -4588,32 +4582,12 @@ window.confirmWalletOtp = async function(){
 // Shared tail of a successful /bank/save, whether it came from the OTP flow
 // above or straight from submitWallet() when bankOtpRequired is off.
 async function finishWalletSave(){
-  // Just re-read the real list and show it -- Soda now allows saving more
-  // than one wallet, so the old "delete every other row" collapse is gone.
+  // One wallet only: /bank/save edits it in place, so just re-read and show it.
   const fresh = await api('/bank/list');
   STATE.bankAccounts = fresh.status === 'success' ? fresh.accounts : (STATE.bankAccounts || []);
   notify('Wallet saved');
   if (_openSheetTitle === 'Wallet') renderWalletSheet();
 }
-window.deleteWallet = function(id){
-  if (!id) return;
-  openSimpleConfirm('Delete wallet', 'Remove this payout number?', async () => {
-    const r = await post('/bank/delete', { id });
-    if (r.status !== 'success') { notify(r.message || 'Could not remove the wallet.'); return false; }
-    STATE.bankAccounts = (STATE.bankAccounts || []).filter(x => x.id !== id);
-    // Was unconditional -- correct back when a delete always emptied the
-    // list entirely (Soda's old one-wallet rule), wrong now that deleting
-    // ONE of several should return to the remaining list, not jump straight
-    // into "add a new wallet". Same "editing only when genuinely empty"
-    // rule openWalletSheet() itself already uses.
-    if (_openSheetTitle === 'Wallet') paintWalletParts();
-    // The Withdraw screen may have had exactly this wallet selected --
-    // clear a now-dangling selection so it falls back to whatever is left.
-    if (_witSelectedWalletId === id) _witSelectedWalletId = null;
-    return true;
-  });
-};
-
 // ── NOTIFY DIALOG (Notify.dc.html) ──
 // The app-wide validation alert: dimmed backdrop, amber warning triangle,
 // message, one pill OK. Replaces notify() for anything the member must
@@ -4995,14 +4969,15 @@ window.submitTradePasswordChange = async function(){
 // chest artwork, key field, OPEN CHEST. A valid key flashes the green
 // full-screen win state with the amount won and the new balance.
 window.openChestSheet = function(){
-  openSheet('Gift Codes', `<div class="reveal-in gift-code-stage">
-    <div class="gift-code-mark" aria-hidden="true">${VI.bottle}</div>
-    <h2>Redeem Gift Code</h2>
-    <p class="sub">Enter a valid gift code to add its reward to your balance.</p>
-    <div style="width:100%;">
-      <div class="key-field"><input id="chestKey" type="text" placeholder="Enter gift code" maxlength="14" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
-      <button class="primary-button" id="chestOpenBtn" style="width:100%;height:54px;padding:0;font-size:16px;letter-spacing:.06em;" onclick="submitChestKey()">REDEEM CODE</button>
-    </div>
+  const pic = STATE.brandLogo
+    ? `<img src="${esc(STATE.brandLogo)}" alt="">`
+    : `<span class="v-chest-ic">${VI.bottle}</span>`;
+  openSheet('TREASURE CHEST', `<div class="v-chest reveal-in">
+    <div class="v-chest-ring"><div class="v-chest-disc">${pic}</div></div>
+    <h2>MYSTERY TREASURE</h2>
+    <p>Enter your key to unlock the reward</p>
+    <div class="v-chest-key"><span class="v-chest-keyic">${VI.key}</span><input id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="14" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+    <button class="v-chest-go" id="chestOpenBtn" type="button" onclick="submitChestKey()">UNLOCK TREASURE</button>
   </div>`);
 };
 window.submitChestKey = async function(){
@@ -5012,12 +4987,12 @@ window.submitChestKey = async function(){
   const raw = ($('chestKey').value || '').trim();
   // Owner named these two exactly: "so on 'please enter the treasure chest
   // key', 'wrong treasure chest password'."
-  if (!raw) return notify('Please enter a gift code');
+  if (!raw) return notify('Please enter the treasure chest key');
   const btn = $('chestOpenBtn');
-  btn.disabled = true; btn.textContent = 'REDEEMING…';
+  btn.disabled = true; btn.textContent = 'UNLOCKING…';
   const r = await post('/redeem', { code: raw });
-  btn.disabled = false; btn.textContent = 'REDEEM CODE';
-  if (r.status !== 'success') return notify(r.message || 'That gift code could not be redeemed.');
+  btn.disabled = false; btn.textContent = 'UNLOCK TREASURE';
+  if (r.status !== 'success') return notify(r.message || 'Wrong treasure chest password');
   // Owner: "why does the congratulations card delay to appear when one has
   // claimed treasure code." Because it used to wait on TWO more round trips
   // after the redeem itself -- /account and the transactions cache -- purely
@@ -5041,7 +5016,7 @@ window.submitChestKey = async function(){
   // amount/live-counting balance/COLLECT, showChestWin() and friends) is
   // gone -- a redeemed code is now just this one toast, the same notify()
   // every other quick confirmation in this app already uses.
-  notify('Giftcode redeemed successfully ✓');
+  notify('Giftcode redeemed successfully');
   // Now catch the app up in the background.
   refreshAfterWin();
 };
@@ -6262,18 +6237,9 @@ async function pollDepositStatus(depositId){
 // exist. null means "no explicit pick yet" -- witSelectedWallet() then
 // falls back to the first saved one, so a member with only one wallet (the
 // common case) never sees a picker or has to choose anything.
-var _witSelectedWalletId = null;
-function witSelectedWallet(){
-  const accounts = STATE.bankAccounts || [];
-  if (_witSelectedWalletId) {
-    const hit = accounts.find(a => a.id === _witSelectedWalletId);
-    if (hit) return hit;
-  }
-  return accounts[0] || null;
-}
+function witSelectedWallet(){ return (STATE.bankAccounts || [])[0] || null; }
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
-  _witSelectedWalletId = null;
   openSheet('Withdraw', '');
   // Paint the actual withdrawal page immediately. Waiting for /bank/list
   // left a transparent-looking empty sheet over Home on a cold open.
@@ -6334,44 +6300,14 @@ function withdrawHoursLine(s){
   if (!w.enabled) return 'Withdraw can be requested at any time of day.';
   return `Withdraw time: ${esc(w.from)} to ${esc(w.to)}.`;
 }
-// The wallet card, plus a "Switch wallet" picker when more than one saved
-// wallet exists (owner: "make when one can add multiple banks") -- a
-// separate small toggle list under the card, reusing the exact
-// .prov-list/.prov-opt look the provider picker already established,
-// rather than sending the member all the way to the Wallet sheet just to
-// choose which of their OWN already-saved wallets this one withdrawal goes
-// to. Isolated in its own function so openWithdrawSheet()'s post-fetch
+// The one wallet card and the Bind Wallet button (one wallet per member; the
+// Wallet page edits it in place). Isolated so openWithdrawSheet()'s post-fetch
 // update can repaint only this block, never #witAmount.
 function witWalletBlockHtml(s){
-  const accounts = STATE.bankAccounts || [];
   const w = witSelectedWallet();
-  const switcher = accounts.length > 1 ? `
-    <div class="prov-pick" id="witWalletPick">
-      <button class="v-bind" type="button" style="margin:0 0 10px;" onclick="toggleWitWalletPicker()">Switch wallet</button>
-      <div class="prov-list" id="witWalletList">
-        ${accounts.map(a => `<button type="button" class="prov-opt${w && a.id === w.id ? ' on' : ''}" onclick="selectWitWallet('${esc(a.id)}')">${esc(walletDestDisplay(a))} — ${esc(String(a.network || '').replace(/\s*(Mobile )?Money$/i, ''))}</button>`).join('')}
-      </div>
-    </div>` : '';
   return `<div id="witWallet">${walletCardHtml(w)}</div>
-    ${switcher}
     <button id="witBindBtn" class="v-bind" type="button" onclick="openWalletSheet()">Bind Wallet</button>`;
 }
-window.toggleWitWalletPicker = function(){
-  const box = $('witWalletPick');
-  if (box) box.classList.toggle('open');
-};
-window.selectWitWallet = function(id){
-  _witSelectedWalletId = id;
-  const s = STATE.settings || {};
-  const block = $('witWalletBlock');
-  if (block) block.innerHTML = witWalletBlockHtml(s);
-};
-// Closes the wallet switcher the same way the provider picker's own
-// document-level listener does -- tapping anywhere outside it.
-document.addEventListener('click', function(e){
-  const box = document.getElementById('witWalletPick');
-  if (box && box.classList.contains('open') && !box.contains(e.target)) box.classList.remove('open');
-});
 // Withdraw.dc.html. Replaces the form inherited from Snow: a tinted balance
 // card, a UGX-prefixed amount field, the bound wallet shown as the same
 // bank-card tile the Wallet screen uses (not a <select> of several), the
