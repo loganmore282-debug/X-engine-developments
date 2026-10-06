@@ -4661,7 +4661,7 @@ app.get('/investments', async (req, res) => {
     });
     res.json({ status: 'success', investments });
   } catch (e) {
-    res.status(500).json({ status: 'error', message: 'Could not load your plans' });
+    res.status(500).json({ status: 'error', message: 'Could not load your products' });
   }
 });
 
@@ -5921,7 +5921,7 @@ app.post('/withdraw/request', async (req, res) => {
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       if (fresh.data().registrationDone === false) throw new Error('Finish signing up before withdrawing.');
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
-        throw new Error('Purchase at least one plan before you can withdraw.');
+        throw new Error('Purchase at least one product before you can withdraw.');
       const bal = fresh.data().walletBalance || 0;
       if (bal < amt) {
         logSecurityEvent(userId, 'withdraw_insufficient_funds', { attempted: amt, balance: bal });
@@ -7685,7 +7685,7 @@ app.post('/admin/admins/deactivate', async (req, res) => {
     await invalidateSessionsFor(username);
     logAdminAction(req, 'admin_deactivated', { username });
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/admins/reactivate', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -7694,7 +7694,7 @@ app.post('/admin/admins/reactivate', async (req, res) => {
     await db.collection('adminUsers').doc(username).update({ active: true });
     logAdminAction(req, 'admin_reactivated', { username });
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/admins/reset-password', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -8609,7 +8609,7 @@ app.post('/admin/promocodes/deactivate', async (req, res) => {
     await db.collection('promoCodes').doc(id).update({ active: false });
     logAdminAction(req, 'giftcode_deactivated', { id });
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }
 });
 
 // Legacy rows may carry a currency tag, but all new Soda activity is UGX.
@@ -9276,11 +9276,14 @@ app.post('/admin/debit', async (req, res) => {
     }));
     logAdminAction(req, 'manual_debit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Removed ${fmtMoney(amt)}. New balance ${fmtMoney(newBal)}`, newBalance: newBal });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { res.status(/^Cannot debit/.test(e.message) ? 400 : adminFailCode(e)).json({ status: 'error', message: e.message }); }
 });
+// An admin action aimed at something that does not exist is a "not found", not a server error.
+const adminFailCode = e => /matched no document|not found/i.test(String((e && e.message) || '')) ? 404 : 500;
 app.post('/admin/ban', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, action, reason } = req.body;
+  if (!userId || typeof userId !== 'string') return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const isBan = action === 'ban';
     await db.collection('users').doc(userId).update({
@@ -9288,7 +9291,7 @@ app.post('/admin/ban', async (req, res) => {
     });
     logAdminAction(req, isBan ? 'user_banned' : 'user_unbanned', { userId, reason });
     res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }
 });
 // Groups already-processed rows by calendar day (Kampala time, matching
 // eatDayKey everywhere else) for the admin "Processed per day" charts.

@@ -485,7 +485,7 @@ function msToDatetimeLocal(ms){
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
 const TX_LABELS = {
   deposit: 'Recharge', withdraw: 'Withdraw', commission: 'Commission', team_reward: 'Task Center reward',
-  checkin: 'Daily reward', cashback: 'Plan cashback', investment: 'Plan purchase',
+  checkin: 'Daily reward', cashback: 'Product cashback', investment: 'Product purchase',
   promocode: 'Promo code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
   welcome_bonus: 'Welcome bonus', mission_salary: 'Mission Center salary',
   mission_deposit_reward: 'Mission Center recharge reward',
@@ -2517,7 +2517,7 @@ async function renderTransactions(){
   const { merged, truncated } = await loadTxnsAndStatements(1000);
   if(staleTab('transactions')) return;
   _txns = merged;
-  const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Plans'],['promocode','Codes'],['statement','Statements']];
+  const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Products'],['promocode','Codes'],['statement','Statements']];
   $('content').innerHTML = `
     <h2 class="sec">Transactions</h2>
     <div class="panel-card"><input id="txSearch" placeholder="Search description, type, user id, or a reference"></div>
