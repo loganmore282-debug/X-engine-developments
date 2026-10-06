@@ -3106,8 +3106,10 @@ function vBuyHtml(p){
   const open = p.isOpen !== false && !p.comingSoon;
   if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>BUY NOW</span></button>`;
   const at = Number(p.opensAt) || 0;
-  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy" disabled><span>COMING SOON</span></button>';
-  return `<button class="v-buy" disabled data-opens-at="${at}">Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
+  // Not `disabled`: a disabled button swallows the tap, and the owner's screen
+  // shows the "Coming soon, please wait" dialog when it is tapped.
+  if (!at || p.openMode === 'soon' || p.comingSoon) return '<button class="v-buy v-soon" onclick="notify(\'Coming soon, please wait\')"><span>COMING SOON</span></button>';
+  return `<button class="v-buy v-soon" onclick="notify('Coming soon, please wait')" data-opens-at="${at}">Coming soon in ${fmtCountdown(at - Date.now())}</button>`;
 }
 function vBannerHtml(){
   const st = STATE.settings || {};
@@ -5404,9 +5406,23 @@ window.addEventListener('appinstalled', () => { window._installPrompt = null; })
 window.promptInstallApp = async function(){
   if (!window._installPrompt) { notify('Already installed, or your browser doesn\'t support installing ' + brandName() + '.'); return; }
   window._installPrompt.prompt();
-  await window._installPrompt.userChoice.catch(() => {});
+  const choice = await window._installPrompt.userChoice.catch(() => null);
   window._installPrompt = null;
+  if (choice && choice.outcome === 'accepted') openDownloadDialog();
 };
+// The owner's screen after the download starts: a blue card, "Download", the
+// sentence, and one Confirm button that closes it.
+window.openDownloadDialog = function(){
+  let bg = $('dlBg');
+  if (!bg) {
+    bg = document.createElement('div');
+    bg.id = 'dlBg'; bg.className = 'v-dl-bg';
+    bg.innerHTML = '<div class="v-dl-card"><h3>Download</h3><p>The app has been downloaded, please go to the browser to check and install it.</p><button type="button" onclick="closeDownloadDialog()">Confirm</button></div>';
+    document.body.appendChild(bg);
+  }
+  bg.classList.add('show');
+};
+window.closeDownloadDialog = function(){ const bg = $('dlBg'); if (bg) bg.classList.remove('show'); };
 // Owner: "remove double loading of startup loader or system it's self it
 // can loading the again it reloads automatically without touching it so
 // remove it, the system should launch once per user's request." This app
