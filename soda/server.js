@@ -4041,6 +4041,19 @@ app.post('/register', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not complete your registration right now' });
   }
 });
+// VIP level = the highest VIP number among the assets the member owns (bought or
+// given by the admin, running or finished). Read from the live asset list, so
+// changing an asset's VIP in the admin panel applies to current owners too.
+async function memberVipLevel(userId) {
+  const [snap, products] = await Promise.all([
+    db.collection('investments').where('userId', '==', userId).get(),
+    getProducts(),
+  ]);
+  const vipByKey = new Map(products.filter(p => !p.deleted).map(p => [p.key, Number(p.vip) || 0]));
+  let best = 0;
+  snap.forEach(d => { best = Math.max(best, vipByKey.get(d.data().tierKey) || 0); });
+  return best;
+}
 app.get('/account', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -4076,12 +4089,13 @@ app.get('/account', async (req, res) => {
         console.warn(`Backfilled missing referral code for ${uid}: ${u.referralCode}`);
       } catch (e) { console.error('Referral code backfill failed:', e.message); }
     }
+    const vipLevel = await memberVipLevel(uid).catch(() => 0);
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       checkinStreak: u.checkinStreak || 0, lastCheckinAt: u.lastCheckinAt || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash,
+      hasTradePin: !!u.transactionPinHash, vipLevel,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -8320,7 +8334,14 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     buyLimit = Number(p.buyLimit);
     if (!Number.isInteger(buyLimit) || buyLimit < 0 || buyLimit > 1000) return refuse('Purchase limit', 'must be a whole number from 0 to 1000 (0 = no limit)');
   }
-  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  // The VIP number this asset gives its owner (0 = none). A member's VIP is the
+  // highest number among the assets they own, bought or given.
+  let vip = 0;
+  if (p?.vip != null && p.vip !== '') {
+    vip = Number(p.vip);
+    if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
+  }
+  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,

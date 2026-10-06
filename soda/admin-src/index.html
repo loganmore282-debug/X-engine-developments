@@ -2137,7 +2137,7 @@ async function renderProducts(){
         <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch()}</div>
         <div class="pb">
           <div class="pt">${esc(p.name||p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Upcoming</span>':''}${(!p.comingSoon&&p.openFrom&&p.openTo)?`<span class="pill-tag t-warn">${esc(p.openFrom)}–${esc(p.openTo)}</span>`:''}${(!p.comingSoon&&p.openAt&&Number(p.openAt)>Date.now())?'<span class="pill-tag t-warn">Scheduled</span>':''}</div>
-          <div class="pp">${ugx(p.price)} · ${p.cycle||0} days</div>
+          <div class="pp">${ugx(p.price)} · ${p.cycle||0} days · VIP ${p.vip||0}</div>
           <div class="pr">Pays ${ugx(resolvedPayout(p))}${(Number(p.multiplier)>0)?` <span class="muted">(&times;${esc(String(p.multiplier))})</span>`:''}</div>
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
         </div>
@@ -2168,6 +2168,8 @@ function editProduct(p, order){
       <div><label>Total payout (${adminCur()})</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
       <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||180}"></div>
     </div>
+    <label>VIP level (0 = none)</label><input id="pVip" type="number" min="0" max="100" step="1" value="${p.vip>0?p.vip:''}" placeholder="0">
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">A member's VIP is the highest VIP among the assets they own, including assets you give them.</p>
     <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see it on the card as owned/limit, for example 0/3.</p>
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
@@ -2252,7 +2254,7 @@ function editProduct(p, order){
     const typedKey = $('pKey').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'').slice(0,24);
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
-      expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, order:$('pOrder').value,
+      expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
