@@ -1138,7 +1138,7 @@ var _memberSession = window.createSodaIdleSession('soda_member_session', functio
   window._triedAutoSignIn = true;
   document.querySelectorAll('.sheet-bg.show,.modal-bg.show,.pay-page.show,#msgDetailBg.show').forEach(el => el.classList.remove('show'));
   unlockBodyScroll();
-  $('loadingScreen').style.display = 'none';
+  hideLoadingScreen();
   $('app').style.display = 'none';
   $('authScreen').style.display = '';
   // {auto:true} -- see doLogout()'s own comment on why an idle timeout must
@@ -1411,7 +1411,7 @@ function firebaseReady(maxMs, needs){
 setTimeout(function(){
   if (window.fbAuth) return;
   try {
-    $('loadingScreen').style.display = 'none';
+    hideLoadingScreen();
     if ($('app').style.display === 'none') $('authScreen').style.display = '';
     notify('Could not load the sign-in service. Check your connection, then reload the app.');
   } catch (_) {}
@@ -1753,6 +1753,24 @@ async function performMemberLogout(opts){
 // _artPromise is that work, exposed so the one thing that genuinely needs a
 // picture before it appears (the announcement dialog) can wait for it
 // instead of opening blank.
+// The loading screen stays for at least LOADER_MIN_MS from the moment the page began (owner: "let it take
+// about 3 seconds, then open the page"). Everything that used to hide it immediately goes through here; the
+// app is built underneath while it waits, and the pictures start loading straight away.
+var LOADER_MIN_MS = 3000, _ldTimer = null;
+function hideLoadingScreen(){
+  const ls = $('loadingScreen'); if (!ls) return;
+  try { startArtwork(); } catch (_) {}
+  const began = Number(window._sodaLoaderStart) || 0;
+  const minMs = typeof window._sodaLoaderMinMs === 'number' ? window._sodaLoaderMinMs : LOADER_MIN_MS;
+  const wait = began ? Math.max(0, minMs - (Date.now() - began)) : 0;
+  if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
+  if (!wait) { ls.style.display = 'none'; return; }
+  _ldTimer = setTimeout(() => { _ldTimer = null; ls.style.display = 'none'; }, wait);
+}
+function showLoadingScreen(){
+  if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
+  $('loadingScreen').style.display = 'flex';
+}
 var _artPromise = null, _artLanded = false, _annWaiting = false;
 function startArtwork(){
   if (_artPromise) return _artPromise;
@@ -2101,7 +2119,7 @@ function startOpeningGateCountdown(targetMs){
 async function maybeShowOpeningGate(){
   if (!STATE.settings) await withTimeout(_bootPromise, 6000);
   if (!isOpeningGateActive()) return false;
-  $('loadingScreen').style.display = 'none';
+  hideLoadingScreen();
   $('authScreen').style.display = 'none';
   $('app').style.display = 'none';
   $('openingGate').style.display = 'flex';
@@ -2122,7 +2140,7 @@ function handleMemberAuth(user){
 window.addEventListener('snow-auth', ev => {
   handleMemberAuth(ev.detail).catch(() => {
     notify('Could not open your account. Please try logging in again.');
-    $('loadingScreen').style.display = 'none';
+    hideLoadingScreen();
     $('authScreen').style.display = '';
     setBtnLoading('loginBtn', false, 'Log In');
   });
@@ -2159,7 +2177,7 @@ async function processMemberAuth(user){
     // wouldn't immediately hand the same member right back in.
     // Returning to login never silently reuses a stored password.
     window._triedAutoSignIn = true;
-    $('loadingScreen').style.display = 'none';
+    hideLoadingScreen();
     $('app').style.display = 'none';
     $('authScreen').style.display = '';
     setBtnLoading('loginBtn', false, 'Log In');
@@ -2172,7 +2190,7 @@ async function processMemberAuth(user){
     return;
   }
   $('authScreen').style.display = 'none';
-  $('loadingScreen').style.display = 'flex';
+  showLoadingScreen();
   await enterApp();
 }
 // Real feature: a returning member used to sit through the loading screen
@@ -2272,7 +2290,7 @@ async function enterApp(){
   // fixing it. The wait now happens narrowly in showPage()'s 'home' branch,
   // just before maybeShowAnnouncement() -- gates only the announcement's
   // own appearance, not this instant paint.
-  $('loadingScreen').style.display = 'none';
+  hideLoadingScreen();
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
@@ -2317,7 +2335,7 @@ async function registerCurrentUser(pin, phone){
 // which signs in and finishes this same registration.
 var SIGNUP_UNFINISHED_CODES = ['REFERRAL_REQUIRED', 'BAD_REFERRAL', 'BAD_REFERRAL_REGION'];
 async function abandonUnfinishedSignup(reg){
-  $('loadingScreen').style.display = 'none';
+  hideLoadingScreen();
   if (SIGNUP_UNFINISHED_CODES.indexOf(reg.code) === -1) {
     notify(reg.message || 'Could not complete registration');
     $('authScreen').style.display = '';
@@ -2361,7 +2379,7 @@ async function bootFromNetwork(uid){
     // very session that is opening.
     if (reg.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (reg.status !== 'success' && reg.status !== 'already_done') {
-      $('loadingScreen').style.display = 'none';
+      hideLoadingScreen();
       notify(reg.message || 'Could not complete registration');
       $('authScreen').style.display = '';
       setBtnLoading('regBtn', false, 'Sign Up');
@@ -2391,13 +2409,13 @@ async function bootFromNetwork(uid){
     // Re-opening the app on a slow or dropped connection is not a reason to end
     // the login: show the login screen with the message and keep the session.
     // (A login the member just typed still signs out below, so a retry is clean.)
-    $('loadingScreen').style.display = 'none';
+    hideLoadingScreen();
     $('authScreen').style.display = '';
     notify('Could not reach the server. Check your connection and try again.');
     return;
   }
   if (r.status === 'error') {
-    $('loadingScreen').style.display = 'none';
+    hideLoadingScreen();
     if (r.code === 'BANNED') { notify(r.message); await window.fbSignOut(); return; }
     notify(r.message || 'Could not load your account');
     await window.fbSignOut();
@@ -2425,7 +2443,7 @@ async function bootFromNetwork(uid){
   // was already in memory, so the "nothing cached yet" branch could not fire
   // on any screen.
   await withTimeout(_bootPromise, 6000);
-  $('loadingScreen').style.display = 'none';
+  hideLoadingScreen();
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();

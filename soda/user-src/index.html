@@ -349,7 +349,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
 #loadingScreen{position:fixed;inset:0;background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/api/public/loader-image') center/cover no-repeat,linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
 #loadingScreen .ld-txt{display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);animation:ldBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
-@keyframes ldBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-64px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
+@keyframes ldBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-34px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
 @media (prefers-reduced-motion:reduce){#loadingScreen .ld-txt{animation:none;}}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 #openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
@@ -1849,6 +1849,32 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
   <span class="ld-txt" aria-hidden="true">Loading...</span>
   <span class="sr-only" role="status" aria-live="polite">Loading</span>
 </div>
+<script data-soda-loader>
+/* Paint the owner's loading picture on the very first frame: the copy kept from the last visit is set
+   inline (no network wait), then the stored copy is refreshed in the background for next time. The very
+   first launch ever has no copy yet, so it shows the gradient with the Loading... word until the picture arrives. */
+(function(){
+  window._sodaLoaderStart = Date.now();
+  try {
+    var ls = document.getElementById('loadingScreen'), KEY = 'soda_loader_img';
+    var layer = function(u){ return 'linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url("' + u + '"),linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%)'; };
+    var kept = null; try { kept = localStorage.getItem(KEY); } catch (e) {}
+    if (kept && ls) ls.style.backgroundImage = layer(kept);
+    if (!window.fetch || !window.FileReader) return;
+    fetch('/api/public/loader-image', { cache: 'no-cache' }).then(function(r){ if (r.status === 404) { try { localStorage.removeItem(KEY); } catch (e) {} if (ls && kept) ls.style.backgroundImage = ''; return null; } return r.ok ? r.blob() : null; }).then(function(b){
+      if (!b || b.size > 1500000) return;
+      var fr = new FileReader();
+      fr.onload = function(){
+        var u = String(fr.result || '');
+        if (u.indexOf('data:image/') !== 0 || u === kept) return;
+        try { localStorage.setItem(KEY, u); } catch (e) {}
+        if (!kept && ls) ls.style.backgroundImage = layer(u);
+      };
+      fr.readAsDataURL(b);
+    }).catch(function(){});
+  } catch (e) {}
+})();
+</script>
 
 <script>
 /* THE APP'S NAME, PAINTED BEFORE ANYTHING ELSE.

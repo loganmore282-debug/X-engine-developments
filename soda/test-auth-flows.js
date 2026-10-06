@@ -24,6 +24,7 @@ function load(pre) {
   w.scrollTo = () => {}; w.open = () => null;
   w.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });
   w.Notification = { permission: 'denied' };
+  w._sodaLoaderMinMs = 0; // the real 3-second hold is not what these tests are about
   w.fetch = async () => ({ status: 200, json: async () => ({ status: 'success', settings: {}, products: [] }) });
   if (pre) pre(w);
   for (const tag of w.document.scripts) {

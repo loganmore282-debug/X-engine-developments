@@ -9,7 +9,7 @@ const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 ok(/<span class="ld-txt"[^>]*>Loading\.\.\.<\/span>/.test(html), 'the loader says "Loading..."');
 ok(/#loadingScreen\{[^}]*url\('\/api\/public\/loader-image'\)/.test(html), 'the loader background is the admin picture');
-ok(/@keyframes ldBounce\{.*translateY\(-64px\)/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in a wide area (64 px)');
+ok(/@keyframes ldBounce\{.*translateY\(-34px\)/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in its original 34 px area');
 ok((html.match(/ld-txt[^{]*\{[^}]*animation:/g) || []).length === 2, 'one bounce animation (plus its reduced-motion off switch), nothing else');
 ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:24px[^}]*letter-spacing:\.02em/.test(html), 'bold serif, 24 px, letters and dots close together');
 ok(/ld-txt\{[^}]*color:#fff/.test(html), 'colour stays white (not specified by the owner)');
@@ -32,4 +32,7 @@ ok(/\.v-ann-img\{[^}]*object-fit:contain[^}]*\}/.test(html) && !/\.v-ann-img\{[^
 ok(/function vFitCard\(img\)/.test(mod) && /onload="vFitCard\(this\)"/.test(mod) && /\.v-card-img\.has-img img\{[^}]*height:auto/.test(html) && !/\.v-card-img\.has-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures are shown whole in their own shape (portrait in the column, wide or square across the top)');
 ok(!/fileToFramedDataUrl|PRODUCT_IMG_W/.test(admin) && /fileToDataUrl\(f,900,0\.82\)/.test(admin), 'the admin no longer crops asset pictures to 16:9');
 ok(/--img-w/.test(mod) && /grid-template-columns:var\(--img-w,112\.5px\) 1fr/.test(html), 'a portrait picture gets a column of its own shape (a 2:3 photo is 133 px wide at the 200 px card height)');
+ok(/<script data-soda-loader>/.test(html) && /localStorage\.getItem\(KEY\)/.test(html) && /ls\.style\.backgroundImage = layer\(kept\)/.test(html) && /window\._sodaLoaderStart = Date\.now\(\)/.test(html), 'the kept loading picture is painted inline on the first frame, before any network request');
+ok(/fetch\('\/api\/public\/loader-image', \{ cache: 'no-cache' \}\)/.test(html) && /localStorage\.setItem\(KEY, u\)/.test(html), 'and refreshed in the background for the next visit');
+ok(/var LOADER_MIN_MS = 3000/.test(mod) && /function hideLoadingScreen\(\)/.test(mod) && !/\$\('loadingScreen'\)\.style\.display = 'none'/.test(mod), 'the loading screen stays for 3 seconds before the page opens, through one function');
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);
