@@ -1150,7 +1150,7 @@ var NUMBER_FONT_STACKS = {
   'Roboto Mono': "'Roboto Mono',ui-monospace,'SFMono-Regular',monospace",
   'JetBrains Mono': "'JetBrains Mono',ui-monospace,'SFMono-Regular',monospace",
   'Orbitron': "'Orbitron',ui-sans-serif,sans-serif",
-  'System default': "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+  'System default': "'Roboto',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif",
 };
 // ── THE APP'S NAME ──
 // Owner: "l would like to also to edit the app name soda, so make it when it
