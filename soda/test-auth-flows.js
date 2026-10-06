@@ -103,7 +103,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     const html = fs.readFileSync(htmlPath, 'utf8');
     const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
     const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
-    ok(/background:rgba\(255,255,255,var\(--auth-card-opacity,\.78\)\)/.test(html), 'auth card tint stays adjustable');
+    ok(/rgba\(255,255,255,calc\(var\(--auth-card-opacity,\.78\)/.test(html), 'auth card tint stays adjustable');
     ok(/backdrop-filter:blur\(var\(--auth-card-blur,18px\)\)/.test(html), 'auth card blur stays adjustable');
     ok(html.includes('id="authHeroBg"') && html.includes('id="loginHeading">Login'), 'login uses the full-screen uploaded image and reference heading');
     ok(html.includes('id="registerHeading">Sign Up'), 'registration uses the reference heading');
@@ -120,7 +120,10 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq(w.document.documentElement.style.getPropertyValue('--auth-hero-blur'), '8px', 'background blur reaches the screen');
     eq(w.document.documentElement.style.getPropertyValue('--auth-card-opacity'), '0.25', 'card opacity reaches the glass layer');
     eq(w.document.documentElement.style.getPropertyValue('--auth-card-blur'), '3px', 'card blur reaches the glass layer');
-    ok(w.document.querySelectorAll('.auth-card svg').length >= 3, 'auth card icons remain inline SVGs');
+    ok(w.document.querySelectorAll('.va-card svg').length >= 4, 'auth card icons remain inline SVGs');
+    ok(!/Forgot Password\?|forgotPane|togglePw|af-eye|doForgot/.test(html), 'no Forgot Password and no password eye (owner screenshots)');
+    ok(html.includes('id="rememberMe"') && html.includes('Remember me'), 'Remember me checkbox is on the login card');
+    ok(!/id="[a-z]+BrandFallback"|>P<\/span>/.test(html), 'no placeholder letter on the auth screens');
     await closeSoon(dom);
   }
 

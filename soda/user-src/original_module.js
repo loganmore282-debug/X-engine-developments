@@ -67,7 +67,7 @@ function applyRegion(r){
 function paintRegionChrome(){
   try {
     const d = dialPlus();
-    for (const id of ['loginDial', 'regDial', 'forgotDial']) { const el = $(id); if (el) el.textContent = d; }
+    for (const id of ['loginDial', 'regDial']) { const el = $(id); if (el) el.textContent = d; }
     // The country and currency are NOT printed on the sign-in screen. They
     // were, briefly, as a way to make a wrongly-mapped address visible --
     // owner: "why showing the country and currency, that should not be
@@ -1245,15 +1245,6 @@ function sanitizePhoneInput(el){
   el.value = digits;
 }
 function $(id){ return document.getElementById(id); }
-function togglePw(id, btn){
-  const el = $(id);
-  const showing = el.type === 'password';
-  el.type = showing ? 'text' : 'password';
-  if (btn) {
-    btn.innerHTML = showing ? ICONS.eyeOff : ICONS.eye;
-    btn.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
-  }
-}
 
 // ── STATE ──
 var STATE = { user: null, account: null, settings: null, products: null, investments: null,
@@ -1496,8 +1487,6 @@ function cleanPhone(raw){
 function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
-  $('forgotPane').style.display = tab === 'forgot' ? '' : 'none';
-  if (tab === 'forgot') window._forgotOtp = { otpId: null, ticket: null, phone: '' };
   stopSmsCodeListener();
 }
 // ── OTP RESEND COOLDOWN ──
@@ -1690,19 +1679,6 @@ var _webOtpAbort = null;
 function stopSmsCodeListener(){
   if (_webOtpAbort) { try { _webOtpAbort.abort(); } catch (_) {} _webOtpAbort = null; }
 }
-function listenForSmsCode(inputId){
-  try {
-    stopSmsCodeListener();
-    if (!('OTPCredential' in window) || !navigator.credentials || typeof AbortController === 'undefined') return;
-    const ac = _webOtpAbort = new AbortController();
-    navigator.credentials.get({ otp: { transport: ['sms'] }, signal: ac.signal }).then(cred => {
-      const el = $(inputId);
-      if (!cred || !cred.code || ac.signal.aborted || !el) return;
-      el.value = String(cred.code).replace(/\D/g, '').slice(0, 6);
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }).catch(() => {});
-  } catch (_) {}
-}
 window.doRegister = async function(){
   const phone = cleanPhone($('regPhone').value);
   const pass = $('regPassword').value;
@@ -1789,55 +1765,6 @@ window.doRegister = async function(){
   }
 };
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
-// Reached from the Log In screen. No Firebase session exists yet (the
-// member cannot sign in, that's the whole point) -- identity is proven by
-// the OTP ticket alone, and the password itself is changed server-side via
-// /auth/reset/confirm (Admin SDK, no active session needed). Same
-// single-screen pattern as the rebuilt Sign Up above (Send Code fills
-// otpId, the real verify happens inside the submit handler), not the
-// earlier 3-step wizard.
-window._forgotOtp = { otpId: null, ticket: null, phone: '' };
-function forgotError(msg){ if (msg) notify(msg); }
-window.doForgotSendOtp = async function(){
-  const phone = cleanPhone($('forgotPhone').value);
-  if (!phone) return forgotError('Enter a valid ' + regionName() + ' mobile number.');
-  forgotError('');
-  setBtnLoading('forgotSendOtpBtn', true, 'Send Code', 'Sending…');
-  const d = await post('/auth/otp/send', { purpose: 'reset', phone });
-  setBtnLoading('forgotSendOtpBtn', false, 'Send Code');
-  if (d.status !== 'success') return forgotError(d.message || 'Could not send the code');
-  window._forgotOtp = { otpId: d.otpId, ticket: null, phone };
-  const otpInput = $('forgotOtp');
-  if (otpInput) { otpInput.value = ''; try { otpInput.focus(); } catch (_) {} }
-  notify('Verification code sent. It can take a moment to arrive.');
-  startOtpResendCooldown('forgotSendOtpBtn', 30);
-  listenForSmsCode('forgotOtp');
-};
-window.doForgotSubmit = async function(){
-  const phone = cleanPhone($('forgotPhone').value);
-  const code = ($('forgotOtp').value || '').trim();
-  const pass = $('forgotPassword').value;
-  const pass2 = $('forgotPassword2').value;
-  if (!phone) return forgotError('Enter a valid ' + regionName() + ' mobile number.');
-  if (!window._forgotOtp.otpId || window._forgotOtp.phone !== phone) return forgotError('Please tap Send Code first.');
-  if (!/^\d{6}$/.test(code)) return forgotError('Enter the 6-digit verification code sent to your phone.');
-  if (!pass || pass.length < 6) return forgotError('Password must be at least 6 characters.');
-  if (pass !== pass2) return forgotError('The two passwords do not match.');
-  forgotError('');
-  setBtnLoading('forgotSubmitBtn', true, 'Reset Password', 'Verifying code…');
-  const v = await post('/auth/otp/verify', { otpId: window._forgotOtp.otpId, code });
-  if (v.status !== 'success') { setBtnLoading('forgotSubmitBtn', false, 'Reset Password'); return forgotError(v.message || 'Incorrect verification code.'); }
-  window._forgotOtp.ticket = v.ticket;
-  setBtnLoading('forgotSubmitBtn', true, 'Reset Password', 'Resetting password…');
-  const d = await post('/auth/reset/confirm', { phone: window._forgotOtp.phone, ticket: window._forgotOtp.ticket, newPassword: pass });
-  setBtnLoading('forgotSubmitBtn', false, 'Reset Password');
-  if (d.status !== 'success') return forgotError(d.message || 'Could not reset your password');
-  notify('Password reset. Please log in.');
-  window._forgotOtp = { otpId: null, ticket: null, phone: '' };
-  $('loginPhone').value = $('forgotPhone').value;
-  $('loginPassword').value = '';
-  showAuthTab('login');
-};
 window.doLogout = function(opts){
   if (window._logoutPromise) return window._logoutPromise;
   window._logoutPromise = performMemberLogout(opts).finally(() => { window._logoutPromise = null; });
@@ -2264,25 +2191,7 @@ function otpVerificationEnabled(){
 // to discover it by being rejected. Runs whenever the auth screen paints.
 function updateReferralFieldHint(){
   const input = $('regReferral');
-  if (!input) return;
-  const required = referralIsRequired();
-  input.placeholder = required ? 'Referral code' : 'Referral code (optional)';
-  const hint = $('regReferralHint');
-  if (hint) {
-    // Owner: "don't replace it with any word down... let only optional in
-    // box be there only" -- the field's OWN placeholder already reads
-    // "Referral code (optional)" when it isn't required; a separate
-    // "Optional." line underneath just repeated that same word a second
-    // time. Nothing shows here at all in that case now -- hidden outright
-    // (not just emptied), so no blank line is left behind either.
-    if (required) {
-      hint.textContent = 'Referral code is required';
-      hint.style.display = '';
-    } else {
-      hint.textContent = '';
-      hint.style.display = 'none';
-    }
-  }
+  if (input) input.placeholder = 'Invitation Code';
 }
 
 // Owner: "let's establish a timer ie like saying snow opening in

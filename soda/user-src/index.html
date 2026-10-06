@@ -1044,24 +1044,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .auth-card h1{margin:0 0 24px;color:#111827;text-align:left;font-size:26px;line-height:1.2;font-weight:700;letter-spacing:-.02em;}
 .auth-card .auth-intro{margin:0 auto 18px;}
 .auth-card .auth-intro h1{text-align:left;}
-.auth-card .af-v2{height:54px;margin-bottom:14px;padding:0 8px;background:transparent;border:0;border-bottom:1.5px solid rgba(28,93,171,.34);border-radius:0;-webkit-backdrop-filter:none;backdrop-filter:none;}
-.auth-card .af-v2:focus-within{border-bottom-color:#1739b8;}
-.auth-card .af-v2 input{color:#17243a;}
-.auth-card .af-v2 input::placeholder{color:#77869b;opacity:1;}
-.auth-card .af-ic{color:#5983b5;}
-.auth-card .af-ic.af-gift{color:#e4b72f;}
-.auth-card .af-prefix{color:#526a88;border-right-color:rgba(28,93,171,.25);}
-.auth-card .af-eye{color:#647b99;}
-.auth-card .af-btn-v2{height:56px;border-radius:16px;background:#1739b8;color:#fff;box-shadow:0 8px 18px rgba(23,105,194,.2);}
-.auth-card .af-btn-v2:active{background:#1232a1;}
-.auth-card .af-switch{color:#59677b;margin-top:18px;}
-.auth-card .af-switch a,.auth-card .af-forgot a{color:#1232a1;}
-.auth-card .af-forgot a{color:#1232a1;}
-.auth-card .af-inline-btn{background:#1739b8;}
-.auth-card .af-reg-referral-hint{color:#64748b;}
-.auth-card .af-eye svg{color:inherit;}
 .auth-card .auth-subtitle{margin:-16px 0 22px;color:#64748b;font-size:14px;}
-.auth-card .af-forgot{margin:-2px 0 18px;}
 .auth-card .auth-signup-link{display:block;margin:18px 0 0;text-align:center;color:#5d6b7f;font-size:14px;}
 .auth-card .auth-signup-link a{color:#1232a1;font-weight:700;text-decoration:none;}
 .auth-intro{text-align:center;color:#fff;margin:0 auto 24px;max-width:320px;}
@@ -1082,11 +1065,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    promises -- applyAuthTagline() itself needed no changes, it already
    null-safely hides this element when the tagline is blank. */
 .auth-tagline{margin:0 0 10px;color:rgba(255,255,255,.72);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
-.af-v2{display:flex;align-items:center;gap:10px;background:rgba(20,12,8,.44);border:1.5px solid rgba(255,255,255,.18);
-  border-radius:var(--r-ctl);padding:0 16px;height:54px;margin-bottom:14px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
-.af-v2 input{border:0;background:transparent;outline:0;font-family:inherit;font-size:15px;flex:1;min-width:0;color:#fff;}
-.af-v2 input::placeholder{color:rgba(255,255,255,.58);}
-.af-ic{color:rgba(255,255,255,.78);display:flex;flex-shrink:0;}
 /* Owner: "this time no using subdomains ... only on signup or login one
    selects country code besides the number area ie 256|" -- restores the
    dial-code chip the phone field always had, in the SAME slot the person
@@ -1096,24 +1074,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    deposit screen's own .dep-phone .prefix already uses elsewhere in this
    app -- nothing new to build, just re-adding the element it already knew
    how to fill. */
-.af-prefix{flex-shrink:0;font-weight:700;color:#fff;font-size:15px;padding-right:10px;margin-right:2px;border-right:1.5px solid rgba(255,255,255,.24);}
-.af-eye{background:none;border:none;padding:4px;color:rgba(255,255,255,.68);display:flex;align-items:center;flex-shrink:0;cursor:pointer;}
-.af-v2.with-btn{padding-right:6px;}
-.af-inline-btn{flex-shrink:0;background:var(--soda-orange);color:#fff;border:0;border-radius:var(--r-ctl);
-  padding:0 16px;height:38px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;}
-.af-inline-btn:disabled{opacity:.55;cursor:default;}
-.af-forgot{text-align:right;margin:-4px 0 18px;font-size:13.5px;}
-/* .af-forgot's -4px top margin exists to tuck "Forgot Password?" up close
-   under the LOGIN PASSWORD FIELD right above it -- correct there, but the
-   same class reused verbatim for "Back to Log In" under the Reset Password
-   BUTTON pulled that link up against the button's own bottom edge instead
-   (owner: "background to login word is very too closed to reset password
-   button"). A button already carries visual weight a plain input field
-   doesn't, so the identical negative pull reads as crowding here. This
-   modifier swaps it for a real gap, matching .af-switch's own positive
-   margin-top -- the same "link sits below a button" case already solved
-   correctly for Sign Up's "Already have an account?" line. */
-.af-forgot.after-btn{margin-top:16px;}
 /* Another real bug from the same audit: updateReferralFieldHint() ("says out
    loud whether the box must be filled, instead of leaving members to
    discover it by being rejected") has always null-safely set textContent
@@ -1121,14 +1081,6 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
    text has never actually shown; only the input's own placeholder swap
    ("Referral code" vs "(optional)") was ever visible. Restored under the
    referral field. */
-.af-reg-referral-hint{margin:-8px 0 14px;font-size:12px;line-height:1.4;color:rgba(255,255,255,.62);}
-.af-forgot a{color:rgba(255,255,255,.85);text-decoration:none;font-weight:600;}
-.af-btn-v2{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--soda-grad);
-  color:#fff;border:0;border-radius:var(--r-ctl);height:54px;font:inherit;font-size:16px;font-weight:700;
-  cursor:pointer;letter-spacing:.01em;}
-.af-btn-v2:disabled{opacity:.6;cursor:default;}
-.af-switch{text-align:center;margin-top:18px;font-size:13.5px;color:rgba(255,255,255,.72);}
-.af-switch a{color:#fff;text-decoration:none;font-weight:700;}
 /* Owner: "make (+256) static, so one can type 07xxxxxxxx or 7xxxxxxxx... just
    the system understand it" -- every phone field is now a static, fixed
    "+256" chip next to a local-number-only input, instead of one free-text
@@ -1800,6 +1752,39 @@ body.sheet-open .bottom-nav{display:flex;}
 .v-chest-key input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:14.5px;letter-spacing:1px;color:var(--v-ink);padding:0 14px;}
 .v-chest-go{width:100%;height:47px;border:0;border-radius:12px;background:var(--v-grad);color:#fff;font:inherit;font-size:15px;font-weight:700;letter-spacing:2.4px;box-shadow:0 14px 26px -16px rgba(14,42,142,.9);}
 .v-chest-go:disabled{opacity:.6;}
+
+/* ── Login / Sign Up: measured from the owner's screenshots (360 px phone) ── */
+.va-screen{position:relative;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);}
+@supports (min-height:100dvh){.va-screen{min-height:100dvh;}}
+.va-screen::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(to bottom,rgba(9,35,78,0) 40%,rgba(9,35,78,.18) 100%);}
+.va-scroll{position:relative;z-index:2;flex:1;min-height:100vh;min-height:100dvh;box-sizing:border-box;overflow-y:auto;display:flex;flex-direction:column;justify-content:flex-end;padding:0 13px calc(13px + env(safe-area-inset-bottom));}
+.va-pane{width:100%;max-width:480px;margin:0 auto;}
+.va-card{box-sizing:border-box;padding:31px 21.5px 23px;border:1px solid rgba(255,255,255,.6);border-radius:28px;color:#18243a;
+  background:linear-gradient(180deg,rgba(255,255,255,calc(var(--auth-card-opacity,.78) * .3)) 0%,rgba(255,255,255,calc(var(--auth-card-opacity,.78) * .62)) 45%,rgba(255,255,255,.94) 100%);
+  -webkit-backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);backdrop-filter:blur(var(--auth-card-blur,18px)) saturate(1.12);box-shadow:0 18px 46px rgba(4,20,49,.25);}
+.va-card h1{margin:0 0 21px;font-size:25px;line-height:30px;font-weight:700;color:#111827;}
+.va-f{display:flex;align-items:center;height:46px;padding-top:13px;border-bottom:1.5px solid rgba(23,57,184,.4);}
+.va-f:focus-within{border-bottom-color:#1739b8;}
+.va-f input{flex:1;min-width:0;border:0;background:transparent;outline:0;font:inherit;font-size:14px;color:#17243a;padding:0;height:30px;}
+.va-f input::placeholder{color:#7a8699;opacity:1;}
+#registerPane .va-card h1{margin-bottom:16px;}
+#registerPane .va-btn{margin-top:15px;}
+#loginPane .va-f+.va-f{height:48.5px;}
+#loginPane .va-rem{margin-top:15px;}
+.va-pre{flex:0 0 auto;margin-left:13px;padding-right:2.7px;font-size:12.8px;font-weight:500;color:#526a88;border-right:1.5px solid rgba(23,57,184,.4);height:15px;line-height:15px;margin-right:13.5px;}
+.va-ic{flex:0 0 14px;width:14px;height:16px;margin:0 11px 0 15px;display:flex;align-items:center;justify-content:center;color:#6f87ad;}
+.va-ic svg{height:16px;width:auto;}
+.va-ic.va-gift{color:#e4b72f;}
+.va-ic.va-gift svg{width:14px;height:14px;}
+.va-rem{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12px;color:#58627a;cursor:pointer;}
+.va-rem input{appearance:none;-webkit-appearance:none;width:17px;height:17px;margin:0;border:1.5px solid #9aa6bd;border-radius:4px;background:rgba(255,255,255,.5);display:grid;place-content:center;flex:0 0 17px;}
+.va-rem input:checked{background:var(--v-blue,#1739b8);border-color:var(--v-blue,#1739b8);}
+.va-rem input:checked::after{content:'';width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px);}
+.va-btn{display:block;width:100%;height:43.7px;margin-top:21px;border:0;border-radius:10px;background:linear-gradient(135deg,#2448cc 0%,#1739b8 45%,#0e2a8e 100%);color:#fff;font:inherit;font-size:15px;font-weight:700;box-shadow:0 8px 18px rgba(23,57,184,.25);}
+.va-btn:disabled{opacity:.65;}
+.va-btn:active:not(:disabled){transform:scale(.99);}
+.va-link{margin:19px 0 0;text-align:center;font-size:12px;line-height:20px;color:#58627a;}
+.va-link a{color:#1739b8;font-weight:700;text-decoration:none;}
 /* V2-END */
 </style>
 <script data-soda-idle>
@@ -1994,132 +1979,56 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
 
 <!-- ═══════════ AUTH ═══════════ -->
 <div id="authScreen" style="display:none;">
-  <!-- Rebuilt to the owner's exact mockup: ONE continuous full-bleed photo
-       background (no separate "hero band" + "card" split Soda used) with
-       plain dark translucent pill fields floating directly on it. The photo
-       itself is still the existing admin-uploadable 'authhero' slot --
-       owner: "background image will be uploaded to admin panel" -- applied
-       via the same --auth-hero-img/-op/-blur CSS vars applyAuthBackgrounds()
-       already writes, just consumed by #authHero as a single full-screen
-       layer instead of a top band. #authCardBg/--auth-card-* are no longer
-       referenced by this markup (the admin's separate "form card" upload
-       section still exists but has nothing left to apply to -- one photo
-       now, not two). -->
-  <div class="auth-screen-v2" id="authHero">
+  <!-- Login and Sign Up, built from the owner's two screenshots: the
+       admin-uploaded photo fills the screen (slot "authhero"), one frosted
+       card sits at the bottom with 13px margins, underlined fields, bottle
+       icons, no logo, no password eye, no reset link. -->
+  <div class="va-screen" id="authHero">
     <span class="auth-bg" id="authHeroBg" aria-hidden="true"></span>
-    <div class="auth-scroll-v2">
-      <div id="loginPane" class="auth-pane">
-        <div class="auth-intro">
-          <div class="auth-brand-mark">
-            <img class="auth-brand-logo" id="loginBrandLogo" data-auth-brand-logo data-auth-fallback="loginBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('loginBrandFallback');if(f)f.style.display='flex'">
-            <span class="auth-brand-fallback" id="loginBrandFallback" aria-hidden="true">P</span>
+    <div class="va-scroll">
+      <div id="loginPane" class="va-pane">
+        <section class="va-card" aria-labelledby="loginHeading">
+          <h1 id="loginHeading">Login</h1>
+          <div class="va-f">
+            <span class="va-pre" id="loginDial">+256</span>
+            <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
           </div>
-          <p class="auth-tagline" id="authTagline" style="display:none;"></p>
-        </div>
-        <section class="auth-card" aria-labelledby="loginHeading">
-        <h1 id="loginHeading">Login</h1>
-        <div class="af-v2">
-          <span class="af-prefix" id="loginDial">+256</span>
-          <input id="loginPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
-        </div>
-        <!-- Which country this web address serves. Shown only when the
-             platform actually runs in more than one, so a single-country
-             app gains no clutter -- and so a short address quietly
-             pointing at the wrong country is visible instead of showing
-             up later as "Incorrect phone number or password". Filled by
-             paintRegionChrome(). -->
-        <div id="loginRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#64748b;text-align:center;"></div>
-        <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="3.25"/><path d="m10.4 12.6 8.1-8.1 2 2-2.2 2.2 1.5 1.5-2.1 2.1-1.5-1.5-3.4 3.4"/></svg></span>
-          <input id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
-          <button class="af-eye" onclick="togglePw('loginPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        </div>
-        <p class="af-forgot"><a href="#" onclick="showAuthTab('forgot');return false;">Forgot Password?</a></p>
-        <button class="af-btn-v2" id="loginBtn" onclick="doLogin()">Log In</button>
-        <p class="af-switch" style="margin-top:0"><a href="#" onclick="showAuthTab('register');return false;">Sign Up</a></p>
+          <div class="va-f">
+            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
+            <input id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
+          </div>
+          <label class="va-rem"><input type="checkbox" id="rememberMe"><span>Remember me</span></label>
+          <button class="va-btn" id="loginBtn" onclick="doLogin()">Log In</button>
+          <p class="va-link"><a href="#" onclick="showAuthTab('register');return false;">Sign Up</a></p>
         </section>
       </div>
 
-      <!-- Sign Up mirrors the supplied screen: phone, login password,
-           confirmation, trade PIN and invitation code. -->
-      <div id="registerPane" class="auth-pane" style="display:none;">
-        <div class="auth-intro">
-          <div class="auth-brand-mark">
-            <img class="auth-brand-logo" id="registerBrandLogo" data-auth-brand-logo data-auth-fallback="registerBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('registerBrandFallback');if(f)f.style.display='flex'">
-            <span class="auth-brand-fallback" id="registerBrandFallback" aria-hidden="true">P</span>
+      <div id="registerPane" class="va-pane" style="display:none;">
+        <section class="va-card" aria-labelledby="registerHeading">
+          <h1 id="registerHeading">Sign Up</h1>
+          <div class="va-f">
+            <span class="va-pre" id="regDial">+256</span>
+            <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
           </div>
-        </div>
-        <section class="auth-card" aria-labelledby="registerHeading">
-        <h1 id="registerHeading">Sign Up</h1>
-        <div class="af-v2">
-          <span class="af-prefix" id="regDial">+256</span>
-          <input id="regPhone" type="tel" inputmode="numeric" placeholder="Enter phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
-        </div>
-        <div id="regRegionNote" style="display:none;margin:-4px 0 10px;font-size:12.5px;color:#64748b;text-align:center;"></div>
-        <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="3.25"/><path d="m10.4 12.6 8.1-8.1 2 2-2.2 2.2 1.5 1.5-2.1 2.1-1.5-1.5-3.4 3.4"/></svg></span>
-          <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
-          <button class="af-eye" onclick="togglePw('regPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        </div>
-        <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-          <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
-          <button class="af-eye" onclick="togglePw('regPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        </div>
-        <div class="af-v2">
-          <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1"/></svg></span>
-          <input id="regTradePin" type="password" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="new-password">
-          <button class="af-eye" onclick="togglePw('regTradePin',this)" aria-label="Show trade password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        </div>
-        <div class="af-v2">
-          <span class="af-ic af-gift"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M2 6h20v3H2zM12 6v15M12 6c-1.3 0-4.5-.2-4.5-2.2 0-2.3 4.5-1.8 4.5 2.2Zm0 0c1.3 0 4.5-.2 4.5-2.2C16.5 1.5 12 2 12 6Z"/></svg></span>
-          <input id="regReferral" type="text" placeholder="Invitation Code" autocomplete="off" maxlength="12">
-        </div>
-        <p class="af-reg-referral-hint" id="regReferralHint"></p>
-        <button class="af-btn-v2" id="regBtn" onclick="doRegister()">Sign Up</button>
-        <p class="af-switch">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
+          <div class="va-f">
+            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
+            <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
+          </div>
+          <div class="va-f">
+            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
+            <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
+          </div>
+          <div class="va-f">
+            <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
+            <input id="regTradePin" type="password" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="new-password">
+          </div>
+          <div class="va-f">
+            <span class="va-ic va-gift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M2 6h20v3H2zM12 6v15M12 6c-1.3 0-4.5-.2-4.5-2.2 0-2.3 4.5-1.8 4.5 2.2Zm0 0c1.3 0 4.5-.2 4.5-2.2C16.5 1.5 12 2 12 6Z"/></svg></span>
+            <input id="regReferral" type="text" placeholder="Invitation Code" autocomplete="off" maxlength="12">
+          </div>
+          <button class="va-btn" id="regBtn" onclick="doRegister()">Sign Up</button>
+          <p class="va-link">Already have an account? <a href="#" onclick="showAuthTab('login');return false;">Log In</a></p>
         </section>
-      </div>
-
-      <!-- Forgot password, reached from Log In above. No Firebase session
-           exists at this point -- identity is proven by the OTP ticket
-           alone (see /auth/reset/confirm in server.js). Same one-screen
-           pattern as Sign Up (Send Code inline, verify happens on submit),
-           not a 3-step wizard -- the owner didn't send a mockup for this
-           screen specifically, but the same "one screen, exactly the
-           fields needed" treatment applies for consistency. -->
-      <div id="forgotPane" style="display:none;">
-        <div class="auth-intro">
-          <div class="auth-brand-mark">
-            <img class="auth-brand-logo" id="forgotBrandLogo" data-auth-brand-logo data-auth-fallback="forgotBrandFallback" alt="" aria-hidden="true" style="display:none;" onerror="this.style.display='none';var f=document.getElementById('forgotBrandFallback');if(f)f.style.display='flex'">
-            <span class="auth-brand-fallback" id="forgotBrandFallback" aria-hidden="true">P</span>
-          </div>
-          <h1>Reset your password</h1>
-          <p>Follow the steps below to regain access to your account.</p>
-        </div>
-        <div id="forgotFormGroup">
-          <div class="af-v2">
-            <span class="af-prefix" id="forgotDial">+256</span>
-            <input id="forgotPhone" type="tel" inputmode="numeric" placeholder="Enter your phone number" autocomplete="tel" oninput="sanitizePhoneInput(this)">
-          </div>
-          <div class="af-v2 with-btn">
-            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.6 3 7.8 7 9 4-1.2 7-4.4 7-9V6l-7-2.5Z"/><path d="M12 8.5v5M9.5 11h5"/></svg></span>
-            <input id="forgotOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="Enter verification code" autocomplete="one-time-code">
-            <button class="af-inline-btn" id="forgotSendOtpBtn" onclick="doForgotSendOtp()">Send Code</button>
-          </div>
-          <div class="af-v2">
-            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-            <input id="forgotPassword" type="password" placeholder="New password" autocomplete="new-password">
-            <button class="af-eye" onclick="togglePw('forgotPassword',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-          <div class="af-v2">
-            <span class="af-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-            <input id="forgotPassword2" type="password" placeholder="Confirm new password" autocomplete="new-password">
-            <button class="af-eye" onclick="togglePw('forgotPassword2',this)" aria-label="Show password"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          </div>
-          <button class="af-btn-v2" id="forgotSubmitBtn" onclick="doForgotSubmit()">Reset Password</button>
-        </div>
-        <p class="af-forgot after-btn"><a href="#" onclick="showAuthTab('login');return false;">Back to Log In</a></p>
       </div>
     </div>
   </div>

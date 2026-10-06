@@ -34,6 +34,6 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   // client: the form is never replaced by a support message
   const page = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8'), mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ok(!/forgotSupportGroup/.test(page + mod), 'no support-message replacement for Forgot Password');
-  ok(/forgotFormGroup/.test(page), 'the form is still there');
+  ok(!/forgotFormGroup|doForgot/.test(page + mod), 'the member app has no Forgot Password screen any more (owner screenshots); the server routes remain');
   console.log(`PASS: Forgot Password keeps its OTP with the master switch off (${checks} checks)`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });
