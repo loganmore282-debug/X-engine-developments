@@ -3175,7 +3175,7 @@ async function refreshCatalogNow(){
 async function renderAssets(){
   const hadCache = Array.isArray(STATE.investments);
   if (hadCache) paintAssets();
-  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
   const [pr, ir, ar] = await Promise.all([api('/public/products'), api('/investments'), api('/account')]);
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
   if (ir.status === 'success' && Array.isArray(ir.investments)) STATE.investments = ir.investments;
@@ -3378,27 +3378,11 @@ window.switchTeamLevel = async function(level){
   }
   if (_activeTeamLevel === level) renderTeamMembers(level);
 };
-// The orbiting-chips mark, centred, while a list is in flight. PLAN_SPIN is
-// the same markup the ongoing-plan rows and the payment page use -- every
-// length inside it is a fraction of --s, so one mark serves 32px, 56px and
-// 150px with no second copy and no second set of keyframes.
-function teamLoadingHtml(){ return '<div class="list-loading">' + MINI_RING_LOADER + '</div>'; }
-// The boot screen's own three-ring mark, reused small wherever a section
-// needs an in-app "loading" indicator (Owner: "l need the other start up
-// loader to be in navigation of loading so it will be smaller even") --
-// same .ring-arc/ringSweep CSS, sized down via .mini-ring-loader. Carries
-// its own #miniRingGrad def (same stops as the boot screen's #ringGrad)
-// rather than pointing at that one -- see the CSS comment above
-// .mini-ring-loader for why: a paint-server def only resolves reliably
-// while its own ancestor isn't display:none, and #loadingScreen usually is.
-var MINI_RING_LOADER = '<svg class="mini-ring-loader" viewBox="0 0 120 120" aria-hidden="true">'
-  + '<defs><linearGradient id="miniRingGrad" x1="24" y1="104" x2="96" y2="16" gradientUnits="userSpaceOnUse">'
-  + '<stop offset="0%" stop-color="#4a70e6"/><stop offset="55%" stop-color="#1739b8"/><stop offset="100%" stop-color="#ffb000"/>'
-  + '</linearGradient></defs>'
-  + '<circle class="ring-arc ring-arc-1" cx="60" cy="60" r="52" pathLength="100"/>'
-  + '<circle class="ring-arc ring-arc-2" cx="60" cy="60" r="45" pathLength="100"/>'
-  + '<circle class="ring-arc ring-arc-3" cx="60" cy="60" r="38" pathLength="100"/>'
-  + '</svg>';
+// The "Loading . . ." word, centred, while a list is in flight.
+function teamLoadingHtml(){ return '<div class="list-loading">' + NAV_LOADER + '</div>'; }
+// The "Loading . . ." word shown inside a page while its data arrives (same word and
+// font as the start-up loader, bouncing a little).
+var NAV_LOADER = '<span class="nav-loading">Loading . . .</span>';
 function maskPhone(phone){
   // "706****1455": the first three and last four digits of the local number
   // (country code and leading zero dropped), enough to recognise your own
@@ -3446,7 +3430,7 @@ function renderTeamMembers(level){
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
   if (hadCache) paintNetwork();
-  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + MINI_RING_LOADER + '</div>';
+  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
   const r = await api('/team/stats');
   if (r.status === 'success') STATE.teamStats = r;
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0, levelCommission:{l1:0,l2:0,l3:0} };
@@ -4010,7 +3994,7 @@ window.openTransactionStatement = async function(cat){
     <div id="statementBody"></div>`);
   $('sheetBg').classList.add('v-rec-page');
   if (hadCache) renderStatement();
-  else $('statementBody').innerHTML = '<div class="v-empty">Loading…</div>';
+  else $('statementBody').innerHTML = '<div class="list-loading">' + NAV_LOADER + '</div>';
   const r = await api('/transactions');
   if (r.status === 'success') {
     STATE.transactions = r.transactions;
@@ -4033,7 +4017,7 @@ window.openMessagesSheet = async function(){
   const hadCache = Array.isArray(STATE.messages);
   openSheet('Messages', '<div id="msgBody"></div>');
   if (hadCache) renderMessagesList();
-  else $('msgBody').innerHTML = '<div class="list-empty">Loading&hellip;</div>';
+  else $('msgBody').innerHTML = '<div class="list-loading">' + NAV_LOADER + '</div>';
   const r = await api('/messages');
   if (r.status === 'success') STATE.messages = r.messages;
   else if (!hadCache) STATE.messages = [];

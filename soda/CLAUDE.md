@@ -66,4 +66,6 @@
 
 6r. (Codex, reviewed and merged by Claude) **Maturity/daily payout crash window fixed.** `_settleDueInvestmentNow` used to mark the investment `matured` BEFORE crediting the wallet, so a crash between the two left the payout unpaid forever (the sweep only scans `active`). It now credits first, atomically, with a per-investment token (`creditedPayoutKeys`, key `<investmentId>:<payoutsMade>`) and a deterministic ledger row `cashback:<key>`, all inside `bal:<userId>`, and only then advances the investment. Test: `test-cashback-crash-recovery.js` (crash injected right after the wallet credit; retry completes without paying twice). Residual: if a retry were delayed past a day boundary the key would differ; the retry normally runs within 0.5 s.
 
+6s. (Claude, owner: "it is still using the other loader on navigation of referrals, use Loading...") Pages that wait for data (Income, Team, Team member list, Balance Record, Messages) used the three-ring SVG spinner (`MINI_RING_LOADER`) or a plain "Loading…"; they now all show the same bouncing "Loading . . ." word as the start-up loader (`NAV_LOADER`, `.nav-loading`, blue on the page background, 22 px, 14 px bounce). The ring spinner code and CSS are deleted. Test: `test-loader.js`. SW `soda-shell-v262`.
+
 7. Web Push (own VAPID) for admin alerts.

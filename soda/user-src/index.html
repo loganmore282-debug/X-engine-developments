@@ -353,23 +353,10 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 @media (prefers-reduced-motion:reduce){#loadingScreen .ld-txt{animation:none;}}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 #openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
-.ring-arc{fill:none;stroke:url(#ringGrad);stroke-linecap:round;
-  stroke-dasharray:2 98;stroke-dashoffset:0;transform-origin:60px 60px;
-  animation:ringSweep 2.4s ease-in-out infinite;}
-.ring-arc-1{stroke-width:3;}
-.ring-arc-2{stroke-width:2.4;opacity:.85;}
-.ring-arc-3{stroke-width:1.8;opacity:.7;}
-@keyframes ringSweep{
-  0%{stroke-dasharray:2 98;stroke-dashoffset:0;}
-  50%{stroke-dasharray:78 22;stroke-dashoffset:-38;}
-  100%{stroke-dasharray:2 98;stroke-dashoffset:-100;}
-}
 /* Download APP screen (openDownloadSheet(), its 'downloadbg' admin backdrop,
    and this CSS) removed -- see original_module.js's own comment above
    promptInstallApp() for the owner's reversal. Account's Download App row
    now triggers the install prompt directly, no screen in between. */
-#loadingScreen .spin{width:40px;height:40px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;animation:sp .8s linear infinite;}
-@keyframes sp{to{transform:rotate(360deg);}}
 /* Owner: "when one taps recharge after having select amount it should
    bring a spin loader so as to open the screen which is for selecting
    network and number" -- proceedToManualPaymentMethod() already swapped
@@ -1327,21 +1314,9 @@ body.deposit-status-open .bottom-nav{display:none;}
    triangles not Loading..."). */
 .list-loading{padding:34px 4px;display:flex;justify-content:center;align-items:center;}
 .list-loading .pspin{--s:56px;}
-/* Network's own team/referral loading state used PLAN_SPIN (the orbiting-
-   chips mark) too, by explicit earlier request, then a plain spinning ring.
-   Owner, this round: "l need the other start up loader to be in navigation
-   of loading so it will be smaller even" -- reusing the boot screen's own
-   three-ring SVG mark (see #loadingScreen above) here, just small, rather
-   than a third distinct spinner design. It shares the same .ring-arc/
-   ringSweep animation rules, but carries its OWN gradient def
-   (#miniRingGrad, identical stops to the boot screen's #ringGrad) instead
-   of pointing at that one: confirmed by rendering this offline that a
-   url(#ringGrad) paint-server reference from OUTSIDE a display:none
-   subtree does not reliably resolve in Chromium once #loadingScreen
-   itself is display:none -- the ring painted with no stroke at all. A
-   self-contained def has no dependency on #loadingScreen's visibility. */
-.mini-ring-loader{width:34px;height:34px;overflow:visible;filter:drop-shadow(0 0 4px rgba(23,57,184,.4));}
-.mini-ring-loader .ring-arc{stroke:url(#miniRingGrad);}
+.nav-loading{display:inline-block;color:var(--v-blue,#1739b8);font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:22px;font-weight:700;letter-spacing:.16em;animation:navBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
+@keyframes navBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-14px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
+@media (prefers-reduced-motion:reduce){.nav-loading{animation:none;}}
 @media(prefers-reduced-motion:reduce){}
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:15px;}
 
