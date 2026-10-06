@@ -952,7 +952,7 @@ async function getHelpBanner() {
 // no longer its own screen with a backdrop; Account's new Download App row
 // (downloadAppRowHtml()) now triggers the existing promptInstallApp() PWA
 // prompt directly, in user-src/original_module.js -- see its own comment.
-const SODA_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo'];
+const SODA_IMAGE_SLOTS = ['logo', 'authhero', 'banner2', 'banner3', 'checkinbanner', 'profilelogo', 'loaderbg'];
 const _sodaImageCache = {};
 const LEGACY_IMAGE_PREFIX = ['c','h','i','p','z','-'].join('');
 async function getSodaImage(slot) {
@@ -3668,6 +3668,21 @@ app.get('/public/help-banner', async (_req, res) => {
 app.get('/public/announcement-image', async (req, res) => {
   try { publicJson(req, res, { status: 'success', image: await getAnnouncementImage() }, IMAGE_CACHE); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// The start-up loader's background, served as a real image (not JSON) so the
+// browser can paint it from its own cache in the first frame of the next
+// launch. ETag + no-cache: a re-upload shows on the next open.
+app.get('/public/loader-image', async (req, res) => {
+  try {
+    const image = await getSodaImage('loaderbg');
+    const m = /^data:(image\/(?:png|jpe?g|webp|gif));base64,(.+)$/.exec(image || '');
+    if (!m) return res.status(404).end();
+    const buf = Buffer.from(m[2], 'base64');
+    const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex') + '"';
+    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, no-cache', ETag: etag });
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.send(buf);
+  } catch (e) { res.status(500).end(); }
 });
 // Soda artwork needed by the current member surfaces, fetched together.
 app.get('/public/soda-images', async (req, res) => {
@@ -8144,12 +8159,12 @@ app.post('/admin/settings/update', async (req, res) => {
 app.get('/admin/soda-images', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [logo, authhero, banner2, banner3, checkinbanner, profilelogo] = await Promise.all([
+    const [logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg] = await Promise.all([
       getSodaImage('logo'),
       getSodaImage('authhero'), getSodaImage('banner2'),
-      getSodaImage('banner3'), getSodaImage('checkinbanner'), getSodaImage('profilelogo'),
+      getSodaImage('banner3'), getSodaImage('checkinbanner'), getSodaImage('profilelogo'), getSodaImage('loaderbg'),
     ]);
-    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo });
+    res.json({ status: 'success', logo, authhero, banner2, banner3, checkinbanner, profilelogo, loaderbg });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/soda-image/set', async (req, res) => {

@@ -2774,6 +2774,7 @@ async function renderBanners(){
   const homeSlide3Image = cir.banner3||'';
   const logoImage = cir.logo||'';
   const profileLogoImage = cir.profilelogo||'';
+  const loaderBgImage = cir.loaderbg||'';
   const announcementImage = (annr && annr.image) || '';
   const appIconImage = bar.appIcon||'';
   const appIconCustom = !!bar.appIconCustom;
@@ -2837,6 +2838,17 @@ async function renderBanners(){
         ${profileLogoImage?`<button class="btn danger sm" id="profileLogoClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="profileLogoFile" accept="image/*" hidden></label>
+    </div>
+
+    <h2 class="sec">Loading screen background</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">The picture behind the word "Loading . . ." when the app starts. Portrait, about 1080&times;1920. Without one, a blue background shows.</p>
+      <div class="banner-row">
+        ${loaderBgImage?`<img class="img-thumb" src="${esc(loaderBgImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${loaderBgImage?'Custom image':'<span class="muted">Not set</span>'}</div>
+        ${loaderBgImage?`<button class="btn danger sm" id="loaderBgClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="loaderBgFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Login &amp; Sign Up background</h2>
@@ -2908,7 +2920,7 @@ function wireBannerHandlers(){
           // The auth backdrop fills a large area, so it keeps more
           // resolution than the banners.
           const maxDim = slot==='logo' ? 512
-                       : slot==='authhero' ? 1600
+                       : (slot==='authhero' || slot==='loaderbg') ? 1600
                        : 1280;
           const image = await fileToDataUrl(f, maxDim, 0.82);
           const d = await api('/admin/soda-image/set', { slot, image });
@@ -2974,6 +2986,7 @@ function wireBannerHandlers(){
       if (d.status==='success') renderBanners();
     })());
   });
+  wireSodaImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen background saved', 'Loading screen background removed');
   wireSodaImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   const brandLogoFile = $('brandLogoFile');
   if (brandLogoFile) brandLogoFile.addEventListener('change', async e=>{
