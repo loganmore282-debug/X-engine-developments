@@ -86,4 +86,6 @@
 
 6ab. (Claude, owner: his pictures are portrait, 2:3 like a bottle photo 1024x1536) Portrait pictures now get a picture column of their own shape: `vFitCard` sets `--img-w` = 200 x (width/height) clamped to 112.5-150 px (a 2:3 photo -> 133 px wide, exactly the 200 px height of the figures beside it), so the whole picture shows with no side bars and no crop on Home and Income. Wider than 0.85 still goes across the top. Checked with his actual bottle photo (resized like the admin does to 600x900). SW `soda-shell-v268`.
 
+6ac. (Claude, owner: start-up loader too huge, dots and letters not spaced, bigger bounce area) **Start-up loader** is now "Loading..." (one word, no gaps) at 24 px (was 36), letter-spacing .02em (was .16em) and bounces 64 px (was 34). The in-page loader is unchanged (15 px). Test: `test-loader.js`. SW `soda-shell-v269`.
+
 7. Web Push (own VAPID) for admin alerts.

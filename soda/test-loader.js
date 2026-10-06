@@ -7,11 +7,11 @@ const html = fs.readFileSync(__dirname + (built ? '/user/index.html' : '/user-sr
 const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
-ok(/<span class="ld-txt"[^>]*>Loading \. \. \.<\/span>/.test(html), 'the loader says "Loading . . ."');
+ok(/<span class="ld-txt"[^>]*>Loading\.\.\.<\/span>/.test(html), 'the loader says "Loading..."');
 ok(/#loadingScreen\{[^}]*url\('\/api\/public\/loader-image'\)/.test(html), 'the loader background is the admin picture');
-ok(/@keyframes ldBounce\{.*translateY\(-34px\)/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in a small area');
+ok(/@keyframes ldBounce\{.*translateY\(-64px\)/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in a wide area (64 px)');
 ok((html.match(/ld-txt[^{]*\{[^}]*animation:/g) || []).length === 2, 'one bounce animation (plus its reduced-motion off switch), nothing else');
-ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:36px[^}]*letter-spacing:\.16em/.test(html), 'bold serif, 36 px, wide spacing (the owner\'s sample)');
+ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:24px[^}]*letter-spacing:\.02em/.test(html), 'bold serif, 24 px, letters and dots close together');
 ok(/ld-txt\{[^}]*color:#fff/.test(html), 'colour stays white (not specified by the owner)');
 ok(/\.sr-only\{/.test(html), 'the screen-reader word is hidden');
 ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondary pages end above the bottom navigation');
