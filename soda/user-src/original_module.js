@@ -3708,12 +3708,13 @@ window.openWalletSheet = async function(){
   openSheet('Wallet', '');
   renderWalletSheet();
   // The provider list only widens once the bank list lands; the form is never repainted under the member's finger.
-  if (!Array.isArray(STATE.supportedBanks)) {
+  // An empty answer (the bank list could not be fetched) is not kept, so the next visit asks again.
+  if (!(STATE.supportedBanks && STATE.supportedBanks.length)) {
     api('/bank/supported-banks').then(br => {
-      STATE.supportedBanks = br.status === 'success' && Array.isArray(br.banks) ? br.banks : [];
+      if (br.status === 'success' && Array.isArray(br.banks) && br.banks.length) STATE.supportedBanks = br.banks;
       const list = $('walProviderList');
       if (_openSheetTitle === 'Wallet' && list) list.innerHTML = walProviderOptionsHtml();
-    }).catch(() => { STATE.supportedBanks = STATE.supportedBanks || []; });
+    }).catch(() => {});
   }
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
@@ -3795,7 +3796,7 @@ function renderWalletSheet(){
           <div class="v-uline prov-input"><input id="walProvider" type="text" autocomplete="off" placeholder="Type wallet provider to search" oninput="filterProviders()" onfocus="openProviderList()"></div>
           <div class="prov-list" id="walProviderList">${walProviderOptionsHtml()}</div>
         </div>
-        <label class="v-flabel" for="walPhone">Phone Number</label>
+        <label class="v-flabel" for="walPhone">Account Number</label>
         <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="${esc(phoneHintBody())}" oninput="handleWalDestInput(this)"></div>
         <label class="v-flabel" for="walHolder">Account Holder Name</label>
         <div class="v-uline"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
@@ -3812,6 +3813,7 @@ function renderWalletSheet(){
 window.openProviderList = function(){ const box = $('walProviderPick'); if (box) box.classList.add('open'); };
 window.filterProviders = function(){
   const inp = $('walProvider'); if (!inp) return;
+  if (inp.dataset.network) inp.dataset.lastNetwork = inp.dataset.network;   // remembered so pickProvider knows what was chosen before
   inp.dataset.network = '';
   const q = inp.value.trim().toLowerCase();
   document.querySelectorAll('#walProviderList .prov-opt').forEach(b => { b.style.display = !q || b.textContent.toLowerCase().includes(q) ? '' : 'none'; });
@@ -3819,8 +3821,8 @@ window.filterProviders = function(){
 };
 window.pickProvider = function(name){
   const inp = $('walProvider');
-  const prev = inp ? (inp.dataset.network || walFull(inp.value)) : '';
-  if (inp) { inp.value = walShort(name); inp.dataset.network = name; }
+  const prev = inp ? (inp.dataset.network || inp.dataset.lastNetwork || walFull(inp.value)) : '';
+  if (inp) { inp.value = walShort(name); inp.dataset.network = name; inp.dataset.lastNetwork = name; }
   const box = $('walProviderPick');
   if (box) box.classList.remove('open');
   document.querySelectorAll('#walProviderList .prov-opt').forEach(b => { b.style.display = ''; });
@@ -4516,16 +4518,16 @@ var _depChosenAmount = 0;
 function openDepositFormSheet(){
   const s = STATE.settings || {};
   _depChosenAmount = 0;
-  // The screens ask for no phone number: the payment prompt goes to the
-  // number the member signed up with (still the same field submitDeposit()
-  // reads and validates, now carried quietly).
-  const defaultPhone = localDigits((STATE.account || {}).phone) || '';
+  // The payment prompt goes to the number typed here: the member's own registered number is
+  // filled in, and it can be changed to any other mobile money number.
+  const registered = localDigits((STATE.account || {}).phone) || '';
+  const defaultPhone = registered ? '0' + registered : '';
   const min = Number(s.minDeposit) || 0;
   openSheet('Deposit', `<div class="v-form">
     <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
     <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
     <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="syncDepositQuickAmt()" autocomplete="off">
-    <input id="depPhone" type="hidden" value="${esc(defaultPhone)}">
+    <input class="v-phone-in" id="depPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Phone Number" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
     <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
     <div class="v-pays" id="depPays">
       <button type="button" class="on" onclick="pickPayLabel(this)">PAY-A</button>
@@ -5033,7 +5035,7 @@ window.submitDeposit = async function(){
   // other two.
   const s = STATE.settings || {};
   if (amount < (Number(s.minDeposit) || 0)) return notify('Minimum amount is ' + fmtUGX(s.minDeposit));
-  if (!phone) return notify('Your account has no mobile money number to charge. Contact support.');
+  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
   submitBtn.disabled = true; submitBtn.textContent = 'Sending request…';
   let r;
   try {

@@ -6827,7 +6827,7 @@ app.post('/bank/save', async (req, res) => {
     if (!destValue) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
   } else {
     destValue = String(req.body.phone || req.body.accountNumber || '').replace(/\s+/g, '').trim();
-    if (!/^[A-Za-z0-9]{4,34}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number' });
+    if (!/^[A-Za-z0-9]{4,64}$/.test(destValue)) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number' });
     // Validated against the SAME live/cached list #bank/supported-banks
     // serves -- a bank name the picker never offered has no business
     // reaching MarzPay's own bank-transfer create call, where an unknown
