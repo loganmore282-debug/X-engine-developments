@@ -721,13 +721,19 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 /* ── Gift Codes: Soda energy-voucher treatment ──
    The old treasure-chest scene was Soda artwork and metaphor. Soda keeps
    the same redeem flow but presents it as a clean code/voucher utility. */
-/* The full-screen "Congratulations! You won..." win card (chest-win-bg/
-   chest-win-card/gift-win-mark, ChestSuccess.dc.html) is removed entirely --
-   owner: "remove this stuff completely, only just put a notify 'giftcode
-   redeemed successfully'." A redeemed code now just closes the sheet and
-   shows the same notify() toast every other quick confirmation in this app
-   uses (see submitChestKey() in original_module.js), not a second win-card
-   system of its own. */
+/* Gift-code win card (owner's screenshot): blurred page behind, white card with the
+   gift mark, Congratulations!, You won, the amount, the new balance and COLLECT. */
+.v-win-bg{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:7.6px 18px 0;background:rgba(23,57,184,.5);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);opacity:0;transition:opacity .25s ease;}
+.v-win-bg.show{opacity:1;}
+.v-win-card{width:100%;max-width:323px;box-sizing:border-box;background:#fcfcfe;border-radius:24px;padding:34px 24px 34px;text-align:center;box-shadow:0 18px 44px -14px rgba(10,22,70,.5);transform:scale(.94);transition:transform .3s cubic-bezier(.22,1,.36,1);}
+.v-win-bg.show .v-win-card{transform:scale(1);}
+.v-win-mark{width:60px;height:60px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:var(--v-grad);color:#fff;box-shadow:0 10px 22px -8px rgba(23,57,184,.65);}
+.v-win-mark svg{width:25px;height:25px;}
+.v-win-card h2{margin:18.6px 0 0;font-size:22px;font-weight:800;letter-spacing:.066em;color:#111;}
+.v-win-sub{margin:14px 0 0;font-size:11px;font-style:italic;color:#9aa0b4;}
+.v-win-amt{margin:20.2px 0 0;font-size:37.4px;font-weight:700;color:var(--v-blue);line-height:1.1;}
+.v-win-bal{margin:23.2px 0 0;font-size:11.5px;color:#9aa0b4;}
+.v-win-btn{display:block;width:100%;height:43px;margin:29.6px 0 0;border:0;border-radius:14px;background:var(--v-grad);color:#fff;font:inherit;font-size:13px;font-weight:700;letter-spacing:.16em;cursor:pointer;}
 
 /* ── Transaction Statement ──
    Professional ledger presentation: categories are one horizontal tab row at

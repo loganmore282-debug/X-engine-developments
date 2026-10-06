@@ -4214,15 +4214,34 @@ window.submitChestKey = async function(){
   const after = Number.isFinite(Number(r.walletBalance)) && r.walletBalance !== null
     ? Number(r.walletBalance) : before + reward;
   if (STATE.account) STATE.account.walletBalance = after;
-  closeSheet({ fromAction: true });
-  // Owner: "remove this stuff completely, only just put a notify 'giftcode
-  // redeemed successfully'." The old full-screen win card (Congratulations/
-  // amount/live-counting balance/COLLECT, showChestWin() and friends) is
-  // gone -- a redeemed code is now just this one toast, the same notify()
-  // every other quick confirmation in this app already uses.
-  notify('Giftcode redeemed successfully');
+  // The win card from the owner's screenshot: Congratulations!, You won, the
+  // amount, the new balance and COLLECT, over the blurred Treasure Chest page.
+  showChestWin(reward, after);
   // Now catch the app up in the background.
   refreshAfterWin();
+};
+function showChestWin(reward, balance){
+  let bg = $('chestWinBg');
+  if (bg) bg.remove();
+  bg = document.createElement('div');
+  bg.id = 'chestWinBg'; bg.className = 'v-win-bg';
+  bg.innerHTML = `
+    <div class="v-win-card" role="dialog" aria-modal="true">
+      <span class="v-win-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.2h-19z"/><path d="M12 5.8v14.7"/><path d="M12 5.8C10.2 5.8 8.4 5 8.4 3.6 8.4 2.5 9.4 2 10.4 2.4c1.1.5 1.6 1.9 1.6 3.4zM12 5.8c1.8 0 3.6-.8 3.6-2.2 0-1.1-1-1.6-2-1.2-1.1.5-1.6 1.9-1.6 3.4z"/></svg></span>
+      <h2>Congratulations!</h2>
+      <p class="v-win-sub">You won</p>
+      <div class="v-win-amt">${esc(vMoney2(reward))}</div>
+      <p class="v-win-bal">New Balance: ${esc(vMoney2(balance))}</p>
+      <button type="button" class="v-win-btn" onclick="collectChestWin()">COLLECT</button>
+    </div>`;
+  document.body.appendChild(bg);
+  requestAnimationFrame(() => bg.classList.add('show'));
+  fireConfetti();
+}
+window.collectChestWin = function(){
+  const bg = $('chestWinBg');
+  if (bg) bg.remove();
+  closeSheet({ fromAction: true });
 };
 // The two network refreshes a win needs. Deliberately not awaited by its
 // caller -- the toast above already told the member it worked, so nothing
