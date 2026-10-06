@@ -7432,30 +7432,11 @@ app.get('/withdrawals', async (req, res) => {
 // BROADCASTS stored once in `messages`; per-member read state lives in
 // `messageReads` keyed `<uid>_<messageId>` so a broadcast never has to be
 // fanned out into one document per member.
-// Built fresh per call rather than held as a constant, so it picks up a
-// renamed app. An admin-authored 'welcome' doc still overrides it entirely.
-function defaultWelcomeMessage(s) {
-  return {
-    id: 'welcome',
-    title: 'Welcome to the ' + brandName(s) + ' Investment Returns app!',
-    body: 'You can earn daily income through investments via the app, and also earn daily wages by sharing your referral link with friends and family.',
-  };
-}
+// Only what the admin writes in the panel is ever shown: there is no built-in or "welcome" message,
+// so a deployment with nothing written shows the empty "No messages" screen.
 async function listBroadcastMessages() {
   const snap = await db.collection('messages').orderBy('createdAt', 'desc').limit(100).get();
-  const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  const rows = all.filter(m => !m.deleted);
-  // A brand-new deployment has no admin-authored messages yet; the welcome
-  // note the mockups show is served as a virtual row so the inbox is never
-  // blank on day one. The moment an admin writes a real 'welcome' doc it
-  // takes over (same id), so this can't ever duplicate it. Tested against
-  // `all`, not `rows` -- an admin who DELETED the welcome message left a
-  // tombstone behind, and checking the filtered list would resurrect it.
-  //
-  if (!all.some(m => m.id === 'welcome')) {
-    rows.push({ ...defaultWelcomeMessage(await getSettings()), createdAt: 0, date: '', time: '' });
-  }
-  return rows;
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => !m.deleted);
 }
 app.get('/messages', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -8552,10 +8533,7 @@ app.post('/admin/messages/delete', async (req, res) => {
   const id = String(req.body.id || '');
   if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
   try {
-    // Tombstoned rather than removed so the built-in 'welcome' message can
-    // also be hidden by an admin who does not want it (listBroadcastMessages
-    // only re-adds the virtual welcome row when no doc with that id exists,
-    // and a tombstone IS such a doc).
+    // Marked deleted rather than removed, so the row stays out of every list but is not lost.
     await db.collection('messages').doc(id).set({ deleted: true }, { merge: true });
     logAdminAction(req, 'message_deleted', { id });
     res.json({ status: 'success' });
