@@ -3069,7 +3069,7 @@ function vFitCard(img){
 }
 function vNoPicture(img, initial){
   const frame = img.parentNode;
-  if (frame && frame.classList) frame.classList.remove('has-img');
+  if (frame && frame.classList) frame.classList.remove('has-img', 'v-fence');
   const card = img.closest('.v-card'); if (card) card.classList.remove('v-flat');
   img.outerHTML = '<span class="v-glyph">' + initial + '</span>';
 }
@@ -3232,8 +3232,10 @@ function vOwnedCardHtml(inv){
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
   const name = inv.tierLabel || p.name || 'Asset';
   const initial = esc(String(name || '?').trim()[0] || '?');
+  // Fenced: the picture lives in a fixed-size frame (see .v-owned .v-card-img) and is scaled to fit
+  // inside it, so its shape or load time can never move the figures or spill over the card.
   const img = p.image
-    ? `<img src="${esc(p.image)}" alt="" onload="vFitCard(this)" onerror="vNoPicture(this,'${initial}')">`
+    ? `<img src="${esc(p.image)}" alt="" onerror="vNoPicture(this,'${initial}')">`
     : `<span class="v-glyph">${initial}</span>`;
   const startMs = st.createdMs;
   const endMs = startMs + st.total * 86400000;
@@ -3243,7 +3245,7 @@ function vOwnedCardHtml(inv){
     <h3 class="v-card-h">${esc(name)}</h3>
     ${inv.granted ? '<i class="v-ribbon"><b>GIFT</b></i>' : ''}
     <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
+      <div class="v-card-img${p.image ? ' v-fence' : ''}">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
       <div class="v-side">
         <dl class="v-rows">
           <div><dt>Price</dt><dd>${esc(vMoney(st.amount))}</dd></div>

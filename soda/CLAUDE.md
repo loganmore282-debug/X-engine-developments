@@ -100,4 +100,6 @@
 
 6ai. (Claude, owner: "on a bought product the card and image override a bit") Rendered the Income page with bought assets (portrait, wide, square) and found the cause: a bought card has no footer, so the Purchase/Expire box sat on the card's bottom border, and a portrait picture (200 px high) ended well above it. Now `.v-owned .v-card-b` has 12 px bottom padding and a portrait picture is centred beside the figures (`.v-owned:not(.v-flat) .v-card-img.has-img`). Looked at with screenshots at 360 px; no test (CSS spacing only). SW `soda-shell-v274`.
 
+6aj. (Claude, owner: "still persisting, fence up the image of a bought or gifted product in Income") The Income card no longer sizes itself to the picture. Bought and gifted cards use a **fixed frame** (133 x 227 px, `overflow:hidden`, class `v-fence`, light tint) with the picture scaled to fit inside it (`object-fit: contain`, nothing cropped), a fixed 133 px picture column, and no `vFitCard` (so no layout change when a picture finishes loading). A wide or square picture is shown whole but smaller inside the frame; a failed picture falls back to the letter (`vNoPicture` also clears the fence). Home cards keep the shape-fitting behaviour of 6aa/6ab. Checked with screenshots (portrait, wide, square) at 360 px. SW `soda-shell-v275`.
+
 7. Web Push (own VAPID) for admin alerts.
