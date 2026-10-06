@@ -58,14 +58,6 @@ upstream soda_node {
     keepalive 32;
 }
 
-# Compress what compresses (the app page is ~350 KB of script; JSON replies shrink a lot too).
-gzip on;
-gzip_comp_level 5;
-gzip_min_length 1024;
-gzip_proxied any;
-gzip_vary on;
-gzip_types text/plain text/css text/javascript application/javascript application/json application/manifest+json image/svg+xml;
-
 limit_req_zone $binary_remote_addr zone=soda_api:10m rate=20r/s;
 limit_req_zone $binary_remote_addr zone=soda_admin_login:10m rate=1r/s;
 limit_req_zone $binary_remote_addr zone=soda_member_login:10m rate=3r/s;
@@ -89,6 +81,14 @@ ${prod ? '    listen 80;\n    listen [::]:80;' : '    listen 8090;\n    listen [
     server_name ${host};
 
     server_tokens off;   # inside this server only: a top-level copy clashes with other sites' files
+    # Compress what compresses (the app page is ~350 KB of script; JSON replies shrink a lot too).
+    # Inside this server only, so it never clashes with a gzip line in the main nginx.conf.
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types text/plain text/css text/javascript application/javascript application/json application/manifest+json image/svg+xml;
     client_max_body_size 8m;
 ${prod ? `
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
