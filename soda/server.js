@@ -1634,22 +1634,31 @@ async function uniqueRef(letter) {
 // own Level 1 members who have deposited; a "deposit" task counts what the whole team (levels 1-3) has deposited.
 const TASK_MAX_ROWS = 30, TASK_MAX_REFERRALS = 100000;
 // Validates what the admin sends. Whole numbers only, one row per target, a stable id per row (new rows get one).
-function sanitizeTaskRows(rows, kind) {
+function sanitizeTaskRows(rows, kind, history) {
   const label = kind === 'deposit' ? 'Deposits' : 'Referrals';
   if (!Array.isArray(rows)) return { error: `${label}: send a list of tasks.` };
   if (rows.length > TASK_MAX_ROWS) return { error: `${label}: at most ${TASK_MAX_ROWS} tasks.` };
   const maxTarget = kind === 'deposit' ? MAX_MONEY_AMOUNT : TASK_MAX_REFERRALS;
-  const out = [], ids = new Set(), targets = new Set();
+  const out = [], targets = new Set();
   for (const r of rows) {
     const target = Number(r && r.target), reward = Number(r && r.reward);
     if (!Number.isInteger(target) || target < 1 || target > maxTarget) return { error: `${label}: every target must be a whole number from 1 to ${maxTarget}.` };
     if (!Number.isInteger(reward) || reward < 1 || reward > MAX_MONEY_AMOUNT) return { error: `${label}: every reward must be a whole number from 1 to ${MAX_MONEY_AMOUNT}.` };
     if (targets.has(target)) return { error: `${label}: two tasks have the same target (${target}).` };
     targets.add(target);
-    let id = String((r && r.id) || '');
-    if (!/^[a-z0-9]{1,16}$/.test(id) || ids.has(id)) id = 't' + crypto.randomBytes(4).toString('hex');
-    ids.add(id);
-    out.push({ id, target, reward });
+    out.push({ id: String((r && r.id) || ''), target, reward });
+  }
+  // Ids the admin's rows already carry are kept. A row with no usable id first gets back the id this target ever had
+  // (`history`, target -> id), so deleting a task and typing it again can never turn it into a new, claimable one;
+  // only a target that has never existed gets a fresh id.
+  const used = new Set();
+  for (const r of out) { if (/^[a-z0-9]{1,16}$/.test(r.id) && !used.has(r.id)) used.add(r.id); else r.id = ''; }
+  for (const r of out) {
+    if (r.id) continue;
+    const old = history && history[String(r.target)];
+    if (typeof old === 'string' && /^[a-z0-9]{1,16}$/.test(old) && !used.has(old)) r.id = old;
+    else { do { r.id = 't' + crypto.randomBytes(4).toString('hex'); } while (used.has(r.id)); }
+    used.add(r.id);
   }
   out.sort((x, y) => x.target - y.target);
   return { rows: out };
@@ -3364,7 +3373,9 @@ app.post('/team/task/claim', async (req, res) => {
         balance = round2(Number(after.exists && after.data().walletBalance) || 0);
       });
       if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
-      await ledger();
+      // The money is already in the wallet. If only the history row fails to write, say success (a retry repairs the row)
+      // instead of telling the member it failed.
+      await ledger().catch(e => console.error('Task reward ledger row failed (credit is applied, a retry repairs it):', e.message));
       return { code: 200, body: { status: 'success', amount: row.reward, walletBalance: balance, message: `${fmtMoney(row.reward)} added to your wallet` } };
     });
     res.status(out.code).json(out.body);
@@ -8625,10 +8636,22 @@ app.get('/admin/tasks', async (req, res) => {
 });
 app.post('/admin/tasks/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const ref = sanitizeTaskRows(req.body.referrals, 'count'), dep = sanitizeTaskRows(req.body.deposits, 'deposit');
-  if (ref.error || dep.error) return res.status(400).json({ status: 'error', message: ref.error || dep.error });
   try {
-    await db.collection('settings').doc('main').set({ taskReferrals: ref.rows, taskDeposits: dep.rows }, { merge: true });
+    const mainSnap = await db.collection('settings').doc('main').get();
+    const stored = Object.assign({}, DEFAULT_SETTINGS, mainSnap.exists ? mainSnap.data() : {});
+    // The ids members can be holding claims for: everything remembered so far, plus the lists that are live right now
+    // (so a task removed in this very save is still on record).
+    const seed = (old, rows, kind) => { const m = Object.assign({}, old); for (const r of taskRows(rows, kind)) m[String(r.target)] = r.id; return m; };
+    const hist = { count: seed(stored.taskIdByTarget && stored.taskIdByTarget.count, stored.taskReferrals, 'count'),
+                   deposit: seed(stored.taskIdByTarget && stored.taskIdByTarget.deposit, stored.taskDeposits, 'deposit') };
+    const ref = sanitizeTaskRows(req.body.referrals, 'count', hist.count), dep = sanitizeTaskRows(req.body.deposits, 'deposit', hist.deposit);
+    if (ref.error || dep.error) return res.status(400).json({ status: 'error', message: ref.error || dep.error });
+    // Remember every target's id for good (a removed task keeps its id on record), so a task typed again later is the same task.
+    const remember = (old, rows) => { const m = Object.assign({}, old); for (const r of rows) m[String(r.target)] = r.id; return m; };
+    await db.collection('settings').doc('main').set({
+      taskReferrals: ref.rows, taskDeposits: dep.rows,
+      taskIdByTarget: { count: remember(hist.count, ref.rows), deposit: remember(hist.deposit, dep.rows) },
+    }, { merge: true });
     _settingsCacheTs = 0;
     logAdminAction(req, 'tasks_saved', { referrals: ref.rows.length, deposits: dep.rows.length });
     res.json({ status: 'success', referrals: ref.rows, deposits: dep.rows });

@@ -23,6 +23,13 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(S([{ target: 1000000, reward: 5 }], 'deposit').rows, 'a deposit target can be large');
   ok(S([{ target: 1000000, reward: 5 }], 'count').error, 'a referral target cannot be a million');
   ok(T([{ id: 'a', target: 5, reward: 1 }, { target: 3, reward: 2 }, null, { id: 'b', target: -1, reward: 1 }], 'count').length === 1, 'malformed stored rows are quietly left out');
+  // a task typed again gets its old id back (so it cannot be claimed twice); a new target gets a fresh one
+  const re = S([{ target: 5, reward: 7 }, { target: 9, reward: 1 }], 'count', { 5: 'r1' });
+  ok(re.rows.find(r => r.target === 5).id === 'r1', 'a removed task typed again gets its old id back');
+  ok(/^t[0-9a-f]{8}$/.test(re.rows.find(r => r.target === 9).id), 'a target that never existed gets a fresh id');
+  const clash = S([{ id: 'r1', target: 6, reward: 1 }, { target: 5, reward: 1 }], 'count', { 5: 'r1' });
+  ok(clash.rows.find(r => r.target === 6).id === 'r1' && clash.rows.find(r => r.target === 5).id !== 'r1', 'an id already taken by another row is never handed out twice');
+  ok(/taskIdByTarget/.test(server) && /Task reward ledger row failed/.test(server), 'the server remembers ids and a failed ledger write does not turn a paid claim into an error');
   ok(/app\.post\('\/team\/task\/claim'/.test(server) && /creditedTaskKeys: \{ \$ne: key \}/.test(server) && /withLock\('taskclaim:' \+ userId/.test(server), 'the claim is locked per member and guarded by an atomic token');
   ok(/app\.post\('\/admin\/tasks\/save', async \(req, res\) => \{\s*if \(!verifyOwner/.test(server), 'only the owner can save the tasks');
   ok(!/TEAM_MILESTONES|TEAM_DEPOSIT_MILESTONES/.test(server), 'the old hard-coded ladders are gone');
@@ -86,5 +93,13 @@ for (const s of d.scripts) {
   w.eval(d.querySelectorAll('.v-tk-btn.go')[0].getAttribute('onclick').replace(/this\)/, 'document.querySelectorAll(".v-tk-btn.go")[0])'));
   await new Promise(r => setTimeout(r, 30));
   ok(d.getElementById('notifyMsg').textContent === 'Already claimed', 'a refused claim shows the server\'s message');
+  // a failed load never reads as "no tasks"
+  w.eval('STATE.teamStats=null; _taskFailed=false'); w.api = async () => ({ status: 'error', message: 'x' });
+  await w.openTaskCenter(); await new Promise(r => setTimeout(r, 20));
+  ok(d.getElementById('tkBody').textContent === 'Could not load your team' && !/No tasks yet/.test(d.getElementById('tkBody').textContent), 'a failed first load says it could not load (not "No tasks yet.")');
+  w.eval('STATE.teamStats=' + JSON.stringify({ l1ActiveCount: 1, teamDeposits: 0, milestones: [{ type: 'count', id: 'r1', target: 5, reward: 10000, current: 1, achieved: false, claimed: false }] }));
+  await w.refreshTaskCenter(); await new Promise(r => setTimeout(r, 20));
+  ok(d.querySelectorAll('.v-tk-card').length === 1, 'a failed refresh keeps the list that is on screen');
+  w.closeSheet();
   console.log('test-task-center: ' + n + ' checks passed' + (built ? ' (built)' : ''));
 })().catch(e => { console.error(e); process.exit(1); });

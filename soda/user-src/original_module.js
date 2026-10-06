@@ -3529,20 +3529,42 @@ function taskCenterHtml(){
     <div class="v-tk-list">${list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">No tasks yet.</div>'}</div>
   </div>`;
 }
-function paintTaskCenter(){ const b = $('tkBody'); if (b) b.innerHTML = taskCenterHtml(); }
+function paintTaskCenter(){
+  const b = $('tkBody'); if (!b) return;
+  if (_taskFailed && !(STATE.teamStats && STATE.teamStats.milestones)) { _taskShowsFailure = true; b.innerHTML = '<div class="v-empty" onclick="refreshTaskCenter()">Could not load your team</div>'; return; }
+  _taskShowsFailure = false;
+  b.innerHTML = taskCenterHtml();
+}
+window.refreshTaskCenter = refreshTaskCenter;
 function updateTaskBadge(){
   const e = $('tkBadge'); if (!e) return;
   const n = taskReadyCount(); e.textContent = n; e.style.display = n ? '' : 'none';
 }
 window.switchTaskTab = function(k){ _taskTab = k === 'deposit' ? 'deposit' : 'count'; paintTaskCenter(); };
+var _taskFailed = false, _taskTimer = null, _taskShowsFailure = false;
+// Fetches the true progress. A failed fetch keeps whatever the page already shows; with nothing to show it says so
+// (tap to retry) instead of printing "No tasks yet." as if the owner had none.
+async function refreshTaskCenter(){
+  const had = !!(STATE.teamStats && STATE.teamStats.milestones);
+  const before = had ? JSON.stringify([STATE.teamStats.milestones, STATE.teamStats.l1ActiveCount, STATE.teamStats.teamDeposits]) : '';
+  const r = await api('/team/stats');
+  if (r.status === 'success') { STATE.teamStats = r; _taskFailed = false; }
+  else _taskFailed = !had;
+  const now = STATE.teamStats && STATE.teamStats.milestones ? JSON.stringify([STATE.teamStats.milestones, STATE.teamStats.l1ActiveCount, STATE.teamStats.teamDeposits]) : '';
+  if (_openSheetTitle === 'Task Center' && (before !== now || _taskFailed || !had || _taskShowsFailure)) paintTaskCenter();
+  updateTaskBadge();
+}
 window.openTaskCenter = async function(){
   openSheet('Task Center', '<div id="tkBody"></div>');
   if (STATE.teamStats && STATE.teamStats.milestones) paintTaskCenter();
   else { const b = $('tkBody'); if (b) b.innerHTML = '<div class="v-tk-wait">' + NAV_LOADER + '</div>'; }
-  const r = await api('/team/stats');
-  if (r.status === 'success') STATE.teamStats = r;
-  if (_openSheetTitle === 'Task Center') paintTaskCenter();
-  updateTaskBadge();
+  // While the page is open, progress is re-read every 15 seconds so a referral that just deposited shows up by itself.
+  if (_taskTimer) clearInterval(_taskTimer);
+  _taskTimer = setInterval(() => {
+    if (_openSheetTitle !== 'Task Center') { clearInterval(_taskTimer); _taskTimer = null; return; }
+    if (!_taskBusy && !document.hidden) refreshTaskCenter();
+  }, 15000);
+  await refreshTaskCenter();
 };
 window.claimTask = async function(type, id, btn){
   if (_taskBusy) return;
@@ -3563,10 +3585,8 @@ window.claimTask = async function(type, id, btn){
   }
   // Not claimable after all (already taken, progress changed, task removed): say so and show the true state.
   notify(r.message || 'Could not claim that reward');
-  const s = await api('/team/stats');
-  if (s.status === 'success') STATE.teamStats = s;
+  await refreshTaskCenter();
   if (_openSheetTitle === 'Task Center') paintTaskCenter();
-  updateTaskBadge();
 };
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
