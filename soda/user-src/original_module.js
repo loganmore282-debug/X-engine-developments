@@ -1916,7 +1916,19 @@ async function boot(){
   // loading screen has gone, so they never compete with the account request
   // for a slow mobile connection (see startArtwork()).
   setTimeout(startArtwork, 8000);
-  const [s, p, b] = await Promise.all([ pSettings, pProducts, pBanner ]);
+  // Only the settings are waited for. The asset list and the Home banner carry
+  // pictures (megabytes of base64) and used to hold the loading screen until
+  // they had fully downloaded; they now land underneath the app and repaint
+  // the pages that show them.
+  const s = await pSettings;
+  pProducts.then(p => {
+    STATE.products = p.status === 'success' ? p.products : (STATE.products || []);
+    repaintAfterBootData();
+  }).catch(() => {});
+  pBanner.then(b => {
+    STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
+    repaintAfterBootData();
+  }).catch(() => {});
   STATE.settings = s.status === 'success' ? s.settings : {};
   // The region that owns this hostname, so the landing screen, Sign Up and
   // the product list already read in the right currency before anybody has
@@ -1938,9 +1950,16 @@ async function boot(){
   // filled, and whichever one wins the race has to be the one that applies it.
   applyBrandName();
   applyInnerBackgroundSettings();
-  STATE.products = p.status === 'success' ? p.products : [];
-  STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
   applyNumberFont();
+}
+// Home and Income show the asset list and the banner; repaint whichever is
+// on screen when either lands after the app has opened.
+function repaintAfterBootData(){
+  try {
+    if (!$('app') || $('app').style.display === 'none') return;
+    if (STATE.page === 'home') paintHome();
+    else if (STATE.page === 'assets') paintAssets();
+  } catch (_) {}
 }
 // Everything the first screen does not need. Called when the three heavy
 // replies land -- which may be before or after the app becomes visible, so
@@ -3066,10 +3085,12 @@ async function renderHome(){
   const hadCache = !!STATE.account;
   const hadInvestments = Array.isArray(STATE.investments);
   const shownProducts = homeSignature();
+  const hadProductList = !!STATE.products;
   paintHome();
   const [accR, invR, prR] = await Promise.all([ api('/account'), api('/investments'), api('/public/products') ]);
   if (accR.status === 'success') STATE.account = accR.account;
   if (prR.status === 'success' && Array.isArray(prR.products)) STATE.products = prR.products;
+  else if (!STATE.products) STATE.products = [];
   if (invR.status === 'success' && Array.isArray(invR.investments)) {
     STATE.investments = invR.investments;
     _investmentsLoadFailed = false;
@@ -3079,7 +3100,7 @@ async function renderHome(){
   if (STATE.page !== 'home') return; // navigated away while awaiting
   // Repaint only when the catalog really changed: a rebuild restarts the
   // banner carousel, the ticker and the Buy glow and throws away the scroll position.
-  if (homeSignature() !== shownProducts) paintHome();
+  if (homeSignature() !== shownProducts || !hadProductList) paintHome();
   // The envelope button's unread dot. Fetched once per Home entry, AFTER
   // the paint (never blocking it) and patched in place via
   // updateMessageBadge() so it can't tear down the ticker/chest animation.
@@ -3209,7 +3230,7 @@ function paintHome(){
     <button onclick="openChestSheet()"><span class="v-ic">${VI.bottle}</span><b>Gift Code</b></button>
   </div>
   <div class="v-ticker"><span class="v-ticker-ic">${VI.megaphone}</span><div class="v-ticker-win"><span class="v-ticker-txt">${esc(ticker)}</span></div></div>
-  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : '<div class="v-empty">No assets yet.</div>'}</div>
+  <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No assets yet.</div>' : '')}</div>
 </div>`;
   $('pageHost').innerHTML = html;
   startHomeCarousel();

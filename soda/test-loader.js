@@ -11,6 +11,8 @@ ok(/<span class="ld-txt"[^>]*>Loading \. \. \.<\/span>/.test(html), 'the loader 
 ok(/#loadingScreen\{[^}]*url\('\/api\/public\/loader-image'\)/.test(html), 'the loader background is the admin picture');
 ok(/@keyframes ldBounce\{.*translateY\(-34px\)/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in a small area');
 ok((html.match(/ld-txt[^{]*\{[^}]*animation:/g) || []).length === 2, 'one bounce animation (plus its reduced-motion off switch), nothing else');
+ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:36px[^}]*letter-spacing:\.16em/.test(html), 'bold serif, 36 px, wide spacing (the owner\'s sample)');
+ok(/ld-txt\{[^}]*color:#fff/.test(html), 'colour stays white (not specified by the owner)');
 ok(/\.sr-only\{/.test(html), 'the screen-reader word is hidden');
 ok(/body\.sheet-open \.sheet-bg\{bottom:var\(--nav-h\);\}/.test(html), 'secondary pages end above the bottom navigation');
 ok(/'profilelogo', 'loaderbg'\]/.test(server) && /app\.get\('\/public\/loader-image'/.test(server), 'server stores and serves the loader picture');
@@ -21,4 +23,5 @@ ok(!/toggleWitPin|toggleStyle|aria-label="Show password"/.test(html + mod), 'no 
 ok(!/walOtpGroup|confirmWalletOtp|bankOtpRequired/.test(mod), 'saving a wallet has no OTP step');
 ok(!/id="sOtpVerification"|id="sBankOtp"|id="sAnnEnabled"|id="sReturnMult"/.test(admin), 'admin no longer shows the OTP, announcement-switch and return-multiple settings');
 ok(/setTimeout\(startArtwork, 8000\)/.test(mod) && !/_artPromise = Promise\.all\(\[ api\('\/public\/announcement-image'\), api\('\/public\/soda-images'\) \]\)\n/.test(mod.split('async function boot()')[1].split('async function')[0]), 'pictures are fetched after the loading screen, not beside the account request');
+ok(/const s = await pSettings;/.test(mod) && !/Promise\.all\(\[ pSettings, pProducts, pBanner \]\)/.test(mod), 'the loading screen waits for the settings only, not for the asset pictures or the banner');
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);
