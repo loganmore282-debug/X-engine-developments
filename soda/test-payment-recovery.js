@@ -89,7 +89,7 @@ function setup(input = seed()) {
   });
   vm.runInContext('const _lockTails=new Map(); const _creditingDeposits=new Set();\n' + [
     'withLock','finiteMoney','depositFullyCredited','creditReferralCommission','creditDepositReferralCommission','_payReferralCommissionNow','creditDeposit','_creditDepositNow'
-  ].map(fn).join('\n') + '\n' + route('/team/milestone/claim'), c);
+  ].map(fn).join('\n'), c);
   return {c, db, routes};
 }
 function response(){return {code:200,status(code){this.code=code;return this},json(body){this.body=body;return this}}}
@@ -171,24 +171,6 @@ async function main(){
     const {c,db}=setup(input);await credit(c,db);
     assert.equal(db.rows.users.l1.walletBalance,0,'existing first-investment credit must not be paid again on deposit');
   }
-  {
-    const {c,db,routes}=setup(),claim=routes['/team/milestone/claim'];
-    db.faults.push((col,id)=>col==='transactions'&&id.startsWith('team-reward:'));
-    const first=response();await claim({body:{type:'count',target:5}},first);
-    assert.equal(first.code,500);assert.equal(db.rows.users.l1.walletBalance,5000);
-    c.activeL1Count=async()=>0; // Even changed progress must allow history repair.
-    const repaired=response();await claim({body:{type:'count',target:5}},repaired);
-    assert.equal(repaired.code,200);assert.equal(repaired.body.alreadyClaimed,true);
-    assert.equal(db.rows.users.l1.walletBalance,5000);
-    assert.equal(Object.values(db.rows.transactions).filter(t=>t.type==='team_reward').length,1);
-    const bad=response();await claim({body:{type:'unknown',target:5}},bad);assert.equal(bad.code,400);
-    const deposit=response();await claim({body:{type:'deposit',target:250000}},deposit);
-    assert.equal(deposit.code,200);assert.equal(db.rows.users.l1.walletBalance,10000);
-    const repeat=response();await claim({body:{type:'deposit',target:250000}},repeat);
-    assert.equal(repeat.body.alreadyClaimed,true);assert.equal(db.rows.users.l1.walletBalance,10000);
-    db.rows.users.l1.status='banned';
-    const banned=response();await claim({body:{type:'count',target:5}},banned);assert.equal(banned.code,403);
-  }
-  console.log('PASS: deposits, one-time referral commissions, failed writes, repeated callbacks, bans, legacy credits, and task claim recovery');
+  console.log('PASS: deposits, one-time referral commissions, failed writes, repeated callbacks, bans, and legacy credits');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

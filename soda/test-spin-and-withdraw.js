@@ -136,7 +136,7 @@ console.log('\n— and it is rate limited like every other money route —');
 const limiterList = grab("['/withdraw/request'", '// ── BODY PARSING ──');
 ck(/'\/turntable\/spin'/.test(limiterList),
    'the spin route is on the strict per-user limiter, not just the global one');
-for (const p of ['/withdraw/request', '/invest/create', '/checkin']) {
+for (const p of ['/withdraw/request', '/invest/create']) {
   ck(limiterList.includes(`'${p}'`), `(${p} still is too)`);
 }
 

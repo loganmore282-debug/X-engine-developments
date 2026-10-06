@@ -41,16 +41,17 @@ app.use(helmet({
 // just another copy of the site to a scanner or a curious visitor.
 
 // ── RATE LIMITERS ──
-// Money endpoints are keyed by the Firebase user (from the token), not
-// shared IP — Ugandan carrier-NAT puts many real users behind one IP.
+// Money endpoints are keyed per signed-in member (a hash of the session
+// token), not shared IP -- Ugandan carrier-NAT puts many real users behind
+// one IP. The token is random, never decoded; an invalid one just gets its
+// own bucket, and ipOnlyLimiter below caps what a fake-token flood can do.
 function rlKeyByUser(req) {
   const auth = req.headers.authorization || '';
-  if (auth.startsWith('Bearer ')) {
-    try {
-      const p = JSON.parse(Buffer.from(auth.slice(7).split('.')[1], 'base64').toString('utf8'));
-      const uid = p && (p.user_id || p.sub);
-      if (uid) return 'u:' + uid;
-    } catch (_) {}
+  // Pre-sign-in routes (OTP sms, reset, sign-up) stay keyed by IP: a caller
+  // there could attach a made-up token to every request to dodge the cap.
+  const open = /^\/(auth|register)\b/.test(req.originalUrl || '');
+  if (!open && auth.startsWith('Bearer ') && auth.length > 7) {
+    return 'u:' + crypto.createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 16);
   }
   return req.ip;
 }
@@ -132,12 +133,12 @@ app.use('/admin/', async (req, _res, next) => {
   }
   next();
 });
-// '/turntable/spin' belongs here for the same reason '/checkin' does: it
+// '/turntable/spin' belongs here because it
 // pays real money on an unauthenticated-body POST, so it gets the strict
 // 60/min per-user cap rather than only the 400/min global one.
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/bank/delete',
  '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
- '/team/milestone/claim', '/checkin', '/turntable/spin', '/auth/otp/send', '/auth/otp/verify', '/auth/reset/confirm']
+ '/turntable/spin', '/auth/otp/send', '/auth/otp/verify', '/auth/reset/confirm']
   .forEach(p => app.use(p, apiLimiter));
 // Owner: "some people can deplete sms costs, so block too many requests of
 // otp requests I think 10 requests, the ip should be said too many
@@ -3260,60 +3261,8 @@ app.get('/team/stats', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not load team stats' });
   }
 });
-app.post('/team/milestone/claim', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const target = Number(req.body.target);
-  if (!['count', 'deposit'].includes(req.body.type)) return res.status(400).json({ status: 'error', message: 'Unknown task category' });
-  const isDeposit = req.body.type === 'deposit';
-  const table = isDeposit ? TEAM_DEPOSIT_MILESTONES : TEAM_MILESTONES;
-  const m = table.find(x => x.target === target);
-  if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
-  try {
-    const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
-    const profile = await db.collection('users').doc(userId).get();
-    if (!profile.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (profile.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    const repairClaim = !!profile.data()[claimFlag];
-    const progress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
-    if (!repairClaim && progress < m.target) {
-      const need = isDeposit ? fmtMoney(m.target) : m.target;
-      const have = isDeposit ? fmtMoney(progress) : progress;
-      return res.status(400).json({ status: 'error', message: `You need ${need} to claim this, you have ${have}.` });
-    }
-    let done = false, stillShort = false, alreadyClaimed = false;
-    await withLock('milestoneclaim:' + userId + ':' + claimFlag, async () => {
-      const liveProgress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
-      if (!repairClaim && liveProgress < m.target) { stillShort = true; return; }
-      await withLock('bal:' + userId, async () => {
-        const uRef = db.collection('users').doc(userId);
-        const fresh = await uRef.get();
-        if (!fresh.exists || fresh.data().status === 'banned') return;
-        alreadyClaimed = !!fresh.data()[claimFlag];
-        // Credit and claim token must land in the same atomic user update.
-        // A retry after a ledger failure repairs the row without paying twice.
-        if (!fresh.data()[claimFlag]) {
-          const applied = await uRef.updateIf({ [claimFlag]: { $ne: true }, status: { $ne: 'banned' } }, {
-            walletBalance: FieldValue.increment(m.reward), totalEarned: FieldValue.increment(m.reward), [claimFlag]: true
-          });
-          if (!applied) return;
-        }
-        const { date, time } = nowStr();
-        const prior = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').where('milestone', '==', m.target).limit(1).get();
-        if (prior.empty) await db.collection('transactions').doc(`team-reward:${userId}:${req.body.type}:${m.target}`).createIfAbsent({
-            userId, statementId: newStatementId(), type: 'team_reward',
-            description: isDeposit ? `Task Center: whole team deposits ${fmtMoney(m.target)}` : `Task Center: ${m.target} active referrals`,
-            amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-          });
-        done = true;
-      });
-    });
-    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now. Please try again.' });
-    if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
-    res.json({ status: 'success', amount: m.reward, alreadyClaimed,
-      message: alreadyClaimed ? 'This reward was already claimed. Its transaction record is complete.' : `${fmtMoney(m.reward)} added to your wallet` });
-  } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
-});
+// The Task Center reward claim (/team/milestone/claim) is removed: no screen calls
+// it and it paid money. Team progress is still reported by /team/stats.
 
 // ── MISSION CENTER — REMOVED ──
 // Owner: "remove mission center". The three routes that lived here
@@ -4137,132 +4086,7 @@ app.get('/account', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not load your account' });
   }
 });
-app.post('/checkin', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  try {
-    let result = null;
-    await withLock('checkin:' + uid, async () => {
-      const sett = await getSettings();
-      const ref = db.collection('users').doc(uid);
-      const snap = await ref.get();
-      if (!snap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      const u = snap.data();
-      if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
-      // Codex-caught real bug (2nd money-flow audit): computeCheckinStreak()
-      // walks this ledger window and, if every row in it turns out to be
-      // contiguous (no real gap), simply runs out of rows to walk -- it has
-      // no way to tell "the streak legitimately ends here" apart from "the
-      // query just stopped returning more rows." At a 500-row cap, a member
-      // who checks in every single day without ever missing one would have
-      // their streak permanently stick at 501 the moment they cross it (day
-      // 501's window is 500 contiguous rows -> reports 500 -> +1 -> 501; day
-      // 502's window is STILL 500 contiguous rows, just shifted by one ->
-      // reports 500 again -> +1 -> 501 again, forever). Bumped to a
-      // practically-unreachable ceiling (13+ years of unbroken daily
-      // check-ins) rather than building real pagination for it -- same
-      // "generous cap, not a rewrite" tradeoff already used elsewhere in
-      // this file (e.g. /admin/referrals/list). Also bumped at this
-      // function's two other copies (admin reconcile-checkin,
-      // recountAllTotals's own freshness re-check) so all three can never
-      // disagree about what "the real streak" is.
-      const ledgerSnap = await db.collection('transactions')
-        .where('userId', '==', uid).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
-      const stamps = ledgerSnap.docs.map(d => tsMillis(d.data().createdAt)).filter(Boolean);
-      const real = computeCheckinStreak(stamps);
-      const now = Date.now();
-      // Owner: "make daily checkin to reset at 00:00 not 24hrs" -- gate and
-      // streak both compare EAT calendar days now, not a rolling 24h/48h
-      // window (see computeCheckinStreak's own header comment for why).
-      const todayKey = eatDayKey(new Date(now));
-      const lastKey = real.lastCheckinAt ? eatDayKey(new Date(real.lastCheckinAt)) : null;
-      // ── THE DURABLE CLAIM IS A FIELD OF ITS OWN ──
-      // Audit finding, CONFIRMED: this gate used to be `lastKey === todayKey`
-      // alone -- and `lastKey` comes from computeCheckinStreak(), which reads
-      // the TRANSACTIONS LEDGER, while the claim was written to the USER
-      // DOCUMENT. Two different facts. So if the wallet credit landed and the
-      // ledger row then failed, the endpoint returned 500, the retry
-      // reconstructed eligibility from a ledger with no row for today, and
-      // the SAME day's check-in credited the wallet again. Repeatable once
-      // per failed ledger write. withLock does not help: the retry is a new
-      // request, arriving after that lock has already been released.
-      //
-      // `lastCheckinClaimDay` is now the claim, written in the same atomic
-      // user-document update as the money. It is deliberately NOT
-      // `lastCheckinAt`: that field is recomputed from the ledger by
-      // /admin/user/reconcile-checkin and by recountAllTotals's freshness
-      // pass, so a reconciler could roll the claim back to a ledger that is
-      // missing today's row and re-open the same hole. Nothing else in this
-      // file writes lastCheckinClaimDay.
-      //
-      // The LEDGER is still what the streak NUMBER is derived from -- that is
-      // its original job (see computeCheckinStreak's header) and is unchanged.
-      // Only the "may I claim today" question moved.
-      const claimDay = u.lastCheckinClaimDay || null;
-      // Both are checked, not just the new field: members who claimed before
-      // this field existed have no claimDay, and their ledger row for today
-      // is the only evidence of it. Without the second half of this test,
-      // deploying the fix would hand everyone who had already checked in that
-      // day one extra check-in.
-      if (claimDay === todayKey || lastKey === todayKey) {
-        logSecurityEvent(uid, 'checkin_already_claimed', null);
-        // Repair a ledger row that went missing when its write failed after
-        // the credit. Deterministic id, so this cannot duplicate a row that
-        // is already there -- and it restores the streak, which would
-        // otherwise reset tomorrow because the ledger has a hole in it.
-        try {
-          await db.collection('transactions').doc(`checkin:${uid}:${todayKey}`).createIfAbsent({
-            userId: uid, statementId: newStatementId(), type: 'checkin', description: `Daily check-in, day ${u.checkinStreak || 1}`,
-            amount: Number(sett.dailyCheckin) || 0, status: 'success',
-            date: nowStr().date, time: nowStr().time, createdAt: FieldValue.serverTimestamp(),
-          });
-        } catch (_) {}
-        result = { code: 400, body: { status: 'error', message: 'Already checked in today. Come back after midnight.', nextCheckinAt: eatNextMidnight(now) } };
-        return;
-      }
-      const yesterdayKey = eatDayKey(new Date(now - 86400000));
-      const streak = (lastKey === yesterdayKey) ? real.streak + 1 : 1;
-      const bonus = Number(sett.dailyCheckin) || 0;
-      // Nested under bal:<uid> -- see settleInvestmentIfDue's own comment.
-      //
-      // CONDITIONAL, not a blind update: the claim and the money move in one
-      // atomic document write, and only if this day has not already been
-      // claimed. The read above can be stale (a concurrent request, a retry);
-      // this cannot. If it does not apply, somebody else already claimed
-      // today and nothing has been credited.
-      const applied = await withLock('bal:' + uid, () => ref.updateIf(
-        { lastCheckinClaimDay: { $ne: todayKey } },
-        {
-          walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus),
-          lastCheckinAt: now, checkinStreak: streak, lastCheckinClaimDay: todayKey,
-        }
-      ));
-      if (!applied) {
-        result = { code: 400, body: { status: 'error', message: 'Already checked in today. Come back after midnight.', nextCheckinAt: eatNextMidnight(now) } };
-        return;
-      }
-      const { date, time } = nowStr();
-      // Independently idempotent, and deliberately NOT allowed to undo the
-      // claim. The spendable balance is already correct; re-opening the claim
-      // because a bookkeeping row failed is the exact double-credit path this
-      // whole change exists to close. Surface it loudly instead -- and the
-      // deterministic id means the next attempt today repairs it.
-      try {
-        await db.collection('transactions').doc(`checkin:${uid}:${todayKey}`).createIfAbsent({
-          userId: uid, statementId: newStatementId(), type: 'checkin', description: `Daily check-in, day ${streak}`,
-          amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-        });
-      } catch (ledgerErr) {
-        console.error(`MONEY-SAFETY: check-in bonus ${bonus} credited to ${uid} for ${todayKey} but its transaction row failed; the claim stands to prevent a double credit.`, ledgerErr.message);
-      }
-      result = { code: 200, body: { status: 'success', bonus, streak, nextCheckinAt: eatNextMidnight(now) } };
-    });
-    res.status(result.code).json(result.body);
-  } catch (e) {
-    console.error('Checkin error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Check-in failed' });
-  }
-});
+// The daily check-in claim (/checkin) is removed: no screen calls it and it paid money.
 
 // ═══════════════════════════════════════════
 // TURNTABLE (daily spin wheel)
@@ -8484,6 +8308,10 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     return refuse('Open daily from / until', 'a daily window needs BOTH times, or neither');
   if (openFrom != null && openFrom === openTo)
     return refuse('Open daily from / until', 'a daily window cannot start and end at the same minute');
+  // Without these the purchase would quietly fall back to the built-in
+  // x30 over 150 days and promise the member a payout nobody chose.
+  if (cycle == null) return refuse('Cycle (days)', 'is required');
+  if (multiplier == null && expectedReturn == null) return refuse('Multiplier (×)', 'or the total payout is required');
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
   const order = p?.order != null ? Number(p.order) : fallbackOrder;
   // How many of this asset one member may own (the "0/3" badge on the card). 0 or blank = no limit.
@@ -8594,130 +8422,6 @@ app.post('/admin/products/clear', async (req, res) => {
     logAdminAction(req, 'products_cleared', { removed });
     res.json({ status: 'success', removed });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear products' }); }
-});
-// Updates price/cycle/expectedReturn on every saved product doc back to the
-// current DEFAULT_PRODUCTS values, leaving image/active/comingSoon/order
-// untouched -- a saved product that was never individually edited is
-// already correct and is skipped.
-app.post('/admin/products/sync-pricing', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const defaultsByKey = new Map(DEFAULT_PRODUCTS.map(p => [p.key, p]));
-    // No genuine pagination available in this Mongo/Firestore-compat layer
-    // (no cursor support) -- bumped well past any realistic product-catalog
-    // size instead of silently truncating at 1,000, per the button's own
-    // "every product" promise.
-    const snap = await db.collection('products').limit(100000).get();
-    const batch = db.batch();
-    let synced = 0;
-    snap.forEach(d => {
-      const p = d.data();
-      if (p.deleted) return;
-      const def = defaultsByKey.get(d.id);
-      if (!def) return;
-      // Only touch (and count) a doc whose stored pricing genuinely
-      // differs -- a saved product that already matches the defaults
-      // shouldn't be reported as "synced" alongside ones that really changed.
-      if (p.price === def.price && p.cycle === def.cycle && p.expectedReturn === def.expectedReturn) return;
-      batch.update(d.ref, { price: def.price, cycle: def.cycle, expectedReturn: def.expectedReturn });
-      synced++;
-    });
-    await batch.commit();
-    _productsCacheTs = 0;
-    logAdminAction(req, 'products_synced', { synced });
-    res.json({ status: 'success', synced });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not sync pricing' }); }
-});
-// One-time cleanup for a real, now-fixed bug: the admin panel's key field
-// used to run its "make a slug" regex on an EXISTING product key too, which
-// strips hyphens -- so saving anything on "product-1" silently created a
-// SECOND doc at "product1" instead of updating the first. The untouched
-// "product-1" default kept existing side by side with it, both named
-// "Product-1" -- which is exactly what the owner saw as "editing product 1
-// makes what looks like product 2 turn into product 1 again": whichever of
-// the two happened to sort into the next slot was the corrupted duplicate.
-//
-// This finds every DEFAULT_PRODUCTS key with a hyphen (product-1 .. -12) and
-// checks whether its hyphen-stripped form (product1 .. ) also exists as a
-// saved doc -- that dehyphenated doc can ONLY have been created by this bug,
-// since nothing else in the app ever derives a key that way.
-//
-//   - If the correctly-hyphenated key was never individually saved (still
-//     the untouched default), the fix is unambiguous: move the corrupted
-//     doc's fields onto the correct key and delete the corrupted one.
-//   - If BOTH the correct key and the corrupted one were separately edited
-//     (e.g. an image saved under each before the owner noticed), picking a
-//     winner automatically could silently discard real data either way --
-//     those are reported back as conflicts for the owner to resolve by hand
-//     in the product list (compare the two, keep the one with the right
-//     image, delete the other) rather than merged blindly.
-// One-time repair for accounts issued while ids were six digits. Owner: "so
-// far now the current account is 000001, so remove first 0 so it will be
-// 00001." Changing PUBLIC_ID_DIGITS only governs ids handed out from now on;
-// what is already stored has to be rewritten, and only an explicit admin
-// action should rewrite an identifier a member may have already been given.
-//
-// ONLY ids that are pure padding are touched: a six-character id whose value
-// still fits in five (000001 -> 00001). An id that genuinely needs its length
-// (100000 and up) is left exactly as it is -- shortening that would change
-// which account it names.
-//
-// A target that some other account already holds is skipped and reported
-// rather than written: two members sharing an id is far worse than one
-// member keeping a longer one, and this cannot be undone by re-running.
-app.post('/admin/users/shorten-public-ids', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('users').limit(100000).get();
-    const taken = new Set();
-    const rows = [];
-    snap.forEach(d => {
-      const id = String((d.data() || {}).publicId || '');
-      if (id) taken.add(id);
-      rows.push({ ref: d.ref, id });
-    });
-    const changed = [], conflicts = [];
-    for (const r of rows) {
-      if (!/^0\d+$/.test(r.id) || r.id.length <= PUBLIC_ID_DIGITS) continue;
-      const short = String(Number(r.id)).padStart(PUBLIC_ID_DIGITS, '0');
-      if (short.length >= r.id.length) continue;          // nothing to strip
-      if (taken.has(short)) { conflicts.push({ from: r.id, to: short }); continue; }
-      await r.ref.set({ publicId: short }, { merge: true });
-      taken.delete(r.id); taken.add(short);
-      changed.push({ from: r.id, to: short });
-    }
-    res.json({ status: 'success', changed, conflicts });
-  } catch (e) {
-    console.error('shorten-public-ids', e);
-    res.status(500).json({ status: 'error', message: 'Could not shorten account ids' });
-  }
-});
-app.post('/admin/products/fix-legacy-keys', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('products').limit(100000).get();
-    const byKey = new Map();
-    snap.forEach(d => { if (!d.data().deleted) byKey.set(d.id, d.data()); });
-    const batch = db.batch();
-    const fixed = [], conflicts = [];
-    for (const def of DEFAULT_PRODUCTS) {
-      const properKey = def.key;
-      const strippedKey = properKey.replace(/[^a-zA-Z0-9]+/g, '');
-      if (strippedKey === properKey) continue;   // no hyphen to have been stripped
-      const corrupted = byKey.get(strippedKey);
-      if (!corrupted) continue;                  // this one was never hit by the bug
-      const proper = byKey.get(properKey);
-      if (proper) { conflicts.push({ properKey, strippedKey }); continue; }
-      const { key: _oldKey, ...rest } = corrupted;
-      batch.set(db.collection('products').doc(properKey), { ...rest, key: properKey }, { merge: false });
-      batch.delete(db.collection('products').doc(strippedKey));
-      fixed.push({ properKey, strippedKey });
-    }
-    if (fixed.length) await batch.commit();
-    _productsCacheTs = 0;
-    logAdminAction(req, 'products_legacy_keys_fixed', { fixed: fixed.length, conflicts: conflicts.length });
-    res.json({ status: 'success', fixed, conflicts });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not check for duplicate keys' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -8961,7 +8665,20 @@ app.post('/admin/user/set-phone', async (req, res) => {
   const phone = cleanPhone(req.body.phone || '');
   if (!userId || !phone) return res.status(400).json({ status: 'error', message: 'userId and a valid phone required' });
   try {
+    // The login lives in authAccounts under an id built from the phone, so
+    // moving the number means moving that document -- changing users.phone
+    // alone would leave the member signing in with the old number and let
+    // someone else register the new one.
+    const acct = await findAccountByUid(userId);
+    if (!acct) return res.status(404).json({ status: 'error', message: 'No login exists for this member' });
+    if (acct.id !== memberAccountId(phone)) {
+      const { ref: _ref, id: _id, ...fields } = acct;
+      const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({ ...fields, phone });
+      if (!created) return res.status(409).json({ status: 'error', message: 'Another account already uses that phone number.' });
+      await acct.ref.delete();
+    }
     await db.collection('users').doc(userId).update({ phone });
+    await sessionPolicy.revokeAllMemberSessions(db, userId);
     logAdminAction(req, 'user_phone_set', { userId, phone });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -9279,40 +8996,6 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
     logAdminAction(req, 'referrer_attached', { userId, referralCode: code, referrerId, commissionTriggered });
     res.json({ status: 'success', commissionTriggered });
   } catch (e) { res.status(e.code || 500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/user/reconcile-checkin', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = String(req.body.userId || '');
-  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
-  try {
-    // Codex-caught real bug: this recomputed lastCheckinAt purely from the
-    // transaction ledger and wrote it with a bare .update(), completely
-    // unguarded by the checkin:<uid> lock /checkin itself holds. /checkin
-    // sets lastCheckinAt=now BEFORE writing this check-in's own ledger row
-    // (a deliberate claim-before-credit ordering so a crash there can only
-    // under-count, never double-pay) -- if this reconcile tool runs in that
-    // exact gap, it would see "no ledger row for this check-in yet" and
-    // overwrite lastCheckinAt back to the previous one, erasing the claim
-    // marker the user's own request just set. The member could then call
-    // /checkin again inside the still-active cooldown and get credited a
-    // second time. Wrapped in the same lock so the two can never interleave.
-    let result = null;
-    await withLock('checkin:' + userId, async () => {
-      const uSnap = await db.collection('users').doc(userId).get();
-      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
-      const before = { checkinStreak: uSnap.data().checkinStreak || 0 };
-      // Same limit bump as /checkin's own copy of this query -- see its comment.
-      const ledgerSnap = await db.collection('transactions')
-        .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
-      const stamps = ledgerSnap.docs.map(d => tsMillis(d.data().createdAt)).filter(Boolean);
-      const real = computeCheckinStreak(stamps);
-      const after = { checkinStreak: real.streak };
-      await db.collection('users').doc(userId).update({ checkinStreak: real.streak, lastCheckinAt: real.lastCheckinAt });
-      logAdminAction(req, 'checkin_reconciled', { userId, streak: real.streak });
-      result = { code: 200, body: { status: 'success', before, after, changed: before.checkinStreak !== after.checkinStreak, lastCheckinAt: real.lastCheckinAt } };
-    });
-    res.status(result.code).json(result.body);
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Recomputes teamL1/L2/L3 counts for the WHOLE referral tree hanging off one
 // account — used after a delete reparents a downline, since a multi-level

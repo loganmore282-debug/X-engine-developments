@@ -8,7 +8,7 @@ let n = 0; const ok = (c, m) => { assert(c, m); n++; };
 
 // 1. /team/stats adds what each level has paid, from the ledger's own commissionLevel (0 = Level 1)
 const grab = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i); if (i < 0 || j < 0) throw new Error('slice ' + a); return src.slice(i, j); };
-const route = grab("app.get('/team/stats'", "app.post('/team/milestone/claim'");
+const route = grab("app.get('/team/stats'", "// ── MISSION CENTER — REMOVED ──");
 const finiteMoney = v => Number.isFinite(Number(v)) ? Number(v) : 0;
 function runStats(rows) {
   let handler;
@@ -64,7 +64,10 @@ function runStats(rows) {
 const sanSrc = (() => { let st = src.indexOf('function sanitizeProductInput('), d = 0; for (let k = src.indexOf('{', st); ; k++) { if (src[k] === '{') d++; else if (src[k] === '}' && --d === 0) return src.slice(st, k + 1); } })();
 const sanitize = new Function('MAX_MONEY_AMOUNT', 'hhmmToMin', sanSrc + '; return sanitizeProductInput;')(1e9, () => 0);
 const out0 = {};
-const base = { key: 'a1', name: 'A', price: 1000 };
+const base = { key: 'a1', name: 'A', price: 1000, cycle: 8, multiplier: 3 };
+ok(sanitize({ key: 'a1', name: 'A', price: 1000, multiplier: 3 }, 0, {}) === null, 'an asset without a cycle is refused, not given a hidden 150 days');
+ok(sanitize({ key: 'a1', name: 'A', price: 1000, cycle: 8 }, 0, {}) === null, 'an asset with no multiplier or total payout is refused, not given a hidden x30');
+ok(sanitize({ key: 'a1', name: 'A', price: 1000, cycle: 8, expectedReturn: 3000 }, 0, {}) !== null, 'a total payout alone is enough');
 ok(sanitize(base, 0, out0).buyLimit === 0, 'no limit by default');
 ok(sanitize({ ...base, buyLimit: '3' }, 0, {}).buyLimit === 3, 'the admin can set 3');
 ok(sanitize({ ...base, buyLimit: '0' }, 0, {}).buyLimit === 0 && sanitize({ ...base, buyLimit: '' }, 0, {}).buyLimit === 0, '0 or blank = no limit');

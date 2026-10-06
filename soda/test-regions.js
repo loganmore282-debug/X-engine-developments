@@ -1686,7 +1686,7 @@ async function askShare(opts) {
     const get = await headersFor('/public/settings');
     ck(!('Content-Type' in get),
       'a read sends no Content-Type, so it is never preflighted: ' + JSON.stringify(get));
-    const post = await headersFor('/checkin', { method: 'POST', body: '{}' });
+    const post = await headersFor('/bank/save', { method: 'POST', body: '{}' });
     ck(post['Content-Type'] === 'application/json',
       'a write still declares its JSON body');
     ck(/maxAge: 86400/.test(bare),
