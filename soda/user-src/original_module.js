@@ -1630,6 +1630,8 @@ async function performMemberLogout(opts){
   _memberSession.clear();
   window._triedAutoSignIn = true;
   if (!auto) { try { sessionStorage.setItem('soda_relogin_required', '1'); } catch (_) {} }
+  // Signing out always lands on Login, even when this visitor last used Sign Up.
+  showAuthTab('login');
   stopLiveRefresh();
   // Defense in depth alongside the _openSheetTitle fix on the checkin
   // countdown's own tick: a sign-out that happens to land while Daily

@@ -27,4 +27,5 @@ ok(/const s = await pSettings;/.test(mod) && !/Promise\.all\(\[ pSettings, pProd
 ok(!/fileToLogoPng|background connected to the image edge/.test(admin) && /wireSodaImageSlot\('logo', 'brandLogoFile'/.test(admin), 'the brand logo is uploaded as it is (no background removal)');
 ok(/var NAV_LOADER = '<span class="nav-loading">Loading \. \. \.<\/span>'/.test(mod) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show the same "Loading . . ." word while data arrives, no ring spinner is left');
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
+ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);
