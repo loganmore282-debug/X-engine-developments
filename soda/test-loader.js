@@ -28,4 +28,5 @@ ok(!/fileToLogoPng|background connected to the image edge/.test(admin) && /wireS
 ok(/var NAV_LOADER = '<span class="nav-loading">Loading\.\.\.<\/span>'/.test(mod) && /\.nav-loading\{[^}]*font-size:15px[^}]*letter-spacing:\.03em/.test(html) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show a small "Loading..." word while data arrives, no ring spinner is left');
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
+ok(/\.v-ann-img\{[^}]*object-fit:contain[^}]*\}/.test(html) && !/\.v-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole (contain), never cropped');
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);

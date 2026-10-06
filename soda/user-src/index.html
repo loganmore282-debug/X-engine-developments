@@ -1177,11 +1177,11 @@ body.sheet-open .sheet-bg{bottom:0;}
 .chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
 /* Announcement: one tall portrait picture (admin upload) from the top of the
    screen down to the buttons, Join Channel + Close at the bottom. */
-.ann-bg{position:fixed;inset:0;background:rgba(190,201,240,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:320;display:none;align-items:stretch;justify-content:center;padding:0 15px 40px;}
+.ann-bg{position:fixed;inset:0;background:rgba(190,201,240,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:320;display:none;align-items:center;justify-content:center;padding:20px 15px;}
 .ann-bg.show{display:flex;}
-.ann-sheet{width:100%;max-width:440px;display:flex;flex-direction:column;gap:12px;transform:scale(.96);opacity:0;transition:transform .45s cubic-bezier(.22,1,.36,1),opacity .45s cubic-bezier(.22,1,.36,1);}
+.ann-sheet{width:auto;max-width:min(440px,100%);display:flex;flex-direction:column;gap:12px;transform:scale(.96);opacity:0;transition:transform .45s cubic-bezier(.22,1,.36,1),opacity .45s cubic-bezier(.22,1,.36,1);}
 .ann-bg.show .ann-sheet{transform:scale(1);opacity:1;}
-.v-ann-img{display:block;width:100%;flex:1 1 auto;min-height:0;object-fit:cover;border-radius:0 0 20px 20px;}
+.v-ann-img{display:block;align-self:center;width:auto;height:auto;max-width:100%;max-height:calc(100vh - 115px);max-height:calc(100dvh - 115px);object-fit:contain;border-radius:20px;}
 .v-ann-btns{display:flex;gap:12px;width:100%;flex:0 0 auto;}
 .v-ann-join,.v-ann-close{flex:1;height:41px;border-radius:12px;font:inherit;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;text-decoration:none;cursor:pointer;}
 .v-ann-join{background:var(--v-grad);color:#fff;border:1.5px solid transparent;}
