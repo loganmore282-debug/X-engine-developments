@@ -50,6 +50,13 @@ function runStats(rows) {
   // 3. the Home ticker line is an admin setting that members receive
   ok(/tickerText: ''/.test(src), 'tickerText is a real setting (empty = built-in sentence)');
   ok(/id="sTickerText"/.test(adm) && /tickerText:\$\('sTickerText'\)\.value\.trim\(\)/.test(adm), 'the admin saves it');
+  // 5. production hygiene
+  ok(/const DEFAULT_PRODUCTS = \[\];/.test(src), 'no built-in placeholder assets: members only see what the admin created');
+  const cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+  ok(!/Soda Mini|Soda Classic|Product-1\b/.test(cli), 'no sample asset is written into the app code');
+  ok(!/at midnight 00:00/.test(cli) && /every 24 hours after you buy it/.test(cli), 'the Home line states the real payout rule (24 hours after purchase)');
+  const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
+  ok(/--v-blue:#0a5fff/.test(css) && !/#e30613|#1457e8/i.test(css), 'the app uses the bright blue and no red/old blue is left');
   console.log(`PASS: screen data (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
 

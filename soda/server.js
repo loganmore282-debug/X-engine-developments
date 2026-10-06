@@ -757,20 +757,10 @@ const NUMBER_FONT_OPTIONS = ['Bodoni Moda', 'Playfair Display', 'DM Serif Displa
 // Placeholder catalog — Soda has no confirmed product names/images yet (see
 // CLAUDE.md "Product config"). Formula reused from Snow: expectedReturn = price * 30
 // over a 150-day cycle. Rename/replace images once the owner supplies real ones.
-const DEFAULT_PRODUCTS = [
-  { key: 'product-1',  name: 'Product-1',  price: 30000,    cycle: 150, expectedReturn: 900000,     image: '/products/product-1.jpg' },
-  { key: 'product-2',  name: 'Product-2',  price: 90000,    cycle: 150, expectedReturn: 2700000,    image: '/products/product-2.jpg' },
-  { key: 'product-3',  name: 'Product-3',  price: 197000,   cycle: 150, expectedReturn: 5910000,    image: '/products/product-3.jpg' },
-  { key: 'product-4',  name: 'Product-4',  price: 355000,   cycle: 150, expectedReturn: 10650000,   image: '/products/product-4.jpg' },
-  { key: 'product-5',  name: 'Product-5',  price: 560000,   cycle: 150, expectedReturn: 16800000,   image: '/products/product-5.jpg' },
-  { key: 'product-6',  name: 'Product-6',  price: 950000,   cycle: 150, expectedReturn: 28500000,   image: '/products/product-6.jpg' },
-  { key: 'product-7',  name: 'Product-7',  price: 1000000,  cycle: 150, expectedReturn: 30000000,   image: '/products/product-7.jpg' },
-  { key: 'product-8',  name: 'Product-8',  price: 1250000,  cycle: 150, expectedReturn: 37500000,   image: '/products/product-8.jpg' },
-  { key: 'product-9',  name: 'Product-9',  price: 2550000,  cycle: 150, expectedReturn: 76500000,   image: '/products/product-9.jpg' },
-  { key: 'product-10', name: 'Product-10', price: 4500000,  cycle: 150, expectedReturn: 135000000,  image: '/products/product-10.jpg' },
-  { key: 'product-11', name: 'Product-11', price: 6000000,  cycle: 150, expectedReturn: 180000000,  image: '/products/product-11.jpg' },
-  { key: 'product-12', name: 'Product-12', price: 8000000,  cycle: 150, expectedReturn: 240000000,  image: '/products/product-12.jpg' },
-];
+// Soda starts with NO built-in assets. The twelve placeholder "Product-N" rows this list used to
+// carry came from another app (x30 over 150 days) and showed up in front of members until each one
+// was deleted by hand. Every asset a member sees is now one the admin created in Products.
+const DEFAULT_PRODUCTS = [];
 
 // The active settings document is settings/main.
 let _settingsCache = null, _settingsCacheTs = 0;
@@ -4118,6 +4108,7 @@ app.get('/account', async (req, res) => {
       totalEarned: u.totalEarned || 0, totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       checkinStreak: u.checkinStreak || 0, lastCheckinAt: u.lastCheckinAt || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
+      hasTradePin: !!u.transactionPinHash,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -7086,9 +7077,13 @@ app.post('/account/transaction-pin/change', async (req, res) => {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    const check = await pinCheck(userId, req.body.oldPin);
-    if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
-    await db.collection('users').doc(userId).update({ transactionPinHash: scryptHash(newPin) });
+    // A member who has no Trade Password yet (an account made before it existed) sets the first one
+    // here without an old one; once one exists, changing it always needs the old one.
+    if (uSnap.exists && uSnap.data().transactionPinHash) {
+      const check = await pinCheck(userId, req.body.oldPin);
+      if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
+    }
+    await db.collection('users').doc(userId).update({ transactionPinHash: scryptHash(newPin), pinFailCount: 0, pinLockedUntil: null });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not change your PIN' }); }
 });

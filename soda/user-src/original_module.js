@@ -1071,7 +1071,7 @@ var ICONS = {
   envelope: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 6l8 7 8-7"/></svg>',
   // Full-size support-email badge, rebuilt from the supplied red envelope
   // reference with Soda's red, orange and yellow palette (no white fill).
-  emailSoda: '<svg class="email-soda-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#1457e8"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  emailSoda: '<svg class="email-soda-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#0a5fff"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
   // ── Soda re-theme additions: the Home mockup's own icon set (Deposit/
   // Withdraw/Invite/Support tiles, the notification bell, the gift-box
   // Daily Check-in card, the wallet-balance eye toggle, the 3 stat-card
@@ -3493,7 +3493,7 @@ function vBannerHtml(){
 function paintHome(){
   const st = STATE.settings || {};
   const products = STATE.products || [];
-  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance at midnight 00:00.');
+  const ticker = String(st.tickerText || 'Each asset pays its daily earnings into your balance every 24 hours after you buy it.');
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}
@@ -3892,7 +3892,7 @@ function teamLoadingHtml(){ return '<div class="list-loading">' + MINI_RING_LOAD
 // while its own ancestor isn't display:none, and #loadingScreen usually is.
 var MINI_RING_LOADER = '<svg class="mini-ring-loader" viewBox="0 0 120 120" aria-hidden="true">'
   + '<defs><linearGradient id="miniRingGrad" x1="24" y1="104" x2="96" y2="16" gradientUnits="userSpaceOnUse">'
-  + '<stop offset="0%" stop-color="#3d8bff"/><stop offset="55%" stop-color="#1457e8"/><stop offset="100%" stop-color="#ffb000"/>'
+  + '<stop offset="0%" stop-color="#3d93ff"/><stop offset="55%" stop-color="#0a5fff"/><stop offset="100%" stop-color="#ffb000"/>'
   + '</linearGradient></defs>'
   + '<circle class="ring-arc ring-arc-1" cx="60" cy="60" r="52" pathLength="100"/>'
   + '<circle class="ring-arc ring-arc-2" cx="60" cy="60" r="45" pathLength="100"/>'
@@ -4755,7 +4755,8 @@ function renderStatement(){
     const title = statementDescription(t);
     const chip = statementChip(t);
     const amt = recordsRowAmount(t);
-    const line = chip ? `<span class="v-chip ${chip.cls}">${esc(chip.text)}</span>` : `<span class="v-rdesc">${esc(cleanDesc(t.description) || title)}</span>`;
+    const desc = t.type === 'cashback' ? String(t.description || '').replace(/\s*daily cashback$/i, '') : cleanDesc(t.description);
+    const line = chip ? `<span class="v-chip ${chip.cls}">${esc(chip.text)}</span>` : `<span class="v-rdesc">${esc(desc || title)}</span>`;
     return `
       <article class="v-rec">
         <span class="v-rav ${amt < 0 ? 'out' : ''}">${esc(title.charAt(0).toUpperCase())}</span>
@@ -4985,32 +4986,35 @@ window.submitLoginPasswordChange = async function(){
 // The 6-digit PIN that confirms withdrawals. Soda uses 6 digits where Snow
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
 window.openChangeTradePasswordSheet = function(){
+  const first = (STATE.account || {}).hasTradePin === false;
   openSheet('Trade Password', `<div class="reveal-in" style="padding-top:22px;">
-    <p class="pw-note">Your trade password is your 6-digit PIN used to confirm cash outs and other sensitive actions.</p>
-    <div class="pw-head"><span class="bar"></span><span>Old Trade Password</span></div>
-    ${pwFieldHtml('tpOld', 'Enter old 6-digit PIN', true)}
-    <div class="pw-head"><span class="bar"></span><span>New Trade Password</span></div>
-    ${pwFieldHtml('tpNew', 'Enter new 6-digit PIN', true)}
-    <div class="pw-head"><span class="bar"></span><span>Confirm New Password</span></div>
-    ${pwFieldHtml('tpNew2', 'Re-enter new 6-digit PIN', true)}
+    <p class="pw-note">${first ? 'You have not set a Trade Password yet. Choose a 6-digit one: you will enter it every time you withdraw.' : 'Your trade password is your 6-digit PIN used to confirm cash outs and other sensitive actions.'}</p>
+    ${first ? '' : `<div class="pw-head"><span class="bar"></span><span>Old Trade Password</span></div>
+    ${pwFieldHtml('tpOld', 'Enter old 6-digit PIN', true)}`}
+    <div class="pw-head"><span class="bar"></span><span>${first ? 'Trade Password' : 'New Trade Password'}</span></div>
+    ${pwFieldHtml('tpNew', first ? 'Enter 6-digit PIN' : 'Enter new 6-digit PIN', true)}
+    <div class="pw-head"><span class="bar"></span><span>${first ? 'Confirm Trade Password' : 'Confirm New Password'}</span></div>
+    ${pwFieldHtml('tpNew2', first ? 'Re-enter 6-digit PIN' : 'Re-enter new 6-digit PIN', true)}
     <button class="primary-button" id="tpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitTradePasswordChange()">SAVE TRADE PASSWORD</button>
   </div>`);
 };
 window.submitTradePasswordChange = async function(){
-  const oldPin = $('tpOld').value.trim();
+  const first = (STATE.account || {}).hasTradePin === false;
+  const oldPin = first ? '' : $('tpOld').value.trim();
   const newPin = $('tpNew').value.trim();
   const confirm = $('tpNew2').value.trim();
-  if (!/^\d{6}$/.test(oldPin)) return notify('Enter your current 6-digit trade password.');
+  if (!first && !/^\d{6}$/.test(oldPin)) return notify('Enter your current 6-digit trade password.');
   if (!/^\d{6}$/.test(newPin)) return notify('Your new trade password must be exactly 6 digits.');
   if (newPin !== confirm) return notify('The two new trade passwords do not match.');
-  if (newPin === oldPin) return notify('Your new trade password must be different from the old one.');
+  if (!first && newPin === oldPin) return notify('Your new trade password must be different from the old one.');
   const btn = $('tpSaveBtn');
   btn.disabled = true; btn.textContent = 'SAVING…';
-  const r = await post('/account/transaction-pin/change', { oldPin, newPin });
+  const r = await post('/account/transaction-pin/change', first ? { newPin } : { oldPin, newPin });
   btn.disabled = false; btn.textContent = 'SAVE TRADE PASSWORD';
   if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
+  if (STATE.account) STATE.account.hasTradePin = true;
   closeSheet({ fromAction: true });
-  notify('Trade password changed');
+  notify(first ? 'Trade password saved' : 'Trade password changed');
 };
 
 // ── TREASURE CHEST (Chest.dc.html / ChestSuccess.dc.html) ──
@@ -6042,7 +6046,7 @@ function fireConfetti(){
     window.addEventListener('resize', resize);
     // Amber/red/gold, plus white -- Soda's own palette, not generic
     // party colours, so this still looks like it belongs to the app.
-    const COLORS = ['#1457e8', '#f5a000', '#ffb000', '#1a7a3e', '#2f6fd6', '#ffffff'];
+    const COLORS = ['#0a5fff', '#f5a000', '#ffb000', '#1a7a3e', '#2f6fd6', '#ffffff'];
     const particles = [];
     function makePiece(x, y, vx, vy, burst){
       return {
@@ -6412,6 +6416,7 @@ function paintWithdrawSheet(s){
     <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
     <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
+ ${(STATE.account || {}).hasTradePin === false ? '<div class="v-fee" style="margin:0 0 10px;color:var(--v-blue-2)">You have not set a Trade Password yet. Set it first under My, then Trade Password.</div>' : ''}
     <div class="v-pin"><input id="witPin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="one-time-code"><button type="button" onclick="toggleWitPin(this)" aria-label="Show or hide">${VI.eye}</button></div>
     <div class="v-fee">Fee: ${fee}%</div>
     <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>

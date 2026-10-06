@@ -43,3 +43,29 @@ const build = db => new Function('crypto', 'db', 'withLock', 'tsMillis', `
   ok(/INVALID_TRADE_PIN/.test(reg) && /transactionPinHash = scryptHash\(tradePin\)/.test(reg), 'sign-up requires and hashes the 6-digit Trade Password');
   console.log(`PASS: trade password (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
+
+// first-time Trade Password for an account that has none (made before it existed), and the route's guards
+(async () => {
+  const route = src.slice(src.indexOf("app.post('/account/transaction-pin/change'"), src.indexOf('// GIFT CODES'));
+  const run = async (doc, body) => {
+    let handler; const app = { post: (p, h) => { if (p === '/account/transaction-pin/change') handler = h; } };
+    const db = { collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => doc }), update: async u => { Object.assign(doc, u); } }) }) };
+    const lib = build(db);
+    new Function('app', 'db', 'verifyAuth', 'pinCheck', 'scryptHash', 'isWeakPin', 'console', route)(app, db, async () => 'u1', lib.pinCheck, lib.scryptHash, v => /^(\d)\1{5}$/.test(v), console);
+    let code = 200, out; const res = { status: c => { code = c; return res; }, json: b => { out = b; } };
+    await handler({ headers: {}, body }, res); return { code, out, doc };
+  };
+  const lib0 = build({}); 
+  let r = await run({ status: 'active' }, { newPin: '482913' });
+  ok(r.code === 200 && r.doc.transactionPinHash && !r.doc.transactionPinHash.includes('482913'), 'no Trade Password yet: the first one can be set without an old one, and is stored hashed');
+  r = await run({ status: 'active' }, { newPin: '111111' }); ok(r.code === 400, 'even the first one cannot be six identical digits');
+  r = await run({ status: 'active' }, { newPin: '12345' }); ok(r.code === 400, 'or fewer than six digits');
+  r = await run({ status: 'active', transactionPinHash: lib0.scryptHash('123456') }, { newPin: '482913' });
+  ok(r.code === 400 && r.out.code === 'INVALID_PIN', 'once one exists, changing it without the old one is refused');
+  r = await run({ status: 'active', transactionPinHash: lib0.scryptHash('123456') }, { oldPin: '000000', newPin: '482913' });
+  ok(r.code === 400 && r.out.code === 'WRONG_PIN', 'a wrong old one is refused');
+  r = await run({ status: 'active', transactionPinHash: lib0.scryptHash('123456') }, { oldPin: '123456', newPin: '482913' });
+  ok(r.code === 200, 'the right old one changes it');
+  ok(/hasTradePin: !!u\.transactionPinHash/.test(src), '/account tells the app whether a Trade Password exists');
+  console.log(`PASS: trade password first set (${n} checks so far)`);
+})().catch(e => { console.error(e); process.exit(1); });
