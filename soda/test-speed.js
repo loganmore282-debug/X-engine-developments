@@ -21,7 +21,7 @@ const lib = new Function('crypto', `const _scrypt = (password, salt) => new Prom
   ok(!/await settleAllForUser\(/.test(acct) && /memberVipLevelCached/.test(acct), '/account no longer settles cashback or queries VIP on every refresh');
   const inv = server.slice(server.indexOf("app.get('/investments', async"), server.indexOf("app.get('/investments', async") + 900);
   ok(!/await settleAllForUser\(/.test(inv), '/investments no longer settles first (the 0.5 s sweep pays what is due)');
-  ok(/Promise\.all\(\[\s*db\.collection\('users'\)\.doc\(userId\)\.get\(\), getSettings\(\), wholeTeamDeposits\(userId\), activeL1Count\(userId\)/.test(server), '/team/stats reads everything together');
+  ok(/Promise\.all\(\[\s*db\.collection\('users'\)\.doc\(userId\)\.get\(\), getSettings\(\), wholeTeamStats\(userId\), activeL1Count\(userId\)/.test(server), '/team/stats reads everything together');
   // 3. payout sweep
   ok(/where\('nextPayoutAt', '<=', new Date\(\)\)/.test(server) && /_lastFullCashbackSweep > 5 \* 60 \* 1000/.test(server) && /status: 1, nextPayoutAt: 1/.test(db), 'the 0.5 s sweep reads only due investments, with a full pass every 5 minutes as a safety net');
   ok(/nextPayoutAt: willComplete \|\| !createdMs \? null/.test(server) && (server.match(/nextPayoutAt: new Date\(Date\.now\(\) \+ 86400000\)/g) || []).length === 2, 'new and given investments get their first payout time; each payout sets the next');

@@ -14,13 +14,13 @@ function runStats(rows) {
   let handler;
   const app = { get: (p, h) => { if (p === '/team/stats') handler = h; } };
   const db = { collection: name => ({
-    doc: () => ({ get: async () => ({ exists: true, data: () => ({ referralCode: 'ABC', teamL1Count: 3, teamL2Count: 1, teamL3Count: 0, teamCommission: 0 }) }) }),
+    doc: () => ({ get: async () => ({ exists: true, data: () => ({ referralCode: 'ABC', teamL1Count: 99, teamL2Count: 99, teamL3Count: 99, teamCommission: 0 }) }) }),
     where: (f, _o, v) => { const f1 = { f, v }; const q = { conds: [f1], where(ff, _oo, vv) { q.conds.push({ f: ff, v: vv }); return q; }, get: async () => {
       const list = name === 'transactions' ? rows.filter(r => q.conds.every(c => r[c.f] === c.v)) : [];
       return { forEach: cb => list.forEach(r => cb({ data: () => r })), docs: list.map(r => ({ data: () => r })) }; } }; return q; },
   }) };
-  new Function('app', 'db', 'verifyAuth', 'getSettings', 'wholeTeamDeposits', 'activeL1Count', 'TEAM_MILESTONES', 'TEAM_DEPOSIT_MILESTONES', 'finiteMoney', 'console', route)(
-    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => 5000, async () => 0, [], [], finiteMoney, console);
+  new Function('app', 'db', 'verifyAuth', 'getSettings', 'wholeTeamStats', 'activeL1Count', 'TEAM_MILESTONES', 'TEAM_DEPOSIT_MILESTONES', 'finiteMoney', 'console', route)(
+    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => ({ deposits: 5000, counts: [3, 1, 0] }), async () => 0, [], [], finiteMoney, console);
   let body; const res = { json: b => { body = b; }, status() { return res; } };
   return handler({ headers: {} }, res).then(() => body);
 }
@@ -36,7 +36,7 @@ function runStats(rows) {
   const r = await runStats(rows);
   ok(r.status === 'success', 'stats still answer');
   assert.deepStrictEqual(r.levelCommission, { l1: 1500, l2: 200, l3: 50 }); n++;
-  ok(r.totalTeam === 4 && r.teamDeposits === 5000, 'the older fields are untouched');
+  ok(r.totalTeam === 4 && r.teamDeposits === 5000 && r.team.l1 === 3 && r.team.l2 === 1 && r.team.l3 === 0, 'the level counts come from the live team read, not the stored counters (which here say 3/1/0 by coincidence only)');
   const empty = await runStats([]);
   assert.deepStrictEqual(empty.levelCommission, { l1: 0, l2: 0, l3: 0 }); n++;
 

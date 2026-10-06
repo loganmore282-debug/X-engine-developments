@@ -1639,7 +1639,7 @@ async function performMemberLogout(opts){
   // session either.
   if (_checkinCountdownTimer) { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; }
   STATE.authEpoch++;
-  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null });
+  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null }); _teamMembersAt = {}; _teamMembersFailed = {};
   clearCachedState();
   // Without this, an explicit logout would immediately silently sign the
   // member right back in on the next boot via tryAutoSignIn() -- Chrome
@@ -2805,7 +2805,7 @@ async function liveRefreshVisible(){
       const r = await api('/team/stats');
       if (r.status === 'success' && STATE.page === 'network' && !_openSheetTitle) {
         STATE.teamStats = r;
-        if (liveChanged('team', r)) paintNetwork();
+        if (liveChanged('team', r)) { _teamMembersAt = {}; paintNetwork(); } // someone joined or changed: refetch the lists too
       } else if (r.status !== 'success') { _liveTeamAt = 0; ok = false; }
     }
   }
@@ -3406,16 +3406,24 @@ function paintMyAssetsInner(){
 // one used to let the first tap's slow fetch land later and silently
 // replace the visible (different) level's member list.
 var _activeTeamLevel = null;
+var _teamMembersAt = {};            // when each level's list was last fetched
+var _teamMembersFailed = {};        // a level whose last fetch failed (shows a retry line, never "no members")
+var TEAM_LIST_FRESH_MS = 15000;
+// Shows the level's list at once when one is already held, then (if it is older than a few seconds
+// or was never fetched) fetches a fresh one and repaints it. A failed fetch keeps whatever list was
+// on screen and is never stored as an empty list: that used to read "No members at this level yet"
+// for the rest of the session after one dropped connection.
 window.switchTeamLevel = async function(level){
   _activeTeamLevel = level;
   document.querySelectorAll('.v-level').forEach(el => el.classList.toggle('on', Number(el.dataset.level) === level));
-  if (!STATE.teamMembers[level]) {
-    const box = $('teamMembersBox');
-    if (box) box.innerHTML = teamLoadingHtml();
-    const r = await api('/team/members?level=' + level);
-    STATE.teamMembers[level] = r.status === 'success' ? r.members : [];
-  }
-  if (_activeTeamLevel === level) renderTeamMembers(level);
+  const held = !!STATE.teamMembers[level];
+  if (held) renderTeamMembers(level);
+  else { const box = $('teamMembersBox'); if (box) box.innerHTML = teamLoadingHtml(); }
+  if (held && Date.now() - (_teamMembersAt[level] || 0) < TEAM_LIST_FRESH_MS) return;
+  const r = await api('/team/members?level=' + level);
+  if (r.status === 'success') { STATE.teamMembers[level] = r.members; _teamMembersAt[level] = Date.now(); _teamMembersFailed[level] = false; }
+  else _teamMembersFailed[level] = true;
+  if (_activeTeamLevel === level && STATE.page === 'network') renderTeamMembers(level);
 };
 // The "Loading . . ." word, centred, while a list is in flight.
 function teamLoadingHtml(){ return '<div class="list-loading">' + NAV_LOADER + '</div>'; }
@@ -3459,6 +3467,7 @@ function renderTeamMembers(level){
   const members = STATE.teamMembers[level] || [];
   const box = $('teamMembersBox');
   if (!box) return;
+  if (!STATE.teamMembers[level] && _teamMembersFailed[level]) { box.innerHTML = '<div class="v-empty" onclick="switchTeamLevel(' + level + ')">Could not load your team</div>'; return; }
   if (!members.length) { box.innerHTML = '<div class="v-empty">No members at this level yet.</div>'; return; }
   box.innerHTML = members.map(m => `
   <div class="v-member">
@@ -3508,8 +3517,7 @@ function paintNetwork(){
   <div id="teamMembersBox"></div>
 </div>`;
   $('pageHost').innerHTML = html;
-  if (STATE.teamMembers[level]) renderTeamMembers(level);
-  else switchTeamLevel(level);
+  switchTeamLevel(level); // shows a held list at once and refreshes it if it is old
 }
 
 // ── MISSION CENTER — REMOVED ──

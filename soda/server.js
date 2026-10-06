@@ -1651,24 +1651,32 @@ async function activeL1Count(userId) {
 // wholeTeamDeposits() below STAY -- they are shared with the Task Center,
 // which is a different feature and is not being removed.
 
-// Sum of the WHOLE team's (L1+L2+L3) deposits — powers Team's "Team
-// deposits" stat card.
-async function wholeTeamDeposits(userId) {
+// The WHOLE team (L1+L2+L3): how many members sit at each level and what they have deposited --
+// powers Team's level cards and "Team deposits". The counts are read live from the same
+// `referredBy` links the member lists use, so a card can never disagree with its list (the
+// stored teamL1/L2/L3Count counters drift after a crash window or an admin re-attach).
+async function wholeTeamStats(userId) {
   let parentIds = [userId];
-  let total = 0;
-  for (let level = 1; level <= 3; level++) {
+  let deposits = 0;
+  const counts = [0, 0, 0];
+  const seen = new Set([userId]);
+  for (let level = 0; level < 3; level++) {
     if (!parentIds.length) break;
     const snap = await db.collection('users').where('referredBy', 'in', parentIds).get();
     const nextIds = [];
     snap.forEach(d => {
+      if (seen.has(d.id)) return; // a referral loop must never count anyone twice (or the member themself)
+      seen.add(d.id);
       const v = d.data();
       nextIds.push(d.id);
-      if (v.status !== 'banned') total += finiteMoney(v.totalDeposited);
+      counts[level] += 1;
+      if (v.status !== 'banned') deposits += finiteMoney(v.totalDeposited);
     });
     parentIds = nextIds;
   }
-  return total;
+  return { deposits, counts };
 }
+async function wholeTeamDeposits(userId) { return (await wholeTeamStats(userId)).deposits; }
 
 // ── PER-KEY MUTEX ──
 // M0 has NO real transactions: two parallel requests can both read the same
@@ -3248,8 +3256,8 @@ app.get('/team/stats', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     // All the reads this screen needs go out together (they used to run one after another).
-    const [uSnap, sett, deposits, l1ActiveCount, rewardTxSnap, commSnap] = await Promise.all([
-      db.collection('users').doc(userId).get(), getSettings(), wholeTeamDeposits(userId), activeL1Count(userId),
+    const [uSnap, sett, teamNow, l1ActiveCount, rewardTxSnap, commSnap] = await Promise.all([
+      db.collection('users').doc(userId).get(), getSettings(), wholeTeamStats(userId), activeL1Count(userId),
       db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').get(),
       db.collection('transactions').where('userId', '==', userId).where('type', '==', 'commission').get().catch(() => null),
     ]);
@@ -3257,6 +3265,7 @@ app.get('/team/stats', async (req, res) => {
     const u = uSnap.data();
     if (u.status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const deposits = teamNow.deposits, [n1, n2, n3] = teamNow.counts;
     const milestones = [
       ...TEAM_MILESTONES.map(m => ({ type: 'count', target: m.target, reward: m.reward,
         current: l1ActiveCount, achieved: l1ActiveCount >= m.target, claimed: !!u['milestoneClaimed_' + m.target] })),
@@ -3274,8 +3283,8 @@ app.get('/team/stats', async (req, res) => {
       status: 'success',
       referralCode: u.referralCode || null,
       commRates: { l1: sett.commL1, l2: sett.commL2, l3: sett.commL3 },
-      team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
-      totalTeam: (u.teamL1Count || 0) + (u.teamL2Count || 0) + (u.teamL3Count || 0),
+      team: { l1: n1, l2: n2, l3: n3 },
+      totalTeam: n1 + n2 + n3,
       teamCommission: finiteMoney(u.teamCommission),
       teamDeposits: deposits, l1ActiveCount, milestones, teamRewards, levelCommission,
     });
@@ -9040,15 +9049,24 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
         // real fix needs a durable outbox/counts-recompute mechanism, a
         // bigger lift than this pass; not attempted, same tradeoff this
         // codebase already accepts for registration's own identical shape.
-        await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+        // The attached member may already have a team of their own: it moves up the chain with
+        // them, so each ancestor's counts grow by the size of that team at the level it lands on
+        // (the referrer sees it one level down, the referrer's referrer two, ...), not by one.
+        // Atomic increments, so a registration happening at the same time is never overwritten.
+        const kids = await db.collection('users').where('referredBy', '==', userId).get();
+        const grand = kids.empty ? { size: 0 } : await db.collection('users').where('referredBy', 'in', kids.docs.map(d => d.id)).get();
+        const below = [kids.size, grand.size]; // their own L1 and L2 (their L3 falls outside every ancestor's 3 levels)
         const l1Snap = await db.collection('users').doc(referrerId).get();
         const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
-        if (l2Id && l2Id !== referrerId) {
-          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
-          const l2Snap = await db.collection('users').doc(l2Id).get();
-          const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
-          if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
-        }
+        const l2Snap = l2Id && l2Id !== referrerId ? await db.collection('users').doc(l2Id).get() : null;
+        const l3Id = l2Snap && l2Snap.exists ? l2Snap.data().referredBy : null;
+        // One update per ancestor (all of that ancestor's increments together).
+        const inc = new Map();
+        const add = (id, field, n) => { if (!id || !(n > 0)) return; inc.set(id, { ...(inc.get(id) || {}), [field]: FieldValue.increment(n) }); };
+        add(referrerId, 'teamL1Count', 1); add(referrerId, 'teamL2Count', below[0]); add(referrerId, 'teamL3Count', below[1]);
+        if (l2Snap && l2Snap.exists) { add(l2Id, 'teamL2Count', 1); add(l2Id, 'teamL3Count', below[0]); }
+        if (l3Id && l3Id !== referrerId && l3Id !== l2Id) add(l3Id, 'teamL3Count', 1);
+        await Promise.all([...inc].map(([id, fields]) => db.collection('users').doc(id).update(fields)));
       });
     });
     // Codex-caught real bug: the admin UI's own copy ("if this member
