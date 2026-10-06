@@ -2345,8 +2345,8 @@ async function renderPromoCodes(){
     <h2 class="sec">Gift codes</h2>
     <div class="panel-card">
       <div class="row">
-        <div><label>Min reward (${adminCur()})</label><input id="cMinReward" type="number" step="1" min="1" placeholder="100"></div>
-        <div><label>Max reward (${adminCur()})</label><input id="cMaxReward" type="number" step="1" min="1" placeholder="500"></div>
+        <div><label>Min reward (${adminCur()})</label><input id="cMinReward" type="number" step="0.01" min="0.01" placeholder="100.50"></div>
+        <div><label>Max reward (${adminCur()})</label><input id="cMaxReward" type="number" step="0.01" min="0.01" placeholder="500.75"></div>
         <div><label>How many</label><input id="cCount" type="number" value="1" min="1" max="50"></div>
       </div>
       <div class="row" style="margin-top:6px">
@@ -2382,7 +2382,7 @@ async function renderPromoCodes(){
     }).join(''):`<tr><td colspan="${ADMIN_REGIONS.length>1?9:8}" class="empty">No codes yet</td></tr>`}
     </tbody></table></div>`;
   $('genBtn').addEventListener('click', async()=>{
-    const minReward=Math.round(parseFloat($('cMinReward').value||0)), maxReward=Math.round(parseFloat($('cMaxReward').value||0));
+    const minReward=Math.round(parseFloat($('cMinReward').value||0)*100)/100, maxReward=Math.round(parseFloat($('cMaxReward').value||0)*100)/100;
     if(!minReward)return toast('Enter a minimum reward amount','err');
     if(!maxReward||maxReward<minReward)return toast('Max reward must be at least the minimum','err');
     const count=parseInt($('cCount').value||1), maxUses=parseInt($('cMax').value)||undefined;

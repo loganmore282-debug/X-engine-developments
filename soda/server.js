@@ -1135,17 +1135,11 @@ async function getRulesContent() {
 }
 
 // ── HELPERS ──
-// Owner originally asked for decimal places on gift-code rewards ("so in
-// treasure codes there are also decimals"), then reversed that: "remove
-// decimal places even if in gift codes, stop it from generating rewards
-// with decimals let it be whole number only." Gift codes now use
-// roundWhole() (see /admin/promocodes/generate and /redeem below), not
-// round2() -- every money amount in this app, gift codes included, is a
-// whole shilling. hasCents below is kept as a defensive display fallback,
-// not a feature: it only matters for a value already in the database from
-// before this reversal (an old fractional-reward gift code or redemption
-// row), which should still render its real number rather than silently
-// truncating history.
+// Gift-code rewards carry cents (owner: "make gift codes to have decimal places
+// ie 647.72, 212.36 instead of whole number"): the random roll is made in whole
+// cents and paid as e.g. 647.72. Every other money amount (deposits, asset
+// prices, withdrawals) stays a whole shilling. fmtMoney shows cents only when
+// the figure has them.
 // Labelled in the CURRENCY OF THE REGION THIS REQUEST BELONGS TO -- see the
 // REGIONS section. A member never sees an amount in another country's
 // currency, including in the descriptions stored against their own
@@ -1161,14 +1155,9 @@ function fmtMoney(n, currency) {
   // the label in front of it is what changes.
   return cur + ' ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
 }
-// Rounds to the nearest UGX cent (2 decimal places). Still used by the spin
-// wheel/turntable and other reporting math below -- NOT by gift codes
-// anymore, see roundWhole() and the comment above.
+// Rounds to the nearest UGX cent (2 decimal places). Used by gift codes, the spin
+// wheel/turntable and reporting math.
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
-// Gift-code rewards only, per the owner's reversal above: whole shillings,
-// no cents, no matter what an admin types into min/max or what the random
-// roll lands on.
-function roundWhole(n) { return Math.round(Number(n) || 0); }
 function stripHtml(s) { return String(s || '').replace(/<[^>]*>/g, '').trim(); }
 // The region's own wall clock. Kampala (UTC+3) for Uganda, and whatever
 // utcOffsetMin the admin set for any other country -- a withdraw window of
@@ -4088,8 +4077,8 @@ app.get('/account', async (req, res) => {
       } catch (e) { console.error('Referral code backfill failed:', e.message); }
     }
     res.json({ status: 'success', account: {
-      phone: u.phone, walletBalance: u.walletBalance || 0, totalDeposited: u.totalDeposited || 0,
-      totalEarned: u.totalEarned || 0, totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
+      phone: u.phone, walletBalance: round2(u.walletBalance), totalDeposited: u.totalDeposited || 0,
+      totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       checkinStreak: u.checkinStreak || 0, lastCheckinAt: u.lastCheckinAt || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
       hasTradePin: !!u.transactionPinHash,
@@ -7013,12 +7002,9 @@ app.post('/redeem', async (req, res) => {
       }
       // Legacy fallback: a code generated before random rewards only has
       // the old single `reward` field -- treat it as a zero-width range so
-      // it still pays exactly that fixed amount, unchanged. roundWhole(),
-      // not round2() -- see roundWhole()'s own comment -- so even a code
-      // whose min/max was set before the owner's decimal reversal now
-      // rolls (and, on the legacy-`reward` path, pays) a whole shilling.
-      const minReward = roundWhole(Number(cd.minReward ?? cd.reward) || 0);
-      const maxReward = roundWhole(Number(cd.maxReward ?? cd.reward) || 0);
+      // it still pays exactly that fixed amount, unchanged.
+      const minReward = round2(Number(cd.minReward ?? cd.reward) || 0);
+      const maxReward = round2(Number(cd.maxReward ?? cd.reward) || 0);
       let reward;
       // CLAIM-BEFORE-CREDIT — a retried redeem after a mid-request failure
       // must never credit twice off the same code. A resumed (already-
@@ -7028,14 +7014,10 @@ app.post('/redeem', async (req, res) => {
       // attempt (below), never re-rolling — a retry must always pay
       // exactly what was already promised, not a fresh random draw.
       if (!alreadyClaimed) {
-        // Rolled ONCE per claim, at whole-shilling granularity -- owner:
-        // "stop it from generating rewards with decimals let it be whole
-        // number only" (this used to roll at 2-decimal/cent granularity,
-        // e.g. min 100/max 500 could land on 123.39, 234.89, etc.).
-        // crypto.randomInt's upper bound is exclusive, hence maxReward+1;
-        // minReward===maxReward (a code with no real range) still works,
-        // always returning that one value.
-        reward = crypto.randomInt(minReward, maxReward + 1);
+        // Rolled ONCE per claim, in whole cents, so a payout can be e.g. 647.72.
+        // crypto.randomInt's upper bound is exclusive, hence +1; min===max (a
+        // code with no real range) always returns that one value.
+        reward = crypto.randomInt(Math.round(minReward * 100), Math.round(maxReward * 100) + 1) / 100;
         // Claiming the code AND persisting the rolled amount happen in one
         // atomic write, so a crash right after this line can never lose
         // track of what was promised -- the resume path above reads it
@@ -7059,7 +7041,7 @@ app.post('/redeem', async (req, res) => {
         // be > 0), but this makes the fallback correct on its own terms
         // rather than relying on that invariant holding elsewhere.
         const persisted = cd.claimedRewards && cd.claimedRewards[userId];
-        reward = roundWhole(Number.isFinite(persisted) ? persisted : minReward);
+        reward = round2(Number.isFinite(persisted) ? persisted : minReward);
       }
       // Codex-caught real bug (2nd money-flow audit): claiming the code in
       // usedBy above is NOT the same as the credit having actually landed --
@@ -7115,7 +7097,7 @@ app.post('/redeem', async (req, res) => {
         // Omitted rather than sent as null when unreadable -- the client
         // falls back to its own arithmetic, and a null would have to be
         // special-cased there to avoid reading as a balance of zero.
-        if (Number.isFinite(bal)) body.walletBalance = bal;
+        if (Number.isFinite(bal)) body.walletBalance = round2(bal);
       } catch (_) { /* the reward is credited; the figure is a convenience */ }
       result = { code: 200, body };
     });
@@ -8494,17 +8476,15 @@ app.post('/admin/messages/delete', async (req, res) => {
 // reward and maximum reward, so no more fixed rewards... also make when I
 // can set treasure code to expire in given seconds." A code no longer
 // carries one fixed `reward` -- it carries a `minReward`/`maxReward` range,
-// and /redeem below rolls a real random whole-shilling amount for each
-// claim, independently (owner later reversed an even-later request for
-// cent-precision rolls here -- see roundWhole()'s own comment -- so this
-// no longer lands on figures like 123.39). Setting minReward===maxReward
+// and /redeem below rolls a real random amount (in cents, e.g. 647.72) for
+// each claim, independently. Setting minReward===maxReward
 // still works and behaves exactly like the old fixed-reward code, so
 // nothing is lost for an admin who wants that. Expiry switched from
 // whole minutes to whole seconds for finer-grained flash-code control.
 app.post('/admin/promocodes/generate', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const minReward = roundWhole(Number(req.body.minReward));
-  const maxReward = roundWhole(Number(req.body.maxReward));
+  const minReward = round2(Number(req.body.minReward));
+  const maxReward = round2(Number(req.body.maxReward));
   const maxUses = req.body.maxUses ? Math.round(Number(req.body.maxUses)) : null;
   const durationSeconds = req.body.durationSeconds ? Number(req.body.durationSeconds) : null;
   if (!Number.isFinite(minReward) || minReward <= 0 || minReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Enter a valid minimum reward amount' });
@@ -10208,7 +10188,7 @@ async function computeUserRealTotals(userId) {
   invSnap.forEach(d => { invested += finiteMoney(d.data().amount); });
   let withdrawn = 0;
   witSnap.forEach(d => { withdrawn += finiteMoney(d.data().net); });
-  return { deposited, earned, invested, withdrawn };
+  return { deposited, earned: round2(earned), invested, withdrawn };
 }
 async function computeRealTotals() {
   const [txSnap, invSnap, witSnap] = await Promise.all([
@@ -10323,7 +10303,7 @@ async function recountAllTotals() {
       // and re-read the doc fresh, both INSIDE the bal:<userId> lock,
       // immediately before writing.
       const moneyLooksStale = finiteMoney(u.totalDeposited) !== row.deposited ||
-        finiteMoney(u.totalEarned) !== row.earned ||
+        round2(u.totalEarned) !== round2(row.earned) ||
         finiteMoney(u.totalInvested) !== realInvestedSnapshot ||
         finiteMoney(u.totalWithdrawn) !== realWithdrawnSnapshot;
       let moneyWrote = false, investedChanged = false;
@@ -10341,7 +10321,7 @@ async function recountAllTotals() {
           const fd = freshDoc.exists ? freshDoc.data() : {};
           const moneyUpdate = {};
           if (finiteMoney(fd.totalDeposited) !== fresh.deposited) moneyUpdate.totalDeposited = fresh.deposited;
-          if (finiteMoney(fd.totalEarned) !== fresh.earned) moneyUpdate.totalEarned = fresh.earned;
+          if (round2(fd.totalEarned) !== round2(fresh.earned)) moneyUpdate.totalEarned = round2(fresh.earned);
           if (finiteMoney(fd.totalInvested) !== fresh.invested) { moneyUpdate.totalInvested = fresh.invested; investedChanged = true; }
           if (finiteMoney(fd.totalWithdrawn) !== fresh.withdrawn) moneyUpdate.totalWithdrawn = fresh.withdrawn;
           if (Object.keys(moneyUpdate).length) {
