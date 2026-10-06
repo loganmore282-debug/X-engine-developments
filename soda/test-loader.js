@@ -31,4 +31,5 @@ ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out alw
 ok(/\.v-ann-img\{[^}]*object-fit:contain[^}]*\}/.test(html) && !/\.v-ann-img\{[^}]*object-fit:cover/.test(html), 'the announcement picture is shown whole (contain), never cropped');
 ok(/function vFitCard\(img\)/.test(mod) && /onload="vFitCard\(this\)"/.test(mod) && /\.v-card-img\.has-img img\{[^}]*height:auto/.test(html) && !/\.v-card-img\.has-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures are shown whole in their own shape (portrait in the column, wide or square across the top)');
 ok(!/fileToFramedDataUrl|PRODUCT_IMG_W/.test(admin) && /fileToDataUrl\(f,900,0\.82\)/.test(admin), 'the admin no longer crops asset pictures to 16:9');
+ok(/--img-w/.test(mod) && /grid-template-columns:var\(--img-w,112\.5px\) 1fr/.test(html), 'a portrait picture gets a column of its own shape (a 2:3 photo is 133 px wide at the 200 px card height)');
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);

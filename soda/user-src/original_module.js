@@ -3041,7 +3041,13 @@ function startHomeCarousel(){
 // the left column; a square or wide one goes across the top of the card with the figures below.
 function vFitCard(img){
   const card = img.closest('.v-card');
-  if (card && img.naturalWidth && img.naturalHeight) card.classList.toggle('v-flat', img.naturalWidth / img.naturalHeight > 0.85);
+  if (!card || !img.naturalWidth || !img.naturalHeight) return;
+  const r = img.naturalWidth / img.naturalHeight;
+  card.classList.toggle('v-flat', r > 0.85);
+  // A portrait picture gets a column just wide enough for its own shape at the card's usual 200 px
+  // height (a 2:3 photo -> 133 px), never narrower than the standard 112.5 px or wider than 150 px.
+  if (r <= 0.85) card.style.setProperty('--img-w', Math.round(Math.min(150, Math.max(112.5, 200 * r)) * 10) / 10 + 'px');
+  else card.style.removeProperty('--img-w');
 }
 function vNoPicture(img, initial){
   const frame = img.parentNode;
