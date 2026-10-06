@@ -349,7 +349,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
 #loadingScreen{position:fixed;inset:0;background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/api/public/loader-image') center/cover no-repeat,linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
 #loadingScreen .ld-txt{display:inline-block;color:#fff;font-size:22px;font-weight:700;letter-spacing:.06em;text-shadow:0 2px 10px rgba(0,0,0,.45);animation:ldBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
-@keyframes ldBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-16px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
+@keyframes ldBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-34px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
 @media (prefers-reduced-motion:reduce){#loadingScreen .ld-txt{animation:none;}}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 #openingGate .og-mark{font-weight:800;font-size:36px;letter-spacing:.03em;color:#fff;}
@@ -2002,7 +2002,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
           </div>
           <div class="va-f">
             <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
+            <input id="loginPassword" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter password" autocomplete="current-password">
           </div>
           <label class="va-rem"><input type="checkbox" id="rememberMe"><span>Remember me</span></label>
           <button class="va-btn" id="loginBtn" onclick="doLogin()">Log In</button>
@@ -2019,15 +2019,15 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
           </div>
           <div class="va-f">
             <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="regPassword" type="password" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
+            <input id="regPassword" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Login Password (at least 6 characters)" autocomplete="new-password">
           </div>
           <div class="va-f">
             <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="regPassword2" type="password" placeholder="Confirm Login Password" autocomplete="new-password">
+            <input id="regPassword2" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Confirm Login Password" autocomplete="new-password">
           </div>
           <div class="va-f">
             <span class="va-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/></svg></span>
-            <input id="regTradePin" type="password" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="new-password">
+            <input id="regTradePin" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="numeric" maxlength="6" placeholder="Trade Password (6 digits)" autocomplete="new-password">
           </div>
           <div class="va-f">
             <span class="va-ic va-gift"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M2 6h20v3H2zM12 6v15M12 6c-1.3 0-4.5-.2-4.5-2.2 0-2.3 4.5-1.8 4.5 2.2Zm0 0c1.3 0 4.5-.2 4.5-2.2C16.5 1.5 12 2 12 6Z"/></svg></span>

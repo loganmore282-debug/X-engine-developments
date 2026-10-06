@@ -3671,7 +3671,9 @@ app.get('/public/announcement-image', async (req, res) => {
 });
 // The start-up loader's background, served as a real image (not JSON) so the
 // browser can paint it from its own cache in the first frame of the next
-// launch. ETag + no-cache: a re-upload shows on the next open.
+// launch. stale-while-revalidate: it is painted from the cache at once and
+// refreshed in the background, so it never delays the app; a re-upload
+// shows on the open after next.
 app.get('/public/loader-image', async (req, res) => {
   try {
     const image = await getSodaImage('loaderbg');
@@ -3679,7 +3681,7 @@ app.get('/public/loader-image', async (req, res) => {
     if (!m) return res.status(404).end();
     const buf = Buffer.from(m[2], 'base64');
     const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex') + '"';
-    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, no-cache', ETag: etag });
+    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=0, stale-while-revalidate=604800', ETag: etag });
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.send(buf);
   } catch (e) { res.status(500).end(); }
@@ -6991,23 +6993,8 @@ app.post('/bank/save', async (req, res) => {
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    // OTP proves it's really the account holder adding this payout
-    // destination -- sent to THEIR OWN phone on file (resolved by
-    // /auth/otp/send's 'bank' purpose), not to `destValue` above, which is
-    // the new account being added and could belong to someone else
-    // entirely (a family member's mobile money, for instance). Optional
-    // now, per the owner -- off by default (see DEFAULT_SETTINGS.bankOtpRequired).
-    const walletSettings = await getSettings();
-    // The master switch (see DEFAULT_SETTINGS.otpVerificationEnabled) only
-    // turns the code request OFF -- saving a payout account works exactly as
-    // usual either way (owner: "it should remain as usual but just disabling
-    // otp requests"). With it off the bank-OTP requirement can never be
-    // satisfied, so it is skipped too rather than refusing the save.
-    if (walletSettings.otpVerificationEnabled !== false && walletSettings.bankOtpRequired) {
-      const ownPhone = cleanPhone((uSnap.exists && uSnap.data().phone) || '');
-      const ticketOk = await consumeOtpTicket(String(req.body.otpTicket || ''), ownPhone, 'bank');
-      if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify with the code sent to your phone first.' });
-    }
+    // No OTP step when saving a payout wallet (owner decision): the member is
+    // already signed in, and withdrawals still need the Trade Password.
     // MarzPay's own recommended step, done here rather than only at
     // withdrawal time: catches a mistyped account number the moment it is
     // entered, with the member still looking at the form, instead of only

@@ -18,7 +18,7 @@ for (const s of d.scripts) {
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
-  w.eval('STATE.page="home";STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings={annEnabled:true,annTitle:"Hello",annBody:"Body",whatsappGroup:"https://chat.whatsapp.com/abc",telegramGroup:"https://t.me/grp",supportTelegram:"https://t.me/agent",supportEmail:"help@x.com",supportHours:"8-5"}');
+  w.eval('STATE.page="home";STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings={annTitle:"Hello",annBody:"Body",whatsappGroup:"https://chat.whatsapp.com/abc",telegramGroup:"https://t.me/grp",supportTelegram:"https://t.me/agent",supportEmail:"help@x.com",supportHours:"8-5"}');
   w.maybeShowAnnouncement();
   const sheet = d.getElementById('annSheet');
   ok(d.getElementById('annBg').classList.contains('show'), 'dialog opens with an admin picture');
@@ -34,8 +34,6 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   ok(!d.getElementById('annBg').classList.contains('show'), 'Close hides it');
   w.eval('STATE.announcementImage=null'); d.getElementById('annSheet').innerHTML = ''; w.maybeShowAnnouncement();
   ok(!d.getElementById('annBg').classList.contains('show'), 'no picture uploaded -> no dialog');
-  w.eval('STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings.annEnabled=false'); w.maybeShowAnnouncement();
-  ok(!d.getElementById('annBg').classList.contains('show'), 'announcement switched off -> no dialog');
   ok(typeof w.openSupportSheet === 'undefined', 'the old Support page is gone (Help dialog replaces it)');
   console.log(`PASS: announcement dialog (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

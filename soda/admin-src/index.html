@@ -2820,7 +2820,7 @@ async function renderBanners(){
 
     <h2 class="sec">Announcement picture</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The portrait picture members see when they open the app (with Join Channel and Close under it). Tall portrait (for example 1080&times;2200); it is shown as tall as the screen allows. Shown only while the announcement is enabled in Settings.</p>
+      <p class="muted" style="margin-top:0">The portrait picture members see when they open the app (with Join Channel and Close under it). Tall portrait (for example 1080&times;2200); it is shown as tall as the screen allows. It shows to every member on opening the app while a picture is uploaded; remove the picture to turn it off.</p>
       <div class="banner-row">
         ${announcementImage?`<img class="img-thumb" src="${esc(announcementImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set</span>'}</div>
@@ -2920,9 +2920,10 @@ function wireBannerHandlers(){
           // The auth backdrop fills a large area, so it keeps more
           // resolution than the banners.
           const maxDim = slot==='logo' ? 512
-                       : (slot==='authhero' || slot==='loaderbg') ? 1600
+                       : slot==='loaderbg' ? 1080
+                       : slot==='authhero' ? 1600
                        : 1280;
-          const image = await fileToDataUrl(f, maxDim, 0.82);
+          const image = await fileToDataUrl(f, maxDim, slot==='loaderbg' ? 0.7 : 0.82);
           const d = await api('/admin/soda-image/set', { slot, image });
           toast(d.status==='success'?savedMsg:(d.message||'Failed'), d.status==='success'?'ok':'err');
           if (d.status==='success') renderBanners();
@@ -3048,24 +3049,10 @@ async function renderSettings(){
         <div><label>L3 commission (%)</label><input id="sC3" type="number" step="1" value="${v('commL3',1)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
-        <div><label>Return multiple (×)</label><input id="sReturnMult" type="number" step="0.1" value="${v('returnMultiple',30)}"></div>
-        <div><label>Cycle (days)</label><input id="sCycle" type="number" value="${v('cycleDays',150)}"></div>
         <div><label>Max withdrawals per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
-      </div>
-      <!-- OTP verification codes cost real money per SMS (MarzSms, ~30 UGX
-           each) -- capped per phone number, resetting daily. 0 means send
-           none, not unlimited; see otpDailyLimit()'s own comment in server.js. -->
-      <div class="row" style="margin-top:6px">
-        <div><label>OTP codes/day &middot; add bank account</label><input id="sOtpBank" type="number" min="0" value="${v('otpDailyLimitBank',2)}"></div>
-      </div>
-      <div class="row" style="margin-top:10px">
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>OTP verification (add wallet)</b> </span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sOtpVerification" ${s.otpVerificationEnabled!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>Require OTP to add a payout account</b> <span class="muted">(off by default; ignored while OTP verification above is off)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sBankOtp" ${s.bankOtpRequired===true?'checked':''} style="width:auto"></label></div>
       <!-- Owner: "one withdrawal time should be SETTABLE IN ADMIN, such that
            when one tries to withdrawal he sees, that withdrawals start from
            this time to this time, nothing much ie 6pm to 5pm." -->
@@ -3092,8 +3079,6 @@ async function renderSettings(){
       <label style="margin-top:14px">Allowed website domains</label>
       <textarea id="sAllowedOrigins" rows="4" placeholder="soda-platform.com&#10;www.soda-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. soda-platform.com and this VPS's own address are always allowed.</p>
-      <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
-      <p class="muted" style="margin:0 0 4px">Automatic recharge is the only recharge method. Every withdrawal waits as Pending until you act on it in Withdrawals.</p>
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
@@ -3120,13 +3105,10 @@ async function renderSettings(){
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
-    <h2 class="sec">Home announcement dialog</h2>
+    <h2 class="sec">Scrolling line on Home</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A popup shown every time a member logs in or completes registration, and also when they navigate back to Home. It shows the picture uploaded under Banners (Announcement picture), with Join Channel (the Telegram group link set in Support contacts above) and Close under it.</p>
-      <div class="switch-row"><span><b>Enable announcement</b></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sAnnEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
-      <label>Scrolling line on Home</label><input id="sTickerText" maxlength="200" value="${esc(v('tickerText',''))}" placeholder="Leave empty for the built-in sentence">
-      <button class="btn block" id="saveAnn" style="margin-top:10px">Save announcement</button>
+      <label>Text</label><input id="sTickerText" maxlength="200" value="${esc(v('tickerText',''))}" placeholder="Leave empty for the built-in sentence">
+      <button class="btn block" id="saveAnn" style="margin-top:10px">Save</button>
     </div>
 
     <h2 class="sec">App name</h2>
@@ -3151,12 +3133,8 @@ async function renderSettings(){
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       withdrawFeePct:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
-      returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
-      otpDailyLimitBank:+$('sOtpBank').value,
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
-      otpVerificationEnabled:$('sOtpVerification').checked,
-      bankOtpRequired:$('sBankOtp').checked,
       withdrawWindowEnabled:$('sWitWindow').checked,
       withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
       // Sent as raw text; the server splits, validates and de-duplicates it,
@@ -3172,8 +3150,8 @@ async function renderSettings(){
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveAnn').addEventListener('click', async()=>{
-    const upd = { annEnabled:$('sAnnEnabled').checked, tickerText:$('sTickerText').value.trim() };
-    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    const upd = { tickerText:$('sTickerText').value.trim() };
+    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveBrandName').addEventListener('click', async()=>{
     const name = $('brandNameInput').value.trim();

@@ -1340,7 +1340,7 @@ async function apiRequest(path, opts){
     if (opts.signal.aborted) abort();
     else opts.signal.addEventListener('abort', abort, { once: true });
   }
-  const timeout = setTimeout(abort, 45000);
+  const timeout = setTimeout(abort, Number(opts.timeoutMs) || 45000);
   let data, tokenAbort;
   try {
     if (window.fbAuth && window.fbAuth.currentUser) {
@@ -1488,37 +1488,6 @@ function showAuthTab(tab){
   $('loginPane').style.display = tab === 'login' ? '' : 'none';
   $('registerPane').style.display = tab === 'register' ? '' : 'none';
   stopSmsCodeListener();
-}
-// ── OTP RESEND COOLDOWN ──
-// Shared by every OTP step (registration, forgot-password, add-wallet) so
-// "Resend code" cannot be mashed into a second/third paid SMS the instant
-// the first one goes out. Purely a client-side courtesy -- the real limit is
-// the server's per-day cap (see otpDailyLimit() in server.js); this just
-// keeps an impatient double-tap from wasting one of that limited daily count
-// on nothing.
-var _otpCooldownActive = {};
-function startOtpResendCooldown(linkId, seconds, idleLabel){
-  const el = $(linkId);
-  if (!el) return;
-  const label = idleLabel || 'Send Code';
-  _otpCooldownActive[linkId] = true;
-  el.style.pointerEvents = 'none';
-  el.style.opacity = '.55';
-  let remaining = seconds;
-  const tick = () => {
-    if (!el.isConnected) { delete _otpCooldownActive[linkId]; return; } // sheet/pane torn down mid-countdown
-    if (remaining <= 0) {
-      _otpCooldownActive[linkId] = false;
-      el.textContent = label;
-      el.style.pointerEvents = '';
-      el.style.opacity = '';
-      return;
-    }
-    el.textContent = `${label} (${remaining}s)`;
-    remaining--;
-    setTimeout(tick, 1000);
-  };
-  tick();
 }
 // Owner: "on login it should not say please wait, it should say logging
 // in... so everywhere saying please wait... it should be removed."
@@ -1921,16 +1890,32 @@ async function performMemberLogout(opts){
 // _artPromise is that work, exposed so the one thing that genuinely needs a
 // picture before it appears (the announcement dialog) can wait for it
 // instead of opening blank.
-var _artPromise = null;
+var _artPromise = null, _artLanded = false, _annWaiting = false;
+function startArtwork(){
+  if (_artPromise) return _artPromise;
+  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/soda-images') ])
+    .then(([ai, ci]) => { applyBootArtwork(ai, ci); })
+    .catch(() => {})
+    .then(() => { _artLanded = true; });
+  return _artPromise;
+}
+// Start the pictures the moment the loading screen comes down, wherever that
+// happens (a signed-in app, the login screen, an error), instead of at 14 call sites.
+(function(){
+  const ls = document.getElementById('loadingScreen');
+  if (!ls || !window.MutationObserver) return;
+  new MutationObserver(() => { if (ls.style.display === 'none') startArtwork(); }).observe(ls, { attributes: true, attributeFilter: ['style'] });
+})();
 async function boot(){
   // Fired together so Home receives its first activity rows before it paints.
   // The server caches completed activity; this is deliberately not generated
   // client-side so the ticker never invents financial events.
   const pSettings = api('/public/settings'), pProducts = api('/public/products');
   const pBanner = api('/public/banner');
-  _artPromise = Promise.all([ api('/public/announcement-image'), api('/public/soda-images') ])
-    .then(([ai, ci]) => { applyBootArtwork(ai, ci); })
-    .catch(() => {});
+  // The pictures (several megabytes of base64) are fetched only once the
+  // loading screen has gone, so they never compete with the account request
+  // for a slow mobile connection (see startArtwork()).
+  setTimeout(startArtwork, 8000);
   const [s, p, b] = await Promise.all([ pSettings, pProducts, pBanner ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   // The region that owns this hostname, so the landing screen, Sign Up and
@@ -2168,18 +2153,6 @@ async function loadAuthSettings(){
 function referralIsRequired(){
   const st = STATE.settings || {};
   return st.referralRequired !== false;
-}
-// Owner: "when l disable otp verification system the functions go away
-// completely ie put code field, and on reset it shows support email, on
-// payout account it shows support email, so l just toggle and system
-// switches." One admin setting (settings.otpVerificationEnabled, default
-// true so nothing already live changes behavior until it's actually
-// flipped) governs all three OTP-gated flows at once. Default TRUE before
-// settings load, same reasoning as referralIsRequired() -- a failed
-// settings fetch must never silently turn a security step off.
-function otpVerificationEnabled(){
-  const st = STATE.settings || {};
-  return st.otpVerificationEnabled !== false;
 }
 // Registration just drops its OTP step when the toggle is off (a brand-new
 // account has no existing identity to protect) -- see doRegister()'s own
@@ -2515,7 +2488,7 @@ async function bootFromNetwork(uid){
     window._pendingRegPin = ''; window._pendingRegPhone = '';
     r = await api('/account');
   } else {
-    r = await api('/account');
+    r = await api('/account', { timeoutMs: 15000 });
     if (r.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.code === 'REGISTRATION_REQUIRED' || r.message === 'User not found')) {
       // Ghost account (Firebase user exists, our profile never finished in
@@ -2532,6 +2505,15 @@ async function bootFromNetwork(uid){
   }
   // Same reasoning as above for the account fetch itself.
   if (r.stale || !STATE.user || STATE.user.uid !== uid) return;
+  if (r.status === 'error' && !r.code && !window._pendingLoginSuccess && /timed out|Could not reach/.test(r.message || '')) {
+    // Re-opening the app on a slow or dropped connection is not a reason to end
+    // the login: show the login screen with the message and keep the session.
+    // (A login the member just typed still signs out below, so a retry is clean.)
+    $('loadingScreen').style.display = 'none';
+    $('authScreen').style.display = '';
+    notify('Could not reach the server. Check your connection and try again.');
+    return;
+  }
   if (r.status === 'error') {
     $('loadingScreen').style.display = 'none';
     if (r.code === 'BANNED') { notify(r.message); await window.fbSignOut(); return; }
@@ -3054,7 +3036,12 @@ window.closeAnnouncement = function(){
 // or the WhatsApp group link when no Telegram group is set.
 function maybeShowAnnouncement(){
   const s = STATE.settings || {};
-  if (!s.annEnabled || !STATE.announcementImage) return;
+  if (!STATE.announcementImage) {
+    // The pictures are fetched after the loading screen comes down; if they
+    // have not landed yet, open the dialog the moment they do.
+    if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; maybeShowAnnouncement(); }); }
+    return;
+  }
   const bg = $('annBg'), sheet = $('annSheet');
   if (!bg || !sheet) return;
   const link = s.telegramGroup || s.whatsappGroup || '';
@@ -3941,12 +3928,6 @@ function renderWalletSheet(){
         <div class="v-uline"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
         <div class="v-two"><button class="v-ghost" type="button" onclick="closeSheet()">Cancel</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Submit</button></div>
       </div>
-      <div id="walOtpGroup" style="display:none;">
-        <label class="v-flabel" for="walOtp">6-digit code</label>
-        <div class="v-uline"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></div>
-        <div class="v-two"><button class="v-ghost" type="button" onclick="cancelWalletOtp()">Back</button><button class="v-solid" id="walConfirmBtn" type="button" onclick="confirmWalletOtp()">Confirm</button></div>
-        <a href="#" id="walResendBtn" onclick="submitWallet();return false;">Resend code</a>
-      </div>
       <div id="walYours" style="${(STATE.bankAccounts || []).length ? '' : 'display:none'}">
         <h3 class="v-yours">Your Wallet</h3>
         <div id="walRows">${walRowsHtml()}</div>
@@ -3993,17 +3974,6 @@ document.addEventListener('click', function(e){
   const box = document.getElementById('walProviderPick');
   if (box && box.classList.contains('open') && !box.contains(e.target)) box.classList.remove('open');
 });
-// Adding/changing the payout wallet used to always require an OTP first
-// (prove it's really the account holder, sent to THEIR OWN phone on file,
-// never to the wallet number being entered above). Owner: "remove otp on
-// withdrawal bank account... it should be optional" -- now admin-controlled
-// via STATE.settings.bankOtpRequired (default off, see server.js). Off:
-// submitWallet() saves straight away. On: same two-phase OTP flow as
-// before, kept in these two closure vars rather than re-rendering the sheet
-// between them -- a re-render would wipe whatever the member just typed
-// into walProvider/walPhone/walHolder.
-var _walletPending = null;
-var _walletOtpId = null;
 window.submitWallet = async function(){
   const network = walNetwork();
   const phone = $('walPhone').value;
@@ -4021,50 +3991,13 @@ window.submitWallet = async function(){
   }
   if (!holder) return notify('Enter the account holder name.');
   const btn = $('walSaveBtn');
-  // A code step only exists when OTP is on AND the payout-account option is
-  // on; turning OTP off just removes the code request, saving is unchanged.
-  if (!otpVerificationEnabled() || !(STATE.settings || {}).bankOtpRequired) {
-    btn.disabled = true; btn.textContent = 'Saving…';
-    const r = await post('/bank/save', { holder, network, phone });
-    btn.disabled = false; btn.textContent = 'Submit';
-    if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
-    return finishWalletSave();
-  }
-  btn.disabled = true; btn.textContent = 'Sending code…';
-  const d = await post('/auth/otp/send', { purpose: 'bank' });
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const r = await post('/bank/save', { holder, network, phone });
   btn.disabled = false; btn.textContent = 'Submit';
-  if (d.status !== 'success') return notify(d.message || 'Could not send a verification code.');
-  _walletPending = { holder, network, phone };
-  _walletOtpId = d.otpId;
-  const otpInput = $('walOtp'); if (otpInput) otpInput.value = '';
-  const formGroup = $('walFormGroup'), otpGroup = $('walOtpGroup');
-  if (formGroup) formGroup.style.display = 'none';
-  if (otpGroup) otpGroup.style.display = '';
-  startOtpResendCooldown('walResendBtn', 30, 'Resend code');
-};
-window.cancelWalletOtp = function(){
-  _walletPending = null; _walletOtpId = null;
-  const formGroup = $('walFormGroup'), otpGroup = $('walOtpGroup');
-  if (otpGroup) otpGroup.style.display = 'none';
-  if (formGroup) formGroup.style.display = '';
-};
-window.confirmWalletOtp = async function(){
-  if (!_walletPending || !_walletOtpId) return cancelWalletOtp();
-  const code = ($('walOtp').value || '').trim();
-  if (!/^\d{6}$/.test(code)) return notify('Enter the 6-digit code sent to your phone.');
-  const btn = $('walConfirmBtn');
-  btn.disabled = true; btn.textContent = 'Verifying…';
-  const v = await post('/auth/otp/verify', { otpId: _walletOtpId, code });
-  if (v.status !== 'success') { btn.disabled = false; btn.textContent = 'Confirm'; return notify(v.message || 'Incorrect code.'); }
-  btn.textContent = 'Saving…';
-  const r = await post('/bank/save', Object.assign({}, _walletPending, { otpTicket: v.ticket }));
-  btn.disabled = false; btn.textContent = 'Confirm';
   if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
-  _walletPending = null; _walletOtpId = null;
-  await finishWalletSave();
+  return finishWalletSave();
 };
-// Shared tail of a successful /bank/save, whether it came from the OTP flow
-// above or straight from submitWallet() when bankOtpRequired is off.
+// Tail of a successful /bank/save.
 async function finishWalletSave(){
   // One wallet only: /bank/save edits it in place, so just re-read and show it.
   const fresh = await api('/bank/list');
@@ -4326,7 +4259,7 @@ window.closeMessageDetail = function(){
 function updateMessageBadge(){}
 
 function vPwBox(id, placeholder, pin){
-  return `<div class="v-pbox"><input id="${id}" type="password" placeholder="${esc(placeholder)}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
+  return `<div class="v-pbox"><input id="${id}" type="text" placeholder="${esc(placeholder)}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
 }
 window.openChangeLoginPasswordSheet = function(){
   openSheet('Change Login Password', `<div class="v-form reveal-in"><div class="v-edit">
@@ -5370,7 +5303,7 @@ function paintWithdrawSheet(s){
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
     <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
  
-    <div class="v-pin"><input id="witPin" type="password" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="one-time-code"><button type="button" onclick="toggleWitPin(this)" aria-label="Show or hide">${VI.eye}</button></div>
+    <div class="v-pin"><input id="witPin" type="text" inputmode="numeric" maxlength="6" placeholder="Enter trade password" autocomplete="off"></div>
     <div class="v-fee">Fee: ${fee}%</div>
     <button class="v-cta fade" id="witSubmitBtn" ${_withdrawSubmitting ? 'disabled' : ''} onclick="submitWithdraw()">Confirm Withdraw</button>
     <div class="v-info">
@@ -5384,13 +5317,6 @@ function paintWithdrawSheet(s){
     </div>
   </div>`;
 }
-window.toggleWitPin = function(btn){
-  const el = $('witPin');
-  if (!el) return;
-  const show = el.type === 'password';
-  el.type = show ? 'text' : 'password';
-  btn.innerHTML = show ? VI.eyeOff : VI.eye;
-};
 function withdrawalFeePct(s){
   const value = Number(s && s.withdrawFeePct);
   return s && s.withdrawFeePct != null && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 15;
