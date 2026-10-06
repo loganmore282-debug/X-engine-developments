@@ -552,6 +552,16 @@ app.use(async (req, res, next) => {
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000,
   welcomeBonus: 5000, commL1: 27, commL2: 2, commL3: 1,
+  // Task Center (Team page): what a member earns for team progress, edited in the admin panel under Settings > Task Center.
+  // `id` stays with a row when its numbers are edited, so an edit can never let a member claim the same task twice.
+  taskReferrals: [
+    { id: 'r1', target: 5, reward: 10000 }, { id: 'r2', target: 10, reward: 20000 }, { id: 'r3', target: 20, reward: 40000 },
+    { id: 'r4', target: 35, reward: 80000 }, { id: 'r5', target: 50, reward: 160000 }, { id: 'r6', target: 100, reward: 320000 },
+  ],
+  taskDeposits: [
+    { id: 'd1', target: 250000, reward: 10000 }, { id: 'd2', target: 500000, reward: 25000 }, { id: 'd3', target: 1000000, reward: 25000 },
+    { id: 'd4', target: 1500000, reward: 50000 }, { id: 'd5', target: 2000000, reward: 50000 }, { id: 'd6', target: 5000000, reward: 100000 },
+  ],
   returnMultiple: 30, cycleDays: 150,
   // Not yet confirmed by the owner — a reasonable Snow-scaled default,
   // admin-editable like every other rate here.
@@ -1619,23 +1629,37 @@ async function uniqueRef(letter) {
   }
   return letter + Date.now() + crypto.randomInt(1000);
 }
-// TASK CENTER — milestone rewards on top of ordinary L1/L2/L3 % commission.
-// Reward numbers are Snow-scaled defaults (flat per-referral / flat % of
-// team deposits, same shape as space8's proven ladder) — not yet confirmed
-// by the owner; flag before treating these as final.
-// Task Center rewards are earned from deposits, never from a referral's
-// investment. A Level 1 member becomes active only after their deposit has
-// genuinely credited their account. Each listed task remains claimable once.
-const TEAM_MILESTONES = [
-  { target: 5, reward: 10000 }, { target: 15, reward: 20000 },
-  { target: 20, reward: 40000 }, { target: 35, reward: 80000 },
-  { target: 50, reward: 160000 }, { target: 100, reward: 320000 },
-];
-const TEAM_DEPOSIT_MILESTONES = [
-  { target: 250000, reward: 10000 }, { target: 500000, reward: 10000 },
-  { target: 750000, reward: 20000 }, { target: 1000000, reward: 20000 },
-  { target: 1500000, reward: 50000 }, { target: 2000000, reward: 50000 },
-];
+// TASK CENTER -- rewards for team progress, on top of the ordinary L1/L2/L3 commission. The two lists live in
+// the settings (defaults above, edited in Admin > Settings > Task Center). A "referral" task counts the member's
+// own Level 1 members who have deposited; a "deposit" task counts what the whole team (levels 1-3) has deposited.
+const TASK_MAX_ROWS = 30, TASK_MAX_REFERRALS = 100000;
+// Validates what the admin sends. Whole numbers only, one row per target, a stable id per row (new rows get one).
+function sanitizeTaskRows(rows, kind) {
+  const label = kind === 'deposit' ? 'Deposits' : 'Referrals';
+  if (!Array.isArray(rows)) return { error: `${label}: send a list of tasks.` };
+  if (rows.length > TASK_MAX_ROWS) return { error: `${label}: at most ${TASK_MAX_ROWS} tasks.` };
+  const maxTarget = kind === 'deposit' ? MAX_MONEY_AMOUNT : TASK_MAX_REFERRALS;
+  const out = [], ids = new Set(), targets = new Set();
+  for (const r of rows) {
+    const target = Number(r && r.target), reward = Number(r && r.reward);
+    if (!Number.isInteger(target) || target < 1 || target > maxTarget) return { error: `${label}: every target must be a whole number from 1 to ${maxTarget}.` };
+    if (!Number.isInteger(reward) || reward < 1 || reward > MAX_MONEY_AMOUNT) return { error: `${label}: every reward must be a whole number from 1 to ${MAX_MONEY_AMOUNT}.` };
+    if (targets.has(target)) return { error: `${label}: two tasks have the same target (${target}).` };
+    targets.add(target);
+    let id = String((r && r.id) || '');
+    if (!/^[a-z0-9]{1,16}$/.test(id) || ids.has(id)) id = 't' + crypto.randomBytes(4).toString('hex');
+    ids.add(id);
+    out.push({ id, target, reward });
+  }
+  out.sort((x, y) => x.target - y.target);
+  return { rows: out };
+}
+// What the app and the claim route read: the stored list, with anything malformed quietly left out.
+function taskRows(rows, kind) {
+  const ok = (Array.isArray(rows) ? rows : []).filter(r => r && typeof r.id === 'string' && Number(r.target) > 0 && Number(r.reward) > 0);
+  const r = sanitizeTaskRows(ok, kind);
+  return r.rows || [];
+}
 async function activeL1Count(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
   let n = 0;
@@ -3266,11 +3290,13 @@ app.get('/team/stats', async (req, res) => {
     if (u.status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const deposits = teamNow.deposits, [n1, n2, n3] = teamNow.counts;
+    const claimedKeys = new Set(u.creditedTaskKeys || []);
+    const refRows = taskRows(sett.taskReferrals, 'count'), depRows = taskRows(sett.taskDeposits, 'deposit');
     const milestones = [
-      ...TEAM_MILESTONES.map(m => ({ type: 'count', target: m.target, reward: m.reward,
-        current: l1ActiveCount, achieved: l1ActiveCount >= m.target, claimed: !!u['milestoneClaimed_' + m.target] })),
-      ...TEAM_DEPOSIT_MILESTONES.map(m => ({ type: 'deposit', target: m.target, reward: m.reward,
-        current: deposits, achieved: deposits >= m.target, claimed: !!u['depositMilestoneClaimed_' + m.target] })),
+      ...refRows.map(m => ({ type: 'count', id: m.id, target: m.target, reward: m.reward,
+        current: l1ActiveCount, achieved: l1ActiveCount >= m.target, claimed: claimedKeys.has('count:' + m.id) })),
+      ...depRows.map(m => ({ type: 'deposit', id: m.id, target: m.target, reward: m.reward,
+        current: deposits, achieved: deposits >= m.target, claimed: claimedKeys.has('deposit:' + m.id) })),
     ];
     let teamRewards = 0;
     rewardTxSnap.forEach(d => { teamRewards += finiteMoney(d.data().amount); });
@@ -3293,8 +3319,57 @@ app.get('/team/stats', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not load team stats' });
   }
 });
-// The Task Center reward claim (/team/milestone/claim) is removed: no screen calls
-// it and it paid money. Team progress is still reported by /team/stats.
+// Claiming a Task Center reward. Money-safe the same way a deposit credit is: one claim at a time per member,
+// the live progress is re-read here (the app's own figure is never trusted), and the credit, the member's
+// "already claimed" token and the totals land in ONE atomic user update, so a double tap, two phones or a retry
+// after a crash can never pay the same task twice. The ledger row is written (or repaired) afterwards.
+app.post('/team/task/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const type = req.body.type === 'deposit' ? 'deposit' : req.body.type === 'count' ? 'count' : '';
+  const id = String(req.body.id || '').slice(0, 40);
+  if (!type || !id) return res.status(400).json({ status: 'error', message: 'Unknown task' });
+  try {
+    const sett = await getSettings();
+    const row = taskRows(type === 'deposit' ? sett.taskDeposits : sett.taskReferrals, type).find(r => r.id === id);
+    if (!row) return res.status(400).json({ status: 'error', code: 'TASK_GONE', message: 'This task is no longer available.' });
+    const key = type + ':' + row.id;
+    const out = await withLock('taskclaim:' + userId, async () => {
+      const uRef = db.collection('users').doc(userId);
+      const first = await uRef.get();
+      if (!first.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
+      if (first.data().status === 'banned') return { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } };
+      const { date, time } = nowStr();
+      const ledger = () => db.collection('transactions').doc(`team-reward:${userId}:${key}`).createIfAbsent({
+        userId, statementId: newStatementId(), type: 'team_reward',
+        description: type === 'deposit' ? `Task Center: whole team deposits ${fmtMoney(row.target)}` : `Task Center: ${row.target} active referrals`,
+        amount: row.reward, taskKey: key, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      if ((first.data().creditedTaskKeys || []).includes(key)) {
+        await ledger();   // repairs a ledger row a crash left behind; never pays again
+        return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
+      }
+      const progress = type === 'deposit' ? (await wholeTeamStats(userId)).deposits : await activeL1Count(userId);
+      if (progress < row.target) {
+        const need = type === 'deposit' ? fmtMoney(row.target) : row.target, have = type === 'deposit' ? fmtMoney(progress) : progress;
+        return { code: 400, body: { status: 'error', code: 'NOT_REACHED', message: `You need ${need} to claim this, you have ${have}.` } };
+      }
+      let balance = 0, applied = false;
+      await withLock('bal:' + userId, async () => {
+        applied = await uRef.updateIf({ creditedTaskKeys: { $ne: key }, status: { $ne: 'banned' } }, {
+          walletBalance: FieldValue.increment(row.reward), totalEarned: FieldValue.increment(row.reward),
+          creditedTaskKeys: FieldValue.arrayUnion(key)
+        });
+        const after = await uRef.get();
+        balance = round2(Number(after.exists && after.data().walletBalance) || 0);
+      });
+      if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
+      await ledger();
+      return { code: 200, body: { status: 'success', amount: row.reward, walletBalance: balance, message: `${fmtMoney(row.reward)} added to your wallet` } };
+    });
+    res.status(out.code).json(out.body);
+  } catch (e) { console.error('Task claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
+});
 
 // ── MISSION CENTER — REMOVED ──
 // Owner: "remove mission center". The three routes that lived here
@@ -8538,6 +8613,26 @@ app.post('/admin/messages/delete', async (req, res) => {
     logAdminAction(req, 'message_deleted', { id });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this message' }); }
+});
+
+// ── ADMIN: Task Center rewards (what members earn on the Team page) ──
+app.get('/admin/tasks', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const sett = await getSettings();
+    res.json({ status: 'success', referrals: taskRows(sett.taskReferrals, 'count'), deposits: taskRows(sett.taskDeposits, 'deposit') });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load the tasks' }); }
+});
+app.post('/admin/tasks/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const ref = sanitizeTaskRows(req.body.referrals, 'count'), dep = sanitizeTaskRows(req.body.deposits, 'deposit');
+  if (ref.error || dep.error) return res.status(400).json({ status: 'error', message: ref.error || dep.error });
+  try {
+    await db.collection('settings').doc('main').set({ taskReferrals: ref.rows, taskDeposits: dep.rows }, { merge: true });
+    _settingsCacheTs = 0;
+    logAdminAction(req, 'tasks_saved', { referrals: ref.rows.length, deposits: dep.rows.length });
+    res.json({ status: 'success', referrals: ref.rows, deposits: dep.rows });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the tasks' }); }
 });
 
 // ═══════════════════════════════════════════

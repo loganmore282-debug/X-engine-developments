@@ -989,6 +989,10 @@ var VI = {
   headset: vSvg('<path d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.2" y="13.5" width="4" height="6.2" rx="1.8"/><rect x="16.8" y="13.5" width="4" height="6.2" rx="1.8"/>'),
   megaphone: vSvg('<path d="M4 9.6v4.8h3.2L14 18.5v-13L7.2 9.6H4z"/><path d="M17.2 9a4.2 4.2 0 0 1 0 6"/><path d="M7.4 14.4l1.2 4.6"/>'),
   plane: vSvg('<path d="M21 3 3 10.2l7.2 2.8 2.8 7.2z"/><path d="M21 3 10.2 13"/>'),
+  gift: vSvg('<rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.2h-19z"/><path d="M12 5.8v14.7"/><path d="M12 5.8C10.2 5.8 8.4 5 8.4 3.6 8.4 2.5 9.4 2 10.4 2.4c1.1.5 1.6 1.9 1.6 3.4zM12 5.8c1.8 0 3.6-.8 3.6-2.2 0-1.1-1-1.6-2-1.2-1.1.5-1.6 1.9-1.6 3.4z"/>'),
+  tick: vSvg('<path d="m5 12.6 4.3 4.3L19 7.2"/>'),
+  chev: vSvg('<path d="m9 5.5 6.5 6.5L9 18.5"/>'),
+  trophy: vSvg('<path d="M8 4h8v5.2a4 4 0 0 1-8 0z"/><path d="M8 6.2H4.6a3.2 3.2 0 0 0 3.7 4M16 6.2h3.4a3.2 3.2 0 0 1-3.7 4"/><path d="M12 13.2V17M8.6 20h6.8M10 17h4"/>'),
   clipboard: vSvg('<rect x="5" y="4.5" width="14" height="16.5" rx="2.6"/><path d="M9 4.5V3.3h6v1.2"/><path d="M9 10h.01M12 10h3M9 14h.01M12 14h3M9 18h.01M12 18h3"/>'),
   download: vSvg('<path d="M12 3.8v11"/><path d="m7.6 10.6 4.4 4.4 4.4-4.4"/><path d="M4.2 15.5v2.7a2 2 0 0 0 2 2h11.6a2 2 0 0 0 2-2v-2.7"/>'),
   logout: vSvg('<path d="M9.5 4H6.2A2.2 2.2 0 0 0 4 6.2v11.6A2.2 2.2 0 0 0 6.2 20h3.3"/><path d="m16 8 4 4-4 4"/><path d="M20 12H9.5"/>'),
@@ -3475,6 +3479,95 @@ function renderTeamMembers(level){
     <div class="v-member-join">Joined ${esc(joinedStamp(m.createdAt))}</div>
   </div>`).join('');
 }
+// ── TASK CENTER (opened from the Team page) ──
+// Two lists the owner sets in the admin panel: Referrals (members of your own Level 1 who have deposited) and
+// Deposits (what your whole team has deposited). Progress and the claim itself are decided by the server.
+var _taskTab = 'count', _taskBusy = false;
+function taskLists(){
+  const ms = (STATE.teamStats && STATE.teamStats.milestones) || [];
+  return { count: ms.filter(m => m.id && m.type === 'count'), deposit: ms.filter(m => m.id && m.type === 'deposit') };
+}
+function taskReadyCount(){ return ((STATE.teamStats && STATE.teamStats.milestones) || []).filter(m => m.achieved && !m.claimed).length; }
+function taskCardHtml(m, isNext){
+  const isDep = m.type === 'deposit';
+  const cur = Number(m.current) || 0, tgt = Number(m.target) || 1;
+  const state = m.claimed ? 'done' : m.achieved ? 'ready' : isNext ? 'next' : 'locked';
+  const pct = Math.max(0, Math.min(100, Math.round(cur / tgt * 100)));
+  const shown = Math.min(cur, tgt);
+  const target = isDep ? vMoney(tgt) : String(tgt);
+  const progress = isDep ? vMoney(shown) + ' / ' + vMoney(tgt) : shown + ' / ' + tgt;
+  const btn = m.claimed
+    ? `<button type="button" class="v-tk-btn done" disabled>${VI.tick}<span>Claimed</span></button>`
+    : m.achieved
+      ? `<button type="button" class="v-tk-btn go" onclick="claimTask('${esc(m.type)}','${esc(m.id)}',this)"><span>Claim</span></button>`
+      : `<button type="button" class="v-tk-btn" disabled><span>Claim</span></button>`;
+  return `<article class="v-tk-card ${state}">
+    <div class="v-tk-top">
+      <span class="v-tk-medal">${m.claimed ? VI.tick : VI.gift}</span>
+      <div class="v-tk-tgt"><b>${esc(target)}</b><span>${isDep ? 'Team recharge' : 'Level 1 active referrals'}</span></div>
+      <span class="v-tk-reward">${esc(vMoney(m.reward))}</span>
+    </div>
+    <div class="v-tk-bar"><i style="width:${pct}%"></i></div>
+    <div class="v-tk-foot"><span>Progress: ${esc(progress)}</span>${btn}</div>
+  </article>`;
+}
+function taskCenterHtml(){
+  const t = STATE.teamStats || {};
+  const L = taskLists(), tab = _taskTab;
+  const ready = k => L[k].filter(m => m.achieved && !m.claimed).length;
+  const tabBtn = (k, label) => `<button type="button" class="${tab === k ? 'on' : ''}" onclick="switchTaskTab('${k}')">${label}${ready(k) ? `<em>${ready(k)}</em>` : ''}</button>`;
+  const list = L[tab];
+  const nextIdx = list.findIndex(m => !m.claimed && !m.achieved);
+  return `<div class="v-tk reveal-in">
+    <div class="v-tk-hero">
+      <span class="v-tk-trophy">${VI.trophy}</span>
+      <div class="v-tk-stat"><b>${Number(t.l1ActiveCount) || 0}</b><span>Level 1 active referrals</span></div>
+      <i></i>
+      <div class="v-tk-stat"><b>${esc(vMoney(t.teamDeposits))}</b><span>Team recharge</span></div>
+    </div>
+    <div class="v-tk-tabs">${tabBtn('count', 'Referrals')}${tabBtn('deposit', 'Deposits')}</div>
+    <div class="v-tk-list">${list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">No tasks yet.</div>'}</div>
+  </div>`;
+}
+function paintTaskCenter(){ const b = $('tkBody'); if (b) b.innerHTML = taskCenterHtml(); }
+function updateTaskBadge(){
+  const e = $('tkBadge'); if (!e) return;
+  const n = taskReadyCount(); e.textContent = n; e.style.display = n ? '' : 'none';
+}
+window.switchTaskTab = function(k){ _taskTab = k === 'deposit' ? 'deposit' : 'count'; paintTaskCenter(); };
+window.openTaskCenter = async function(){
+  openSheet('Task Center', '<div id="tkBody"></div>');
+  if (STATE.teamStats && STATE.teamStats.milestones) paintTaskCenter();
+  else { const b = $('tkBody'); if (b) b.innerHTML = '<div class="v-tk-wait">' + NAV_LOADER + '</div>'; }
+  const r = await api('/team/stats');
+  if (r.status === 'success') STATE.teamStats = r;
+  if (_openSheetTitle === 'Task Center') paintTaskCenter();
+  updateTaskBadge();
+};
+window.claimTask = async function(type, id, btn){
+  if (_taskBusy) return;
+  _taskBusy = true; if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+  let r;
+  try { r = await post('/team/task/claim', { type, id }); } finally { _taskBusy = false; }
+  if (r.status === 'success') {
+    const m = ((STATE.teamStats && STATE.teamStats.milestones) || []).find(x => x.type === type && x.id === id);
+    if (m) m.claimed = true;
+    const before = Number((STATE.account || {}).walletBalance) || 0;
+    const reward = Number(r.amount) || 0;
+    const after = Number.isFinite(Number(r.walletBalance)) && r.walletBalance !== null ? Number(r.walletBalance) : before + reward;
+    if (STATE.account) STATE.account.walletBalance = after;
+    paintTaskCenter(); updateTaskBadge();
+    showChestWin(reward, after, () => {});
+    refreshAfterWin();
+    return;
+  }
+  // Not claimable after all (already taken, progress changed, task removed): say so and show the true state.
+  notify(r.message || 'Could not claim that reward');
+  const s = await api('/team/stats');
+  if (s.status === 'success') STATE.teamStats = s;
+  if (_openSheetTitle === 'Task Center') paintTaskCenter();
+  updateTaskBadge();
+};
 async function renderNetwork(){
   const hadCache = !!STATE.teamStats;
   if (hadCache) paintNetwork();
@@ -3513,6 +3606,11 @@ function paintNetwork(){
     <div class="v-share-box"><span class="v-share-url">${esc(link || '—')}</span><button type="button" onclick="copyText('${esc(link)}')" aria-label="Copy invite link">${VI.copy}</button></div>
     <button class="v-btn" type="button" onclick="copyText('${esc(link)}')">Copy Invite Link</button>
   </div>
+  <button class="v-task-btn" type="button" onclick="openTaskCenter()">
+    <span class="v-task-ic">${VI.trophy}</span><b>Task Center</b>
+    <em id="tkBadge" style="${taskReadyCount() ? '' : 'display:none'}">${taskReadyCount()}</em>
+    <span class="v-task-go">${VI.chev}</span>
+  </button>
   <div class="v-levels">${levels}</div>
   <div id="teamMembersBox"></div>
 </div>`;
@@ -4267,11 +4365,11 @@ window.submitChestKey = async function(){
   // Now catch the app up in the background.
   refreshAfterWin();
 };
-function showChestWin(reward, balance){
+function showChestWin(reward, balance, after){
   let bg = $('chestWinBg');
   if (bg) bg.remove();
   bg = document.createElement('div');
-  bg.id = 'chestWinBg'; bg.className = 'v-win-bg';
+  bg.id = 'chestWinBg'; bg.className = 'v-win-bg'; bg._after = typeof after === 'function' ? after : null;
   bg.innerHTML = `
     <div class="v-win-card" role="dialog" aria-modal="true">
       <span class="v-win-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.2h-19z"/><path d="M12 5.8v14.7"/><path d="M12 5.8C10.2 5.8 8.4 5 8.4 3.6 8.4 2.5 9.4 2 10.4 2.4c1.1.5 1.6 1.9 1.6 3.4zM12 5.8c1.8 0 3.6-.8 3.6-2.2 0-1.1-1-1.6-2-1.2-1.1.5-1.6 1.9-1.6 3.4z"/></svg></span>
@@ -4287,8 +4385,11 @@ function showChestWin(reward, balance){
 }
 window.collectChestWin = function(){
   const bg = $('chestWinBg');
+  const after = bg && bg._after;
   if (bg) bg.remove();
-  closeSheet({ fromAction: true });
+  // A win that came from somewhere other than the Treasure Chest page (a Task Center reward) hands control back to
+  // its own page instead of closing the sheet underneath.
+  if (after) after(); else closeSheet({ fromAction: true });
 };
 // The two network refreshes a win needs. Deliberately not awaited by its
 // caller -- the toast above already told the member it worked, so nothing

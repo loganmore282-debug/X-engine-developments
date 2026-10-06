@@ -8,7 +8,7 @@ let n = 0; const ok = (c, m) => { assert(c, m); n++; };
 
 // 1. /team/stats adds what each level has paid, from the ledger's own commissionLevel (0 = Level 1)
 const grab = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i); if (i < 0 || j < 0) throw new Error('slice ' + a); return src.slice(i, j); };
-const route = grab("app.get('/team/stats'", "// ── MISSION CENTER — REMOVED ──");
+const route = grab("app.get('/team/stats'", "// Claiming a Task Center reward.");
 const finiteMoney = v => Number.isFinite(Number(v)) ? Number(v) : 0;
 function runStats(rows) {
   let handler;
@@ -19,8 +19,8 @@ function runStats(rows) {
       const list = name === 'transactions' ? rows.filter(r => q.conds.every(c => r[c.f] === c.v)) : [];
       return { forEach: cb => list.forEach(r => cb({ data: () => r })), docs: list.map(r => ({ data: () => r })) }; } }; return q; },
   }) };
-  new Function('app', 'db', 'verifyAuth', 'getSettings', 'wholeTeamStats', 'activeL1Count', 'TEAM_MILESTONES', 'TEAM_DEPOSIT_MILESTONES', 'finiteMoney', 'console', route)(
-    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => ({ deposits: 5000, counts: [3, 1, 0] }), async () => 0, [], [], finiteMoney, console);
+  new Function('app', 'db', 'verifyAuth', 'getSettings', 'wholeTeamStats', 'activeL1Count', 'taskRows', 'finiteMoney', 'console', route)(
+    app, db, async () => 'u1', async () => ({ commL1: 26, commL2: 2, commL3: 1 }), async () => ({ deposits: 5000, counts: [3, 1, 0] }), async () => 0, () => [], finiteMoney, console);
   let body; const res = { json: b => { body = b; }, status() { return res; } };
   return handler({ headers: {} }, res).then(() => body);
 }

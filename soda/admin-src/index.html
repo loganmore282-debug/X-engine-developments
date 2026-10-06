@@ -2980,6 +2980,13 @@ async function renderSettings(){
       <button class="btn block" id="saveAnn" style="margin-top:10px">Save</button>
     </div>
 
+    <h2 class="sec">Task Center</h2>
+    <div class="panel-card" id="taskCard">
+      <p class="muted" style="margin-top:0">Rewards on the Team page. Referrals count a member's own Level 1 members who have deposited. Deposits count what their whole team (levels 1 to 3) has deposited. A task a member has already claimed stays claimed when you change its numbers.</p>
+      <div id="taskEditor" class="muted">Loading&hellip;</div>
+      <button class="btn block" id="saveTasks" style="margin-top:12px" disabled>Save Task Center</button>
+    </div>
+
     <h2 class="sec">App name</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Renames the app everywhere inside it &mdash; the browser tab and the app name. Up to 24 characters.</p>
@@ -3021,6 +3028,40 @@ async function renderSettings(){
   $('saveAnn').addEventListener('click', async()=>{
     const upd = { tickerText:$('sTickerText').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  // ── Task Center editor: two tables of target / reward, each row keeps its id so edits never re-open a claimed task ──
+  const taskRowHtml=(r)=>`<div class="task-row" data-id="${esc(r.id||'')}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <input type="number" min="1" step="1" class="tk-target" value="${r.target||''}" placeholder="Target" style="flex:1;margin:0">
+      <input type="number" min="1" step="1" class="tk-reward" value="${r.reward||''}" placeholder="Reward" style="flex:1;margin:0">
+      <button class="btn sm danger tk-del" type="button" aria-label="Remove" style="flex:0 0 auto">&times;</button></div>`;
+  const taskTableHtml=(kind,title,hint,rows)=>`<div class="task-table" data-kind="${kind}" style="margin-bottom:16px">
+      <div style="font-weight:700;margin-bottom:2px">${title}</div>
+      <div class="muted" style="font-size:11.5px;margin-bottom:8px">${hint}</div>
+      <div style="display:flex;gap:8px;margin-bottom:4px"><span class="muted" style="flex:1;font-size:11.5px">Target</span><span class="muted" style="flex:1;font-size:11.5px">Reward (${adminCur()})</span><span style="width:44px"></span></div>
+      <div class="task-rows">${rows.map(taskRowHtml).join('')}</div>
+      <button class="btn sm ghost tk-add" type="button">+ Add task</button></div>`;
+  const wireTaskTable=(box)=>{
+    box.querySelectorAll('.tk-del').forEach(b=>b.onclick=()=>b.closest('.task-row').remove());
+    box.querySelector('.tk-add').onclick=()=>{ const w=document.createElement('div'); w.innerHTML=taskRowHtml({}); const row=w.firstElementChild; box.querySelector('.task-rows').appendChild(row); row.querySelector('.tk-del').onclick=()=>row.remove(); row.querySelector('.tk-target').focus(); };
+  };
+  const readTaskTable=(kind)=>[...document.querySelectorAll(`.task-table[data-kind="${kind}"] .task-row`)]
+    .map(r=>({ id:r.dataset.id||'', target:r.querySelector('.tk-target').value.trim(), reward:r.querySelector('.tk-reward').value.trim() }))
+    .filter(r=>r.target!==''||r.reward!=='')
+    .map(r=>({ id:r.id, target:Number(r.target), reward:Number(r.reward) }));
+  api('/admin/tasks').then(d=>{
+    const box=$('taskEditor'); if(!box) return;
+    if(d.status!=='success'){ box.textContent=d.message||'Could not load the tasks'; return; }
+    box.classList.remove('muted');
+    box.innerHTML=taskTableHtml('referrals','Referrals','Level 1 members who have deposited',d.referrals||[])+taskTableHtml('deposits','Deposits','Team deposits, levels 1 to 3',d.deposits||[]);
+    box.querySelectorAll('.task-table').forEach(wireTaskTable);
+    $('saveTasks').disabled=false;
+  });
+  $('saveTasks').addEventListener('click', async()=>{
+    const b=$('saveTasks'); if(b.disabled) return; b.disabled=true;
+    const d=await api('/admin/tasks/save',{ referrals:readTaskTable('referrals'), deposits:readTaskTable('deposits') });
+    b.disabled=false;
+    toast(d.status==='success'?'Task Center saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ const box=$('taskEditor'); box.innerHTML=taskTableHtml('referrals','Referrals','Level 1 members who have deposited',d.referrals)+taskTableHtml('deposits','Deposits','Team deposits, levels 1 to 3',d.deposits); box.querySelectorAll('.task-table').forEach(wireTaskTable); }
   });
   $('saveBrandName').addEventListener('click', async()=>{
     const name = $('brandNameInput').value.trim();

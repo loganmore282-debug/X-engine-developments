@@ -41,7 +41,7 @@ let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
   // Server: one wallet, edited in place; chest messages.
   ok(/MAX_SAVED_PAYOUT_ACCOUNTS = 1/.test(server), 'server keeps one wallet');
   ok(/Wrong treasure chest password/.test(server) && /Please enter the treasure chest key/.test(server), 'server chest messages');
-  ok(/function showChestWin\(reward, balance\)/.test(source) && /Congratulations!/.test(source) && /You won/.test(source) && /New Balance: /.test(source) && />COLLECT</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
+  ok(/function showChestWin\(reward, balance(, after)?\)/.test(source) && /Congratulations!/.test(source) && /You won/.test(source) && /New Balance: /.test(source) && />COLLECT</.test(source), 'claiming a gift code opens the Congratulations card (You won, amount, New Balance, COLLECT)');
 ok(!/notify\('Giftcode redeemed successfully'\)/.test(source), 'the plain toast no longer replaces the card');
 ok(/class="v-phone-in" id="depPhone" type="tel"/.test(source) && !/id="depPhone" type="hidden"/.test(source) && /placeholder="Phone Number"/.test(source), 'the Deposit page has a visible Phone Number field (registered number filled in, any other number allowed)');
 ok(/for="walPhone">Account Number<\/label>/.test(source) && !/for="walPhone">Phone Number/.test(source), 'the wallet number field is labelled Account Number');
