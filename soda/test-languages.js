@@ -630,7 +630,7 @@ console.log('\n— what it will and will not rewrite —');
 const body = el('div');
 const head = el('h2').text('Team');
 const amount = el('div').text('UGX 45,000.00');
-const name = el('div').text('Home Cell Battery');
+const name = el('div').text('Sample Battery');
 const mixed = el('p').text('Tap Withdraw to cash out');
 const field = el('input', { attrs: { placeholder: 'Enter phone number', 'aria-label': 'Enter phone number' } });
 const guarded = el('span', { noI18n: true }).text('Team');
@@ -642,7 +642,7 @@ i18n.translateTree(body);
 
 ck(head.childNodes[0].nodeValue === 'Timu', 'a heading that matches a row is translated');
 ck(amount.childNodes[0].nodeValue === 'UGX 45,000.00', 'an amount is left exactly alone');
-ck(name.childNodes[0].nodeValue === 'Home Cell Battery',
+ck(name.childNodes[0].nodeValue === 'Sample Battery',
   'a product name is left alone even though it starts with a word that IS in the table -- only a whole node match is replaced, never a substring');
 ck(mixed.childNodes[0].nodeValue === 'Tap Withdraw to cash out',
   'and a sentence merely containing a translated word is left alone for the same reason');

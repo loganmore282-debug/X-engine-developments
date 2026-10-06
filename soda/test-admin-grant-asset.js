@@ -38,7 +38,7 @@ function setup({ users, products }) {
 }
 
 (async () => {
-  const products = { volt: { key: 'volt', name: 'Volt Go', price: 30000, cycle: 8, multiplier: 3 }, gone: { key: 'gone', name: 'Old', price: 1000, deleted: true }, free: { key: 'free', name: 'Free', price: 0 } };
+  const products = { volt: { key: 'volt', name: 'Test Asset', price: 30000, cycle: 8, multiplier: 3 }, gone: { key: 'gone', name: 'Old', price: 1000, deleted: true }, free: { key: 'free', name: 'Free', price: 0 } };
   const mk = () => setup({ users: { u1: { phone: '0700', walletBalance: 5000, totalInvested: 0, status: 'active' }, bad: { status: 'banned', walletBalance: 0 } }, products });
 
   // owner-only
