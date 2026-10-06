@@ -2927,32 +2927,50 @@ async function _settleDueInvestmentNow(doc) {
       const target = Math.round(fExpected * newMade / fTotal);
       const amount = Math.max(0, target - fPaidOut);
       if (amount <= 0 && !willComplete) return;
-      // RECORD-BEFORE-CREDIT: db.js's runTransaction replays queued writes
-      // sequentially with no rollback, so advancing payoutsMade first means
-      // a failed credit rolls back cleanly instead of silently re-crediting
-      // the same day forever on every future tick.
-      await doc.ref.update({
-        payoutsMade: newMade, paidOut: FieldValue.increment(amount),
-        status: willComplete ? 'matured' : 'active'
+      // Credit first with a deterministic per-investment payout token in the
+      // same atomic user-document update. If the process stops after the
+      // wallet write but before the investment cursor advances, the active
+      // investment is retried and this token prevents a second credit. The
+      // reverse order can permanently lose a maturity payout: the investment
+      // becomes `matured` before the wallet write, so the active-only sweep
+      // never sees it after a crash.
+      const payoutKey = `${doc.id}:${newMade}`;
+      let payoutBlocked = false;
+      await withLock('bal:' + f.userId, async () => {
+        if (amount > 0) {
+          const userRef = db.collection('users').doc(f.userId);
+          const applied = await userRef.updateIf(
+            { creditedPayoutKeys: { $ne: payoutKey }, status: { $ne: 'banned' } },
+            {
+              walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount),
+              creditedPayoutKeys: FieldValue.arrayUnion(payoutKey)
+            }
+          );
+          if (!applied) {
+            const check = await userRef.get();
+            if (!check.exists) throw new Error(`Maturity payout ${payoutKey} could not be verified -- user ${f.userId} is missing.`);
+            if (!(check.data().creditedPayoutKeys || []).includes(payoutKey)) {
+              if (check.data().status === 'banned') { payoutBlocked = true; return; }
+              throw new Error(`Maturity payout ${payoutKey} could not be verified.`);
+            }
+          }
+          const { date, time } = nowStr();
+          await db.collection('transactions').doc(`cashback:${payoutKey}`).createIfAbsent({
+            userId: f.userId, statementId: newStatementId(), type: 'cashback', description: `${f.tierLabel} daily cashback`,
+            amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
+          });
+        }
+        // Keep this inside bal:<userId> too: recountAllTotals() re-reads its
+        // source ledger while holding that same lock, so it cannot snapshot
+        // between the wallet increment and this deterministic transaction row.
+        // Advancing the cursor comes only after both are durable.
+        await doc.ref.update({
+          payoutsMade: newMade, paidOut: FieldValue.increment(amount),
+          status: willComplete ? 'matured' : 'active'
+        });
       });
+      if (payoutBlocked) return;
       if (amount <= 0) return;
-      try {
-        // Nested under bal:<userId> so this credit can't interleave with a
-        // concurrent absolute-value rewrite of the same totals (repair-ledger,
-        // recountAllTotals) reading stale data mid-increment (see those
-        // functions' own bal: locking and CLAUDE.md's Round 17/19 notes).
-        await withLock('bal:' + f.userId, () => db.collection('users').doc(f.userId).update({
-          walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount)
-        }));
-      } catch (creditErr) {
-        await doc.ref.update({ payoutsMade: fMade, paidOut: FieldValue.increment(-amount), status: 'active' }).catch(() => {});
-        throw creditErr;
-      }
-      const { date, time } = nowStr();
-      await db.collection('transactions').add({
-        userId: f.userId, statementId: newStatementId(), type: 'cashback', description: `${f.tierLabel} daily cashback`,
-        amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
-      });
     });
     return true;
   } finally { _creditingPayouts.delete(doc.id); }
