@@ -56,7 +56,7 @@ function runStats(rows) {
   ok(!/Soda Mini|Soda Classic|Product-1\b/.test(cli), 'no sample asset is written into the app code');
   ok(!/at midnight 00:00/.test(cli) && /every 24 hours after you buy it/.test(cli), 'the Home line states the real payout rule (24 hours after purchase)');
   const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
-  ok(/--v-blue:#0a5fff/.test(css) && !/#e30613|#1457e8/i.test(css), 'the app uses the bright blue and no red/old blue is left');
+  ok(/--v-blue:#1739b8/.test(css) && !/#e30613|#1457e8/i.test(css), 'the app uses the royal blue and no red is left');
   console.log(`PASS: screen data (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
 

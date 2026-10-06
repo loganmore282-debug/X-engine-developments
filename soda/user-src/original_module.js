@@ -1071,7 +1071,7 @@ var ICONS = {
   envelope: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 6l8 7 8-7"/></svg>',
   // Full-size support-email badge, rebuilt from the supplied red envelope
   // reference with Soda's red, orange and yellow palette (no white fill).
-  emailSoda: '<svg class="email-soda-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#0a5fff"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  emailSoda: '<svg class="email-soda-icon" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#1739b8"/><circle cx="32" cy="32" r="26.5" fill="#F15A24"/><path d="M15.5 22.5c0-2.2 1.8-4 4-4h25c2.2 0 4 1.8 4 4v19c0 2.2-1.8 4-4 4h-25c-2.2 0-4-1.8-4-4v-19Z" fill="#FFB51B" stroke="#9F1420" stroke-width="2.7"/><path d="m17.5 22 14.5 12 14.5-12" stroke="#D91E2B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m18 42 11-10m17 10L35 32" stroke="#F05A28" stroke-width="2.5" stroke-linecap="round"/><path d="M20 24h24" stroke="#FFE17A" stroke-width="1.8" stroke-linecap="round"/></svg>',
   // ── Soda re-theme additions: the Home mockup's own icon set (Deposit/
   // Withdraw/Invite/Support tiles, the notification bell, the gift-box
   // Daily Check-in card, the wallet-balance eye toggle, the 3 stat-card
@@ -3892,7 +3892,7 @@ function teamLoadingHtml(){ return '<div class="list-loading">' + MINI_RING_LOAD
 // while its own ancestor isn't display:none, and #loadingScreen usually is.
 var MINI_RING_LOADER = '<svg class="mini-ring-loader" viewBox="0 0 120 120" aria-hidden="true">'
   + '<defs><linearGradient id="miniRingGrad" x1="24" y1="104" x2="96" y2="16" gradientUnits="userSpaceOnUse">'
-  + '<stop offset="0%" stop-color="#3d93ff"/><stop offset="55%" stop-color="#0a5fff"/><stop offset="100%" stop-color="#ffb000"/>'
+  + '<stop offset="0%" stop-color="#4a70e6"/><stop offset="55%" stop-color="#1739b8"/><stop offset="100%" stop-color="#ffb000"/>'
   + '</linearGradient></defs>'
   + '<circle class="ring-arc ring-arc-1" cx="60" cy="60" r="52" pathLength="100"/>'
   + '<circle class="ring-arc ring-arc-2" cx="60" cy="60" r="45" pathLength="100"/>'
@@ -4456,6 +4456,7 @@ function renderWalletSheet(){
   const editingBank = prefill && !isMobileMoneyNetwork(prefill.network);
   $('sheetBody').innerHTML = `<div class="wallet-minimal reveal-in">
     <div class="wallet-add-form" id="walFormGroup">
+      <div class="v-sec" style="margin-top:6px"><span class="bar"></span><h2>Network or Bank</h2></div>
       <div class="prov-pick" id="walProviderPick">
         <div class="wallet-line-field prov-input" onclick="toggleProviderList()">
           <input id="walProvider" type="text" readonly placeholder="Select network or bank" value="${prefill && prefill.network ? esc(prefill.network) : ''}">
@@ -4465,17 +4466,19 @@ function renderWalletSheet(){
           ${providers.map(p => `<button type="button" class="prov-opt${prefill && prefill.network === p ? ' on' : ''}" onclick="pickProvider('${esc(p)}')">${esc(p)}</button>`).join('')}
         </div>
       </div>
+      <div class="v-sec"><span class="bar"></span><h2 id="walPhoneHead">Phone Number</h2></div>
       <div class="wallet-line-field">
         <input id="walPhone" type="${editingBank ? 'text' : 'tel'}" inputmode="${editingBank ? 'text' : 'numeric'}" autocomplete="${editingBank ? 'off' : 'tel'}" enterkeyhint="next" placeholder="${editingBank ? 'Account number' : 'Phone number'}" value="${prefill ? esc(walletDestDisplay(prefill)) : ''}" oninput="handleWalDestInput(this)">
       </div>
+      <div class="v-sec"><span class="bar"></span><h2>Account Holder</h2></div>
       <div class="wallet-line-field"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" placeholder="Account holder name" value="${prefill ? esc(prefill.holder || '') : ''}"></div>
-      <button class="primary-button wallet-save" id="walSaveBtn" onclick="submitWallet()">Save</button>
+      <button class="v-cta" id="walSaveBtn" onclick="submitWallet()">Bind Wallet</button>
     </div>
     <div id="walOtpGroup" style="display:none;">
       <div class="wallet-line-field"><input id="walOtp" type="tel" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"></div>
       <div class="wallet-otp-actions">
         <button type="button" onclick="cancelWalletOtp()">Back</button>
-        <button class="primary-button" id="walConfirmBtn" onclick="confirmWalletOtp()">Confirm</button>
+        <button class="v-cta" id="walConfirmBtn" onclick="confirmWalletOtp()">Confirm</button>
       </div>
       <a href="#" id="walResendBtn" onclick="submitWallet();return false;">Resend code</a>
     </div>
@@ -4567,13 +4570,13 @@ window.submitWallet = async function(){
   if (!otpVerificationEnabled() || !(STATE.settings || {}).bankOtpRequired) {
     btn.disabled = true; btn.textContent = 'Saving…';
     const r = await post('/bank/save', { holder, network, phone });
-    btn.disabled = false; btn.textContent = 'Submit';
+    btn.disabled = false; btn.textContent = 'Bind Wallet';
     if (r.status !== 'success') return notify(r.message || 'Could not save your wallet.');
     return finishWalletSave();
   }
   btn.disabled = true; btn.textContent = 'Sending code…';
   const d = await post('/auth/otp/send', { purpose: 'bank' });
-  btn.disabled = false; btn.textContent = 'Submit';
+  btn.disabled = false; btn.textContent = 'Bind Wallet';
   if (d.status !== 'success') return notify(d.message || 'Could not send a verification code.');
   _walletPending = { holder, network, phone };
   _walletOtpId = d.otpId;
@@ -4869,7 +4872,7 @@ function renderMessagesList(){
   if (!list.length) { box.innerHTML = '<div class="list-empty">No messages yet.</div>'; return; }
   box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
     <button class="msg-row${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
-      <span class="av">C</span>
+      <span class="av">${VI.bottle}</span>
       <span class="txt">
         <span class="top">
           <span class="t1">${esc(m.title || '')}</span>
@@ -4885,7 +4888,7 @@ window.openMessageDetail = async function(index){
   $('msgDetail').innerHTML = `
     <button class="xbtn" onclick="closeMessageDetail()" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
     <div class="head">
-      <div class="av">C</div>
+      <div class="av">${VI.bottle}</div>
       <div>
         <h2>${esc(m.title || '')}</h2>
         <div class="date">${esc(m.date || '')} ${esc(m.time || '')}</div>
@@ -4942,17 +4945,15 @@ function pwFieldHtml(id, placeholder, pin){
   return `<div class="pw-field${pin ? ' pin' : ''}">${pwLockSvg()}<input id="${id}" type="password" placeholder="${placeholder}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
 }
 window.openChangeLoginPasswordSheet = function(){
-  openSheet('Security Settings', `<div class="pw-form reveal-in">
-    <div class="pw-form-heading"><span class="pw-heading-icon">${pwLockSvg()}</span><div><h3>Change login password</h3><p>Protect your ${esc(brandName())} account with a new password.</p></div></div>
-    <div class="pw-form-fields">
-    <label class="pw-label" for="lpOld">Current password</label>
+  openSheet('Login Password', `<div class="v-form reveal-in">
+    <p class="pw-note">Protect your ${esc(brandName())} account with a new password.</p>
+    <div class="v-sec"><span class="bar"></span><h2>Current Password</h2></div>
     ${pwFieldHtml('lpOld', 'Enter old password')}
-    <label class="pw-label" for="lpNew">New password</label>
+    <div class="v-sec"><span class="bar"></span><h2>New Password</h2></div>
     ${pwFieldHtml('lpNew', 'Enter new password')}
-    <label class="pw-label" for="lpNew2">Confirm new password</label>
+    <div class="v-sec"><span class="bar"></span><h2>Confirm New Password</h2></div>
     ${pwFieldHtml('lpNew2', 'Re-enter new password')}
-    </div>
-    <button class="primary-button" id="lpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitLoginPasswordChange()">SAVE LOGIN PASSWORD</button>
+    <button class="v-cta" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Save Login Password</button>
   </div>`);
 };
 window.submitLoginPasswordChange = async function(){
@@ -4987,7 +4988,7 @@ window.submitLoginPasswordChange = async function(){
 // used 5 -- server.js validates the same length on /account/transaction-pin/change.
 window.openChangeTradePasswordSheet = function(){
   const first = (STATE.account || {}).hasTradePin === false;
-  openSheet('Trade Password', `<div class="reveal-in" style="padding-top:22px;">
+  openSheet('Trade Password', `<div class="v-form reveal-in">
     <p class="pw-note">${first ? 'You have not set a Trade Password yet. Choose a 6-digit one: you will enter it every time you withdraw.' : 'Your trade password is your 6-digit PIN used to confirm cash outs and other sensitive actions.'}</p>
     ${first ? '' : `<div class="pw-head"><span class="bar"></span><span>Old Trade Password</span></div>
     ${pwFieldHtml('tpOld', 'Enter old 6-digit PIN', true)}`}
@@ -4995,7 +4996,7 @@ window.openChangeTradePasswordSheet = function(){
     ${pwFieldHtml('tpNew', first ? 'Enter 6-digit PIN' : 'Enter new 6-digit PIN', true)}
     <div class="pw-head"><span class="bar"></span><span>${first ? 'Confirm Trade Password' : 'Confirm New Password'}</span></div>
     ${pwFieldHtml('tpNew2', first ? 'Re-enter 6-digit PIN' : 'Re-enter new 6-digit PIN', true)}
-    <button class="primary-button" id="tpSaveBtn" style="width:100%;height:54px;padding:0;font-size:17px;letter-spacing:.06em;" onclick="submitTradePasswordChange()">SAVE TRADE PASSWORD</button>
+    <button class="v-cta" id="tpSaveBtn" onclick="submitTradePasswordChange()">Save Trade Password</button>
   </div>`);
 };
 window.submitTradePasswordChange = async function(){
@@ -5008,9 +5009,9 @@ window.submitTradePasswordChange = async function(){
   if (newPin !== confirm) return notify('The two new trade passwords do not match.');
   if (!first && newPin === oldPin) return notify('Your new trade password must be different from the old one.');
   const btn = $('tpSaveBtn');
-  btn.disabled = true; btn.textContent = 'SAVING…';
+  btn.disabled = true; btn.textContent = 'Saving…';
   const r = await post('/account/transaction-pin/change', first ? { newPin } : { oldPin, newPin });
-  btn.disabled = false; btn.textContent = 'SAVE TRADE PASSWORD';
+  btn.disabled = false; btn.textContent = 'Save Trade Password';
   if (r.status !== 'success') return notify(r.message || 'Could not change your trade password.');
   if (STATE.account) STATE.account.hasTradePin = true;
   closeSheet({ fromAction: true });
@@ -6046,7 +6047,7 @@ function fireConfetti(){
     window.addEventListener('resize', resize);
     // Amber/red/gold, plus white -- Soda's own palette, not generic
     // party colours, so this still looks like it belongs to the app.
-    const COLORS = ['#0a5fff', '#f5a000', '#ffb000', '#1a7a3e', '#2f6fd6', '#ffffff'];
+    const COLORS = ['#1739b8', '#f5a000', '#ffb000', '#1a7a3e', '#2a52d4', '#ffffff'];
     const particles = [];
     function makePiece(x, y, vx, vy, burst){
       return {
