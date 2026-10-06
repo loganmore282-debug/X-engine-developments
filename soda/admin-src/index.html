@@ -2136,6 +2136,9 @@ function editProduct(p, order){
       <div><label>Total payout (${adminCur()})</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
       <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||180}"></div>
     </div>
+    <div class="row">
+      <div><label>Daily payout (${adminCur()}) <span class="muted" style="font-weight:400">automatic</span></label><input id="pDaily" type="text" readonly tabindex="-1" value=""></div>
+    </div>
     <label>VIP level (0 = none)</label><input id="pVip" type="number" min="0" max="100" step="1" value="${p.vip>0?p.vip:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">A member's VIP is the highest VIP among the products they own, including products you give them.</p>
     <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
@@ -2197,9 +2200,16 @@ function editProduct(p, order){
     if(price > 0 && ret > 0) $('pMult').value = Math.round((ret / price) * 100) / 100;
     _syncing = false;
   };
-  $('pMult').addEventListener('input', syncFromMult);
-  $('pRet').addEventListener('input', syncFromRet);
-  $('pPrice').addEventListener('input', ()=>{ if(parseFloat($('pMult').value) > 0) syncFromMult(); else syncFromRet(); });
+  // The daily payout is total payout / cycle days, shown read-only and refreshed whenever any of them changes.
+  const syncDaily = ()=>{
+    const ret = parseFloat($('pRet').value), days = parseFloat($('pCycle').value);
+    $('pDaily').value = ret > 0 && days > 0 ? Math.round(ret / days).toLocaleString('en-US') : '';
+  };
+  $('pMult').addEventListener('input', ()=>{ syncFromMult(); syncDaily(); });
+  $('pRet').addEventListener('input', ()=>{ syncFromRet(); syncDaily(); });
+  $('pPrice').addEventListener('input', ()=>{ if(parseFloat($('pMult').value) > 0) syncFromMult(); else syncFromRet(); syncDaily(); });
+  $('pCycle').addEventListener('input', syncDaily);
+  syncDaily();
   $('pImage').addEventListener('input', ()=>{ imgData=''; setPrev($('pImage').value.trim()); });
   $('pSave').addEventListener('click', async()=>{
     const image = imgData || $('pImage').value.trim();
