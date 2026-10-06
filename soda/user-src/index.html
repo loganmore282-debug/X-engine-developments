@@ -1375,6 +1375,10 @@ body.sheet-open .bottom-nav{display:flex;}
 .v-card-img.has-img,.v-owned .v-card-img.has-img{height:auto;background:none;overflow:visible;}
 .v-card-img.has-img img{position:static;display:block;width:100%;height:auto;border-radius:11px;}
 .v-card-img.has-img .v-badge{z-index:2;}
+/* A bought asset has no footer, so give its body its own bottom space (the Purchase/Expire box used to
+   sit on the card's border) and centre a portrait picture beside the taller column. */
+.v-owned .v-card-b{padding-bottom:12px;}
+.v-owned:not(.v-flat) .v-card-img.has-img{align-self:center;}
 .v-card.v-flat .v-card-b{grid-template-columns:1fr;gap:12px;}
 .v-card.v-flat .v-rows,.v-card.v-flat.v-owned .v-rows{height:auto;}
 .v-card.v-flat .v-rows>div{flex:none;min-height:38px;}
