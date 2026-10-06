@@ -1378,9 +1378,10 @@ body.sheet-open .bottom-nav{display:flex;}
 /* A bought asset has no footer, so give its body its own bottom space (the Purchase/Expire box used to
    sit on the card's border) and centre a portrait picture beside the taller column. */
 .v-owned .v-card-b{padding-bottom:12px;grid-template-columns:133px minmax(0,1fr);}
-/* The bought/gifted picture is fenced: a frame of one fixed size, the picture scaled to fit inside it. */
-.v-owned .v-card-img{width:133px;height:227px;overflow:hidden;align-self:start;}
-.v-owned .v-card-img.v-fence{background:#eef1fb;}
+/* The bought/gifted picture is fenced: a frame of one fixed size, exactly the 2:3 portrait shape (133 x 200),
+   the picture scaled to fit inside it, so a 2:3 picture fills it with no blank band. */
+.v-owned .v-card-img{width:133px;height:200px;overflow:hidden;align-self:center;}
+.v-owned .v-card-img.v-fence{background:none;}
 .v-owned .v-card-img.v-fence img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:0;}
 .v-card.v-flat .v-card-b{grid-template-columns:1fr;gap:12px;}
 .v-card.v-flat .v-rows,.v-card.v-flat.v-owned .v-rows{height:auto;}
