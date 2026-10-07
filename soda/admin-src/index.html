@@ -133,12 +133,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 
   /* shell */
   .topbar{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
-  .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0;flex-wrap:wrap}
-  /* On a phone the six header controls do not fit beside the name: they drop onto their own row instead of pushing the page wider than the screen. */
-  @media (max-width:760px){
-    .topbar-inner{gap:8px;padding:10px 0}
-    .topbar-inner .spacer{flex:1 0 100%;height:0}
-  }
+  .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0}
   .topbar .mk{width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
   .topbar .mk svg{width:20px;height:20px}
   .topbar b{font-size:16px}
@@ -149,7 +144,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .tab.active{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
   .tab .badge-n{display:inline-block;min-width:17px;padding:0 5px;margin-left:5px;background:var(--danger);color:#fff;
     border-radius:20px;font-size:10px;line-height:16px;}
-  .content{padding:18px 14px 70px}   /* keeps .wrap's side margin (it used to be reset to 0, so on a phone the content touched both screen edges) */
+  .content{padding:18px 0 70px}
 
   h2.sec{font-size:17px;margin:4px 0 14px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
