@@ -67,7 +67,7 @@ for (const s of d.scripts) {
   await w.openTaskCenter(); await new Promise(r => setTimeout(r, 20));
   ok(d.getElementById('sheetTitle').textContent === 'Task Center', 'it opens as a full page titled Task Center');
   ok(d.querySelectorAll('.v-tk-tabs button').length === 2 && /Referrals/.test(d.querySelectorAll('.v-tk-tabs button')[0].textContent) && /Deposits/.test(d.querySelectorAll('.v-tk-tabs button')[1].textContent), 'two tabs: Referrals and Deposits');
-  ok(/Level 1 active referrals/.test(d.querySelector('.v-tk-hero').textContent) && /Team recharge/.test(d.querySelector('.v-tk-hero').textContent) && /UGX400,000/.test(d.querySelector('.v-tk-hero').textContent), 'the summary shows both figures');
+  ok(/Level 1 active referrals/.test(d.querySelector('.v-tk-hero').textContent) && /Team deposits/.test(d.querySelector('.v-tk-hero').textContent) && /UGX400,000/.test(d.querySelector('.v-tk-hero').textContent), 'the summary shows both figures');
   let cards = [...d.querySelectorAll('.v-tk-card')];
   ok(cards.length === 3, 'Referrals lists its 3 tasks (the cached row without an id is skipped)');
   ok(cards[0].classList.contains('ready') && cards[1].classList.contains('next') && cards[2].classList.contains('locked'), 'states: ready, next, locked');

@@ -979,6 +979,8 @@ function vMoney(n){
   const hasCents = Math.round(v * 100) % 100 !== 0;
   return cur() + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
 }
+// Long money figures (nine digits and more) step the font down in two sizes so they stay on one line inside their box.
+function vFit(text, a, b){ var n = String(text).length; return n > b ? 'v-fit2' : n > a ? 'v-fit1' : ''; }
 function vMoney2(n){ return cur() + (Number(n) || 0).toLocaleString('en-UG', {minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Icons traced from the owner's screenshots live in a square box 288 units wide drawn 1:1 with a 22 px picture (13.1 units = 1 px); the stroke sits on the <g> so a bigger/smaller box keeps the same proportions.
 function vSvgT(cx, cy, sw, body, size){ size = size || 288; var h = size / 2; return '<svg viewBox="' + (cx - h) + ' ' + (cy - h) + ' ' + size + ' ' + size + '" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g stroke-width="' + sw + '">' + body + '</g></svg>'; }
@@ -3514,8 +3516,8 @@ function taskCardHtml(m, isNext){
   return `<article class="v-tk-card ${state}">
     <div class="v-tk-top">
       <span class="v-tk-medal">${m.claimed ? VI.tick : VI.gift}</span>
-      <div class="v-tk-tgt"><b>${esc(target)}</b><span>${isDep ? 'Team recharge' : 'Level 1 active referrals'}</span></div>
-      <span class="v-tk-reward">${esc(vMoney(m.reward))}</span>
+      <div class="v-tk-tgt"><b class="${vFit(target, 10, 13)}">${esc(target)}</b><span>${isDep ? 'Team deposits' : 'Level 1 active referrals'}</span></div>
+      <span class="v-tk-reward ${vFit(vMoney(m.reward), 11, 13)}">${esc(vMoney(m.reward))}</span>
     </div>
     <div class="v-tk-bar"><i style="width:${pct}%"></i></div>
     <div class="v-tk-foot"><span>Progress: ${esc(progress)}</span>${btn}</div>
@@ -3533,7 +3535,7 @@ function taskCenterHtml(){
       <span class="v-tk-trophy">${VI.trophy}</span>
       <div class="v-tk-stat"><b>${Number(t.l1ActiveCount) || 0}</b><span>Level 1 active referrals</span></div>
       <i></i>
-      <div class="v-tk-stat"><b>${esc(vMoney(t.teamDeposits))}</b><span>Team recharge</span></div>
+      <div class="v-tk-stat"><b class="${vFit(vMoney(t.teamDeposits), 10, 13)}">${esc(vMoney(t.teamDeposits))}</b><span>Team deposits</span></div>
     </div>
     <div class="v-tk-tabs">${tabBtn('count', 'Referrals')}${tabBtn('deposit', 'Deposits')}</div>
     <div class="v-tk-list">${list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">No tasks yet.</div>'}</div>
@@ -3621,14 +3623,14 @@ function paintNetwork(){
       <span class="v-lv-l"><b>Level ${n}</b><small>${team['l' + n] || 0} Members</small></span>
       <span class="v-lv-r"><small>Rate</small><i>${rates['l' + n] != null ? rates['l' + n] : 0}%</i></span>
       <span class="v-lv-sep"></span>
-      <span class="v-lv-c"><small>Commission</small><b>${esc(vMoney2(lc['l' + n]))}</b></span>
+      <span class="v-lv-c"><small>Commission</small><b class="${vFit(vMoney2(lc['l' + n]), 12, 17)}">${esc(vMoney2(lc['l' + n]))}</b></span>
     </button>`).join('');
   const html = `
 <div class="v-page v-team">
   <div class="v-tcard">
     <div class="v-tcard-top"><span class="v-tc-ic">${VI.people}</span><span class="v-tc-lbl">Total Team</span><b class="v-tc-num">${Number(t.totalTeam) || 0}</b></div>
     <div class="v-tc-line"></div>
-    <div class="v-tc-money">${esc(vMoney2(t.teamDeposits))}</div>
+    <div class="v-tc-money ${vFit(vMoney2(t.teamDeposits), 16, 22)}">${esc(vMoney2(t.teamDeposits))}</div>
     <div class="v-tc-cap">Purchase</div>
   </div>
   <div class="v-share">

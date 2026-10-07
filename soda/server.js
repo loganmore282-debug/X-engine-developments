@@ -551,7 +551,7 @@ app.use(async (req, res, next) => {
 // these are only the boot fallback.
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000,
-  welcomeBonus: 5000, commL1: 27, commL2: 2, commL3: 1,
+  welcomeBonus: 5000, commL1: 25, commL2: 2, commL3: 1,
   // Task Center (Team page): what a member earns for team progress, edited in the admin panel under Settings > Task Center.
   // `id` stays with a row when its numbers are edited, so an edit can never let a member claim the same task twice.
   taskReferrals: [
