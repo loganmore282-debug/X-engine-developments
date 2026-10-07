@@ -366,6 +366,14 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   ck(/opening and closing times cannot be the same/.test(src),
      'as are two identical times, which would show hours nobody enforces');
 
+  // Per-member "unrestricted by withdrawal time" (owner): the flag is honoured on the server, only when the hours are closed.
+  ck(/if \(win\.enabled && !win\.open\) \{\s*const flag = await db\.collection\('users'\)\.doc\(userId\)\.get\(\);\s*anyTime = flag\.exists && flag\.data\(\)\.withdrawAnytime === true;/.test(src)
+     && /if \(win\.enabled && !win\.open && !anyTime\)\s*return res\.status\(400\)\.json\(\{ status: 'error', code: 'WINDOW_CLOSED'/.test(src),
+     'a member marked unrestricted is not refused for the hours, anyone else still is');
+  ck(/app\.post\('\/admin\/user\/withdraw-anytime'[\s\S]{0,200}verifyOwner\(req\)[\s\S]{0,400}typeof req\.body\.enabled !== 'boolean'/.test(src),
+     'only the owner can switch it, and only with a real true/false');
+  ck(/withdrawAnytime: u\.withdrawAnytime === true/.test(src) && /withdrawAnytime\) return \{ enabled: false, open: true/.test(fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8')),
+     'the account tells the app, which then shows that member no hours');
   console.log(bad ? `\n${bad} FAILED` : '\nwithdraw rules: all cases pass');
   process.exit(bad ? 1 : 0);
 })().catch(e => { console.error('CRASHED:', e); process.exit(1); });

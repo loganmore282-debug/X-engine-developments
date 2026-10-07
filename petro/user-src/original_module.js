@@ -6489,6 +6489,8 @@ function witClock(v){
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
 function withdrawWindow(s){
+  // A member the owner made unrestricted by withdrawal time sees no hours and is not blocked (the server skips them too).
+  if (STATE.account && STATE.account.withdrawAnytime) return { enabled: false, open: true, from: '', to: '' };
   const from = witMinutes(s && s.withdrawOpenFrom), to = witMinutes(s && s.withdrawOpenTo);
   if (!(s && s.withdrawWindowEnabled) || from == null || to == null || from === to)
     return { enabled: false, open: true, from: '', to: '' };
