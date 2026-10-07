@@ -72,7 +72,9 @@ for (const s of d.scripts) {
   ok(cards.length === 3, 'Referrals lists its 3 tasks (the cached row without an id is skipped)');
   ok(cards[0].classList.contains('ready') && cards[1].classList.contains('next') && cards[2].classList.contains('locked'), 'states: ready, next, locked');
   ok(/Progress: 5 \/ 5/.test(cards[0].textContent) && /Progress: 6 \/ 10/.test(cards[1].textContent), 'progress is capped at the target');
-  ok(cards[0].querySelector('.v-tk-btn.go') && !cards[1].querySelector('.v-tk-btn.go') && cards[1].querySelector('.v-tk-btn').disabled, 'only the reached task has an active Claim button');
+  ok(cards[0].querySelector('.v-tk-btn.go') && !cards[1].querySelector('.v-tk-btn.go') && cards[1].querySelector('.v-tk-btn').getAttribute('onclick').indexOf('taskNotReached') === 0, 'only the reached task has an active Claim button; the others answer "not reached"');
+  w.taskNotReached('count'); ok(/Referral target not reached/.test(d.getElementById('notifyMsg').textContent), 'tapping Claim on an unreached referral task says Referral target not reached');
+  w.taskNotReached('deposit'); ok(/Deposit target not reached/.test(d.getElementById('notifyMsg').textContent), 'and on an unreached deposit task says Deposit target not reached');
   ok(/UGX10,000/.test(cards[0].querySelector('.v-tk-reward').textContent), 'the reward is shown');
   w.switchTaskTab('deposit'); cards = [...d.querySelectorAll('.v-tk-card')];
   ok(cards.length === 2 && cards[0].classList.contains('done') && /Claimed/.test(cards[0].textContent) && /UGX250,000/.test(cards[0].textContent), 'Deposits tab: a claimed task shows Claimed');

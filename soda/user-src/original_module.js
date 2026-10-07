@@ -3535,7 +3535,7 @@ function taskCardHtml(m, isNext){
     ? `<button type="button" class="v-tk-btn done" disabled>${VI.tick}<span>Claimed</span></button>`
     : m.achieved
       ? `<button type="button" class="v-tk-btn go" onclick="claimTask('${esc(m.type)}','${esc(m.id)}',this)"><span>Claim</span></button>`
-      : `<button type="button" class="v-tk-btn" disabled><span>Claim</span></button>`;
+      : `<button type="button" class="v-tk-btn" onclick="taskNotReached('${esc(m.type)}')"><span>Claim</span></button>`;
   return `<article class="v-tk-card ${state}">
     <div class="v-tk-top">
       <span class="v-tk-medal">${m.claimed ? VI.tick : VI.gift}</span>
@@ -3631,6 +3631,12 @@ window.openTaskCenter = async function(){
     if (!_taskBusy && !document.hidden) refreshTaskCenter();
   }, 15000);
   await refreshTaskCenter();
+};
+// Tapping Claim on a task that is not reached yet says so (a disabled button would swallow the tap), with a nudge on what to do.
+window.taskNotReached = function(type){
+  notify(type === 'deposit'
+    ? 'Deposit target not reached. Keep growing your team and encourage them to deposit.'
+    : 'Referral target not reached. Share your invite link to bring in more members.');
 };
 window.claimTask = async function(type, id, btn){
   if (_taskBusy) return;
@@ -4105,7 +4111,8 @@ window.notify = function(message, onClose){
   // acknowledge) -- tapping it early still works via closeNotify() on the
   // card's own onclick, which clears this same timer first.
   if (_notifyTimer) clearTimeout(_notifyTimer);
-  _notifyTimer = setTimeout(closeNotify, 1400);
+  // A longer message (two lines) stays a little longer so it can be read.
+  _notifyTimer = setTimeout(closeNotify, String(message || '').length > 45 ? 2600 : 1400);
 };
 window.closeNotify = function(){
   if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
