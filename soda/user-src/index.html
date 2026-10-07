@@ -1615,7 +1615,7 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 .v-recbal::before,.v-recbal::after{content:'';position:absolute;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,rgba(47,123,255,.22),rgba(47,123,255,0) 70%);}
 .v-recbal::before{left:-40px;top:-10px;}
 .v-recbal::after{right:-40px;bottom:-14px;}
-.v-rectabs{display:flex;gap:0;border-top:1px solid #d9e0f7;border-bottom:1px solid #d9e0f7;margin:0 -15px 12px;padding:0 15px;overflow-x:auto;}
+.v-rectabs{display:flex;gap:0;border-top:1px solid #d9e0f7;border-bottom:1px solid #d9e0f7;margin:0 -15px 12px;padding:0 15px;overflow-x:auto;position:sticky;top:66.5px;z-index:3;background:#f5f6fd;}
 .v-rectabs button{flex:1;min-width:0;background:none;border:0;border-bottom:2px solid transparent;height:43.5px;padding:0;font:inherit;font-size:13px;color:#8a94a8;font-weight:500;white-space:nowrap;}
 .v-rectabs button.on{color:var(--v-blue-2);font-weight:700;border-bottom-color:var(--v-blue-2);}
 .v-rec{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #d0d8f6;border-radius:14px;padding:14px 16px;margin-bottom:8.5px;box-shadow:0 10px 22px -20px rgba(14,42,142,.6);}
@@ -1684,7 +1684,13 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 .msg-row{gap:11px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid #d0d8f6;border-left-width:1px;background:#fff;}
 .msg-detail{border:1.5px solid #16213f;border-radius:18px;}
 .sheet-bg.v-rec-page{background:linear-gradient(180deg,#f5f6fd,var(--v-bg));}
-.sheet-bg.v-rec-page .sheet-head{background:transparent;box-shadow:none;border-bottom:1px solid #dde3f8;}
+/* The title bar of this page keeps the page's own top colour (not transparent): content scrolled up under it used to
+   show through the title ("UGX5,255.08" printed over "Balance Record"). */
+.sheet-bg.v-rec-page .sheet-head{background:#f5f6fd;box-shadow:none;border-bottom:1px solid #dde3f8;}
+/* The soft blue blobs behind the balance stick out past the screen edge; clip them so the page can never be dragged sideways. */
+.v-recbal{overflow:hidden;}
+/* No full-screen page may ever scroll sideways. */
+.sheet-bg{overflow-x:hidden;}
 
 /* ── the remaining inner pages in the same language (Wallet, passwords, Messages, buttons) ── */
 .primary-button{height:45px;border-radius:12px;background:var(--v-grad);color:#fff;font-weight:700;font-size:16.5px;letter-spacing:0;text-transform:none;border:0;box-shadow:0 14px 24px -18px rgba(14,42,142,.9);}
@@ -1701,7 +1707,8 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 .msg-row.read .av,.msg-row.read .av{background:linear-gradient(135deg,#9fb0ec,#7d90e0);box-shadow:none;}
 .msg-row .t1{font-size:14px;font-weight:700;color:var(--v-ink);}
 .msg-row .date{font-size:10.5px;color:#8a94a8;}
-.msg-row .t2{font-size:12px;color:#5b6b8c;}
+.msg-row .t2{font-size:12px;color:#5b6b8c;display:block;}
+.msg-row .txt{display:block;}
 .msg-detail{border:1.5px solid #16213f;border-radius:18px;}
 .msg-detail h2{font-size:18px;font-weight:700;color:var(--v-ink);}
 .msg-detail .ln{background:#d9e0f7;}
