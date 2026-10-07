@@ -13,4 +13,7 @@ ok(/display:\s*block/.test(last('.msg-row .t2')), 'a message preview line is a b
 ok(/align-self:\s*stretch/.test(last('.v-pbox input,.v-pin input,.v-amtrow input')), 'a text box is tappable over its whole height (the input fills its box)');
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 ok(admin.indexOf('Each product has its OWN multiplier') < admin.indexOf('<label>VIP level'), 'the product editor explains price / multiplier / payout right under those fields');
+{ const m = /\.v-tcard::before\{width:(\d+)px;height:\d+px;right:-?[\d.]+px;top:(-?[\d.]+)px;\}/.exec(css);
+  // line sits 82 px below the card top (padding 21.5 + row 42.5 + margin 18); the outer ring must end above it
+  ok(m && (Number(m[2]) + Number(m[1])) < 82 - 4, 'the Total Team rings end above the divider line instead of crossing it'); }
 console.log('test-layout: ' + n + ' checks passed');

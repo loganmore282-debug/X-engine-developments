@@ -980,12 +980,14 @@ function vMoney(n){
   return cur() + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
 }
 function vMoney2(n){ return cur() + (Number(n) || 0).toLocaleString('en-UG', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Icons traced from the owner's screenshots live in a square box 288 units wide drawn 1:1 with a 22 px picture (13.1 units = 1 px); the stroke sits on the <g> so a bigger/smaller box keeps the same proportions.
+function vSvgT(cx, cy, sw, body){ return '<svg viewBox="' + (cx - 144) + ' ' + (cy - 144) + ' 288 288" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g stroke-width="' + sw + '">' + body + '</g></svg>'; }
 function vSvg(body, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + body + '</svg>'; }
 var VI = {
-  bottle: vSvg('<path d="M9.5 2.8h5"/><path d="M10.3 2.8v3.2L8 9.8v9.4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V9.8l-2.3-3.8V2.8"/><path d="M8 13.2c2.6 1.3 5.4 1.3 8 0"/><path d="M8 17c2.6 1.3 5.4 1.3 8 0"/>'),
-  cell: vSvg('<rect x="8" y="3" width="8" height="18" rx="2.4"/><path d="M11 7.5h2M11 11.5h2M11 15.5h2"/>'),
-  people: vSvg('<circle cx="9" cy="8" r="3.2"/><path d="M3.4 19.5a5.6 5.6 0 0 1 11.2 0"/><circle cx="17" cy="9" r="2.6"/><path d="M16.2 14.4a4.8 4.8 0 0 1 4.9 4.6"/>'),
-  person: vSvg('<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
+  bottle: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V92H170Z"/><path d="M178 92C160 110 140 130 142 165C143 185 160 195 160 210C140 220 134 235 136 252C138 280 160 293 190 293C220 293 243 280 245 252C247 235 240 220 220 210C220 195 238 185 240 165C242 130 222 110 212 92"/><path d="M138 241H244"/>'),
+  cell: vSvgT(590, 215, 11, '<rect x="546" y="108" width="88" height="214" rx="9"/><path d="M548 128H632M548 166H632M548 205H632M548 244H632" stroke-opacity=".6"/>'),
+  people: vSvgT(990, 205, 17, '<circle cx="953" cy="143" r="50"/><path d="M1040 95A55 55 0 0 1 1045 190"/><path d="M866 318V292C866 256 895 238 950 238C1005 238 1032 256 1032 292V318"/><path d="M1070 246C1100 252 1112 272 1112 300V318"/>'),
+  person: vSvgT(1388, 206, 11, '<circle cx="1388" cy="145" r="54"/><path d="M1296 322V292C1296 262 1325 246 1388 246C1451 246 1480 262 1480 292V322"/>'),
   headset: vSvg('<path d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.2" y="13.5" width="4" height="6.2" rx="1.8"/><rect x="16.8" y="13.5" width="4" height="6.2" rx="1.8"/>'),
   megaphone: vSvg('<path d="M4 9.6v4.8h3.2L14 18.5v-13L7.2 9.6H4z"/><path d="M17.2 9a4.2 4.2 0 0 1 0 6"/><path d="M7.4 14.4l1.2 4.6"/>'),
   plane: vSvg('<path d="M21 3 3 10.2l7.2 2.8 2.8 7.2z"/><path d="M21 3 10.2 13"/>'),
@@ -3828,7 +3830,7 @@ function formatPhoneDisplay(phone){
 
 // Short names the Wallet page shows ("MTN", "Airtel"); the server still gets the full provider name.
 function walShort(n){ n = String(n || ''); return n === 'MTN Mobile Money' ? 'MTN' : n === 'Airtel Money' ? 'Airtel' : n; }
-function walProviders(){ return ['MTN Mobile Money', 'Airtel Money'].concat(STATE.supportedBanks || []); }
+function walProviders(){ return ['MTN Mobile Money', 'Airtel Money'].concat(STATE.supportedBanks || []).sort((x, y) => walShort(x).localeCompare(walShort(y))); }
 function walFull(label){
   const t = String(label || '').trim().toLowerCase();
   if (!t) return '';
@@ -3867,7 +3869,7 @@ function vWalletCardHtml(w){
   const provider = w && w.network ? String(w.network).replace(/\s*(Mobile )?Money$/i, '').toUpperCase() : 'MOBILE MONEY';
   return `<div class="v-wcard">
     <div class="v-wcard-top"><b>${esc(provider)}</b><span class="v-wcard-ic">${VI.bottle}</span></div>
-    <div class="v-chip-art" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div class="v-chip-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
     <div class="v-wcard-num">${w ? esc(walletDestDisplay(w)) : 'No wallet linked'}</div>
     <div class="v-wcard-l">ACCOUNT HOLDER</div>
     <div class="v-wcard-n">${w ? esc(String(w.holder || '').toUpperCase()) : '—'}</div>
