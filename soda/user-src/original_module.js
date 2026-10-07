@@ -3523,13 +3523,17 @@ function taskCardHtml(m, isNext){
     <div class="v-tk-foot"><span>Progress: ${esc(progress)}</span>${btn}</div>
   </article>`;
 }
+// The cards of the open tab (the page and the tab switch both use it).
+function taskListInnerHtml(){
+  const list = taskLists()[_taskTab];
+  const nextIdx = list.findIndex(m => !m.claimed && !m.achieved);
+  return list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">No tasks yet.</div>';
+}
 function taskCenterHtml(){
   const t = STATE.teamStats || {};
   const L = taskLists(), tab = _taskTab;
   const ready = k => L[k].filter(m => m.achieved && !m.claimed).length;
   const tabBtn = (k, label) => `<button type="button" class="${tab === k ? 'on' : ''}" onclick="switchTaskTab('${k}')">${label}${ready(k) ? `<em>${ready(k)}</em>` : ''}</button>`;
-  const list = L[tab];
-  const nextIdx = list.findIndex(m => !m.claimed && !m.achieved);
   return `<div class="v-tk reveal-in">
     <div class="v-tk-hero">
       <span class="v-tk-trophy">${VI.trophy}</span>
@@ -3537,8 +3541,8 @@ function taskCenterHtml(){
       <i></i>
       <div class="v-tk-stat"><b class="${vFit(vMoney(t.teamDeposits), 10, 13)}">${esc(vMoney(t.teamDeposits))}</b><span>Team deposits</span></div>
     </div>
-    <div class="v-tk-tabs">${tabBtn('count', 'Referrals')}${tabBtn('deposit', 'Deposits')}</div>
-    <div class="v-tk-list">${list.length ? list.map((m, i) => taskCardHtml(m, i === nextIdx)).join('') : '<div class="v-empty">No tasks yet.</div>'}</div>
+    <div class="v-tk-tabs" data-tab="${tab}"><i class="v-tk-pill" aria-hidden="true"></i>${tabBtn('count', 'Referrals')}${tabBtn('deposit', 'Deposits')}</div>
+    <div class="v-tk-list" id="tkList">${taskListInnerHtml()}</div>
   </div>`;
 }
 function paintTaskCenter(){
@@ -3552,7 +3556,34 @@ function updateTaskBadge(){
   const e = $('tkBadge'); if (!e) return;
   const n = taskReadyCount(); e.textContent = n; e.style.display = n ? '' : 'none';
 }
-window.switchTaskTab = function(k){ _taskTab = k === 'deposit' ? 'deposit' : 'count'; paintTaskCenter(); };
+// Switching tabs: the white pill glides to the other tab and the cards slide out and the new ones slide in from the
+// side the member is heading to (nothing jumps). With reduced motion, or no page to animate, it swaps at once.
+var _tkSwapTimer = null;
+window.switchTaskTab = function(k){
+  const next = k === 'deposit' ? 'deposit' : 'count';
+  if (next === _taskTab) return;
+  _taskTab = next;
+  const tabs = document.querySelector('.v-tk-tabs'), list = $('tkList');
+  const calm = typeof matchMedia !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!tabs || !list || calm) { paintTaskCenter(); return; }
+  tabs.dataset.tab = next;
+  tabs.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', (i === 1) === (next === 'deposit')));
+  const dir = next === 'deposit' ? 1 : -1;
+  clearTimeout(_tkSwapTimer);
+  list.style.transition = 'opacity .13s ease, transform .13s ease';
+  list.style.opacity = '0';
+  list.style.transform = 'translateX(' + (-dir * 22) + 'px)';
+  _tkSwapTimer = setTimeout(() => {
+    const cur = $('tkList'); if (!cur) return;
+    cur.innerHTML = taskListInnerHtml();
+    cur.style.transition = 'none';
+    cur.style.transform = 'translateX(' + (dir * 22) + 'px)';
+    void cur.offsetWidth;
+    cur.style.transition = 'opacity .28s ease, transform .34s cubic-bezier(.2,.85,.25,1)';
+    cur.style.opacity = '1';
+    cur.style.transform = 'none';
+  }, 130);
+};
 var _taskFailed = false, _taskTimer = null, _taskShowsFailure = false;
 // Fetches the true progress. A failed fetch keeps whatever the page already shows; with nothing to show it says so
 // (tap to retry) instead of printing "No tasks yet." as if the owner had none.
