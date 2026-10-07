@@ -3561,7 +3561,7 @@ function updateTaskBadge(){
 var _tkSwapTimer = null;
 window.switchTaskTab = function(k){
   const next = k === 'deposit' ? 'deposit' : 'count';
-  if (next === _taskTab) return;
+  if (next === _taskTab) { paintTaskCenter(); return; }
   _taskTab = next;
   const tabs = document.querySelector('.v-tk-tabs'), list = $('tkList');
   const calm = typeof matchMedia !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches;
