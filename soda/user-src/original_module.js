@@ -2673,6 +2673,17 @@ function updateNavIcons(){
 // await when the member signs out would otherwise come back, reschedule itself
 // and keep polling a session that no longer exists.
 var _liveTimer = null, _liveBusy = false, _liveDelay = 0, _liveSigs = {}, _liveGen = 0;
+// Database reads are the scarce thing on the hosted database (500 operations a second in all), and a Home tick used to cost
+// three reads (balance, then the list of products owned, which is two). The balance still follows the member every second,
+// but the heavier lists are re-read only when something that can change them has happened: the balance moved (a payout, a
+// deposit, a purchase all move it) or their own short beat has elapsed (an admin giving a product or sending a message does
+// not move the balance). Nothing else about what is shown changes.
+var LIVE_LIST_MS = 8000, LIVE_FEED_MS = 4000, _liveSeenAt = {}, _liveAccountMoved = false;
+function liveDue(key, ms, force){
+  const now = Date.now();
+  if (force || !_liveSeenAt[key] || now - _liveSeenAt[key] >= ms) { _liveSeenAt[key] = now; return true; }
+  return false;
+}
 // Owner: "let it poll every 1 second, we have a VPS KVM1 and MongoDB flex" --
 // was 5000/floored-at-2000. The 2s floor's own reasoning (phone battery/radio
 // wake-ups, not server cost) still genuinely applies at 1s -- it is simply a
@@ -2704,7 +2715,7 @@ function liveChanged(key, value){
 function stopLiveRefresh(){
   _liveGen++;
   clearTimeout(_liveTimer); _liveTimer = null; _liveBusy = false;
-  _liveDelay = 0; _liveSigs = {}; _liveTeamAt = 0; _liveSettingsAt = 0;
+  _liveDelay = 0; _liveSigs = {}; _liveTeamAt = 0; _liveSettingsAt = 0; _liveSeenAt = {}; _liveAccountMoved = false;
 }
 function scheduleLive(gen, ms){
   clearTimeout(_liveTimer);
@@ -2740,7 +2751,9 @@ async function liveRefreshVisible(){
   const acc = await api('/account');
   if (acc.status === 'success') {
     STATE.account = acc.account;
+    _liveAccountMoved = false;
     if (liveChanged('account', acc.account)) {
+      _liveAccountMoved = true;
       // patchHomeBalances() writes only the specific figures and no-ops on a
       // page that has none, so it is safe on every screen -- and unlike
       // renderAccount() it cannot reset the member's scroll position, which
@@ -2778,6 +2791,7 @@ async function liveRefreshVisible(){
   // An open sheet is what the member is actually looking at, so it wins over
   // the page behind it.
   if (sheet === 'Transaction Statement') {
+    if (!liveDue('tx', LIVE_LIST_MS, _liveAccountMoved)) return ok;
     const r = await api('/transactions');
     if (r.status === 'success' && _openSheetTitle === 'Transaction Statement') {
       STATE.transactions = r.transactions;
@@ -2787,6 +2801,7 @@ async function liveRefreshVisible(){
     return ok;
   }
   if (sheet === 'Messages') {
+    if (!liveDue('messages', LIVE_FEED_MS, _liveAccountMoved)) return ok;
     const r = await api('/messages');
     if (r.status === 'success' && _openSheetTitle === 'Messages') {
       STATE.messages = r.messages;
@@ -2796,6 +2811,7 @@ async function liveRefreshVisible(){
   }
 
   if (STATE.page === 'home' && !sheet) {
+    if (!liveDue('inv', LIVE_LIST_MS, _liveAccountMoved)) return ok;
     const r = await api('/investments');
     if (r.status === 'success' && Array.isArray(r.investments)) {
       STATE.investments = r.investments;
@@ -2803,6 +2819,7 @@ async function liveRefreshVisible(){
       if (!_openSheetTitle && STATE.page === 'home' && liveChanged('investments', r.investments)) paintMyAssetsInner();
     } else ok = false;
   } else if (STATE.page === 'assets') {
+    if (!liveDue('inv', LIVE_LIST_MS, _liveAccountMoved)) return ok;
     const [pr, ir] = await Promise.all([api('/public/products'), api('/investments')]);
     if (pr.status === 'success') STATE.products = pr.products; else ok = false;
     if (ir.status === 'success') {

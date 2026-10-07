@@ -28,5 +28,8 @@ const lib = new Function('crypto', `const _scrypt = (password, salt) => new Prom
   // 4. nginx + node
   ok(/gzip on;/.test(nginx) && /application\/json/.test(nginx) && /upstream soda_node/.test(nginx) && /keepalive 32;/.test(nginx) && /proxy_set_header Connection ""/.test(nginx), 'nginx compresses and keeps connections to Node open');
   ok(/keepAliveTimeout = 65 \* 1000/.test(server), 'Node keeps those connections longer than nginx does');
+  // 5. the live loop reads the heavy lists only when the balance moved or their own beat elapsed
+  const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+  ok((mod.match(/liveDue\('(inv|tx|messages)'/g) || []).length === 4 && /_liveAccountMoved = true/.test(mod), 'Home, Income, Balance Record and Messages re-read their lists only when the balance moved or after their own beat, not every second');
   console.log(`PASS: speed (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });
