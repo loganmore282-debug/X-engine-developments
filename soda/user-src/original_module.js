@@ -3125,7 +3125,7 @@ function vBannerHtml(){
 function paintHome(){
   const st = STATE.settings || {};
   const products = STATE.products || [];
-  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance.');
+  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance after 24 hours.');
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}

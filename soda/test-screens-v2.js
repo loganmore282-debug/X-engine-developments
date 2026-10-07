@@ -54,7 +54,7 @@ function runStats(rows) {
   ok(/const DEFAULT_PRODUCTS = \[\];/.test(src), 'no built-in placeholder assets: members only see what the admin created');
   const cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ok(!/Soda Mini|Soda Classic|Product-1\b/.test(cli), 'no sample asset is written into the app code');
-  ok(!/at midnight 00:00/.test(cli) && /All product earnings will be automatically added to your app balance\./.test(cli), 'the Home line uses the owner\'s sentence without the midnight claim Soda does not keep');
+  ok(!/at midnight 00:00/.test(cli) && /All product earnings will be automatically added to your app balance after 24 hours\./.test(cli), 'the Home line uses the owner\'s sentence without the midnight claim Soda does not keep');
   const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
   ok(/--v-blue:#1739b8/.test(css) && !/#e30613|#1457e8/i.test(css), 'the app uses the royal blue and no red is left');
   console.log(`PASS: screen data (${n} checks)`);
