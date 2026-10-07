@@ -342,6 +342,20 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED',
      `and 17:30, the one shut hour, is refused (${r.code})`);
 
+  // Owner: a member marked "unrestricted by withdrawal time" is not held to the hours (everything else still applies).
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });
+  st.user.withdrawAnytime = true; st.now = eatAt(21);
+  r = await run(st, REQ);
+  ck(r.code === 200, `an unrestricted member goes through at 21:00 EAT, outside the hours (${r.code} ${r.replied && r.replied.code})`);
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });
+  st.user.withdrawAnytime = false; st.now = eatAt(21);
+  r = await run(st, REQ);
+  ck(r.code === 400 && r.replied.code === 'WINDOW_CLOSED', `the flag switched off is held to the hours again (${r.code})`);
+  st = fresh({ settings: { withdrawWindowEnabled: true, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00' } });
+  st.user.withdrawAnytime = true; st.now = eatAt(21);
+  r = await run(st, { ...REQ, amount: 1000 });
+  ck(r.code === 400 && r.replied.code !== 'WINDOW_CLOSED', `an unrestricted member still meets the minimum (${r.code} ${r.replied && r.replied.code})`);
+
   console.log('\n— the daily limit counts payouts, not refunded failures —');
   st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'declined', amount: 20000, date: '15/01/2026' }] });
   r = await run(st, REQ);

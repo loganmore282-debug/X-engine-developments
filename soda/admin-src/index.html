@@ -1654,6 +1654,9 @@ async function openUser(uid){
       <div style="flex:2"><input id="pinNew" type="text" inputmode="numeric" maxlength="6" placeholder="New 6-digit trade password"></div>
       <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
     </div>`:''}
+    ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Withdrawal hours</h4>
+    <div class="kv"><span class="k">This member</span><span id="anyTimeState">${u.withdrawAnytime===true?'Unrestricted, can withdraw at any hour':'Follows the withdrawal hours'}</span></div>
+    <button class="btn ${u.withdrawAnytime===true?'ghost':'sky'} sm" id="anyTimeBtn" style="margin-top:6px">${u.withdrawAnytime===true?'Follow the withdrawal hours':'Make unrestricted by withdrawal time'}</button>`:''}
     <h4 style="margin:18px 0 8px;font-size:14px">Recharges (${(r.deposits||[]).length})</h4>
     ${(r.deposits||[]).length?`<div class="table-scroll" style="max-height:230px"><table><thead><tr><th>When</th><th>Amount</th><th>Paid to</th><th>Paid from</th><th>Status</th></tr></thead><tbody>
       ${r.deposits.map(d=>{
@@ -1764,6 +1767,14 @@ async function openUser(uid){
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
   });
   $('viewChainBtn')?.addEventListener('click', ()=>openReferralChain(uid));
+  $('anyTimeBtn')?.addEventListener('click', async()=>{
+    const on=u.withdrawAnytime!==true;
+    if(!confirm(on?`Let ${u.phone} withdraw at any hour, even outside the withdrawal hours?`:`Make ${u.phone} follow the withdrawal hours again?`)) return;
+    const b=$('anyTimeBtn'); b.disabled=true;
+    const d=await api('/admin/user/withdraw-anytime',{userId:uid,enabled:on});
+    toast(d.status==='success'?(on?'Unrestricted by withdrawal time':'Follows the withdrawal hours again'):(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ u.withdrawAnytime=on; closeModal(); (RENDERERS[_tab]||renderUsers)(); } else b.disabled=false;
+  });
   $('resetPinBtn')?.addEventListener('click', async()=>{
     const np=($('pinNew').value||'').trim();
     if(!/^\d{6}$/.test(np)) return toast('Enter a new 6-digit trade password','err');

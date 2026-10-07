@@ -4213,7 +4213,7 @@ app.get('/account', async (req, res) => {
       totalEarned: round2(u.totalEarned), totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       checkinStreak: u.checkinStreak || 0, lastCheckinAt: u.lastCheckinAt || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
-      hasTradePin: !!u.transactionPinHash, vipLevel,
+      hasTradePin: !!u.transactionPinHash, vipLevel, withdrawAnytime: u.withdrawAnytime === true,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     // The member's OWN region, which the middleware has already put in
     // force for this request. The app re-reads its currency, dialling code
@@ -5963,7 +5963,14 @@ app.post('/withdraw/request', async (req, res) => {
     // a plain authenticated POST -- a rule that lives only in the client is
     // not a rule.
     const win = withdrawWindowState(sett, Date.now());
-    if (win.enabled && !win.open)
+    // A member the owner has marked "withdraw any time" (Admin > Users > the member) is not held to the hours. Read only
+    // when the window is actually closed, so ordinary requests cost no extra read.
+    let anyTime = false;
+    if (win.enabled && !win.open) {
+      const flag = await db.collection('users').doc(userId).get();
+      anyTime = flag.exists && flag.data().withdrawAnytime === true;
+    }
+    if (win.enabled && !win.open && !anyTime)
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
         message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum withdraw is ${fmtMoney(sett.minWithdraw)}` });
@@ -8834,6 +8841,21 @@ app.post('/admin/user/reset-payout-pin', async (req, res) => {
     await ref.update({ transactionPinHash: scryptHash(newPin), pinFailCount: 0, pinLockedUntil: null });
     logAdminAction(req, 'user_pin_reset', { userId });
     res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Owner: make one member "unrestricted by withdrawal time": they can request a withdrawal at any hour even when the
+// withdrawal hours are switched on in Settings. Everything else (minimum, multiple, fee, Trade Password, one at a time) still applies.
+app.post('/admin/user/withdraw-anytime', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId || typeof req.body.enabled !== 'boolean') return res.status(400).json({ status: 'error', message: 'userId and enabled (true or false) required' });
+  try {
+    const ref = db.collection('users').doc(userId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    await ref.update({ withdrawAnytime: req.body.enabled });
+    logAdminAction(req, 'user_withdraw_anytime', { userId, enabled: req.body.enabled });
+    res.json({ status: 'success', enabled: req.body.enabled });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/user/reset-password', async (req, res) => {

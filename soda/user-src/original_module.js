@@ -5431,7 +5431,8 @@ function witWalletBlockHtml(s){
 function paintWithdrawSheet(s){
   const balance = (STATE.account && STATE.account.walletBalance) || 0;
   const fee = withdrawalFeePct(s);
-  const win = withdrawWindow(s);
+  // A member the owner made unrestricted by withdrawal time sees no hours (the server skips them too).
+  const win = (STATE.account && STATE.account.withdrawAnytime) ? { enabled: false, open: true } : withdrawWindow(s);
   const secs = v => v ? v + ':00' : '';
   const min = Number(s.minWithdraw) || 0, max = Number(s.maxWithdraw) || 0, mult = Number(s.withdrawMultiple) || 0;
   const perDay = Number(s.maxWithdrawalsPerDay) || 0;
@@ -5513,7 +5514,7 @@ window.submitWithdraw = async function(){
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
   const win = withdrawWindow(STATE.settings || {});
-  if (win.enabled && !win.open)
+  if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);
   const witPin = $('witPin') ? $('witPin').value.trim() : '';
   if (!/^\d{6}$/.test(witPin)) return notify('Enter your 6-digit Trade Password.');
