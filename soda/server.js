@@ -223,7 +223,8 @@ const CORS_ALLOWED_ORIGINS = new Set([
   // (see nginx-soda.conf.template's matching comment); if it's ever
   // regenerated, this entry, the template, and the live certbot cert all
   // have to agree.
-  'https://mysoda.p-colasoda.com', 'https://mysoda.p-colasoda.com',
+  // The live address (owner, 2026-10-07): app.p-colasoda.com. mysoda. was the planned name and stays allowed.
+  'https://app.p-colasoda.com', 'https://mysoda.p-colasoda.com',
   // Direct VPS frontend used while Soda is served/tested on port 8080.
   // Different ports are different browser origins, so without this exact
   // entry the member page loads but every API call to :3000 is blocked by CORS.
