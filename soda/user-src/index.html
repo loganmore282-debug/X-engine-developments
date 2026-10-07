@@ -1808,6 +1808,12 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 #loginPane .va-link{margin-top:21.4px;}
 .va-f{display:flex;align-items:center;height:46px;padding-top:13px;border-bottom:1.5px solid rgba(23,57,184,.4);}
 .va-f:focus-within{border-bottom-color:#1739b8;}
+/* Chrome paints a pale sheet over a field it fills or previews from a saved login. Keep the field see-through: the sheet's colour is held back
+   for effectively ever (the standard transition trick) and the typed text keeps its own colour. */
+input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active,input:autofill{
+  -webkit-text-fill-color:#17243a;caret-color:#17243a;-webkit-box-shadow:0 0 0 0 transparent inset;box-shadow:0 0 0 0 transparent inset;
+  transition:background-color 600000s 0s,color 600000s 0s;}
+.va-f input:-webkit-autofill{background-color:transparent!important;background-clip:content-box;}
 .va-f input{flex:1;min-width:0;border:0;background:transparent;outline:0;font:inherit;font-size:14px;color:#17243a;padding:0;height:30px;}
 .va-f input::placeholder{color:#7a8699;opacity:1;}
 #registerPane .va-card h1{margin-bottom:16px;}
