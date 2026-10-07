@@ -1771,7 +1771,7 @@ async function performMemberLogout(opts){
 // The loading screen stays for at least LOADER_MIN_MS from the moment the page began (owner: "let it take
 // about 3 seconds, then open the page"). Everything that used to hide it immediately goes through here; the
 // app is built underneath while it waits, and the pictures start loading straight away.
-var LOADER_MIN_MS = 3000, _ldTimer = null;
+var LOADER_MIN_MS = 2500, _ldTimer = null;
 function hideLoadingScreen(){
   const ls = $('loadingScreen'); if (!ls) return;
   try { startArtwork(); } catch (_) {}
