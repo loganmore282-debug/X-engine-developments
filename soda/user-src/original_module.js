@@ -981,15 +981,22 @@ function vMoney(n){
 }
 function vMoney2(n){ return cur() + (Number(n) || 0).toLocaleString('en-UG', {minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Icons traced from the owner's screenshots live in a square box 288 units wide drawn 1:1 with a 22 px picture (13.1 units = 1 px); the stroke sits on the <g> so a bigger/smaller box keeps the same proportions.
-function vSvgT(cx, cy, sw, body){ return '<svg viewBox="' + (cx - 144) + ' ' + (cy - 144) + ' 288 288" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g stroke-width="' + sw + '">' + body + '</g></svg>'; }
+function vSvgT(cx, cy, sw, body, size){ size = size || 288; var h = size / 2; return '<svg viewBox="' + (cx - h) + ' ' + (cy - h) + ' ' + size + ' ' + size + '" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g stroke-width="' + sw + '">' + body + '</g></svg>'; }
 function vSvg(body, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + body + '</svg>'; }
 var VI = {
-  bottle: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V92H170Z"/><path d="M178 92C160 110 140 130 142 165C143 185 160 195 160 210C140 220 134 235 136 252C138 280 160 293 190 293C220 293 243 280 245 252C247 235 240 220 220 210C220 195 238 185 240 165C242 130 222 110 212 92"/><path d="M138 241H244"/>'),
+  bottle: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/>'),
+  bottleDown: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><path d="M191 168V238M173 222L191 242L209 222"/></g>'),
+  bottleUp: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><path d="M191 238V158M173 176L191 156L209 176"/></g>'),
+  bottleRing: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><circle cx="191" cy="212" r="22" stroke-width="13"/></g>'),
+  bottleWallet: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><rect x="163" y="168" width="56" height="44" rx="9"/><path d="M178 168Q191 142 204 168"/></g>'),
+  bottleChat: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><ellipse cx="191" cy="168" rx="19" ry="32"/></g>'),
+  bottleLock: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><rect x="169" y="172" width="44" height="40" rx="7"/><path d="M178 172V160Q191 136 204 160V172"/></g>'),
+  bottleKey: vSvgT(191, 180, 18, '<path d="M170 80Q170 68 181 68H201Q212 68 212 80V99H170Z"/><path d="M180 83H202" stroke-width="6"/><path d="M173 99C150 122 139 148 141 172C143 194 160 202 164 212"/><path d="M209 99C232 122 243 148 241 172C239 194 222 202 218 212"/><circle cx="191" cy="247" r="52"/><path d="M162 242H220M166 254H216" stroke-width="7" stroke-opacity=".6"/><g stroke-width="12"><circle cx="178" cy="164" r="15"/><path d="M189 175L214 206M203 192L212 184"/></g>'),
   cell: vSvgT(590, 215, 11, '<rect x="546" y="108" width="88" height="214" rx="9"/><path d="M548 128H632M548 166H632M548 205H632M548 244H632" stroke-opacity=".6"/>'),
   people: vSvgT(990, 205, 17, '<circle cx="953" cy="143" r="50"/><path d="M1040 95A55 55 0 0 1 1045 190"/><path d="M866 318V292C866 256 895 238 950 238C1005 238 1032 256 1032 292V318"/><path d="M1070 246C1100 252 1112 272 1112 300V318"/>'),
   person: vSvgT(1388, 206, 11, '<circle cx="1388" cy="145" r="54"/><path d="M1296 322V292C1296 262 1325 246 1388 246C1451 246 1480 262 1480 292V322"/>'),
-  headset: vSvg('<path d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.2" y="13.5" width="4" height="6.2" rx="1.8"/><rect x="16.8" y="13.5" width="4" height="6.2" rx="1.8"/>'),
-  megaphone: vSvg('<path d="M4 9.6v4.8h3.2L14 18.5v-13L7.2 9.6H4z"/><path d="M17.2 9a4.2 4.2 0 0 1 0 6"/><path d="M7.4 14.4l1.2 4.6"/>'),
+  headset: vSvgT(1467, 228, 22, '<path d="M1332 268C1332 150 1390 90 1467 90C1545 90 1603 150 1603 268"/><path d="M1332 258H1385Q1418 258 1418 288V335Q1418 366 1385 366H1355Q1332 366 1332 335Z"/><path d="M1603 258H1550Q1518 258 1518 288V335Q1518 366 1550 366H1580Q1603 366 1603 335Z"/>', 336),
+  megaphone: vSvgT(192, 166, 17, '<path d="M110 100H148V182H110Q92 182 92 164V118Q92 100 110 100Z"/><path d="M148 100L270 62Q296 56 296 82V200Q296 222 272 212L148 178"/><path d="M135 186Q140 215 160 250Q172 272 188 262Q198 252 190 232L178 196"/>'),
   plane: vSvg('<path d="M21 3 3 10.2l7.2 2.8 2.8 7.2z"/><path d="M21 3 10.2 13"/>'),
   gift: vSvg('<rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.2h-19z"/><path d="M12 5.8v14.7"/><path d="M12 5.8C10.2 5.8 8.4 5 8.4 3.6 8.4 2.5 9.4 2 10.4 2.4c1.1.5 1.6 1.9 1.6 3.4zM12 5.8c1.8 0 3.6-.8 3.6-2.2 0-1.1-1-1.6-2-1.2-1.1.5-1.6 1.9-1.6 3.4z"/>'),
   tick: vSvg('<path d="m5 12.6 4.3 4.3L19 7.2"/>'),
@@ -3132,10 +3139,10 @@ function paintHome(){
 <div class="v-page v-home">
   ${vBannerHtml()}
   <div class="v-quick">
-    <button onclick="openDepositSheet()"><span class="v-ic">${VI.bottle}</span><b>Deposit</b></button>
-    <button onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottle}</span><b>Withdraw</b></button>
+    <button onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span><b>Deposit</b></button>
+    <button onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span><b>Withdraw</b></button>
     <button onclick="openHelpDialog('Help')"><span class="v-ic">${VI.headset}</span><b>Help Me</b></button>
-    <button onclick="openChestSheet()"><span class="v-ic">${VI.bottle}</span><b>Gift Code</b></button>
+    <button onclick="openChestSheet()"><span class="v-ic">${VI.bottleRing}</span><b>Gift Code</b></button>
   </div>
   <div class="v-ticker"><span class="v-ticker-ic">${VI.megaphone}</span><div class="v-ticker-win"><span class="v-ticker-txt">${esc(ticker)}</span></div></div>
   <div id="homeProducts">${products.length ? products.map(vProductCardHtml).join('') : (STATE.products ? '<div class="v-empty">No products yet.</div>' : '')}</div>
@@ -3792,21 +3799,21 @@ async function renderAccount(){
     <div class="v-me-lbl">TOTAL BALANCE</div>
     <div class="v-me-bal" id="myBalance">${esc(vMoney2(a.walletBalance))}</div>
     <div class="v-me-btns">
-      <button class="v-me-dep" onclick="openDepositSheet()"><span class="v-ic">${VI.bottle}</span>Deposit</button>
-      <button class="v-me-wit" onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottle}</span>Withdraw</button>
+      <button class="v-me-dep" onclick="openDepositSheet()"><span class="v-ic">${VI.bottleDown}</span>Deposit</button>
+      <button class="v-me-wit" onclick="openWithdrawSheet()"><span class="v-ic">${VI.bottleUp}</span>Withdraw</button>
     </div>
   </div>
   <div class="v-sec"><span class="bar"></span><h2>Account</h2><i></i></div>
   <div class="v-tiles">
-    ${vTileHtml(VI.bottle, 'Wallet', 'openWalletSheet()')}
-    ${vTileHtml(VI.bottle, 'Messages', 'openMessagesSheet()', 'gold')}
+    ${vTileHtml(VI.bottleWallet, 'Wallet', 'openWalletSheet()')}
+    ${vTileHtml(VI.bottleChat, 'Messages', 'openMessagesSheet()', 'gold')}
     ${vTileHtml(VI.clipboard, 'Details', "openTransactionStatement('income')", 'gold')}
     ${vTileHtml(VI.download, 'APP', 'promptInstallApp()')}
   </div>
   <div class="v-sec"><span class="bar"></span><h2>Security</h2><i></i></div>
   <div class="v-tiles">
-    ${vTileHtml(VI.bottle, 'Login Password', 'openChangeLoginPasswordSheet()')}
-    ${vTileHtml(VI.bottle, 'Trade Password', 'openChangeTradePasswordSheet()')}
+    ${vTileHtml(VI.bottleLock, 'Login Password', 'openChangeLoginPasswordSheet()')}
+    ${vTileHtml(VI.bottleKey, 'Trade Password', 'openChangeTradePasswordSheet()')}
   </div>
   <button class="v-wide" onclick="openHelpDialog('Help Me')"><span class="v-ic">${VI.headset}</span>Help Me</button>
   <button class="v-logout" onclick="doLogout()"><span class="v-ic">${VI.logout}</span>Log Out</button>
