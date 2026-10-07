@@ -2750,6 +2750,11 @@ async function renderBanners(){
         ${loaderBgImage?`<button class="btn danger sm" id="loaderBgClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="loaderBgFile" accept="image/*" hidden></label>
+      <div class="row" style="margin-top:10px">
+        <div><label>Opacity (0&ndash;100%)</label><input id="loaderBgOp" type="number" min="0" max="100" value="${esc(v('loaderBgOpacity',100))}"></div>
+        <div><label>Blur (0&ndash;40 px)</label><input id="loaderBgBlur" type="number" min="0" max="40" value="${esc(v('loaderBgBlur',0))}"></div>
+      </div>
+      <button class="btn block" id="saveLoaderBg" style="margin-top:14px">Save loading screen appearance</button>
     </div>
 
     <h2 class="sec">Login &amp; Sign Up background</h2>
@@ -2891,6 +2896,17 @@ function wireBannerHandlers(){
   wireSodaImageSlot('loaderbg', 'loaderBgFile', 'loaderBgClear', 'Loading screen background saved', 'Loading screen background removed');
   wireSodaImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
   wireSodaImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
+  const saveLoaderBg = $('saveLoaderBg');
+  if (saveLoaderBg) saveLoaderBg.addEventListener('click', async()=>{
+    const nums = { loaderBgOpacity:+$('loaderBgOp').value, loaderBgBlur:+$('loaderBgBlur').value };
+    for (const [k,val] of Object.entries(nums)) {
+      const max = k.endsWith('Blur') ? 40 : 100;
+      if (!Number.isFinite(val) || val < 0 || val > max)
+        return toast(`${k.endsWith('Blur')?'Blur':'Opacity'} must be between 0 and ${max}`,'err');
+    }
+    const d = await api('/admin/settings/update', { settings: nums });
+    toast(d.status==='success'?'Loading screen appearance saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{
     const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value,

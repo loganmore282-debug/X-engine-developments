@@ -580,6 +580,8 @@ const DEFAULT_SETTINGS = {
   // back. With no image set these do nothing at all.
   authHeroOpacity: 100, authHeroBlur: 0,
   authCardOpacity: 100, authCardBlur: 0,
+  // Start-up loading screen picture (Admin > Banners > Loading screen background): 100 = as uploaded, 0 = blur off.
+  loaderBgOpacity: 100, loaderBgBlur: 0,
   // Background treatment for signed-in Home/Assets/Network/Profile and
   // secondary pages. Authentication screens keep their own controls above.
   innerBgOpacity: 100, innerBgBlur: 0,
@@ -3748,7 +3750,11 @@ app.get('/public/loader-image', async (req, res) => {
     if (!m) return res.status(404).end();
     const buf = Buffer.from(m[2], 'base64');
     const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex') + '"';
-    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=0, stale-while-revalidate=604800', ETag: etag });
+    // The picture's opacity and blur ride along as headers, so the phone can apply them on the very first frame of its next launch.
+    const sett = await getSettings();
+    const clampNum = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
+    res.set({ 'Content-Type': m[1], 'Cache-Control': 'public, max-age=0, stale-while-revalidate=604800', ETag: etag,
+      'X-Loader-Opacity': String(clampNum(sett.loaderBgOpacity, 0, 100, 100)), 'X-Loader-Blur': String(clampNum(sett.loaderBgBlur, 0, 40, 0)) });
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.send(buf);
   } catch (e) { res.status(500).end(); }
@@ -7916,6 +7922,7 @@ const SETTINGS_CRITICAL_RANGES = {
   withdrawMultiple: [0, MAX_MONEY_AMOUNT],
   authHeroOpacity: [0, 100], authHeroBlur: [0, 40],
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
+  loaderBgOpacity: [0, 100], loaderBgBlur: [0, 40],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
   otpDailyLimitReset: [0, 50], otpDailyLimitBank: [0, 50],

@@ -347,8 +347,10 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 
 /* ── App chrome not in the mockups: auth, sheets, forms, toast, loading ── */
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
-#loadingScreen{position:fixed;inset:0;background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/api/public/loader-image') center/cover no-repeat,linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
-#loadingScreen .ld-txt{display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);animation:ldBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
+#loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
+/* The admin's picture sits on its own layer so its opacity and blur (Admin > Banners > Loading screen background) never touch the word. The layer is pushed past the edges by twice the blur so a blurred picture has no pale rim. */
+#loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/api/public/loader-image') center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);pointer-events:none;}
+#loadingScreen .ld-txt{position:relative;z-index:1;display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);animation:ldBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
 @keyframes ldBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-34px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
 @media (prefers-reduced-motion:reduce){#loadingScreen .ld-txt{animation:none;}}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
@@ -1893,6 +1895,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
 <body>
 
 <div id="loadingScreen">
+  <span class="ld-bg" id="ldBg" aria-hidden="true"></span>
   <span class="ld-txt" aria-hidden="true">Loading...</span>
   <span class="sr-only" role="status" aria-live="polite">Loading</span>
 </div>
@@ -1903,19 +1906,29 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
 (function(){
   window._sodaLoaderStart = Date.now();
   try {
-    var ls = document.getElementById('loadingScreen'), KEY = 'soda_loader_img';
-    var layer = function(u){ return 'linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url("' + u + '"),linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%)'; };
+    var ls = document.getElementById('loadingScreen'), bg = document.getElementById('ldBg'), KEY = 'soda_loader_img', FX = 'soda_loader_fx';
+    var layer = function(u){ return 'linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url("' + u + '")'; };
+    /* The picture's opacity (0-100) and blur (0-40 px) are remembered the same way, so they also apply on the first frame. */
+    var fx = function(op, bl){
+      op = Number(op); bl = Number(bl);
+      if (!ls || !isFinite(op) || !isFinite(bl)) return;
+      ls.style.setProperty('--ld-op', String(Math.min(100, Math.max(0, op)) / 100));
+      ls.style.setProperty('--ld-blur', Math.min(40, Math.max(0, bl)) + 'px');
+      try { localStorage.setItem(FX, Math.round(op) + ',' + Math.round(bl)); } catch (e) {}
+    };
+    window._sodaLoaderFx = fx;
+    try { var kfx = (localStorage.getItem(FX) || '').split(','); if (kfx.length === 2) fx(kfx[0], kfx[1]); } catch (e) {}
     var kept = null; try { kept = localStorage.getItem(KEY); } catch (e) {}
-    if (kept && ls) ls.style.backgroundImage = layer(kept);
+    if (kept && bg) bg.style.backgroundImage = layer(kept);
     if (!window.fetch || !window.FileReader) return;
-    fetch('/api/public/loader-image', { cache: 'no-cache' }).then(function(r){ if (r.status === 404) { try { localStorage.removeItem(KEY); } catch (e) {} if (ls && kept) ls.style.backgroundImage = ''; return null; } return r.ok ? r.blob() : null; }).then(function(b){
+    fetch('/api/public/loader-image', { cache: 'no-cache' }).then(function(r){ if (r.status === 404) { try { localStorage.removeItem(KEY); } catch (e) {} if (bg && kept) bg.style.backgroundImage = 'none'; return null; } if (r.ok) fx(r.headers.get('X-Loader-Opacity'), r.headers.get('X-Loader-Blur')); return r.ok ? r.blob() : null; }).then(function(b){
       if (!b || b.size > 1500000) return;
       var fr = new FileReader();
       fr.onload = function(){
         var u = String(fr.result || '');
         if (u.indexOf('data:image/') !== 0 || u === kept) return;
         try { localStorage.setItem(KEY, u); } catch (e) {}
-        if (!kept && ls) ls.style.backgroundImage = layer(u);
+        if (!kept && bg) bg.style.backgroundImage = layer(u);
       };
       fr.readAsDataURL(b);
     }).catch(function(){});

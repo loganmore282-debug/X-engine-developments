@@ -1951,8 +1951,14 @@ function applyNumberFont(){
 //
 // Opacity is stored as a percent (0-100) so the admin panel takes a whole
 // number like every other field; it is divided here, once.
+// The start-up loading screen picture's opacity and blur follow the settings too (and are remembered for the next launch's first frame).
+function applyLoaderFx(){
+  const s = STATE.settings || {};
+  if (typeof window._sodaLoaderFx === 'function' && s.loaderBgOpacity != null && s.loaderBgBlur != null) window._sodaLoaderFx(s.loaderBgOpacity, s.loaderBgBlur);
+}
 function applyAuthBackgrounds(){
   const s = STATE.settings || {};
+  applyLoaderFx();
   const root = document.documentElement;
   function set(prefix, image, opacityPct, blurPx){
     // url() is built here, so an unset slot yields `none` and the section
