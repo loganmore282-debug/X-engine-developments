@@ -133,7 +133,12 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 
   /* shell */
   .topbar{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
-  .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0}
+  .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0;flex-wrap:wrap}
+  /* On a phone the six header controls do not fit beside the name: they drop onto their own row instead of pushing the page wider than the screen. */
+  @media (max-width:760px){
+    .topbar-inner{gap:8px;padding:10px 0}
+    .topbar-inner .spacer{flex:1 0 100%;height:0}
+  }
   .topbar .mk{width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
   .topbar .mk svg{width:20px;height:20px}
   .topbar b{font-size:16px}
@@ -144,7 +149,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .tab.active{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
   .tab .badge-n{display:inline-block;min-width:17px;padding:0 5px;margin-left:5px;background:var(--danger);color:#fff;
     border-radius:20px;font-size:10px;line-height:16px;}
-  .content{padding:18px 0 70px}
+  .content{padding:18px 14px 70px}   /* keeps .wrap's side margin (it used to be reset to 0, so on a phone the content touched both screen edges) */
 
   h2.sec{font-size:17px;margin:4px 0 14px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
@@ -2139,11 +2144,11 @@ function editProduct(p, order){
     <div class="row">
       <div><label>Daily payout (${adminCur()}) <span class="muted" style="font-weight:400">automatic</span></label><input id="pDaily" type="text" readonly tabindex="-1" value=""></div>
     </div>
+    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
     <label>VIP level (0 = none)</label><input id="pVip" type="number" min="0" max="100" step="1" value="${p.vip>0?p.vip:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">A member's VIP is the highest VIP among the products they own, including products you give them.</p>
     <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see it on the card as owned/limit, for example 0/3.</p>
-    <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Each product has its OWN multiplier — nothing is fixed globally. Type a multiplier and the total payout fills in automatically (and vice versa). If both are set, the multiplier wins, so repricing a product updates its payout on its own.</p>
     <div class="row">
       <div><label>Display position (lower appears first)</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
     </div>

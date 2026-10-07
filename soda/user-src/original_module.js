@@ -2899,6 +2899,7 @@ window.showPage = async function(name){
   else if (name === 'catalog') name = 'assets';
   else if (name === 'team' || name === 'referral') { name = 'network'; }
   STATE.page = name;
+  window.scrollTo(0, 0);   // every tab opens at its top, not wherever the previous one was scrolled
   updateNavIcons();
   if (name === 'home') {
     // Deliberately NOT awaited: renderHome() does its own account/investments
@@ -2932,7 +2933,7 @@ window.showPage = async function(name){
 // already established -- one set of contact fields, two places they show.
 window.closeAnnouncement = function(){
   const bg = $('annBg');
-  if (bg) bg.classList.remove('show');
+  if (bg) { if (bg.classList.contains('show')) dlgClosed(); bg.classList.remove('show'); }
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
 };
 // The announcement is one portrait picture (uploaded in the admin panel) with
@@ -2956,7 +2957,7 @@ function maybeShowAnnouncement(){
       <button class="v-ann-close" type="button" onclick="closeAnnouncement()">Close</button>
     </div>`;
   bg.classList.add('show');
-  lockBodyScroll();
+  lockBodyScroll(); dlgOpened();
 }
 
 // ── HOME ──
@@ -4063,10 +4064,10 @@ window.openHelpDialog = function(title){
     <div class="v-help-btns">${btn(s.telegramGroup || s.telegramChannel, 'Channel')}${btn(s.supportTelegram, 'Service')}</div>
     <button class="v-help-close" type="button" onclick="closeHelpDialog()">Close</button>`;
   $('helpBg').classList.add('show');
-  lockBodyScroll();
+  lockBodyScroll(); dlgOpened();
 };
 window.closeHelpDialog = function(){
-  $('helpBg').classList.remove('show');
+  $('helpBg').classList.remove('show'); dlgClosed();
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
 };
 
@@ -4401,6 +4402,7 @@ function showChestWin(reward, balance, after){
     </div>`;
   document.body.appendChild(bg);
   requestAnimationFrame(() => bg.classList.add('show'));
+  dlgOpened();
   fireConfetti();
 }
 window.collectChestWin = function(){
@@ -4409,7 +4411,10 @@ window.collectChestWin = function(){
   if (bg) bg.remove();
   // A win that came from somewhere other than the Treasure Chest page (a Task Center reward) hands control back to
   // its own page instead of closing the sheet underneath.
-  if (after) after(); else closeSheet({ fromAction: true });
+  if (after) { after(); dlgClosed(); return; }
+  // The chest page and the win card each own a history entry: close both with ONE history call.
+  if (!_dlgFromPop && history.state && history.state.dlg) { closeSheet({ fromAction: true, keepHistory: true }); _dlgIgnore(); history.go(-2); }
+  else closeSheet({ fromAction: true });
 };
 // The two network refreshes a win needs. Deliberately not awaited by its
 // caller -- the toast above already told the member it worked, so nothing
@@ -4572,7 +4577,54 @@ window.closeSheet = function(opts){
   // with one history.go(-n) -- see showPage(). Only that caller sets it.
   if (!(opts && opts.keepHistory) && history.state && history.state.sheet) history.back();
 };
-window.addEventListener('popstate', () => {
+// ── The Back button and pop-up dialogs ──
+// Sheets and the message popup own a history entry, so Back closes them. The other dialogs (Buy confirm, Help, the
+// announcement, the win card, the Download card) used not to, and Back with one of them open walked the member out
+// of the app. Now each pushes ONE entry when it opens; Back closes the dialog and stays. When a dialog is closed
+// with its own button its entry is removed a moment later (not at once: a page opened right after the close pushes
+// its own entry, and a back() queued before that push would remove the wrong one); an entry that outlives its
+// dialog is skipped over by the popstate handler below, so Back never "does nothing".
+var _dlgIgnorePop = false, _dlgFromPop = false, _dlgCleanTimer = null;
+function anyDialogOpen(){
+  return !!($('chestWinBg')
+    || ($('dlBg') && $('dlBg').classList.contains('show'))
+    || ($('helpBg') && $('helpBg').classList.contains('show'))
+    || ($('confirmBg') && $('confirmBg').classList.contains('show'))
+    || ($('annBg') && $('annBg').classList.contains('show')));
+}
+function _dlgIgnore(){ _dlgIgnorePop = true; setTimeout(() => { _dlgIgnorePop = false; }, 700); }
+function dlgOpened(){
+  if (_dlgCleanTimer) { clearTimeout(_dlgCleanTimer); _dlgCleanTimer = null; }
+  if (history.state && history.state.dlg) history.replaceState({ dlg: 1 }, '', '');
+  else history.pushState({ dlg: 1 }, '', '');
+}
+function dlgClosed(){
+  if (_dlgFromPop) return;   // Back already took its entry away
+  if (_dlgCleanTimer) clearTimeout(_dlgCleanTimer);
+  _dlgCleanTimer = setTimeout(() => {
+    _dlgCleanTimer = null;
+    if (!anyDialogOpen() && history.state && history.state.dlg) { _dlgIgnore(); history.back(); }
+  }, 400);
+}
+function closeTopDialog(){
+  _dlgFromPop = true;
+  try {
+    if ($('chestWinBg')) collectChestWin();
+    else if ($('dlBg') && $('dlBg').classList.contains('show')) closeDownloadDialog();
+    else if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
+    else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
+    else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
+  } finally { _dlgFromPop = false; }
+}
+// A tap on the edge of a text box (its padding or the currency sign beside the figure) focuses the box's input too.
+document.addEventListener('click', (e) => {
+  const box = e.target.closest && e.target.closest('.v-pbox,.v-pin,.v-amtrow,.v-uline');
+  if (!box || e.target.closest('button,a,input,select,textarea')) return;
+  const inp = box.querySelector('input'); if (inp) inp.focus();
+});
+window.addEventListener('popstate', (ev) => {
+  if (_dlgIgnorePop) { _dlgIgnorePop = false; return; }       // the removal of a leftover dialog entry: nothing to close
+  if (anyDialogOpen()) { closeTopDialog(); return; }            // Back closes the dialog and stays where it is
   // The message detail sits ON TOP of the Messages sheet and carries its own
   // history entry, so unwinding it closes just the popup and lands back on
   // the sheet's entry -- the list is still open behind it, which is what
@@ -4589,6 +4641,8 @@ window.addEventListener('popstate', () => {
   unlockBodyScroll();
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
+  // Landed on an entry whose dialog is already closed: step over it so one Back is one visible step.
+  if (ev && ev.state && ev.state.dlg) { _dlgIgnore(); history.back(); }
 });
 
 // About page: an admin-authored ordered list of text/image blocks (see
@@ -5507,14 +5561,14 @@ window.openInvestConfirm = function(tierKey, btn){
     notify(`${p.name} is now running. See it under Income.`);
   };
   $('confirmBg').classList.add('show');
-  lockBodyScroll();
+  lockBodyScroll(); dlgOpened();
 };
 
 // The Cancel button and backdrop both call this by name from inline markup.
 // It must be a window property; a missing global here leaves confirmBg up and
 // keeps the document's scroll lock active, which traps the member on screen.
 window.closeConfirm = function(){
-  $('confirmBg').classList.remove('show');
+  $('confirmBg').classList.remove('show'); dlgClosed();
   $('confirmSheet').innerHTML = '';
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
 };
@@ -5551,9 +5605,9 @@ window.openDownloadDialog = function(){
     bg.innerHTML = '<div class="v-dl-card"><h3>Download</h3><p>The app has been downloaded, please go to the browser to check and install it.</p><button type="button" onclick="closeDownloadDialog()">Confirm</button></div>';
     document.body.appendChild(bg);
   }
-  bg.classList.add('show');
+  bg.classList.add('show'); dlgOpened();
 };
-window.closeDownloadDialog = function(){ const bg = $('dlBg'); if (bg) bg.classList.remove('show'); };
+window.closeDownloadDialog = function(){ const bg = $('dlBg'); if (bg) { if (bg.classList.contains('show')) dlgClosed(); bg.classList.remove('show'); } };
 // Owner: "remove double loading of startup loader or system it's self it
 // can loading the again it reloads automatically without touching it so
 // remove it, the system should launch once per user's request." This app

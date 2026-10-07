@@ -1727,6 +1727,9 @@ body.deposit-status-open .sheet-bg{bottom:0;}
 .v-pbox input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:14px;color:var(--v-ink);}
 .v-pbox input::placeholder{color:#6c7488;}
 .v-pbox:focus-within{border-color:var(--v-blue);box-shadow:0 0 0 3px rgba(23,57,184,.12);}
+/* A text box is tappable over its whole height (the input used to be a thin 18 px strip inside a 40 px box). */
+.v-pbox input,.v-pin input,.v-amtrow input{align-self:stretch;}
+.v-pbox,.v-pin,.v-amtrow{cursor:text;}
 .v-edit .v-cta{margin:-1.5px 0 0;font-size:16.75px;}
 .v-two{display:grid;grid-template-columns:1fr 1fr;gap:11.5px;margin-top:20px;}
 .v-ghost,.v-solid{height:41px;border-radius:12px;font:inherit;font-size:14.5px;font-weight:700;}
