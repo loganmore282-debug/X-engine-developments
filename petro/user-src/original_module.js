@@ -6395,12 +6395,17 @@ window.submitDeposit = async function(){
 // The 60-second budget is unchanged -- 24 ticks at the new spacing is the same
 // wall-clock window, so nothing gives up on a payment any sooner than before.
 var DEP_POLL_FIRST_MS = 1200;
-var DEP_POLL_EVERY_MS = 2500;
+var DEP_POLL_EVERY_MS = 1500;
 async function pollDepositStatus(depositId){
   _depActiveDepositId = depositId;
   _depPollDone = false;
-  for (let i = 0; i < 24; i++) {
-    await new Promise(r => setTimeout(r, i === 0 ? DEP_POLL_FIRST_MS : DEP_POLL_EVERY_MS));
+  // Ticks are 1.5 s apart MEASURED FROM THE START OF EACH TICK (a slow answer no longer pushes the next check further away), and the
+  // budget is 70 s of the wall clock, not 24 ticks however long each took.
+  const began = Date.now();
+  let tickAt = began + DEP_POLL_FIRST_MS;
+  for (let i = 0; Date.now() - began < 70000; i++) {
+    await new Promise(r => setTimeout(r, Math.max(0, tickAt - Date.now())));
+    tickAt = Math.max(Date.now(), tickAt) + DEP_POLL_EVERY_MS;
     // A Verify tap may have settled it between ticks -- stop rather than
     // firing another provider call for an answer already in hand.
     if (_depPollDone) return;
