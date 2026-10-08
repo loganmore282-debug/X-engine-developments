@@ -2009,6 +2009,12 @@ function applyAuthTagline(){
 // settings call must never strand a member on the spinner
 // forever; past this cap the app proceeds with whatever boot() has (or
 // hasn't) filled in yet, same as before this change.
+// The settings may be waited for at several points of a start-up (the opening gate, then entering the app). They share ONE budget measured
+// from the moment the page began, so a slow connection waits for them once, not once per step.
+function waitForBootSettings(ms){
+  const began = Number(window._sodaLoaderStart) || Date.now();
+  return withTimeout(_bootPromise, Math.max(300, (ms || 6000) - (Date.now() - began)));
+}
 function withTimeout(promise, ms){
   return Promise.race([ promise, new Promise(resolve => setTimeout(resolve, ms)) ]);
 }
@@ -2138,7 +2144,7 @@ function startOpeningGateCountdown(targetMs){
 // network boot, same "don't block the common case for a rare edge case"
 // reasoning Round 63 already established for the announcement dialog.
 async function maybeShowOpeningGate(){
-  if (!STATE.settings) await withTimeout(_bootPromise, 6000);
+  if (!STATE.settings) await waitForBootSettings(6000);
   if (!isOpeningGateActive()) return false;
   hideLoadingScreen();
   $('authScreen').style.display = 'none';
@@ -2158,14 +2164,19 @@ function handleMemberAuth(user){
   task.finally(() => { if (_memberAuthTask === task) _memberAuthTask = null; }).catch(() => {});
   return task;
 }
-window.addEventListener('snow-auth', ev => {
-  handleMemberAuth(ev.detail).catch(() => {
+function onMemberAuth(user){
+  handleMemberAuth(user).catch(() => {
     notify('Could not open your account. Please try logging in again.');
     hideLoadingScreen();
     $('authScreen').style.display = '';
     setBtnLoading('loginBtn', false, 'Log In');
   });
-});
+}
+window.addEventListener('snow-auth', ev => onMemberAuth(ev.detail));
+// The sign-in script announces who is signed in (or nobody) once, as soon as the page is parsed. This code is unpacked a little
+// later, and on a slow or busy phone it can be MORE than a little later: then that announcement happened before anyone was listening
+// and nothing ever took the loading screen down. If it already fired, take it from the sign-in script directly.
+if (window._sodaAuthFired && window.fbAuth) onMemberAuth(window.fbAuth.currentUser);
 async function processMemberAuth(user){
   // Ignore repeated notifications only after the account is actually open.
   // Failed account setup must remain retryable for the same Firebase uid.
@@ -2409,7 +2420,7 @@ async function bootFromNetwork(uid){
     window._pendingRegPin = ''; window._pendingRegPhone = '';
     r = await api('/account');
   } else {
-    r = await api('/account', { timeoutMs: 15000 });
+    r = await api('/account', { timeoutMs: 10000 });
     if (r.stale || !STATE.user || STATE.user.uid !== uid) return;
     if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.code === 'REGISTRATION_REQUIRED' || r.message === 'User not found')) {
       // Ghost account (Firebase user exists, our profile never finished in
@@ -2463,7 +2474,7 @@ async function bootFromNetwork(uid){
   // that by the time the app became visible, every dataset a skeleton covers
   // was already in memory, so the "nothing cached yet" branch could not fire
   // on any screen.
-  await withTimeout(_bootPromise, 6000);
+  await waitForBootSettings(6000);
   hideLoadingScreen();
   $('app').style.display = '';
   showPage(STATE.page || 'home');

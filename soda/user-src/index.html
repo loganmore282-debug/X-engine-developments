@@ -2263,7 +2263,9 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
     getIdTokenResult: async () => ({ claims: { auth_time: (read() || s).authTime } }),
   });
   const auth = { currentUser: null };
-  const announce = user => { auth.currentUser = user; window.dispatchEvent(new CustomEvent('snow-auth', { detail: user })); };
+  // _sodaAuthFired tells the app, if its own code unpacks AFTER this script has already announced who is signed in, that it must pick that up
+  // itself (an announcement made before anyone listens is lost, which left the loading screen up for ever).
+  const announce = user => { auth.currentUser = user; window._sodaAuthFired = true; window.dispatchEvent(new CustomEvent('snow-auth', { detail: user })); };
   const open = (data, email) => {
     const s = { token: data.token, uid: data.uid, authTime: data.authTime, expiresAt: data.expiresAt, email };
     write(s); const u = makeUser(s); announce(u); return { user: u };

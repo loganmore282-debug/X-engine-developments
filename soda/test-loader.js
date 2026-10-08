@@ -42,4 +42,7 @@ ok(/loaderBgOpacity: \[0, 100\], loaderBgBlur: \[0, 40\]/.test(server) && /'X-Lo
 ok(/id="loaderBgOp"/.test(admin) && /id="loaderBgBlur"/.test(admin) && /id="saveLoaderBg"/.test(admin) && /loaderBgOpacity:\+\$\('loaderBgOp'\)\.value/.test(admin), 'admin can edit the loader picture opacity and blur');
 ok(/localStorage\.setItem\(FX/.test(html) && /r\.headers\.get\('X-Loader-Opacity'\)/.test(html) && /function applyLoaderFx\(\)/.test(mod), 'the values are remembered for the first frame and follow the settings');
 ok(/#loadingScreen \.ld-txt\{position:relative;z-index:1;/.test(html), 'the word stays above the picture layer');
+ok(/window\._sodaAuthFired = true;\s*window\.dispatchEvent\(new CustomEvent\('snow-auth'/.test(html), 'the sign-in script records that it has announced who is signed in');
+ok(/window\.addEventListener\('snow-auth', ev => onMemberAuth\(ev\.detail\)\);[\s\S]{0,700}if \(window\._sodaAuthFired && window\.fbAuth\) onMemberAuth\(window\.fbAuth\.currentUser\);/.test(mod), 'and the app picks that announcement up itself when its own code unpacks later (otherwise the loading screen stays for ever)');
+ok(/function waitForBootSettings\(ms\)/.test(mod) && !/withTimeout\(_bootPromise, 6000\)/.test(mod), 'the settings are waited for once in total (6 s from page start), not once per start-up step');
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);
