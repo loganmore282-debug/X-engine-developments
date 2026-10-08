@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'petro-admin-shell-v72';
+const CACHE = 'petro-admin-shell-v73';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/vendor/firebase-app-compat.js', '/vendor/firebase-messaging-compat.js'];
 // The uploaded icon, served by Petro backend. manifest.json and index.html's
 // <link rel="icon"> point here too; the local /icon-*.png above stay only as
