@@ -2526,12 +2526,16 @@ function _marzExtractTx(d) {
 function marzDepositFailureMsg(tx) {
   return marzUserMsg({ message: tx && tx.message }, DEPOSIT_FAILED_MSG);
 }
-async function _marzFetchTxStatus(path, uuid, label) {
+async function _marzFetchTxStatus(path, uuid, label, opts) {
+  // `fast`: for a member who is watching the screen (their next check is 2.5 s away and is itself the retry): one short attempt, no
+  // fallback. The patient version (2 attempts + a fallback, up to 20 s each) is for the background reconciler.
+  const fast = !!(opts && opts.fast);
+  const attempts = fast ? 1 : 2, timeoutMs = fast ? 7000 : MARZ_TIMEOUT;
   let lastErr = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const resp = await fetch(`${MARZPAY_BASE}${path}`, {
-        signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+        signal: AbortSignal.timeout(timeoutMs), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
       });
       const d = await resp.json().catch(() => ({}));
       if (!resp.ok) {
@@ -2541,8 +2545,9 @@ async function _marzFetchTxStatus(path, uuid, label) {
         return _marzExtractTx(d);
       }
     } catch (e) { lastErr = e; console.error(`${label}(${uuid}) attempt ${attempt} failed:`, e.message); }
-    if (attempt < 2) await new Promise(r => setTimeout(r, 350));
+    if (attempt < attempts) await new Promise(r => setTimeout(r, 350));
   }
+  if (fast) return { status: '', reference: null };
   // MarzPay's docs list GET /transactions/{uuid} as a documented fallback
   // "when webhooks are delayed" — one extra try before giving up.
   try {
@@ -2558,7 +2563,7 @@ async function _marzFetchTxStatus(path, uuid, label) {
   console.error(`${label}(${uuid}): gave up after 2 attempts + fallback, last error:`, lastErr && lastErr.message);
   return { status: '', reference: null };
 }
-async function marzGetCollectTx(uuid) { return _marzFetchTxStatus(`/collect-money/${uuid}`, uuid, 'marzGetCollectTx'); }
+async function marzGetCollectTx(uuid, opts) { return _marzFetchTxStatus(`/collect-money/${uuid}`, uuid, 'marzGetCollectTx', opts); }
 async function marzGetSendTx(uuid)    { return _marzFetchTxStatus(`/send-money/${uuid}`,    uuid, 'marzGetSendTx'); }
 async function marzGetSendStatus(uuid) { return (await marzGetSendTx(uuid)).status; }
 const SUCCESS_STATUSES = new Set(['success', 'successful', 'completed']);
@@ -5707,7 +5712,7 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: 'pending' });
     }
     if (!dep.marzTxUuid) return res.json({ status: 'success', state: 'pending' });
-    const marzTx = await marzGetCollectTx(dep.marzTxUuid);
+    const marzTx = await marzGetCollectTx(dep.marzTxUuid, { fast: true });
     if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
     if (FAILED_STATUSES.has(marzTx.status)) {
       // Own test-caught bug: markDepositFailed() can now correctly no-op
