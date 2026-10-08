@@ -3363,8 +3363,8 @@ function fmtDay(value){
   return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' ' + d.getFullYear() + ' at ' + t;
 }
 // Deposit result marks, traced from the owner's two pictures (green tick badge, red cross badge).
-var PAY_OK_SVG = '<svg viewBox="0 0 696 696" aria-hidden="true"><circle cx="348.0" cy="348.0" r="348.0" fill="#fff"/><path fill="#42af3c" fill-rule="evenodd" d="M316.5 694.5C292.9 692.3 268.0 687.5 246.5 680.9C233.9 677.0 210.0 668.0 210.0 667.1C210.0 666.7 209.1 666.4 207.9 666.3C204.1 666.0 170.5 647.8 156.5 638.4C-27.6 515.5 -53.7 256.8 102.4 101.7C239.3 -34.4 458.9 -33.7 595.3 103.3C601.7 109.8 607.0 115.4 607.0 115.8C607.0 116.2 603.0 118.9 598.1 121.7L589.2 126.8L578.3 116.1C417.3 -42.0 151.0 3.9 53.4 206.5C-40.2 400.9 78.7 632.9 291.0 669.9C317.8 674.6 360.4 676.1 383.5 673.2C488.4 659.9 575.7 603.8 628.7 515.5C647.9 483.6 665.7 436.2 669.6 406.9C670.0 404.2 670.7 402.0 671.2 402.0C671.7 402.0 671.8 401.5 671.5 401.0C671.2 400.4 671.7 394.2 672.6 387.2C674.8 371.7 675.1 327.9 673.2 312.5C667.0 263.5 652.8 220.9 628.9 180.8L622.9 170.6L630.3 163.2L637.8 155.9L640.3 159.2C648.7 170.3 665.9 204.8 673.9 226.1C683.0 250.6 691.8 286.1 692.3 300.2C692.4 303.4 692.8 306.0 693.1 306.0C693.4 306.0 694.2 312.9 694.8 321.2C711.2 535.8 530.6 714.0 316.5 694.5ZM334.0 645.3C299.1 642.8 272.5 637.4 244.5 627.0C113.2 578.2 33.9 444.8 53.5 305.7C71.8 175.7 174.8 72.5 305.0 53.6C394.8 40.5 489.0 70.3 551.9 131.6L563.5 142.9L550.0 152.2C481.4 199.6 411.8 266.8 340.6 354.0C334.1 362.0 328.4 368.9 328.0 369.3C327.6 369.8 302.7 357.8 272.6 342.8L217.9 315.5L208.7 315.5C194.1 315.5 183.9 321.6 177.3 334.2C174.8 338.9 174.5 340.6 174.5 349.0C174.5 363.3 175.4 364.8 203.0 395.0C267.6 465.8 311.7 506.8 335.4 518.1C354.3 527.1 376.0 523.7 390.3 509.7C398.6 501.6 396.2 505.5 444.8 418.5C484.5 347.4 528.4 280.5 565.5 234.5C579.5 217.1 600.1 194.0 601.6 194.0C604.3 194.0 619.1 223.3 626.9 244.4C667.7 353.9 641.1 475.0 558.1 558.1C518.1 598.1 471.5 624.4 417.7 637.5C393.3 643.4 356.0 646.9 334.0 645.3ZM350.0 501.6C330.0 495.8 285.8 455.4 218.1 381.1C198.2 359.3 194.0 353.7 194.0 349.3C194.0 346.0 198.2 338.9 201.1 337.5C208.4 333.7 208.5 333.8 273.0 366.0L332.9 396.0L343.2 383.2C432.1 272.6 514.0 196.0 596.0 146.8C615.1 135.3 618.5 133.7 620.8 134.9C625.9 137.6 624.8 139.5 607.2 157.5C534.7 231.3 488.3 297.9 404.5 448.5C384.6 484.2 383.1 486.8 378.4 492.6C371.7 500.8 360.0 504.5 350.0 501.6Z"/></svg>';
-var PAY_FAIL_SVG = '<svg viewBox="0 0 313 313" aria-hidden="true"><circle cx="156.5" cy="156.5" r="156.5" fill="#ea2c2c"/><g fill="#fff"><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(45 156.5 156.5)"/><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(-45 156.5 156.5)"/></g></svg>';
+var PAY_OK_SVG = '<svg viewBox="0 0 696 696" class="draw-ok" aria-hidden="true"><defs><clipPath id="mkClip"><circle cx="348" cy="348" r="296"/></clipPath><mask id="mkRing" maskUnits="userSpaceOnUse" x="0" y="0" width="696" height="696"><circle class="dm-ring" cx="348" cy="348" r="345" pathLength="1" fill="none" stroke="#fff" stroke-width="110"/><path d="M212 352L362 486L625 148" fill="none" stroke="#000" stroke-width="200" stroke-linecap="round" stroke-linejoin="round"/></mask><mask id="mkDisc" maskUnits="userSpaceOnUse" x="0" y="0" width="696" height="696"><circle cx="348" cy="348" r="300" fill="#fff"/></mask><mask id="mkCover" maskUnits="userSpaceOnUse" x="0" y="0" width="696" height="696"><rect width="696" height="696" fill="#fff"/><path class="dm-tick" pathLength="1" d="M212 352L362 486L625 148" fill="none" stroke="#000" stroke-width="210" stroke-linecap="round" stroke-linejoin="round"/></mask><mask id="mkTip" maskUnits="userSpaceOnUse" x="0" y="0" width="696" height="696"><path class="dm-tick" pathLength="1" d="M212 352L362 486L625 148" fill="none" stroke="#fff" stroke-width="210" stroke-linecap="round" stroke-linejoin="round"/><circle cx="348" cy="348" r="297" fill="#000"/></mask></defs><circle cx="348" cy="348" r="348" fill="#fff"/><g mask="url(#mkRing)"><path fill="#42af3c" fill-rule="evenodd" d="M316.5 694.5C292.9 692.3 268.0 687.5 246.5 680.9C233.9 677.0 210.0 668.0 210.0 667.1C210.0 666.7 209.1 666.4 207.9 666.3C204.1 666.0 170.5 647.8 156.5 638.4C-27.6 515.5 -53.7 256.8 102.4 101.7C239.3 -34.4 458.9 -33.7 595.3 103.3C601.7 109.8 607.0 115.4 607.0 115.8C607.0 116.2 603.0 118.9 598.1 121.7L589.2 126.8L578.3 116.1C417.3 -42.0 151.0 3.9 53.4 206.5C-40.2 400.9 78.7 632.9 291.0 669.9C317.8 674.6 360.4 676.1 383.5 673.2C488.4 659.9 575.7 603.8 628.7 515.5C647.9 483.6 665.7 436.2 669.6 406.9C670.0 404.2 670.7 402.0 671.2 402.0C671.7 402.0 671.8 401.5 671.5 401.0C671.2 400.4 671.7 394.2 672.6 387.2C674.8 371.7 675.1 327.9 673.2 312.5C667.0 263.5 652.8 220.9 628.9 180.8L622.9 170.6L630.3 163.2L637.8 155.9L640.3 159.2C648.7 170.3 665.9 204.8 673.9 226.1C683.0 250.6 691.8 286.1 692.3 300.2C692.4 303.4 692.8 306.0 693.1 306.0C693.4 306.0 694.2 312.9 694.8 321.2C711.2 535.8 530.6 714.0 316.5 694.5ZM334.0 645.3C299.1 642.8 272.5 637.4 244.5 627.0C113.2 578.2 33.9 444.8 53.5 305.7C71.8 175.7 174.8 72.5 305.0 53.6C394.8 40.5 489.0 70.3 551.9 131.6L563.5 142.9L550.0 152.2C481.4 199.6 411.8 266.8 340.6 354.0C334.1 362.0 328.4 368.9 328.0 369.3C327.6 369.8 302.7 357.8 272.6 342.8L217.9 315.5L208.7 315.5C194.1 315.5 183.9 321.6 177.3 334.2C174.8 338.9 174.5 340.6 174.5 349.0C174.5 363.3 175.4 364.8 203.0 395.0C267.6 465.8 311.7 506.8 335.4 518.1C354.3 527.1 376.0 523.7 390.3 509.7C398.6 501.6 396.2 505.5 444.8 418.5C484.5 347.4 528.4 280.5 565.5 234.5C579.5 217.1 600.1 194.0 601.6 194.0C604.3 194.0 619.1 223.3 626.9 244.4C667.7 353.9 641.1 475.0 558.1 558.1C518.1 598.1 471.5 624.4 417.7 637.5C393.3 643.4 356.0 646.9 334.0 645.3ZM350.0 501.6C330.0 495.8 285.8 455.4 218.1 381.1C198.2 359.3 194.0 353.7 194.0 349.3C194.0 346.0 198.2 338.9 201.1 337.5C208.4 333.7 208.5 333.8 273.0 366.0L332.9 396.0L343.2 383.2C432.1 272.6 514.0 196.0 596.0 146.8C615.1 135.3 618.5 133.7 620.8 134.9C625.9 137.6 624.8 139.5 607.2 157.5C534.7 231.3 488.3 297.9 404.5 448.5C384.6 484.2 383.1 486.8 378.4 492.6C371.7 500.8 360.0 504.5 350.0 501.6Z"/></g><g class="dr-pop"><g mask="url(#mkDisc)"><path fill="#42af3c" fill-rule="evenodd" d="M316.5 694.5C292.9 692.3 268.0 687.5 246.5 680.9C233.9 677.0 210.0 668.0 210.0 667.1C210.0 666.7 209.1 666.4 207.9 666.3C204.1 666.0 170.5 647.8 156.5 638.4C-27.6 515.5 -53.7 256.8 102.4 101.7C239.3 -34.4 458.9 -33.7 595.3 103.3C601.7 109.8 607.0 115.4 607.0 115.8C607.0 116.2 603.0 118.9 598.1 121.7L589.2 126.8L578.3 116.1C417.3 -42.0 151.0 3.9 53.4 206.5C-40.2 400.9 78.7 632.9 291.0 669.9C317.8 674.6 360.4 676.1 383.5 673.2C488.4 659.9 575.7 603.8 628.7 515.5C647.9 483.6 665.7 436.2 669.6 406.9C670.0 404.2 670.7 402.0 671.2 402.0C671.7 402.0 671.8 401.5 671.5 401.0C671.2 400.4 671.7 394.2 672.6 387.2C674.8 371.7 675.1 327.9 673.2 312.5C667.0 263.5 652.8 220.9 628.9 180.8L622.9 170.6L630.3 163.2L637.8 155.9L640.3 159.2C648.7 170.3 665.9 204.8 673.9 226.1C683.0 250.6 691.8 286.1 692.3 300.2C692.4 303.4 692.8 306.0 693.1 306.0C693.4 306.0 694.2 312.9 694.8 321.2C711.2 535.8 530.6 714.0 316.5 694.5ZM334.0 645.3C299.1 642.8 272.5 637.4 244.5 627.0C113.2 578.2 33.9 444.8 53.5 305.7C71.8 175.7 174.8 72.5 305.0 53.6C394.8 40.5 489.0 70.3 551.9 131.6L563.5 142.9L550.0 152.2C481.4 199.6 411.8 266.8 340.6 354.0C334.1 362.0 328.4 368.9 328.0 369.3C327.6 369.8 302.7 357.8 272.6 342.8L217.9 315.5L208.7 315.5C194.1 315.5 183.9 321.6 177.3 334.2C174.8 338.9 174.5 340.6 174.5 349.0C174.5 363.3 175.4 364.8 203.0 395.0C267.6 465.8 311.7 506.8 335.4 518.1C354.3 527.1 376.0 523.7 390.3 509.7C398.6 501.6 396.2 505.5 444.8 418.5C484.5 347.4 528.4 280.5 565.5 234.5C579.5 217.1 600.1 194.0 601.6 194.0C604.3 194.0 619.1 223.3 626.9 244.4C667.7 353.9 641.1 475.0 558.1 558.1C518.1 598.1 471.5 624.4 417.7 637.5C393.3 643.4 356.0 646.9 334.0 645.3ZM350.0 501.6C330.0 495.8 285.8 455.4 218.1 381.1C198.2 359.3 194.0 353.7 194.0 349.3C194.0 346.0 198.2 338.9 201.1 337.5C208.4 333.7 208.5 333.8 273.0 366.0L332.9 396.0L343.2 383.2C432.1 272.6 514.0 196.0 596.0 146.8C615.1 135.3 618.5 133.7 620.8 134.9C625.9 137.6 624.8 139.5 607.2 157.5C534.7 231.3 488.3 297.9 404.5 448.5C384.6 484.2 383.1 486.8 378.4 492.6C371.7 500.8 360.0 504.5 350.0 501.6Z"/></g><g clip-path="url(#mkClip)"><path d="M212 352L362 486L625 148" fill="none" stroke="#42af3c" stroke-width="200" stroke-linecap="round" stroke-linejoin="round" mask="url(#mkCover)"/></g></g><g mask="url(#mkTip)"><path fill="#42af3c" fill-rule="evenodd" d="M316.5 694.5C292.9 692.3 268.0 687.5 246.5 680.9C233.9 677.0 210.0 668.0 210.0 667.1C210.0 666.7 209.1 666.4 207.9 666.3C204.1 666.0 170.5 647.8 156.5 638.4C-27.6 515.5 -53.7 256.8 102.4 101.7C239.3 -34.4 458.9 -33.7 595.3 103.3C601.7 109.8 607.0 115.4 607.0 115.8C607.0 116.2 603.0 118.9 598.1 121.7L589.2 126.8L578.3 116.1C417.3 -42.0 151.0 3.9 53.4 206.5C-40.2 400.9 78.7 632.9 291.0 669.9C317.8 674.6 360.4 676.1 383.5 673.2C488.4 659.9 575.7 603.8 628.7 515.5C647.9 483.6 665.7 436.2 669.6 406.9C670.0 404.2 670.7 402.0 671.2 402.0C671.7 402.0 671.8 401.5 671.5 401.0C671.2 400.4 671.7 394.2 672.6 387.2C674.8 371.7 675.1 327.9 673.2 312.5C667.0 263.5 652.8 220.9 628.9 180.8L622.9 170.6L630.3 163.2L637.8 155.9L640.3 159.2C648.7 170.3 665.9 204.8 673.9 226.1C683.0 250.6 691.8 286.1 692.3 300.2C692.4 303.4 692.8 306.0 693.1 306.0C693.4 306.0 694.2 312.9 694.8 321.2C711.2 535.8 530.6 714.0 316.5 694.5ZM334.0 645.3C299.1 642.8 272.5 637.4 244.5 627.0C113.2 578.2 33.9 444.8 53.5 305.7C71.8 175.7 174.8 72.5 305.0 53.6C394.8 40.5 489.0 70.3 551.9 131.6L563.5 142.9L550.0 152.2C481.4 199.6 411.8 266.8 340.6 354.0C334.1 362.0 328.4 368.9 328.0 369.3C327.6 369.8 302.7 357.8 272.6 342.8L217.9 315.5L208.7 315.5C194.1 315.5 183.9 321.6 177.3 334.2C174.8 338.9 174.5 340.6 174.5 349.0C174.5 363.3 175.4 364.8 203.0 395.0C267.6 465.8 311.7 506.8 335.4 518.1C354.3 527.1 376.0 523.7 390.3 509.7C398.6 501.6 396.2 505.5 444.8 418.5C484.5 347.4 528.4 280.5 565.5 234.5C579.5 217.1 600.1 194.0 601.6 194.0C604.3 194.0 619.1 223.3 626.9 244.4C667.7 353.9 641.1 475.0 558.1 558.1C518.1 598.1 471.5 624.4 417.7 637.5C393.3 643.4 356.0 646.9 334.0 645.3ZM350.0 501.6C330.0 495.8 285.8 455.4 218.1 381.1C198.2 359.3 194.0 353.7 194.0 349.3C194.0 346.0 198.2 338.9 201.1 337.5C208.4 333.7 208.5 333.8 273.0 366.0L332.9 396.0L343.2 383.2C432.1 272.6 514.0 196.0 596.0 146.8C615.1 135.3 618.5 133.7 620.8 134.9C625.9 137.6 624.8 139.5 607.2 157.5C534.7 231.3 488.3 297.9 404.5 448.5C384.6 484.2 383.1 486.8 378.4 492.6C371.7 500.8 360.0 504.5 350.0 501.6Z"/></g></svg>';
+var PAY_FAIL_SVG = '<svg viewBox="0 0 313 313" class="draw-fail" aria-hidden="true"><defs><mask id="mkX1" maskUnits="userSpaceOnUse" x="0" y="0" width="313" height="313"><line class="dm-x1" pathLength="1" x1="95" y1="95" x2="218" y2="218" stroke="#fff" stroke-width="46"/></mask><mask id="mkX2" maskUnits="userSpaceOnUse" x="0" y="0" width="313" height="313"><line class="dm-x2" pathLength="1" x1="95" y1="218" x2="218" y2="95" stroke="#fff" stroke-width="46"/></mask></defs><g class="dr-pop"><circle cx="156.5" cy="156.5" r="156.5" fill="#ea2c2c"/></g><g fill="#fff"><g mask="url(#mkX1)"><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(45 156.5 156.5)"/></g><g mask="url(#mkX2)"><rect x="81.5" y="141.5" width="150" height="30" rx="7" transform="rotate(-45 156.5 156.5)"/></g></g></svg>';
 // Waiting for the payment: a dot travels from the phone to the wallet (nothing rotates).
 var DEPOSIT_POLL_FLOW = '<div class="dep-flow" role="img" aria-label="Processing payment">'
   + '<span class="dep-flow-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.5h3"/></svg></span>'
@@ -4486,7 +4486,6 @@ function showChestWin(reward, balance, after){
   document.body.appendChild(bg);
   requestAnimationFrame(() => bg.classList.add('show'));
   dlgOpened();
-  fireConfetti();
 }
 window.collectChestWin = function(){
   const bg = $('chestWinBg');
@@ -4866,8 +4865,7 @@ async function resumePendingCardDeposit(){
       if (r.status === 'success' && r.state === 'matched') {
         clearInterval(timer);
         try { localStorage.removeItem(CARD_DEPOSIT_STORAGE_KEY); } catch (e) {}
-        fireConfetti();
-        notify('Card payment completed! Credited to your balance.');
+              notify('Card payment completed! Credited to your balance.');
         await refreshTransactionsCache();
         if (STATE.page === 'home') renderHome();
         return;
@@ -5096,106 +5094,9 @@ function setDepositStatusPending(amount, phone, network){
   // nothing for the member to do but wait.
   setDepButtons(false, false);
 }
-// ── CONFETTI ── owner: "high quality confetti sparklings bursting and
-// dropping down allover the page on payment success on all methods."
-// One shared function, called from every deposit rail's own success path
-// (setDepositStatusSuccess() below covers Mobile Money + Card, which share
-// this one modal; doUsdtDeposit()/pollUsdtDepositStatus() call it directly
-// for USDT, which never uses this modal at all).
-//
-// Plain canvas, zero dependencies -- matches this codebase's own standing
-// preference (see static-server.js's own "ZERO DEPENDENCIES on purpose"
-// note) over pulling in a confetti library for one animation. A fixed,
-// full-viewport, pointer-events:none canvas overlay so it never blocks a
-// tap on the Close/Back button underneath it. Two particle sets for the
-// "bursting AND dropping down all over" brief: an upward burst from
-// bottom-center (the "bursting" half) plus a wide rain of pieces already
-// falling from above the top edge (the "dropping down allover the page"
-// half), both under the same gravity so the burst pieces arc over and
-// join the rain by the time they fade out. Respects prefers-reduced-motion
-// -- skipped entirely for anyone who has that on, same as this app's
-// existing spinners already do.
-function fireConfetti(){
-  try {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    let canvas = document.getElementById('confettiCanvas');
-    if (canvas) canvas.remove(); // a rapid second success (rare, but possible) restarts cleanly rather than layering two loops
-    canvas = document.createElement('canvas');
-    canvas.id = 'confettiCanvas';
-    canvas.setAttribute('aria-hidden', 'true');
-    canvas.style.cssText = 'position:fixed;inset:0;z-index:99999;pointer-events:none;';
-    document.body.appendChild(canvas);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { canvas.remove(); return; }
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    let W = window.innerWidth, H = window.innerHeight;
-    function resize(){
-      W = window.innerWidth; H = window.innerHeight;
-      canvas.width = W * dpr; canvas.height = H * dpr;
-      canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-    resize();
-    window.addEventListener('resize', resize);
-    // Amber/red/gold, plus white -- Soda's own palette, not generic
-    // party colours, so this still looks like it belongs to the app.
-    const COLORS = ['#1739b8', '#f5a000', '#ffb000', '#1a7a3e', '#2a52d4', '#ffffff'];
-    const particles = [];
-    function makePiece(x, y, vx, vy, burst){
-      return {
-        x, y, vx, vy, burst,
-        w: 5 + Math.random() * 6, h: 8 + Math.random() * 9,
-        color: COLORS[(Math.random() * COLORS.length) | 0],
-        rot: Math.random() * Math.PI * 2, vrot: (Math.random() - 0.5) * 0.35,
-        shape: Math.random() < 0.45 ? 'circle' : 'rect',
-      };
-    }
-    // The rain: falling from above the visible top edge, spread across the
-    // full width -- "dropping down allover the page".
-    for (let i = 0; i < 140; i++) {
-      particles.push(makePiece(
-        Math.random() * W, -20 - Math.random() * H * 0.6,
-        (Math.random() - 0.5) * 1.6, 2 + Math.random() * 2.5, false
-      ));
-    }
-    // The burst: fired upward/outward from bottom-center -- "bursting".
-    for (let i = 0; i < 70; i++) {
-      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
-      const speed = 7 + Math.random() * 9;
-      particles.push(makePiece(
-        W / 2 + (Math.random() - 0.5) * 100, H * 0.72,
-        Math.cos(angle) * speed, Math.sin(angle) * speed, true
-      ));
-    }
-    const GRAVITY = 0.16, DURATION = 4200, start = performance.now();
-    function frame(now){
-      const elapsed = now - start;
-      ctx.clearRect(0, 0, W, H);
-      const fade = Math.max(0, 1 - elapsed / DURATION);
-      for (const p of particles) {
-        p.vy += GRAVITY * (p.burst ? 0.55 : 0.3);
-        if (p.burst) p.vx *= 0.985;
-        p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
-        if (p.y - 20 > H) continue; // off the bottom -- skip drawing, still fades on schedule with the rest
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rot);
-        ctx.globalAlpha = fade;
-        ctx.fillStyle = p.color;
-        if (p.shape === 'rect') ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-        else { ctx.beginPath(); ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2); ctx.fill(); }
-        ctx.restore();
-      }
-      if (elapsed < DURATION) requestAnimationFrame(frame);
-      else { window.removeEventListener('resize', resize); canvas.remove(); }
-    }
-    requestAnimationFrame(frame);
-  } catch (e) {}
-}
-window.fireConfetti = fireConfetti;
+// (Confetti and sparkles were removed on the owner's request: success is shown by the tick drawing itself, see PAY_OK_SVG.)
 var _depSuccessRedirectTimer = null;
 function setDepositStatusSuccess(){
-  fireConfetti();
   $('depStatusIcon').className = 'dep-status-icon success';
   // The owner's own artwork, cut out of the images he supplied.
   $('depStatusIcon').innerHTML = PAY_OK_SVG;
