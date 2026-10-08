@@ -5241,17 +5241,17 @@ window.submitDeposit = async function(){
 //
 //   * the FIRST check is at 1.2s. That is the case worth optimising: the
 //     member had the prompt open and approved it immediately.
-//   * later checks are 2.5s apart, which is the cadence PesaJet's own SDK
+//   * later checks are 1.5s apart (owner, 2026-10-08; was 2.5s, the cadence PesaJet's own SDK
 //     uses in pollUntilComplete.
 //
 // The 60-second budget is unchanged -- 24 ticks at the new spacing is the same
 // wall-clock window, so nothing gives up on a payment any sooner than before.
 var DEP_POLL_FIRST_MS = 1200;
-var DEP_POLL_EVERY_MS = 2500;
+var DEP_POLL_EVERY_MS = 1500;
 async function pollDepositStatus(depositId){
   _depActiveDepositId = depositId;
   _depPollDone = false;
-  // Ticks are 2.5 s apart MEASURED FROM THE START OF EACH TICK (a slow answer no longer pushes the next check further away), and the
+  // Ticks are 1.5 s apart MEASURED FROM THE START OF EACH TICK (a slow answer no longer pushes the next check further away), and the
   // budget is 70 s of the wall clock, not 24 ticks however long each took.
   const began = Date.now();
   let tickAt = began + DEP_POLL_FIRST_MS;
