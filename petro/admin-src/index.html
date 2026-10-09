@@ -3122,8 +3122,7 @@ async function renderSettings(){
            is 24-hour. Owner: "withdrawal time has problems, is it in 24hrs or,
            please make sure every withdrawal time is reading very well on each
            country". -->
-      <p class="muted" style="margin:6px 0 0">Uganda time. Members can withdraw only between these two times, for example 6:00 AM to 4:00 PM. One withdrawal at a time per member, always.</p>
-      <p class="muted" id="witNow" style="margin:6px 0 0;font-weight:600"></p>
+      <p class="muted" style="margin:6px 0 0">24-hour, local time. Can run past midnight (e.g. 18:00&ndash;17:00). One withdrawal at a time per member, always.</p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a referral code to sign up</b> <span class="muted">(every new member must be invited by an existing one)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqReferral" ${s.requireReferralCode!==false?'checked':''} style="width:auto"></label></div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Leave ON &mdash; the first-ever account is always let through.</p>
@@ -3244,20 +3243,6 @@ async function renderSettings(){
     const d = await api('/admin/settings/update', { settings: { cardDepositEnabled:$('sCardEnabled').checked } });
     toast(d.status==='success' ? 'Card deposit setting saved' : (d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  // Says plainly, from the two times typed above, whether withdrawing is open at this moment (Uganda time, the same clock the server uses).
-  function refreshWitNow(){
-    const el=$('witNow'); if(!el) return;
-    const on=$('sWitWindow')&&$('sWitWindow').checked, f=$('sWitFrom').value, t=$('sWitTo').value;
-    const m=x=>{const r=/^(\d{1,2}):(\d{2})/.exec(x||'');return r?(+r[1])*60+(+r[2]):null;};
-    const d=new Date(Date.now()+3*3600000), now=d.getUTCHours()*60+d.getUTCMinutes(), a=m(f), b=m(t);
-    const clock=String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
-    if(!on){ el.textContent='Switch is off: members can withdraw at any hour.'; return; }
-    if(a==null||b==null||a===b){ el.textContent='Pick two different times.'; return; }
-    const open=a<b?(now>=a&&now<b):(now>=a||now<b);
-    el.textContent='Right now it is '+clock+' Uganda time: withdrawing is '+(open?'OPEN.':'CLOSED.');
-  }
-  ['sWitWindow','sWitFrom','sWitTo'].forEach(id=>{ const e=$(id); if(e){ e.addEventListener('change',refreshWitNow); e.addEventListener('input',refreshWitNow); } });
-  refreshWitNow();
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
