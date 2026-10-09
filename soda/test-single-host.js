@@ -39,6 +39,21 @@ for (const args of [['dev', 'Panel7x9k'], ['prod', 'mysoda.example.com', 'Panel7
   const out = require('child_process').execFileSync('node', ['deploy/make-nginx.js', ...args], { encoding: 'utf8' });
   ok(!/^server_tokens/m.test(out), `${args[0]} nginx file has no top-level server_tokens (it clashes with other sites)`);
 }
+// two-host setup: the admin panel lives ONLY on its own hidden host
+{
+  const gen = (...a) => require('child_process').execFileSync('node', ['deploy/make-nginx.js', ...a], { encoding: 'utf8' });
+  const two = gen('prod', 'example.com', 'Panel7x9k', 'sv37ah.example.com');
+  const blocks = two.split(/^server \{/m).slice(1);
+  ok(blocks.length === 2, 'two-host mode writes two server blocks');
+  const [mem, adm] = blocks;
+  ok(/server_name example\.com;/.test(mem) && /server_name sv37ah\.example\.com;/.test(adm), 'each block has its own host');
+  ok(!/Panel7x9k/.test(mem) && /location \^~ \/api\/admin\/ \{ return 404; \}/.test(mem), 'the member host serves no admin path and refuses /api/admin/');
+  ok(/location \^~ \/Panel7x9k\//.test(adm) && /location \/ \{ return 404; \}/.test(adm) && !/refCode|share\.html|\/user;/.test(adm), 'the admin host serves only the admin path, the API behind it, and 404 for everything else');
+  ok(!/\/api\/admin\/ \{ return 404/.test(adm) && /location ~ \^\/api\/admin\/\(login\|check-key\)\$/.test(adm), 'the admin host still reaches the admin API');
+  ok(gen('prod', 'example.com', 'Panel7x9k') === gen('prod', 'example.com', 'Panel7x9k'), 'one-host output is stable');
+  let bad = false; try { gen('prod', 'example.com', 'Panel7x9k', 'example.com'); } catch (e) { bad = true; }
+  ok(bad, 'the admin host must differ from the member host');
+}
 // 3. the two service workers share a host without trampling each other
 function boot(file, scope) {
   const L = {}, cacheOps = { deleted: [] }; let responded = 0, respondedWith;
