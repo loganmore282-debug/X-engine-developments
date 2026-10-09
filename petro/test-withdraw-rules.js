@@ -48,7 +48,7 @@ const grab = (a, b) => {
 // validator can tell from a deliberate one. Uganda then ran three hours
 // behind itself and a member was refused at 07:00 on a 06:00-17:00 window.
 const winFor = off => new Function(`
-  ${fnSource('tsMillis')}
+  const tsMillis = t => Number(t) || 0;
   const tzOffMs = () => (${off}) * 60000;
   ${fnSource('hhmmToMin')}
   ${fnSource('hhmmLabel')}

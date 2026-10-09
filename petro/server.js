@@ -1344,10 +1344,7 @@ function withdrawWindowState(sett, ts) {
   const enabled = !!(sett && sett.withdrawWindowEnabled) && from != null && to != null && from !== to;
   const label = { from: hhmmLabel(sett && sett.withdrawOpenFrom), to: hhmmLabel(sett && sett.withdrawOpenTo) };
   if (!enabled) return { enabled: false, open: true, from: label.from, to: label.to };
-  // `ts` is an epoch NUMBER (Date.now()): tsMillis() only understands Dates and Firestore timestamps and answers 0 for a number, which made
-  // every request be judged at 00:00 UTC = 03:00 local, so a window such as 06:00-16:00 was ALWAYS closed and a member was refused all day.
-  const at = typeof ts === 'number' && Number.isFinite(ts) && ts > 0 ? ts : (tsMillis(ts) || Date.now());
-  const d = new Date(at + tzOffMs());
+  const d = new Date(tsMillis(ts || Date.now()) + tzOffMs());
   const now = d.getUTCHours() * 60 + d.getUTCMinutes();
   const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
   return { enabled: true, open, from: label.from, to: label.to };
