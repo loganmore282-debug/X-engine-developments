@@ -50,8 +50,8 @@
      that shipped in the repo, so the icon "never changed" here no matter how
      many times it was replaced. One source of truth now: whatever
      /admin/app-icon/set last wrote. -->
-<link rel="icon" href="/api/public/app-icon-192.png">
-<link rel="apple-touch-icon" href="/api/public/app-icon-192.png">
+<link rel="icon" href="/k7x2/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="/k7x2/public/app-icon-192.png">
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 window._adminInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window._adminInstallPrompt = e;
@@ -392,8 +392,8 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
 <script>
 // Soda Admin panel.
 // Same host as the page; the panel itself lives under a secret path, so the
-// API is addressed from the root (/api), while the panel's own files are relative.
-const SERVER = '/api';
+// API is addressed from the root (/k7x2), while the panel's own files are relative.
+const SERVER = '/k7x2';
 
 let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
 try {

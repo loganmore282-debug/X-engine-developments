@@ -1,9 +1,9 @@
 // Soda backend, on the same Hostinger VPS as this frontend (pm2, port 3000
 // behind nginx). api./app. are still different subdomains -- different
 // browser origins -- so this host must stay in server.js's CORS allowlist.
-// Same host as the page: the server answers under /api (nginx strips the prefix).
+// Same host as the page: the server answers under /k7x2 (nginx strips the prefix).
 // No domain is baked in, so changing the host never needs a rebuild.
-var API_BASE = '/api';
+var API_BASE = '/k7x2';
 
 
 // Every money amount elsewhere is always a whole shilling -- only a

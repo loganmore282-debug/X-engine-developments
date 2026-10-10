@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'soda-admin-shell-v96';
+const CACHE = 'soda-admin-shell-v97';
 // The panel lives under a secret path on the SAME host as the member app, so
 // everything it owns is addressed relative to this worker (never from '/'),
 // and its cache name has its own prefix so neither worker ever clears the
@@ -10,7 +10,7 @@ const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.pn
 // the offline shell copy. Before this, the admin panel read the PNG that
 // shipped in the repo, so replacing the icon in Admin -> Brand changed the
 // members' app and left the admin's own icon untouched forever.
-const BRAND_ICON = '/api/public/app-icon-192.png';
+const BRAND_ICON = '/k7x2/public/app-icon-192.png';
 
 // Firebase Messaging background handler -- shows a notification for pushes
 // that arrive while the admin panel tab isn't open/focused. Foreground
@@ -33,7 +33,7 @@ firebase.initializeApp({
 });
 const messaging = firebase.messaging();
 // The API is on the same host, under /api.
-const API_ORIGIN = self.location.origin + '/api';
+const API_ORIGIN = self.location.origin + '/k7x2';
 
 // The server sends DATA-ONLY pushes (title/body live in `data`), so THIS is
 // the only place a notification is created. A message that carries a
@@ -127,8 +127,8 @@ self.addEventListener('activate', e => {
 // session on the same device.
 self.addEventListener('fetch', e => {
   const reqUrl = new URL(e.request.url);
-  // The API is same-origin now (/api/...): never cached, always the network.
-  if (reqUrl.origin !== self.location.origin || reqUrl.pathname.indexOf('/api/') === 0) {
+  // The API is same-origin now (/k7x2/...): never cached, always the network.
+  if (reqUrl.origin !== self.location.origin || reqUrl.pathname.indexOf('/k7x2/') === 0) {
     e.respondWith(fetch(e.request));
     return;
   }

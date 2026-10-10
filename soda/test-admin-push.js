@@ -209,7 +209,7 @@ async function swTests() {
   w.clientsList.list = [w.mkClient()];
   const closed = await w.click(ownerPush.data, 'approve');
   ok(closed, 'notification dismissed'); eq(reqs.length, 1);
-  eq(reqs[0][0], 'https://app.example/api/admin/withdraw/quick-approve'); eq(reqs[0][1].method, 'POST');
+  eq(reqs[0][0], 'https://app.example/k7x2/admin/withdraw/quick-approve'); eq(reqs[0][1].method, 'POST');
   eq(JSON.parse(reqs[0][1].body), { withdrawalId: 'W1', pushToken: 'devA', secret: 'S' }, 'sends exactly the three fields');
   ok(!/authorization/i.test(JSON.stringify(reqs[0][1].headers)), 'no login session or master key is sent');
   eq([w.shown[0].title, w.shown[0].body, w.shown[0].tag], ['Withdrawal approved', 'Sending UGX 4,000 to 0771', 'wd-W1'], 'result replaces the alert (same tag)');
@@ -246,7 +246,7 @@ async function pageTests() {
     const S = { calls: [], messageHandlers: {}, onMessage: null, perm: permission, registerReply: { status: 'success', quickApprove: role === 'owner' } };
     const dom = new JSDOM(html, { url, runScripts: 'dangerously', virtualConsole: vc, beforeParse(w) {
       w.fetch = async (u, o = {}) => {
-        const path = String(u).replace(/^https?:\/\/[^/]+/, '').replace(/^\/api(?=\/)/, ''); const body = o.body ? JSON.parse(o.body) : null; S.calls.push([path, body]);
+        const path = String(u).replace(/^https?:\/\/[^/]+/, '').replace(/^\/k7x2(?=\/)/, ''); const body = o.body ? JSON.parse(o.body) : null; S.calls.push([path, body]);
         const base = { status: 'success', token: 't', username: 'owner', role, settings: {}, users: [], products: [], withdrawals: [], deposits: [], transactions: [], stats: {}, pendingWithdrawals: 0 };
         return { status: 200, ok: true, json: async () => (path === '/admin/push/register' ? S.registerReply : base) };
       };

@@ -115,7 +115,7 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
       const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://app.example/', runScripts: 'outside-only' }); const w = dom.window;
       if (storage) for (const [k, v] of Object.entries(storage)) w.sessionStorage.setItem(k, v);
       w.events = []; w.addEventListener('snow-auth', e => w.events.push(e.detail));
-      w.fetch = async (url, opts) => { const path = String(url).replace(/^https?:\/\/[^/]+/, '').replace(/^\/api(?=\/)/, ''); if (w.netDown) throw new Error('offline');
+      w.fetch = async (url, opts) => { const path = String(url).replace(/^https?:\/\/[^/]+/, '').replace(/^\/k7x2(?=\/)/, ''); if (w.netDown) throw new Error('offline');
         const r = await E.call(path, JSON.parse(opts.body), Object.fromEntries(Object.entries(opts.headers || {}).map(([k, v]) => [k.toLowerCase(), v]))); return { ok: r.code >= 200 && r.code < 300, status: r.code, json: async () => r.body }; };
       w.eval(shim); return w;
     };

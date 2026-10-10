@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'soda-shell-v301';
+const CACHE = 'soda-shell-v302';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -46,7 +46,7 @@ self.addEventListener('activate', e => {
 // because a phone that cannot install the app is a far worse outcome than one
 // that installs it under last week's name.
 // Same host: the API answers under /api.
-const API_ORIGIN = '/api';
+const API_ORIGIN = '/k7x2';
 const BRAND_CACHE = 'soda-brand-v1';
 const BRAND_KEY = '/__brand-name';
 
@@ -105,10 +105,10 @@ async function brandedManifest(request) {
 
 self.addEventListener('fetch', e => {
   const reqUrl = new URL(e.request.url);
-  // The API is same-origin now (/api/...): per-user responses, never cached,
+  // The API is same-origin now (/k7x2/...): per-user responses, never cached,
   // never handled here -- the request goes straight to the network. Same for
   // the admin panel's own area, which has its own worker.
-  if (reqUrl.pathname.indexOf('/api/') === 0) return;
+  if (reqUrl.pathname.indexOf('/k7x2/') === 0) return;
   if (reqUrl.origin !== self.location.origin) {
     // Do NOT respondWith here. Returning without responding hands the request
     // back to the browser untouched, which is what respondWith(fetch(...))

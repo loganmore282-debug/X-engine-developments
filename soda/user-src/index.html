@@ -63,8 +63,8 @@
      It falls back to the bundled icon-192/512.png, so these never 404.
      THESE URLS ARE PERMANENT. Changing a path here breaks the installed
      icon and every previously-shared link at the same time. -->
-<link rel="icon" href="/api/public/app-icon-192.png">
-<link rel="apple-touch-icon" href="/api/public/app-icon-192.png">
+<link rel="icon" href="/k7x2/public/app-icon-192.png">
+<link rel="apple-touch-icon" href="/k7x2/public/app-icon-192.png">
 <meta name="description" content="Soda — invest, earn daily income, and grow your team.">
 <!-- Link preview REMOVED entirely, again, all the way this time (owner,
      after the previous round left a text-only card in place: "why still
@@ -349,7 +349,7 @@ html,body{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent
 .wrap{max-width:480px;margin:0 auto;position:relative;min-height:100vh;background:var(--snow-canvas);padding-bottom:calc(var(--nav-h) + 20px);}
 #loadingScreen{position:fixed;inset:0;overflow:hidden;background:linear-gradient(145deg,#0b2b58 0%,#1739b8 52%,#103863 100%);display:flex;align-items:center;justify-content:center;z-index:500;}
 /* The admin's picture sits on its own layer so its opacity and blur (Admin > Banners > Loading screen background) never touch the word. The layer is pushed past the edges by twice the blur so a blurred picture has no pale rim. */
-#loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/api/public/loader-image') center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);pointer-events:none;}
+#loadingScreen .ld-bg{position:absolute;inset:calc(var(--ld-blur,0px) * -2);background:linear-gradient(rgba(3,12,32,.25),rgba(3,12,32,.35)),url('/k7x2/public/loader-image') center/cover no-repeat;opacity:var(--ld-op,1);filter:blur(var(--ld-blur,0px));transform:translateZ(0);pointer-events:none;}
 #loadingScreen .ld-txt{position:relative;z-index:1;display:inline-block;color:#fff;font-family:'Noto Serif',Georgia,'DejaVu Serif','Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:.02em;text-shadow:0 2px 10px rgba(0,0,0,.45);animation:ldBounce .9s cubic-bezier(.28,.84,.42,1) infinite;}
 @keyframes ldBounce{0%,100%{transform:translateY(0);animation-timing-function:cubic-bezier(.55,.06,.68,.19);}50%{transform:translateY(-34px);animation-timing-function:cubic-bezier(.22,.61,.36,1);}}
 @media (prefers-reduced-motion:reduce){#loadingScreen .ld-txt{animation:none;}}
@@ -1941,7 +1941,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
     var kept = null; try { kept = localStorage.getItem(KEY); } catch (e) {}
     if (kept && bg) bg.style.backgroundImage = layer(kept);
     if (!window.fetch || !window.FileReader) return;
-    fetch('/api/public/loader-image', { cache: 'no-cache' }).then(function(r){ if (r.status === 404) { try { localStorage.removeItem(KEY); } catch (e) {} if (bg && kept) bg.style.backgroundImage = 'none'; return null; } if (r.ok) fx(r.headers.get('X-Loader-Opacity'), r.headers.get('X-Loader-Blur')); return r.ok ? r.blob() : null; }).then(function(b){
+    fetch('/k7x2/public/loader-image', { cache: 'no-cache' }).then(function(r){ if (r.status === 404) { try { localStorage.removeItem(KEY); } catch (e) {} if (bg && kept) bg.style.backgroundImage = 'none'; return null; } if (r.ok) fx(r.headers.get('X-Loader-Opacity'), r.headers.get('X-Loader-Blur')); return r.ok ? r.blob() : null; }).then(function(b){
       if (!b || b.size > 1500000) return;
       var fr = new FileReader();
       fr.onload = function(){
@@ -2238,7 +2238,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
   // fbSignOut / fbChangePassword / fbAuth.currentUser and the 'snow-auth'
   // event), so the rest of the app did not have to change. The origin below is
   // rewritten by set-backend-url.js together with the app's other copies.
-  const SODA_AUTH_API = '/api';
+  const SODA_AUTH_API = '/k7x2';
   const KEY = 'soda_auth_session';
   // sessionStorage on purpose: closing the tab ends the login, exactly as the
   // previous sign-in did (browserSessionPersistence).

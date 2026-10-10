@@ -8,7 +8,7 @@ const server = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const admin = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); };
 ok(/<span class="ld-txt"[^>]*>Loading\.\.\.<\/span>/.test(html), 'the loader says "Loading..."');
-ok(/#loadingScreen \.ld-bg\{[^}]*url\('\/api\/public\/loader-image'\)[^}]*opacity:var\(--ld-op,1\)[^}]*filter:blur\(var\(--ld-blur,0px\)\)/.test(html) && /id="ldBg"/.test(html), 'the loader background is the admin picture, on its own layer with the admin opacity and blur (never on the word)');
+ok(/#loadingScreen \.ld-bg\{[^}]*url\('\/k7x2\/public\/loader-image'\)[^}]*opacity:var\(--ld-op,1\)[^}]*filter:blur\(var\(--ld-blur,0px\)\)/.test(html) && /id="ldBg"/.test(html), 'the loader background is the admin picture, on its own layer with the admin opacity and blur (never on the word)');
 ok(/@keyframes ldBounce\{.*translateY\(-34px\)/.test(html) && /animation:ldBounce/.test(html), 'the word bounces in its original 34 px area');
 ok((html.match(/ld-txt[^{]*\{[^}]*animation:/g) || []).length === 2, 'one bounce animation (plus its reduced-motion off switch), nothing else');
 ok(/ld-txt\{[^}]*font-family:'Noto Serif'[^}]*font-size:24px[^}]*letter-spacing:\.02em/.test(html), 'bold serif, 24 px, letters and dots close together');
@@ -33,7 +33,7 @@ ok(/function vFitCard\(img\)/.test(mod) && /onload="vFitCard\(this\)"/.test(mod)
 ok(!/fileToFramedDataUrl|PRODUCT_IMG_W/.test(admin) && /fileToDataUrl\(f,900,0\.82\)/.test(admin), 'the admin no longer crops asset pictures to 16:9');
 ok(/--img-w/.test(mod) && /grid-template-columns:var\(--img-w,112\.5px\) 1fr/.test(html), 'a portrait picture gets a column of its own shape (a 2:3 photo is 133 px wide at the 200 px card height)');
 ok(/<script data-soda-loader>/.test(html) && /localStorage\.getItem\(KEY\)/.test(html) && /bg\.style\.backgroundImage = layer\(kept\)/.test(html) && /window\._sodaLoaderStart = Date\.now\(\)/.test(html), 'the kept loading picture is painted inline on the first frame, before any network request');
-ok(/fetch\('\/api\/public\/loader-image', \{ cache: 'no-cache' \}\)/.test(html) && /localStorage\.setItem\(KEY, u\)/.test(html), 'and refreshed in the background for the next visit');
+ok(/fetch\('\/k7x2\/public\/loader-image', \{ cache: 'no-cache' \}\)/.test(html) && /localStorage\.setItem\(KEY, u\)/.test(html), 'and refreshed in the background for the next visit');
 ok(/var LOADER_MIN_MS = 2500/.test(mod) && /function hideLoadingScreen\(\)/.test(mod) && !/\$\('loadingScreen'\)\.style\.display = 'none'/.test(mod), 'the loading screen stays for 2.5 seconds before the page opens, through one function');
 ok(/var PAY_OK_SVG = '<svg viewBox="0 0 696 696" class="draw-ok"/.test(mod) && /var PAY_FAIL_SVG = '<svg viewBox="0 0 313 313" class="draw-fail"/.test(mod) && /innerHTML = PAY_OK_SVG/.test(mod) && /innerHTML = PAY_FAIL_SVG/.test(mod), 'deposit success and failed use the traced green tick and red cross');
 ok(/var DEPOSIT_POLL_FLOW = /.test(mod) && /innerHTML = DEPOSIT_POLL_FLOW/.test(mod) && !/dep-poll|pspin|DEPOSIT_POLL_SPIN|depPollRotate/.test(html + mod), 'the payment wait is the phone-to-wallet dots; the rotating rings and orbiting chips are gone');
