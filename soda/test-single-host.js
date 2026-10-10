@@ -38,6 +38,8 @@ eq([JSON.parse(read('user/manifest.json')).start_url, JSON.parse(read('user/mani
 for (const args of [['dev', 'Panel7x9k'], ['prod', 'mysoda.example.com', 'Panel7x9k']]) {
   const out = require('child_process').execFileSync('node', ['deploy/make-nginx.js', ...args], { encoding: 'utf8' });
   ok(!/^server_tokens/m.test(out), `${args[0]} nginx file has no top-level server_tokens (it clashes with other sites)`);
+  // seen live: Petro's file already sets these at the top level, so a second copy fails nginx -t
+  ok(!/^\s*ssl_(protocols|ciphers|prefer_server_ciphers|session_(cache|timeout|tickets))\b/m.test(out), `${args[0]} nginx file sets no TLS defaults of its own (they clash with other sites and certbot)`);
 }
 // two-host setup: the admin panel lives ONLY on its own hidden host
 {

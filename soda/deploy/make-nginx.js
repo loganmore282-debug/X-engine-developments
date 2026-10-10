@@ -177,12 +177,8 @@ map $http_user_agent $soda_bot_html {
     default '';
     ~*(WhatsApp|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|redditbot|Pinterest|vkShare|Viber|line-poker) '/no-preview.html';
 }
-${prod ? `
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_prefer_server_ciphers off;
-ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
-ssl_session_cache shared:SodaSSL:10m;
-ssl_session_timeout 1d;
-ssl_session_tickets off;
-` : ''}
+# TLS protocols/ciphers/session settings are NOT written here: certbot adds its own
+# (options-ssl-nginx.conf) inside each server block, and other sites on this box
+# (Petro) already set them at the top level -- a second copy of any of them in this
+# file makes nginx -t fail with "directive is duplicate" (seen live).
 ${serverBlock([host].concat(extraHosts).join(' '), adminHost ? 'member' : 'both')}${adminHost ? '\n' + serverBlock(adminHost, 'admin') : ''}`);
