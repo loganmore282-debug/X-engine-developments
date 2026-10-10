@@ -65,7 +65,7 @@ The member app must show these from admin settings (upload in the admin panel, s
 Keep these frames/areas in the layout even when no picture is uploaded (neutral tinted placeholder), so the page never collapses.
 
 ## Do NOT change
-Money rules, calculations, settings, locks, login/session code, `/api` single-host routing, nginx files. The numbers in the screenshots (11,000 / 30 days / 2,200 / 66,000, rates 26% / 2% / 1%, min 10000, 2000-2000000, 08:00-17:00, fee 15%) are only examples from the other platform: show Soda's own values from its settings and data. If a screenshot needs a rule Soda does not have (for example a different daily-earnings schedule, VIP levels, Turntable/Fruit rows), list it for the owner instead of inventing it.
+Money rules, calculations, settings, locks, login/session code, `/k7x2` single-host routing, nginx files. The numbers in the screenshots (11,000 / 30 days / 2,200 / 66,000, rates 26% / 2% / 1%, min 10000, 2000-2000000, 08:00-17:00, fee 15%) are only examples from the other platform: show Soda's own values from its settings and data. If a screenshot needs a rule Soda does not have (for example a different daily-earnings schedule, VIP levels, Turntable/Fruit rows), list it for the owner instead of inventing it.
 
 ## Report back
 After each screen group: files changed, what was removed, tests run, what could not be tested. Bump `soda-shell-vN` in `user/sw.js` and `soda-admin-shell-vN` in `admin/sw.js`; run `npm run test:audit`; commit; push.

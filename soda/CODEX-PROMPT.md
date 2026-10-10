@@ -28,7 +28,7 @@ npm run test:audit      # the full test suite
 ## Rules that must not break
 1. **Money safety:** do not touch deposit, withdrawal, investment, bonus or commission calculations, the in-process locks (`withLock`, `_creditingDeposits`, `_completingWithdrawals`), or `instances: 1`. Design changes only change how things look and are arranged, not what the numbers do. If a screenshot shows different numbers or rules (fees, minimums, percentages), **list them for me and wait**; do not change money rules silently.
 2. **Login stays MongoDB-based** (no Firebase). Keep the `/auth/*` calls, the session token handling and the sign-out behaviour as they are.
-3. **One host:** the app calls the relative path `/api`; the admin panel lives under a secret path with relative asset URLs. Do not add absolute backend addresses.
+3. **One host:** the app calls the relative path `/k7x2` (the private API prefix; never `/api`); the admin panel lives under a secret path with relative asset URLs. Do not add absolute backend addresses.
 4. **No emoji in the UI; use SVG icons.** Show full numbers ("UGX 23,000", never "23k"). No abbreviations the screenshots don't use.
 5. **The name "Soda" is temporary.** Keep reading the visible name from the brand setting/`brand.config.json`; never hardcode a new name in many places.
 6. **Do not copy wording, icons or layout from the old Nexus, Petro or Chipz apps** where a screenshot gives me something different.
