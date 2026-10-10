@@ -51,6 +51,16 @@ for (const args of [['dev', 'Panel7x9k'], ['prod', 'mysoda.example.com', 'Panel7
   ok(/location \^~ \/Panel7x9k\//.test(adm) && /location \/ \{ return 404; \}/.test(adm) && !/refCode|share\.html|\/user;/.test(adm), 'the admin host serves only the admin path, the API behind it, and 404 for everything else');
   ok(!/\/api\/admin\/ \{ return 404/.test(adm) && /location ~ \^\/api\/admin\/\(login\|check-key\)\$/.test(adm), 'the admin host still reaches the admin API');
   ok(gen('prod', 'example.com', 'Panel7x9k') === gen('prod', 'example.com', 'Panel7x9k'), 'one-host output is stable');
+  // extra member addresses typed as words
+  const also = gen('prod', 'example.com', 'Panel7x9k', 'sv37ah.example.com', '--also=mysoda, Go ,mysoda,promo.other.com');
+  const ab = also.split(/^server \{/m).slice(1);
+  ok(/server_name example\.com mysoda\.example\.com go\.example\.com promo\.other\.com;/.test(ab[0]), 'each word becomes <word>.<host> on the member block (once, any case)');
+  ok(/server_name sv37ah\.example\.com;/.test(ab[1]) && !/mysoda/.test(ab[1]), 'the hidden admin host stays alone on its own block');
+  ok(gen('prod', 'example.com', 'Panel7x9k', '--also=mysoda').includes('server_name example.com mysoda.example.com;'), 'words also work without a separate admin host');
+  for (const badArgs of [['prod', 'example.com', 'Panel7x9k', 'sv37ah.example.com', '--also=sv37ah'], ['prod', 'example.com', 'Panel7x9k', '--also=bad word'], ['dev', 'Panel7x9k', '--also=x']]) {
+    let refused = false; try { gen(...badArgs); } catch (e) { refused = true; }
+    ok(refused, 'refused: ' + badArgs.slice(3).join(' '));
+  }
   let bad = false; try { gen('prod', 'example.com', 'Panel7x9k', 'example.com'); } catch (e) { bad = true; }
   ok(bad, 'the admin host must differ from the member host');
 }

@@ -10,6 +10,10 @@
 //        <admin-host>, e.g. sv37ah.p-colasoda.com/Panel7x9k . <host> then answers 404 for the admin
 //        path and for /api/admin/*, and <admin-host> shows nothing except the admin path.
 //        Certbot: `certbot --nginx -d <host> -d <admin-host>`.
+//   ... --also=mysoda,go     (prod only, any of the forms above)
+//        EXTRA addresses of the member app: each word becomes <word>.<host> (mysoda.p-colasoda.com),
+//        or give a full host name. They serve exactly the same app as <host>.
+//        Re-run certbot with every name and --expand so ONE certificate covers them all.
 //
 // <admin-path> is the secret URL segment of the admin panel (letters/digits,
 // 6+ chars), e.g. "k7q2mx9p" -> https://<host>/k7q2mx9p/ . It is NOT written
@@ -19,7 +23,9 @@
 // Why a generator and not a template with placeholders: nginx's add_header
 // does not inherit into a location that sets its own add_header, so every
 // location here repeats the full security header set -- written once, below.
-const [mode, a, b, c] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const alsoArg = argv.find(x => x.startsWith('--also='));
+const [mode, a, b, c] = argv.filter(x => !x.startsWith('--'));
 const usage = () => { console.error('usage: node deploy/make-nginx.js dev <admin-path> | prod <host> <admin-path> [admin-host]'); process.exit(1); };
 if (mode !== 'dev' && mode !== 'prod') usage();
 const host = mode === 'prod' ? a : '_';
@@ -27,6 +33,17 @@ const adminPath = mode === 'prod' ? b : a;
 const adminHost = mode === 'prod' && c ? c : '';
 if (mode === 'prod' && !/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(host || '')) { console.error('Host must look like mysoda.example.com'); usage(); }
 if (adminHost && (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(adminHost) || adminHost.toLowerCase() === String(host).toLowerCase())) { console.error('Admin host must be a different full host name, e.g. sv37ah.example.com'); usage(); }
+const extraHosts = [];
+if (alsoArg) {
+  if (mode !== 'prod') { console.error('--also only applies to prod'); usage(); }
+  for (const raw of alsoArg.slice(7).split(',').map(x => x.trim().toLowerCase()).filter(Boolean)) {
+    const h = raw.includes('.') ? raw : raw + '.' + String(host).toLowerCase();
+    if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/.test(h) || h.includes('..')) { console.error('Not a usable address: ' + raw); usage(); }
+    if (h === String(host).toLowerCase() || h === adminHost.toLowerCase()) { console.error('"' + raw + '" is already the main or the admin address'); usage(); }
+    if (!extraHosts.includes(h)) extraHosts.push(h);
+  }
+  if (extraHosts.length > 10) { console.error('At most 10 extra addresses'); usage(); }
+}
 if (!/^[A-Za-z0-9]{6,32}$/.test(adminPath || '')) { console.error('Admin path must be 6-32 letters/digits'); usage(); }
 const PORT = process.env.SODA_API_PORT || '3001';
 const ROOT = process.env.SODA_ROOT || '/srv/soda-src/soda';
@@ -168,4 +185,4 @@ ssl_session_cache shared:SodaSSL:10m;
 ssl_session_timeout 1d;
 ssl_session_tickets off;
 ` : ''}
-${serverBlock(host, adminHost ? 'member' : 'both')}${adminHost ? '\n' + serverBlock(adminHost, 'admin') : ''}`);
+${serverBlock([host].concat(extraHosts).join(' '), adminHost ? 'member' : 'both')}${adminHost ? '\n' + serverBlock(adminHost, 'admin') : ''}`);
