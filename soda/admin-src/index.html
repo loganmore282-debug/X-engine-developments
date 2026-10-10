@@ -490,6 +490,7 @@ const TX_LABELS = {
   welcome_bonus: 'Welcome bonus', mission_salary: 'Mission Center salary',
   mission_deposit_reward: 'Mission Center recharge reward',
   deposit_reversal: 'Recharge reversed (fraud)',
+  investment_refund: 'Product refund',
   statement: 'Statement downloaded',
 };
 function txLabel(type){ return TX_LABELS[type] || (type ? type.replace(/_/g,' ') : ''); }
@@ -1634,8 +1635,8 @@ async function openUser(uid){
       <button class="btn sky sm" id="attachRefBtn">Attach</button>
     </div>`:''}`:''}
     <h4 style="margin:18px 0 8px;font-size:14px">Plans (${(r.investments||[]).length})</h4>
-    ${(r.investments||[]).length?`<div class="table-scroll" style="max-height:170px"><table><tbody>
-      ${r.investments.map(iv=>`<tr><td><b>${esc(iv.tierLabel||'Product')}</b></td><td>${ugx(iv.amount)}</td>
+    ${(r.investments||[]).length?`<div class="table-scroll" style="max-height:${SESSION_ROLE==='owner'?240:170}px"><table><tbody>
+      ${r.investments.map(iv=>`<tr><td style="white-space:nowrap"><b>${esc(iv.tierLabel||'Product')}</b>${SESSION_ROLE==='owner'?`<div style="margin-top:5px"><button class="btn danger sm" data-rmprod="${esc(iv.id)}">Remove</button></div>`:''}</td><td style="white-space:nowrap">${ugx(iv.amount)}</td>
         <td><span class="pill-tag ${iv.status==='active'?'t-warn':iv.status==='matured'?'t-ok':'t-mut'}">${esc(iv.status)}</span></td>
         <td style="white-space:nowrap">${ugx(iv.paidOut)} / ${ugx(iv.expectedReturn)}</td></tr>`).join('')}
     </tbody></table></div>`:'<p class="muted" style="margin:0">No plans purchased yet.</p>'}
@@ -1679,6 +1680,17 @@ async function openUser(uid){
   const tx=(r.transactions||[]).slice(0,25);
   $('userTx').innerHTML = tx.length?tx.map(t=>`<tr><td style="white-space:nowrap">${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap;text-align:right">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td class="empty">No transactions</td></tr>';
+  document.querySelectorAll('[data-rmprod]').forEach(btn=>btn.addEventListener('click', async()=>{
+    const iv=(r.investments||[]).find(x=>x.id===btn.dataset.rmprod); if(!iv) return;
+    const nm=iv.tierLabel||'this product';
+    if(!confirm(`Remove ${nm} from ${u.phone}?\n\nIt stops earning at once and disappears from their account. Cashback already paid to them (${ugx(iv.paidOut)}) stays in their wallet.`)) return;
+    let refund=false;
+    if(!iv.granted && Number(iv.amount)>0) refund=confirm(`Also give back the ${ugx(iv.amount)} they paid for ${nm}, into their wallet?\n\nOK = remove and refund ${ugx(iv.amount)}\nCancel = remove WITHOUT a refund`);
+    if(btn.disabled) return; btn.disabled=true; const lbl=btn.textContent; btn.innerHTML=btnBusyHtml('Removing…');
+    const d=await api('/admin/user/remove-product',{userId:uid,investmentId:iv.id,refund});
+    toast(d.message||d.status, d.status==='success'?'ok':'err');
+    if(d.status==='success'){ closeModal(); openUser(uid); } else { btn.disabled=false; btn.textContent=lbl; }
+  }));
   if($('grantAsset')){
     // One id per opened modal: a double tap or a retry of the same activation
     // is recognised by the server and creates only one plan.

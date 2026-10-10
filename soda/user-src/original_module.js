@@ -4183,6 +4183,7 @@ function statementDescription(t){
   if (STATEMENT_TURNTABLE_TYPES.has(t.type)) return 'Turntable';
   if (t.type === 'admin_credit') return 'Deposit';
   if (t.type === 'invest' || t.type === 'investment') return 'Purchase';
+  if (t.type === 'investment_refund') return 'Refund';
   return 'Transaction';
 }
 // The pill under a row: orange while it is still moving, green once paid,

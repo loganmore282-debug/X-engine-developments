@@ -8889,6 +8889,58 @@ app.post('/admin/user/withdraw-anytime', async (req, res) => {
     res.json({ status: 'success', enabled: req.body.enabled });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+
+// ── ADMIN: remove a product from a member (owner only) ───────────────────────────────────────────────────────────
+// The product is deleted, so it stops earning at once and leaves the member's Income and product count (the purchase
+// limit frees up too). What stays: cashback already paid (it is in their wallet and their Balance Record) and the
+// purchase / cashback history rows. Optionally the purchase price goes back to the wallet (never for a gifted product,
+// which was never paid for). The member's `totalInvested` always drops by the product's amount, exactly as "Recalculate
+// totals" would work it out from the investments that are left, so the integrity audit stays clean.
+// One atomic user update carries the wallet refund, the totalInvested drop and a token (`remove:<investmentId>`), so a
+// crash between that update and the delete can be retried without paying a refund twice. Lock order is the same as
+// the cashback settlement (payout:<id> first, then bal:<userId>), so the two can never deadlock or both act.
+app.post('/admin/user/remove-product', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || ''), invId = String(req.body.investmentId || '');
+  const refund = req.body.refund === true;
+  if (!userId || !invId || invId.length > 80) return res.status(400).json({ status: 'error', message: 'userId and investmentId are required' });
+  try {
+    let out;
+    await withLock('payout:' + invId, async () => {
+      const invRef = db.collection('investments').doc(invId);
+      const snap = await invRef.get();
+      if (!snap.exists || snap.data().userId !== userId) {
+        const nf = new Error('That product was not found on this member. It may already have been removed.'); nf.http = 404; throw nf;
+      }
+      const inv = snap.data();
+      const amount = finiteMoney(inv.amount);
+      if (refund && inv.granted === true) throw new Error('A gifted product was never paid for, so there is nothing to refund.');
+      const refunded = refund ? amount : 0;
+      await withLock('bal:' + userId, async () => {
+        const uRef = db.collection('users').doc(userId);
+        const u = await uRef.get();
+        if (!u.exists) { const nf = new Error('User not found'); nf.http = 404; throw nf; }
+        const key = 'remove:' + invId;
+        await uRef.updateIf({ creditedPayoutKeys: { $ne: key } }, {
+          walletBalance: FieldValue.increment(refunded), totalInvested: FieldValue.increment(-amount),
+          creditedPayoutKeys: FieldValue.arrayUnion(key)
+        });
+        if (refunded > 0) {
+          const { date, time } = nowStr();
+          await db.collection('transactions').doc('remove-refund:' + invId).createIfAbsent({
+            userId, statementId: newStatementId(), type: 'investment_refund', description: `Refund: ${inv.tierLabel || 'product'}`,
+            amount: refunded, status: 'success', date, time, investmentId: invId, createdAt: FieldValue.serverTimestamp()
+          });
+        }
+        await invRef.delete();
+      });
+      out = { name: inv.tierLabel || 'Product', amount, paidOut: finiteMoney(inv.paidOut), payoutsMade: Number(inv.payoutsMade) || 0, refunded, granted: inv.granted === true, tierKey: inv.tierKey || '' };
+    });
+    logAdminAction(req, 'product_removed', { userId, investmentId: invId, tierKey: out.tierKey, name: out.name, amount: out.amount, paidOut: out.paidOut, payoutsMade: out.payoutsMade, refunded: out.refunded, granted: out.granted });
+    _vipCache.delete(userId);
+    res.json({ status: 'success', refunded: out.refunded, message: out.refunded > 0 ? `${out.name} removed and ${fmtMoney(out.refunded)} refunded to the wallet` : `${out.name} removed` });
+  } catch (e) { res.status(e.http || 400).json({ status: 'error', message: e.message }); }
+});
 app.post('/admin/user/reset-password', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
