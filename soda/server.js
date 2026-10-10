@@ -10935,9 +10935,32 @@ async function reconcileCashback() {
       ? await db.collection('investments').where('status', '==', 'active').orderBy('createdAt', 'asc').limit(5000).get()
       : await db.collection('investments').where('status', '==', 'active').where('nextPayoutAt', '<=', new Date()).orderBy('nextPayoutAt', 'asc').limit(1000).get();
     if (full) _lastFullCashbackSweep = Date.now();
-    for (const doc of snap.docs) { await settleInvestmentIfDue(doc).catch(e => console.error('Reconcile cashback error:', e.message)); }
+    await settleMany(snap.docs);
+    // At 00:00 EVERY running product falls due in the same second. A full page means more are waiting: carry on at
+    // once instead of waiting for the next 0.5 s tick, so the last member is paid seconds after the first, not minutes.
+    if (!full && snap.docs.length >= 1000) setImmediate(reconcileCashback);
   } catch (e) { console.error('Reconcile cashback error:', e.message); }
   finally { _sweepingCashback = false; }
+}
+// Pays due investments a few at a time (each one still settles under its own payout lock, and the wallet credit under
+// the member's balance lock, so two products of one member simply queue; nothing here can pay twice).
+const CASHBACK_PARALLEL = 8;
+// A one-shot timer aimed at the next Uganda midnight starts a sweep the moment 00:00 arrives (the 0.5 s tick would
+// anyway, at most half a second later; this just removes that wait). Re-armed after every firing.
+function armMidnightSweep() {
+  const wait = Math.max(20, eatNextMidnight(Date.now()) - Date.now() + 50);
+  const t = setTimeout(() => { reconcileCashback(); armMidnightSweep(); }, wait);
+  if (t.unref) t.unref();
+}
+async function settleMany(docs) {
+  let next = 0;
+  const worker = async () => {
+    while (next < docs.length) {
+      const doc = docs[next++];
+      await settleInvestmentIfDue(doc).catch(e => console.error('Reconcile cashback error:', e.message));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CASHBACK_PARALLEL, docs.length) }, worker));
 }
 // One-time catch-up at start: running investments created before `nextPayoutAt` existed get it.
 async function backfillNextPayoutAt() {
@@ -11060,7 +11083,7 @@ connectMongo(MONGODB_URI)
     // (still a single lightweight query -- .where('status','==','active'),
     // not a full-ledger scan) -- worth knowing on the M0 free tier, not
     // expected to be a real problem at Snow's current scale.
-    migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); });
+    migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
     setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);

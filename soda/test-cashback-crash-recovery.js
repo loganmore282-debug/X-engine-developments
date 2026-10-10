@@ -81,9 +81,9 @@ function harness() {
     FieldValue: { increment: n => ({ op: 'inc', n }), arrayUnion: (...items) => ({ op: 'union', items }), serverTimestamp: () => new Date() },
     tsMillis: value => value instanceof Date ? value.getTime() : Date.parse(value),
     nowStr: () => ({ date: '2026-10-06', time: '13:00' }), newStatementId: () => 'statement',
-    tzOffMs: () => 10800000, withLock: async (_key, work) => work(), _creditingPayouts: new Set(), _sweepingCashback: false, _lastFullCashbackSweep: 0,
+    tzOffMs: () => 10800000, CASHBACK_PARALLEL: 8, setImmediate, withLock: async (_key, work) => work(), _creditingPayouts: new Set(), _sweepingCashback: false, _lastFullCashbackSweep: 0,
   });
-  vm.runInContext([fn('eatNextMidnight'), fn('payoutDueAtMs'), fn('payoutsDueCount'), fn('settleInvestmentIfDue'), fn('_settleDueInvestmentNow'), fn('reconcileCashback')].join('\n'), c);
+  vm.runInContext([fn('eatNextMidnight'), fn('payoutDueAtMs'), fn('payoutsDueCount'), fn('settleInvestmentIfDue'), fn('_settleDueInvestmentNow'), fn('settleMany'), fn('reconcileCashback')].join('\n'), c);
   return { state, c };
 }
 
