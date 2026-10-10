@@ -3170,7 +3170,7 @@ function vBannerHtml(){
 function paintHome(){
   const st = STATE.settings || {};
   const products = STATE.products || [];
-  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance after 24 hours.');
+  const ticker = String(st.tickerText || 'All product earnings will be automatically added to your app balance at midnight 00:00.');
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}
@@ -3288,7 +3288,8 @@ function vOwnedCardHtml(inv){
     ? `<img src="${esc(p.image)}" alt="" onerror="vNoPicture(this,'${initial}')">`
     : `<span class="v-glyph">${initial}</span>`;
   const startMs = st.createdMs;
-  const endMs = startMs + st.total * 86400000;
+  // The last payment falls at Uganda midnight: the first one at the first 00:00 after purchase, then one every night.
+  const endMs = (Math.floor((startMs + tzOffMs()) / 86400000) + 1) * 86400000 - tzOffMs() + (st.total - 1) * 86400000;
   const two = ms => { const t = statementStampMs(ms).split(' '); return esc(t[0] || '') + '<br>' + esc(t[1] || ''); };
   return `
   <article class="v-card v-owned${inv.granted ? ' v-gift' : ''}">

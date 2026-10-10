@@ -54,7 +54,7 @@ function runStats(rows) {
   ok(/const DEFAULT_PRODUCTS = \[\];/.test(src), 'no built-in placeholder assets: members only see what the admin created');
   const cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ok(!/Soda Mini|Soda Classic|Product-1\b/.test(cli), 'no sample asset is written into the app code');
-  ok(!/at midnight 00:00/.test(cli) && /All product earnings will be automatically added to your app balance after 24 hours\./.test(cli), 'the Home line uses the owner\'s sentence without the midnight claim Soda does not keep');
+  ok(!/after 24 hours/.test(cli) && /All product earnings will be automatically added to your app balance at midnight 00:00\./.test(cli), 'the Home line says earnings are added at midnight 00:00 (cashback is paid at Uganda midnight)');
   const css = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
   ok(/--v-blue:#1739b8/.test(css) && !/#e30613|#1457e8/i.test(css), 'the app uses the royal blue and no red is left');
   console.log(`PASS: screen data (${n} checks)`);
@@ -89,9 +89,9 @@ async function buy(limit, owned) {
   const db = { collection: n => n === 'users' ? { doc: () => ({ get: async () => ({ exists: true, data: () => user }), update: async u => { for (const [k, v] of Object.entries(u)) user[k] = v && v.__inc !== undefined ? (user[k] || 0) + v.__inc : v; } }) }
     : n === 'investments' ? { ...q(investments), doc: () => ({ id: 'new', set: async d => { investments.push(d); }, delete: async () => {} }) }
     : { add: async () => ({}) } };
-  new Function('app', 'db', 'verifyAuth', 'getProductByKey', 'productOpenState', 'getSettings', 'withLock', 'productExpectedReturn', 'FieldValue', 'nowStr', 'newStatementId', 'fmtMoney', 'grantTurntableSpins', 'console',
+  new Function('app', 'db', 'verifyAuth', 'getProductByKey', 'productOpenState', 'getSettings', 'withLock', 'productExpectedReturn', 'FieldValue', 'nowStr', 'newStatementId', 'fmtMoney', 'grantTurntableSpins', 'console', 'eatNextMidnight',
     'const _vipCache = new Map();\n' + invRoute)(app, db, async () => 'u1', async () => tier, () => ({ open: true }), async () => ({ cycleDays: 30 }), (_k, fn) => fn(), () => 30000,
-    { increment: n => ({ __inc: n }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console);
+    { increment: n => ({ __inc: n }), serverTimestamp: () => 0 }, () => ({ date: 'd', time: 't' }), () => 's', n => String(n), () => {}, console, ts => (Math.floor((ts + 10800000) / 86400000) + 1) * 86400000 - 10800000);
   let code = 200, body; const res = { status: c => { code = c; return res; }, json: b => { body = b; } };
   await handler({ headers: {}, body: { tierKey: 'a1' } }, res);
   return { code, body, user, count: investments.filter(i => i.userId === 'u1' && i.tierKey === 'a1').length };

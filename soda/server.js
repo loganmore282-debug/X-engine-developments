@@ -1270,6 +1270,16 @@ function eatNextMidnight(ts) {
   const dayStart = Math.floor((ts + tzOffMs()) / 86400000) * 86400000;
   return dayStart + 86400000 - tzOffMs();
 }
+// ── Cashback timing: Uganda MIDNIGHT (00:00), not 24 hours after purchase ──
+// The k-th payment (k = 1..total) is due at the first local midnight AFTER the purchase, plus (k-1) days. A product bought
+// at 15:00 therefore pays at 00:00 the next night, then every night at 00:00, `total` payments in all; the last one
+// is the maturity payment. Uganda has no daylight saving, so the day length is a constant 86,400,000 ms.
+function payoutDueAtMs(createdMs, k) { return eatNextMidnight(createdMs) + (k - 1) * 86400000; }
+function payoutsDueCount(createdMs, now, total) {
+  const first = eatNextMidnight(createdMs);
+  if (!(now >= first)) return 0;
+  return Math.min(total, Math.floor((now - first) / 86400000) + 1);
+}
 function eatParts(ts) {
   const ms = tsMillis(ts) || Date.now();
   const d = new Date(ms + tzOffMs());
@@ -2948,8 +2958,7 @@ async function _settleDueInvestmentNow(doc) {
   const made  = Number(inv.payoutsMade) || 0;
   if (!total || made >= total) return false;
   const createdMs = tsMillis(inv.createdAt) || Date.now();
-  const elapsedDays = Math.floor((Date.now() - createdMs) / 86400000);
-  const dueCount = Math.min(total, elapsedDays) - made;
+  const dueCount = payoutsDueCount(createdMs, Date.now(), total) - made;
   if (dueCount <= 0) return false;
   if (_creditingPayouts.has(doc.id)) return false;
   _creditingPayouts.add(doc.id);
@@ -2978,8 +2987,7 @@ async function _settleDueInvestmentNow(doc) {
       }
       const fMade = Number(f.payoutsMade) || 0;
       const fTotal = Number(f.payoutsTotal) || 0;
-      const fElapsed = Math.floor((Date.now() - (tsMillis(f.createdAt) || Date.now())) / 86400000);
-      const fDue = Math.min(fTotal, fElapsed) - fMade;
+      const fDue = payoutsDueCount(tsMillis(f.createdAt) || Date.now(), Date.now(), fTotal) - fMade;
       if (fDue <= 0) return;
       const newMade = fMade + fDue;
       const willComplete = newMade >= fTotal;
@@ -3029,7 +3037,7 @@ async function _settleDueInvestmentNow(doc) {
         await doc.ref.update({
           payoutsMade: newMade, paidOut: FieldValue.increment(amount),
           status: willComplete ? 'matured' : 'active',
-          nextPayoutAt: willComplete || !createdMs ? null : new Date(createdMs + (newMade + 1) * 86400000),
+          nextPayoutAt: willComplete || !createdMs ? null : new Date(payoutDueAtMs(createdMs, newMade + 1)),
         });
       });
       if (payoutBlocked) return;
@@ -4704,7 +4712,7 @@ app.post('/invest/create', async (req, res) => {
       try {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
-          status: 'active', nextPayoutAt: new Date(Date.now() + 86400000), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+          status: 'active', nextPayoutAt: new Date(eatNextMidnight(Date.now())), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
           isFirstInvestment, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -8946,7 +8954,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       const { date, time } = nowStr();
       const created = await invRef.createIfAbsent({
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
-        status: 'active', nextPayoutAt: new Date(Date.now() + 86400000), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+        status: 'active', nextPayoutAt: new Date(eatNextMidnight(Date.now())), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
         granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
@@ -9944,10 +9952,12 @@ function bandOf(h) {
   if (h >= 17 && h < 21) return 'evening';
   return 'night';
 }
-// Read-only schedule math mirrors settlement's cumulative rounding. Each
-// instalment falls 24 hours after purchase, never at calendar midnight.
+// Read-only schedule math mirrors settlement's cumulative rounding. Each instalment falls at Uganda midnight (00:00),
+// the first one at the first midnight after purchase (see payoutDueAtMs). `created` below is the anchor that makes
+// "created + k days" equal the k-th payment's instant, so the rest of the maths reads the same as before.
 function analyticsContractDay(inv, start, end, now) {
-  const created = tsMillis(inv.createdAt);
+  const created0 = tsMillis(inv.createdAt);
+  const created = created0 ? eatNextMidnight(created0) - 86400000 : 0;
   const total = Number(inv.payoutsTotal);
   const expected = Number(inv.expectedReturn);
   const made = Number(inv.payoutsMade);
@@ -10936,8 +10946,24 @@ async function backfillNextPayoutAt() {
   for (const d of snap.docs) {
     const x = d.data(), createdMs = tsMillis(x.createdAt);
     if (!createdMs) continue;
-    await d.ref.update({ nextPayoutAt: new Date(createdMs + ((Number(x.payoutsMade) || 0) + 1) * 86400000) }); n++;
+    await d.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, (Number(x.payoutsMade) || 0) + 1)) }); n++;
   }
+  return n;
+}
+// One-time move to the midnight schedule: running investments carry a `nextPayoutAt` computed the old way (purchase
+// time + n days); it is recomputed so the 0.5 s sweep picks each one up at its midnight. Settlement itself never
+// depended on it (it re-derives what is due from the purchase time), so this only keeps payments on time.
+async function migratePayoutsToMidnightOnce() {
+  const marker = db.collection('meta').doc('payoutAtMidnight');
+  if ((await marker.get()).exists) return 0;
+  const snap = await db.collection('investments').where('status', '==', 'active').limit(20000).get();
+  let n = 0;
+  for (const d of snap.docs) {
+    const x = d.data(), createdMs = tsMillis(x.createdAt), made = Number(x.payoutsMade) || 0, total = Number(x.payoutsTotal) || 0;
+    if (!createdMs || !total || made >= total) continue;
+    await d.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1)) }); n++;
+  }
+  await marker.set({ at: new Date(), moved: n });
   return n;
 }
 function runReconciler() {
@@ -11034,7 +11060,7 @@ connectMongo(MONGODB_URI)
     // (still a single lightweight query -- .where('status','==','active'),
     // not a full-ledger scan) -- worth knowing on the M0 free tier, not
     // expected to be a real problem at Snow's current scale.
-    backfillNextPayoutAt().then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); });
+    migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); });
     setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
