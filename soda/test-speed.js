@@ -34,5 +34,6 @@ const lib = new Function('crypto', `const _scrypt = (password, salt) => new Prom
   // 00:00: every running product falls due in the same second -- they are paid a few at a time, a full page carries on at once, and a timer is aimed at the exact midnight
   ok(/const CASHBACK_PARALLEL = 8;/.test(server) && /await settleMany\(snap\.docs\);/.test(server) && /if \(!full && snap\.docs\.length >= 1000\) setImmediate\(reconcileCashback\);/.test(server), 'the payout sweep pays due products a few at a time and drains a full page at once');
   ok(/function armMidnightSweep\(\)/.test(server) && /eatNextMidnight\(Date\.now\(\)\) - Date\.now\(\) \+ 50/.test(server) && /armMidnightSweep\(\); \}\);/.test(server), 'a timer starts a sweep at the exact Uganda midnight');
+  ok(/Nothing is due, yet the sweep's hint says it is/.test(server) && /nextPayoutAt: new Date\(payoutDueAtMs\(createdMs, made \+ 1\)\)/.test(server), 'a product whose hint is in the past but is not yet due gets its hint put at the real due time (not re-read every 0.5 s)');
   console.log(`PASS: speed (${n} checks)`);
 })().catch(e => { console.error(e); process.exit(1); });

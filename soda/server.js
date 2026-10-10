@@ -2959,7 +2959,14 @@ async function _settleDueInvestmentNow(doc) {
   if (!total || made >= total) return false;
   const createdMs = tsMillis(inv.createdAt) || Date.now();
   const dueCount = payoutsDueCount(createdMs, Date.now(), total) - made;
-  if (dueCount <= 0) return false;
+  if (dueCount <= 0) {
+    // Nothing is due, yet the sweep's hint says it is (a purchase a few milliseconds either side of 00:00, or a row
+    // with no hint): put the hint at the real due time, or this product is re-read every 0.5 s until then.
+    if (tsMillis(inv.createdAt) && !(tsMillis(inv.nextPayoutAt) > Date.now())) {
+      doc.ref.update({ nextPayoutAt: new Date(payoutDueAtMs(createdMs, made + 1)) }).catch(() => {});
+    }
+    return false;
+  }
   if (_creditingPayouts.has(doc.id)) return false;
   _creditingPayouts.add(doc.id);
   try {
