@@ -1248,20 +1248,8 @@ body.deposit-status-open .bottom-nav{display:none;}
    does not jump as the poll resolves. */
 .dep-status-icon{width:auto;min-height:120px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;}
 .dep-status-icon>svg{width:120px;height:120px;display:block;}
-/* The owner's own green tick and red cross (deposit result page only) draw themselves: the ring runs round, the disc pops in, then the tick is written
-   (or the cross, one bar after the other). The artwork is untouched; masks reveal it. */
-.draw-ok .dm-ring,.draw-ok .dm-tick,.draw-fail .dm-x1,.draw-fail .dm-x2{stroke-dasharray:1 1.2;stroke-dashoffset:1;}
-.draw-ok .dm-ring{transform-box:fill-box;transform-origin:center;transform:rotate(-90deg);animation:drDraw .6s cubic-bezier(.5,0,.25,1) forwards;}
-.draw-ok .dr-pop,.draw-fail .dr-pop{transform-box:view-box;transform-origin:50% 50%;transform:scale(.6);opacity:0;animation:drPop .4s cubic-bezier(.2,.9,.3,1.15) .55s forwards;}
-.draw-ok .dm-tick{animation:drDraw .5s cubic-bezier(.4,0,.2,1) 1s forwards;}
-.draw-fail .dr-pop{animation-delay:0s;}
-.draw-fail .dm-x1{animation:drDraw .26s ease-out .45s forwards;}
-.draw-fail .dm-x2{animation:drDraw .26s ease-out .72s forwards;}
-@keyframes drDraw{to{stroke-dashoffset:0;}}
-@keyframes drPop{to{transform:scale(1);opacity:1;}}
-@media (prefers-reduced-motion:reduce){
-  .draw-ok .dm-ring,.draw-ok .dm-tick,.draw-fail .dm-x1,.draw-fail .dm-x2{animation:none;stroke-dashoffset:0;}
-  .draw-ok .dr-pop,.draw-fail .dr-pop{animation:none;transform:none;opacity:1;}}
+/* The owner's own green tick and red cross (deposit result page only) draw themselves on a canvas (see playStatusIcon in the app code). */
+.dep-status-icon>canvas{width:120px;height:120px;display:block;}
 
 /* Waiting for the payment: a coin-dot travels from the phone to the wallet (nothing rotates). */
 .dep-flow{display:flex;align-items:center;justify-content:center;gap:12px;width:240px;max-width:100%;}
