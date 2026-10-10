@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { IDLE_MS, ADMIN_IDLE_MS, MAX_MS, MEMBER_MAX_MS, createMemberSession, checkMemberSession, revokeMemberSession, revokeAllMemberSessions, tokenKey, validSession } = require('./session-policy');
 assert.equal(IDLE_MS, 4 * 60 * 60 * 1000, 'member inactivity limit is exactly four hours');
-assert.equal(ADMIN_IDLE_MS, 15 * 60 * 1000, 'admin inactivity remains fifteen minutes');
+assert.equal(ADMIN_IDLE_MS, 2 * 60 * 60 * 1000, 'admin inactivity is two hours');
 assert.equal(MAX_MS, 8 * 60 * 60 * 1000, 'admin absolute lifetime remains eight hours');
 assert.equal(MEMBER_MAX_MS, 4 * 60 * 60 * 1000, 'member sessions end after four hours');
 function fakeDb(){
@@ -69,7 +69,7 @@ function clientChecks(panel, idleMs, maxMs){
   const user = html.match(/<script data-soda-idle>([\s\S]*?)<\/script>/)[1];
   const admin = fs.readFileSync(__dirname+'/admin-src/index.html','utf8').match(/<script data-soda-idle>([\s\S]*?)<\/script>/)[1];
   assert(user.includes('IDLE = 4 * 60 * 60 * 1000, MAX = 4 * 60 * 60 * 1000'));
-  assert(admin.includes('IDLE = 15 * 60 * 1000'));
+  assert(admin.includes('IDLE = 2 * 60 * 60 * 1000'));
   let now=1800000000000, expired=0, pulses=0;
   const listeners={},store=new Map();
   const document={hidden:false,addEventListener:(name,fn)=>listeners[name]=fn};
@@ -101,7 +101,7 @@ function clientChecks(panel, idleMs, maxMs){
   assert.equal(session.begin('legacy',0,false),false);
   store.set('test',JSON.stringify({identity:'corrupt',started:now}));assert.equal(session.begin('corrupt',now,false),false);
 }
-(async()=>{await serverChecks();clientChecks('user',4*60*60*1000,4*60*60*1000);clientChecks('admin',15*60*1000,8*60*60*1000);console.log('PASS: member 4-hour idle and maximum / admin 15-minute idle, 8-hour maximum, activity-only renewal, refresh/hidden tabs, revocation, migration and account isolation');})().catch(e=>{console.error(e);process.exitCode=1;});
+(async()=>{await serverChecks();clientChecks('user',4*60*60*1000,4*60*60*1000);clientChecks('admin',2*60*60*1000,8*60*60*1000);console.log('PASS: member 4-hour idle and maximum / admin 15-minute idle, 8-hour maximum, activity-only renewal, refresh/hidden tabs, revocation, migration and account isolation');})().catch(e=>{console.error(e);process.exitCode=1;});
 // ── remembered sessions (speed): one read serves many requests, but revocation and expiry still bite at once ──
 (async () => {
   const rows = new Map(); let reads = 0;

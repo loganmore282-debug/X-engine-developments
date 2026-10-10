@@ -21,13 +21,14 @@ const N = 20000;
 const codes = Array.from({ length: N }, genGiftCode);
 
 check(GIFTCODE_LENGTH === 12, `length is 12 (got ${GIFTCODE_LENGTH})`);
-check(codes.every(c => c.length === 12), 'every generated code is exactly 12 characters');
-check(codes.every(c => /^[A-Z0-9]+$/.test(c)), 'uppercase letters and digits only -- no small letters');
+check(codes.every(c => /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c)), 'every generated code is 12 characters in three groups of four joined by dashes (XXXX-XXXX-XXXX)');
+check(codes.every(c => /^[A-Z0-9-]+$/.test(c)), 'capital letters and digits only -- no small letters');
 check(!codes.some(c => /[a-z]/.test(c)), 'not one lowercase character in 20,000 codes');
 check(codes.every(c => !/[IOL01]/.test(c)), 'no I, O, L, 0 or 1 -- unambiguous when read off a screen');
+check(GIFTCODE_CHARS === GIFTCODE_CHARS.toLowerCase() && /REFERRAL_CHARS = GIFTCODE_CHARS/.test(src), 'referral codes keep their own (lowercase) alphabet: only gift codes became capitals');
 
 const EX = 'HDG27RHRFT64';
-check(EX.length === 12 && [...EX].every(ch => GIFTCODE_CHARS.includes(ch)),
+check(EX.length === 12 && [...EX].every(ch => GIFTCODE_CHARS.toUpperCase().includes(ch)),
   `the owner's example ${EX} is a valid code for this alphabet`);
 
 check(codes.some(c => /[A-Z]/.test(c)) && codes.some(c => /[0-9]/.test(c)), 'letters and digits both occur');
@@ -44,7 +45,7 @@ check(Math.abs(mixed / N - expectedMix) < 0.01,
 
 check(new Set(codes).size === N, `no duplicates in ${N.toLocaleString()} codes`);
 
-const used = new Set(codes.join(''));
+const used = new Set(codes.join('').replace(/-/g, ''));
 check(used.size === GIFTCODE_CHARS.length,
   `all ${GIFTCODE_CHARS.length} alphabet characters appear (saw ${used.size})`);
 

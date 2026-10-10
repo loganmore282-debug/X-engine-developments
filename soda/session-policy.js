@@ -1,7 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const IDLE_MS = 4 * 60 * 60 * 1000;
-const ADMIN_IDLE_MS = 15 * 60 * 1000;
+const ADMIN_IDLE_MS = 2 * 60 * 60 * 1000;
 const MAX_MS = 8 * 60 * 60 * 1000; // admin sessions
 const MEMBER_MAX_MS = 4 * 60 * 60 * 1000;
 const millis = value => value instanceof Date ? value.getTime() : Number(value) || Date.parse(value) || 0;

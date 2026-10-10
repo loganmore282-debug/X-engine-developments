@@ -27,7 +27,7 @@ function load(panel){
   w.fbAuth={currentUser:account};w.fbSignOut=async()=>{signedOut++;w.fbAuth.currentUser=null;w.dispatchEvent(new w.CustomEvent('snow-auth',{detail:null}));};
   w.enterApp=async()=>entered++;
   w.dispatchEvent(new w.CustomEvent('snow-auth',{detail:account}));await tick();
-  assert.equal(entered,1);assert(w.sessionStorage.getItem('soda_member_session'));
+  assert.equal(entered,1);assert(w.localStorage.getItem('soda_member_session'));
   const request=w.api,wait=deferred();let calls=0;
   w.fetch=async()=>{calls++;return wait.promise;};
   const one=request('/account'),two=request('/account');assert.equal(one,two);
@@ -39,11 +39,11 @@ function load(panel){
   w.navigatePage('network');assert.equal(navigations,1);
   now+=16*60*1000;w.dispatchEvent(new w.Event('pageshow'));await tick();
   assert.equal(signedOut,0,'member remains signed in past the old 15-minute limit');
-  assert(w.sessionStorage.getItem('soda_member_session'));
+  assert(w.localStorage.getItem('soda_member_session'));
   now+=(4*60-16)*60*1000-1;w.dispatchEvent(new w.Event('pageshow'));await tick();
   assert.equal(signedOut,0,'member remains signed in immediately before four hours');
   now++;w.dispatchEvent(new w.Event('pageshow'));await tick();
-  assert.equal(signedOut,1);assert.equal(w.sessionStorage.getItem('soda_member_session'),null);
+  assert.equal(signedOut,1);assert.equal(w.localStorage.getItem('soda_member_session'),null);
   assert.equal(w._suppressAutofillLogin,false,'idle expiry preserves existing picker-assisted login');
   assert.equal(w.sessionStorage.getItem('soda_relogin_required'),null);
   assert.equal(w._triedAutoSignIn,true,'silent stored-password login stays disabled');
@@ -63,8 +63,8 @@ function load(panel){
   a.document.querySelector('#content').innerHTML='<p id="retained">Visible dashboard</p>';
   a.document.querySelector('.tab[data-tab="dashboard"]').click();assert(a.document.querySelector('#retained'),'repeated active tab tap keeps DOM');
   a.fetch=async()=>({status:200,json:async()=>({status:'success'})});
-  clock+=16*60*1000;a.dispatchEvent(new a.Event('pageshow'));await tick();
-  assert.equal(a.sessionStorage.getItem('snow_admin_token'),null);
+  clock+=(2*60+1)*60*1000;a.dispatchEvent(new a.Event('pageshow'));await tick();
+  assert.equal(a.localStorage.getItem('snow_admin_token'),null);
   assert(a.document.querySelector('#shell').classList.contains('hidden'));
   assert(!a.document.querySelector('#loginView').classList.contains('hidden'));
   assert.match(a.document.querySelector('#loginErr').textContent,/expired/);

@@ -262,16 +262,19 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .chart-x{font-size:9px;color:var(--sub);white-space:nowrap}
 </style>
 <script data-soda-idle>
+// Where a login is kept. localStorage, so it survives closing the app or the browser (the server still ends it after its own idle/maximum time);
+// sessionStorage when the browser does not allow localStorage. (sessionStorage alone ended every login the moment the tab or the app was closed.)
+window.sodaKeep = (function(){ try { var k = '__soda_probe'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return localStorage; } catch (_) { try { return sessionStorage; } catch (__) { return null; } } })();
 // Real interaction renews activity; polling, focus, and visibility never do.
 window.createSodaIdleSession = function(key, onExpire, onActivity){
-  var IDLE = 15 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
+  var IDLE = 2 * 60 * 60 * 1000, MAX = 8 * 60 * 60 * 1000;
   var state = null, lastPulse = 0, lastSave = 0, timer = null;
   function save(force){
     if (!state || (!force && Date.now() - lastSave < 1000)) return;
     lastSave = Date.now();
-    try { sessionStorage.setItem(key, JSON.stringify(state)); } catch (_) {}
+    try { window.sodaKeep.setItem(key, JSON.stringify(state)); } catch (_) {}
   }
-  function clear(){ state = null; lastSave = 0; clearInterval(timer); timer = null; try { sessionStorage.removeItem(key); } catch (_) {} }
+  function clear(){ state = null; lastSave = 0; clearInterval(timer); timer = null; try { window.sodaKeep.removeItem(key); } catch (_) {} }
   function expire(){ if (!state) return false; clear(); onExpire(); return false; }
   function check(){
     if (!state) return false;
@@ -298,7 +301,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
     begin: function(identity, started, fresh){
       clearInterval(timer);
       var saved = null;
-      try { saved = JSON.parse(sessionStorage.getItem(key)); } catch (_) {}
+      try { saved = JSON.parse(window.sodaKeep.getItem(key)); } catch (_) {}
       state = !fresh && saved && saved.identity === identity ? saved :
         {identity:identity, started:started, last:started};
       if (!check()) return false;
@@ -396,10 +399,11 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
 const SERVER = '/k7x2';
 
 let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
+// Kept in window.sodaKeep (localStorage): the login survives closing the tab or the browser, until the server ends it (2 hours idle, 8 in all) or you log out.
 try {
-  SESSION_TOKEN = sessionStorage.getItem('snow_admin_token') || '';
-  SESSION_USER  = sessionStorage.getItem('snow_admin_user')  || '';
-  SESSION_ROLE  = sessionStorage.getItem('snow_admin_role')  || '';
+  SESSION_TOKEN = window.sodaKeep.getItem('snow_admin_token') || '';
+  SESSION_USER  = window.sodaKeep.getItem('snow_admin_user')  || '';
+  SESSION_ROLE  = window.sodaKeep.getItem('snow_admin_role')  || '';
 } catch (_) {}
 var _adminSession = window.createSodaIdleSession('soda_admin_session', expireAdminSession, () => api('/admin/session/activity', {}));
 function expireAdminSession(){
@@ -412,7 +416,7 @@ function expireAdminSession(){
 function storeSession(token, username, role){
   SESSION_TOKEN = token; SESSION_USER = username; SESSION_ROLE = role;
   _adminSession.begin(token, Date.now(), true);
-  try { sessionStorage.setItem('snow_admin_token', token); sessionStorage.setItem('snow_admin_user', username); sessionStorage.setItem('snow_admin_role', role); } catch (_) {}
+  try { window.sodaKeep.setItem('snow_admin_token', token); window.sodaKeep.setItem('snow_admin_user', username); window.sodaKeep.setItem('snow_admin_role', role); } catch (_) {}
 }
 function clearSession(){
   _adminSession.clear();
@@ -420,7 +424,7 @@ function clearSession(){
   $('content').innerHTML = '';
   _tab = ''; // invalidate in-flight tab renders immediately
   SESSION_TOKEN = ''; SESSION_USER = ''; SESSION_ROLE = '';
-  try { sessionStorage.removeItem('snow_admin_token'); sessionStorage.removeItem('snow_admin_user'); sessionStorage.removeItem('snow_admin_role'); sessionStorage.removeItem('snow_admin_tab'); } catch (_) {}
+  try { window.sodaKeep.removeItem('snow_admin_token'); window.sodaKeep.removeItem('snow_admin_user'); window.sodaKeep.removeItem('snow_admin_role'); sessionStorage.removeItem('snow_admin_tab'); } catch (_) {}
 }
 
 const $ = id => document.getElementById(id);
@@ -2376,7 +2380,7 @@ async function renderPromoCodes(){
       const cCur = c.regionKey && c.regionKey !== 'all' ? c.regionKey : undefined;
       const rewardCol = c.minReward===c.maxReward ? ugx(c.minReward, cCur) : `${ugx(c.minReward, cCur)} – ${ugx(c.maxReward, cCur)}`;
       const claimedCol = c.uses ? `<b>${ugx(c.totalClaimed, cCur)}</b>` : '<span class="muted">Not claimed yet</span>';
-      return `<tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc('Uganda')}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
+      return `<tr><td><b class="mono">${esc(String(c.code||'').toUpperCase())}</b> <button class="btn sm ghost" data-copy="${esc(String(c.code||'').toUpperCase())}" title="Copy code">Copy</button></td><td>${rewardCol}</td>${ADMIN_REGIONS.length>1?`<td>${c.regionKey==='all'?'<span class="muted">All countries</span>':esc('Uganda')}</td>`:''}<td>${c.uses||0} / ${c.maxUses||'∞'}</td>
       <td>${claimedCol}</td>
       <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
       <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>

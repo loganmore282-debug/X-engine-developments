@@ -1533,8 +1533,11 @@ const GIFTCODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
 const GIFTCODE_GROUP_LEN = 4;
 const GIFTCODE_GROUPS = 3;
 const GIFTCODE_LENGTH = GIFTCODE_GROUP_LEN * GIFTCODE_GROUPS; // 12 meaningful characters, unchanged
+// Gift codes are written in CAPITAL letters (owner: "make gift codes be capital letters"). The alphabet constant above stays lowercase because
+// referral codes share it; matching a code when it is redeemed is case-insensitive (codeLower), so older lowercase codes still work.
+const GIFTCODE_UPPER = GIFTCODE_CHARS.toUpperCase();
 function genGiftCode() {
-  const raw = randFromAlphabet(GIFTCODE_CHARS, GIFTCODE_LENGTH);
+  const raw = randFromAlphabet(GIFTCODE_UPPER, GIFTCODE_LENGTH);
   const groups = [];
   for (let i = 0; i < GIFTCODE_LENGTH; i += GIFTCODE_GROUP_LEN) groups.push(raw.slice(i, i + GIFTCODE_GROUP_LEN));
   return groups.join('-');
@@ -1936,7 +1939,7 @@ function logAdminAction(req, action, meta) {
 // logging in issues a random, short-lived session token (adminSessions)
 // instead of resending a password on every request, so deactivating or
 // resetting one account revokes only that person's access.
-const ADMIN_SESSION_TTL_MS = sessionPolicy.MAX_MS; // 8h maximum, plus 15 minute idle expiry
+const ADMIN_SESSION_TTL_MS = sessionPolicy.MAX_MS; // 8h maximum, plus 2 hour idle expiry
 // Used by /admin/login to run scryptVerify against SOMETHING even when the
 // username doesn't exist, so that path costs the same as a real wrong-
 // password attempt instead of returning near-instantly (timing side-channel).

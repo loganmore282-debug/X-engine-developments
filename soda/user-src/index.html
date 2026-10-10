@@ -1839,6 +1839,9 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 /* V2-END */
 </style>
 <script data-soda-idle>
+// Where a login is kept. localStorage, so it survives closing the app or the browser (the server still ends it after its own idle/maximum time);
+// sessionStorage when the browser does not allow localStorage. (sessionStorage alone ended every login the moment the tab or the app was closed.)
+window.sodaKeep = (function(){ try { var k = '__soda_probe'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return localStorage; } catch (_) { try { return sessionStorage; } catch (__) { return null; } } })();
 // Real interaction renews activity; polling, focus, and visibility never do.
 window.createSodaIdleSession = function(key, onExpire, onActivity){
   var IDLE = 4 * 60 * 60 * 1000, MAX = 4 * 60 * 60 * 1000;
@@ -1846,9 +1849,9 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
   function save(force){
     if (!state || (!force && Date.now() - lastSave < 1000)) return;
     lastSave = Date.now();
-    try { sessionStorage.setItem(key, JSON.stringify(state)); } catch (_) {}
+    try { window.sodaKeep.setItem(key, JSON.stringify(state)); } catch (_) {}
   }
-  function clear(){ state = null; lastSave = 0; clearInterval(timer); timer = null; try { sessionStorage.removeItem(key); } catch (_) {} }
+  function clear(){ state = null; lastSave = 0; clearInterval(timer); timer = null; try { window.sodaKeep.removeItem(key); } catch (_) {} }
   function expire(){ if (!state) return false; clear(); onExpire(); return false; }
   // A phone's clock is corrected by the network now and then and can step
   // BACK by a few seconds. Treating any backward step as tampering signed
@@ -1886,7 +1889,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
     begin: function(identity, started, fresh){
       clearInterval(timer);
       var saved = null;
-      try { saved = JSON.parse(sessionStorage.getItem(key)); } catch (_) {}
+      try { saved = JSON.parse(window.sodaKeep.getItem(key)); } catch (_) {}
       // Firebase timestamps use the server clock. Allow the same small
       // forward skew as the backend; clamp locally so no lifetime is added.
       var localStarted = started > Date.now() && started <= Date.now() + 60000 ? Date.now() : started;
@@ -2228,16 +2231,17 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
   // rewritten by set-backend-url.js together with the app's other copies.
   const SODA_AUTH_API = '/k7x2';
   const KEY = 'soda_auth_session';
-  // sessionStorage on purpose: closing the tab ends the login, exactly as the
-  // previous sign-in did (browserSessionPersistence).
+  // Kept in window.sodaKeep (localStorage), so the member stays signed in after closing the app, until the server ends the session
+  // (4 hours idle or in all) or they log out. It used to be sessionStorage: closing the tab ended every login.
+  const keep = () => window.sodaKeep || sessionStorage;
   const read = () => {
     try {
-      const s = JSON.parse(sessionStorage.getItem(KEY));
+      const s = JSON.parse(keep().getItem(KEY));
       return s && s.token && s.uid && Number(s.expiresAt) > Date.now() ? s : null;
     } catch (_) { return null; }
   };
-  const write = s => { try { sessionStorage.setItem(KEY, JSON.stringify(s)); } catch (_) {} };
-  const wipe = () => { try { sessionStorage.removeItem(KEY); } catch (_) {} };
+  const write = s => { try { keep().setItem(KEY, JSON.stringify(s)); } catch (_) {} };
+  const wipe = () => { try { keep().removeItem(KEY); } catch (_) {} try { sessionStorage.removeItem(KEY); } catch (_) {} };
   const CODES = {
     INVALID_CREDENTIAL: 'auth/invalid-credential', TOO_MANY_ATTEMPTS: 'auth/too-many-requests', TOO_MANY_REQUESTS: 'auth/too-many-requests',
     PHONE_IN_USE: 'auth/email-already-in-use', WEAK_PASSWORD: 'auth/weak-password', INVALID_PHONE: 'auth/invalid-email',

@@ -4549,7 +4549,7 @@ window.openChestSheet = function(){
     <div class="v-chest-ring"><div class="v-chest-disc">${pic}</div></div>
     <h2>MYSTERY TREASURE</h2>
     <p>Enter your key to unlock the reward</p>
-    <div class="v-chest-key"><span class="v-chest-keyic">${VI.key}</span><input id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="14" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+    <div class="v-chest-key"><span class="v-chest-keyic">${VI.key}</span><input id="chestKey" type="text" placeholder="Enter treasure chest key" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
     <button class="v-chest-go" id="chestOpenBtn" type="button" onclick="submitChestKey()">UNLOCK TREASURE</button>
   </div>`);
 };
