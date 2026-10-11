@@ -11142,7 +11142,17 @@ async function reconcileCashback() {
       ? await db.collection('investments').where('status', '==', 'active').orderBy('createdAt', 'asc').limit(5000).get()
       : await db.collection('investments').where('status', '==', 'active').where('nextPayoutAt', '<=', new Date()).orderBy('nextPayoutAt', 'asc').limit(1000).get();
     if (full) _lastFullCashbackSweep = Date.now();
-    await settleMany(snap.docs);
+    const sweepStart = Date.now();
+    // The oldest product that was already due when this sweep began (for the timing line below).
+    let oldestDue = Infinity;
+    for (const d of snap.docs) { const t = tsMillis(d.data().nextPayoutAt); if (t && t <= sweepStart && t < oldestDue) oldestDue = t; }
+    const paid = await settleMany(snap.docs);
+    // One line per sweep that really paid something, so the pm2 log shows how punctual the payouts are (at 00:00 this is the whole story).
+    try {
+      if (paid > 0 && oldestDue !== Infinity) {
+        console.log(`Cashback sweep: paid ${paid} payment(s) in ${((Date.now() - sweepStart) / 1000).toFixed(1)}s; the oldest was due ${((sweepStart - oldestDue) / 1000).toFixed(1)}s before the sweep began, the last was paid ${((Date.now() - oldestDue) / 1000).toFixed(1)}s after its due time`);
+      }
+    } catch (_) {}
     // At 00:00 EVERY running product falls due in the same second. A full page means more are waiting: carry on at
     // once instead of waiting for the next 0.5 s tick, so the last member is paid seconds after the first, not minutes.
     if (!full && snap.docs.length >= 1000) setImmediate(reconcileCashback);
@@ -11160,14 +11170,16 @@ function armMidnightSweep() {
   if (t.unref) t.unref();
 }
 async function settleMany(docs) {
-  let next = 0;
+  let next = 0, paid = 0;
   const worker = async () => {
     while (next < docs.length) {
       const doc = docs[next++];
-      await settleInvestmentIfDue(doc).catch(e => console.error('Reconcile cashback error:', e.message));
+      const r = await settleInvestmentIfDue(doc).catch(e => { console.error('Reconcile cashback error:', e.message); return false; });
+      if (r === true) paid++;
     }
   };
   await Promise.all(Array.from({ length: Math.min(CASHBACK_PARALLEL, docs.length) }, worker));
+  return paid;
 }
 // One-time catch-up at start: running investments created before `nextPayoutAt` existed get it.
 async function backfillNextPayoutAt() {
