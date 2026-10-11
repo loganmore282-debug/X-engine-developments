@@ -14,8 +14,8 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   let settings = { otpVerificationEnabled: false };
   let ticketOk = false, counted = 0;
   const db = { collection: () => ({ where() { return this; }, limit() { return this; }, get: async () => ({ docs: [{ data: () => ({ registrationDone: true }), id: 'u1' }], empty: false }) }) };
-  new Function('weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'app', 'db', 'OTP_PURPOSES', 'getSettings', 'cleanPhone', 'badPhoneMessage', 'verifyAuth', 'MARZSMS_KEY', 'otpCheckAndBumpDailyLimit', 'consumeOtpTicket', 'setMemberPassword', 'logSecurityEvent', 'console',
-    sendSrc + '\n' + confirmSrc)(require('./weak-passwords').weakPasswordReason, '', app, db, new Set(['reset', 'bank']), async () => settings, p => String(p || '').replace(/\D/g, ''), () => 'bad phone', async () => null,
+  new Function('MEMBER_PASSWORD_MIN', 'weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'app', 'db', 'OTP_PURPOSES', 'getSettings', 'cleanPhone', 'badPhoneMessage', 'verifyAuth', 'MARZSMS_KEY', 'otpCheckAndBumpDailyLimit', 'consumeOtpTicket', 'setMemberPassword', 'logSecurityEvent', 'console',
+    sendSrc + '\n' + confirmSrc)(10, require('./weak-passwords').weakPasswordReason, '', app, db, new Set(['reset', 'bank']), async () => settings, p => String(p || '').replace(/\D/g, ''), () => 'bad phone', async () => null,
     '', async () => { counted++; return null; }, async () => ticketOk, async () => {}, () => {}, { error() {} });
   const send = async purpose => { const r = res(); await handlers['/auth/otp/send']({ body: { purpose, phone: '0770000001' }, headers: {} }, r); return r; };
   // Registration no longer accepts OTP. Bank is refused when OTP is off...

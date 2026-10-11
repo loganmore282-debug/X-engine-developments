@@ -4173,7 +4173,7 @@ app.post('/auth/reset/confirm', async (req, res) => {
     const phone = cleanPhone(req.body.phone || '');
     if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
     const newPassword = String(req.body.newPassword || '');
-    if (newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters.' });
+    if (newPassword.length < MEMBER_PASSWORD_MIN) return res.status(400).json({ status: 'error', message: 'Password must be at least 10 characters.' });
     if (weakPasswordReason(newPassword, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     const ticketOk = await consumeOtpTicket(String(req.body.ticket || ''), phone, 'reset');
     if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
@@ -7688,7 +7688,7 @@ app.post('/admin/login', async (req, res) => {
 // stored or logged. Sessions are in `memberSessions` (see session-policy.js).
 const LOGIN_MAX_FAILS = 6;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
-const MEMBER_PASSWORD_MIN = 6, MEMBER_PASSWORD_MAX = 128;
+const MEMBER_PASSWORD_MIN = 10, MEMBER_PASSWORD_MAX = 128;
 const DUMMY_MEMBER_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
 const memberAccountId = phone => 'p' + String(phone).replace(/\D/g, '');
 const newMemberUid = () => crypto.randomBytes(12).toString('hex');
