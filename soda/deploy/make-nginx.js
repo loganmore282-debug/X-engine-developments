@@ -54,6 +54,10 @@ const API = 'k7x2';
 // Node stays the real protection; the secret address only hides the door. The token lives on the VPS (never in git).
 const HOOK_TOKEN = String(process.env.SODA_HOOK_TOKEN || '').trim();
 if (HOOK_TOKEN && !/^[a-z0-9]{16,64}$/.test(HOOK_TOKEN)) { console.error('SODA_HOOK_TOKEN must be 16-64 lowercase letters or digits'); process.exit(1); }
+// Optional hook-only HOST (SODA_HOOK_HOST, e.g. q7m2x.p-colasoda.com): with it, PesaJet is told https://<hook host>/h-<token>/pesajet; that host
+// serves nothing but the webhook (every other address 404), and the member host no longer carries the secret address at all.
+const HOOK_HOST = String(process.env.SODA_HOOK_HOST || '').trim().toLowerCase();
+if (HOOK_HOST && (!HOOK_TOKEN || mode !== 'prod' || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(HOOK_HOST))) { console.error('SODA_HOOK_HOST needs prod mode, SODA_HOOK_TOKEN and a full host name'); process.exit(1); }
 const ROOT = process.env.SODA_ROOT || '/srv/soda-src/soda';
 const prod = mode === 'prod';
 
@@ -79,6 +83,44 @@ const proxy = (extra = '') => `        rewrite ^/${API}/(.*)$ /$1 break;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;${extra}`;
+
+// The webhook proxy lines: Node only ever sees /pesajet/webhook, body untouched (the signature is checked over the raw body).
+const hookProxy = `        rewrite ^ /pesajet/webhook break;
+        proxy_pass http://soda_node;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;`;
+const hookLocation = path => `    location = ${path} {
+        limit_req zone=soda_api burst=40 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${hookProxy}
+    }
+`;
+// On the member host: the secret address (unless a hook-only host carries it) and the plain, guessable one closed.
+const memberHookLocations = `    # secret PesaJet webhook address (see HOOK_TOKEN in the generator); the plain one is closed${HOOK_HOST ? ' (the secret one is served on the hook host only)' : ''}
+${HOOK_HOST ? '' : hookLocation('/' + API + '/h-' + HOOK_TOKEN + '/pesajet')}    location = /${API}/pesajet/webhook { return 404; }
+`;
+// A host that exists only for the webhook: one POST address, everything else 404, no app, no admin, no API.
+const hookHostBlock = () => `server {
+    listen 80;
+    listen [::]:80;
+    server_name ${HOOK_HOST};
+    server_tokens off;
+    if ($soda_bad_ua) { return 444; }
+    if ($request_method !~ ^(GET|HEAD|POST|OPTIONS)$) { return 405; }
+    limit_conn soda_conn 150;
+    limit_conn_status 429;
+    limit_req_status 429;
+    client_max_body_size 1m;
+    client_header_timeout 15s;
+    client_body_timeout 20s;
+    send_timeout 30s;
+${hookLocation('/h-' + HOOK_TOKEN + '/pesajet')}    location / { return 404; }
+}
+`;
 
 const serverBlock = (name, role) => `server {
 ${prod ? '    listen 80;\n    listen [::]:80;' : '    listen 8090;\n    listen [::]:8090;'}
@@ -119,21 +161,7 @@ ${proxy()}
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
-${HOOK_TOKEN && role !== 'admin' ? `    # secret PesaJet webhook address (see HOOK_TOKEN in the generator); the plain one is closed
-    location = /${API}/h-${HOOK_TOKEN}/pesajet {
-        limit_req zone=soda_api burst=40 nodelay;
-${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
-        rewrite ^ /pesajet/webhook break;
-        proxy_pass http://soda_node;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    location = /${API}/pesajet/webhook { return 404; }
-` : ''}    location /${API}/ {
+${HOOK_TOKEN && role !== 'admin' ? memberHookLocations : ''}    location /${API}/ {
         limit_req zone=soda_api burst=40 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
@@ -227,4 +255,4 @@ map $http_user_agent $soda_bot_html {
 # (options-ssl-nginx.conf) inside each server block, and other sites on this box
 # (Petro) already set them at the top level -- a second copy of any of them in this
 # file makes nginx -t fail with "directive is duplicate" (seen live).
-${serverBlock([host].concat(extraHosts).join(' '), adminHost ? 'member' : 'both')}${adminHost ? '\n' + serverBlock(adminHost, 'admin') : ''}`);
+${serverBlock([host].concat(extraHosts).join(' '), adminHost ? 'member' : 'both')}${adminHost ? '\n' + serverBlock(adminHost, 'admin') : ''}${HOOK_HOST ? '\n' + hookHostBlock() : ''}`);

@@ -122,6 +122,13 @@ function boot(file, scope) {
     ok(tok.includes('location = /k7x2/pesajet/webhook { return 404; }'), 'token: the plain webhook address answers 404');
     eq(tok.split('/h-' + T + '/pesajet').length - 1, 1, 'token: the secret address is in the member block only, not on the admin host');
     eq(tok.replace(/    # secret PesaJet webhook address[\s\S]*?location = \/k7x2\/pesajet\/webhook \{ return 404; \}\n/, ''), base, 'token: nothing else in the file changes');
+    const hh = g({ SODA_HOOK_TOKEN: T, SODA_HOOK_HOST: 'q7m2x.example.com' }, 'prod', 'example.com', 'Panel7x9k', 'adm.example.com');
+    ok(/server_name q7m2x\.example\.com;/.test(hh) && hh.includes('location = /h-' + T + '/pesajet {') && hh.includes('location / { return 404; }'), 'hook host: its own block serves only the secret address, everything else 404');
+    ok(!hh.includes('/k7x2/h-' + T), 'hook host: the member host no longer carries the secret address');
+    ok(hh.includes('location = /k7x2/pesajet/webhook { return 404; }'), 'hook host: the plain address is still closed on the member host');
+    eq(hh.split('server_name ').length - 1, 3, 'hook host: member, admin and hook blocks');
+    let r2 = false; try { g({ SODA_HOOK_HOST: 'q7m2x.example.com' }, 'prod', 'example.com', 'Panel7x9k'); } catch (e) { r2 = true; } ok(r2, 'a hook host without a token is refused');
+    let r3 = false; try { g({ SODA_HOOK_TOKEN: T, SODA_HOOK_HOST: 'bad host' }, 'prod', 'example.com', 'Panel7x9k'); } catch (e) { r3 = true; } ok(r3, 'a malformed hook host is refused');
     let refused = false; try { g({ SODA_HOOK_TOKEN: 'Bad Token!' }, 'prod', 'example.com', 'Panel7x9k'); } catch (e) { refused = true; } ok(refused, 'a malformed token is refused');
   }
   console.log(`PASS: one host for app, API and admin (${n} checks)`); process.exit(0);

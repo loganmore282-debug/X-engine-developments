@@ -24,7 +24,9 @@ npm install --omit=dev --no-audit --no-fund 2>&1 | tail -1
 
 # Secret PesaJet webhook address: the token lives only on this server (made by deploy/make-hook-url.sh), never in git.
 HOOK_FILE=${SODA_HOOK_FILE:-/srv/soda-secrets/hook-token}
+HOOK_HOST_FILE=${SODA_HOOK_HOST_FILE:-/srv/soda-secrets/hook-host}
 if [ -s "$HOOK_FILE" ]; then SODA_HOOK_TOKEN=$(tr -d '[:space:]' < "$HOOK_FILE"); export SODA_HOOK_TOKEN; echo "    (secret PesaJet webhook address is ON)"; fi
+if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then SODA_HOOK_HOST=$(tr -d '[:space:]' < "$HOOK_HOST_FILE"); export SODA_HOOK_HOST; echo "    (webhook-only host: $SODA_HOOK_HOST)"; fi
 
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
@@ -40,6 +42,16 @@ fi
 
 say "4/7  HTTPS (same certificate, only switched back on)"
 certbot --nginx -d "$APP_HOST" -d "$ADMIN_HOST" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
+# The webhook-only host gets its certificate in a SECOND step, so a DNS that is not ready yet can never take the other two hosts' HTTPS down.
+if [ -n "${SODA_HOOK_HOST:-}" ]; then
+  MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true); HOOKIP=$(getent ahostsv4 "$SODA_HOOK_HOST" 2>/dev/null | awk '{print $1; exit}')
+  if [ -n "$MYIP" ] && [ "$MYIP" = "$HOOKIP" ]; then
+    certbot --nginx --expand -d "$APP_HOST" -d "$ADMIN_HOST" -d "$SODA_HOOK_HOST" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
+  else
+    echo "    !! $SODA_HOOK_HOST does not point to this server yet (it points to '${HOOKIP:-nothing}', this server is '$MYIP')."
+    echo "       Check the A record in Hostinger, wait a few minutes and run this again. The other two addresses are not affected."
+  fi
+fi
 # HTTP/2 lets a phone fetch many files over ONE connection (a big gain on long-distance links). Added only if missing, and undone if nginx refuses it.
 cp "$CONF" /tmp/soda.conf.pre-h2
 sed -i -E '/^[[:space:]]*listen .*443 ssl/{/http2/!s/443 ssl/443 ssl http2/}' "$CONF"
