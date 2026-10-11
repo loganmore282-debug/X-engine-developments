@@ -49,6 +49,11 @@ const PORT = process.env.SODA_API_PORT || '3001';
 // The API's URL prefix. It must equal API_BASE / SODA_AUTH_API / SERVER / the service workers' API_ORIGIN / the icon links
 // in the sources (test-single-host.js checks they all agree). Not /api: that is the first thing a scanner tries.
 const API = 'k7x2';
+// Optional SECRET address for the PesaJet webhook: set SODA_HOOK_TOKEN (16-64 lowercase letters/digits) and PesaJet is told
+// https://<host>/k7x2/h-<token>/pesajet instead of the guessable /k7x2/pesajet/webhook, which then answers 404. The signature check in
+// Node stays the real protection; the secret address only hides the door. The token lives on the VPS (never in git).
+const HOOK_TOKEN = String(process.env.SODA_HOOK_TOKEN || '').trim();
+if (HOOK_TOKEN && !/^[a-z0-9]{16,64}$/.test(HOOK_TOKEN)) { console.error('SODA_HOOK_TOKEN must be 16-64 lowercase letters or digits'); process.exit(1); }
 const ROOT = process.env.SODA_ROOT || '/srv/soda-src/soda';
 const prod = mode === 'prod';
 
@@ -114,7 +119,21 @@ ${proxy()}
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
-    location /${API}/ {
+${HOOK_TOKEN && role !== 'admin' ? `    # secret PesaJet webhook address (see HOOK_TOKEN in the generator); the plain one is closed
+    location = /${API}/h-${HOOK_TOKEN}/pesajet {
+        limit_req zone=soda_api burst=40 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+        rewrite ^ /pesajet/webhook break;
+        proxy_pass http://soda_node;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /${API}/pesajet/webhook { return 404; }
+` : ''}    location /${API}/ {
         limit_req zone=soda_api burst=40 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}

@@ -22,6 +22,10 @@ git log -1 --format='    now at: %h %s'
 say "2/7  Packages"
 npm install --omit=dev --no-audit --no-fund 2>&1 | tail -1
 
+# Secret PesaJet webhook address: the token lives only on this server (made by deploy/make-hook-url.sh), never in git.
+HOOK_FILE=${SODA_HOOK_FILE:-/srv/soda-secrets/hook-token}
+if [ -s "$HOOK_FILE" ]; then SODA_HOOK_TOKEN=$(tr -d '[:space:]' < "$HOOK_FILE"); export SODA_HOOK_TOKEN; echo "    (secret PesaJet webhook address is ON)"; fi
+
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
 if node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" > /tmp/soda.conf.new && cp /tmp/soda.conf.new "$CONF" && nginx -t >/tmp/soda.nginxtest 2>&1; then

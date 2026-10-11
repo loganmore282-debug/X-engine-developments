@@ -112,5 +112,17 @@ function boot(file, scope) {
   const del2 = await a.activate(['soda-admin-shell-v1', curA, curU, 'soda-brand-v1']);
   eq(del2, ['soda-admin-shell-v1'], "the admin worker clears only its own old caches, never the member app's");
   const r = a.fetchEvent('https://h.example/k7x2/admin/stats'); eq(r.responded, 1, 'the panel passes /k7x2 straight to the network');
+  { // secret PesaJet webhook address
+    const g = (env, ...a) => require('child_process').execFileSync('node', ['deploy/make-nginx.js', ...a], { encoding: 'utf8', env: { ...process.env, ...env } });
+    const base = g({ SODA_HOOK_TOKEN: '' }, 'prod', 'example.com', 'Panel7x9k', 'adm.example.com');
+    ok(!/h-[a-z0-9]{16}/.test(base) && !/pesajet\/webhook \{ return 404/.test(base), 'no token: no secret webhook address and the plain one is not closed');
+    const T = 'abcdef0123456789abcd';
+    const tok = g({ SODA_HOOK_TOKEN: T }, 'prod', 'example.com', 'Panel7x9k', 'adm.example.com');
+    ok(tok.includes('location = /k7x2/h-' + T + '/pesajet {') && tok.includes('rewrite ^ /pesajet/webhook break;'), 'token: the secret address maps to Node /pesajet/webhook');
+    ok(tok.includes('location = /k7x2/pesajet/webhook { return 404; }'), 'token: the plain webhook address answers 404');
+    eq(tok.split('/h-' + T + '/pesajet').length - 1, 1, 'token: the secret address is in the member block only, not on the admin host');
+    eq(tok.replace(/    # secret PesaJet webhook address[\s\S]*?location = \/k7x2\/pesajet\/webhook \{ return 404; \}\n/, ''), base, 'token: nothing else in the file changes');
+    let refused = false; try { g({ SODA_HOOK_TOKEN: 'Bad Token!' }, 'prod', 'example.com', 'Panel7x9k'); } catch (e) { refused = true; } ok(refused, 'a malformed token is refused');
+  }
   console.log(`PASS: one host for app, API and admin (${n} checks)`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });
