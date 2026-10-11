@@ -47,8 +47,7 @@ const ck = (o, l) => { if (!o) bad++; console.log((o ? 'PASS  ' : 'FAIL  ') + l)
 // parameter list and hands back a truncated function. Half of this module's
 // functions take an options object, and that is exactly how this file first
 // failed ("Unexpected token 'async'" -- the slice had ended mid-declaration).
-// The `async` is part of the name match for the reason test-spin-sources.js
-// records: matching the bare `function` finds the right place in an async
+// The `async` is part of the name match, because: matching the bare `function` finds the right place in an async
 // function but starts the slice after the keyword, and `new Function` then
 // rejects the awaits inside.
 function fnSource(name) {
