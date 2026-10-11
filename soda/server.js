@@ -698,6 +698,8 @@ const DEFAULT_SETTINGS = {
   // Off by default: a fresh install must not lock withdraw behind hours
   // nobody has set yet.
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
+  // What every NEW mobile-money recharge / withdrawal reference starts with (soda2610111048053568). Admin > Settings; existing references never change.
+  referencePrefix: 'S',
   // Off by default — approves every pending withdrawal automatically a few
   // seconds after it's requested, server-driven, idempotent (shares the
   // exact same processWithdrawalCore path a manual admin approval uses).
@@ -1676,6 +1678,14 @@ async function uniqueRef(letter) {
     if (inDep.empty && inWit.empty) return ref;
   }
   return letter + Date.now() + crypto.randomInt(1000);
+}
+// The owner-chosen start of a payment reference: 1-12 letters/digits, starting with a letter. '' = not acceptable (the caller falls back to 'S').
+function sanitizeRefPrefix(v) {
+  const t = String(v == null ? '' : v).trim();
+  return /^[A-Za-z][A-Za-z0-9]{0,11}$/.test(t) ? t : '';
+}
+async function mobileMoneyRefPrefix() {
+  try { return sanitizeRefPrefix((await getSettings()).referencePrefix) || 'S'; } catch (_) { return 'S'; }
 }
 // TASK CENTER -- rewards for team progress, on top of the ordinary L1/L2/L3 commission. The two lists live in
 // the settings (defaults above, edited in Admin > Settings > Task Center). A "referral" task counts the member's
@@ -4952,7 +4962,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     }
     _depCreateDebounce.set(userId, Date.now());
 
-    const ref = await uniqueRef('S');
+    const ref = await uniqueRef(await mobileMoneyRefPrefix());
     const marzReference = crypto.randomUUID();
     const { date, time } = nowStr();
     const depRef = db.collection('pendingDeposits').doc();
@@ -6153,7 +6163,7 @@ app.post('/withdraw/request', async (req, res) => {
     const fee = Math.round(amt * feePct / 100);
     const net = amt - fee;
     if (net <= 0) throw new Error('Withdraw amount is too small after fees.');
-    const ref = await uniqueRef('S');
+    const ref = await uniqueRef(await mobileMoneyRefPrefix());
     // This adapter has no real multi-document rollback. Persist the request
     // first, then charge once with a durable token that recovery can inspect.
     await withLock('bal:' + userId, async () => {
@@ -8185,6 +8195,12 @@ app.post('/admin/settings/update', async (req, res) => {
       if (addr && !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr))
         return res.status(400).json({ status: 'error', message: 'That does not look like a valid TRC20 wallet address (should start with T, 34 characters).' });
       updates.usdtWalletAddress = addr;
+    }
+    // Start of every new payment reference. Refused rather than repaired, so what the owner types is exactly what appears at the gateway.
+    if ('referencePrefix' in updates) {
+      const px = sanitizeRefPrefix(updates.referencePrefix);
+      if (!px) return res.status(400).json({ status: 'error', message: 'The reference start must be 1 to 12 letters or digits and begin with a letter, e.g. soda' });
+      updates.referencePrefix = px;
     }
     // The two withdraw times. Refused rather than coerced: a silently
     // repaired time is a window the owner did not choose, on a screen whose

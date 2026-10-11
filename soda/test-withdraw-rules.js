@@ -183,6 +183,7 @@ function run(state, body) {
       : { ok: false, code: /^\d{6}$/.test(String(pin || '')) ? 'WRONG_PIN' : 'INVALID_PIN', message: 'Incorrect Trade Password.' },
     cleanPhone: p => String(p || '').replace(/\D/g, '') || '',
     uniqueRef: async () => 'S1',
+    mobileMoneyRefPrefix: async () => 'S',
     nowStr: () => ({ date: '15/01/2026', time: '12:00' }),
     fmtMoney: n => 'UGX ' + Number(n).toLocaleString('en-US'),
     // The route stamps the member's region onto the withdrawal document now.
@@ -233,7 +234,7 @@ function run(state, body) {
   };
   const fn = new Function('sandbox', `
     const { console, crypto, verifyAuth, withLock, getSettings, pinCheck, cleanPhone,
-            uniqueRef, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
+            uniqueRef, mobileMoneyRefPrefix, nowStr, fmtMoney, logSecurityEvent, sendAdminPush,
             sendWithdrawalSmsAlert, NETWORK_NAMES, MAX_MONEY_AMOUNT,
             _witRequestInFlight, _userBeingDeleted, FieldValue, db,
             withdrawWindowState, currentRegionKey, DEFAULT_REGION_KEY, withUserRegion } = sandbox;

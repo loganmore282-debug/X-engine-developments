@@ -2969,6 +2969,8 @@ async function renderSettings(){
       </div>
       <div class="row" style="margin-top:6px">
         <div><label>Max withdrawals per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
+        <div><label>Payment reference starts with</label><input id="sRefPrefix" type="text" maxlength="12" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(v('referencePrefix','S'))}">
+          <div id="sRefPrefixPreview" style="font-size:12px;opacity:.7;margin-top:4px"></div></div>
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a plan before withdrawing</b> <span class="muted">(blocks bonus-only withdrawals)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
@@ -3069,12 +3071,16 @@ async function renderSettings(){
   }
   ['sWitWindow','sWitFrom','sWitTo'].forEach(id=>{ const e=$(id); if(e){ e.addEventListener('change',refreshWitNow); e.addEventListener('input',refreshWitNow); } });
   refreshWitNow();
+  { const px=$('sRefPrefix'), pv=$('sRefPrefixPreview');
+    const showRef=()=>{ const t=px.value.trim(); const ok=/^[A-Za-z][A-Za-z0-9]{0,11}$/.test(t); pv.textContent = ok ? 'New payments will look like: '+t+'2610111048053568' : 'Use 1 to 12 letters or digits, starting with a letter (for example soda)'; pv.style.color = ok ? '' : '#c0392b'; };
+    px.addEventListener('input',showRef); showRef(); }
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       withdrawFeePct:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
+      referencePrefix:$('sRefPrefix').value.trim(),
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
       withdrawWindowEnabled:$('sWitWindow').checked,
       withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
