@@ -180,6 +180,8 @@ async function ensureIndexes() {
     ['promoRedemptions',{ userId: 1 }],
     ['securityEvents',  { userId: 1 }],
     ['securityEvents',  { createdAt: -1 }],
+    ['turntableSpins',  { investmentId: 1 }],
+    ['turntableSpins',  { userId: 1, used: 1, createdAt: 1 }],
     ['promoRedemptions',{ userId: 1, code: 1 }],
     ['messageReads',    { userId: 1 }],
     ['statementDownloads', { createdAt: -1 }],
@@ -445,7 +447,7 @@ class DocumentReference {
   }
   // Atomic create-if-missing for deterministic idempotency records. Unlike
   // set(..., { merge:true }), this never changes an existing document, so a
-  // retry from another process cannot reset a record that was already written.
+  // retry from another process cannot reset a spin that was already used.
   async createIfAbsent(data) {
     const plain = resolveFieldValues(data);
     const result = await _mdb.collection(this._col).updateOne(
@@ -528,9 +530,10 @@ class Query {
   }
   // How many documents match -- without pulling any of them back.
   //
-  // Added because counting by fetching is what produced a real bug: a count read from
-  // a query capped at .limit(200) showed 200 for anyone holding more. Counting here
-  // never pulls the documents back.
+  // Added because counting by fetching is what produced a real bug: the
+  // turntable reported `earnedSpins: snap.size` from a query capped at
+  // .limit(200), so a member holding more than 200 unused spins was shown 200.
+  // The spins existed and were spendable; only the number was wrong.
   //
   // Deliberately NOT named the same as Firestore's own count() aggregate
   // (which returns a snapshot you then read .data().count from) -- this

@@ -160,10 +160,12 @@ app.use('/admin/', async (req, _res, next) => {
   }
   next();
 });
-// Routes that move money or send SMS get the strict 60/min per-user cap rather than only the 400/min global one.
+// '/turntable/spin' belongs here because it
+// pays real money on an unauthenticated-body POST, so it gets the strict
+// 60/min per-user cap rather than only the 400/min global one.
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/bank/delete',
  '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
- '/auth/otp/send', '/auth/otp/verify', '/auth/reset/confirm']
+ '/turntable/spin', '/auth/otp/send', '/auth/otp/verify', '/auth/reset/confirm']
   .forEach(p => app.use(p, apiLimiter));
 // Owner: "some people can deplete sms costs, so block too many requests of
 // otp requests I think 10 requests, the ip should be said too many
@@ -613,6 +615,24 @@ const DEFAULT_SETTINGS = {
   // Background treatment for signed-in Home/Assets/Network/Profile and
   // secondary pages. Authentication screens keep their own controls above.
   innerBgOpacity: 100, innerBgBlur: 0,
+  // ── Turntable (daily spin wheel) ──
+  // Owner's spec: "spin wheel bonus, so everyday one spins just like daily
+  // check-in and earns the set amount in admin panel, also spin can also be
+  // available from buying products like any vip product like product
+  // 2,3,4,5,6,7,8... one earns the set percentage in admin panel of product
+  // amount bought."
+  // So there are TWO kinds of spin, with different payout rules:
+  //   * the free daily one, paying a random amount in [Min, Max] (set both
+  //     equal for a fixed amount), and
+  //   * spins earned by buying a product, paying from THAT product's own
+  //     spinMin/spinMax band -- configured per product, not here.
+  turntableEnabled: false,
+  turntableDailyMin: 200, turntableDailyMax: 1000,
+  // Spins earned from purchases are configured PER PRODUCT (spinCount,
+  // spinMin, spinMax on each product) -- owner: "make when l can configure
+  // every spin price for each product... also products will have different
+  // rates of multipliers so don't fix it in settings." Only the free daily
+  // spin's band lives here, because it is not tied to any product.
   // Owner's rule: the referral code on Sign Up is a MUST, not optional.
   // Enforced on the server (it used to be a client-side check only, which any
   // direct POST /register walked straight past). The very first account is
@@ -1179,7 +1199,8 @@ function fmtMoney(n, currency) {
   // the label in front of it is what changes.
   return cur + ' ' + v.toLocaleString('en-UG', hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {});
 }
-// Rounds to the nearest UGX cent (2 decimal places). Used by gift codes and reporting math.
+// Rounds to the nearest UGX cent (2 decimal places). Used by gift codes, the spin
+// wheel/turntable and reporting math.
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function stripHtml(s) { return String(s || '').replace(/<[^>]*>/g, '').trim(); }
 // The region's own wall clock. Kampala (UTC+3) for Uganda, and whatever
@@ -1494,6 +1515,29 @@ function depositSenderPhone(body, accountPhone, keys) {
 }
 const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
 const MAX_MONEY_AMOUNT = 999_999_999;
+// The most spins one purchase can ever grant. Used in TWO places that must
+// agree: sanitizeProductInput() refuses a bigger number at save time, and
+// grantTurntableSpins() clamps its loop to it at grant time. The second is
+// not redundant -- it is the LOOP BOUND, and it reads a value out of the
+// database. Not every write to products/ goes through the validator (the
+// legacy-key migration re-writes stored docs directly), so the loop must
+// not depend on the validator having been the only writer.
+//
+// It was 20, and 20 was an invented number -- owner: "stop limiting
+// everything bro, they are above 25 even." It is 200 now. What this figure
+// actually bounds is the WRITE LOOP in writeTurntableSpinDocs(): one Mongo
+// document per spin, written one await at a time, so the cost of a purchase's
+// grant is linear in it. That is why it is not simply removed -- a typed
+// 100000 would try to write a hundred thousand money documents -- but 200
+// leaves the owner far more room than he asked for and costs at most a couple
+// of seconds of work that runs AFTER the purchase has already answered
+// (grantTurntableSpins is fire-and-forget from /invest/create) and inside
+// that investment's own lock, so nothing a member is waiting on is slowed.
+// The sequential await is also what makes the resume-after-failure logic
+// correct: surviving rows are a contiguous prefix, which is what
+// `existingCount` assumes. Do not make this loop concurrent without making
+// that resume fill MISSING ordinals instead of counting rows.
+const MAX_SPINS_PER_PURCHASE = 200;
 function finiteMoney(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -4332,6 +4376,404 @@ app.get('/account', async (req, res) => {
 // The daily check-in claim (/checkin) is removed: no screen calls it and it paid money.
 
 // ═══════════════════════════════════════════
+// TURNTABLE (daily spin wheel)
+// ═══════════════════════════════════════════
+// A Soda-only feature -- Snow has no equivalent, so none of this is a port.
+//
+// Two spin sources, deliberately kept as separate concepts because they pay
+// differently and must not be able to subsidise each other:
+//   1. One FREE spin per EAT calendar day, paying a random amount inside the
+//      admin's [turntableDailyMin, turntableDailyMax] band.
+//   2. Spins EARNED by buying a product, each paying a random amount from
+//      that product's own spinMin/spinMax band. Configured per product
+//      (spinCount/spinMin/spinMax) because the owner wants every product to
+//      be able to pay differently.
+//
+// Earned spins are stored as individual `turntableSpins` documents rather
+// than a counter, because each one carries its own payout basis (the price
+// of the product that granted it). A counter would lose that, and a member
+// who bought a cheap tier then an expensive one would be paid the wrong
+// amount on one of them.
+async function grantTurntableSpins(userId, product, investmentId) {
+  try {
+    const sett = await getSettings();
+    if (!sett.turntableEnabled) return;
+    // Idempotent per purchase. This is fire-and-forget from /invest/create,
+    // so nothing today calls it twice -- but a bonus that pays out again on
+    // a retry is the kind of thing a later caller adds by accident, and one
+    // query is cheap next to silently double-granting.
+    //
+    // The check and the writes it guards run INSIDE one lock, because on its
+    // own it is a read-then-write: two calls for the same investmentId could
+    // both find nothing and both grant, which is the double-grant the query
+    // exists to stop. Keyed on the investment so two different purchases
+    // still run concurrently. Owner's question -- "what if a product spin and
+    // a daily spin combine together, can't it override??" -- is about the
+    // SPENDING side, which was already safe; this is the granting side, where
+    // the only hole actually was.
+    // AWAITED, not returned: this is called fire-and-forget from
+    // /invest/create with no .catch(), so a returned promise would carry any
+    // rejection straight past the handler below and out as an unhandled
+    // rejection.
+    if (!investmentId) { await writeTurntableSpinDocs(userId, product, null, 0); return; }
+    await withLock('spingrant:' + investmentId, async () => {
+      const already = await db.collection('turntableSpins')
+        .where('investmentId', '==', investmentId).get();
+      // A previous attempt may have died halfway through the loop. The old
+      // existence-only guard treated one surviving row as "all spins were
+      // granted" forever. Count the durable rows and fill only the missing
+      // tail while this investment lock excludes concurrent grant attempts.
+      await writeTurntableSpinDocs(userId, product, investmentId, already.size);
+    });
+  } catch (e) {
+    // Never let this break a purchase that has already been paid for. The
+    // member keeps their product; the spin is simply not granted, and the
+    // failure is loud in the logs rather than silently swallowed.
+    console.error(`Turntable: failed to grant spins to ${userId} for ${product && product.key}:`, e.message);
+  }
+}
+// The writes themselves. Split out only so the idempotency query above and
+// these can share one lock; it has no try/catch of its own because its single
+// caller already wraps it, and swallowing an error here would let that caller
+// report a grant it did not make.
+async function writeTurntableSpinDocs(userId, product, investmentId, existingCount) {
+    // Per-product config: how many spins this purchase grants, and the band
+    // each of those spins pays from. A product with no spinCount grants
+    // none, which is how "the cheapest product earns nothing" is expressed --
+    // there is no global tier threshold any more.
+    // Every one of these is re-clamped from the STORED product rather than
+    // trusted: this loop writes a document per iteration and each document
+    // is money, so the bound and the band are validated where they are used,
+    // not only where they were saved.
+    const count = Math.min(MAX_SPINS_PER_PURCHASE,
+      Math.max(0, Math.floor(Number(product && product.spinCount) || 0)));
+    if (!count) return;
+    const lo = Math.min(MAX_MONEY_AMOUNT, Math.max(0, Number(product.spinMin) || 0));
+    const hi = Math.min(MAX_MONEY_AMOUNT, Math.max(lo, Number(product.spinMax) || 0));
+    if (hi <= 0) return;
+    const { date, time } = nowStr();
+    const start = Math.min(count, Math.max(0, Math.floor(Number(existingCount) || 0)));
+    for (let i = start; i < count; i++) {
+      // The band is SNAPSHOT onto the spin, not looked up when it is spun.
+      // A member who earned a spin under one configuration keeps that deal
+      // even if the admin retunes the product afterwards -- and an admin
+      // lowering a payout cannot retroactively shrink spins already earned.
+      const spinData = {
+        // investmentId ties the spin to the purchase that paid for it: it is
+        // what makes the guard above work, and it is the only way to answer
+        // "where did this spin come from" when auditing a member's account.
+        userId, investmentId: investmentId || null, grantOrdinal: i,
+        spinMin: lo, spinMax: hi, source: 'product',
+        productKey: product.key, productName: product.name,
+        used: false, date, time, createdAt: FieldValue.serverTimestamp(),
+      };
+      if (investmentId) {
+        await db.collection('turntableSpins')
+          .doc(`grant:${investmentId}:${i}`).createIfAbsent(spinData);
+      } else {
+        await db.collection('turntableSpins').add(spinData);
+      }
+    }
+}
+// One shared roll for both spin kinds -- the daily band from settings, or a
+// product spin's own snapshot band.
+// This decides how much money a member is paid, so it does NOT use
+// Math.random(). V8's Math.random is a seeded xorshift128+ whose internal
+// state can be recovered from a modest run of outputs -- and a member sees
+// every one of their own spin results, which is exactly such a run. The
+// exposure was bounded (nobody can win past spinMax either way), but a
+// predictable generator has no business deciding payouts when the fix is
+// one line. crypto.randomInt is a CSPRNG and draws from a uniform range
+// with no modulo bias.
+//
+// Resolution is 1/100 of a shilling, matching round2()'s own precision, so
+// nothing is lost by working in integer cents here.
+// ── THE WHEEL'S OWN SLICES ──
+// Owner: "why the spin wheel has no amounts?" -- because there were none to
+// show. The payout used to be any figure at all between the admin's minimum
+// and maximum, so no slice could be labelled with anything.
+//
+// The eight amounts a member sees on the wheel and the eight the payout is
+// drawn from MUST be the same list, or the wheel lands on 600 while the
+// wallet gets 587 -- a money screen telling a lie. So they are computed HERE,
+// used by the roll, and handed to the client to render. One source of truth,
+// with no second copy in the app to keep in step (this project already keeps
+// one such pair by hand -- phoneToEmail -- and needs a dedicated test to
+// prove the two still agree; that is not a pattern worth repeating).
+//
+// The band is still the owner's: turntableDailyMin/Max for the free daily
+// spin, and each product's own spinMin/spinMax snapshotted onto the spins it
+// earned. Nothing new to configure, which is what he asked for -- "basing on
+// the set spin ranges on products amount ranges and that amount of daily
+// spin".
+var SPIN_SLICES = 8;
+function spinWheelSlices(lo, hi) {
+  lo = Math.max(0, finiteMoney(lo));
+  hi = Math.max(lo, finiteMoney(hi));
+  // A zero-width band is not a broken one: an admin who sets min == max means
+  // every spin pays exactly that, and the honest wheel shows it on all eight.
+  if (hi <= lo) return new Array(SPIN_SLICES).fill(round2(lo));
+  // Evenly spaced from lo to hi inclusive, then rounded to a step that suits
+  // the band's own width so the figures read as money rather than as
+  // arithmetic: 200 / 310 / 430 ... rather than 200 / 314.29 / 428.57. The
+  // two ENDS stay exactly lo and hi, because those are the numbers the copy
+  // under the wheel promises and the admin typed.
+  const span = hi - lo;
+  const step = span >= 8000 ? 500 : span >= 800 ? 50 : span >= 80 ? 5 : 1;
+  const out = [];
+  for (let i = 0; i < SPIN_SLICES; i++) {
+    if (i === 0) { out.push(round2(lo)); continue; }
+    if (i === SPIN_SLICES - 1) { out.push(round2(hi)); continue; }
+    const raw = lo + (span * i) / (SPIN_SLICES - 1);
+    out.push(round2(Math.min(hi, Math.max(lo, Math.round(raw / step) * step))));
+  }
+  return out;
+}
+// The roll IS the wheel: pick a slice, pay what that slice says. crypto, not
+// Math.random -- V8's Math.random is a seeded xorshift128+ whose state is
+// recoverable from a run of outputs, and a member sees every one of their own
+// results.
+function rollSpinSlice(lo, hi) {
+  const slices = spinWheelSlices(lo, hi);
+  const index = crypto.randomInt(0, slices.length);
+  return { slices, index, amount: slices[index] };
+}
+function rollSpinReward(lo, hi) {
+  return rollSpinSlice(lo, hi).amount;
+}
+function turntableDailyReward(sett) {
+  return rollSpinReward(sett.turntableDailyMin, sett.turntableDailyMax);
+}
+// The band the NEXT spin will be paid from, which is not always the daily
+// one: the spin route takes the free daily spin first if it is available and
+// otherwise the OLDEST unused earned spin, each of which carries the band its
+// product had at the moment it was granted. The wheel has to be labelled with
+// whichever of those is actually about to be used, or it shows one product's
+// prizes and pays another's.
+function spinBandOf(doc) {
+  const d = doc && doc.data ? doc.data() : doc;
+  if (!d) return null;
+  if (d.spinMin != null || d.spinMax != null) return { lo: d.spinMin, hi: d.spinMax };
+  // Spins granted before per-product bands carry a flat `reward`. Honour it:
+  // every slice reads the same, which is exactly what such a spin pays.
+  const flat = round2(Number(d.reward) || 0);
+  return { lo: flat, hi: flat };
+}
+app.get('/turntable/status', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const sett = await getSettings();
+    const snap = await db.collection('users').doc(uid).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
+    const u = snap.data();
+    if (u.status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const now = Date.now();
+    const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
+    const dailyAvailable = lastKey !== eatDayKey(new Date(now));
+    // A real count, not the size of a capped fetch. This used to be
+    // .limit(200).get() and report snap.size, so a member holding more than
+    // 200 unused spins was told they had 200 -- the spins existed and were
+    // spendable, but the number on screen was wrong, and totalSpins (which
+    // enables the SPIN button) was wrong with it.
+    const earnedCount = await db.collection('turntableSpins')
+      .where('userId', '==', uid).where('used', '==', false).count();
+    // The wheel is labelled with the band of the spin that is actually next,
+    // resolved exactly the way /turntable/spin resolves it: the free daily
+    // spin if it is available, otherwise the oldest unused earned one. The
+    // extra read only happens when there IS an earned spin to describe.
+    let band = { lo: sett.turntableDailyMin, hi: sett.turntableDailyMax };
+    let nextSource = 'daily';
+    if (!dailyAvailable && earnedCount > 0) {
+      const earned = await db.collection('turntableSpins')
+        .where('userId', '==', uid).where('used', '==', false)
+        .orderBy('createdAt', 'asc').limit(1).get();
+      if (!earned.empty) {
+        band = spinBandOf(earned.docs[0]) || band;
+        nextSource = 'product';
+      }
+    }
+    res.json({
+      status: 'success',
+      enabled: !!sett.turntableEnabled,
+      dailyAvailable,
+      earnedSpins: earnedCount,
+      totalSpins: (dailyAvailable ? 1 : 0) + earnedCount,
+      nextDailyAt: eatNextMidnight(now),
+      dailyMin: Number(sett.turntableDailyMin) || 0,
+      dailyMax: Number(sett.turntableDailyMax) || 0,
+      nextSource,
+      nextMin: round2(Math.max(0, finiteMoney(band.lo))),
+      nextMax: round2(Math.max(0, finiteMoney(band.hi))),
+      slices: spinWheelSlices(band.lo, band.hi),
+    });
+  } catch (e) {
+    console.error('Turntable status error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not load the turntable' });
+  }
+});
+app.post('/turntable/spin', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    let result = null;
+    // Same lock discipline as /checkin: one spin at a time per member, with
+    // the balance write nested under bal:<uid>. Without this, two taps
+    // landing together would each see the same unused spin and pay it twice.
+    await withLock('turntable:' + uid, async () => {
+      const sett = await getSettings();
+      if (!sett.turntableEnabled) { result = { code: 400, body: { status: 'error', message: 'The turntable is not available right now.' } }; return; }
+      const ref = db.collection('users').doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      const u = snap.data();
+      if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+
+      const now = Date.now();
+      const todayKey = eatDayKey(new Date(now));
+      const lastKey = u.lastTurntableAt ? eatDayKey(new Date(u.lastTurntableAt)) : null;
+      const dailyAvailable = lastKey !== todayKey;
+
+      // `roll` carries the eight slices the wheel must land on and which of
+      // them won, so the animation can stop on the exact figure being paid.
+      let reward, source, label, spinDoc = null, roll = null;
+      if (dailyAvailable) {
+        // The day is CLAIMED here, atomically, before anything is paid.
+        // withLock() is an in-process promise chain -- it serialises taps
+        // inside ONE server process and nothing more, so if this app is ever
+        // run on more than one instance two simultaneous taps could each
+        // read lastTurntableAt, each see the day as free, and each pay a
+        // daily spin. updateIf() is a single conditional Mongo write: only
+        // the request whose read matched the stored value wins, whichever
+        // process it came from.
+        const claimed = await ref.updateIf(
+          { lastTurntableAt: u.lastTurntableAt == null ? null : u.lastTurntableAt },
+          { lastTurntableAt: now });
+        if (!claimed) {
+          result = { code: 400, body: { status: 'error', message: 'That spin was already used. Come back after midnight for your free daily spin.', nextDailyAt: eatNextMidnight(now) } };
+          return;
+        }
+        roll = rollSpinSlice(sett.turntableDailyMin, sett.turntableDailyMax);
+        reward = roll.amount;
+        source = 'daily';
+        label = 'Turntable daily spin';
+      } else {
+        // Oldest unused earned spin first, so a member cannot hold back a
+        // high-value spin and burn cheap ones on other days.
+        const earned = await db.collection('turntableSpins')
+          .where('userId', '==', uid).where('used', '==', false)
+          .orderBy('createdAt', 'asc').limit(1).get();
+        if (earned.empty) {
+          result = { code: 400, body: { status: 'error', message: 'No spins left. Come back after midnight for your free daily spin.', nextDailyAt: eatNextMidnight(now) } };
+          return;
+        }
+        spinDoc = earned.docs[0];
+        // spinBandOf() also covers the older spins, granted before
+        // per-product bands, which carry a flat `reward` instead of one --
+        // honoured as a zero-width band rather than paid as 0.
+        const band = spinBandOf(spinDoc);
+        roll = rollSpinSlice(band.lo, band.hi);
+        reward = roll.amount;
+        source = 'product';
+        label = `Turntable spin from ${spinDoc.data().productName || 'a purchase'}`;
+      }
+
+      // Burn the spin BEFORE crediting. If the credit then fails, the member
+      // has lost a spin -- annoying but recoverable, and visible in the
+      // logs. Crediting first and burning second would mean a failure paid
+      // real money out and left the spin re-usable, which is unrecoverable.
+      // The daily spin was already claimed atomically above; only an earned
+      // spin still needs burning. Same order as before -- burn, then credit --
+      // because a failed credit that left the spin re-usable would pay real
+      // money out twice, while a burnt spin with no credit is recoverable.
+      if (spinDoc) {
+        const burnt = await spinDoc.ref.updateIf({ used: false }, { used: true, usedAt: now });
+        if (!burnt) {
+          result = { code: 400, body: { status: 'error', message: 'That spin was already used.' } };
+          return;
+        }
+      }
+      try {
+        await withLock('bal:' + uid, () => ref.update({
+          walletBalance: FieldValue.increment(reward),
+          totalEarned: FieldValue.increment(reward),
+        }));
+      } catch (creditErr) {
+        // The wallet did NOT move, so hand the entitlement back. This catch
+        // deliberately covers only the wallet update: if the money already
+        // landed and a later history write fails, re-arming the spin would
+        // let the same entitlement pay a second time on retry.
+        if (spinDoc) await spinDoc.ref.update({ used: false, usedAt: null }).catch(() => {});
+        else await ref.update({ lastTurntableAt: u.lastTurntableAt || null }).catch(() => {});
+        throw creditErr;
+      }
+      const { date, time } = nowStr();
+      try {
+        await db.collection('transactions').add({
+          userId: uid, statementId: newStatementId(), type: 'turntable', description: label, amount: reward,
+          status: 'success', date, time, createdAt: FieldValue.serverTimestamp(),
+        });
+      } catch (ledgerErr) {
+        // MONEY-SAFETY: the spendable balance is already correct. Never
+        // restore the spin here; doing so is a direct double-credit path.
+        // Surface the missing history row loudly for the integrity tools /
+        // operator instead of turning a bookkeeping failure into free money.
+        console.error(`MONEY-SAFETY: turntable reward ${reward} credited to ${uid} but its transaction row failed; entitlement remains consumed to prevent a double credit.`, ledgerErr.message);
+      }
+
+      const earnedLeft = await db.collection('turntableSpins')
+        .where('userId', '==', uid).where('used', '==', false).count();
+      // RE-READ the balance rather than adding the reward to the snapshot
+      // taken at the top of this lock.
+      //
+      // `u` was read before the increment, and withLock('bal:' + uid) only
+      // serialises the WRITES -- that read sits outside it. Anything else
+      // crediting this member in between (a referral commission from a
+      // downline purchase, a manual deposit being approved, an investment
+      // maturing on the sweep) lands after the read, so
+      // `u.walletBalance + reward` is short by exactly that amount. The
+      // client trusts this number: it writes it into STATE.account and the
+      // win popup counts up to it, so a member would watch their balance
+      // animate to a figure LOWER than the money they actually have and keep
+      // seeing it until the next /account fetch.
+      //
+      // /checkin, which shares this endpoint's lock discipline, sidesteps the
+      // problem by returning only the bonus and letting the client refetch.
+      // This endpoint promises a balance, so it has to be the real one. On a
+      // failed re-read, omit it -- the client already falls back to
+      // before + reward, and a null is honest where a guess is not.
+      let newBalance = null;
+      try {
+        const after = await ref.get();
+        if (after.exists) newBalance = round2(Number(after.data().walletBalance) || 0);
+      } catch (_) { newBalance = null; }
+      result = { code: 200, body: {
+        status: 'success', reward, source,
+        walletBalance: newBalance,
+        earnedSpins: earnedLeft,
+        dailyAvailable: false,
+        totalSpins: earnedLeft,
+        nextDailyAt: eatNextMidnight(now),
+        // The eight amounts this spin was drawn from, and which one won, so
+        // the wheel can stop on the exact figure being credited. Sent even
+        // though the client already has a set from /turntable/status: the
+        // spin that was actually taken may not be the one that status
+        // described (another device may have used the daily spin in
+        // between), and the wheel must be relabelled rather than land on a
+        // stale prize.
+        slices: roll ? roll.slices : null,
+        sliceIndex: roll ? roll.index : null,
+      } };
+    });
+    res.status(result.code).json(result.body);
+  } catch (e) {
+    console.error('Turntable spin error:', e.message);
+    res.status(500).json({ status: 'error', message: 'The spin could not be completed. Your balance is unchanged.' });
+  }
+});
+
+// ═══════════════════════════════════════════
 // INVESTMENTS
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {
@@ -4418,7 +4860,10 @@ app.post('/invest/create', async (req, res) => {
         throw createErr;
       }
     });
-    // Referral commission belongs to the first confirmed deposit, not to the purchase.
+    // Referral commission belongs to the first confirmed deposit. A spin is
+    // a bonus, and failing to grant one must never fail a purchase the member
+    // has already paid for.
+    grantTurntableSpins(userId, liveTier, invId);
     _vipCache.delete(userId);
     res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtMoney(liveTier.price)}` });
   } catch (e) {
@@ -6947,7 +7392,7 @@ app.post('/redeem', async (req, res) => {
       // come back for /account before it could show anything -- a whole extra
       // round trip between a successful claim and any sign that it worked,
       // which is the delay the owner reported. One local read here replaces a
-      // network round trip on a phone.
+      // network round trip on a phone. /turntable/spin already does this.
       //
       // Read AFTER the increment, not computed from the pre-credit snapshot:
       // this is the real stored balance, so it is also right on the
@@ -7022,6 +7467,7 @@ function statementRowLabel(t, brand) {
   if (type === 'team_reward') return 'Team Reward';
   if (type === 'mission_salary') return 'Mission Salary';
   if (type === 'mission_deposit_reward') return 'Mission Reward';
+  if (type === 'turntable' || type === 'spin' || type === 'spin_bonus') return 'Reward';
   if (type === 'admin_credit') return brand + ' Credit';
   if (type === 'admin_debit') return brand + ' Adjustment';
   return 'Transaction';
@@ -7633,6 +8079,7 @@ const SETTINGS_CRITICAL_RANGES = {
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
+  turntableDailyMin: [0, MAX_MONEY_AMOUNT], turntableDailyMax: [0, MAX_MONEY_AMOUNT],
   autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
   // real business constraint -- an admin fat-fingering a date shouldn't be
@@ -7658,7 +8105,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // near this), not a business one -- same reasoning as withdrawMultiple.
   usdtRate: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled', 'otpVerificationEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled', 'otpVerificationEnabled'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -8073,12 +8520,12 @@ function productExpectedReturn(p, sett) {
 // separate ways to be refused in here and they all used to arrive as ONE
 // sentence naming four fields ("key, name, price, or cycle/return"), which
 // made a refused save pure guesswork -- the report that prompted this was
-// "product 12 failed to save", and that product's field was not among the four things
+// "product 12 failed to save spins", and spins were not among the four things
 // the message listed. The `null` return is unchanged: it is the contract
 // test-product-config.js drives, and every caller still reads truthiness.
 // Named `refuse`, not `bad`: several harnesses lift this function into their
 // own scope with eval/new Function, and `bad` is already the failure counter
-// in some of them.
+// in test-spin-and-withdraw.js.
 function sanitizeProductInput(p, fallbackOrder, out) {
   const refuse = (field, why) => { if (out) { out.field = field; out.why = why; } return null; };
   const key = String(p?.key || '').trim();
@@ -8111,6 +8558,31 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     multiplier = Number(p.multiplier);
     if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1000)
       return refuse('Multiplier (×)', 'must be a number greater than 0 and no more than 1000');
+  }
+  // Owner: "make when l can configure every spin price for each product like
+  // product 2 buying, amount 200 to 1000 number of spins like that." Each
+  // product carries its own turntable band and spin count -- there is no
+  // global percentage or tier threshold any more.
+  let spinMin = null, spinMax = null;
+  if (p?.spinMin != null && p.spinMin !== '') {
+    spinMin = Math.round(Number(p.spinMin));
+    if (!Number.isFinite(spinMin) || spinMin < 0 || spinMin > MAX_MONEY_AMOUNT)
+      return refuse('Win from', `must be a number between 0 and ${MAX_MONEY_AMOUNT}`);
+  }
+  if (p?.spinMax != null && p.spinMax !== '') {
+    spinMax = Math.round(Number(p.spinMax));
+    if (!Number.isFinite(spinMax) || spinMax < 0 || spinMax > MAX_MONEY_AMOUNT)
+      return refuse('Win to', `must be a number between 0 and ${MAX_MONEY_AMOUNT}`);
+  }
+  // A band that runs backwards would silently pay the wrong amount, so it is
+  // rejected at save time rather than clamped quietly at spin time.
+  if (spinMin != null && spinMax != null && spinMax < spinMin)
+    return refuse('Win to', 'cannot be less than "Win from"');
+  let spinCount = 0;
+  if (p?.spinCount != null && p.spinCount !== '') {
+    spinCount = Math.round(Number(p.spinCount));
+    if (!Number.isFinite(spinCount) || spinCount < 0 || spinCount > MAX_SPINS_PER_PURCHASE)
+      return refuse('Spins per purchase', `must be a whole number between 0 and ${MAX_SPINS_PER_PURCHASE}`);
   }
   // Opening schedule -- see productOpenState() for what each field means and
   // why the two shapes (a one-off moment, and a daily window) coexist.
@@ -8163,7 +8635,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
     vip = Number(p.vip);
     if (!Number.isInteger(vip) || vip < 0 || vip > 100) return refuse('VIP level', 'must be a whole number from 0 to 100');
   }
-  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
+  return { key, name, price, cycle, expectedReturn, multiplier, buyLimit, vip, spinMin, spinMax, spinCount, image, active: p?.active !== false, comingSoon: p?.comingSoon === true, openAt, openFrom, openTo, order: Number.isFinite(order) ? order : fallbackOrder, deleted: false };
 }
 // `?region=ke` hands the editor that region's view of every product -- its
 // own price where it has one, Uganda's where it has not -- plus `overrides`,

@@ -521,6 +521,7 @@ console.log('\n— a sentence with a figure in it —');
      'an AMOUNT is copied verbatim -- never reformatted by a translation'],
     ['ID: 00042', 'Kitambulisho: 00042', 'an account id is copied verbatim'],
     ['2 Members', 'Wanachama 2', 'a placeholder may MOVE -- Swahili puts it last'],
+    ['0 spins available', 'Mizungusho 0 inapatikana', 'the turntable count'],
     ['Joined 01/09/2026 10:00', 'Alijiunga 01/09/2026 10:00', 'a date is copied verbatim'],
   ]) ck(sw.t(input) === want, `${label}: ${JSON.stringify(sw.t(input))}`);
   // The negative half, and it is the one that matters on a money screen: a
