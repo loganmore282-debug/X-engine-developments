@@ -63,6 +63,18 @@ fi
 if [ "${#CERT_ARGS[@]}" -gt 0 ]; then
   certbot --nginx --cert-name "${SODA_CERT_NAME:-app.p-colasoda.com}" --expand "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
 fi
+# An address that was dropped (deploy/change-app-host.sh drop-old) must also leave the certificate, or the certificate could not be renewed once its
+# DNS record is deleted. Names the certificate has but we no longer serve are removed by re-issuing it for exactly the wanted names.
+CERT_NAME=${SODA_CERT_NAME:-app.p-colasoda.com}
+HAVE=$(certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | sed -n 's/^ *Domains: //p' | head -1)
+WANT=" $APP_HOST $ADMIN_HOST ${ALSO_HOSTS//,/ } ${SODA_HOOK_HOST:-} "
+EXTRA=""; for H in $HAVE; do case "$WANT" in *" $H "*) ;; *) EXTRA="$EXTRA $H" ;; esac; done
+if [ -n "$EXTRA" ] && [ "${#CERT_ARGS[@]}" -gt 0 ]; then
+  echo "    removing no-longer-served names from the certificate:$EXTRA"
+  certbot --nginx --cert-name "$CERT_NAME" "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
+  HAVE2=$(certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | sed -n 's/^ *Domains: //p' | head -1)
+  echo "    certificate now covers: $HAVE2"
+fi
 # HTTP/2 lets a phone fetch many files over ONE connection (a big gain on long-distance links). Added only if missing, and undone if nginx refuses it.
 cp "$CONF" /tmp/soda.conf.pre-h2
 sed -i -E '/^[[:space:]]*listen .*443 ssl/{/http2/!s/443 ssl/443 ssl http2/}' "$CONF"

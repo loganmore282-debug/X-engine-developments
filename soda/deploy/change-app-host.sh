@@ -14,8 +14,18 @@ ARG=${1:-}
 CUR=${SODA_APP_HOST:-app.p-colasoda.com}; [ -s "$APP_HOST_FILE" ] && CUR=$(tr -d '[:space:]' < "$APP_HOST_FILE")
 
 if [ "$ARG" = drop-old ]; then
-  rm -f "$ALSO_FILE"; echo "The old address is dropped from nginx. Updating..."
-  bash "$SODA/deploy/update-vps.sh" > /tmp/soda.host-update.log 2>&1 && grep -q "^DONE\." /tmp/soda.host-update.log && echo "Done: only $CUR answers now." || { echo "Update did not finish:"; tail -12 /tmp/soda.host-update.log; }
+  OLD=""; [ -s "$ALSO_FILE" ] && OLD=$(tr -d '[:space:]' < "$ALSO_FILE")
+  cp "$ALSO_FILE" /tmp/soda.also.bak 2>/dev/null
+  rm -f "$ALSO_FILE"; echo "The old address ($OLD) is dropped from nginx and from the certificate. Updating..."
+  if bash "$SODA/deploy/update-vps.sh" > /tmp/soda.host-update.log 2>&1 && grep -q "^DONE\." /tmp/soda.host-update.log; then
+    grep -E "removing no-longer-served|certificate now covers" /tmp/soda.host-update.log
+    echo "Done: only $CUR answers now."
+    echo; echo "Before you delete the old address's DNS record in Hostinger, check BOTH:"
+    echo "  1. the line 'certificate now covers' above no longer lists the old address (otherwise the certificate could not renew later);"
+    echo "  2. the GitHub webhook points at https://$CUR/k7x2/deploy/webhook (the old address used to receive it; auto-deploy stops silently if it still points there)."
+  else
+    echo "Update did not finish. Putting the old address back:"; [ -f /tmp/soda.also.bak ] && cp /tmp/soda.also.bak "$ALSO_FILE"; tail -12 /tmp/soda.host-update.log
+  fi
   exit 0
 fi
 
