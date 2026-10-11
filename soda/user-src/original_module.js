@@ -5117,6 +5117,13 @@ function depositStatusCheck(depositId){
     .finally(() => { _depStatusInflight = null; });
   return _depStatusInflight;
 }
+// The autopoll's own request: asks the server to HOLD the answer for a few seconds while it is watching the payment (server.js waitDepositSettled),
+// so "paid" arrives the moment PesaJet confirms instead of at the next tick. Deliberately NOT shared with depositStatusCheck(): a Verify tap must
+// never be made to wait behind a held request. A server that does not hold simply answers at once and the loop's own pacing takes over.
+var DEP_HOLD_MS = 8000;
+function depositStatusHold(depositId){
+  return post('/deposit/marzpay/status', { depositId, waitMs: DEP_HOLD_MS });
+}
 // The single place that decides what a status response MEANS, shared by the
 // autopoll and the Verify button so the two can never disagree about the same
 // payload. Returns true once the deposit has settled.
@@ -5367,7 +5374,7 @@ window.submitDeposit = async function(){
 //
 // The 60-second budget is unchanged -- 24 ticks at the new spacing is the same
 // wall-clock window, so nothing gives up on a payment any sooner than before.
-var DEP_POLL_FIRST_MS = 1200;
+var DEP_POLL_FIRST_MS = 1000;
 var DEP_POLL_EVERY_MS = 1500;
 async function pollDepositStatus(depositId){
   _depActiveDepositId = depositId;
@@ -5375,10 +5382,9 @@ async function pollDepositStatus(depositId){
   // Ticks are 1.5 s apart MEASURED FROM THE START OF EACH TICK (a slow answer no longer pushes the next check further away), and the
   // budget is 70 s of the wall clock, not 24 ticks however long each took.
   const began = Date.now();
-  let tickAt = began + DEP_POLL_FIRST_MS;
-  for (let i = 0; Date.now() - began < 70000; i++) {
-    await new Promise(r => setTimeout(r, Math.max(0, tickAt - Date.now())));
-    tickAt = Math.max(Date.now(), tickAt) + DEP_POLL_EVERY_MS;
+  await new Promise(r => setTimeout(r, DEP_POLL_FIRST_MS));
+  while (Date.now() - began < 70000) {
+    const tickStart = Date.now();
     // A Verify tap may have settled it between ticks -- stop rather than
     // firing another provider call for an answer already in hand.
     if (_depPollDone) return;
@@ -5389,9 +5395,13 @@ async function pollDepositStatus(depositId){
     // _depPollDone and stop B's loop as well. Same shape as the bug already
     // documented on the manual-pay poll.
     if (_depActiveDepositId !== depositId) return;
-    // Goes through the same single-flight the Verify button uses, so a tap
-    // landing mid-tick joins THIS request instead of starting a second one.
-    if (await applyDepositStatusResult(await depositStatusCheck(depositId))) return;
+    const r = await depositStatusHold(depositId);
+    if (_depPollDone) return;
+    if (_depActiveDepositId !== depositId) return;
+    if (await applyDepositStatusResult(r)) return;
+    // Answered at once (nothing to hold on, or an error): pace the next ask. A held answer already took its time.
+    const spent = Date.now() - tickStart;
+    if (spent < DEP_POLL_EVERY_MS) await new Promise(r2 => setTimeout(r2, DEP_POLL_EVERY_MS - spent));
   }
   // Ending the loop is the autopoll giving up on its own ~60s budget, not the
   // payment being over -- _depPollDone stays false on purpose so Verify keeps

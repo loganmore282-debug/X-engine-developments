@@ -578,8 +578,7 @@ async function finish() {
     ck(first <= 1500, `the first status check is ${first}ms after the screen opens`);
     ck(every <= 2500, `and later ones every ${every}ms, PesaJet's own SDK cadence`);
     const loop = app.slice(app.indexOf('async function pollDepositStatus'));
-    const ticks = num(loop, /for \(let i = 0; i < (\d+); i\+\+\)/, 'poll tick count');
-    const budget = first + (ticks - 1) * every;
+    const budget = num(loop, /Date\.now\(\) - began < (\d+)/, 'poll wall-clock budget');
     ck(budget >= 55000,
        `and the giving-up budget is still about a minute (${Math.round(budget / 1000)}s) -- ` +
        'faster polling must not mean giving up on a payment sooner');

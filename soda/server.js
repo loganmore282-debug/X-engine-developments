@@ -2054,6 +2054,10 @@ function logSecurityEvent(userId, type, meta) {
     .catch(e => console.error('logSecurityEvent error:', e.message));
 }
 async function markDepositFailed(depRef, userId, reason) {
+  try { return await _markDepositFailedNow(depRef, userId, reason); }
+  finally { if (typeof _notifyDeposit === 'function') _notifyDeposit(depRef.id); }   // wake a held status request (see waitDepositSettled)
+}
+async function _markDepositFailedNow(depRef, userId, reason) {
   // subagent-audit-caught HIGH bug: this used to overwrite status:'failed'
   // unconditionally, with no check that the deposit hadn't already been
   // credited by a DIFFERENT in-flight check (the client poll, the webhook,
@@ -2880,6 +2884,61 @@ async function pesajetGetTx(transactionId, { attempts = 2 } = {}) {
     if (attempt < attempts) await new Promise(r2 => setTimeout(r2, 350));
   }
   return { status: '', reference: null, transactionId, failureReason: null, providerDown: true, httpStatus: last && last.httpStatus };
+}
+// ── Fast confirmation of a PesaJet recharge ─────────────────────────────────
+// Before: the member's phone asked the server every 1.5 s and ONLY THEN did the server ask PesaJet, so every step stacked up (phone network,
+// then the server's own trip to PesaJet, then the next tick). Now the SERVER watches each pending PesaJet recharge itself, once a second, from the
+// moment PesaJet has accepted it, and credits it the instant PesaJet says COMPLETED (or marks it failed). The phone's poll then only reads the
+// database (one cheap read), so it can ask every second without hitting PesaJet at all. Webhook, watcher, the member's poll and the periodic
+// reconciler all end in the same creditDeposit()/markDepositFailed(), which are single-writer locked, so nothing can credit twice.
+// Capped, and a watcher that stops (cap, restart, 2 minutes) simply hands over to the old poll-driven check, which still works on its own.
+const PESAJET_WATCH_EVERY_MS = 700, PESAJET_WATCH_BUDGET_MS = 120000, PESAJET_WATCH_MAX = 20;
+const _pesajetWatchers = new Map();   // depositId -> time of its last PesaJet check
+let _pesajetSleep = ms => new Promise(r => setTimeout(r, ms));
+function pesajetWatcherFresh(depositId, maxAgeMs = 3500) {
+  const last = _pesajetWatchers.get(depositId);
+  return last !== undefined && Date.now() - last < maxAgeMs;
+}
+// Long-poll: the member's status request can be HELD for a few seconds and is answered the instant the deposit settles (webhook, watcher, anyone),
+// instead of waiting for the phone's next poll tick. _notifyDeposit() is called at the end of creditDeposit() and markDepositFailed().
+const _depWaiters = new Map();        // depositId -> Set of resolve functions
+function _notifyDeposit(depositId) {
+  const set = _depWaiters.get(depositId); if (!set) return;
+  _depWaiters.delete(depositId); for (const fn of set) fn();
+}
+function waitDepositSettled(depositId, ms) {
+  return new Promise(resolve => {
+    let done = false; const set = _depWaiters.get(depositId) || new Set(); _depWaiters.set(depositId, set);
+    const finish = () => { if (done) return; done = true; clearTimeout(timer); set.delete(finish); if (!set.size && _depWaiters.get(depositId) === set) _depWaiters.delete(depositId); resolve(); };
+    const timer = setTimeout(finish, ms); set.add(finish);
+  });
+}
+function watchPesajetDeposit(depositId) {
+  if (!depositId || _pesajetWatchers.has(depositId) || _pesajetWatchers.size >= PESAJET_WATCH_MAX) return;
+  _pesajetWatchers.set(depositId, Date.now());
+  (async () => {
+    try {
+      const began = Date.now();
+      while (Date.now() - began < PESAJET_WATCH_BUDGET_MS) {
+        await _pesajetSleep(PESAJET_WATCH_EVERY_MS);
+        const snap = await db.collection('pendingDeposits').doc(depositId).get();
+        if (!snap.exists) return;
+        const dep = snap.data();
+        if (dep.status !== 'pending' && dep.status !== 'initiating') return;   // a webhook, a poll or the reconciler already settled it
+        if (!dep.pesajetTxId) continue;
+        const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
+        _pesajetWatchers.set(depositId, Date.now());
+        if (t.providerDown) continue;
+        const realStatus = pesajetStatusLabel(t.status);
+        if (realStatus === 'success') { await creditDeposit(snap); return; }
+        if (realStatus === 'failed') { await markDepositFailed(snap.ref, dep.userId, pesajetFailureMsg(t.status)); return; }
+      }
+    } catch (e) {
+      console.error('PesaJet watcher (' + depositId + '):', e.message);
+    } finally {
+      _pesajetWatchers.delete(depositId);
+    }
+  })();
 }
 // PesaJet's status -> the three words the rest of this file already speaks
 // ('success'/'failed'/'processing'), so the deposit and withdrawal branches
@@ -4981,6 +5040,7 @@ app.post('/deposit/marzpay', async (req, res) => {
           await depRef.update({ pesajetTxId }).catch(() => {});
         }
       });
+      if (pesajetTxId) watchPesajetDeposit(depRef.id);   // credit the moment PesaJet confirms (see the note at watchPesajetDeposit)
       return;
     }
 
@@ -5040,6 +5100,7 @@ function depositFullyCredited(d) { return d.status === 'matched' && !d.needsManu
 async function creditDeposit(depDoc) {
   const userId = depDoc && depDoc.data() && depDoc.data().userId;
   const credited = await _creditDepositNow(depDoc);
+  if (typeof _notifyDeposit === 'function') _notifyDeposit(depDoc.id);   // wake a held status request (see waitDepositSettled)
   if (credited) await creditDepositReferralCommission(depDoc.id, userId).catch(e => console.error('Deposit commission error:', e.message));
   return credited;
 }
@@ -5725,10 +5786,19 @@ app.post('/deposit/marzpay/status', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
+    let depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
     if (!depSnap.exists || depSnap.data().userId !== userId)
       return res.status(404).json({ status: 'error', message: 'Recharge not found' });
-    const dep = depSnap.data();
+    let dep = depSnap.data();
+    // The app's autopoll asks us to HOLD the answer (waitMs) while the server's own watcher is on this PesaJet payment, so the member is told the
+    // moment it settles rather than at the phone's next tick. Never for the Verify button (no waitMs) and never longer than 9 s.
+    const holdMs = Math.min(Math.max(parseInt(req.body.waitMs, 10) || 0, 0), 9000);
+    if (holdMs > 0 && dep.provider === 'pesajet' && (dep.status === 'pending' || dep.status === 'initiating') && pesajetWatcherFresh(depSnap.id)) {
+      await waitDepositSettled(depSnap.id, holdMs);
+      depSnap = await db.collection('pendingDeposits').doc(depSnap.id).get();
+      if (!depSnap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
+      dep = depSnap.data();
+    }
     if (dep.status === 'matched') {
       // Best-effort self-heal: if a prior credit attempt got the status to
       // 'matched' but failed to actually pay the wallet (needsManualCredit),
@@ -5749,6 +5819,8 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     // here than it does for the other two gateways -- not less.
     if (dep.provider === 'pesajet') {
       if (!dep.pesajetTxId) return res.json({ status: 'success', state: 'pending' });
+      // The server's own watcher is already asking PesaJet every second: this poll only reports what the database says (already read above).
+      if (pesajetWatcherFresh(depSnap.id)) return res.json({ status: 'success', state: 'pending' });
       // One attempt: a member is watching this, and their next poll is 2.5s
       // away and is itself the retry.
       const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
