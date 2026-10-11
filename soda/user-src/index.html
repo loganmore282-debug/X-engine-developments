@@ -1200,6 +1200,13 @@ body.deposit-status-open .bottom-nav{display:none;}
   filter:blur(16px);
 }
 .pay-page.show{display:flex;}
+/* Owner: "when I scroll that page down harder it shows that" (the product page's BUY NOW card peeking out from under the payment screen).
+   On a phone browser a drag that the full-screen page does not use falls through to the DOCUMENT behind it; the address bar then slides away,
+   the visible area grows, and a fixed layer sized for the old, shorter area leaves a strip at the bottom where the page underneath shows. While a
+   full-page screen is open the document behind it must simply not scroll, and the screen must not pass its own overscroll on. */
+html:has(.pay-page.show),body:has(.pay-page.show),
+html:has(.sheet-bg.show),body:has(.sheet-bg.show){overflow:hidden;overscroll-behavior:none;}
+.pay-page{overscroll-behavior:none;}
 /* Owner: "l told you to remove that stuff bro, l nolonger need that
    header on payment polling page" -- removing the <h2> text (an earlier
    round) still left the full .sheet-head BAR: padding, border-bottom,
