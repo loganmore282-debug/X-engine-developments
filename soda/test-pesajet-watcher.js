@@ -62,7 +62,7 @@ function env(rows) {
   t0 = Date.now(); await e.waitDepositSettled('h2', 40); ok(Date.now() - t0 >= 35 && Date.now() - t0 < 250, 'with no news it answers at the limit it was given'); ok(!e._depWaiters.has('h2'), 'and cleans up');
   e._notifyDeposit('nobody-waiting'); ok(true, 'notifying a deposit nobody waits for is harmless');
   // the real callers wake held requests, and the route only holds under the right conditions
-  ok(/async function creditDeposit\(depDoc\) \{[\s\S]*?_notifyDeposit\(depDoc\.id\)/.test(src), 'creditDeposit wakes held requests');
+  ok(/async function creditDeposit\(depDoc, source\) \{[\s\S]*?_notifyDeposit\(depDoc\.id\)/.test(src), 'creditDeposit wakes held requests');
   ok(/async function markDepositFailed\(depRef, userId, reason\) \{\s*try \{ return await _markDepositFailedNow[\s\S]*?finally \{[^}]*_notifyDeposit\(depRef\.id\)/.test(src), 'markDepositFailed wakes held requests (also on errors)');
   const rs0 = src.indexOf("app.post('/deposit/marzpay/status'"); const route0 = src.slice(rs0, src.indexOf("// ── CARD DEPOSIT (MarzPay) ──", rs0));
   ok(/Math\.min\(Math\.max\(parseInt\(req\.body\.waitMs, 10\) \|\| 0, 0\), 9000\)/.test(route0), 'the hold is capped at 9 s whatever the client asks');
