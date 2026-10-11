@@ -1386,6 +1386,7 @@ function fbErrMsg(e){
   if (code === 'auth/user-not-found') return 'No account found for that number.';
   if (code === 'auth/email-already-in-use') return 'An account with that number already exists.';
   if (code === 'auth/weak-password') return 'Password must be at least 6 characters.';
+  if (code === 'auth/common-password') return 'That password is too easy to guess. Choose a different one, for example a few letters and numbers that only you know.';
   if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
   // A weak connection is the commonest real failure here, and without these
   // the member was shown Firebase's own developer text, e.g.

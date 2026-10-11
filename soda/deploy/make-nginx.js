@@ -89,6 +89,17 @@ ${prod ? '    listen 80;\n    listen [::]:80;' : '    listen 8090;\n    listen [
     gzip_vary on;
     gzip_types text/plain text/css text/javascript application/javascript application/json application/manifest+json image/svg+xml;
     client_max_body_size 8m;
+
+    # ── walls against scanners and slow-connection attacks ──
+    if ($soda_bad_ua) { return 444; }   # a hacking tool in the User-Agent: close the connection without any answer
+    if ($request_method !~ ^(GET|HEAD|POST|OPTIONS)$) { return 405; }   # PUT, DELETE, TRACE, CONNECT... are never used here
+    limit_conn soda_conn 150;           # at most 150 simultaneous connections from one address
+    limit_conn_status 429;
+    limit_req_status 429;
+    client_header_timeout 15s;          # slow-connection attacks (slowloris) are cut off
+    client_body_timeout 20s;
+    send_timeout 30s;
+    large_client_header_buffers 4 8k;
 ${prod ? `
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
 ` : ''}
@@ -109,6 +120,10 @@ ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
     location = /health { proxy_pass http://127.0.0.1:${PORT}/health; access_log off; }
+    # Nothing on this site is a hidden file, a server-side script or a backup/config file. Scanners that look for them get a plain 404 (fail2ban bans
+    # an address that keeps asking: see deploy/fail2ban). The admin panel path above and the certificate check path are not touched by these.
+    location ~ /\\.(?!well-known/) { return 404; }
+    location ~* \\.(php|phtml|asp|aspx|jsp|jspx|cgi|pl|sh|bash|py|rb|bak|old|orig|save|swp|sql|sqlite|db|env|ini|log|conf|cfg|yml|yaml|toml|git|svn|htaccess|htpasswd)$ { return 404; }
 
 ${role !== 'member' ? `    # ── admin panel: a secret path, same files as always ──────────────
     location = /${adminPath} { return 301 /${adminPath}/; }
@@ -173,6 +188,15 @@ upstream soda_node {
 limit_req_zone $binary_remote_addr zone=soda_api:10m rate=20r/s;
 limit_req_zone $binary_remote_addr zone=soda_admin_login:10m rate=1r/s;
 limit_req_zone $binary_remote_addr zone=soda_member_login:10m rate=3r/s;
+limit_conn_zone $binary_remote_addr zone=soda_conn:10m;
+
+# Hacking and scanning tools announce themselves in the User-Agent (the names below are those of the common Kali Linux tools). They get no answer at all:
+# nginx closes the connection (444). Ordinary tools that real services use (curl, node, axios, Go, Postman...) are NOT listed, so payment
+# and GitHub webhooks are never affected.
+map $http_user_agent $soda_bad_ua {
+    default 0;
+    ~*(sqlmap|nikto|nmap|masscan|zgrab|zmap|hydra|medusa|ncrack|patator|gobuster|dirbuster|dirb/|wfuzz|ffuf|feroxbuster|nuclei|acunetix|nessus|openvas|netsparker|havij|w3af|wpscan|joomscan|whatweb|metasploit|msfconsole|appscan|skipfish|arachni|paros|grabber|httprint|webshag|nessus|burpcollaborator|zaproxy|owasp) 1;
+}
 
 # Link-preview crawlers (WhatsApp, Telegram, ...) get an empty page, every real
 # browser gets the real one (see no-preview.html and soda/CLAUDE.md).

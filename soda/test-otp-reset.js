@@ -14,8 +14,8 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   let settings = { otpVerificationEnabled: false };
   let ticketOk = false, counted = 0;
   const db = { collection: () => ({ where() { return this; }, limit() { return this; }, get: async () => ({ docs: [{ data: () => ({ registrationDone: true }), id: 'u1' }], empty: false }) }) };
-  new Function('app', 'db', 'OTP_PURPOSES', 'getSettings', 'cleanPhone', 'badPhoneMessage', 'verifyAuth', 'MARZSMS_KEY', 'otpCheckAndBumpDailyLimit', 'consumeOtpTicket', 'setMemberPassword', 'logSecurityEvent', 'console',
-    sendSrc + '\n' + confirmSrc)(app, db, new Set(['reset', 'bank']), async () => settings, p => String(p || '').replace(/\D/g, ''), () => 'bad phone', async () => null,
+  new Function('weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'app', 'db', 'OTP_PURPOSES', 'getSettings', 'cleanPhone', 'badPhoneMessage', 'verifyAuth', 'MARZSMS_KEY', 'otpCheckAndBumpDailyLimit', 'consumeOtpTicket', 'setMemberPassword', 'logSecurityEvent', 'console',
+    sendSrc + '\n' + confirmSrc)(require('./weak-passwords').weakPasswordReason, '', app, db, new Set(['reset', 'bank']), async () => settings, p => String(p || '').replace(/\D/g, ''), () => 'bad phone', async () => null,
     '', async () => { counted++; return null; }, async () => ticketOk, async () => {}, () => {}, { error() {} });
   const send = async purpose => { const r = res(); await handlers['/auth/otp/send']({ body: { purpose, phone: '0770000001' }, headers: {} }, r); return r; };
   // Registration no longer accepts OTP. Bank is refused when OTP is off...
@@ -29,8 +29,8 @@ const res = () => ({ code: 200, body: null, status(c) { this.code = c; return th
   // reset confirm still requires a ticket with the switch off
   settings = { otpVerificationEnabled: false };
   const confirm = async b => { const x = res(); await handlers['/auth/reset/confirm']({ body: b }, x); return x; };
-  r = await confirm({ phone: '0770000001', newPassword: 'abcdef', ticket: 'nope' }); ok(r.code === 400 && r.body.code === 'OTP_REQUIRED', 'reset without a valid code is refused with the switch off');
-  ticketOk = true; r = await confirm({ phone: '0770000001', newPassword: 'abcdef', ticket: 'good' }); ok(r.code === 200 && r.body.status === 'success', 'reset with a valid code works with the switch off');
+  r = await confirm({ phone: '0770000001', newPassword: 'Zebra-Pass-71', ticket: 'nope' }); ok(r.code === 400 && r.body.code === 'OTP_REQUIRED', 'reset without a valid code is refused with the switch off');
+  ticketOk = true; r = await confirm({ phone: '0770000001', newPassword: 'Zebra-Pass-71', ticket: 'good' }); ok(r.code === 200 && r.body.status === 'success', 'reset with a valid code works with the switch off');
   // client: the form is never replaced by a support message
   const page = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8'), mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
   ok(!/forgotSupportGroup/.test(page + mod), 'no support-message replacement for Forgot Password');

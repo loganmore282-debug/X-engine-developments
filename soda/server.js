@@ -1,4 +1,7 @@
 const sessionPolicy = require('./session-policy');
+const { createFailGuard } = require('./security-guard');
+const totp = require('./totp');
+const { weakPasswordReason, WEAK_PASSWORD_MESSAGE } = require('./weak-passwords');
 const express     = require('express');
 const admin       = require('firebase-admin');
 const cors        = require('cors');
@@ -112,6 +115,26 @@ app.use((req, res, next) => (req.path === '/health' ? next() : LIVE_POLL_ROUTES.
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
+// ── PASSWORD-GUESSING WALLS ──
+// Each guard counts FAILURES only, per source address, so many honest members behind one mobile-carrier address are never slowed down.
+//  * ownerKeyGuard: wrong admin key (or wrong 6-digit code) from one address: 5 in 15 minutes locks that address for 15 minutes.
+//    It used to be ONE global lock, so anybody on the internet could lock the owner out of the panel just by guessing wrongly.
+//  * ownerKeyGlobalGuard: only if 200 wrong keys arrive from everywhere (a botnet) does the key screen close, for 5 minutes.
+//  * adminBadCredGuard: a wrong master key sent to any other admin route, or a wrong staff login: 20 in 15 minutes locks the address.
+//  * memberLoginIpGuard: 40 wrong member logins from one address in 10 minutes (credential stuffing) locks LOGIN from it for 15 minutes.
+const ownerKeyGuard = createFailGuard({ max: 5, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 });
+const ownerKeyGlobalGuard = createFailGuard({ max: 200, windowMs: 15 * 60 * 1000, lockMs: 5 * 60 * 1000 });
+const adminBadCredGuard = createFailGuard({ max: 20, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 });
+const memberLoginIpGuard = createFailGuard({ max: 40, windowMs: 10 * 60 * 1000, lockMs: 15 * 60 * 1000 });
+// Optional second factor for the owner's admin key: set ADMIN_TOTP_SECRET (base32) in the secrets file and the key alone is no longer enough.
+const ADMIN_TOTP_SECRET = (() => {
+  const raw = String(process.env.ADMIN_TOTP_SECRET || '').trim();
+  if (!raw) return '';
+  const dec = totp.base32Decode(raw);
+  if (!dec || dec.length < 10) { console.warn('ADMIN_TOTP_SECRET is set but is not a valid base32 secret, so the admin 6-digit code is NOT being asked for.'); return ''; }
+  return raw;
+})();
+let _lastTotpStep = -1;
 const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
@@ -127,9 +150,13 @@ app.use('/admin/', adminLimiter);
 // the legacy-key check (which fails closed).
 app.use('/admin/', async (req, _res, next) => {
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (header && !(ADMIN_KEY && safeEqual(header, ADMIN_KEY))) {
+  if (adminBadCredGuard.locked(req.ip)) return _res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in a few minutes.' });
+  if (header && !(ADMIN_KEY && !ADMIN_TOTP_SECRET && safeEqual(header, ADMIN_KEY))) {
     try { req.adminUser = await resolveSession(header, req.path === '/session/activity'); }
     catch (e) { console.error('Admin session resolve error:', e.message); return _res.status(503).json({ status:'error', message:'Session service unavailable. Try again.' }); }
+    // Not a session and not the key: a guess at the master key. (A stale SESSION token has the exact shape of a session token, 64 hex
+    // characters, and is not counted, so an expired tab polling the panel can never lock the owner out.)
+    if (!req.adminUser && !/^[a-f0-9]{64}$/.test(header)) adminBadCredGuard.fail(req.ip);
   }
   next();
 });
@@ -1800,11 +1827,11 @@ function paymentAmount(value) {
   const amount = Number(value);
   return Number.isSafeInteger(amount) && amount > 0 ? amount : NaN;
 }
+// Compares SHA-256 digests, so the time taken never depends on how long the two values are or where they first differ.
 function safeEqual(a, b) {
-  const bufA = Buffer.from(String(a || ''));
-  const bufB = Buffer.from(String(b || ''));
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
+  const da = crypto.createHash('sha256').update(String(a || '')).digest();
+  const db2 = crypto.createHash('sha256').update(String(b || '')).digest();
+  return crypto.timingSafeEqual(da, db2) && String(a || '').length > 0 && String(b || '').length > 0;
 }
 // Accepts EITHER a resolved staff session (req.adminUser, attached by the
 // '/admin/' middleware below) OR the owner's raw ADMIN_KEY — every existing
@@ -1812,10 +1839,11 @@ function safeEqual(a, b) {
 // multi-admin accounts sit on top of it.
 function verifyAdmin(req) {
   if (req.adminUser) return true;
-  if (!ADMIN_KEY) return false;
+  // With the admin 6-digit code switched on (ADMIN_TOTP_SECRET) the raw key must NOT open admin routes by itself, or the second factor would
+  // be pointless: only a session that /admin/check-key issued after the code was checked counts. (The key is never accepted in a request body.)
+  if (!ADMIN_KEY || ADMIN_TOTP_SECRET) return false;
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (header && safeEqual(header, ADMIN_KEY)) return true;
-  return safeEqual(req.body?.adminKey, ADMIN_KEY);
+  return !!header && safeEqual(header, ADMIN_KEY);
 }
 // Owner-only actions (staff management, rates, products, gift codes, wallet
 // credit/debit/ban/delete) must never be reachable with a staff login.
@@ -4146,6 +4174,7 @@ app.post('/auth/reset/confirm', async (req, res) => {
     if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
     const newPassword = String(req.body.newPassword || '');
     if (newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters.' });
+    if (weakPasswordReason(newPassword, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     const ticketOk = await consumeOtpTicket(String(req.body.ticket || ''), phone, 'reset');
     if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
     const uSnap = await db.collection('users').where('phone', '==', phone).where('registrationDone', '==', true).limit(1).get();
@@ -7598,9 +7627,17 @@ app.post('/messages/read', async (req, res) => {
 app.post('/admin/check-key', async (req, res) => {
   const { key } = req.body;
   if (!ADMIN_KEY) return res.status(500).json({ status: 'error', message: 'Admin key not configured' });
-  if (loginLocked('owner-key')) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
-  if (!safeEqual(key, ADMIN_KEY)) { recordLoginFail('owner-key'); return res.status(401).json({ status: 'error', message: 'Invalid key' }); }
-  clearLoginFails('owner-key');
+  if (ownerKeyGuard.locked(req.ip) || ownerKeyGlobalGuard.locked('all')) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
+  if (!safeEqual(key, ADMIN_KEY)) { ownerKeyGuard.fail(req.ip); ownerKeyGlobalGuard.fail('all'); return res.status(401).json({ status: 'error', message: 'Invalid key' }); }
+  // The key is right. With a second factor configured it is still not enough: the 6-digit code from the authenticator app is needed too.
+  if (ADMIN_TOTP_SECRET) {
+    const given = String(req.body.totp || '').replace(/\s/g, '');
+    if (!given) return res.status(401).json({ status: 'error', code: 'TOTP_REQUIRED', message: 'Enter the 6-digit code from your authenticator app.' });
+    const v = totp.verify(ADMIN_TOTP_SECRET, given, Date.now(), _lastTotpStep);
+    if (!v.ok) { ownerKeyGuard.fail(req.ip); ownerKeyGlobalGuard.fail('all'); return res.status(401).json({ status: 'error', code: 'TOTP_REQUIRED', message: 'That code is wrong or already used. Wait for the next code and try again.' }); }
+    _lastTotpStep = v.step;
+  }
+  ownerKeyGuard.clear(req.ip);
   // Codex-caught real bug: this used to send only {status, token} -- the
   // admin UI's storeSession(d.token, d.username, d.role) then stored
   // SESSION_ROLE as undefined for the OWNER's own master-key login, so
@@ -7621,14 +7658,14 @@ app.post('/admin/login', async (req, res) => {
   const username = String(req.body.username || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   if (!username || !password) return res.status(400).json({ status: 'error', message: 'Username and password required' });
-  if (loginLocked('staff:' + username)) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
+  if (loginLocked('staff:' + username) || adminBadCredGuard.locked(req.ip)) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
   try {
     const snap = await db.collection('adminUsers').doc(username).get();
     const validAccount = snap.exists && snap.data().active !== false;
     const hashToCheck = validAccount ? snap.data().passwordHash : DUMMY_PASSWORD_HASH;
     const passwordOk = await scryptVerifyAsync(password, hashToCheck);
     if (!validAccount || !passwordOk) {
-      recordLoginFail('staff:' + username);
+      recordLoginFail('staff:' + username); adminBadCredGuard.fail(req.ip);
       return res.status(401).json({ status: 'error', message: 'Invalid username or password' });
     }
     clearLoginFails('staff:' + username);
@@ -7698,6 +7735,7 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
     const password = String(req.body.password || '');
     if (password.length < MEMBER_PASSWORD_MIN || password.length > MEMBER_PASSWORD_MAX)
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
+    if (weakPasswordReason(password, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     const uid = newMemberUid();
     const created = await db.collection('authAccounts').doc(memberAccountId(phone)).createIfAbsent({
       uid, phone, passwordHash: await scryptHashAsync(password), failCount: 0, createdAt: FieldValue.serverTimestamp()
@@ -7715,6 +7753,9 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
     const password = String(req.body.password || '');
     const bad = () => res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Incorrect phone number or password.' });
     if (!phone || !password || password.length > MEMBER_PASSWORD_MAX) return bad();
+    const ipLeft = memberLoginIpGuard.locked(req.ip);
+    if (ipLeft) return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: Math.ceil(ipLeft / 1000),
+      message: `Too many wrong attempts from this network. Try again in ${Math.ceil(ipLeft / 60000)} minutes.` });
     const id = memberAccountId(phone);
     const snap = await db.collection('authAccounts').doc(id).get();
     const acct = snap.exists ? snap.data() : null;
@@ -7726,7 +7767,7 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
     // The dummy hash makes an unknown phone cost the same as a wrong password,
     // so the answer's timing cannot be used to find which numbers have accounts.
     const ok = await scryptVerifyAsync(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
-    if (!acct || !ok) { if (acct) await recordLoginFailure(id); return bad(); }
+    if (!acct || !ok) { memberLoginIpGuard.fail(req.ip); if (acct) await recordLoginFailure(id); return bad(); }
     if (Number(acct.failCount) > 0) await snap.ref.update({ failCount: 0 }).catch(() => {});
     sessionReply(res, acct.uid, await sessionPolicy.createMemberSession(db, acct.uid, acct.phone));
   } catch (e) {
@@ -7743,6 +7784,7 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
     const acct = await findAccountByUid(decoded.uid);
     if (!acct) return res.status(404).json({ status: 'error', message: 'Account not found' });
+    if (weakPasswordReason(newPassword, acct.phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     if (acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now())
       return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', message: 'Too many wrong attempts. Try again in a few minutes.' });
     if (!(await scryptVerifyAsync(oldPassword, acct.passwordHash))) {
@@ -11127,7 +11169,10 @@ const MONGODB_URI = process.env.MONGODB_URI || '';
 if (!MONGODB_URI) { console.error('MONGODB_URI env var is required'); process.exit(1); }
 connectMongo(MONGODB_URI)
   .then(() => {
-    const httpServer = app.listen(PORT, () => console.log(`Soda backend listening on :${PORT}`));
+    // Listens on the loopback address ONLY: the whole world reaches this server through nginx (rate limits, headers, the separate admin host), never
+    // directly on this port. BIND_HOST can override it for a test box; do not set it on the VPS.
+    const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
+    const httpServer = app.listen(PORT, BIND_HOST, () => console.log(`Soda backend listening on ${BIND_HOST}:${PORT}`));
     // nginx keeps connections to Node open (upstream keepalive); Node's own 5-second default would close them
     // under nginx's feet and now and then turn a request into a 502.
     httpServer.keepAliveTimeout = 65 * 1000;

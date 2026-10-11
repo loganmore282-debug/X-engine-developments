@@ -337,6 +337,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
     <p class="muted">Owner: leave username blank and enter your admin key. Staff: enter the username and password you were given.</p>
     <input id="userInput" type="text" placeholder="Username (leave blank if you're the owner)" autocomplete="off">
     <input id="keyInput" type="password" placeholder="Admin key / password" autocomplete="off">
+    <input id="totpInput" class="hidden" type="text" inputmode="numeric" maxlength="7" placeholder="6-digit code from your authenticator app" autocomplete="one-time-code">
     <button class="btn block" id="loginBtn">Sign in</button>
     <p class="muted" id="loginErr" style="color:var(--danger);margin-top:12px"></p>
   </div>
@@ -410,7 +411,7 @@ function expireAdminSession(){
   clearSession();
   $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden');
   $('modalRoot').classList.add('hidden'); $('modalRoot').innerHTML = '';
-  $('keyInput').value = '';
+  $('keyInput').value = ''; $('totpInput').value = ''; $('totpInput').classList.add('hidden');
   $('loginErr').textContent = 'Session expired. Sign in again.';
 }
 function storeSession(token, username, role){
@@ -670,7 +671,8 @@ async function doLogin(){
   const btn=$('loginBtn'); btn.disabled=true; btn.textContent='Checking…'; $('loginErr').textContent='';
   try{
     const path = username ? '/admin/login' : '/admin/check-key';
-    const payload = username ? { username, password: secret } : { key: secret };
+    const code = $('totpInput').classList.contains('hidden') ? '' : $('totpInput').value.trim();
+    const payload = username ? { username, password: secret } : (code ? { key: secret, totp: code } : { key: secret });
     const r = await fetch(SERVER+path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload), signal:AbortSignal.timeout(15000) });
     const d = await r.json();
     // The raw-key path only ever represents the owner (there's no other
@@ -678,18 +680,23 @@ async function doLogin(){
     // /admin/check-key now sends username/role explicitly, in case an
     // older deployed server.js hasn't picked up that change yet.
     if(d.status==='success'){ storeSession(d.token, d.username || (username?'':'owner'), d.role || (username?'':'owner')); openShell(); }
-    else { $('loginErr').textContent = d.message || 'Invalid credentials.'; }
+    else {
+      // The key was right but the owner has switched on the 6-digit code: ask for it (the key stays typed in).
+      if (d.code === 'TOTP_REQUIRED') { $('totpInput').classList.remove('hidden'); $('totpInput').value = ''; $('totpInput').focus(); }
+      $('loginErr').textContent = d.message || 'Invalid credentials.';
+    }
   }catch(e){ $('loginErr').textContent = 'Network error. Try again.'; }
   btn.disabled=false; btn.textContent='Sign in';
 }
 $('loginBtn').addEventListener('click', doLogin);
 $('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+$('totpInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 $('userInput').addEventListener('keydown', e=>{ if(e.key==='Enter') $('keyInput').focus(); });
 $('logoutBtn').addEventListener('click', async ()=>{
   api('/admin/logout', {}).catch(()=>{});
   clearSession();
   $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden');
-  $('keyInput').value=''; $('userInput').value='';
+  $('keyInput').value=''; $('userInput').value=''; $('totpInput').value=''; $('totpInput').classList.add('hidden');
 });
 
 function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden');

@@ -15,16 +15,16 @@ const context=vm.createContext({Date:Clock,db,crypto,sessionPolicy,FieldValue:{s
 vm.runInContext(extract('createSession')+'\n'+extract('resolveSession'),context);
 (async()=>{
  const owner=await context.createSession('owner','owner');assert.match(owner,/^[a-f0-9]{64}$/);assert(await context.resolveSession(owner));
- now+=15*60*1000-1;assert(await context.resolveSession(owner));assert.equal(+rows.get(owner).lastActiveAt,1800000000000,'background admin reads do not renew');
+ now+=sessionPolicy.ADMIN_IDLE_MS-1;assert(await context.resolveSession(owner));assert.equal(+rows.get(owner).lastActiveAt,1800000000000,'background admin reads do not renew');
  now++;assert.equal(await context.resolveSession(owner,true),null,'expired owner token cannot renew');
  const token=await context.createSession('active','staff');now+=60000;assert(await context.resolveSession(token,true));assert.equal(+rows.get(token).lastActiveAt,now);
  staff.get('active').active=false;assert.equal(await context.resolveSession(token),null,'staff deactivation remains effective');
  const max=await context.createSession('owner','owner');rows.get(max).lastActiveAt=new Date(now+sessionPolicy.MAX_MS-1);now+=sessionPolicy.MAX_MS;assert.equal(await context.resolveSession(max),null);
  const old='legacy';rows.set(old,{role:'owner',expiresAt:new Date(now+1000)});assert.equal(await context.resolveSession(old),null);
  const route=ast.body.find(x=>x.type==='ExpressionStatement'&&x.expression.type==='CallExpression'&&x.expression.callee.property?.name==='post'&&x.expression.arguments[0]?.value==='/admin/check-key');
- const handler=route.expression.arguments.at(-1);context.ADMIN_KEY='owner-secret';context.loginLocked=()=>false;context.safeEqual=(a,b)=>a===b;context.clearLoginFails=()=>{};context.recordLoginFail=()=>{};
+ const handler=route.expression.arguments.at(-1);context.ADMIN_KEY='owner-secret';const guardStub={locked:()=>false,fail(){},clear(){}};context.ownerKeyGuard=guardStub;context.ownerKeyGlobalGuard=guardStub;context.ADMIN_TOTP_SECRET='';context.safeEqual=(a,b)=>a===b;
  vm.runInContext('var ownerLogin = '+source.slice(handler.start,handler.end),context);
- let result;const res={status(){return this;},json(v){result=v;}};await context.ownerLogin({body:{key:'owner-secret'}},res);
+ let result;const res={status(){return this;},json(v){result=v;}};await context.ownerLogin({body:{key:'owner-secret'},ip:'1.2.3.4'},res);
  assert.equal(result.status,'success');assert.notEqual(result.token,'owner-secret');assert(rows.has(result.token));
  console.log('PASS: owner/staff opaque login tokens, idle and absolute limits, no poll renewal, deactivation and legacy-session expiry');
 })().catch(e=>{console.error(e);process.exitCode=1});
