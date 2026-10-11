@@ -2930,7 +2930,7 @@ function watchPesajetDeposit(depositId) {
         _pesajetWatchers.set(depositId, Date.now());
         if (t.providerDown) continue;
         const realStatus = pesajetStatusLabel(t.status);
-        if (realStatus === 'success') { await creditDeposit(snap); return; }
+        if (realStatus === 'success') { await creditDeposit(snap, 'server watcher'); return; }
         if (realStatus === 'failed') { await markDepositFailed(snap.ref, dep.userId, pesajetFailureMsg(t.status)); return; }
       }
     } catch (e) {
@@ -5035,9 +5035,9 @@ app.post('/deposit/marzpay', async (req, res) => {
       await withLock('dep:' + depRef.id, async () => {
         const fresh = await depRef.get();
         if (fresh.exists && fresh.data().status === 'initiating') {
-          await depRef.update({ status: 'pending', pesajetTxId });
+          await depRef.update({ status: 'pending', pesajetTxId, pesajetAcceptedAtMs: Date.now() });
         } else {
-          await depRef.update({ pesajetTxId }).catch(() => {});
+          await depRef.update({ pesajetTxId, pesajetAcceptedAtMs: Date.now() }).catch(() => {});
         }
       });
       if (pesajetTxId) watchPesajetDeposit(depRef.id);   // credit the moment PesaJet confirms (see the note at watchPesajetDeposit)
@@ -5097,14 +5097,14 @@ function depositFullyCredited(d) { return d.status === 'matched' && !d.needsManu
 // admin's hand -- most of which arrive with no region of their own. The
 // description stamped on the member's ledger row carries the amount, so it
 // is written in the DEPOSITOR's currency.
-async function creditDeposit(depDoc) {
+async function creditDeposit(depDoc, source) {
   const userId = depDoc && depDoc.data() && depDoc.data().userId;
-  const credited = await _creditDepositNow(depDoc);
+  const credited = await _creditDepositNow(depDoc, source);
   if (typeof _notifyDeposit === 'function') _notifyDeposit(depDoc.id);   // wake a held status request (see waitDepositSettled)
   if (credited) await creditDepositReferralCommission(depDoc.id, userId).catch(e => console.error('Deposit commission error:', e.message));
   return credited;
 }
-async function _creditDepositNow(depDoc) {
+async function _creditDepositNow(depDoc, source) {
   const dep = depDoc.data();
   if (depositFullyCredited(dep)) return true;
   if (_creditingDeposits.has(depDoc.id)) return false;
@@ -5254,6 +5254,12 @@ async function _creditDepositNow(depDoc) {
     // retried webhook/poll must never fire a duplicate push for the same money.
     if (justCredited) {
       markDepositAttemptSucceeded(dep.userId);
+      // One timing line per real credit, so the pm2 log shows where any delay is: how long after the member submitted it, how long after the
+      // gateway accepted it, and which path (webhook / server watcher / the member's poll / the reconciler) got there first.
+      try {
+        const made = tsMillis(dep.createdAt), acc = Number(dep.pesajetAcceptedAtMs) || 0;
+        console.log(`Deposit ${dep.ref || depDoc.id} (${dep.provider || '?'}) credited` + (made ? ` ${((Date.now() - made) / 1000).toFixed(1)}s after it was submitted` : '') + (acc ? `, ${((Date.now() - acc) / 1000).toFixed(1)}s after PesaJet accepted it` : '') + ` -- confirmed by: ${source || 'other'}`);
+      } catch (_) {}
       // Names the member so the alert is useful on a lock screen; the lookup is
       // best-effort and never delays or blocks the credit that already happened.
       db.collection('users').doc(String(dep.userId)).get().then(u => {
@@ -5826,7 +5832,7 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
       if (t.providerDown) return res.json({ status: 'success', state: 'pending' });
       const realStatus = pesajetStatusLabel(t.status);
-      if (realStatus === 'success') { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
+      if (realStatus === 'success') { await creditDeposit(depSnap, "member's poll"); return res.json({ status: 'success', state: 'matched' }); }
       if (realStatus === 'failed') {
         const msg = pesajetFailureMsg(t.status);
         const reallyFailed = await markDepositFailed(depSnap.ref, userId, msg);
@@ -7026,7 +7032,7 @@ app.post('/pesajet/webhook', async (req, res) => {
       const t = await pesajetGetTx(dep.pesajetTxId);
       if (t.providerDown) return;   // unverifiable -- the reconciler and the member's own poll both retry
       const realStatus = pesajetStatusLabel(t.status);
-      if (realStatus === 'success') await creditDeposit(doc);
+      if (realStatus === 'success') await creditDeposit(doc, 'PesaJet webhook');
       else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(t.status));
       return;
     }
@@ -10888,7 +10894,7 @@ async function reconcilePendingDeposits() {
       const t = await pesajetGetTx(dep.pesajetTxId);
       if (t.providerDown) continue;
       const realStatus = pesajetStatusLabel(t.status);
-      if (realStatus === 'success') { await creditDeposit(doc); settled++; }
+      if (realStatus === 'success') { await creditDeposit(doc, 'reconciler'); settled++; }
       else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(t.status));
     }
     // ...and the rows the sweep above deliberately cannot touch: PesaJet
@@ -10922,7 +10928,7 @@ async function reconcilePendingDeposits() {
       if (hit.found && hit.transactionId) {
         await doc.ref.update({ pesajetTxId: hit.transactionId }).catch(() => {});
         const realStatus = pesajetStatusLabel(hit.status);
-        if (realStatus === 'success') { await creditDeposit(doc); settled++; }
+        if (realStatus === 'success') { await creditDeposit(doc, 'reconciler'); settled++; }
         else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(hit.status));
         continue;
       }
