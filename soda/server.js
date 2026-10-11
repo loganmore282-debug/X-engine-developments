@@ -1439,8 +1439,16 @@ function phoneToEmail(phone, region) {
 // allowed leading digits in the admin panel. Rejects anything that doesn't
 // reduce to exactly that, so a garbled/wrong-country number never reaches a
 // payment provider.
+// Request fields arrive as JSON, so a caller can send an object, an array or a number where a text is expected. String() would turn those into
+// "[object Object]" or "123456" and the value would be treated as real input (a password of "[object Object]" was accepted at sign-up, an array
+// passed the 6-digit PIN check). These accept only what a real client sends.
+function textOf(v) { return typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''); }
+function passwordOf(v) { return typeof v === 'string' ? v : ''; }
 function cleanPhone(raw, region) {
   const r = region || currentRegion();
+  // A number may be typed with spaces, dashes, dots, brackets and a leading +, but not with other text around it ("0770000001; drop" was
+  // read as 0770000001): anything else is not a phone number.
+  if (/[^0-9+\-\s().]/.test(String(raw == null ? '' : raw))) return null;
   const local = localDigits(raw, r);
   if (!local) return null;
   const prefixes = Array.isArray(r.prefixes) ? r.prefixes.filter(Boolean) : [];
@@ -1646,7 +1654,7 @@ async function generateUniqueReferralCode(userId) {
 // 00001." padStart is a MINIMUM, so account 100,000 simply becomes six digits
 // rather than wrapping or colliding -- the same way this behaved at six.
 // Accounts issued before this change keep their stored six-digit id; the
-// one-time repair for those is /admin/users/shorten-public-ids below.
+// one-time repair route for those was removed (Soda starts at five digits).
 const PUBLIC_ID_DIGITS = 5;
 async function nextSequentialPublicId() {
   return withLock('publicid-counter', async () => {
@@ -4159,7 +4167,7 @@ app.post('/auth/otp/send', async (req, res) => {
       phone = cleanPhone(uSnap.data().phone || '');
       if (!phone) return res.status(400).json({ status: 'error', message: 'Your account has no valid phone number on file. Contact support.' });
     } else {
-      phone = cleanPhone(req.body.phone || '');
+      phone = cleanPhone(textOf(req.body.phone));
       if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
       const existing = purpose === 'reset'
         ? await db.collection('users').where('phone', '==', phone).where('registrationDone', '==', true).limit(1).get()
@@ -4248,9 +4256,9 @@ app.post('/auth/reset/confirm', async (req, res) => {
   try {
     // Password reset always needs its OTP ticket (checked below), whatever the
     // master OTP switch says -- see /auth/otp/send.
-    const phone = cleanPhone(req.body.phone || '');
+    const phone = cleanPhone(textOf(req.body.phone));
     if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
-    const newPassword = String(req.body.newPassword || '');
+    const newPassword = passwordOf(req.body.newPassword);
     if (newPassword.length < MEMBER_PASSWORD_MIN) return res.status(400).json({ status: 'error', message: 'Password must be at least 10 characters.' });
     if (weakPasswordReason(newPassword, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     const ticketOk = await consumeOtpTicket(String(req.body.ticket || ''), phone, 'reset');
@@ -4281,10 +4289,10 @@ app.post('/register', async (req, res) => {
     // already succeeded.
     const already = await db.collection('users').doc(userId).get();
     if (!already.exists || !already.data().registrationDone) {
-      const tradePin = String(req.body.pin || '');
+      const tradePin = textOf(req.body.pin);
       if (!/^\d{6}$/.test(tradePin)) return res.status(400).json({ status: 'error', code: 'INVALID_TRADE_PIN', message: 'Trade Password must be exactly 6 digits.' });
     }
-    const result = await completeRegistrationCore(userId, req.body.referralCode, req.body.pin, phone);
+    const result = await completeRegistrationCore(userId, textOf(req.body.referralCode), textOf(req.body.pin), phone);
     const { referrerId, ...memberBody } = result.body;
     res.status(result.code).json(memberBody);
   } catch (e) {
@@ -6039,8 +6047,9 @@ const _witRequestInFlight = new Set();
 // /bank/delete for that change.
 const PIN_LOCK_MS = 15 * 60 * 1000;
 const PIN_MAX_FAILS = 5;
-async function pinCheck(userId, pin) {
-  if (!/^\d{6}$/.test(String(pin || '')))
+async function pinCheck(userId, pin0) {
+  const pin = textOf(pin0);
+  if (!/^\d{6}$/.test(pin))
     return { ok: false, code: 'INVALID_PIN', message: 'Enter your 6-digit Trade Password.' };
   return withLock('pin:' + userId, async () => {
     const uRef = db.collection('users').doc(userId);
@@ -6112,7 +6121,7 @@ app.post('/withdraw/request', async (req, res) => {
     // account lookup right below (boundSnap) is the real gate either way:
     // a value that doesn't match a real saved bankAccounts doc is refused
     // there regardless of which branch validated its shape here.
-    const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(req.body.phone || '') : String(req.body.phone || '').replace(/\s+/g, '').trim();
+    const destValue = NETWORK_NAMES.has(rawNetwork) ? cleanPhone(textOf(req.body.phone)) : textOf(req.body.phone).replace(/\s+/g, '').trim();
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
     // The withdraw window, enforced HERE and not only shown in the app.
@@ -7107,7 +7116,7 @@ app.post('/bank/save', async (req, res) => {
   // need.
   let destValue;
   if (isMobileMoney) {
-    destValue = cleanPhone(req.body.phone || '');
+    destValue = cleanPhone(textOf(req.body.phone));
     if (!destValue) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
   } else {
     destValue = String(req.body.phone || req.body.accountNumber || '').replace(/\s+/g, '').trim();
@@ -7753,7 +7762,7 @@ app.post('/admin/check-key', async (req, res) => {
 // used to enumerate valid usernames by response timing.
 app.post('/admin/login', async (req, res) => {
   const username = String(req.body.username || '').trim().toLowerCase();
-  const password = String(req.body.password || '');
+  const password = passwordOf(req.body.password);
   if (!username || !password) return res.status(400).json({ status: 'error', message: 'Username and password required' });
   if (loginLocked('staff:' + username) || adminBadCredGuard.locked(req.ip)) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
   try {
@@ -7827,9 +7836,9 @@ const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 20, standa
 const sessionReply = (res, uid, sess) => res.json({ status: 'success', token: sess.token, uid, authTime: sess.authTime, expiresAt: sess.expiresAt });
 app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
   try {
-    const phone = cleanPhone(req.body.phone || '');
+    const phone = cleanPhone(textOf(req.body.phone));
     if (!phone) return res.status(400).json({ status: 'error', code: 'INVALID_PHONE', message: badPhoneMessage() });
-    const password = String(req.body.password || '');
+    const password = passwordOf(req.body.password);
     if (password.length < MEMBER_PASSWORD_MIN || password.length > MEMBER_PASSWORD_MAX)
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
     if (weakPasswordReason(password, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
@@ -7846,8 +7855,8 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
 });
 app.post('/auth/login', memberAuthLimiter, async (req, res) => {
   try {
-    const phone = cleanPhone(req.body.phone || '');
-    const password = String(req.body.password || '');
+    const phone = cleanPhone(textOf(req.body.phone));
+    const password = passwordOf(req.body.password);
     const bad = () => res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Incorrect phone number or password.' });
     if (!phone || !password || password.length > MEMBER_PASSWORD_MAX) return bad();
     const ipLeft = memberLoginIpGuard.locked(req.ip);
@@ -7876,7 +7885,7 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
   try {
     const decoded = await _decodeAuth(req);
     if (!decoded) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-    const oldPassword = String(req.body.oldPassword || ''), newPassword = String(req.body.newPassword || '');
+    const oldPassword = passwordOf(req.body.oldPassword), newPassword = passwordOf(req.body.newPassword);
     if (newPassword.length < MEMBER_PASSWORD_MIN || newPassword.length > MEMBER_PASSWORD_MAX)
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
     const acct = await findAccountByUid(decoded.uid);
@@ -7928,7 +7937,7 @@ app.get('/admin/admins/list', async (req, res) => {
 app.post('/admin/admins/create', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const username = String(req.body.username || '').trim().toLowerCase();
-  const password = String(req.body.password || '');
+  const password = passwordOf(req.body.password);
   if (!/^[a-z0-9._-]{3,32}$/.test(username)) return res.status(400).json({ status: 'error', message: 'Username must be 3-32 characters (letters, digits, . _ -).' });
   if (username === 'owner' || username === 'owner-key') return res.status(400).json({ status: 'error', message: 'That username is reserved.' });
   if (password.length < 8) return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters.' });
@@ -7964,7 +7973,7 @@ app.post('/admin/admins/reactivate', async (req, res) => {
 app.post('/admin/admins/reset-password', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const username = String(req.body.username || '').trim().toLowerCase();
-  const password = String(req.body.password || '');
+  const password = passwordOf(req.body.password);
   if (password.length < 8) return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters.' });
   try {
     await db.collection('adminUsers').doc(username).update({ passwordHash: scryptHash(password) });
@@ -9092,7 +9101,7 @@ app.post('/admin/user/remove-product', async (req, res) => {
 app.post('/admin/user/reset-password', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
-  const newPassword = String(req.body.newPassword || '');
+  const newPassword = passwordOf(req.body.newPassword);
   if (!userId || newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'userId and a password of at least 6 characters required' });
   try {
     await setMemberPassword(userId, newPassword);
@@ -9103,7 +9112,7 @@ app.post('/admin/user/reset-password', async (req, res) => {
 app.post('/admin/user/set-phone', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
-  const phone = cleanPhone(req.body.phone || '');
+  const phone = cleanPhone(textOf(req.body.phone));
   if (!userId || !phone) return res.status(400).json({ status: 'error', message: 'userId and a valid phone required' });
   try {
     // The login lives in authAccounts under an id built from the phone, so
@@ -9281,7 +9290,7 @@ app.post('/admin/user/repair-wallet', async (req, res) => {
 app.post('/admin/user/complete-registration', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
-  const pin = String(req.body.pin || '');
+  const pin = textOf(req.body.pin);
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     // Codex-caught real bug: this used to check-then-create the profile doc

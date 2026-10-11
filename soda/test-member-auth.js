@@ -32,9 +32,9 @@ function makeEnv() {
   const lim = () => (q, s, n) => n();
   let failStore = false;
   const dbProxy = new Proxy(db, { get: (t, k) => k === 'collection' ? col => { if (failStore && col === 'memberSessions') throw new Error('mongo down'); return t.collection(col); } : t[k] });
-  const fn = new Function('weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console',
+  const fn = new Function('textOf', 'passwordOf', 'weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console',
     'const _lockTails = new Map();\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
-    (() => '', '', { locked: () => false, fail() {}, clear() {} }, app, dbProxy, crypto, sessionPolicy, { serverTimestamp: () => new Date(), delete: () => DEL }, p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; }, () => 'bad phone',
+    (v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), v => typeof v === 'string' ? v : '', () => '', '', { locked: () => false, fail() {}, clear() {} }, app, dbProxy, crypto, sessionPolicy, { serverTimestamp: () => new Date(), delete: () => DEL }, p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; }, () => 'bad phone',
       v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {} });
   const call = async (path, body, headers = {}) => { const res = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };
     await handlers[path]({ body, headers, path, ip: '1.1.1.1' }, res); return res; };
@@ -55,6 +55,8 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'nine12345' }); eq([r.code, r.body.code], [400, 'WEAK_PASSWORD'], 'nine characters are refused (minimum is 10)');
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'ten1234567' }); eq(r.code, 200, 'ten characters are accepted');
   r = await E.call('/auth/signup', { phone: '0770000009', password: 'x'.repeat(129) }); eq(r.code, 400, 'over-long password');
+  for (const odd of [{ $gt: '' }, ['abcdefghijk1'], 1234567890123, true]) { r = await E.call('/auth/signup', { phone: '0770000009', password: odd }); eq(r.code, 400, 'a password that is not text is refused: ' + JSON.stringify(odd)); }
+  r = await E.call('/auth/signup', { phone: ['0770000009'], password: 'ten1234567' }); eq(r.code, 400, 'a phone sent as a list is refused');
   r = await E.call('/auth/signup', { phone: 'abc', password: 'abcdef7391xy' }); eq([r.code, r.body.code], [400, 'INVALID_PHONE']);
   const race = await Promise.all([1, 2, 3, 4, 5].map(i => E.call('/auth/signup', { phone: '0770000002', password: 'pwpwpw' + i + 'xxx' })));
   eq(race.filter(x => x.code === 200).length, 1, 'five simultaneous signups for one phone create exactly one account'); eq(race.filter(x => x.code === 409).length, 4);
@@ -166,6 +168,8 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
     const forms = ['771234567@soda-platform.com'.split('@')[0], '256771234567', '0771234567', '+256771234567', '07 71 23 45 67'];
     eq(new Set(forms.map(x => real(x))).size, 1, 'the national, international and bare forms are one number: ' + forms.map(x => real(x)).join(' '));
     eq(real('771234567'), '+256771234567'); eq(real('12345'), null, 'junk is not a number'); eq(real(''), null);
+    eq(real('0771234567; drop'), null, 'text around a number makes it not a number (it used to be read as 0771234567)');
+    eq(real('(+256) 771-234.567'), '+256771234567', 'spaces, dashes, dots, brackets and a leading + are still fine');
   }
   // wiring
   ok(!/admin\.auth\(\)/.test(src), 'no Firebase Auth call is left in the server');

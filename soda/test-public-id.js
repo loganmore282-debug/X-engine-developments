@@ -38,13 +38,8 @@ check(pad(99999) === '99999', `account 99999 still fits in five (${pad(99999)})`
 check(pad(100000) === '100000', `account 100000 grows to six rather than wrapping (${pad(100000)})`);
 
 console.log('\n— the repair, using server.js\'s own rules —');
-// The two conditions the route applies, pulled out of the file so this test
-// cannot pass against a route that decides something else.
-check(/if \(!\/\^0\\d\+\$\/\.test\(r\.id\) \|\| r\.id\.length <= PUBLIC_ID_DIGITS\) continue;/.test(src),
-  'the route skips ids that are not zero-padded, and ids already short enough');
-check(/if \(taken\.has\(short\)\) \{ conflicts\.push/.test(src),
-  'and refuses to write an id another account already holds');
-
+// (The one-time admin repair route that applied these rules has been removed from Soda: ids are five digits from the first account. The
+// rules themselves are kept below as the specification of what shortening means.)
 const shorten = id => {
   if (!/^0\d+$/.test(id) || id.length <= PUBLIC_ID_DIGITS) return null;
   const short = String(Number(id)).padStart(PUBLIC_ID_DIGITS, '0');

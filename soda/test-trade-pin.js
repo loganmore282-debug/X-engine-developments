@@ -15,7 +15,7 @@ const mk = () => {
   const db = { collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => doc }), update: async u => { Object.assign(doc, u); } }) }) };
   return { doc, db };
 };
-const build = db => new Function('crypto', 'db', 'withLock', 'tsMillis', `
+const build = db => new Function('crypto', 'db', 'withLock', 'tsMillis', 'textOf', `
   const PIN_LOCK_MS = 15 * 60 * 1000, PIN_MAX_FAILS = 5;
   ${fnSource('scryptHash')}
   ${fnSource('scryptVerify')}
@@ -23,7 +23,7 @@ const build = db => new Function('crypto', 'db', 'withLock', 'tsMillis', `
   ${fnSource('scryptHashAsync')}
   ${fnSource('scryptVerifyAsync')}
   ${fnSource('pinCheck')}
-  return { scryptHash, scryptHashAsync, pinCheck };`)(crypto, db, (_k, fn) => fn(), v => v instanceof Date ? v.getTime() : Number(v) || 0);
+  return { scryptHash, scryptHashAsync, pinCheck };`)(crypto, db, (_k, fn) => fn(), v => v instanceof Date ? v.getTime() : Number(v) || 0, v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''));
 (async () => {
   const { doc, db } = mk(); const { scryptHash, pinCheck } = build(db);
   doc.transactionPinHash = scryptHash('123456');
