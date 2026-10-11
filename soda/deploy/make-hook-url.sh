@@ -10,6 +10,7 @@ HOOK_FILE=${SODA_HOOK_FILE:-/srv/soda-secrets/hook-token}
 HOOK_HOST_FILE=${SODA_HOOK_HOST_FILE:-/srv/soda-secrets/hook-host}
 BASE=${SODA_BASE_DOMAIN:-p-colasoda.com}
 HOST=${SODA_APP_HOST:-app.p-colasoda.com}
+[ -s "${SODA_APP_HOST_FILE:-/srv/soda-secrets/app-host}" ] && HOST=$(tr -d "[:space:]" < "${SODA_APP_HOST_FILE:-/srv/soda-secrets/app-host}")
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 NEWTOKEN=0
 for a in "$@"; do

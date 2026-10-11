@@ -22,6 +22,14 @@ git log -1 --format='    now at: %h %s'
 say "2/7  Packages"
 npm install --omit=dev --no-audit --no-fund 2>&1 | tail -1
 
+# The member app's host can be changed with deploy/change-app-host.sh: the new host is kept in a file (never in git) and the OLD host stays
+# as an extra address of the same app, so installed apps, old links and webhooks keep working.
+APP_HOST_FILE=${SODA_APP_HOST_FILE:-/srv/soda-secrets/app-host}
+ALSO_FILE=${SODA_ALSO_HOSTS_FILE:-/srv/soda-secrets/also-hosts}
+[ -s "$APP_HOST_FILE" ] && APP_HOST=$(tr -d '[:space:]' < "$APP_HOST_FILE")
+ALSO_HOSTS=""; [ -s "$ALSO_FILE" ] && ALSO_HOSTS=$(tr -d '[:space:]' < "$ALSO_FILE")
+echo "    member app host: $APP_HOST${ALSO_HOSTS:+   also answers on: $ALSO_HOSTS}"
+
 # Secret PesaJet webhook address: the token lives only on this server (made by deploy/make-hook-url.sh), never in git.
 HOOK_FILE=${SODA_HOOK_FILE:-/srv/soda-secrets/hook-token}
 HOOK_HOST_FILE=${SODA_HOOK_HOST_FILE:-/srv/soda-secrets/hook-host}
@@ -30,7 +38,7 @@ if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then SODA_HOOK_HOST=$(tr -d 
 
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
-if node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" > /tmp/soda.conf.new && cp /tmp/soda.conf.new "$CONF" && nginx -t >/tmp/soda.nginxtest 2>&1; then
+if node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/soda.conf.new && cp /tmp/soda.conf.new "$CONF" && nginx -t >/tmp/soda.nginxtest 2>&1; then
   echo "    new nginx file accepted"
 else
   echo "    !! nginx refused the new file: putting the old one back"
@@ -40,17 +48,20 @@ else
   exit 1
 fi
 
-say "4/7  HTTPS (same certificate, only switched back on)"
-certbot --nginx -d "$APP_HOST" -d "$ADMIN_HOST" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
-# The webhook-only host gets its certificate in a SECOND step, so a DNS that is not ready yet can never take the other two hosts' HTTPS down.
-if [ -n "${SODA_HOOK_HOST:-}" ]; then
-  MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true); HOOKIP=$(getent ahostsv4 "$SODA_HOOK_HOST" 2>/dev/null | awk '{print $1; exit}')
-  if [ -n "$MYIP" ] && [ "$MYIP" = "$HOOKIP" ]; then
-    certbot --nginx --expand -d "$APP_HOST" -d "$ADMIN_HOST" -d "$SODA_HOOK_HOST" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
-  else
-    echo "    !! $SODA_HOOK_HOST does not point to this server yet (it points to '${HOOKIP:-nothing}', this server is '$MYIP')."
-    echo "       Check the A record in Hostinger, wait a few minutes and run this again. The other two addresses are not affected."
-  fi
+say "4/7  HTTPS (one certificate for every address; an address whose DNS does not point here yet is skipped, never allowed to break the others)"
+MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true)
+CERT_ARGS=(); SKIPPED=""
+for H in "$APP_HOST" "$ADMIN_HOST" ${ALSO_HOSTS//,/ } ${SODA_HOOK_HOST:-}; do
+  [ -n "$H" ] || continue
+  HIP=$(getent ahostsv4 "$H" 2>/dev/null | awk '{print $1; exit}')
+  if [ -n "$MYIP" ] && [ "$HIP" = "$MYIP" ]; then CERT_ARGS+=(-d "$H"); else SKIPPED="$SKIPPED $H(${HIP:-no record})"; fi
+done
+if [ -n "$SKIPPED" ]; then
+  echo "    !! not pointing to this server yet, so no certificate for:$SKIPPED   (this server is $MYIP)"
+  echo "       Check the A record in Hostinger, wait a few minutes and run this again. The other addresses are not affected."
+fi
+if [ "${#CERT_ARGS[@]}" -gt 0 ]; then
+  certbot --nginx --cert-name "${SODA_CERT_NAME:-app.p-colasoda.com}" --expand "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
 fi
 # HTTP/2 lets a phone fetch many files over ONE connection (a big gain on long-distance links). Added only if missing, and undone if nginx refuses it.
 cp "$CONF" /tmp/soda.conf.pre-h2

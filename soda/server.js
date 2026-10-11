@@ -252,6 +252,8 @@ const CORS_ALLOWED_ORIGINS = new Set([
   // have to agree.
   // The live address (owner, 2026-10-07): app.p-colasoda.com. mysoda. was the planned name and stays allowed.
   'https://app.p-colasoda.com', 'https://mysoda.p-colasoda.com',
+  // Owner, 2026-10-11: the member app moved to ydm1.p-colasoda.com (app. stays as an extra address of the same app).
+  'https://ydm1.p-colasoda.com',
   // Direct VPS frontend used while Soda is served/tested on port 8080.
   // Different ports are different browser origins, so without this exact
   // entry the member page loads but every API call to :3000 is blocked by CORS.
