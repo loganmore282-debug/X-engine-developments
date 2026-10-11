@@ -1,8 +1,10 @@
 'use strict';
 // Measures where the time goes, from the VPS itself: database round trip (the server's own connection, nothing printed that is secret),
-// then the public site (HTTP version, compression, first-byte time). Run: node deploy/speed-check.js [https://app.p-colasoda.com]
+// then the public site (HTTP version, compression, first-byte time). Run: node deploy/speed-check.js [https://your-address]
 const fs = require('fs'), https = require('https'), http2 = require('http2'), zlib = require('zlib');
-const SITE = process.argv[2] || 'https://app.p-colasoda.com';
+// Default: the member address this server is configured with (deploy/change-app-host.sh keeps it in a file), else the one passed on the command line.
+const hostFile = (() => { try { return fs.readFileSync(process.env.SODA_APP_HOST_FILE || '/srv/soda-secrets/app-host', 'utf8').trim(); } catch (e) { return ''; } })();
+const SITE = process.argv[2] || (hostFile ? 'https://' + hostFile : 'https://ydm1.p-colasoda.com');
 if (!/^https:\/\//.test(SITE)) { console.log('Use an https:// address.'); process.exit(1); }
 const SECRETS = process.env.SODA_SECRETS_FILE || '/srv/soda-secrets/secrets.local.js';
 const ms = n => (n < 10 ? n.toFixed(1) : Math.round(n)) + ' ms';

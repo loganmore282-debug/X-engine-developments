@@ -11161,7 +11161,9 @@ async function reconcileCashback() {
 }
 // Pays due investments a few at a time (each one still settles under its own payout lock, and the wallet credit under
 // the member's balance lock, so two products of one member simply queue; nothing here can pay twice).
-const CASHBACK_PARALLEL = 8;
+// 12 at a time: with a database round trip of ~23 ms a payment (about 5 sequential database operations) takes ~115 ms, so 12 workers give ~100 payments a
+// second, which is about where Atlas Flex's 500 operations a second begins to throttle (8 workers could not reach it). Each payment still runs under its own lock.
+const CASHBACK_PARALLEL = 12;
 // A one-shot timer aimed at the next Uganda midnight starts a sweep the moment 00:00 arrives (the 0.5 s tick would
 // anyway, at most half a second later; this just removes that wait). Re-armed after every firing.
 function armMidnightSweep() {
