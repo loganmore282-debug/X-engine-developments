@@ -5,7 +5,7 @@ const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 let n = 0; const ok = (c, m) => { n++; assert.ok(c, m); }; const eq = (a, b, m) => { n++; assert.deepEqual(a, b, m); };
 const a = src.indexOf('const PESAJET_WATCH_EVERY_MS'), b = src.indexOf("// PesaJet's status -> the three words the rest of this file already speaks");
 assert.ok(a > 0 && b > a, 'watcher source found');
-const block = src.slice(a, b).replace('PESAJET_WATCH_EVERY_MS = 700', 'PESAJET_WATCH_EVERY_MS = 5').replace('PESAJET_WATCH_BUDGET_MS = 120000', 'PESAJET_WATCH_BUDGET_MS = 300');
+const block = src.slice(a, b).replace('PESAJET_WATCH_EVERY_MS = 700', 'PESAJET_WATCH_EVERY_MS = 5').replace('PESAJET_WATCH_SPREAD_MS = 125', 'PESAJET_WATCH_SPREAD_MS = 0').replace('PESAJET_WATCH_BACKOFF_MS = 1000', 'PESAJET_WATCH_BACKOFF_MS = 20').replace('PESAJET_WATCH_BACKOFF_MAX_MS = 8000', 'PESAJET_WATCH_BACKOFF_MAX_MS = 80').replace('PESAJET_WATCH_BUDGET_MS = 120000', 'PESAJET_WATCH_BUDGET_MS = 300');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 function env(rows) {
   const calls = { pj: 0, credit: [], failed: [], errors: [] };
@@ -39,6 +39,11 @@ function env(rows) {
   e.watchPesajetDeposit('d4'); await wait(25); eq(e.calls.pj, 0, 'no transaction id yet: no gateway call');
   e.state.rows.d4.pesajetTxId = 'tx4'; e.state.rows.d4.status = 'pending'; await wait(120);
   eq(e.calls.credit, ['d4'], 'credited after two outage answers'); 
+  // a struggling gateway is asked less and less often (not hammered at the normal pace)
+  e = env({ b1: { status: 'pending', userId: 'u', pesajetTxId: 'x' } }); e.state.script = [{ providerDown: true }]; e.watchPesajetDeposit('b1'); await wait(250);
+  const askedDown = e.calls.pj; ok(askedDown >= 3 && askedDown <= 8, 'while the gateway is down it is asked with growing gaps (' + askedDown + ' asks in 250 ms, a flat 5 ms pace would be ~40)');
+  e.state.rows.b1.status = 'matched'; await wait(120); ok(!e._pesajetWatchers.has('b1'), 'and the watcher still ends when the deposit is settled elsewhere');
+  ok(/PESAJET_WATCH_SPREAD_MS = 125/.test(src) && /_pesajetWatchers\.size \* PESAJET_WATCH_SPREAD_MS/.test(src), 'with many watchers the pace stretches (about 8 asks per second in total)');
   // the same deposit is never watched twice; the number of watchers is capped
   e = env({ dup: { status: 'pending', userId: 'u', pesajetTxId: 'x' } }); e.state.script = [{ status: 'pending' }];
   e.watchPesajetDeposit('dup'); e.watchPesajetDeposit('dup'); eq(e._pesajetWatchers.size, 1, 'one watcher per deposit');

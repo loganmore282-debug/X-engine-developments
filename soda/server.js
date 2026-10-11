@@ -2893,6 +2893,10 @@ async function pesajetGetTx(transactionId, { attempts = 2 } = {}) {
 // reconciler all end in the same creditDeposit()/markDepositFailed(), which are single-writer locked, so nothing can credit twice.
 // Capped, and a watcher that stops (cap, restart, 2 minutes) simply hands over to the old poll-driven check, which still works on its own.
 const PESAJET_WATCH_EVERY_MS = 700, PESAJET_WATCH_BUDGET_MS = 120000, PESAJET_WATCH_MAX = 20;
+// PesaJet publishes no rate limit but says to answer a 429 with "exponential backoff and jitter", and its own SDK polls every 2.5 s. So: with many
+// watchers the cadence stretches (about 8 asks per second in total, however many members are paying), and a gateway that is struggling (5xx, 429,
+// timeout) is asked less and less often instead of being hammered.
+const PESAJET_WATCH_SPREAD_MS = 125, PESAJET_WATCH_BACKOFF_MS = 1000, PESAJET_WATCH_BACKOFF_MAX_MS = 8000;
 const _pesajetWatchers = new Map();   // depositId -> time of its last PesaJet check
 let _pesajetSleep = ms => new Promise(r => setTimeout(r, ms));
 function pesajetWatcherFresh(depositId, maxAgeMs = 3500) {
@@ -2919,8 +2923,10 @@ function watchPesajetDeposit(depositId) {
   (async () => {
     try {
       const began = Date.now();
+      let down = 0;                                  // consecutive "gateway unavailable" answers
       while (Date.now() - began < PESAJET_WATCH_BUDGET_MS) {
-        await _pesajetSleep(PESAJET_WATCH_EVERY_MS);
+        const backoff = down ? Math.min(PESAJET_WATCH_BACKOFF_MAX_MS, PESAJET_WATCH_BACKOFF_MS * 2 ** (down - 1)) * (0.75 + Math.random() * 0.5) : 0;
+        await _pesajetSleep(Math.max(PESAJET_WATCH_EVERY_MS, _pesajetWatchers.size * PESAJET_WATCH_SPREAD_MS) + backoff);
         const snap = await db.collection('pendingDeposits').doc(depositId).get();
         if (!snap.exists) return;
         const dep = snap.data();
@@ -2928,7 +2934,8 @@ function watchPesajetDeposit(depositId) {
         if (!dep.pesajetTxId) continue;
         const t = await pesajetGetTx(dep.pesajetTxId, { attempts: 1 });
         _pesajetWatchers.set(depositId, Date.now());
-        if (t.providerDown) continue;
+        if (t.providerDown) { down++; continue; }
+        down = 0;
         const realStatus = pesajetStatusLabel(t.status);
         if (realStatus === 'success') { await creditDeposit(snap, 'server watcher'); return; }
         if (realStatus === 'failed') { await markDepositFailed(snap.ref, dep.userId, pesajetFailureMsg(t.status)); return; }
