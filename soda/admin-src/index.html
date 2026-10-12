@@ -1397,7 +1397,7 @@ async function renderAnalytics(silent){
 
 // ── USERS ──
 let _users=[];
-function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('256')) n=n.slice(3); if(n.startsWith('0')&&n.length>=10) n=n.slice(1); return n; }
+function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('256')) n=n.slice(3); n=n.replace(/^0+/,''); return n; }
 async function renderUsers(){
   const r = await api('/admin/users');
   if(staleTab('users')) return;
@@ -1721,7 +1721,7 @@ async function openUser(uid){
       if(d.status==='success'){ closeModal(); openUser(uid); } else { b.disabled=false; b.textContent=lbl; }
     });
   }
-  const amt=()=>Math.round(parseFloat($('adjAmt').value||0)), note=()=>$('adjNote').value.trim();
+  const amt=()=>{ const x=Math.round(parseFloat($('adjAmt').value||0)); return x>0?x:0; }, note=()=>$('adjNote').value.trim();
   // FIXED BUG: neither button disabled itself while the request was in
   // flight, so a double-tap (or a slow connection making it LOOK like the
   // first tap didn't register) could fire two real /admin/deposit or
@@ -1835,12 +1835,16 @@ function loadFailed(r, what){
 }
 const DEP_GROUPS = { pending: ['initiating','pending','awaiting_verification'], review: ['review'], matched: ['matched'], failed: ['failed','rejected'] };
 let _deps=[], _depFilter='pending';
+// A deposit whose payment succeeded but whose wallet credit failed is stored as 'matched' with needsManualCredit: it is NOT paid yet, so it belongs
+// under Pending with a Force-credit button, never under Successful.
+const depNotCredited = d => d.status==='matched' && d.needsManualCredit===true && d.walletCredited!==true;
+const depIn = (d,k) => k==='all' ? true : depNotCredited(d) ? k==='pending' : (DEP_GROUPS[k]||[]).includes(d.status);
 async function renderDeposits(){
   const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits')) return;
   if(loadFailed(r,'deposits')) return;
   _deps = r.deposits||[];
-  const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
+  const grp = k => _deps.filter(d=>depIn(d,k)).length;
   const subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
   const dpbd = r.processedByDay||[];
   const dMaxP = Math.max(1, ...dpbd.map(d=>d.count));
@@ -1866,17 +1870,17 @@ async function renderDeposits(){
   drawDeps();
 }
 function drawDeps(){
-  let list = _depFilter==='all' ? _deps : _deps.filter(d=>(DEP_GROUPS[_depFilter]||[]).includes(d.status));
+  let list = _deps.filter(d=>depIn(d,_depFilter));
   const raw = ($('depSearch')?.value||'').trim();
   const q = raw.toLowerCase(), qCore = phoneCore(raw);
   if(q) list = list.filter(d =>
     (d.referralCode||'').toLowerCase().includes(q) ||
-    (qCore && phoneCore(d.accountPhone||d.phone).includes(qCore)) ||
-    (qCore && phoneCore(d.senderPhone||'').includes(qCore))
+    (qCore.length>=3 && phoneCore(d.accountPhone||d.phone).includes(qCore)) ||
+    (qCore.length>=3 && phoneCore(d.senderPhone||'').includes(qCore))
   );
   $('depRows').innerHTML = list.length?list.map(d=>{
     const isManual = d.method==='manual';
-    const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed' || d.status==='review' || d.status==='awaiting_verification';
+    const stuck = depNotCredited(d) || d.status==='initiating' || d.status==='pending' || d.status==='failed' || d.status==='review' || d.status==='awaiting_verification';
     const code = d.referralCode;
     // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
     // that was never resolved automatically is a real money-safety decision,
@@ -1933,7 +1937,7 @@ function drawDeps(){
       <td>${methodLabel}</td>
       <td><b>${ugx(d.amount, d.regionKey)}</b></td>
       <td>${esc(d.ref||'Not set')}</td>
-      <td>${statusPill(d.status)}${reviewNote}</td>
+      <td>${depNotCredited(d)?'<span class="pill-tag t-bad">Not credited</span>':statusPill(d.status)}${reviewNote}</td>
       <td>${actions}</td></tr>${smsBlock}`;
   }).join(''):'<tr><td colspan="8" class="empty">No recharges</td></tr>';
   // Owner: "l want them to have... l can tap on a deposit to see user
@@ -1965,7 +1969,7 @@ async function quietRefreshDeposits(){
   if(staleTab('deposits') || !$('depRows')) return;
   if(r.status!=='success') return;
   _deps = r.deposits||[];
-  const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
+  const grp = k => _deps.filter(d=>depIn(d,k)).length;
   const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
   document.querySelectorAll('[data-df]').forEach(b=>{
     const k=b.dataset.df, l=(subs.find(s=>s[0]===k)||[])[1]||k;
@@ -2000,7 +2004,7 @@ async function renderWithdrawals(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
       ${_witManualPayouts?'':`<button class="btn sm ghost" id="witSync">Sync payments</button>`}</div>
-    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">Every withdraw request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own. Members withdraw to a bound mobile money number (see each row's destination).</p>`}
+    ${_witManualPayouts?`<p class="muted" style="margin:0 0 12px"><b>Payments are set to Manual</b>, so payouts do not go through any automatic gateway. Send the money yourself from an admin mobile money phone to the destination number on the row, then tap <b>Mark as paid</b>. Marking a row paid only records a payment you have already made, it never sends anything. Auto-approve is ignored while this mode is on.</p>`:`<p class="muted" style="margin:0 0 12px">${r.autoWithdrawals?`<b>Automatic withdrawals are ON</b>: every request still appears here as <b>Pending</b>, then the server sends it to ${PROVIDER_LABEL[normalizeProv(_witProvider)]} after its own random wait (see Settings). You can still press Send or Reject at any time.`:`Every withdraw request waits here as <b>Pending</b> until an admin sends it, nothing reaches ${PROVIDER_LABEL[normalizeProv(_witProvider)]} on its own.`} Members withdraw to a bound mobile money number (see each row's destination).</p>`}
     ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_wits.length+' withdrawals only. The platform has more history than this list can currently display.</div>':''}
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
@@ -2034,7 +2038,7 @@ function drawWits(){
   const q = raw.toLowerCase(), qCore = phoneCore(raw);
   if(q) list = list.filter(w =>
     (w.referralCode||'').toLowerCase().includes(q) ||
-    (qCore && (phoneCore(w.phone).includes(qCore) || phoneCore(w.accountPhone||'').includes(qCore)))
+    (qCore.length>=3 && (phoneCore(w.phone).includes(qCore) || phoneCore(w.accountPhone||'').includes(qCore)))
   );
   $('witRows').innerHTML = list.length?list.map(w=>{
     const code = w.referralCode;
@@ -2969,7 +2973,7 @@ async function renderSettings(){
         <div><label>L3 commission (%)</label><input id="sC3" type="number" step="1" value="${v('commL3',1)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
-        <div><label>Max withdrawals per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
+        <div><label>Max withdrawals per user per day (0 = no limit)</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
         <div><label>Payment reference starts with</label><input id="sRefPrefix" type="text" maxlength="12" autocapitalize="off" autocomplete="off" spellcheck="false" value="${esc(v('referencePrefix','S'))}">
           <div id="sRefPrefixPreview" style="font-size:12px;opacity:.7;margin-top:4px"></div></div>
       </div>
@@ -3095,6 +3099,7 @@ async function renderSettings(){
     px.addEventListener('input',showRef); showRef(); }
   $('saveRates').addEventListener('click', async()=>{
     // A blank number box would be read as 0 (a 0% commission or a 0 minimum would be saved silently): refuse it instead.
+    for(const id of ['sMinDep','sMinWit','sWelcome','sFee','sC1','sC2','sC3','sMaxWitDay','sAutoMin','sAutoMax','sAutoCap']){ if($(id)&&$(id).value.trim()!==''&&!/^\d+$/.test($(id).value.trim())){ toast('Use whole numbers only (no decimals or minus sign).','err'); $(id).focus(); return; } }
     for(const [id,label] of [['sMinDep','Minimum deposit'],['sMinWit','Minimum withdrawal'],['sWelcome','Welcome bonus'],['sFee','Withdrawal fee'],['sC1','Level 1 commission'],['sC2','Level 2 commission'],['sC3','Level 3 commission'],['sMaxWitDay','Withdrawals per day'],['sAutoMin','Shortest wait'],['sAutoMax','Longest wait'],['sAutoCap','Automatic limit']]){
       if($(id) && $(id).value.trim()===''){ toast(label+' cannot be blank. Type a number (0 is allowed).','err'); $(id).focus(); return; }
     }
