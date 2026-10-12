@@ -1979,13 +1979,13 @@ async function quietRefreshDeposits(){
 }
 
 // ── WITHDRAWALS ──
-let _wits=[], _witFilter='pending', _witAuto=false;
+let _wits=[], _witFilter='pending', _witAuto=false, _witAutoLimit=0;
 async function renderWithdrawals(){
   const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals')) return;
   if(loadFailed(r,'withdrawals')) return;
   _wits = r.withdrawals||[];
-  _witProvider = r.payoutMode || 'marzpay'; _witAuto = !!r.autoWithdrawals;
+  _witProvider = r.payoutMode || 'marzpay'; _witAuto = !!r.autoWithdrawals; _witAutoLimit = Number(r.autoLimit)||0;
   _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
@@ -2046,7 +2046,7 @@ function drawWits(){
     const dest = `${esc(w.network||'Not set')}<br><span class="muted" style="font-size:11px">${esc(w.phone||'')}</span>`;
     return `<tr class="clickable" data-uid="${esc(w.userId)}"><td>${fdate(w.createdAt)}</td><td>${who}${code?`<br><span class="muted">${esc(code)}</span>`:''}</td>
     <td>${ugx(w.amount, w.regionKey)}</td><td><b>${ugx(w.net, w.regionKey)}</b></td><td>${dest}</td>
-    <td>${witStatusPill(w)}${w.status==='pending'&&_witAuto?(w.autoHold?'<br><span class="muted" style="font-size:11px">auto-send gave up: send by hand</span>':(w.autoSendAt?`<br><span class="muted" style="font-size:11px">auto-send at ${esc(new Date(w.autoSendAt).toLocaleTimeString([], {hour12:false}))}</span>`:'<br><span class="muted" style="font-size:11px">auto-send soon</span>')):''}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
+    <td>${witStatusPill(w)}${w.status==='pending'&&_witAuto?(w.autoHold?'<br><span class="muted" style="font-size:11px">auto-send gave up: send by hand</span>':(_witAutoLimit&&w.amount>_witAutoLimit)?'<br><span class="muted" style="font-size:11px">over the automatic limit: send by hand</span>':(w.autoSendAt?`<br><span class="muted" style="font-size:11px">auto-send at ${esc(new Date(w.autoSendAt).toLocaleTimeString([], {hour12:false}))}</span>`:'<br><span class="muted" style="font-size:11px">auto-send soon</span>')):''}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">${_witManualPayouts?'Mark as paid':'Send via '+PROVIDER_LABEL[normalizeProv(_witProvider)]}</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       // subagent-audit-caught: 'sending' (MarzPay network-errored mid-send,
@@ -2070,7 +2070,7 @@ function drawWits(){
     if(e.target.closest('button')) return;
     openUser(tr.dataset.uid);
   }));
-  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm(_witManualPayouts?'Only do this AFTER you have actually sent the money from an admin phone to the number on this row.\n\nThis records the payout as paid and closes it. It does not send anything.':`Send this payout through ${PROVIDER_LABEL[normalizeProv(_witProvider)]} now?`))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm(_witManualPayouts?'Only do this AFTER you have actually sent the money from an admin phone to the number on this row.\n\nThis records the payout as paid and closes it. It does not send anything.':`Send this payout through ${PROVIDER_LABEL[normalizeProv(_witProvider)]} now?`))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc, expectManual:!!_witManualPayouts}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation();
     // subagent-audit-caught: the same generic funds-refunded prompt fired for
     // a 'sending' row (MarzPay/PesaJet network-errored mid-payout, genuinely
@@ -2094,7 +2094,7 @@ async function quietRefreshWithdrawals(){
   if(staleTab('withdrawals') || !$('witRows')) return;
   if(r.status!=='success') return;
   _wits = r.withdrawals||[];
-  _witProvider = r.payoutMode || 'marzpay'; _witAuto = !!r.autoWithdrawals;
+  _witProvider = r.payoutMode || 'marzpay'; _witAuto = !!r.autoWithdrawals; _witAutoLimit = Number(r.autoLimit)||0;
   _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an

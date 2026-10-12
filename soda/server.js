@@ -2639,7 +2639,7 @@ async function pesajetDisburse(opts) { return pesajetCreate({ ...opts, type: 'DI
 // and our own reference is matched here. Inventing a seventh parameter would
 // be the same mistake as inventing a balance path.
 const PESAJET_FIND_LIMIT = 100;   // rows per page asked for
-const PESAJET_FIND_PAGES = 3;     // at most 300 rows scanned per lookup
+const PESAJET_FIND_PAGES = 4;     // at most 400 rows scanned per lookup
 // How the reconciler rations those lookups. A lookup costs up to three calls,
 // so a handful per 30s tick; younger than the minimum age the member's own
 // status poll owns the row, and older than the window there is nothing left
@@ -2675,9 +2675,9 @@ async function pesajetFindByReference(reference, { sinceMs } = {}) {
     if (hit) return { found: true, complete: true, providerDown: false,
                       transactionId: hit.transactionId || null,
                       status: String(hit.status || '').toLowerCase() };
-    // A short page is the end of the window. That -- and only that -- means
-    // we have now seen everything there is to see.
-    if (rows.length < PESAJET_FIND_LIMIT) return { found: false, complete: true, providerDown: false };
+    // Only an EMPTY page proves the window was fully seen. A short page used to be taken as the end, but if PesaJet caps `limit` below what we
+    // ask for, page 1 looks short while more rows exist, and "not found" would then license failing a deposit that was really paid.
+    if (rows.length === 0) return { found: false, complete: true, providerDown: false };
   }
   return { found: false, complete: false, providerDown: false };
 }
@@ -5711,6 +5711,10 @@ app.post('/admin/withdraw/process', async (req, res) => {
   // literal string 'owner' regardless of which real staff account actually
   // clicked Send, so the "processed by X" line the admin UI already shows
   // was never telling the truth once more than one admin existed.
+  // The panel says which mode it is showing ("Send via PesaJet" or "Mark as paid"). If the owner switched mode since, the label is stale and the
+  // click would do the opposite of what it says (record a payout as paid without sending, or send when the person meant to record).
+  if (typeof req.body.expectManual === 'boolean' && req.body.expectManual !== payoutIsManual(await getSettings()))
+    return res.status(409).json({ status: 'error', message: 'The payment mode was changed. Refresh the Withdrawals page and try again.' });
   const result = await processWithdrawalCore(withdrawalId, req.adminUser?.username || 'owner');
   if (result.code === 200) logAdminAction(req, 'withdrawal_processed', { withdrawalId, ...result.meta });
   res.status(result.code).json(result.body);
@@ -5795,6 +5799,11 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     // because it invites a reject that refunds the member on top of real
     // money.
     if (w.pesajetRef) {
+      if (!w.pesajetTxId) {
+        // The id was never saved: look the payout up by OUR reference. Found = remember its id and carry on with the normal check below.
+        const f = await pesajetFindByReference(w.pesajetRef, { sinceMs: tsMillis(w.createdAt) }).catch(() => null);
+        if (f && f.found && f.transactionId) { w.pesajetTxId = f.transactionId; await snap.ref.update({ pesajetTxId: f.transactionId }).catch(() => {}); }
+      }
       if (!w.pesajetTxId) {
         return res.json({
           status: 'success', ourStatus: w.status, marzStatus: 'unverifiable',
@@ -8302,9 +8311,41 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     // Subagent-audit-caught: same missing-truncated-flag gap as the deposits
     // list above, fixed the same way.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett), autoWithdrawals: !!sett.autoApproveWithdrawalsEnabled && !payoutIsManual(sett), truncated, regionKey: want || 'all' });
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett), autoWithdrawals: !!sett.autoApproveWithdrawalsEnabled && !payoutIsManual(sett), autoLimit: Number(sett.autoApproveMaxAmount) || 0, truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Reject refunds the member, so it must never run on a payout that may be live at the gateway. Pending rows were never sent. For every other row the
+// gateway is asked first (PesaJet by transaction id, or by our reference when the id was never recorded; MarzPay by uuid or bank-transfer reference).
+// Only a final failed/expired answer, or PesaJet reporting that it has no such payment at all, allows the refund.
+async function payoutRejectGuard(witId, w) {
+  if (w.status === 'pending') return null;
+  const busy = (what) => ({ code: 503, message: `${what} could not be reached to confirm this payout. Try again in a moment.` });
+  const live = (what, st) => ({ code: 409, message: `${what} reports this payout as ${st || 'unknown'}, so it cannot be rejected. Wait for the final result.` });
+  const FINAL_FAIL = ['failed', 'expired', 'cancelled', 'canceled', 'declined'];
+  if (w.pesajetTxId || w.pesajetRef) {
+    if (w.pesajetTxId) {
+      const t = await pesajetGetTx(w.pesajetTxId);
+      if (t.providerDown) return busy('PesaJet');
+      if (!t.notFound && !FINAL_FAIL.includes(t.status)) return live('PesaJet', t.status);
+      return null;
+    }
+    const f = await pesajetFindByReference(w.pesajetRef, { sinceMs: tsMillis(w.createdAt) });
+    if (f.providerDown || (!f.found && !f.complete)) return { code: 503, message: 'PesaJet could not confirm whether this payout was sent (no transaction id was saved). Try again in a moment, or check PesaJet\'s own dashboard first.' };
+    if (f.found && !FINAL_FAIL.includes(f.status)) return live('PesaJet', f.status);
+    return null;
+  }
+  if (w.isBankTransfer && w.marzReference) {
+    const st = await marzGetBankTransferStatus(w.marzReference);
+    if (!st) return busy('MarzPay');
+    return FAILED_STATUSES.has(st) ? null : live('MarzPay', st);
+  }
+  if (w.marzTxUuid) {
+    const st = await marzGetSendStatus(w.marzTxUuid);
+    if (!st) return busy('MarzPay');
+    return FAILED_STATUSES.has(st) ? null : live('MarzPay', st);
+  }
+  return null;
+}
 app.post('/admin/withdraw/reject', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const witId = String(req.body.withdrawalId || '');
@@ -8328,13 +8369,9 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     // sent -- if MarzPay's dashboard shows it WAS sent, take no action here
     // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
-    // A payout PesaJet already has must be asked about first: rejecting (= refunding) a payout that then completes would pay the member twice.
-    if (w.pesajetTxId && w.status !== 'pending') {
-      const live = await pesajetGetTx(w.pesajetTxId);
-      if (live.providerDown) return res.status(503).json({ status: 'error', message: 'PesaJet could not be reached to confirm this payout. Try again in a moment.' });
-      if (!live.notFound && !['failed', 'expired', 'cancelled', 'canceled', 'declined'].includes(live.status))
-        return res.status(409).json({ status: 'error', message: `PesaJet reports this payout as ${live.status || 'unknown'}, so it cannot be rejected. Wait for the final result.` });
-    }
+    // A payout the gateway may already have must be asked about first: rejecting (= refunding) a payout that then completes pays the member twice.
+    const blocked = await payoutRejectGuard(witId, w);
+    if (blocked) return res.status(blocked.code).json({ status: 'error', message: blocked.message });
     const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, stripHtml(textOf(req.body.reason)).slice(0, 200) || 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
     if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied. Refresh and try again.' });
     await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
@@ -9739,8 +9776,29 @@ async function migratePayoutsToMidnightOnce() {
   await marker.set({ at: new Date(), moved: n });
   return n;
 }
+// A MarzPay payment that never got a gateway id (the start reply was lost, or the server restarted during it) has nothing to poll. If no webhook
+// settled it within 30 minutes it is parked as 'review' so it shows in the admin Deposits list (Needs Review) for a person to check at MarzPay and
+// Force-credit; it is never marked failed here, because the member may have paid.
+const LOST_MARZ_REVIEW_AFTER_MS = 30 * 60 * 1000;
+async function parkLostMarzDeposits() {
+  const cutoff = new Date(Date.now() - LOST_MARZ_REVIEW_AFTER_MS);
+  const snap = await db.collection('pendingDeposits').where('status', 'in', ['initiating', 'pending']).where('createdAt', '<=', cutoff).orderBy('createdAt', 'asc').limit(50).get();
+  for (const doc of snap.docs) {
+    const d = doc.data();
+    if (d.provider === 'pesajet' || d.marzTxUuid || d.pesajetTxId || d.method === 'manual') continue;
+    await withLock('dep:' + doc.id, async () => {
+      const fresh = await doc.ref.get();
+      const f = fresh.exists ? fresh.data() : null;
+      if (!f || !['initiating', 'pending'].includes(f.status) || f.marzTxUuid) return;
+      await doc.ref.update({ status: 'review', reviewReason: 'No confirmation from MarzPay reached us. Check MarzPay; Force-credit only if it was paid.' });
+    }).catch(() => {});
+  }
+}
+let _reconcilerRunning = false;
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileStuckWithdrawalRefunds).then(reconcileCommissions).catch(() => {});
+  if (_reconcilerRunning) return;   // a slow gateway must not let passes pile up on top of each other
+  _reconcilerRunning = true;
+  reconcilePendingDeposits().then(parkLostMarzDeposits).then(reconcilePendingWithdrawals).then(reconcileStuckWithdrawalRefunds).then(reconcileCommissions).catch(() => {}).finally(() => { _reconcilerRunning = false; });
 }
 // AUTOMATIC WITHDRAWALS. Owner-toggleable (Admin > Settings): while ON, every still-pending withdrawal is sent by the server after its OWN random
 // wait of autoApproveMinSec..autoApproveMaxSec seconds. The wait is picked once per withdrawal and written on it (autoSendAt), so a restart does not

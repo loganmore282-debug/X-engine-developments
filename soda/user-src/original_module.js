@@ -1153,6 +1153,7 @@ var _memberSession = window.createSodaIdleSession('soda_member_session', functio
   window._triedAutoSignIn = true;
   document.querySelectorAll('.sheet-bg.show,.modal-bg.show,.pay-page.show,#msgDetailBg.show').forEach(el => el.classList.remove('show'));
   unlockBodyScroll();
+  resetOverlayState();
   hideLoadingScreen();
   $('app').style.display = 'none';
   $('authScreen').style.display = '';
@@ -1646,6 +1647,7 @@ async function performMemberLogout(opts){
     return fetch(API_BASE + '/auth/session/logout', { method:'POST', headers:{Authorization:'Bearer ' + token}, signal: ac.signal });
   }).catch(() => {});
   _memberSession.clear();
+  resetOverlayState();
   window._triedAutoSignIn = true;
   if (!auto) { try { sessionStorage.setItem('soda_relogin_required', '1'); } catch (_) {} }
   // Signing out always lands on Login, even when this visitor last used Sign Up.
@@ -4254,7 +4256,7 @@ window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
   // Good news gets the tick, everything else (errors and "please do this first")
   // the circled cross, as in the screens.
-  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong/i.test(String(message || ''));
+  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|status changed|bind it|add a payout/i.test(String(message || ''));
   const ic = $('notifyIc');
   if (ic) { ic.innerHTML = good ? VI.okCircle : VI.errCircle; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
@@ -4698,6 +4700,7 @@ function isAnyOverlayOpen(){
     // The announcement dialog itself, now that it's real again -- so a
     // second trigger (e.g. Withdraw closing right after Deposit already
     // opened it) can't stack a second announcement on top of the first.
+    || ($('depStatusBg') && $('depStatusBg').classList.contains('show'))
     || ($('annBg') && $('annBg').classList.contains('show')));
 }
 // Owner: "when you logout and login again, the system freezes and no
@@ -4819,6 +4822,11 @@ function anyDialogOpen(){
     || ($('annBg') && $('annBg').classList.contains('show')));
 }
 function _dlgIgnore(){ _dlgIgnorePop = true; setTimeout(() => { _dlgIgnorePop = false; }, 700); }
+function resetOverlayState(){
+  document.body.classList.remove('deposit-status-open', 'sheet-open');
+  _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
+  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
+}
 function dlgOpened(){
   if (_dlgCleanTimer) { clearTimeout(_dlgCleanTimer); _dlgCleanTimer = null; }
   if (history.state && history.state.dlg) history.replaceState({ dlg: 1 }, '', '');
@@ -4840,6 +4848,12 @@ function closeTopDialog(){
     else if ($('helpBg') && $('helpBg').classList.contains('show')) closeHelpDialog();
     else if ($('confirmBg') && $('confirmBg').classList.contains('show')) closeConfirm();
     else if ($('annBg') && $('annBg').classList.contains('show')) closeAnnouncement();
+    else if ($('depStatusBg') && $('depStatusBg').classList.contains('show')) {
+      // The payment status page: Back closes it once it has an answer (its Close button is showing). While the payment is still being
+      // checked Back stays on the page (a real operation is in flight, as the page's own comment says), instead of walking out of the app.
+      const cb = $('depStatusCloseBtn');
+      if (cb && cb.style.display === 'block') closeDepositStatusModal(); else dlgOpened();
+    }
   } finally { _dlgFromPop = false; }
 }
 // A tap on the edge of a text box (its padding or the currency sign beside the figure) focuses the box's input too.
@@ -4939,7 +4953,7 @@ function openDepositFormSheet(){
   openSheet('Deposit', `<div class="v-form">
     <div class="v-sec"><span class="bar"></span><h2>Select Amount</h2></div>
     <div class="v-chips" id="depChips">${depositChipsHtml(s, 'depAmount')}</div>
-    <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="syncDepositQuickAmt()" autocomplete="off">
+    <input class="v-amount" id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="${min || ''}" oninput="this.value=this.value.replace(/[\s,]/g,'');syncDepositQuickAmt()" autocomplete="off">
     <input class="v-phone-in" id="depPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Phone Number" value="${esc(defaultPhone)}" oninput="sanitizePhoneInput(this)">
     <div class="v-sec"><span class="bar"></span><h2>Select Payment Method</h2></div>
     <div class="v-pays" id="depPays">
@@ -5081,8 +5095,13 @@ window.openDepositStatusModal = function(amount, phone, network){
   $('depStatusBg').classList.add('show');
   document.body.classList.add('deposit-status-open');
   lockBodyScroll();
+  // Back closes this page (see closeTopDialog) instead of leaving the app. When the deposit sheet's own history entry is still being
+  // taken away (closeSheet called history.back() a moment ago), the popstate for that does the push (closeTopDialog); pushing here too
+  // would be popped by that same back() and leave a stale sheet entry behind. A timer makes sure an entry exists either way.
+  if (!(history.state && history.state.sheet)) dlgOpened();
+  setTimeout(() => { if ($('depStatusBg') && $('depStatusBg').classList.contains('show') && !(history.state && history.state.dlg)) dlgOpened(); }, 700);
 };
-window.closeDepositStatusModal = function(){
+window.closeDepositStatusModal = function(goHome){
   // Cancels the success screen's own auto-redirect countdown if the member
   // taps Close/Back before it fires on its own -- otherwise the timer would
   // still be alive and try to close (or navigate) a modal that is already
@@ -5091,6 +5110,8 @@ window.closeDepositStatusModal = function(){
   $('depStatusBg').classList.remove('show');
   document.body.classList.remove('deposit-status-open');
   unlockBodyScroll();
+  dlgClosed();
+  if (goHome === true && STATE.page !== 'home') { try { navigatePage('home'); } catch (_) {} }
 };
 // ── ONE STATUS REQUEST AT A TIME ──
 // Owner: "add a button saying verify, so one can tap it but it should not
@@ -5161,7 +5182,7 @@ async function applyDepositStatusResult(r){
 function setDepButtons(showVerify, showClose){
   const v = $('depVerifyBtn'), c = $('depStatusCloseBtn');
   if (v) { v.style.display = showVerify ? 'block' : 'none'; v.disabled = false; v.textContent = 'Verify'; }
-  if (c) c.style.display = showClose ? 'block' : 'none';
+  if (c) { c.style.display = showClose ? 'block' : 'none'; c.setAttribute('onclick', 'closeDepositStatusModal(' + (c.textContent === 'Back to Home') + ')'); }
 }
 window.verifyDepositNow = async function(){
   const btn = $('depVerifyBtn');
@@ -5179,6 +5200,7 @@ window.verifyDepositNow = async function(){
   }, DEP_VERIFY_COOLDOWN_MS);
 };
 function setDepositStatusPending(amount, phone, network){
+  if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }   // an old success countdown must not close this new page
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = DEPOSIT_POLL_FLOW;
   $('depStatusTitle').textContent = 'Processing your deposit';
@@ -5263,14 +5285,14 @@ function setDepositStatusSuccess(){
     if (el) el.textContent = 'Returning to Home in ' + secondsLeft + '…';
     if (secondsLeft <= 0) {
       if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
-      closeDepositStatusModal();
+      closeDepositStatusModal(true);
       return;
     }
     secondsLeft--;
   };
   if (_depSuccessRedirectTimer) clearInterval(_depSuccessRedirectTimer);
   tick();
-  _depSuccessRedirectTimer = setInterval(tick, 1000);
+  _depSuccessRedirectTimer = setInterval(() => { if (!document.hidden) tick(); }, 1000);   // the countdown waits while the app is in the background
 }
 function setDepositStatusFailed(msg){
   $('depStatusIcon').className = 'dep-status-icon failed';
@@ -5414,7 +5436,20 @@ async function pollDepositStatus(depositId){
   // Ending the loop is the autopoll giving up on its own ~60s budget, not the
   // payment being over -- _depPollDone stays false on purpose so Verify keeps
   // working on this deposit afterwards.
-  if (!_depPollDone) setDepositStatusUnknown();
+  if (!_depPollDone) { setDepositStatusUnknown(); slowDepositWatch(depositId); }
+}
+// The fast poll gives up after 70 s but the server keeps watching a payment for 2 minutes and the reconciler for longer: keep asking every few
+// seconds for 3 more minutes so a payment approved late still turns the page into its result (Success or Failed) instead of staying on "Still waiting".
+async function slowDepositWatch(depositId){
+  const until = Date.now() + 180000;
+  while (Date.now() < until) {
+    await new Promise(r => setTimeout(r, 4000));
+    if (_depPollDone || _depActiveDepositId !== depositId) return;
+    if (!$('depStatusBg') || !$('depStatusBg').classList.contains('show')) continue;
+    const r = await depositStatusHold(depositId);
+    if (_depPollDone || _depActiveDepositId !== depositId) return;
+    if (await applyDepositStatusResult(r)) return;
+  }
 }
 
 // Cache-first: STATE.bankAccounts is prefetched at login. Deliberately does
@@ -5507,7 +5542,7 @@ function paintWithdrawSheet(s){
   const perDay = Number(s.maxWithdrawalsPerDay) || 0;
   $('sheetBody').innerHTML = `<div class="v-form">
     <div class="v-bal"><span>AVAILABLE BALANCE</span><b>${esc(vMoney2(balance))}</b></div>
-    <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="syncWithdrawReceiveAmt()" autocomplete="off"></div>
+    <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
     <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
     <div class="v-sec"><span class="bar"></span><h2>Trade Password</h2></div>
