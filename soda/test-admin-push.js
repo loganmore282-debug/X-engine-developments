@@ -107,7 +107,7 @@ async function serverTests() {
   eq(t.sent.flat().map(m => m.token), ['live'], 'a rotated (retired) token gets no alert, so no duplicates');
   await sleep(10); eq([...t.db.store.get('adminPushTokens').keys()].sort(), ['live', 'retiredNow'], 'a retired token past its grace is purged');
   // unregister: rotation retires, switching off deletes
-  const unregSrc = slice("app.post('/admin/push/unregister'", '// Real bug fixed: owner reported the SAME push notification');
+  const unregSrc = slice("app.post('/admin/push/unregister'", "app.get('/admin/settings'");
   async function unreg(body, seedTok) {
     const store = new Map([[seedTok, { role: 'owner' }]]); let handler; const app = { post: (p, h) => { if (p === '/admin/push/unregister') handler = h; } };
     const db = { collection: () => ({ doc: id => ({ get: async () => ({ exists: store.has(id) }), update: async d => { store.set(id, { ...store.get(id), ...d }); }, delete: async () => { store.delete(id); } }) }) };

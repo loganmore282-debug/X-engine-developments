@@ -12,7 +12,7 @@ const eq = (a, b, m) => { checks++; assert.deepEqual(JSON.parse(JSON.stringify(a
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const cut = (a, b) => { const i = src.indexOf(a), j = src.indexOf(b, i + 1); assert.ok(i > 0 && j > i, 'markers ' + a); return src.slice(i, j); };
 
-const routeSrc = cut("app.post('/admin/user/grant-asset'", "// Rebuilds one user's totalDeposited");
+const routeSrc = cut("app.post('/admin/user/grant-asset'", "app.post('/admin/user/repair-wallet'");
 const lockSrc = cut('function withLock(key, fn) {', 'const _userBeingDeleted');
 
 function setup({ users, products }) {

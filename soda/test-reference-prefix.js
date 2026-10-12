@@ -11,7 +11,6 @@ ok(/referencePrefix: 'S'/.test(src), 'the default stays S, so nothing changes un
 ok(/stampRef\(letter\)[\s\S]{0,200}letter \+ d\.getUTCFullYear/.test(src), 'the reference is still prefix + date/time + 4 random digits');
 ok(src.includes("const ref = await uniqueRef(await mobileMoneyRefPrefix());\n    const marzReference"), 'new mobile-money recharges use the chosen start');
 ok(src.includes("const ref = await uniqueRef(await mobileMoneyRefPrefix());\n    // This adapter has no real multi-document rollback."), 'new withdrawals use the chosen start');
-ok(src.includes("uniqueRef('U')") && src.includes("uniqueRef('C')"), 'USDT (U) and card (C) references keep their own letters');
 ok(/'referencePrefix' in updates[\s\S]{0,400}status\(400\)/.test(src), 'the settings save refuses an invalid start');
 ok(/id="sRefPrefix"/.test(admin) && /referencePrefix:\$\('sRefPrefix'\)\.value\.trim\(\)/.test(admin), 'the admin panel has the field and sends it');
 console.log(`PASS: payment reference start is owner-editable (${n} checks)`);

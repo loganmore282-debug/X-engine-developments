@@ -57,6 +57,6 @@ function fn(name) { let s = src.indexOf('async function ' + name + '('); if (s <
 
   // 3. sweep
   const sweep = fn('sweepEphemeralState');
-  ok(/_usdtSubmitDebounce/.test(sweep) && /_cardSubmitDebounce/.test(sweep), 'USDT and card debounce maps are swept');
+  ok(/_depCreateDebounce/.test(sweep) && !/_usdtSubmitDebounce|_cardSubmitDebounce/.test(sweep), 'the deposit debounce map is swept and the removed USDT and card maps are gone');
   console.log(`PASS: payment review fixes (${checks} checks)`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

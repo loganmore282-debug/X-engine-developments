@@ -162,34 +162,9 @@ app.use('/admin/', async (req, _res, next) => {
 // '/turntable/spin' belongs here because it
 // pays real money on an unauthenticated-body POST, so it gets the strict
 // 60/min per-user cap rather than only the 400/min global one.
-['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/bank/delete',
- '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
- '/turntable/spin', '/auth/otp/send', '/auth/otp/verify', '/auth/reset/confirm']
+['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/register',
+ '/account/transaction-pin/change', '/redeem', '/turntable/spin']
   .forEach(p => app.use(p, apiLimiter));
-// Owner: "some people can deplete sms costs, so block too many requests of
-// otp requests I think 10 requests, the ip should be said too many
-// requests, not ip being banned." A real money risk, not just abuse --
-// every successful send is a real MarzSms charge (~30 UGX). The existing
-// otpDailyLimitReset/Bank caps (see DEFAULT_SETTINGS) are keyed
-// per PHONE NUMBER, so they do nothing against one source spamming SMS
-// requests across many DIFFERENT numbers -- apiLimiter's blanket 60/min
-// above already covers this route too, but 60 real sends a minute left
-// running is still a real bill. This is a tighter, SMS-cost-specific
-// ceiling stacked on top of it, IP-keyed by default (no rlKeyByUser
-// override) so it can't be evaded by claiming a fresh fake uid on an
-// unauthenticated 'register'/'reset' send the way apiLimiter's own
-// per-user keying could be. A plain temporary throttle, same "too many
-// requests, slow down" message convention every other limiter in this
-// file already uses -- never anything reading as a ban, which is exactly
-// what express-rate-limit's own window-based 429 already is: it clears
-// itself after windowMs, not a persistent block. Owner follow-up: window
-// widened from 1 minute to 5 -- same 10-request cap, just spread over a
-// longer stretch, so 10 sends can no longer be burned in the first minute
-// and then sit fully open for the rest of a longer session.
-const otpSendLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Please wait a moment and try again.' } });
-app.use('/auth/otp/send', otpSendLimiter);
-
 // ── BODY PARSING ──
 // A tight 64kb cap by default; admin routes that carry a base64 product
 // photo get the larger parser instead of loosening the limit for everything.
@@ -452,11 +427,9 @@ const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64-encoded credential
 const MARZ_TIMEOUT = 20000;
 // MarzSms -- a SEPARATE MarzPay product (its own dashboard/API keys at
 // sms.wearemarz.com, distinct from the wallet product MARZPAY_KEY above).
-// Used for the OTP verification codes sent on registration, password reset,
-// and adding a withdrawal bank/mobile-money account -- see the "OTP" section
-// below. Same "base64(api_key:api_secret)" Basic-auth convention as the
-// wallet API. MARZSMS_KEY is unset until the owner supplies it (a VPS
-// secret, never committed); every OTP send refuses cleanly until then.
+// Used for the admin's SMS alerts (see marzSmsSend below). Same "base64(api_key:api_secret)" Basic-auth
+// convention as the wallet API. MARZSMS_KEY is unset until the owner supplies it (a VPS
+// secret, never committed); every send refuses cleanly until then.
 const MARZSMS_BASE = 'https://sms.wearemarz.com/api/v1';
 const MARZSMS_KEY  = process.env.MARZSMS_KEY || '';
 
@@ -672,18 +645,6 @@ const DEFAULT_SETTINGS = {
   // for the actual server-side enforcement.
   openingCountdownEnabled: false, openingCountdownAt: 0,
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
-  // Owner: "remove otp on withdrawal bank account... it should be
-  // optional" -- OTP-verifying a member's OWN phone before they can add a
-  // payout destination was previously unconditional (see /bank/save).
-  // Default OFF now; an owner who wants that extra step back can switch it
-  // on here.
-  bankOtpRequired: false,
-  // Owner: "when I disable otp verification system the functions go away
-  // completely" -- one master switch, separate from bankOtpRequired above.
-  // Default ON for payout-account verification. Registration uses the
-  // screenshot fields and no longer requests an OTP. Reset Password always
-  // requires its code; disabling this switch turns off payout-account codes.
-  otpVerificationEnabled: true,
   // The hours withdraw is open. Owner: "one withdrawal time should be
   // SETTABLE IN ADMIN, such that when one tries to withdrawal he sees, that
   // withdrawals start from this time to this time, nothing much ie 6pm to
@@ -770,25 +731,6 @@ const DEFAULT_SETTINGS = {
   // above, deliberately left untouched. Resolved by withdrawProvider()/
   // payoutIsManual() -- never read this field raw.
   withdrawMethod: 'follow',
-  // ── OTP (SMS one-time codes via MarzSms) ──
-  // Used by password reset and payout-account verification. Daily limits
-  // are per phone; 0 means send none, not unlimited.
-  otpDailyLimitReset: 3, otpDailyLimitBank: 2,
-  // ── USDT (TRC20) DEPOSIT ── a third deposit rail alongside the automatic
-  // MarzPay mobile-money flow (untouched by this) -- see the "USDT (TRC20)
-  // DEPOSIT" section below /deposit/marzpay/status for the actual route.
-  // Off by default; the app only shows the option once an owner turns it
-  // on with a real wallet address and rate set.
-  usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0,
-  // ── CARD DEPOSIT (MarzPay) ── a fourth deposit rail. Uses the SAME
-  // MarzPay account/API key as mobile money above regardless of which
-  // gateway (MarzPay or PesaJet) is picked for mobile-money deposits --
-  // card payments are a MarzPay-only product, so this always goes through
-  // MarzPay even when depositMethod is 'pesajet'. Off by default: the
-  // owner's MarzPay business needs an active Card Payments subscription
-  // before this can work at all (MarzPay refuses with SERVICE_NOT_SUBSCRIBED
-  // otherwise), so it must not turn itself on.
-  cardDepositEnabled: false,
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
 // user-src/original_module.js (the client-side fallback-stack lookup) and
@@ -1163,20 +1105,6 @@ async function getAboutContent() {
   _aboutCacheTs = Date.now();
   return _aboutCache;
 }
-// The Rules and Regulations article is an independent, admin-authored list
-// of text/image blocks. Keep its images out of /public/settings so every app
-// boot does not download rules-page artwork that most members never open.
-let _rulesCache = null, _rulesCacheTs = 0;
-async function getRulesContent() {
-  if (Date.now() - _rulesCacheTs < 60 * 1000 && _rulesCache !== null) return _rulesCache;
-  try {
-    const snap = await db.collection('content').doc('rules').get();
-    _rulesCache = (snap.exists && Array.isArray(snap.data().blocks)) ? snap.data().blocks : null;
-  } catch (_) { _rulesCache = _rulesCache || null; }
-  _rulesCacheTs = Date.now();
-  return _rulesCache;
-}
-
 // ── HELPERS ──
 // Gift-code rewards carry cents (owner: "make gift codes to have decimal places
 // ie 647.72, 212.36 instead of whole number"): the random roll is made in whole
@@ -2229,26 +2157,6 @@ async function marzCollect({ amount, phone, reference, description, callbackUrl,
   });
   return _marzParse(resp);
 }
-// Card collection -- a different shape from marzMoneyBody() above: no
-// phone_number at all (the docs are explicit: "Do not send phone_number
-// for card payments"), and `method: 'card'` is what actually selects the
-// card gateway instead of a mobile-money push prompt. Funds land in a
-// SEPARATE card wallet on MarzPay's side (card_balance, not the main
-// balance) -- nothing in this app cares about that distinction, since a
-// member's own wallet credit here is always driven by our own
-// creditDeposit(), never by which MarzPay wallet the money sits in.
-async function marzCollectCard({ amount, reference, description, callbackUrl, region }) {
-  const market = marzMarket(region);
-  if (!market) return marzNoMarket(region);
-  const payload = { amount: Number(amount), method: 'card', country: market.code, reference, description: description || 'Card payment' };
-  if (callbackUrl) payload.callback_url = callbackUrl;
-  const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
-    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
-    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  return _marzParse(resp);
-}
 async function marzSendMoney({ amount, phone, reference, description, callbackUrl, region }) {
   const payload = marzMoneyBody({ amount, phone, reference, description, region });
   if (!payload) return marzNoMarket(region);
@@ -2457,111 +2365,6 @@ async function marzSmsSend(recipients, message) {
     await new Promise(r => setTimeout(r, 400));
     return attempt();
   }
-}
-// ── OTP (SMS one-time codes, via MarzSms above) ──
-// Owner: registration goes phone -> password -> confirm -> trade PIN;
-// login stays phone/password with a "forgot password" link that also uses
-// OTP; adding a withdrawal bank/mobile-money account requires OTP too (a
-// member's own phone re-verifying it's really them, not the new payout
-// number -- see /bank/save below, which resolves the phone from the
-// account on file, not from the request body).
-//
-// Three purposes, one shared table. A code is generated, hashed (never
-// stored in the clear -- same reasoning as a PIN or password), texted out,
-// and checked by /auth/otp/verify, which on success issues a short-lived
-// one-time `ticket`. The ticket -- not the raw code -- is what the
-// following step (register / reset / bank-save) actually consumes, so the
-// code itself is never seen again after the member types it once.
-const OTP_CODE_LENGTH = 6;
-const OTP_EXPIRES_MS = 10 * 60 * 1000;
-const OTP_TICKET_EXPIRES_MS = 15 * 60 * 1000;
-const OTP_MAX_ATTEMPTS = 5;
-const OTP_PURPOSES = new Set(['reset', 'bank']);
-const OTP_SETTINGS_FIELD = { reset: 'otpDailyLimitReset', bank: 'otpDailyLimitBank' };
-function generateOtpCode() {
-  return String(crypto.randomInt(0, 10 ** OTP_CODE_LENGTH)).padStart(OTP_CODE_LENGTH, '0');
-}
-// SMS costs real money (30 UGX each, per the owner) -- unlike most numeric
-// settings in this file, 0 here means "send none", not "no limit". A stray
-// 0 must fail closed.
-async function otpDailyLimit(purpose, sett) {
-  const s = sett || await getSettings();
-  return Math.max(0, Number(s[OTP_SETTINGS_FIELD[purpose]]) || 0);
-}
-// Atomic per phone+purpose+day counter. withLock is enough (not a Mongo
-// transaction) because ecosystem.config.js pins this process to a single
-// instance -- the same money-safety assumption every other counter in this
-// file already relies on (see withLock's own header comment).
-// Resolves to the day key the send was counted against (so a refund hits the
-// same day even if midnight passes mid-request), or false when refused.
-async function otpCheckAndBumpDailyLimit(phone, purpose) {
-  const day = eatDayKey(new Date());
-  const limit = await otpDailyLimit(purpose);
-  return withLock('otp-limit:' + phone + ':' + purpose, async () => {
-    if (limit <= 0) return false;
-    const ref = db.collection('otpSendLog').doc(`${phone}:${purpose}:${day}`);
-    const snap = await ref.get();
-    const count = snap.exists ? (Number(snap.data().count) || 0) : 0;
-    if (count >= limit) return false;
-    await ref.set({ phone, purpose, day, count: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return day;
-  });
-}
-// A text that could not be sent was never delivered, so it must not use up
-// one of the member's few daily codes (the registration default is 2 -- two
-// provider hiccups would otherwise lock a real member out until tomorrow).
-async function otpRefundDailyLimit(phone, purpose, day) {
-  try {
-    await withLock('otp-limit:' + phone + ':' + purpose, async () => {
-      await db.collection('otpSendLog').doc(`${phone}:${purpose}:${day}`)
-        .set({ count: FieldValue.increment(-1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    });
-  } catch (e) { console.error('OTP quota refund failed:', e.message); }
-}
-// The text itself: code first, so a lock-screen preview shows it without
-// opening the message. The optional last line ("@host #code") is the format
-// Android Chrome's WebOTP API reads to offer the code to the page that
-// requested it -- only added when the caller's origin is one of our own
-// https app origins, so it can never point a browser at somebody else's host.
-function otpOriginHost(req) {
-  try {
-    const o = new URL(String(req.headers.origin || ''));
-    if (o.protocol !== 'https:' || o.port) return '';
-    const h = o.hostname.toLowerCase();
-    if (CORS_ALLOWED_ORIGINS.has(o.origin) || corsHostAllowed(h)) return h;
-  } catch (_) {}
-  return '';
-}
-function otpSmsText(code, sett, req) {
-  const brand = String((sett && sett.brandName) || 'Soda').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 20) || 'Soda';
-  const host = otpOriginHost(req);
-  return `${code} is your ${brand} verification code. It expires in 10 minutes. Never share it with anyone.` +
-    (host ? `\n\n@${host} #${code}` : '');
-}
-// Looks the code up by its ticket (not by the otpCodes doc id, which the
-// caller of /auth/otp/verify never learns), and only ever consumes it once:
-// updateIf's conditional match is a single atomic Mongo call, so two
-// requests racing on the same ticket cannot both succeed (see updateIf's
-// own comment in db.js -- the identical pattern this file already uses for
-// creditedDepositIds/refundedWithdrawalIds).
-async function consumeOtpTicket(ticket, phone, purpose, registrationUserId) {
-  if (!ticket || !phone) return false;
-  const snap = await db.collection('otpCodes').where('ticket', '==', ticket).limit(1).get();
-  if (snap.empty) return false;
-  const ref = snap.docs[0].ref;
-  return withLock('otp:' + ref.id, async () => {
-    const fresh = await ref.get();
-    if (!fresh.exists) return false;
-    const o = fresh.data(), now = Date.now();
-    if (o.ticket !== ticket || !o.verified || o.phone !== phone || o.purpose !== purpose || !(tsMillis(o.ticketExpiresAt) > now)) return false;
-    // A failed referral validation may retry only this same registration.
-    // Reset and payout tickets remain strictly single-use.
-    if (o.consumedAt) return purpose === 'register' && !!registrationUserId && o.registrationUserId === registrationUserId;
-    return ref.updateIf({ ticket, consumedAt: null, verified: true, ticketExpiresAt: { $gt: new Date(now) } }, {
-      consumedAt: FieldValue.serverTimestamp(),
-      ...(purpose === 'register' && registrationUserId ? { registrationUserId } : {})
-    });
-  });
 }
 function _marzExtractTx(d) {
   const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
@@ -3864,10 +3667,6 @@ function serveBrandAsset(slot) {
 }
 app.get('/public/app-icon-512.png', serveBrandAsset('app-icon-512'));
 app.get('/public/app-icon-192.png', serveBrandAsset('app-icon-192'));
-app.get('/public/help-banner', async (_req, res) => {
-  try { res.json({ status: 'success', image: await getHelpBanner() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
 // Prefetched in boot()'s own Promise.all alongside /public/banner, so it's
 // ready with zero added visible latency by the time the announcement dialog
 // itself checks STATE.settings and decides to show (same reasoning as the
@@ -3916,11 +3715,6 @@ app.get('/public/about-content', async (_req, res) => {
   try { res.json({ status: 'success', blocks: await getAboutContent() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.get('/public/rules-content', async (_req, res) => {
-  try { res.json({ status: 'success', blocks: await getRulesContent() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-
 // ═══════════════════════════════════════════
 // REGISTRATION / ACCOUNT
 // ═══════════════════════════════════════════
@@ -3950,30 +3744,6 @@ function defaultProfileDoc(phone, regionKey) {
     createdAt: FieldValue.serverTimestamp()
   };
 }
-app.post('/account/create-profile', async (req, res) => {
-  const auth = await verifyAuthWithEmail(req);
-  if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = auth.uid;
-  const phone = auth.phone;
-  if (!phone) return res.status(400).json({ status: 'error', message: 'Sign in with your Soda phone account.' });
-  try {
-    // Locked on the same 'reg:'+userId key as registration itself -- an
-    // unconditional .set() here without the lock (the old behaviour) could
-    // race a concurrent /register and wipe a just-completed registration
-    // (registrationDone/walletBalance/referralCode) back to a fresh default
-    // doc. Re-checks existence AFTER acquiring the lock, not before.
-    await withLock('reg:' + userId, async () => {
-      const ref = db.collection('users').doc(userId);
-      const snap = await ref.get();
-      if (snap.exists) return;
-      await ref.set(defaultProfileDoc(phone));
-    });
-    res.json({ status: 'success' });
-  } catch (e) {
-    console.error('create-profile error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not create your profile' });
-  }
-});
 // Is there at least one fully registered member yet? Only ever asked to
 // decide whether a referral code CAN be required, so it latches: once a
 // member exists the answer can never go back to "no", and the query is never
@@ -4138,141 +3908,6 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     return { code: 200, body: { status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode, publicId: myPublicId } };
   });
 }
-// ── OTP endpoints ──
-// /auth/otp/send is deliberately reachable WITHOUT a Firebase session for
-// 'reset' -- a phone verifying itself while its owner cannot sign in -- is
-// exactly what OTP is for. 'bank' requires a session:
-// the phone texted is resolved from the caller's own account on file, never
-// from the request body, so a logged-in member cannot use this to spam an
-// arbitrary number.
-app.post('/auth/otp/send', async (req, res) => {
-  try {
-    const purpose = String(req.body.purpose || '');
-    if (!OTP_PURPOSES.has(purpose)) return res.status(400).json({ status: 'error', message: 'Invalid verification purpose' });
-    // The master switch turns off OTP requests for saving a payout account.
-    // Password reset keeps asking for a code regardless: it hands an existing
-    // account to whoever asks, and the code is the only proof it is them.
-    const sett = await getSettings();
-    if (sett.otpVerificationEnabled === false && purpose !== 'reset') {
-      return res.status(503).json({ status: 'error', code: 'OTP_DISABLED', message: 'Verification codes are turned off right now.' });
-    }
-    let phone;
-    if (purpose === 'bank') {
-      const userId = await verifyAuth(req);
-      if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-      const uSnap = await db.collection('users').doc(userId).get();
-      if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-      if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-      phone = cleanPhone(uSnap.data().phone || '');
-      if (!phone) return res.status(400).json({ status: 'error', message: 'Your account has no valid phone number on file. Contact support.' });
-    } else {
-      phone = cleanPhone(textOf(req.body.phone));
-      if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
-      const existing = purpose === 'reset'
-        ? await db.collection('users').where('phone', '==', phone).where('registrationDone', '==', true).limit(1).get()
-        : await db.collection('users').where('phone', '==', phone).limit(1).get();
-      // 'register' checks registrationDone specifically, not just any row --
-      // a Mongo profile can exist with registrationDone:false from an earlier
-      // attempt that crashed between Firebase account creation and finishing
-      // /register (the same "ghost account" doRegister()'s own comment
-      // already handles). Blocking THAT here would wrongly refuse a member
-      // simply retrying their own incomplete signup.
-      if (purpose === 'register' && existing.docs.some(d => d.data().registrationDone))
-        return res.status(400).json({ status: 'error', message: 'An account with this phone number already exists.' });
-      if (purpose === 'reset' && !existing.docs.some(d => d.data().registrationDone))
-        return res.status(400).json({ status: 'error', message: 'No account found with this phone number.' });
-    }
-    if (!MARZSMS_KEY) return res.status(503).json({ status: 'error', message: 'SMS verification is not available right now. Try again later.' });
-    const countedDay = await otpCheckAndBumpDailyLimit(phone, purpose);
-    if (!countedDay) return res.status(429).json({ status: 'error', message: 'Too many verification codes requested for this number today. Try again tomorrow.' });
-    const code = generateOtpCode();
-    const otpRef = db.collection('otpCodes').doc();
-    // The member cannot type the code before this response arrives, so the
-    // database write and the SMS hand-off do not need to run one after the
-    // other -- both start now and the response waits for whichever is slower
-    // instead of for their sum.
-    const [saved, sent] = await Promise.allSettled([
-      otpRef.set({
-        phone, purpose, codeHash: await scryptHashAsync(code), attempts: 0, verified: false,
-        ticket: null, ticketExpiresAt: null, consumedAt: null,
-        expiresAt: new Date(Date.now() + OTP_EXPIRES_MS), createdAt: FieldValue.serverTimestamp(),
-      }),
-      marzSmsSend(phone, otpSmsText(code, sett, req)),
-    ]);
-    if (sent.status === 'rejected') {
-      await otpRef.delete().catch(() => {});
-      await otpRefundDailyLimit(phone, purpose, countedDay);
-      throw sent.reason;
-    }
-    // The text went out but there is no record to check it against: the code
-    // is useless, so remove any partial row and ask for a fresh one. No
-    // refund here -- the SMS was really sent and really billed.
-    if (saved.status === 'rejected') {
-      await otpRef.delete().catch(() => {});
-      throw saved.reason;
-    }
-    res.json({ status: 'success', otpId: otpRef.id, expiresInSec: OTP_EXPIRES_MS / 1000 });
-  } catch (e) {
-    console.error('OTP send error:', e.message);
-    res.status(500).json({ status: 'error', message: 'We could not send the code just now. Please try again in a moment.' });
-  }
-});
-app.post('/auth/otp/verify', async (req, res) => {
-  try {
-    const otpId = String(req.body.otpId || '');
-    const code = String(req.body.code || '').trim();
-    if (!otpId || otpId.length > 100 || !/^\d{6}$/.test(code)) return res.status(400).json({ status: 'error', message: 'Enter the 6-digit verification code.' });
-    await withLock('otp:' + otpId, async () => {
-      const ref = db.collection('otpCodes').doc(otpId);
-      const snap = await ref.get();
-      if (!snap.exists) return res.status(400).json({ status: 'error', message: 'Invalid or expired code. Request a new one.' });
-      const o = snap.data(), now = Date.now();
-      if (o.consumedAt) return res.status(400).json({ status: 'error', message: 'This code has already been used.' });
-      if (!(tsMillis(o.expiresAt) > now)) return res.status(400).json({ status: 'error', message: 'This code has expired. Request a new one.' });
-      if ((o.attempts || 0) >= OTP_MAX_ATTEMPTS) return res.status(429).json({ status: 'error', message: 'Too many incorrect attempts. Request a new code.' });
-      // Reserve an attempt atomically before checking the hash.
-      const attempted = await ref.updateIf({ consumedAt: null, attempts: { $lt: OTP_MAX_ATTEMPTS } }, { attempts: FieldValue.increment(1) });
-      if (!attempted) return res.status(429).json({ status: 'error', message: 'Code unavailable. Request a new code.' });
-      if (!(await scryptVerifyAsync(code, o.codeHash))) return res.status(400).json({ status: 'error', message: 'Incorrect code.' });
-      if (o.verified && o.ticket && tsMillis(o.ticketExpiresAt) > now)
-        return res.json({ status: 'success', ticket: o.ticket, expiresInSec: Math.ceil((tsMillis(o.ticketExpiresAt) - now) / 1000) });
-      const ticket = crypto.randomUUID();
-      const stored = await ref.updateIf({ consumedAt: null, ticket: o.ticket || null }, { verified: true, ticket, ticketExpiresAt: new Date(now + OTP_TICKET_EXPIRES_MS) });
-      if (!stored) return res.status(409).json({ status: 'error', message: 'Verification changed. Please try again.' });
-      res.json({ status: 'success', ticket, expiresInSec: OTP_TICKET_EXPIRES_MS / 1000 });
-    });
-  } catch (e) {
-    console.error('OTP verify error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not verify the code right now' });
-  }
-});
-// Forgot-password. No Firebase session -- the whole point is the member
-// cannot sign in. Identity is proven by the OTP ticket alone; the password
-// itself is changed via the Admin SDK, the same call
-// /admin/user/reset-password already uses, just self-served here once a
-// ticket backs it instead of an owner's say-so.
-app.post('/auth/reset/confirm', async (req, res) => {
-  try {
-    // Password reset always needs its OTP ticket (checked below), whatever the
-    // master OTP switch says -- see /auth/otp/send.
-    const phone = cleanPhone(textOf(req.body.phone));
-    if (!phone) return res.status(400).json({ status: 'error', message: badPhoneMessage() });
-    const newPassword = passwordOf(req.body.newPassword);
-    if (newPassword.length < MEMBER_PASSWORD_MIN) return res.status(400).json({ status: 'error', message: 'Password must be at least 10 characters.' });
-    if (weakPasswordReason(newPassword, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
-    const ticketOk = await consumeOtpTicket(String(req.body.ticket || ''), phone, 'reset');
-    if (!ticketOk) return res.status(400).json({ status: 'error', code: 'OTP_REQUIRED', message: 'Please verify your phone number first.' });
-    const uSnap = await db.collection('users').where('phone', '==', phone).where('registrationDone', '==', true).limit(1).get();
-    if (uSnap.empty) return res.status(404).json({ status: 'error', message: 'No account found with this phone number.' });
-    const userId = uSnap.docs[0].id;
-    await setMemberPassword(userId, newPassword);
-    logSecurityEvent(userId, 'password_reset_self_service', null);
-    res.json({ status: 'success', message: 'Password reset. You can now sign in.' });
-  } catch (e) {
-    console.error('Reset confirm error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not reset your password right now' });
-  }
-});
 app.post('/register', async (req, res) => {
   const auth = await verifyAuthWithEmail(req);
   if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -5295,523 +4930,6 @@ async function _creditDepositNow(depDoc, source) {
   } finally { _creditingDeposits.delete(depDoc.id); }
 }
 
-// ── USDT (TRC20) DEPOSIT ──
-// A third deposit rail alongside the automatic MarzPay mobile-money flow
-// above -- that flow (and its instant crediting) is completely untouched
-// by any of this. The member sends USDT to the admin's own wallet address
-// OUTSIDE this app, then submits the transaction hash here.
-//
-// Every claim is filed as 'awaiting_verification' first (a value nothing
-// else in this file's money logic switches on -- depositFullyCredited()
-// only ever checks for 'matched', so introducing a new pre-credit status
-// here is safe by construction). If TRONGRID_API_KEY is configured, a
-// background check against the real TRON blockchain (verifyUsdtTx below)
-// runs right after filing, and again on every 30s reconciler sweep for
-// anything still unresolved -- a clean, unambiguous match (right
-// contract, right destination address, amount at least what was claimed,
-// confirmed on-chain) auto-credits it via the exact same claim-before-
-// credit creditDeposit() every other deposit path on this platform uses,
-// so this never adds a second way to move money, only a second way to
-// DECIDE to. A conclusively wrong claim is declined through the same
-// markDepositFailed() every other deposit path uses too (Soda's own
-// hardened version -- locked, checks for a concurrent credit before
-// overwriting, flips the ledger row, zeroes displayAmount correctly --
-// not a bespoke status write). Anything inconclusive (no key configured,
-// TronGrid down, no match yet) is never rejected -- it just stays
-// awaiting_verification for the admin's own Approve (force-credit,
-// already exists)/Reject (new, below) in the Deposits tab.
-const TRONGRID_BASE = 'https://api.trongrid.io';
-const TRONGRID_API_KEY = process.env.TRONGRID_API_KEY || '';
-const TRONGRID_TIMEOUT = 15000;
-// The one, official USDT TRC20 contract on TRON mainnet -- matches the
-// "Contract Information ...jLj6t" every real TRC20 wallet shows on its own
-// Deposit USDT screen. Hardcoded (not admin-settable): accepting transfers
-// of a DIFFERENT token to the same address must never be treated as if it
-// were real USDT.
-const USDT_TRC20_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-// TRON/TRC20 addresses show up in at least three different textual forms
-// depending on which part of TronGrid's response they came from: base58check
-// ("T...", what every wallet app and our own settings field use), TRON hex
-// ("41" + 20-byte hash), or bare EVM-style hex ("0x" + 20-byte hash, the
-// same 20-byte hash TRON reuses from Ethereum's address derivation).
-// Comparing two addresses for equality only works if they're both reduced
-// to that shared 20-byte core first -- a naive direct string comparison
-// between a base58 address and TronGrid's hex-formatted event data would
-// NEVER match, silently making auto-verification never fire (safe, since
-// it just falls back to manual review either way, but pointless). Only the
-// DECODE direction is needed (never re-encode to base58), so this is a
-// plain big-integer base58 decode -- no external library required.
-const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-function base58Decode(str) {
-  let num = 0n;
-  for (const ch of str) {
-    const idx = BASE58_ALPHABET.indexOf(ch);
-    if (idx < 0) throw new Error('Invalid base58 character');
-    num = num * 58n + BigInt(idx);
-  }
-  let hex = num.toString(16);
-  if (hex.length % 2) hex = '0' + hex;
-  let leadingZeros = 0;
-  for (const ch of str) { if (ch === '1') leadingZeros++; else break; }
-  return '00'.repeat(leadingZeros) + hex;
-}
-function addrCore(addr) {
-  addr = String(addr || '').trim();
-  if (!addr) return '';
-  if (addr.startsWith('0x') || addr.startsWith('0X')) addr = addr.slice(2);
-  if (/^[0-9a-fA-F]+$/.test(addr) && addr.length >= 40) {
-    let hex = addr.toLowerCase();
-    if (hex.length === 42 && hex.startsWith('41')) hex = hex.slice(2);
-    return hex.length === 40 ? hex : '';
-  }
-  try {
-    let full = base58Decode(addr);
-    if (full.length < 50) full = full.padStart(50, '0');
-    const body = full.slice(0, full.length - 8); // strip the 4-byte (8 hex char) checksum
-    const core = body.length === 42 && body.startsWith('41') ? body.slice(2) : body;
-    return core.length === 40 ? core.toLowerCase() : '';
-  } catch (_) { return ''; }
-}
-// Distinguishes two very different kinds of "not verified":
-//   conclusive:true  -- the transaction WAS found confirmed on-chain, but it
-//                        plainly isn't a valid payment to us (wrong token,
-//                        wrong destination, or short of the claimed amount).
-//                        The blockchain itself proves this claim is wrong --
-//                        safe to decline immediately, no waiting needed.
-//   conclusive:false -- nothing usable came back yet (TronGrid has no record
-//                        of this txid at all, or the request itself failed).
-//                        This does NOT prove the claim is wrong -- a real
-//                        transaction can simply not have confirmed yet, or
-//                        TronGrid can be having a bad moment. Must be
-//                        retried, never declined outright.
-// opts (new-style claims, see /deposit/usdt/intent): { exactMicros, notBeforeMs }.
-// A claim made from a payment request must match its unique amount to the last
-// digit and must have been sent after the request was made -- that is what
-// stops one member claiming a payment another member sent (a TXID is public).
-// Older claims (no opts) keep the previous rule: at least the claimed amount.
-async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt, opts = {}) {
-  if (!TRONGRID_API_KEY) return { verified: false, conclusive: false, reason: 'TRONGRID_API_KEY not configured' };
-  if (!expectWalletAddress) return { verified: false, conclusive: false, reason: 'No receiving wallet address configured' };
-  try {
-    const resp = await fetch(`${TRONGRID_BASE}/v1/transactions/${txid}/events?only_confirmed=true`, {
-      signal: AbortSignal.timeout(TRONGRID_TIMEOUT),
-      headers: { 'TRON-PRO-API-KEY': TRONGRID_API_KEY }
-    });
-    if (!resp.ok) return { verified: false, conclusive: false, reason: `TronGrid HTTP ${resp.status}` };
-    const d = await resp.json().catch(() => null);
-    const events = d && Array.isArray(d.data) ? d.data : null;
-    if (!events) return { verified: false, conclusive: false, reason: 'Unexpected TronGrid response shape' };
-    if (events.length === 0) return { verified: false, conclusive: false, reason: 'Not confirmed on-chain yet' };
-    const expectCore = addrCore(expectWalletAddress);
-    const contractCore = addrCore(USDT_TRC20_CONTRACT);
-    const toUs = events.filter(e =>
-      e && e.event_name === 'Transfer' &&
-      addrCore(e.contract_address) === contractCore &&
-      e.result && addrCore(e.result.to) === expectCore && expectCore !== ''
-    );
-    // Something DID confirm under this txid, it just isn't a matching USDT
-    // payment to our wallet (wrong token, wrong recipient, or not a
-    // Transfer at all) -- the chain itself proves this one is wrong.
-    if (!toUs.length) return { verified: false, conclusive: true, reason: 'The confirmed transaction is not a matching USDT transfer to our wallet' };
-    const exact = opts.exactMicros != null ? BigInt(opts.exactMicros) : null;
-    let transfer = toUs[0];
-    if (exact !== null) {
-      const valueOf = e => { try { return BigInt(String(e.result.value)); } catch (_) { return null; } };
-      transfer = toUs.find(e => valueOf(e) === exact);
-      if (!transfer) return { verified: false, conclusive: true, reason: `The confirmed amount does not match the exact amount of this request (${usdtMicrosText(opts.exactMicros)} USDT). Start a new request and send exactly the amount shown.` };
-      const when = Number(transfer.block_timestamp);
-      if (!Number.isFinite(when) || when <= 0) return { verified: false, conclusive: false, reason: 'TronGrid gave no block time for this transfer' };
-      if (opts.notBeforeMs && when < opts.notBeforeMs)
-        return { verified: false, conclusive: true, reason: 'This transfer was sent before the payment request was made, so it cannot be used for it.' };
-      return { verified: true, onChainAmount: Number(exact) / 1e6 };
-    }
-    // USDT on TRON has 6 decimals -- the raw on-chain value is an integer.
-    const onChainAmount = Number(transfer.result.value) / 1e6;
-    if (!isFinite(onChainAmount)) return { verified: false, conclusive: false, reason: 'Could not parse on-chain amount' };
-    // The member could only ever be credited the AMOUNT THEY CLAIMED (that's
-    // what the UGX figure on the record was computed from) -- so it's only
-    // ever safe to auto-credit when the real on-chain payment is at least
-    // that much. A genuine shortfall must never round up to a match, but it
-    // IS confirmed and conclusive -- the member sent less than they claimed.
-    if (onChainAmount < expectAmountUsdt - 0.000001)
-      return { verified: false, conclusive: true, reason: `The confirmed on-chain amount (${onChainAmount} USDT) is less than the ${expectAmountUsdt} USDT claimed` };
-    return { verified: true, onChainAmount };
-  } catch (e) {
-    return { verified: false, conclusive: false, reason: e.message };
-  }
-}
-// 123456789 micro-USDT -> "123.456789"
-function usdtMicrosText(m) { const t = String(m).padStart(7, '0'); return t.slice(0, -6) + '.' + t.slice(-6); }
-// How long an INCONCLUSIVE claim (TronGrid simply has no record of it yet)
-// is allowed to keep waiting before the reconciler gives up and declines it
-// -- guarantees every claim eventually reaches a definitive completed/
-// declined outcome on its own, never sitting unresolved forever. Real
-// transactions confirm on TRON within seconds to low minutes, so 15 minutes
-// is a generous margin, not a tight one.
-const USDT_UNRESOLVED_TIMEOUT_MS = 15 * 60 * 1000;
-// The transaction hash itself is the database identity for new USDT claims.
-// A "query for this TXID, then insert a random document" sequence is not
-// atomic: two accounts can both see no row and submit the same on-chain
-// payment at the same instant. createIfAbsent() on this deterministic id
-// gives MongoDB one atomic winner even across overlapping server processes.
-// Failed claims may still be corrected and resubmitted by conditionally
-// replacing that same document while its status is exactly `failed`.
-function usdtDepositDocId(txid) { return 'usdt:' + txid; }
-// The one function that decides a USDT claim's fate -- used by the
-// synchronous check-loop at submit time, the client's own status poll, and
-// the 30s reconciler sweep, so there is exactly one path that can ever move
-// a claim out of 'awaiting_verification', not three slightly different ones.
-async function resolveUsdtDeposit(depositId) {
-  try {
-    const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists || snap.data().status !== 'awaiting_verification') return { outcome: 'unchanged' };
-    const dep = snap.data();
-    const result = await verifyUsdtTx(dep.txid, dep.walletAddress, dep.amountUsdt,
-      dep.exactMicros ? { exactMicros: dep.exactMicros, notBeforeMs: Number(dep.intentCreatedMs) ? Number(dep.intentCreatedMs) - USDT_CLOCK_SKEW_MS : undefined } : {});
-    if (result.verified) {
-      // autoVerified is set BEFORE the credit for the same claim-before-credit
-      // reason as everywhere else -- if this update lands but the credit call
-      // below fails, the retry sees autoVerified already true and simply
-      // proceeds straight to creditDeposit() again (idempotent) rather than
-      // re-running the on-chain check.
-      await snap.ref.update({ autoVerified: true, onChainAmountUsdt: result.onChainAmount }).catch(() => {});
-      const ok = await creditDeposit(snap);
-      if (ok) console.log(`USDT deposit ${depositId} auto-credited (on-chain confirmed).`);
-      return { outcome: ok ? 'matched' : 'unchanged' };
-    }
-    if (result.conclusive) {
-      await markDepositFailed(snap.ref, dep.userId, result.reason);
-      await snap.ref.update({ autoDeclined: true }).catch(() => {});
-      console.log(`USDT deposit ${depositId} auto-declined (on-chain proof): ${result.reason}`);
-      return { outcome: 'rejected', reason: result.reason };
-    }
-    // Inconclusive -- only give up and decline once it's been unresolved for
-    // longer than any real confirmation should ever take. Gated on a key
-    // actually being configured: with none set, automatic mode isn't
-    // active at all (pure-manual behavior), so nothing should ever
-    // auto-decline on a timer -- it just waits for an admin, exactly as if
-    // this whole feature didn't exist.
-    if (TRONGRID_API_KEY && Date.now() - tsMillis(dep.createdAt) > USDT_UNRESOLVED_TIMEOUT_MS) {
-      const reason = 'Could not confirm this transaction on-chain. Please check the TXID or contact support.';
-      await markDepositFailed(snap.ref, dep.userId, reason);
-      await snap.ref.update({ autoDeclined: true }).catch(() => {});
-      console.log(`USDT deposit ${depositId} auto-declined (unresolved past ${USDT_UNRESOLVED_TIMEOUT_MS / 60000} min): ${result.reason}`);
-      return { outcome: 'rejected', reason };
-    }
-    console.log(`USDT auto-verify not yet resolved for ${depositId}: ${result.reason}`);
-    return { outcome: 'pending', reason: result.reason };
-  } catch (e) {
-    console.error(`USDT resolve error for ${depositId}:`, e.message);
-    return { outcome: 'pending', reason: e.message };
-  }
-}
-// ── PAYMENT REQUESTS (the fix for TXID hijacking) ──
-// A transaction hash is public the moment it is on-chain, and the old flow
-// credited whoever submitted it first, so anyone watching the wallet could
-// claim another member's payment. Now a member first asks for a payment
-// request: the server reserves a UNIQUE exact amount for them (their amount
-// plus a random 1-999 micro-USDT tail, e.g. 25.000417) and only a transfer of
-// exactly that amount, sent after the request was made, can be credited to
-// that request's owner. Nobody else can hold the same amount at the same time.
-// The reservation is the document id (the exact micro-USDT figure), so two
-// requests can never share an amount; an expired one is reclaimed atomically.
-const USDT_INTENT_TTL_MS = 60 * 60 * 1000;
-const USDT_MAX_OPEN_INTENTS = 3;
-const USDT_OFFSET_MAX = 999;
-const USDT_CLOCK_SKEW_MS = 30 * 1000;
-const _usdtIntentDebounce = new Map();
-async function allocateUsdtIntent(userId, baseCents, extra) {
-  const col = db.collection('usdtIntents');
-  for (let attempt = 0; attempt < 15; attempt++) {
-    const micros = baseCents * 10000 + crypto.randomInt(1, USDT_OFFSET_MAX + 1);
-    const now = Date.now();
-    const doc = { userId, baseUsdt: baseCents / 100, exactMicros: micros, status: 'open', createdMs: now,
-      createdAt: FieldValue.serverTimestamp(), expiresAt: new Date(now + USDT_INTENT_TTL_MS), ...extra };
-    const ref = col.doc(String(micros));
-    if (await ref.createIfAbsent(doc)) return { id: ref.id, ...doc };
-    // Taken. Reclaimable only if it has expired; the condition makes the
-    // takeover atomic, so two requests cannot both win the same amount.
-    const reclaimed = await ref.updateIf({ expiresAt: { $lt: new Date() } }, { ...doc, txid: FieldValue.delete() });
-    if (reclaimed) return { id: ref.id, ...doc };
-  }
-  return null;
-}
-app.post('/deposit/usdt/intent', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  try {
-    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before recharging.' });
-    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT recharges are not available right now.' });
-    const rate = Number(sett.usdtRate) || 0;
-    if (rate <= 0 || !sett.usdtWalletAddress) return res.status(400).json({ status: 'error', message: 'USDT recharges are not configured yet. Please try again later.' });
-    const baseCents = Math.round(Number(req.body.amountUsdt) * 100);
-    if (!Number.isFinite(baseCents) || baseCents < 1) return res.status(400).json({ status: 'error', message: 'Enter a valid USDT amount' });
-    const amountUgx = Math.round((baseCents / 100) * rate);
-    if (amountUgx > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(MAX_MONEY_AMOUNT)}).` });
-    if (amountUgx < sett.minDeposit)
-      return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(sett.minDeposit)} (about ${(sett.minDeposit / rate).toFixed(2)} USDT)` });
-    const last = _usdtIntentDebounce.get(userId) || 0;
-    if (Date.now() - last < 2000) return res.status(429).json({ status: 'error', message: 'Please wait a moment.' });
-    _usdtIntentDebounce.set(userId, Date.now());
-    const view = i => ({ status: 'success', intentId: i.id, exactAmount: usdtMicrosText(i.exactMicros), amountUgx: i.amountUgx,
-      walletAddress: i.walletAddress, expiresAt: tsMillis(i.expiresAt) || new Date(i.expiresAt).getTime() });
-    // The same amount asked for again gives the same request back; a member
-    // can only hold a few open ones at a time.
-    const mineSnap = await db.collection('usdtIntents').where('userId', '==', userId).where('status', '==', 'open').get();
-    const open = mineSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => tsMillis(i.expiresAt) > Date.now());
-    const same = open.find(i => Math.round(Number(i.baseUsdt) * 100) === baseCents && i.walletAddress === sett.usdtWalletAddress);
-    if (same) return res.json(view(same));
-    if (open.length >= USDT_MAX_OPEN_INTENTS)
-      return res.status(429).json({ status: 'error', message: 'You already have open USDT requests. Use one of them, or wait for it to expire.' });
-    const intent = await allocateUsdtIntent(userId, baseCents, { amountUgx, rate, walletAddress: sett.usdtWalletAddress });
-    if (!intent) return res.status(503).json({ status: 'error', message: 'Could not reserve an amount right now. Please try again in a moment.' });
-    res.json(view(intent));
-  } catch (e) {
-    console.error('USDT intent error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not create your payment request. Please try again.' });
-  }
-});
-const _usdtSubmitDebounce = new Map();
-app.post('/deposit/usdt/submit', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  try {
-    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before recharging.' });
-    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT recharges are not available right now.' });
-    // Only a payment request (see /deposit/usdt/intent) can be claimed. The old
-    // "type any amount and a hash" claim could be used to take someone else's
-    // public transaction, so it is no longer accepted.
-    const intentId = String(req.body.intentId || '');
-    if (!/^\d{6,15}$/.test(intentId))
-      return res.status(400).json({ status: 'error', message: 'Start a new USDT recharge to get your exact payment amount first.' });
-    const intentRef = db.collection('usdtIntents').doc(intentId);
-    const intentSnap = await intentRef.get();
-    if (!intentSnap.exists || intentSnap.data().userId !== userId)
-      return res.status(404).json({ status: 'error', message: 'Payment request not found. Start a new USDT recharge.' });
-    const intent = intentSnap.data();
-    const amountUsdt = Number(intent.baseUsdt);
-    const rate = Number(intent.rate);
-    const amountUgx = Number(intent.amountUgx);
-    // Tron TXIDs are 64 hex chars -- a loose format check to keep obvious
-    // junk/typos out. The real verification is TronGrid (or the admin's own
-    // Tronscan check before they approve it); this is not relied on for
-    // security.
-    const txid = String(req.body.txid || '').trim().toLowerCase();
-    if (!/^[a-f0-9]{60,66}$/.test(txid)) return res.status(400).json({ status: 'error', message: 'Enter a valid transaction hash (TXID)' });
-    // One request, one transaction: a second hash for a request that already
-    // has a live claim is refused (a failed claim may be corrected).
-    if (intent.status === 'used' && intent.txid && intent.txid !== txid) {
-      const prev = await db.collection('pendingDeposits').doc(usdtDepositDocId(intent.txid)).get();
-      if (prev.exists && prev.data().status !== 'failed')
-        return res.status(409).json({ status: 'error', message: 'A transaction was already submitted for this payment request.' });
-    }
-
-    const lastSub = _usdtSubmitDebounce.get(userId) || 0;
-    if (Date.now() - lastSub < 7000)
-      return res.status(429).json({ status: 'error', message: 'A recharge is already being submitted. Please wait a moment.' });
-    _usdtSubmitDebounce.set(userId, Date.now());
-
-    // A TXID can only ever back ONE OPEN OR CREDITED claim, by anyone --
-    // without this the same real payment could be submitted by multiple
-    // accounts (or resubmitted after already being credited) to farm repeat
-    // credits off a single real transfer. A claim that was previously
-    // DECLINED doesn't count as a conflict -- the member is allowed to
-    // correct a mistaken claim (e.g. the right amount) against the same
-    // real transaction rather than being permanently locked out over it.
-    const dupSnap = await db.collection('pendingDeposits').where('txid', '==', txid).get();
-    const openOrPaid = dupSnap.docs.filter(d => d.data().status !== 'failed');
-    if (openOrPaid.length) {
-      const matched = openOrPaid.find(d => d.data().status === 'matched');
-      if (matched) {
-        if (matched.data().userId === userId)
-          return res.json({ status: 'success', state: 'matched', depositId: matched.id, message: 'This transaction was already credited.' });
-        return res.status(409).json({ status: 'error', message: 'This transaction hash has already been used.' });
-      }
-      const existing = openOrPaid[0];
-      if (existing.data().userId === userId)
-        return res.json({ status: 'success', state: 'awaiting_verification', depositId: existing.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
-      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
-    }
-
-    // Older releases used random document IDs for USDT claims. If one of
-    // those claims failed, reuse that existing row on correction instead of
-    // creating a second claim under the newer deterministic ID.
-    const failedPrior = dupSnap.docs.find(d => d.data().status === 'failed' && d.data().userId === userId);
-    // A declined claim can be corrected by its original submitter, but the
-    // same TXID must never be transferred to a different account after a
-    // decline. Older releases allowed random-ID duplicates, so inspect every
-    // matching row rather than only a capped prefix.
-    // Claims made from a payment request (they carry exactMicros) are different:
-    // they can only succeed for the request whose unique amount the transfer
-    // really matches, so someone else's failed attempt on this hash (e.g. an
-    // attacker submitting a hash that is not theirs) must not lock the real
-    // owner out of it. Only older, amount-less claims keep the hard lock.
-    if (!failedPrior && dupSnap.docs.some(d => d.data().status === 'failed' && !d.data().exactMicros))
-      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been used.' });
-
-    const ref = await uniqueRef('U');
-    const { date, time } = nowStr();
-    const depRef = db.collection('pendingDeposits').doc(failedPrior ? failedPrior.id : usdtDepositDocId(txid));
-    const claimData = {
-      userId, method: 'usdt', amount: amountUgx, amountUsdt, rate, txid, ref,
-      intentId, exactMicros: intent.exactMicros, intentCreatedMs: intent.createdMs,
-      walletAddress: intent.walletAddress, status: 'awaiting_verification',
-      commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
-      regionKey: currentRegionKey(),
-      date, time, createdAt: FieldValue.serverTimestamp()
-    };
-    let claimed = await depRef.createIfAbsent(claimData);
-    let raced = null;
-    if (!claimed) {
-      raced = await depRef.get();
-      // A conclusively failed claim is deliberately reusable: the member may
-      // have pasted the right hash with the wrong amount. Only one retry can
-      // move it back to awaiting_verification.
-      if (raced.exists && raced.data().status === 'failed' && (raced.data().userId === userId || raced.data().exactMicros)) {
-        claimed = await depRef.updateIf({ status: 'failed', txid }, {
-          ...claimData,
-          failureReason: FieldValue.delete(), autoDeclined: FieldValue.delete(),
-          autoVerified: FieldValue.delete(), onChainAmountUsdt: FieldValue.delete(),
-        });
-        if (!claimed) raced = await depRef.get();
-      }
-      if (!claimed) {
-        if (!raced || !raced.exists) throw new Error('USDT claim changed while it was being submitted');
-        const prior = raced.data();
-        if (prior.userId === userId) {
-          if (prior.status === 'matched')
-            return res.json({ status: 'success', state: 'matched', depositId: raced.id, message: 'This transaction was already credited.' });
-          return res.json({ status: 'success', state: 'awaiting_verification', depositId: raced.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
-        }
-        return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
-      }
-    }
-    await intentRef.update({ status: 'used', txid }).catch(() => {});
-    // Same ledger-row-up-front pattern as /deposit/marzpay -- Records shows
-    // this immediately as Processing rather than staying invisible until
-    // credited.
-    const ledgerData = {
-      userId, statementId: newStatementId(), type: 'deposit', description: `Deposit: Processing (${fmtMoney(amountUgx)})`,
-      amount: amountUgx, displayAmount: amountUgx, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
-    };
-    try {
-      // A corrected retry reuses the deterministic claim document. Reuse its
-      // failed/zeroed ledger row too: creating another row with the same
-      // depositId would make creditDeposit() restore BOTH rows to the full
-      // amount and double the integrity totals even though the wallet credit
-      // itself stayed idempotent.
-      const priorLedger = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
-      if (priorLedger.empty) await db.collection('transactions').add(ledgerData);
-      else {
-        const priorRow = priorLedger.docs[0];
-        const priorData = priorRow.data();
-        await priorRow.ref.update({ ...ledgerData, statementId: priorData.statementId || ledgerData.statementId });
-      }
-    } catch (e) { console.error(`USDT deposit ledger row create failed for dep=${depRef.id}:`, e.message); }
-
-    // Try to resolve it right here, a few times, before answering at all --
-    // in practice the member usually already sent the crypto and waited for
-    // their OWN wallet to show it confirmed before coming back to paste the
-    // hash, so the payment is very often already settled by this point.
-    // This is what turns "submitted, wait and see" into an immediate,
-    // definitive Completed/Declined answer for the common case. Anything
-    // still unresolved after this falls back to the 30s reconciler sweep
-    // (reconcileUsdtDeposits), which keeps retrying until it resolves --
-    // and after 15 minutes unresolved, resolves itself to Declined rather
-    // than sitting there forever. An admin's manual Approve/Reject stays
-    // available as a backstop throughout, but is never required.
-    let resolved = { outcome: 'pending' };
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
-      resolved = await resolveUsdtDeposit(depRef.id);
-      if (resolved.outcome === 'matched' || resolved.outcome === 'rejected') break;
-    }
-    if (resolved.outcome === 'matched')
-      return res.json({ status: 'success', state: 'matched', depositId: depRef.id, reference: ref, message: 'Payment completed! Credited to your wallet.' });
-    if (resolved.outcome === 'rejected')
-      return res.json({ status: 'success', state: 'rejected', depositId: depRef.id, reference: ref, message: 'Payment declined: ' + resolved.reason });
-    res.json({ status: 'success', state: 'awaiting_verification', depositId: depRef.id, reference: ref,
-      message: 'Submitted. Verifying on-chain — this can take a minute.' });
-  } catch (e) {
-    console.error('USDT deposit submit error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not submit your recharge. Please try again.' });
-  }
-});
-// Lets the client poll a still-pending claim (the common early-return case
-// above, or one revived by the background reconciler) until it resolves --
-// same role as /deposit/marzpay/status for the mobile-money flow.
-app.post('/deposit/usdt/status', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
-    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
-    const dep = snap.data();
-    if (dep.status === 'matched') return res.json({ status: 'success', state: 'matched' });
-    if (dep.status === 'failed') return res.json({ status: 'success', state: 'rejected', message: dep.failureReason || 'Payment declined.' });
-    // Give this specific poll one more real attempt rather than just
-    // reporting the stale stored status -- the member is actively watching,
-    // so it's worth trying to resolve it right now instead of waiting for
-    // the next 30s reconciler tick.
-    const resolved = await resolveUsdtDeposit(snap.id);
-    if (resolved.outcome === 'matched') return res.json({ status: 'success', state: 'matched' });
-    if (resolved.outcome === 'rejected') return res.json({ status: 'success', state: 'rejected', message: 'Payment declined: ' + resolved.reason });
-    res.json({ status: 'success', state: 'awaiting_verification' });
-  } catch (e) {
-    console.error('USDT deposit status error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not check payment status' });
-  }
-});
-// Manual admin decline -- the backstop for a claim that isn't resolving on
-// its own (or when TRONGRID_API_KEY isn't configured at all, so every claim
-// is manual-only). Approve reuses the existing /admin/deposit/force-credit
-// (creditDeposit() doesn't care which rail a pendingDeposits row came from).
-app.post('/admin/deposit/usdt/reject', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const depositId = String(req.body.depositId || '');
-  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
-  try {
-    const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Recharge not found' });
-    const dep = snap.data();
-    if (depositFullyCredited(dep)) return res.status(400).json({ status: 'error', message: 'This recharge was already credited -- cannot reject it now.' });
-    const reason = String(req.body.reason || '').trim() || 'Rejected by admin';
-    await markDepositFailed(snap.ref, dep.userId, reason);
-    logAdminAction(req, 'usdt_deposit_rejected', { depositId, reason });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-// Retries on-chain resolution for any USDT claim still sitting at
-// 'awaiting_verification' -- covers the case where TronGrid was briefly
-// down (or the transaction hadn't confirmed yet) at submit time, so a real
-// payment still gets auto-credited on its own rather than needing an admin
-// to notice and force-credit it, AND guarantees the 15-minute unresolved
-// timeout (see resolveUsdtDeposit) actually gets a chance to fire even if
-// the member never reopens the app to poll for status themselves. A no-op
-// entirely (and cheap) when TRONGRID_API_KEY isn't configured -- pure
-// manual mode is untouched by any of this.
-let _sweepingUsdt = false;
-async function reconcileUsdtDeposits() {
-  if (_sweepingUsdt || !TRONGRID_API_KEY) return 0;
-  _sweepingUsdt = true;
-  let settled = 0;
-  try {
-    const snap = await db.collection('pendingDeposits').where('status', '==', 'awaiting_verification').limit(50).get();
-    for (const doc of snap.docs) {
-      const result = await resolveUsdtDeposit(doc.id);
-      if (result.outcome === 'matched' || result.outcome === 'rejected') settled++;
-    }
-  } catch (e) { console.error('Reconcile USDT deposits error:', e.message); }
-  finally { _sweepingUsdt = false; }
-  return settled;
-}
-
 app.post('/deposit/marzpay/status', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -5886,111 +5004,7 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not check payment status' });
   }
 });
-// ── CARD DEPOSIT (MarzPay) ──
-// A fourth deposit rail. The member never leaves the app for mobile money
-// (a push prompt lands on their phone) -- for a card, they leave to
-// MarzPay's own hosted card-gateway page (`redirect_url`) and come back.
-// Nothing about crediting is new here: this reuses the exact same
-// pendingDeposits row shape, the exact same creditDeposit()/
-// markDepositFailed(), and even the exact same /deposit/marzpay/status
-// poll route and reconcilePendingDeposits() sweep as mobile money -- both
-// are already keyed only on `marzTxUuid`/`marzReference`, never on HOW the
-// row was created, so a card row is invisible to them by nothing more than
-// coincidence of shape, not a special case anyone had to add.
-const _cardSubmitDebounce = new Map();
-// MarzPay's own stated range for card collections, independent of this
-// platform's admin-set minDeposit -- enforced as a floor/ceiling regardless
-// of what the admin has minDeposit set to, since a card charge below/above
-// this is refused at the gateway either way; better to say so up front.
-const CARD_MIN_UGX = 500, CARD_MAX_UGX = 10_000_000;
-app.post('/deposit/card/submit', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const amt = paymentAmount(req.body.amount);
-  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  if (amt > MAX_MONEY_AMOUNT || amt > CARD_MAX_UGX) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtMoney(CARD_MAX_UGX)}).` });
-  try {
-    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
-    if (uSnap.data().registrationDone === false) return res.status(403).json({ status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up before topping up.' });
-    if (!sett.cardDepositEnabled) return res.status(400).json({ status: 'error', message: 'Card payments are not available right now.' });
-    const min = Math.max(Number(sett.minDeposit) || 0, CARD_MIN_UGX);
-    if (amt < min) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtMoney(min)}` });
-
-    const lastSub = _cardSubmitDebounce.get(userId) || 0;
-    if (Date.now() - lastSub < 7000)
-      return res.status(429).json({ status: 'error', message: 'A recharge is already being processed. Please wait a moment.' });
-    _cardSubmitDebounce.set(userId, Date.now());
-
-    const ref = await uniqueRef('C');
-    const marzReference = crypto.randomUUID();
-    const { date, time } = nowStr();
-    const depRef = db.collection('pendingDeposits').doc();
-    await depRef.set({
-      userId, method: 'card', amount: amt, ref, marzReference, status: 'initiating', provider: 'marzpay',
-      commissionBasis: 'deposit', commissionPending: true, commissionPaidLevels: [],
-      regionKey: currentRegionKey(),
-      date, time, createdAt: FieldValue.serverTimestamp()
-    });
-    let mpData;
-    try {
-      mpData = await marzCollectCard({
-        amount: amt, reference: marzReference, description: 'Card payment',
-        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
-      });
-    } catch (netErr) {
-      console.error('MarzPay card collect network error (ref ' + ref + '):', netErr.message);
-      await markDepositFailed(depRef, userId, 'Could not reach the card payment gateway. Please try again.');
-      return res.status(500).json({ status: 'error', message: 'Could not start the card payment. Please try again.' });
-    }
-    if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
-      console.error('MarzPay card collect rejected:', JSON.stringify(mpData));
-      await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the card payment'));
-      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the card payment') });
-    }
-    const redirectUrl = mpData.data?.redirect_url;
-    const txUuid = mpData.data?.transaction?.uuid;
-    if (!redirectUrl) {
-      console.error('MarzPay card collect: no redirect_url in response', JSON.stringify(mpData));
-      await markDepositFailed(depRef, userId, 'Card payment could not be started. Please try again.');
-      return res.status(500).json({ status: 'error', message: 'Card payment could not be started. Please try again.' });
-    }
-    // Same "capture our own uuid" step MoMo's collect does -- this is what
-    // lets the webhook (and the reconciler, and the status poll) trust a
-    // matching uuid outright instead of only ever accepting one the webhook
-    // itself supplies (see /deposit/callback's own comment on that exploit).
-    if (txUuid) await depRef.update({ marzTxUuid: txUuid, status: 'pending' }).catch(() => {});
-    res.json({ status: 'success', depositId: depRef.id, reference: ref, redirectUrl });
-  } catch (e) {
-    console.error('Card deposit submit error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not start the card payment. Please try again.' });
-  }
-});
-// Browser-return leg for the card gateway. MarzPay's own docs describe
-// `callback_url` as doing double duty for a card collection -- the same URL
-// the CUSTOMER's browser lands back on after paying, and the URL MarzPay
-// POSTs the real server-to-server result to (handled by the POST handler
-// of this exact path, just below, completely unchanged for this feature).
-// A GET here is always the browser leg, never the webhook (MarzPay's own
-// webhook POST never hits this branch), so this is purely cosmetic --
-// crediting the deposit never depends on a member's browser successfully
-// making it back here. Deliberately NOT redirecting to a separate frontend
-// origin: the VPS has no domain yet (still a bare IP -- see CLAUDE.md), so
-// hardcoding one here would break the moment that changes. The app itself
-// resumes checking the real result on its own (see doCardDeposit()'s own
-// localStorage-based resume, user-src) whether or not this page is ever
-// even seen.
-app.get('/deposit/callback', (req, res) => {
-  res.set('Content-Type', 'text/html; charset=utf-8').send(
-    '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>Payment received</title><style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#1d130f;color:#fff;' +
-    'display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center;box-sizing:border-box}' +
-    'div{max-width:340px}h1{font-size:18px;margin:0 0 8px}p{color:rgba(255,255,255,.7);font-size:14px;line-height:1.5}</style></head>' +
-    '<body><div><h1>Payment received</h1><p>You can close this page and return to the app. Your balance will update automatically once the payment is confirmed.</p></div></body></html>'
-  );
-});
+// ── MARZPAY DEPOSIT WEBHOOK ──
 // MarzPay webhook. Never trusts the claimed status alone — crediting only
 // ever happens after an independent live re-check confirms it, and a uuid
 // this endpoint didn't itself capture is only trusted once that check's own
@@ -6849,70 +5863,6 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     res.json({ status: 'success', ourStatus: w.status, marzStatus: marzStatus || 'unknown', message });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.post('/withdraw/marzpay/status', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const witSnap = await db.collection('withdrawals').doc(String(req.body.withdrawalId || '')).get();
-    if (!witSnap.exists || witSnap.data().userId !== userId)
-      return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
-    const wit = witSnap.data();
-    if (wit.status !== 'processing') return res.json({ status: 'success', state: wit.status });
-    // Bank transfer branch, checked against marzReference/the bank-transfer
-    // status endpoint instead of marzTxUuid/send-money -- see the same
-    // branch in /admin/withdraw/verify above for the full reasoning.
-    if (wit.isBankTransfer) {
-      if (!wit.marzReference) return res.json({ status: 'success', state: 'processing' });
-      const btStatus = await marzGetBankTransferStatus(wit.marzReference);
-      if (SUCCESS_STATUSES.has(btStatus)) {
-        if (await markWithdrawalProcessed(witSnap.ref, userId)) {
-          await finalizeWithdrawalTransactionRecord(witSnap.id, 'processed');
-          return res.json({ status: 'success', state: 'processed' });
-        }
-        const nowSnap = await witSnap.ref.get();
-        return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
-      }
-      if (FAILED_STATUSES.has(btStatus)) {
-        // Same discarded-`declined` guard as the send-money branch right
-        // below -- a concurrent check (reconciler, another poll) may have
-        // already won the decline race; only finalize with what actually happened.
-        const { declined, refunded } = await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the bank', ['processing']);
-        if (declined) await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined', refunded);
-        return res.json({ status: 'success', state: 'declined' });
-      }
-      return res.json({ status: 'success', state: 'processing' });
-    }
-    if (!wit.marzTxUuid) return res.json({ status: 'success', state: 'processing' });
-    const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
-    if (SUCCESS_STATUSES.has(marzStatus)) {
-      if (await markWithdrawalProcessed(witSnap.ref, userId)) {
-        await finalizeWithdrawalTransactionRecord(witSnap.id, 'processed');
-        return res.json({ status: 'success', state: 'processed' });
-      }
-      const nowSnap = await witSnap.ref.get();
-      return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
-    }
-    if (FAILED_STATUSES.has(marzStatus)) {
-      // subagent-audit-caught: `declined` was discarded here -- if a
-      // concurrent status check (the webhook, the reconciler, this exact
-      // poll from another request) already won the decline race,
-      // declineWithdrawalAndRefund() no-ops and returns declined:false, but
-      // finalizeWithdrawalTransactionRecord() was still called unconditionally
-      // and would overwrite the winner's already-correct "Failed, refunded"
-      // row with a stale "Failed, refund pending" (and amount:0, since the
-      // winner already zeroed it) -- permanently mislabeling a withdrawal
-      // that was actually refunded promptly. Only /admin/withdraw/reject
-      // had this guard before; mirrored here.
-      const { declined, refunded } = await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the mobile-money provider', ['processing']);
-      if (declined) await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined', refunded);
-      return res.json({ status: 'success', state: 'declined' });
-    }
-    res.json({ status: 'success', state: 'processing' });
-  } catch (e) {
-    console.error('Withdraw status error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not check withdrawal status' });
-  }
-});
 app.post('/withdraw/callback', async (req, res) => {
   res.status(200).json({ status: 'ok' });
   try {
@@ -7184,26 +6134,6 @@ app.get('/bank/list', async (req, res) => {
     res.json({ status: 'success', accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal accounts' }); }
 });
-app.post('/bank/delete', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const id = String(req.body.id || '');
-  if (!id) return res.status(400).json({ status: 'error', message: 'Missing account id' });
-  try {
-    // subagent-audit-caught: was missing the banned check every sibling
-    // account-mutating route has.
-    const uSnap = await db.collection('users').doc(userId).get();
-    if (uSnap.exists && uSnap.data().status === 'banned')
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    const ref = db.collection('bankAccounts').doc(id);
-    const snap = await ref.get();
-    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Account not found' });
-    // Same reasoning as /bank/save above -- no PIN needed to remove a payout
-    // destination, only to actually withdraw money.
-    await ref.delete();
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the withdrawal account' }); }
-});
 app.post('/account/transaction-pin/change', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -7433,23 +6363,6 @@ app.get('/transactions', async (req, res) => {
     const transactions = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
     res.json({ status: 'success', transactions, truncated: transactions.length >= TX_LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your records' }); }
-});
-
-app.get('/deposits', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('pendingDeposits').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(200).get();
-    res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load recharge history' }); }
-});
-app.get('/withdrawals', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('withdrawals').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(200).get();
-    res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal history' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -7806,32 +6719,6 @@ app.post('/admin/push/unregister', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Real bug fixed: owner reported the SAME push notification arriving twice
-// on one phone. sendAdminPush() sends to every token in adminPushTokens,
-// and a single physical device can end up registered under more than one
-// still-valid token over time (browser vs. installed-PWA each get their
-// own FCM registration scope, a token can rotate after a browser/service-
-// worker update, etc.) -- there's no way to detect "these two opaque
-// tokens are actually the same device" from the token strings alone, so
-// the practical fix is a one-click reset: wipe every registered token,
-// then each device/browser re-subscribes cleanly via the existing
-// Notify button, ending up with exactly one live token per context again.
-app.get('/admin/push/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('adminPushTokens').get();
-    res.json({ status: 'success', count: snap.size, tokens: snap.docs.map(d => ({ token: d.id.slice(0, 16) + '…', role: d.data().role || null, quickApprove: !!d.data().quickApproveSecret, registeredAt: d.data().registeredAt || null })) });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/push/clear-all', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('adminPushTokens').get();
-    await Promise.all(snap.docs.map(d => d.ref.delete()));
-    logAdminAction(req, 'push_tokens_cleared', { count: snap.size });
-    res.json({ status: 'success', cleared: snap.size });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
 // `?region=ke` reads THAT region's settings. `overrides` names the fields
 // the region has actually been given its own value for -- everything else
 // on the screen is still inherited from Uganda, and the panel says so
@@ -7867,12 +6754,8 @@ const SETTINGS_CRITICAL_RANGES = {
   loaderBgOpacity: [0, 100], loaderBgBlur: [0, 40],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
-  otpDailyLimitReset: [0, 50], otpDailyLimitBank: [0, 50],
-  // UGX per 1 USDT. Upper bound is a sanity cap (nobody's rate is anywhere
-  // near this), not a business one -- same reasoning as withdrawMultiple.
-  usdtRate: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain', 'bankOtpRequired', 'usdtEnabled', 'cardDepositEnabled', 'otpVerificationEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7959,18 +6842,6 @@ app.post('/admin/settings/update', async (req, res) => {
       if (name.length > 24) return res.status(400).json({ status: 'error', message: 'App name must be 24 characters or fewer.' });
       if (/[<>]/.test(name)) return res.status(400).json({ status: 'error', message: 'App name cannot contain < or >.' });
       updates.brandName = name;
-    }
-    // The USDT receiving wallet address. A real TRC20 address is base58
-    // (letters/digits only, no I/l/O/0 by construction of that alphabet) and
-    // 34 characters -- rejected outright rather than silently accepted and
-    // shown to every member as a place to send real money to, on a typo.
-    // Blank is always allowed (clears the field / leaves the feature
-    // unusable until a real one is set, same as usdtRate defaulting to 0).
-    if ('usdtWalletAddress' in updates) {
-      const addr = String(updates.usdtWalletAddress == null ? '' : updates.usdtWalletAddress).trim();
-      if (addr && !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr))
-        return res.status(400).json({ status: 'error', message: 'That does not look like a valid TRC20 wallet address (should start with T, 34 characters).' });
-      updates.usdtWalletAddress = addr;
     }
     // Start of every new payment reference. Refused rather than repaired, so what the owner types is exactly what appears at the gateway.
     if ('referencePrefix' in updates) {
@@ -8148,31 +7019,6 @@ app.post('/admin/banner/clear', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the banner' }); }
 });
-app.get('/admin/help-banner', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', image: await getHelpBanner() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/help-banner/set', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const image = String(req.body.image || '');
-  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
-    return res.status(400).json({ status: 'error', message: 'Invalid image' });
-  try {
-    await db.collection('banners').doc('help').set({ image });
-    _helpBannerCacheTs = 0;
-    logAdminAction(req, 'help_banner_set', {});
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the banner' }); }
-});
-app.post('/admin/help-banner/clear', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    await db.collection('banners').doc('help').delete();
-    _helpBannerCacheTs = 0;
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the banner' }); }
-});
 app.get('/admin/announcement-image', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { res.json({ status: 'success', image: await getAnnouncementImage() }); }
@@ -8197,74 +7043,6 @@ app.post('/admin/announcement-image/clear', async (req, res) => {
     _announceImageCacheTs = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the image' }); }
-});
-app.get('/admin/about-content', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', blocks: await getAboutContent() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/about-content/set', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const raw = Array.isArray(req.body.blocks) ? req.body.blocks : null;
-  if (!raw || raw.length > 60) return res.status(400).json({ status: 'error', message: 'Invalid content -- 60 blocks max' });
-  const blocks = [];
-  let totalSize = 0;
-  for (const b of raw) {
-    if (b && b.type === 'text') {
-      const text = String(b.text || '').slice(0, 4000).trim();
-      if (!text) continue;
-      blocks.push({ type: 'text', text });
-      totalSize += text.length;
-    } else if (b && b.type === 'image') {
-      const image = String(b.image || '');
-      if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
-        return res.status(400).json({ status: 'error', message: 'One of the images is invalid or too large' });
-      blocks.push({ type: 'image', image });
-      totalSize += image.length;
-    }
-  }
-  // Stays comfortably under Mongo's 16MB BSON document limit.
-  if (totalSize > 11_000_000) return res.status(400).json({ status: 'error', message: 'Total content is too large -- remove or compress some images' });
-  try {
-    await db.collection('content').doc('about').set({ blocks });
-    _aboutCacheTs = 0;
-    logAdminAction(req, 'about_content_set', { blockCount: blocks.length });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the About page' }); }
-});
-app.get('/admin/rules-content', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try { res.json({ status: 'success', blocks: await getRulesContent() }); }
-  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-app.post('/admin/rules-content/set', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const raw = Array.isArray(req.body.blocks) ? req.body.blocks : null;
-  if (!raw || raw.length > 60) return res.status(400).json({ status: 'error', message: 'Invalid content -- 60 blocks max' });
-  const blocks = [];
-  let totalSize = 0;
-  for (const b of raw) {
-    if (b && b.type === 'text') {
-      const text = String(b.text || '').slice(0, 4000).trim();
-      if (!text) continue;
-      blocks.push({ type: 'text', text });
-      totalSize += text.length;
-    } else if (b && b.type === 'image') {
-      const image = String(b.image || '');
-      if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
-        return res.status(400).json({ status: 'error', message: 'One of the images is invalid or too large' });
-      blocks.push({ type: 'image', image });
-      totalSize += image.length;
-    }
-  }
-  if (totalSize > 11_000_000) return res.status(400).json({ status: 'error', message: 'Total content is too large -- remove or compress some images' });
-  try {
-    await db.collection('content').doc('rules').set({ blocks });
-    _rulesCache = blocks;
-    _rulesCacheTs = Date.now();
-    logAdminAction(req, 'rules_content_set', { blockCount: blocks.length });
-    res.json({ status: 'success' });
-  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the Rules and Regulations page' }); }
 });
 // A product's total payout, in priority order:
 //   1. its own multiplier (price x multiplier) -- the owner's preferred
@@ -8955,37 +7733,6 @@ app.post('/admin/user/grant-asset', async (req, res) => {
     _vipCache.delete(userId);
     res.json({ status: 'success', alreadyGiven, investmentId: invId, message: alreadyGiven ? 'That product was already given.' : `${tier.name} activated for this member` });
   } catch (e) { res.status(400).json({ status: 'error', message: e.message }); }
-});
-// Rebuilds one user's totalDeposited/totalEarned/totalWithdrawn/totalInvested
-// straight from their own transaction ledger — a single-user version of the
-// platform-wide "Recalculate totals" tool, for spot-fixing one account.
-app.post('/admin/user/repair-ledger', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const userId = String(req.body.userId || '');
-  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
-  try {
-    // Codex-caught real bug (round 3): every withdrawal status transition
-    // that touches totalWithdrawn (send, decline, verify, reconcile — see
-    // every other withLock('bal:'+userId, ...) site in this file) is
-    // serialized through this exact lock key. Reading+overwriting
-    // totalWithdrawn here without it could race a settlement mid-flight:
-    // e.g. repair reads a withdrawal as still 'processing' (so it's
-    // included) right as the decline path is about to subtract its net
-    // from totalWithdrawn — repair's overwrite lands with the OLD
-    // (too-high) total included, then decline's own subtraction runs on
-    // top of that, leaving totalWithdrawn too LOW by that amount, permanently.
-    const result = await withLock('bal:' + userId, async () => {
-      const uSnap = await db.collection('users').doc(userId).get();
-      if (!uSnap.exists) return { notFound: true };
-      const { deposited, earned, invested, withdrawn } = await computeUserRealTotals(userId);
-      await db.collection('users').doc(userId).update({ totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested });
-      return { notFound: false, deposited, earned, withdrawn, invested };
-    });
-    if (result.notFound) return res.status(404).json({ status: 'error', message: 'User not found' });
-    const { deposited, earned, withdrawn, invested } = result;
-    logAdminAction(req, 'user_ledger_repaired', { userId, deposited, earned, withdrawn, invested });
-    res.json({ status: 'success', totals: { totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested } });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Owner-only wallet-balance repair for exactly ONE direction: the real ledger
 // total is HIGHER than what's stored (a genuine under-credit somewhere --
@@ -10969,7 +9716,7 @@ async function migratePayoutsToMidnightOnce() {
   return n;
 }
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileStuckWithdrawalRefunds).then(reconcileCommissions).then(reconcileUsdtDeposits).catch(() => {});
+  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileStuckWithdrawalRefunds).then(reconcileCommissions).catch(() => {});
 }
 // Owner-toggleable: approves every still-pending withdrawal automatically,
 // a few seconds after it was requested — shares processWithdrawalCore with
@@ -11011,8 +9758,8 @@ async function autoApproveWithdrawalsTick() {
 app.get('/admin/payments/sync', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [depSettled, witSettled, usdtSettled] = await Promise.all([reconcilePendingDeposits(), reconcilePendingWithdrawals(), reconcileUsdtDeposits()]);
-    res.json({ status: 'success', depositsSettled: depSettled, withdrawalsSettled: witSettled, usdtSettled });
+    const [depSettled, witSettled] = await Promise.all([reconcilePendingDeposits(), reconcilePendingWithdrawals()]);
+    res.json({ status: 'success', depositsSettled: depSettled, withdrawalsSettled: witSettled });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -11022,8 +9769,6 @@ function sweepEphemeralState() {
   const dropStale = (map, maxAgeMs) => { for (const [k, ts] of map) if (now - ts > maxAgeMs) map.delete(k); };
   try {
     dropStale(_depCreateDebounce, 5 * 60 * 1000);
-    dropStale(_usdtSubmitDebounce, 5 * 60 * 1000);
-    dropStale(_cardSubmitDebounce, 5 * 60 * 1000);
     dropStale(_adminCreditDebounce, 5 * 60 * 1000);
     dropStale(_adminDebitDebounce, 5 * 60 * 1000);
     dropStale(_depAttemptsSucceededAt, 60 * 1000);

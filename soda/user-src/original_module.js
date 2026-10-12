@@ -5006,21 +5006,6 @@ async function resumePendingCardDeposit(){
     if (attempts >= 6) clearInterval(timer);
   }, 5000);
 }
-var _usdtIntent = null;
-function updateUsdtConversion(){
-  const s = STATE.settings || {};
-  const rate = Number(s.usdtRate) || 0;
-  const amt = parseFloat(($('usdtAmt') || {}).value) || 0;
-  const el = $('usdtUgxPreview');
-  if (el) el.textContent = fmtUGX(Math.round(amt * rate));
-  // Changing the amount after getting a payment amount makes that amount stale.
-  if (_usdtIntent && Math.round(amt * 100) !== Math.round(_usdtIntent.base * 100)) {
-    _usdtIntent = null;
-    const box = $('usdtPayBox'); if (box) box.style.display = 'none';
-  }
-}
-window.updateUsdtConversion = updateUsdtConversion;
-
 // The chip values still come from the live product prices (owner: "juck put
 // quick amounts basing on products prices"), so they stay correct when
 // products are repriced, only the chip's LOOK follows the mockup now.

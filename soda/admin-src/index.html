@@ -1873,9 +1873,7 @@ function drawDeps(){
     // that was never resolved automatically is a real money-safety decision,
     // not a routine action) -- the button matches that, same silent pattern
     // as every other owner-only control, rather than showing one that just
-    // errors. /admin/deposit/usdt/reject is the same gate, for the other
-    // direction -- only shown for a USDT claim still genuinely open
-    // (awaiting_verification), never one already matched or failed.
+    // errors.
     let actions = '';
     if (SESSION_ROLE === 'owner' && stuck) {
       actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
