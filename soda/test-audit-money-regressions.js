@@ -32,7 +32,7 @@ function makeDb(seed) {
   }
   function matches(row, filters) {
     return filters.every(([k,op,v]) => op === '==' ? row[k] === v :
-      op === 'in' ? v.some(x => x === row[k] || x === null && row[k] == null) : op === '<=' ? row[k] <= v : op === '>' ? row[k] > v :
+      op === 'in' ? v.some(x => x === row[k] || x === null && row[k] == null) : op === '<=' ? row[k] <= v : op === '>' ? row[k] > v : op === '!=' ? row[k] !== v :
       (() => { throw new Error('Unsupported mock query operator ' + op); })());
   }
   function snap(col,id) {

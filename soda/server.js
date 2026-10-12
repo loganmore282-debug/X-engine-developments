@@ -5589,7 +5589,8 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
         reference: sendingMarker, description: 'Withdrawal',
         idempotencyKey: withdrawalId,
       });
-      if (pj.providerDown) {
+      // 429 is PesaJet answering 'too many requests': it did NOT take the payout, so it is a clean refusal (handled below), not a lost reply.
+      if (pj.providerDown && pj.httpStatus !== 429) {
         console.error('PesaJet disbursement unreachable (ambiguous, NOT reverting to pending):', pj.httpStatus, JSON.stringify(pj.data).slice(0, 200));
         return { code: 500, body: { status: 'error', message: 'Lost contact with PesaJet mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
       }
@@ -5601,6 +5602,12 @@ async function _processWithdrawalNow(withdrawalId, processedBy) {
       }
       const tx = pj.data?.data || pj.data || {};
       const pesajetTxId = tx.transactionId || null;
+      if (!pesajetTxId) {
+        // PesaJet answered OK but gave no transaction id to follow. Without it nothing could ever check or settle this payout, so it stays on
+        // 'sending' (not processing) and resolveSendingPesajetPayouts() finds it by our reference within a couple of minutes.
+        console.error(`PesaJet accepted withdrawal ${withdrawalId} but returned no transaction id; left on 'sending' for the reference lookup`);
+        return { code: 500, body: { status: 'error', message: 'PesaJet accepted the payout but did not return its id. It stays on "Sending" and is checked automatically in a few minutes; do not reject it.' } };
+      }
       await withLock('bal:' + wit.userId, async () => {
         await witRef.update({ pesajetRef: sendingMarker, pesajetTxId });
         const claimed = await witRef.updateIf({ status: 'sending' }, { status: 'processing', processedBy, processedAt: FieldValue.serverTimestamp() });
@@ -9499,7 +9506,7 @@ async function reconcilePendingDeposits() {
     // recent ones are the ones worth spending calls on. Older ones age out
     // rather than starving the young ones, which is the same starvation the
     // `pesajetTxId > ''` exclusion above exists to avoid.
-    const pjLostSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').orderBy('createdAt', 'desc').limit(60).get();
+    const pjLostSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').where('pesajetTxId', '==', null).orderBy('createdAt', 'desc').limit(60).get();
     let lookedUp = 0;
     for (const doc of pjLostSnap.docs) {
       if (lookedUp >= PESAJET_LOST_PER_TICK) break;
@@ -9538,10 +9545,47 @@ async function reconcilePendingDeposits() {
   } catch (e) { console.error('Reconcile deposits error:', e.message); }
   return settled;
 }
+// A PesaJet payout can sit on 'sending' with no transaction id: the reply was lost (5xx/timeout) or came without an id. PesaJet may or may not have it.
+// After 2 minutes it is looked up by OUR reference (the withdrawal id): found = remember its id and move to 'processing' exactly as a normal accepted send
+// does (totalWithdrawn counted once), after which the usual webhook/reconciler settles it; a completely scanned window with no such payment = PesaJet never
+// took it, so it goes back to 'pending' (the idempotency key is the withdrawal id, so a retry cannot double-pay); anything less certain is left alone.
+const SENDING_RECOVER_AFTER_MS = 2 * 60 * 1000, SENDING_RECOVER_PER_TICK = 5;
+async function resolveSendingPesajetPayouts() {
+  const snap = await db.collection('withdrawals').where('status', '==', 'sending').where('pesajetRef', '>', '').orderBy('createdAt', 'asc').limit(30).get();
+  let looked = 0;
+  for (const doc of snap.docs) {
+    if (looked >= SENDING_RECOVER_PER_TICK) break;
+    const w = doc.data();
+    if (w.pesajetTxId || _withdrawInFlight.has(doc.id)) continue;
+    const sentMs = tsMillis(w.sendingAt) || tsMillis(w.createdAt);
+    if (!sentMs || Date.now() - sentMs < SENDING_RECOVER_AFTER_MS) continue;
+    looked++;
+    const f = await pesajetFindByReference(w.pesajetRef, { sinceMs: tsMillis(w.createdAt) }).catch(() => null);
+    if (!f || f.providerDown || f.unreadable) continue;
+    _withdrawInFlight.add(doc.id);
+    try {
+      if (f.found && f.transactionId) {
+        await withLock('bal:' + w.userId, async () => {
+          await doc.ref.update({ pesajetTxId: f.transactionId });
+          const claimed = await doc.ref.updateIf({ status: 'sending', pesajetTxId: f.transactionId }, { status: 'processing', processedBy: w.sendingBy || 'recovered', processedAt: FieldValue.serverTimestamp() });
+          if (!claimed) return;
+          await db.collection('users').doc(w.userId).update({ totalWithdrawn: FieldValue.increment(w.net) }).catch(e => console.error(`MONEY-SAFETY: totalWithdrawn increment failed for recovered withdrawal ${doc.id}:`, e.message));
+        });
+        try { const tx = await db.collection('transactions').where('withdrawalId', '==', doc.id).limit(1).get(); if (!tx.empty) await tx.docs[0].ref.updateIf({ status: 'pending' }, { status: 'processing' }); } catch (_) {}
+        console.log(`Recovered PesaJet payout ${doc.id}: found at PesaJet as ${f.transactionId} (${f.status})`);
+      } else if (f.complete) {
+        await doc.ref.updateIf({ status: 'sending', pesajetTxId: null }, { status: 'pending', sendingReference: null, pesajetRef: null, pesajetTxId: null, sendingBy: null, sendingAt: null });
+        console.log(`PesaJet has no record of payout ${doc.id}: handed back to pending`);
+      }
+    } catch (e) { console.error('Sending recovery error:', e.message); }
+    finally { _withdrawInFlight.delete(doc.id); }
+  }
+}
 async function reconcilePendingWithdrawals() {
   let settled = 0;
   try {
     await reconcileWithdrawalCreations();
+    await resolveSendingPesajetPayouts();
     // Codex-caught real bug (2nd money-flow audit): same starvation risk as
     // reconcilePendingDeposits() above -- see its own comment for the full
     // reasoning. A `processing` row with no marzTxUuid was never
@@ -9785,12 +9829,14 @@ async function parkLostMarzDeposits() {
   const snap = await db.collection('pendingDeposits').where('status', 'in', ['initiating', 'pending']).where('createdAt', '<=', cutoff).orderBy('createdAt', 'asc').limit(50).get();
   for (const doc of snap.docs) {
     const d = doc.data();
-    if (d.provider === 'pesajet' || d.marzTxUuid || d.pesajetTxId || d.method === 'manual') continue;
+    if (d.marzTxUuid || d.pesajetTxId || d.method === 'manual') continue;
+    // PesaJet rows are looked up by the reconciler for 6 hours; after that no lookup can see them any more, so they are parked too.
+    if (d.provider === 'pesajet' && Date.now() - tsMillis(d.createdAt) < PESAJET_LOST_WINDOW_MS + 10 * 60 * 1000) continue;
     await withLock('dep:' + doc.id, async () => {
       const fresh = await doc.ref.get();
       const f = fresh.exists ? fresh.data() : null;
       if (!f || !['initiating', 'pending'].includes(f.status) || f.marzTxUuid) return;
-      await doc.ref.update({ status: 'review', reviewReason: 'No confirmation from MarzPay reached us. Check MarzPay; Force-credit only if it was paid.' });
+      await doc.ref.update({ status: 'review', reviewReason: 'No confirmation from the payment provider reached us. Check the provider; Force-credit only if it was paid.' });
     }).catch(() => {});
   }
 }
@@ -9826,9 +9872,9 @@ async function autoApproveWithdrawalsTick() {
     const cap = Number(sett.autoApproveMaxAmount) || 0;
     const since = Number(sett.autoApproveEnabledAt) || 0;
     // Filter before limiting: over-cap rows must not occupy every slot forever.
-    let eligible = db.collection('withdrawals').where('status', '==', 'pending');
+    let eligible = db.collection('withdrawals').where('status', '==', 'pending').where('autoHold', '!=', true);   // held rows must not fill the window
     if (cap > 0) eligible = eligible.where('amount', '<=', cap);
-    const snap = await eligible.orderBy('createdAt', 'asc').limit(100).get();
+    const snap = await eligible.orderBy('createdAt', 'asc').limit(200).get();
     const now = Date.now();
     for (const doc of snap.docs) {
       const wit = doc.data();

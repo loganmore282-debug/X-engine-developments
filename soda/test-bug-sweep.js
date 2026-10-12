@@ -53,4 +53,10 @@ ok(/ADMIN_TOTP_SECRET = '';/.test(rd('deploy/setup-admin-code.js')), 'switching 
 const dbs = rd('db.js'); ok(/\['memberSessions', \{ expiresAt: 1 \}, \{ expireAfterSeconds: 86400 \}\]/.test(dbs) && /\['adminSessions',  \{ expiresAt: 1 \}, \{ expireAfterSeconds: 86400 \}\]/.test(dbs), 'expired login sessions are deleted by the database');
 ok(/\['pendingDeposits', \{ createdAt: -1 \}\]/.test(dbs) && /\['withdrawals',     \{ createdAt: -1 \}\]/.test(dbs) && /\['transactions',    \{ createdAt: -1 \}\]/.test(dbs), 'the admin lists have a createdAt index');
 for (const f of ['user/sw.js', 'admin/sw.js']) ok(/if \(resp && resp\.ok\)/.test(rd(f)), f + ' never stores a failed answer in the cache');
+// runtime-tester findings: stuck PesaJet payouts, automatic mode starvation, lost deposits
+ok(/pj\.providerDown && pj\.httpStatus !== 429/.test(server), 'PesaJet 429 on a payout is a clean refusal (row back to Pending), not "lost contact"');
+ok(/PesaJet accepted withdrawal \$\{withdrawalId\} but returned no transaction id/.test(server), 'an accepted payout without an id stays on Sending instead of Processing with nothing to follow');
+ok(/async function resolveSendingPesajetPayouts/.test(server) && /await resolveSendingPesajetPayouts\(\);/.test(server) && /status: 'sending', pesajetTxId: null/.test(server), 'a PesaJet payout stuck on Sending is looked up by our reference: adopted when found, handed back to Pending when PesaJet has no record');
+ok(/where\('autoHold', '!=', true\)/.test(server), 'held rows cannot fill the automatic-mode window');
+ok(/where\('provider', '==', 'pesajet'\)\.where\('pesajetTxId', '==', null\)/.test(server) && /PESAJET_LOST_WINDOW_MS \+ 10 \* 60 \* 1000/.test(server), 'the lost-deposit lookup only reads rows without an id, and PesaJet rows older than the lookup window are parked for review');
 console.log(`PASS: bug sweep fixes (${n} checks)`);
