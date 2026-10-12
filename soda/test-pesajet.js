@@ -410,7 +410,7 @@ async function finish() {
   // quietly cover for it, so nothing would ever look wrong.
   ck(!src.includes('/deposit/pesajet/callback') && !src.includes('/withdraw/pesajet/callback'),
      'there are no per-direction PesaJet callbacks (the dashboard takes one URL)');
-  const hook = routeSlice("app.post('/pesajet/webhook'", "app.post('/bank/save'");
+  const hook = routeSlice("async function pesajetWebhookWork(", "app.post('/bank/save'");   // the work function (re-read, credit) and the route that acks first
   ck(hook.includes('pesajetVerifyWebhook'), 'the one webhook verifies the signature');
   ck(/mismatch[\s\S]*?401/.test(hook), '  and answers 401 to a forged one');
   ck(hook.includes('req.rawBody'),
@@ -424,7 +424,7 @@ async function finish() {
   // 200 within 30 seconds is PesaJet's own requirement, and the re-read can
   // outlast it (two attempts, 30s timeout each). So the ack goes first.
   const iAck = hook.indexOf('res.status(200).json({ received: true })');
-  const iWork = hook.indexOf('pesajetGetTx');
+  const iWork = hook.indexOf('await pesajetWebhookWork(body)');
   ck(iAck > 0 && iWork > iAck,
      "  the 200 is sent BEFORE the re-read -- PesaJet requires it within 30 seconds");
   // The raw body has to actually be captured, or the dashboard's own digest

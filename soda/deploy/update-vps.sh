@@ -79,6 +79,9 @@ if [ -n "$EXTRA" ] && [ "${#CERT_ARGS[@]}" -gt 0 ]; then
   HAVE2=$(certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | sed -n 's/^ *Domains: //p' | head -1)
   echo "    certificate now covers: $HAVE2"
 fi
+# certbot's http->https redirect answers 301, and a client that follows a 301 re-sends a POST as a GET WITHOUT its body: a payment callback registered
+# with an http:// address would silently arrive empty. 308 keeps the method and the body (browsers treat it like 301 for a normal page).
+sed -i -E 's#return 301 https://#return 308 https://#' "$CONF"
 # The regenerated file has no HTTPS sections until certbot adds them. If the old file had them and this one does not (certbot skipped or failed), put
 # the old file back: reloading port-80-only nginx would lock every browser out (the site sends HSTS).
 if [ -f "$BAK" ] && grep -q ssl_certificate "$BAK" && ! grep -q ssl_certificate "$CONF"; then

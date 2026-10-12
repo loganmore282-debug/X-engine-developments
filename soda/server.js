@@ -422,6 +422,7 @@ const ADMIN_KEY   = process.env.ADMIN_KEY   || '';
 const PUBLIC_URL  = (() => {
   let u = (process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
   if (u && !u.startsWith('http')) u = 'https://' + u;
+  if (!u) console.warn('WARNING: PUBLIC_URL is not set, so MarzPay is never told where to send payment callbacks and every MarzPay deposit/payout waits for the 30-second sweep. Set it to https://<app host>/k7x2 in the secrets file.');
   return u;
 })();
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
@@ -479,6 +480,8 @@ function requestHost(req) {
 function currentRegion() { return DEFAULT_REGION; }
 function currentRegionKey() { return DEFAULT_REGION_KEY; }
 app.use(async (req, res, next) => {
+  // A payment callback is answered at once: it must never wait behind a settings read (a slow database would push its answer past the gateway's timeout).
+  if (req.path === '/deposit/callback' || req.path === '/withdraw/callback' || req.path === '/pesajet/webhook') return next();
   await getSettings();
   next();
 });
@@ -4989,7 +4992,7 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     }
     if (!dep.marzTxUuid) return res.json({ status: 'success', state: 'pending' });
     const marzTx = await marzGetCollectTx(dep.marzTxUuid, { fast: true });
-    if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
+    if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(depSnap, "member's poll"); return res.json({ status: 'success', state: 'matched' }); }
     if (FAILED_STATUSES.has(marzTx.status)) {
       // Own test-caught bug: markDepositFailed() can now correctly no-op
       // (returns false) when this exact deposit was already credited by a
@@ -5013,14 +5016,31 @@ app.post('/deposit/marzpay/status', async (req, res) => {
 // ever happens after an independent live re-check confirms it, and a uuid
 // this endpoint didn't itself capture is only trusted once that check's own
 // reported `reference` is confirmed to match this exact deposit.
-app.post('/deposit/callback', async (req, res) => {
-  res.status(200).json({ status: 'ok' });
+// A callback is answered 200 at once (the gateway must not wait), and the work then runs after the answer. If that first pass cannot confirm what the
+// callback claims (the gateway's own status read still lags its webhook, the row's gateway id is not stored yet, a read failed) the gateway will NOT
+// retry, because it was told 200: the payment would wait for the 30 s sweep. So when a callback claims a FINAL status and the row is still open after the
+// first pass, the same work is repeated 1, 3, 8 and 20 seconds later (every pass is idempotent: it only acts on a row that is still pending).
+function retryCallbackWork(label, work, stillOpen, claimsFinal) {
+  if (!claimsFinal) return;
+  const delays = [1000, 3000, 8000, 20000]; let i = 0;
+  const next = () => {
+    if (i >= delays.length) return;
+    setTimeout(async () => {
+      try { await work(); if (await stillOpen()) next(); } catch (e) { console.error(label + ' retry error:', e.message); }
+    }, delays[i++]);
+  };
+  stillOpen().then(open => { if (open) next(); }).catch(() => {});
+}
+function marzCallbackRawStatus(body) {
+  let st = String(body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || '').toLowerCase();
+  if (!st) st = marzEventTypeFallback(body.event_type);
+  return st;
+}
+async function marzDepositCallbackWork(body) {
   try {
-    const body = req.body || {};
     const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
     if (!reference) return;
-    let rawStatus = String(body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || '').toLowerCase();
-    if (!rawStatus) rawStatus = marzEventTypeFallback(body.event_type);
+    const rawStatus = marzCallbackRawStatus(body);
     const isSuccess = SUCCESS_STATUSES.has(rawStatus);
     const isFailed  = FAILED_STATUSES.has(rawStatus);
     if (!isSuccess && !isFailed) return;
@@ -5044,12 +5064,26 @@ app.post('/deposit/callback', async (req, res) => {
     if (!uuid || !tx) return;
     if (isSuccess) {
       if (!SUCCESS_STATUSES.has(tx.status)) return;
-      await creditDeposit(doc);
+      await creditDeposit(doc, 'MarzPay callback');
     } else if (isFailed) {
       if (!FAILED_STATUSES.has(tx.status)) return;
       await markDepositFailed(doc.ref, dep.userId, marzDepositFailureMsg(tx));
     }
   } catch (e) { console.error('Deposit callback error:', e.message); }
+}
+async function marzDepositCallbackOpen(body) {
+  const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
+  if (!reference) return false;
+  const q = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
+  return !q.empty && ['pending', 'initiating'].includes(q.docs[0].data().status);
+}
+app.post('/deposit/callback', async (req, res) => {
+  res.status(200).json({ status: 'ok' });
+  const body = req.body || {};
+  const st = marzCallbackRawStatus(body);
+  console.log(`MarzPay deposit callback: ${st || body.event_type || 'no status'} ${body.data?.reference || body.reference || body.transaction?.reference || '?'}`);
+  await marzDepositCallbackWork(body);
+  retryCallbackWork('MarzPay deposit callback', () => marzDepositCallbackWork(body), () => marzDepositCallbackOpen(body), SUCCESS_STATUSES.has(st) || FAILED_STATUSES.has(st));
 });
 // ═══════════════════════════════════════════
 // WITHDRAWAL (MarzPay send-money, mobile money only)
@@ -5883,14 +5917,11 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     res.json({ status: 'success', ourStatus: w.status, marzStatus: marzStatus || 'unknown', message });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.post('/withdraw/callback', async (req, res) => {
-  res.status(200).json({ status: 'ok' });
+async function marzWithdrawCallbackWork(body) {
   try {
-    const body = req.body || {};
     const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
     if (!reference) return;
-    let rawStatus = String(body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || '').toLowerCase();
-    if (!rawStatus) rawStatus = marzEventTypeFallback(body.event_type);
+    const rawStatus = marzCallbackRawStatus(body);
     const isSuccess = SUCCESS_STATUSES.has(rawStatus);
     const isFailed  = FAILED_STATUSES.has(rawStatus);
     if (!isSuccess && !isFailed) return;
@@ -5973,6 +6004,25 @@ app.post('/withdraw/callback', async (req, res) => {
       if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
     }
   } catch (e) { console.error('Withdraw callback error:', e.message); }
+}
+async function marzWithdrawCallbackOpen(body) {
+  const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
+  if (!reference) return false;
+  const ourRef = body.data?.transaction?.provider_reference || body.transaction?.provider_reference;
+  for (const r of [reference, ourRef]) {
+    if (!r) continue;
+    const q = await db.collection('withdrawals').where('marzReference', '==', r).limit(1).get();
+    if (!q.empty) return ['processing', 'sending'].includes(q.docs[0].data().status);
+  }
+  return false;
+}
+app.post('/withdraw/callback', async (req, res) => {
+  res.status(200).json({ status: 'ok' });
+  const body = req.body || {};
+  const st = marzCallbackRawStatus(body);
+  console.log(`MarzPay payout callback: ${st || body.event_type || 'no status'} ${body.data?.reference || body.reference || body.transaction?.reference || '?'}`);
+  await marzWithdrawCallbackWork(body);
+  retryCallbackWork('MarzPay payout callback', () => marzWithdrawCallbackWork(body), () => marzWithdrawCallbackOpen(body), SUCCESS_STATUSES.has(st) || FAILED_STATUSES.has(st));
 });
 // ── THE PESAJET WEBHOOK -- ONE ENDPOINT FOR BOTH DIRECTIONS ──
 // PesaJet's dashboard has a SINGLE "Webhook Destination URL" field. Two
@@ -6001,19 +6051,7 @@ app.post('/withdraw/callback', async (req, res) => {
 //     unauthenticated automated path. Only a human, via
 //     /admin/withdraw/reject after checking PesaJet's own dashboard, resolves
 //     one. Refunding a payout that actually went out pays the member twice.
-app.post('/pesajet/webhook', async (req, res) => {
-  const body = req.body || {};
-  const check = pesajetVerifyWebhook(body, req.get('x-webhook-signature'), req.rawBody);
-  // A signature that is present and wrong is the one case worth refusing
-  // loudly: it is either a forgery or a misconfigured secret, and both want
-  // an operator's attention. Answered BEFORE the ack below, since a refusal
-  // is not an acknowledgement.
-  if (!check.verified && check.reason === 'mismatch') {
-    console.error('PesaJet webhook: signature mismatch, refused.');
-    return res.status(401).json({ status: 'error', message: 'Invalid signature' });
-  }
-  res.status(200).json({ received: true });
-  // Everything past here runs after the ack. Nothing may throw out of it.
+async function pesajetWebhookWork(body) {
   try {
     if (body.event === 'ping') return;                 // a delivery test
     const reference = String(body.reference || '');
@@ -6054,6 +6092,32 @@ app.post('/pesajet/webhook', async (req, res) => {
   } catch (e) {
     console.error('PesaJet webhook error (already acked):', e.message);
   }
+}
+async function pesajetWebhookOpen(body) {
+  const reference = String(body.reference || '');
+  if (!reference) return false;
+  const q = await db.collection('pendingDeposits').where('ref', '==', reference).limit(1).get();
+  if (!q.empty) return ['pending', 'initiating'].includes(q.docs[0].data().status);
+  const w = await db.collection('withdrawals').doc(reference).get();
+  return w.exists && ['processing', 'sending'].includes(w.data().status);
+}
+app.post('/pesajet/webhook', async (req, res) => {
+  const body = req.body || {};
+  const check = pesajetVerifyWebhook(body, req.get('x-webhook-signature'), req.rawBody);
+  // A signature that is present and wrong is the one case worth refusing
+  // loudly: it is either a forgery or a misconfigured secret, and both want
+  // an operator's attention. Answered BEFORE the ack below, since a refusal
+  // is not an acknowledgement.
+  if (!check.verified && check.reason === 'mismatch') {
+    console.error('PesaJet webhook: signature mismatch, refused.');
+    return res.status(401).json({ status: 'error', message: 'Invalid signature' });
+  }
+  res.status(200).json({ received: true });
+  // Everything past here runs after the ack. Nothing may throw out of it.
+  console.log(`PesaJet webhook: ${body.event || body.status || '?'} ${body.reference || '?'}`);
+  await pesajetWebhookWork(body);
+  const claimsFinal = /completed|failed|expired/i.test(String(body.event || '')) || ['completed', 'failed', 'expired'].includes(String(body.status || '').toLowerCase());
+  retryCallbackWork('PesaJet webhook', () => pesajetWebhookWork(body), () => pesajetWebhookOpen(body), claimsFinal);
 });
 // ═══════════════════════════════════════════
 // WITHDRAWAL ACCOUNTS (mobile money + bank)
@@ -9437,6 +9501,9 @@ app.use((err, _req, res, _next) => {
 });
 
 // ── RECONCILERS ──
+async function inChunks(items, size, fn) {
+  for (let i = 0; i < items.length; i += size) await Promise.all(items.slice(i, i + size).map(it => fn(it).catch(e => console.error('Reconcile row error:', e.message))));
+}
 async function reconcilePendingDeposits() {
   let settled = 0;
   try {
@@ -9465,13 +9532,14 @@ async function reconcilePendingDeposits() {
     // with -- nothing lost, since a uuid-less row was never actionable here
     // anyway, just no longer able to block newer ones.
     const snap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('marzTxUuid', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    for (const doc of snap.docs) {
+    // Five rows at a time: each check is a patient gateway read (up to 20 s), done one after another a slow MarzPay held up everything behind it.
+    await inChunks(snap.docs, 5, async (doc) => {
       const dep = doc.data();
-      if (!dep.marzTxUuid) continue;
+      if (!dep.marzTxUuid) return;
       const marzTx = await marzGetCollectTx(dep.marzTxUuid);
-      if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(doc); settled++; }
+      if (SUCCESS_STATUSES.has(marzTx.status)) { await creditDeposit(doc, 'reconciler'); settled++; }
       else if (FAILED_STATUSES.has(marzTx.status)) await markDepositFailed(doc.ref, dep.userId, marzDepositFailureMsg(marzTx));
-    }
+    });
     // PesaJet's own pending/initiating deposits. This sweep matters MORE for
     // this gateway than for the other two: PesaJet's webhook URL is
     // configured in their dashboard rather than sent per request, so until
@@ -9485,14 +9553,14 @@ async function reconcilePendingDeposits() {
     // those would reselect themselves every tick forever and starve genuinely
     // pending newer ones.
     const pjSnap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('provider', '==', 'pesajet').where('pesajetTxId', '>', '').orderBy('createdAt', 'asc').limit(50).get();
-    for (const doc of pjSnap.docs) {
+    await inChunks(pjSnap.docs, 5, async (doc) => {
       const dep = doc.data();
       const t = await pesajetGetTx(dep.pesajetTxId);
-      if (t.providerDown) continue;
+      if (t.providerDown) return;
       const realStatus = pesajetStatusLabel(t.status);
       if (realStatus === 'success') { await creditDeposit(doc, 'reconciler'); settled++; }
       else if (realStatus === 'failed') await markDepositFailed(doc.ref, dep.userId, pesajetFailureMsg(t.status));
-    }
+    });
     // ...and the rows the sweep above deliberately cannot touch: PesaJet
     // deposits with NO transaction id, because the create response was lost
     // while PesaJet may well have accepted it. Nothing could ever check these
@@ -9844,7 +9912,11 @@ let _reconcilerRunning = false;
 function runReconciler() {
   if (_reconcilerRunning) return;   // a slow gateway must not let passes pile up on top of each other
   _reconcilerRunning = true;
-  reconcilePendingDeposits().then(parkLostMarzDeposits).then(reconcilePendingWithdrawals).then(reconcileStuckWithdrawalRefunds).then(reconcileCommissions).catch(() => {}).finally(() => { _reconcilerRunning = false; });
+  // Deposits and withdrawals are settled side by side: a slow gateway on one must not hold the other back.
+  Promise.allSettled([
+    reconcilePendingDeposits().then(parkLostMarzDeposits),
+    reconcilePendingWithdrawals().then(reconcileStuckWithdrawalRefunds),
+  ]).then(() => reconcileCommissions()).catch(() => {}).finally(() => { _reconcilerRunning = false; });
 }
 // AUTOMATIC WITHDRAWALS. Owner-toggleable (Admin > Settings): while ON, every still-pending withdrawal is sent by the server after its OWN random
 // wait of autoApproveMinSec..autoApproveMaxSec seconds. The wait is picked once per withdrawal and written on it (autoSendAt), so a restart does not

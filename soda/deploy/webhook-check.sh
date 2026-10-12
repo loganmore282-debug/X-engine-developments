@@ -41,4 +41,7 @@ echo "    (a line 'credited X s after it was submitted, Y s after PesaJet accept
 
 say "6/6  Does the certificate cover the webhook host?"
 certbot certificates 2>/dev/null | grep -E "Certificate Name|Domains|Expiry" | awk '{print "    " $0}'
+if [ -n "$HH" ]; then
+  if certbot certificates 2>/dev/null | grep -E "Domains:" | grep -qw "$HH"; then echo "    OK: the certificate covers the webhook host $HH"; else echo "    !! the certificate does NOT cover $HH: the gateway cannot deliver over https. Check its DNS A record, then run update-vps.sh again."; fi
+fi
 echo; echo "DONE (nothing was changed)."

@@ -59,4 +59,17 @@ ok(/PesaJet accepted withdrawal \$\{withdrawalId\} but returned no transaction i
 ok(/async function resolveSendingPesajetPayouts/.test(server) && /await resolveSendingPesajetPayouts\(\);/.test(server) && /status: 'sending', pesajetTxId: null/.test(server), 'a PesaJet payout stuck on Sending is looked up by our reference: adopted when found, handed back to Pending when PesaJet has no record');
 ok(/where\('autoHold', '!=', true\)/.test(server), 'held rows cannot fill the automatic-mode window');
 ok(/where\('provider', '==', 'pesajet'\)\.where\('pesajetTxId', '==', null\)/.test(server) && /PESAJET_LOST_WINDOW_MS \+ 10 \* 60 \* 1000/.test(server), 'the lost-deposit lookup only reads rows without an id, and PesaJet rows older than the lookup window are parked for review');
+// callbacks (webhooks)
+ok(/function retryCallbackWork\(/.test(server) && /const delays = \[1000, 3000, 8000, 20000\]/.test(server) && /async function pesajetWebhookWork\(body\)/.test(server) && /async function marzDepositCallbackWork\(body\)/.test(server) && /async function marzWithdrawCallbackWork\(body\)/.test(server), 'a callback that claims a final status is re-checked 1, 3, 8 and 20 s later if the first pass could not confirm it (all three handlers)');
+ok(/req\.path === '\/deposit\/callback' \|\| req\.path === '\/withdraw\/callback' \|\| req\.path === '\/pesajet\/webhook'\) return next\(\);\s*await getSettings/.test(server), 'callbacks never wait behind a settings read');
+ok(/WARNING: PUBLIC_URL is not set/.test(server), 'a missing PUBLIC_URL is warned about at start-up');
+ok(/creditDeposit\(doc, 'MarzPay callback'\)/.test(server) && /creditDeposit\(depSnap, \"member's poll\"\)/.test(server), 'MarzPay credits are labelled in the timing log');
+ok(/async function inChunks\(/.test(server) && /Promise\.allSettled\(\[\s*reconcilePendingDeposits\(\)/.test(server), 'the reconciler checks five rows at a time and settles deposits and withdrawals side by side');
+// nginx: callbacks get their own wide rate zone, no user-agent wall on the hook host, 308 instead of 301
+{ const g = require('child_process').execFileSync('node', ['deploy/make-nginx.js', 'prod', 'a.example.com', 'Panel7x9k', 'b.example.com'], { encoding: 'utf8', env: { ...process.env, SODA_HOOK_TOKEN: '0123456789abcdef0123456789abcdef', SODA_HOOK_HOST: 'h.example.com' } });
+  ok(/zone=soda_hook:10m rate=50r\/s/.test(g) && (g.match(/limit_req zone=soda_hook burst=300 nodelay/g) || []).length >= 3, 'payment callbacks (hook host, MarzPay deposit and payout) use their own wide rate zone, not the shared 20/s one');
+  const hostBlock = g.slice(g.indexOf('server_name h.example.com'));
+  ok(!/soda_bad_ua/.test(hostBlock.slice(0, hostBlock.indexOf('location / { return 404; }'))), 'the webhook-only host has no user-agent wall'); }
+ok(/return 308 https:/.test(rd('deploy/update-vps.sh')), 'update-vps.sh turns certbot\'s 301 into 308 so a POST callback keeps its body when it is redirected');
+ok(/maxretry = 3/.test(rd('deploy/fail2ban/soda.local').slice(rd('deploy/fail2ban/soda.local').indexOf('[soda-badua]'), rd('deploy/fail2ban/soda.local').indexOf('[soda-adminlogin]'))), 'one odd sender name no longer bans an address for a day');
 console.log(`PASS: bug sweep fixes (${n} checks)`);

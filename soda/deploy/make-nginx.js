@@ -93,8 +93,10 @@ const hookProxy = `        rewrite ^ /pesajet/webhook break;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;`;
+// A gateway delivers from ONE address and retries in bursts (PesaJet: 1 min, 5, 15 ...): the shared 20 requests/s zone with burst 40 answered 429 to the
+// 42nd request of a burst and the retry came a minute later. Callbacks have their own, much wider, zone (the signature / live re-check protects them).
 const hookLocation = path => `    location = ${path} {
-        limit_req zone=soda_api burst=40 nodelay;
+        limit_req zone=soda_hook burst=300 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${hookProxy}
     }
@@ -109,7 +111,7 @@ const hookHostBlock = () => `server {
     listen [::]:80;
     server_name ${HOOK_HOST};
     server_tokens off;
-    if ($soda_bad_ua) { return 444; }
+    # no user-agent wall here: this host serves one secret POST address only, a gateway's own User-Agent must never be shut out of it
     if ($request_method !~ ^(GET|HEAD|POST|OPTIONS)$) { return 405; }
     limit_conn soda_conn 150;
     limit_conn_status 429;
@@ -161,7 +163,18 @@ ${proxy()}
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
-${HOOK_TOKEN && role !== 'admin' ? memberHookLocations : ''}    location /${API}/ {
+${HOOK_TOKEN && role !== 'admin' ? memberHookLocations : ''}${role !== 'admin' ? `    # MarzPay payment callbacks: their own wide rate zone (see hookLocation)
+    location = /${API}/deposit/callback {
+        limit_req zone=soda_hook burst=300 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${proxy()}
+    }
+    location = /${API}/withdraw/callback {
+        limit_req zone=soda_hook burst=300 nodelay;
+${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
+${proxy()}
+    }
+` : ''}    location /${API}/ {
         limit_req zone=soda_api burst=40 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
@@ -233,6 +246,7 @@ upstream soda_node {
 }
 
 limit_req_zone $binary_remote_addr zone=soda_api:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=soda_hook:10m rate=50r/s;
 limit_req_zone $binary_remote_addr zone=soda_admin_login:10m rate=1r/s;
 limit_req_zone $binary_remote_addr zone=soda_member_login:10m rate=3r/s;
 limit_conn_zone $binary_remote_addr zone=soda_conn:10m;

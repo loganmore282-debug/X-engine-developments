@@ -24,7 +24,7 @@ enabled  = true
 filter   = soda-badua
 port     = http,https
 logpath  = /var/log/nginx/access.log
-maxretry = 1
+maxretry = 3
 findtime = 10m
 bantime  = 24h
 
