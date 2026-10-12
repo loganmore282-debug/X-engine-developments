@@ -195,9 +195,9 @@ async function additionalControls() {
   withdrawals.legacy={status:'pending',amount:5000,createdAt:new Date(2000)};
   const db=makeDb({withdrawals}),processed=[];
   const {c}=context(db,{DEFAULT_REGION_KEY:'ug',tsMillis:t=>+t,
-    getSettings:async()=>({autoApproveWithdrawalsEnabled:true,autoApproveMaxAmount:10000}),
+    getSettings:async()=>({autoApproveWithdrawalsEnabled:true,autoApproveMinSec:0,autoApproveMaxSec:0,autoApproveMaxAmount:10000}),
     processWithdrawalCore:async id=>{processed.push(id);}});
-  vm.runInContext(section('async function autoApproveWithdrawalsTick(', "app.get('/admin/payments/sync'"),c);
+  vm.runInContext(section('let _autoTickRunning', "app.get('/admin/payments/sync'"),c);
   await c.autoApproveWithdrawalsTick();
   assert.deepEqual(processed,['legacy']);
   vm.runInContext(section('function walletLedgerAmount(', "app.post('/admin/user/repair-wallet'"),c);

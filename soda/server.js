@@ -662,12 +662,11 @@ const DEFAULT_SETTINGS = {
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
   // What every NEW mobile-money recharge / withdrawal reference starts with (soda2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
-  // Off by default — approves every pending withdrawal automatically a few
-  // seconds after it's requested, server-driven, idempotent (shares the
-  // exact same processWithdrawalCore path a manual admin approval uses).
-  // autoApproveMaxAmount: 0 = unlimited; a nonzero value leaves anything
-  // above it for manual review instead.
-  autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
+  // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
+  // ON does the server pay them by itself, each one after its OWN random wait of autoApproveMinSec..autoApproveMaxSec seconds (so payouts do not
+  // leave in one burst or on a fixed rhythm). It uses exactly the same processWithdrawalCore as the manual Send button. autoApproveMaxAmount:
+  // 0 = no limit; a nonzero value leaves anything above it for manual review. autoApproveEnabledAt is stamped by the server when the switch is turned on.
+  autoApproveWithdrawalsEnabled: false, autoApproveMinSec: 10, autoApproveMaxSec: 60, autoApproveMaxAmount: 0, autoApproveEnabledAt: 0,
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '', supportEmail: '',
   rulesText: '', aboutText: '',
   // Owner: "l would like to also to edit the app name soda, so make it when
@@ -6742,7 +6741,7 @@ const SETTINGS_CRITICAL_RANGES = {
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
   turntableDailyMin: [0, MAX_MONEY_AMOUNT], turntableDailyMax: [0, MAX_MONEY_AMOUNT],
-  autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
+  autoApproveMinSec: [0, 86400], autoApproveMaxSec: [0, 86400], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
   // 0 = not scheduled; upper bound is a plain sanity cap (year 2100), not a
   // real business constraint -- an admin fat-fingering a date shouldn't be
   // able to silently store something outside "any date anyone would ever
@@ -6850,6 +6849,16 @@ app.post('/admin/settings/update', async (req, res) => {
       if (name.length > 24) return res.status(400).json({ status: 'error', message: 'App name must be 24 characters or fewer.' });
       if (/[<>]/.test(name)) return res.status(400).json({ status: 'error', message: 'App name cannot contain < or >.' });
       updates.brandName = name;
+    }
+    // Automatic withdrawals: the wait is a range, so the top cannot be below the bottom (checked against what is stored when only one is sent),
+    // and the moment the switch goes from off to on is remembered so waits already counted before it was switched on do not fire all at once.
+    delete updates.autoApproveEnabledAt;
+    if (['autoApproveMinSec', 'autoApproveMaxSec', 'autoApproveWithdrawalsEnabled'].some(k => k in updates)) {
+      const prev = await getSettings();
+      const lo = 'autoApproveMinSec' in updates ? updates.autoApproveMinSec : Number(prev.autoApproveMinSec);
+      const hi = 'autoApproveMaxSec' in updates ? updates.autoApproveMaxSec : Number(prev.autoApproveMaxSec);
+      if (hi < lo) return res.status(400).json({ status: 'error', message: 'The longest wait cannot be shorter than the shortest wait.' });
+      if (updates.autoApproveWithdrawalsEnabled === true && !prev.autoApproveWithdrawalsEnabled) updates.autoApproveEnabledAt = Date.now();
     }
     // Start of every new payment reference. Refused rather than repaired, so what the owner types is exactly what appears at the gateway.
     if ('referencePrefix' in updates) {
@@ -8293,7 +8302,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     // Subagent-audit-caught: same missing-truncated-flag gap as the deposits
     // list above, fixed the same way.
     const truncated = snap.docs.length >= 5000 || unresolvedSnap.docs.length >= 5000;
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett), truncated, regionKey: want || 'all' });
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount, payoutMode: withdrawProvider(sett), autoWithdrawals: !!sett.autoApproveWithdrawalsEnabled && !payoutIsManual(sett), truncated, regionKey: want || 'all' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {
@@ -9733,15 +9742,19 @@ async function migratePayoutsToMidnightOnce() {
 function runReconciler() {
   reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileStuckWithdrawalRefunds).then(reconcileCommissions).catch(() => {});
 }
-// Owner-toggleable: approves every still-pending withdrawal automatically,
-// a few seconds after it was requested — shares processWithdrawalCore with
-// the manual "Send" button, so it's exactly as safe/idempotent.
-// Runs once per region, because auto-approval is one of the settings each
-// region owns: Uganda can be auto-paying while Kenya is still hand-checked,
-// and each region's own interval and safety cap apply to its own members'
-// withdrawals. A withdrawal with no regionKey (raised before regions existed)
-// belongs to the founding region.
+// AUTOMATIC WITHDRAWALS. Owner-toggleable (Admin > Settings): while ON, every still-pending withdrawal is sent by the server after its OWN random
+// wait of autoApproveMinSec..autoApproveMaxSec seconds. The wait is picked once per withdrawal and written on it (autoSendAt), so a restart does not
+// change it and several requests do not leave together. Shares processWithdrawalCore with the manual "Send" button, so it is exactly as safe and
+// idempotent. A wait chosen before the switch was last turned on (autoSendAt < autoApproveEnabledAt) is thrown away and picked again.
+// Requests are never held back: they appear as pending the moment they are made, whether this is on or off.
+let _autoTickRunning = false;
+function autoApproveDelayMs(sett) {
+  const lo = Math.max(0, Number(sett.autoApproveMinSec) || 0), hi = Math.max(lo, Number(sett.autoApproveMaxSec) || 0);
+  return Math.round((lo + Math.random() * (hi - lo)) * 1000);
+}
 async function autoApproveWithdrawalsTick() {
+  if (_autoTickRunning) return;
+  _autoTickRunning = true;
   try {
     const sett = await getSettings();
     if (!sett.autoApproveWithdrawalsEnabled) return;
@@ -9752,23 +9765,33 @@ async function autoApproveWithdrawalsTick() {
     // left. The toggle stays where the owner set it and simply does nothing
     // while manual mode is on, rather than being silently rewritten.
     if (payoutIsManual(sett)) return;
-    const cutoff = new Date(Date.now() - (Number(sett.autoApproveIntervalSec) || 10) * 1000);
-    // Filter before limiting: manual-region and over-cap rows must not
-    // occupy every slot forever. Mongo's $in:null includes missing legacy
-    // regionKey fields, which belong to Uganda.
-    let eligible = db.collection('withdrawals').where('status', '==', 'pending')
-      .where('createdAt', '<=', cutoff);
     const cap = Number(sett.autoApproveMaxAmount) || 0;
+    const since = Number(sett.autoApproveEnabledAt) || 0;
+    // Filter before limiting: over-cap rows must not occupy every slot forever.
+    let eligible = db.collection('withdrawals').where('status', '==', 'pending');
     if (cap > 0) eligible = eligible.where('amount', '<=', cap);
-    const snap = await eligible.orderBy('createdAt', 'asc').limit(50).get();
+    const snap = await eligible.orderBy('createdAt', 'asc').limit(100).get();
+    const now = Date.now();
     for (const doc of snap.docs) {
       const wit = doc.data();
-      if (tsMillis(wit.createdAt) > cutoff.getTime()) continue; // not old enough yet
-      const cap = Number(sett.autoApproveMaxAmount) || 0;
-      if (cap > 0 && wit.amount > cap) continue; // above the safety cap — leave for manual review
-      await processWithdrawalCore(doc.id, 'auto-approve').catch(e => console.error('Auto-approve error:', e.message));
+      if (cap > 0 && wit.amount > cap) continue; // above the safety cap -- left for manual review
+      let due = Number(wit.autoSendAt) || 0;
+      if (!due || due < since) {
+        due = now + autoApproveDelayMs(sett);
+        await db.collection('withdrawals').doc(doc.id).update({ autoSendAt: due }).catch(e => console.error('Auto-send time not saved:', e.message));
+      }
+      if (due > now) continue;
+      if (wit.autoHold) continue;   // five failed automatic attempts: left for a person (Send / Reject)
+      const out = await processWithdrawalCore(doc.id, 'auto-approve').catch(e => { console.error('Auto-approve error:', e.message); return { code: 500 }; });
+      if (out && out.code >= 400) {
+        // The gateway refused or was unreachable: do not ask again every second. Wait longer each time, and after 5 tries leave it for a person.
+        const tries = (Number(wit.autoAttempts) || 0) + 1;
+        console.error(`Auto-send of withdrawal ${doc.id} failed (try ${tries}): ${(out.body && out.body.message) || out.code}`);
+        await db.collection('withdrawals').doc(doc.id).update(tries >= 5 ? { autoAttempts: tries, autoHold: true } : { autoAttempts: tries, autoSendAt: Date.now() + 60000 * tries }).catch(() => {});
+      }
     }
   } catch (e) { console.error('Auto-approve tick error:', e.message); }
+  finally { _autoTickRunning = false; }
 }
 app.get('/admin/payments/sync', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -9826,7 +9849,7 @@ connectMongo(MONGODB_URI)
     // not a full-ledger scan) -- worth knowing on the M0 free tier, not
     // expected to be a real problem at Snow's current scale.
     migratePayoutsToMidnightOnce().then(n => { if (n) console.log(`Moved ${n} running investments to the midnight payout schedule`); }).catch(e => console.error('Midnight schedule migration:', e.message)).then(() => backfillNextPayoutAt()).then(n => { if (n) console.log(`Set the next payout time on ${n} running investments`); }).catch(e => console.error('Backfill nextPayoutAt:', e.message)).then(() => { setInterval(reconcileCashback, 500); setTimeout(reconcileCashback, 500); armMidnightSweep(); });
-    setInterval(autoApproveWithdrawalsTick, 10 * 1000);
+    setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
   })

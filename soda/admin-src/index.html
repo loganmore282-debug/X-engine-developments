@@ -1975,13 +1975,13 @@ async function quietRefreshDeposits(){
 }
 
 // ── WITHDRAWALS ──
-let _wits=[], _witFilter='pending';
+let _wits=[], _witFilter='pending', _witAuto=false;
 async function renderWithdrawals(){
   const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals')) return;
   if(loadFailed(r,'withdrawals')) return;
   _wits = r.withdrawals||[];
-  _witProvider = r.payoutMode || 'marzpay';
+  _witProvider = r.payoutMode || 'marzpay'; _witAuto = !!r.autoWithdrawals;
   _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
@@ -2042,7 +2042,7 @@ function drawWits(){
     const dest = `${esc(w.network||'Not set')}<br><span class="muted" style="font-size:11px">${esc(w.phone||'')}</span>`;
     return `<tr class="clickable" data-uid="${esc(w.userId)}"><td>${fdate(w.createdAt)}</td><td>${who}${code?`<br><span class="muted">${esc(code)}</span>`:''}</td>
     <td>${ugx(w.amount, w.regionKey)}</td><td><b>${ugx(w.net, w.regionKey)}</b></td><td>${dest}</td>
-    <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
+    <td>${witStatusPill(w)}${w.status==='pending'&&_witAuto?(w.autoHold?'<br><span class="muted" style="font-size:11px">auto-send gave up: send by hand</span>':(w.autoSendAt?`<br><span class="muted" style="font-size:11px">auto-send at ${esc(new Date(w.autoSendAt).toLocaleTimeString([], {hour12:false}))}</span>`:'<br><span class="muted" style="font-size:11px">auto-send soon</span>')):''}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">${_witManualPayouts?'Mark as paid':'Send via '+PROVIDER_LABEL[normalizeProv(_witProvider)]}</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       // subagent-audit-caught: 'sending' (MarzPay network-errored mid-send,
@@ -2090,7 +2090,7 @@ async function quietRefreshWithdrawals(){
   if(staleTab('withdrawals') || !$('witRows')) return;
   if(r.status!=='success') return;
   _wits = r.withdrawals||[];
-  _witProvider = r.payoutMode || 'marzpay';
+  _witProvider = r.payoutMode || 'marzpay'; _witAuto = !!r.autoWithdrawals;
   _witManualPayouts = _witProvider === 'manual';
   const counts = r.counts || {};
   // subagent-audit-caught: 'sending' had no filter tab of its own, so an
@@ -2993,6 +2993,15 @@ async function renderSettings(){
            country". -->
       <p class="muted" style="margin:6px 0 0">Uganda time. Members can withdraw only between these two times, for example 6:00 AM to 4:00 PM. One withdrawal at a time per member, always.</p>
       <p class="muted" id="witNow" style="margin:6px 0 0;font-weight:600"></p>
+      <!-- Automatic withdrawals: requests still arrive as Pending; only while this is ON does the VPS send each one after its own random wait. -->
+      <div class="switch-row" style="margin-top:14px"><span><b>Automatic withdrawals</b> <span class="muted">(the VPS sends them; requests still arrive as Pending)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sAutoWit" ${s.autoApproveWithdrawalsEnabled===true?'checked':''} style="width:auto"></label></div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Shortest wait (seconds)</label><input id="sAutoMin" type="number" min="0" max="86400" step="1" value="${v('autoApproveMinSec',10)}"></div>
+        <div><label>Longest wait (seconds)</label><input id="sAutoMax" type="number" min="0" max="86400" step="1" value="${v('autoApproveMaxSec',60)}"></div>
+        <div><label>Automatic up to (UGX, 0 = no limit)</label><input id="sAutoCap" type="number" min="0" step="1" value="${v('autoApproveMaxAmount',0)}"></div>
+      </div>
+      <p class="muted" id="autoWitNote" style="margin:6px 0 0"></p>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a referral code to sign up</b> <span class="muted">(every new member must be invited by an existing one)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqReferral" ${s.requireReferralCode!==false?'checked':''} style="width:auto"></label></div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Leave ON &mdash; the first-ever account is always let through.</p>
@@ -3070,6 +3079,15 @@ async function renderSettings(){
     const open=a<b?(now>=a&&now<b):(now>=a||now<b);
     el.textContent='Right now it is '+clock+' Uganda time: withdrawing is '+(open?'OPEN.':'CLOSED.');
   }
+  const refreshAutoNote=()=>{
+    const on=$('sAutoWit').checked, lo=$('sAutoMin').value.trim(), hi=$('sAutoMax').value.trim(), cap=+$('sAutoCap').value||0, n=$('autoWitNote');
+    n.textContent = on
+      ? `ON: every new withdrawal is sent by the VPS after its own random wait of ${lo||'?'} to ${hi||'?'} seconds${cap?`, only up to ${ugx(cap)} (larger ones wait for you)`:''}. It uses the payment method chosen above; with "manual" payment nothing is sent automatically.`
+      : 'OFF: withdrawals wait in Withdrawals until you press Send.';
+    n.style.color = on ? 'var(--ok)' : '';
+  };
+  ['sAutoWit','sAutoMin','sAutoMax','sAutoCap'].forEach(id=>{ $(id).addEventListener('input',refreshAutoNote); $(id).addEventListener('change',refreshAutoNote); });
+  refreshAutoNote();
   ['sWitWindow','sWitFrom','sWitTo'].forEach(id=>{ const e=$(id); if(e){ e.addEventListener('change',refreshWitNow); e.addEventListener('input',refreshWitNow); } });
   refreshWitNow();
   { const px=$('sRefPrefix'), pv=$('sRefPrefixPreview');
@@ -3077,14 +3095,16 @@ async function renderSettings(){
     px.addEventListener('input',showRef); showRef(); }
   $('saveRates').addEventListener('click', async()=>{
     // A blank number box would be read as 0 (a 0% commission or a 0 minimum would be saved silently): refuse it instead.
-    for(const [id,label] of [['sMinDep','Minimum deposit'],['sMinWit','Minimum withdrawal'],['sWelcome','Welcome bonus'],['sFee','Withdrawal fee'],['sC1','Level 1 commission'],['sC2','Level 2 commission'],['sC3','Level 3 commission'],['sMaxWitDay','Withdrawals per day']]){
+    for(const [id,label] of [['sMinDep','Minimum deposit'],['sMinWit','Minimum withdrawal'],['sWelcome','Welcome bonus'],['sFee','Withdrawal fee'],['sC1','Level 1 commission'],['sC2','Level 2 commission'],['sC3','Level 3 commission'],['sMaxWitDay','Withdrawals per day'],['sAutoMin','Shortest wait'],['sAutoMax','Longest wait'],['sAutoCap','Automatic limit']]){
       if($(id) && $(id).value.trim()===''){ toast(label+' cannot be blank. Type a number (0 is allowed).','err'); $(id).focus(); return; }
     }
+    if(+$('sAutoMax').value < +$('sAutoMin').value){ toast('The longest wait cannot be shorter than the shortest wait.','err'); $('sAutoMax').focus(); return; }
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       withdrawFeePct:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
+      autoApproveWithdrawalsEnabled:$('sAutoWit').checked, autoApproveMinSec:+$('sAutoMin').value, autoApproveMaxSec:+$('sAutoMax').value, autoApproveMaxAmount:+$('sAutoCap').value,
       referencePrefix:$('sRefPrefix').value.trim(),
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
       withdrawWindowEnabled:$('sWitWindow').checked,
