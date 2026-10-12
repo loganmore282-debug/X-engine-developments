@@ -19,6 +19,8 @@ process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:
 process.on('uncaughtException',  (err)    => { console.error('Uncaught exception:', err); process.exit(1); });
 
 const app = express();
+// /Withdraw/request must not reach /withdraw/request: the maintenance gate, the nginx walls and fail2ban all match paths case-sensitively.
+app.set('case sensitive routing', true);
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(compression());
@@ -1129,7 +1131,8 @@ function fmtMoney(n, currency) {
 // Rounds to the nearest UGX cent (2 decimal places). Used by gift codes, the spin
 // wheel/turntable and reporting math.
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
-function stripHtml(s) { return String(s || '').replace(/<[^>]*>/g, '').trim(); }
+// Cut the text first: the tag-stripping pattern is quadratic on a long run of '<' with no '>', so an unbounded string could freeze the one-process server.
+function stripHtml(s) { return String(s || '').slice(0, 5000).replace(/<[^>]*>/g, '').trim(); }
 // The region's own wall clock. Kampala (UTC+3) for Uganda, and whatever
 // utcOffsetMin the admin set for any other country -- a withdraw window of
 // "09:00 to 17:00" has to mean nine in the morning where the member lives,
