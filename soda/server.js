@@ -4457,7 +4457,7 @@ app.post('/invest/create', async (req, res) => {
       }
       // Carries a code so the app can react to this specific failure (send
       // the member to Deposit) instead of string-matching the message.
-      if (bal < liveTier.price) {
+      if (round2(bal) < liveTier.price) {   // cents from gift codes can leave a wallet a hair under a whole amount
         const shortErr = new Error(`Need ${fmtMoney(liveTier.price)}, have ${fmtMoney(bal)}`);
         shortErr.code = 'INSUFFICIENT_BALANCE';
         throw shortErr;
@@ -4718,7 +4718,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       console.error('MarzPay collect-money rejected:', JSON.stringify(mpData));
-      await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the payment'));
+      // A gateway that is merely BUSY (5xx, timeout, bad reply) has not refused this payment: it may already be live on the member's phone.
+      // Failing the row would hide a payment that then goes through; leave it for the reconciler, as the network-error path above does.
+      if (!mpData.providerDown) await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the payment'));
       return;
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
@@ -4818,7 +4820,7 @@ async function _creditDepositNow(depDoc, source) {
             const userRef = db.collection('users').doc(depUserId);
             const user = await userRef.get();
             const referral = {};
-            if (fd.commissionBasis === 'deposit' && user.exists && finiteMoney(user.data().totalDeposited) === 0 && !user.data().firstReferralDepositId) {
+            if (fd.commissionBasis === 'deposit' && user.exists && !(user.data().creditedDepositIds || []).length && !user.data().firstReferralDepositId) {   // first REAL deposit: an admin credit also raises totalDeposited and must not use up the referrer's commission
               // Preserve existing first-investment commissions across the
               // changeover. Buying a new asset never creates a second bonus.
               const legacy = await db.collection('investments').where('userId', '==', depUserId).where('isFirstInvestment', '==', true).get();
@@ -5200,7 +5202,7 @@ app.post('/withdraw/request', async (req, res) => {
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
         throw new Error('Purchase at least one product before you can withdraw.');
       const bal = fresh.data().walletBalance || 0;
-      if (bal < amt) {
+      if (round2(bal) < amt) {
         logSecurityEvent(userId, 'withdraw_insufficient_funds', { attempted: amt, balance: bal });
         throw new Error(`Not enough balance, you have ${fmtMoney(bal)}`);
       }
@@ -5241,7 +5243,7 @@ app.post('/withdraw/request', async (req, res) => {
       // request that an administrator could still send.
       await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref,
         status: 'creating', regionKey: currentRegionKey(), date, time, createdAt: FieldValue.serverTimestamp() });
-      const debited = await uRef.updateIf({ walletBalance: { $gte: amt }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, {
+      const debited = await uRef.updateIf({ walletBalance: { $gte: amt - 0.005 }, status: { $ne: 'banned' }, debitedWithdrawalIds: { $ne: witId } }, {
         walletBalance: FieldValue.increment(-amt), debitedWithdrawalIds: FieldValue.arrayUnion(witId)
       });
       if (!debited) throw new Error('Your balance or account status changed. Please refresh and try again.');
@@ -5877,7 +5879,10 @@ app.post('/withdraw/callback', async (req, res) => {
     const isSuccess = SUCCESS_STATUSES.has(rawStatus);
     const isFailed  = FAILED_STATUSES.has(rawStatus);
     if (!isSuccess && !isFailed) return;
-    const witSnap = await db.collection('withdrawals').where('marzReference', '==', reference).limit(1).get();
+    let witSnap = await db.collection('withdrawals').where('marzReference', '==', reference).limit(1).get();
+    // For a payout MarzPay's own `reference` is its UUID and OUR reference arrives as provider_reference (guide 7.1.1 / 11.6).
+    const ourRef = body.data?.transaction?.provider_reference || body.transaction?.provider_reference;
+    if (witSnap.empty && ourRef && ourRef !== reference) witSnap = await db.collection('withdrawals').where('marzReference', '==', ourRef).limit(1).get();
     if (witSnap.empty) return;
     const doc = witSnap.docs[0];
     const wit = doc.data();
@@ -6173,7 +6178,7 @@ app.post('/redeem', async (req, res) => {
     let result = null;
     // Lock on the lowercased code, not the raw input: two members submitting
     // the same code in different casing must serialise against each other.
-    await withLock('redeem:' + raw.toLowerCase(), async () => {
+    await withLock('redeem:' + raw.toLowerCase().replace(/[^a-z0-9]/g, ''), async () => {   // same lock for every spelling of one code (with or without dashes)
       const userSnap = await db.collection('users').doc(userId).get();
       if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
       if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
@@ -8314,7 +8319,14 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     // sent -- if MarzPay's dashboard shows it WAS sent, take no action here
     // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
-    const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
+    // A payout PesaJet already has must be asked about first: rejecting (= refunding) a payout that then completes would pay the member twice.
+    if (w.pesajetTxId && w.status !== 'pending') {
+      const live = await pesajetGetTx(w.pesajetTxId);
+      if (live.providerDown) return res.status(503).json({ status: 'error', message: 'PesaJet could not be reached to confirm this payout. Try again in a moment.' });
+      if (!live.notFound && !['failed', 'expired', 'cancelled', 'canceled', 'declined'].includes(live.status))
+        return res.status(409).json({ status: 'error', message: `PesaJet reports this payout as ${live.status || 'unknown'}, so it cannot be rejected. Wait for the final result.` });
+    }
+    const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, stripHtml(textOf(req.body.reason)).slice(0, 200) || 'Rejected by admin', ['pending', 'processing', 'sending'], req.adminUser?.username || 'owner');
     if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied. Refresh and try again.' });
     await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
     logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded });

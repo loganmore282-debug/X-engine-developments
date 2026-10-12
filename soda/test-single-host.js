@@ -72,7 +72,7 @@ for (const args of [['dev', 'Panel7x9k'], ['prod', 'mysoda.example.com', 'Panel7
   ok(/server_name example\.com;/.test(mem) && /server_name sv37ah\.example\.com;/.test(adm), 'each block has its own host');
   ok(!/Panel7x9k/.test(mem) && /location \^~ \/k7x2\/admin\/ \{ return 404; \}/.test(mem), 'the member host serves no admin path and refuses /k7x2/admin/');
   ok(/location \^~ \/Panel7x9k\//.test(adm) && /location \/ \{ return 404; \}/.test(adm) && !/refCode|share\.html|\/user;/.test(adm), 'the admin host serves only the admin path, the API behind it, and 404 for everything else');
-  ok(!/\/k7x2\/admin\/ \{ return 404/.test(adm) && /location ~ \^\/k7x2\/admin\/\(login\|check-key\)\$/.test(adm), 'the admin host still reaches the admin API');
+  ok(!/\/k7x2\/admin\/ \{ return 404/.test(adm) && /location ~ \^\/k7x2\/admin\/\(login\|check-key\)\/\?\$/.test(adm), 'the admin host still reaches the admin API');
   ok(gen('prod', 'example.com', 'Panel7x9k') === gen('prod', 'example.com', 'Panel7x9k'), 'one-host output is stable');
   // extra member addresses typed as words
   const also = gen('prod', 'example.com', 'Panel7x9k', 'sv37ah.example.com', '--also=mysoda, Go ,mysoda,promo.other.com');

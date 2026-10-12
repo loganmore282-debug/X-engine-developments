@@ -706,7 +706,7 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
   const isOwner = SESSION_ROLE === 'owner';
   ['adminsTab', 'auditLogTab', 'productsTab', 'settingsTab', 'bannersTab', 'promocodesTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
-  if (!isOwner && ['products', 'settings', 'banners', 'promocodes'].includes(lastTab)) lastTab = 'dashboard';
+  if (!isOwner && ['products', 'settings', 'banners', 'promocodes', 'admins', 'auditlog'].includes(lastTab)) lastTab = 'dashboard';
   // The country list is needed before anything renders: every money figure
   // in this panel is labelled from it (see ugx()/curOf()), and the region
   // picker on Settings and Products is built from it. Failure is silent and
@@ -1401,6 +1401,7 @@ function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('2
 async function renderUsers(){
   const r = await api('/admin/users');
   if(staleTab('users')) return;
+  if(loadFailed(r,'users')) return;
   _users = (r.users||[]).sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
   const isOwner = SESSION_ROLE === 'owner';
   $('content').innerHTML = `
@@ -1472,10 +1473,10 @@ async function renderUsers(){
       // system" -- /admin/user/repair-wallet (new) closes the one direction
       // that's actually safe to automate: the real ledger says MORE than the
       // wallet holds (a genuine under-credit), never the reverse. Only
-      // offered on a walletBalance row whose diff is positive; the other
+      // offered on a walletBalance row whose diff (stored minus real) is NEGATIVE; the other
       // direction still says "diagnose by hand" with no button, unchanged.
       const mismatchRow = m => `<div class="kv"><span class="k">${esc(FIELD_LABEL[m.field]||m.field)} ≠ real${m.phone?' · '+esc(m.phone):''}</span>
-            <span>stored ${ugx(m.stored)} vs real ${ugx(m.real)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-openuser="${esc(m.userId)}">Open user</button>${m.field==='walletBalance'&&m.diff>0?` <button class="btn sm ok" data-repairwallet="${esc(m.userId)}">Repair wallet</button>`:''}</span></div>`;
+            <span>stored ${ugx(m.stored)} vs real ${ugx(m.real)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-openuser="${esc(m.userId)}">Open user</button>${m.field==='walletBalance'&&m.diff<0?` <button class="btn sm ok" data-repairwallet="${esc(m.userId)}">Repair wallet</button>`:''}</span></div>`;
       openModal(`<h3>Integrity audit</h3>
         <div class="muted" style="margin-bottom:10px">${d.checked} user(s) checked</div>
         ${!total?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance/total matches its real records, no duplicate credits, no negative balances, no stuck registrations.</div>`
@@ -1531,6 +1532,7 @@ function drawUsers(){
 async function quietRefreshUsers(){
   const r = await api('/admin/users');
   if(staleTab('users') || !$('userRows')) return;
+  if(r.status!=='success') return;
   _users = (r.users||[]).sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
   const h = $('usersCount'); if(h) h.textContent = `Users (${_users.length})`;
   drawUsers();
@@ -1552,7 +1554,7 @@ async function openReferralChain(uid){
     <span>${ugx(m.totalInvested)} · ${esc(m.referralCode||'Not set')} · <span class="pill-tag ${m.status==='banned'?'t-bad':'t-ok'}">${esc(m.status)}</span>${extra||''}</span>
   </div>`;
   const uplineHtml = r.upline.length
-    ? r.upline.map(rowHtml).join('')
+    ? r.upline.map(m=>rowHtml(m)).join('')
     : '<p class="muted" style="margin:0">No referrer -- this account IS the root.</p>';
   const levels = Object.keys(r.downlineCountByLevel).map(Number).sort((a,b)=>a-b);
   const levelSummary = levels.length
@@ -1719,7 +1721,7 @@ async function openUser(uid){
       if(d.status==='success'){ closeModal(); openUser(uid); } else { b.disabled=false; b.textContent=lbl; }
     });
   }
-  const amt=()=>parseFloat($('adjAmt').value||0), note=()=>$('adjNote').value.trim();
+  const amt=()=>Math.round(parseFloat($('adjAmt').value||0)), note=()=>$('adjNote').value.trim();
   // FIXED BUG: neither button disabled itself while the request was in
   // flight, so a double-tap (or a slow connection making it LOOK like the
   // first tap didn't register) could fire two real /admin/deposit or
@@ -1825,11 +1827,18 @@ async function syncMarzPay(btn, afterFn){
     afterFn();
   } else toast(d.message||'Sync failed','err');
 }
+// A failed fetch (timeout, 429, 5xx, dropped network) must never be drawn as "no rows": keep what is on screen, or say it could not load.
+function loadFailed(r, what){
+  if(r && r.status==='success') return false;
+  const c=$('content'); if(c && !c.querySelector('table')) c.innerHTML=`<div class="empty" style="padding:24px;text-align:center">Could not load ${what}. Check the connection, then press Refresh.</div>`;
+  return true;
+}
 const DEP_GROUPS = { pending: ['initiating','pending','awaiting_verification'], review: ['review'], matched: ['matched'], failed: ['failed','rejected'] };
 let _deps=[], _depFilter='pending';
 async function renderDeposits(){
   const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits')) return;
+  if(loadFailed(r,'deposits')) return;
   _deps = r.deposits||[];
   const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
   const subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
@@ -1853,7 +1862,7 @@ async function renderDeposits(){
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Paid from</th><th>Method</th><th>Amount</th><th>Ref</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
   $('depSync').addEventListener('click', ()=>syncMarzPay($('depSync'), renderDeposits));
   $('depSearch').addEventListener('input', drawDeps);
-  document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); }));
+  document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); document.querySelectorAll('[data-df]').forEach(x=>x.classList.toggle('active',x.dataset.df===_depFilter)); }));
   drawDeps();
 }
 function drawDeps(){
@@ -1954,6 +1963,7 @@ function drawDeps(){
 async function quietRefreshDeposits(){
   const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits') || !$('depRows')) return;
+  if(r.status!=='success') return;
   _deps = r.deposits||[];
   const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
   const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
@@ -1969,6 +1979,7 @@ let _wits=[], _witFilter='pending';
 async function renderWithdrawals(){
   const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals')) return;
+  if(loadFailed(r,'withdrawals')) return;
   _wits = r.withdrawals||[];
   _witProvider = r.payoutMode || 'marzpay';
   _witManualPayouts = _witProvider === 'manual';
@@ -1995,7 +2006,7 @@ async function renderWithdrawals(){
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Destination</th><th>Status</th><th></th></tr></thead><tbody id="witRows"></tbody></table></div>`;
-  document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; drawWits(); }));
+  document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; drawWits(); document.querySelectorAll('[data-wf]').forEach(x=>x.classList.toggle('active',x.dataset.wf===_witFilter)); }));
   if($('witSync')) $('witSync').addEventListener('click', ()=>syncMarzPay($('witSync'), renderWithdrawals));
   $('witSearch').addEventListener('input', drawWits);
   drawWits();
@@ -2023,7 +2034,7 @@ function drawWits(){
   const q = raw.toLowerCase(), qCore = phoneCore(raw);
   if(q) list = list.filter(w =>
     (w.referralCode||'').toLowerCase().includes(q) ||
-    (qCore && phoneCore(w.phone).includes(qCore))
+    (qCore && (phoneCore(w.phone).includes(qCore) || phoneCore(w.accountPhone||'').includes(qCore)))
   );
   $('witRows').innerHTML = list.length?list.map(w=>{
     const code = w.referralCode;
@@ -2077,6 +2088,7 @@ function drawWits(){
 async function quietRefreshWithdrawals(){
   const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals') || !$('witRows')) return;
+  if(r.status!=='success') return;
   _wits = r.withdrawals||[];
   _witProvider = r.payoutMode || 'marzpay';
   _witManualPayouts = _witProvider === 'manual';
@@ -2232,9 +2244,12 @@ function editProduct(p, order){
     const ret = parseFloat($('pRet').value), days = parseFloat($('pCycle').value);
     $('pDaily').value = ret > 0 && days > 0 ? Math.round(ret / days).toLocaleString('en-US') : '';
   };
-  $('pMult').addEventListener('input', ()=>{ syncFromMult(); syncDaily(); });
-  $('pRet').addEventListener('input', ()=>{ syncFromRet(); syncDaily(); });
-  $('pPrice').addEventListener('input', ()=>{ if(parseFloat($('pMult').value) > 0) syncFromMult(); else syncFromRet(); syncDaily(); });
+  // The multiplier box only shows 2 decimals, so when the admin TYPED the total payout that exact total is the truth: it is saved as typed
+  // (price 30,000, total 100,000 stays 100,000, not 30,000 x 3.33 = 99,900). Typing the multiplier hands the truth back to price x multiplier.
+  let _retIsTruth = false;
+  $('pMult').addEventListener('input', ()=>{ _retIsTruth = false; syncFromMult(); syncDaily(); });
+  $('pRet').addEventListener('input', ()=>{ _retIsTruth = true; syncFromRet(); syncDaily(); });
+  $('pPrice').addEventListener('input', ()=>{ if(!_retIsTruth && parseFloat($('pMult').value) > 0) syncFromMult(); else syncFromRet(); syncDaily(); });
   $('pCycle').addEventListener('input', syncDaily);
   syncDaily();
   $('pImage').addEventListener('input', ()=>{ imgData=''; setPrev($('pImage').value.trim()); });
@@ -2259,7 +2274,7 @@ function editProduct(p, order){
     const typedKey = $('pKey').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'').slice(0,24);
     const key = typedKey || p.key || ($('pLabel').value.toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24)) || ('item'+Date.now());
     const body = { key, name:$('pLabel').value, price:$('pPrice').value,
-      expectedReturn:$('pRet').value, multiplier:$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
+      expectedReturn:$('pRet').value, multiplier:_retIsTruth?'':$('pMult').value, cycle:$('pCycle').value, buyLimit:$('pLimit').value, vip:$('pVip').value, order:$('pOrder').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked,
       // datetime-local has no zone, so the browser reads it as local time --
       // which for the owner IS Uganda time. Sent as epoch ms so the server
@@ -2405,10 +2420,11 @@ async function renderPromoCodes(){
     if(codes.length){
       const rangeLabel = minReward===maxReward ? ugx(minReward) : `a random amount between ${ugx(minReward)} and ${ugx(maxReward)}`;
       $('genOut').innerHTML=`<div class="codebox">${codes.map(code=>`<span class="code-chip"><b class="mono">${esc(code)}</b><button class="btn sm ghost" data-copy="${esc(code)}" title="Copy code">Copy</button></span>`).join('')}</div>
-        <button class="btn sm ghost" id="copyAllBtn" data-copyall="${esc(codes.join('\\n'))}" style="margin-top:6px">Copy all</button>
+        <button class="btn sm ghost" id="copyAllBtn" data-copyall="${esc(codes.join('\n'))}" style="margin-top:6px">Copy all</button>
         <div class="muted" style="margin-top:6px">${codes.length} code(s) generated, each claim paying ${rangeLabel}${durationSeconds?`, expiring in ${durationSeconds} second${durationSeconds===1?'':'s'}`:''}</div>`;
       wireCopyButtons();
-      setTimeout(renderPromoCodes,1200);
+      // refresh the list underneath, but keep the codes just generated on screen (re-rendering the tab used to wipe them after 1.2 s)
+      setTimeout(async()=>{ const keep=$('genOut')?$('genOut').innerHTML:''; await renderPromoCodes(); if(keep&&$('genOut')){ $('genOut').innerHTML=keep; wireCopyButtons(); } },1200);
     }
     if(failMsg) toast(failMsg,'err');
   });
@@ -2531,6 +2547,7 @@ function sortByCreatedAtDesc(list){
 }
 async function loadTransactions(limit){
   const r = await api('/admin/transactions/list', { limit });
+  if(r.status!=='success') return { merged: null, truncated: false, failed: true };
   return { merged: sortByCreatedAtDesc(r.transactions||[]), truncated: !!r.truncated };
 }
 async function renderTransactions(){
@@ -2539,8 +2556,9 @@ async function renderTransactions(){
   // bumped the request itself higher and made this caption reflect the
   // server's own `truncated` flag instead of a stale, inaccurate hardcoded
   // "300" that no longer matched what was actually being requested.
-  const { merged, truncated } = await loadTransactions(1000);
+  const { merged, truncated, failed } = await loadTransactions(1000);
   if(staleTab('transactions')) return;
+  if(failed){ loadFailed({status:'error'},'transactions'); return; }
   _txns = merged;
   const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Products'],['promocode','Codes']];
   $('content').innerHTML = `
@@ -2567,8 +2585,8 @@ function drawTxns(){
 // quietRefreshUsers(). No counts to patch here, the subtabs are plain
 // labels, so this is just fresh data + drawTxns().
 async function quietRefreshTransactions(){
-  const { merged } = await loadTransactions(1000);
-  if(staleTab('transactions') || !$('txRows')) return;
+  const { merged, failed } = await loadTransactions(1000);
+  if(failed || staleTab('transactions') || !$('txRows')) return;
   _txns = merged;
   drawTxns();
 }
@@ -2595,6 +2613,7 @@ let _refAllUsers = [];
 async function renderReferrals(){
   const [r, ru] = await Promise.all([api('/admin/referrals/list'), api('/admin/users')]);
   if(staleTab('referrals')) return;
+  if(loadFailed(r,'referrals') || ru.status!=='success') return;
   _refs = r.referrals||[];
   _refAllUsers = ru.users||[];
   // Codex-caught real bug: the backend caps this list (a very generous
@@ -2639,6 +2658,7 @@ function drawRefs(){
 async function quietRefreshReferrals(){
   const [r, ru] = await Promise.all([api('/admin/referrals/list'), api('/admin/users')]);
   if(staleTab('referrals') || !$('refTableWrap')) return;
+  if(r.status!=='success' || ru.status!=='success') return;
   _refs = r.referrals||[];
   _refAllUsers = ru.users||[];
   const h = $('refsCount'); if(h) h.textContent = `Referrals (${_refs.length})`;
@@ -3056,6 +3076,10 @@ async function renderSettings(){
     const showRef=()=>{ const t=px.value.trim(); const ok=/^[A-Za-z][A-Za-z0-9]{0,11}$/.test(t); pv.textContent = ok ? 'New payments will look like: '+t+'2610111048053568' : 'Use 1 to 12 letters or digits, starting with a letter (for example soda)'; pv.style.color = ok ? '' : '#c0392b'; };
     px.addEventListener('input',showRef); showRef(); }
   $('saveRates').addEventListener('click', async()=>{
+    // A blank number box would be read as 0 (a 0% commission or a 0 minimum would be saved silently): refuse it instead.
+    for(const [id,label] of [['sMinDep','Minimum deposit'],['sMinWit','Minimum withdrawal'],['sWelcome','Welcome bonus'],['sFee','Withdrawal fee'],['sC1','Level 1 commission'],['sC2','Level 2 commission'],['sC3','Level 3 commission'],['sMaxWitDay','Withdrawals per day']]){
+      if($(id) && $(id).value.trim()===''){ toast(label+' cannot be blank. Type a number (0 is allowed).','err'); $(id).focus(); return; }
+    }
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       withdrawFeePct:+$('sFee').value,

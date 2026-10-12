@@ -2,7 +2,7 @@
 // installed devices pick up the new build instead of sitting on a cached
 // shell indefinitely (the exact "stale build" failure mode space8/Voltra
 // both hit repeatedly before this pattern was adopted).
-const CACHE = 'soda-shell-v316';
+const CACHE = 'soda-shell-v317';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -136,8 +136,8 @@ self.addEventListener('fetch', e => {
   }
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
-      const copy = resp.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      // Only good answers are kept: a 404 or 5xx stored here would be served from the cache for ever (until the next cache version).
+      if (resp && resp.ok) { const copy = resp.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {}); }
       return resp;
     }).catch(() => cached))
   );

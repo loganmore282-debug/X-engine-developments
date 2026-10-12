@@ -3,6 +3,8 @@
 # (puts the old file back by itself if the new one is refused), restores HTTPS, restarts Soda, applies the VPS hardening and checks the site.
 # Safe to run again and again. Run as root:   bash /srv/soda-src/soda/deploy/update-vps.sh
 set -u
+# Files written by the git pull below must stay readable by nginx (www-data); a caller's umask 077 (set-secret / change-app-host) would make them 0600 and the site 403.
+umask 022
 say() { printf '\n==> %s\n' "$*"; }
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 SRC=${SODA_SRC:-/srv/soda-src}
@@ -38,7 +40,7 @@ if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then SODA_HOOK_HOST=$(tr -d 
 
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
-if node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/soda.conf.new && cp /tmp/soda.conf.new "$CONF" && nginx -t >/tmp/soda.nginxtest 2>&1; then
+if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/soda.conf.new) && cp /tmp/soda.conf.new "$CONF" && nginx -t >/tmp/soda.nginxtest 2>&1; then
   echo "    new nginx file accepted"
 else
   echo "    !! nginx refused the new file: putting the old one back"
@@ -50,6 +52,8 @@ fi
 
 say "4/7  HTTPS (one certificate for every address; an address whose DNS does not point here yet is skipped, never allowed to break the others)"
 MYIP=$(curl -4 -s --max-time 8 https://ifconfig.me || true)
+[ -n "$MYIP" ] || MYIP=$(curl -4 -s --max-time 8 https://icanhazip.com | tr -d '[:space:]' || true)
+[ -n "$MYIP" ] || MYIP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
 CERT_ARGS=(); SKIPPED=""
 for H in "$APP_HOST" "$ADMIN_HOST" ${ALSO_HOSTS//,/ } ${SODA_HOOK_HOST:-}; do
   [ -n "$H" ] || continue
@@ -75,8 +79,15 @@ if [ -n "$EXTRA" ] && [ "${#CERT_ARGS[@]}" -gt 0 ]; then
   HAVE2=$(certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | sed -n 's/^ *Domains: //p' | head -1)
   echo "    certificate now covers: $HAVE2"
 fi
+# The regenerated file has no HTTPS sections until certbot adds them. If the old file had them and this one does not (certbot skipped or failed), put
+# the old file back: reloading port-80-only nginx would lock every browser out (the site sends HSTS).
+if [ -f "$BAK" ] && grep -q ssl_certificate "$BAK" && ! grep -q ssl_certificate "$CONF"; then
+  echo "    !! HTTPS sections are missing after the certificate step: putting the previous nginx file back"
+  cp "$BAK" "$CONF"; nginx -t >/dev/null 2>&1 && systemctl reload nginx
+  echo "    Check the DNS records (see above) and run this again."; exit 1
+fi
 # HTTP/2 lets a phone fetch many files over ONE connection (a big gain on long-distance links). Added only if missing, and undone if nginx refuses it.
-cp "$CONF" /tmp/soda.conf.pre-h2
+(umask 077; cp "$CONF" /tmp/soda.conf.pre-h2)   # the file holds the secret webhook address: keep the copy private
 sed -i -E '/^[[:space:]]*listen .*443 ssl/{/http2/!s/443 ssl/443 ssl http2/}' "$CONF"
 if nginx -t >/dev/null 2>&1; then echo "    HTTP/2 on: $(grep -c 'ssl http2' "$CONF") listen line(s)"; else echo "    (HTTP/2 not accepted by this nginx, left as it was)"; cp /tmp/soda.conf.pre-h2 "$CONF"; fi
 if nginx -t >/dev/null 2>&1; then systemctl reload nginx && echo "    nginx reloaded"; else echo "    !! nginx test failed after certbot, putting the old file back"; cp "$BAK" "$CONF"; nginx -t 2>&1 | tail -1; systemctl reload nginx; exit 1; fi

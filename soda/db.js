@@ -154,7 +154,14 @@ async function ensureIndexes() {
     ['pendingDeposits', { userId: 1 }],
     ['authAccounts', { uid: 1 }], // member login: lookup by uid (password change/reset, registration)
     ['memberSessions', { uid: 1 }], // revoke every session of one member
-    ['usdtIntents', { userId: 1, status: 1 }], // /deposit/usdt/intent: a member's open payment requests
+    // Expired logins are deleted by MongoDB itself (a day after they expire); without this every login ever made stays in the collection for ever.
+    ['memberSessions', { expiresAt: 1 }, { expireAfterSeconds: 86400 }],
+    ['adminSessions',  { expiresAt: 1 }, { expireAfterSeconds: 86400 }],
+    // The admin lists read the newest rows of a whole collection (orderBy createdAt desc, no filter): without these each is a full scan.
+    ['pendingDeposits', { createdAt: -1 }],
+    ['withdrawals',     { createdAt: -1 }],
+    ['transactions',    { createdAt: -1 }],
+    ['messages',        { createdAt: -1 }],
     ['pendingDeposits', { marzReference: 1 }],
     ['pendingDeposits', { status: 1 }],
     ['pendingDeposits', { provider: 1, status: 1, createdAt: 1 }], // reconcilePendingDeposits()'s PesaJet sweep

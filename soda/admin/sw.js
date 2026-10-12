@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'soda-admin-shell-v107';
+const CACHE = 'soda-admin-shell-v108';
 // The panel lives under a secret path on the SAME host as the member app, so
 // everything it owns is addressed relative to this worker (never from '/'),
 // and its cache name has its own prefix so neither worker ever clears the
@@ -137,8 +137,8 @@ self.addEventListener('fetch', e => {
   }
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
-      const copy = resp.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      // Only good answers are kept: a 404 or 5xx stored here would be served from the cache for ever (until the next cache version).
+      if (resp && resp.ok) { const copy = resp.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {}); }
       return resp;
     }).catch(() => cached))
   );

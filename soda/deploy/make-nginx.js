@@ -151,12 +151,12 @@ ${prod ? `
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
 ` : ''}
     # ── API: /${API}/x -> Node /x ────────────────────────────────────────
-${role === 'member' ? `    # two-host setup: the admin API is reachable only on the admin host\n    location ^~ /${API}/admin/ { return 404; }\n` : ''}    location ~ ^/${API}/admin/(login|check-key)$ {
+${role === 'member' ? `    # two-host setup: the admin API is reachable only on the admin host\n    location ^~ /${API}/admin/ { return 404; }\n` : ''}    location ~ ^/${API}/admin/(login|check-key)/?$ {
         limit_req zone=soda_admin_login burst=5 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
-    location ~ ^/${API}/auth/(login|signup|password/change)$ {
+    location ~ ^/${API}/auth/(login|signup|password/change)/?$ {
         limit_req zone=soda_member_login burst=10 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}

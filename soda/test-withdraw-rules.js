@@ -242,6 +242,7 @@ function run(state, body) {
     let handler;
     const tsMillis = n => Number(n) || 0;
     const tzOffMs = () => 180 * 60000;
+    const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
     ${fnSource('statementStamp')}
     ${fnSource('newStatementId')}
     ${fnSource('paymentAmount')}

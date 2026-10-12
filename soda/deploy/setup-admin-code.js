@@ -9,7 +9,8 @@ const read = () => { try { return fs.readFileSync(FILE, 'utf8'); } catch (e) { r
 const cur = read();
 if (cur === null) { console.error('Cannot find the secrets file ' + FILE); process.exit(1); }
 if (process.argv[2] === 'off') {
-  fs.writeFileSync(FILE, cur.replace(LINE, ''), { mode: 0o600 });
+  // Written as an EMPTY value, not deleted: pm2's `reload --update-env` adds and changes variables but does not remove ones that disappeared, so a deleted line could leave the code switched on.
+  fs.writeFileSync(FILE, cur.replace(LINE, '').replace(/\n*$/, '\n') + "module.exports.ADMIN_TOTP_SECRET = '';\n", { mode: 0o600 });
   console.log('The admin 6-digit code is switched OFF (the admin key alone works again). Restart Soda to apply.');
   process.exit(0);
 }

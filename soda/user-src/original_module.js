@@ -1640,9 +1640,11 @@ async function performMemberLogout(opts){
   // Revoke the captured session without delaying the UI sign-out. The normal
   // api() epoch guard would intentionally cancel this call during logout.
   const leavingUser = window.fbAuth && window.fbAuth.currentUser;
-  if (leavingUser) leavingUser.getIdToken().then(token => fetch(API_BASE + '/auth/session/logout', {
-    method:'POST', headers:{Authorization:'Bearer ' + token}, signal:AbortSignal.timeout(5000)
-  })).catch(() => {});
+  if (leavingUser) leavingUser.getIdToken().then(token => {
+    // AbortSignal.timeout() does not exist on older phones: a throw here would skip the server logout and leave the token valid for hours.
+    const ac = new AbortController(); setTimeout(() => ac.abort(), 5000);
+    return fetch(API_BASE + '/auth/session/logout', { method:'POST', headers:{Authorization:'Bearer ' + token}, signal: ac.signal });
+  }).catch(() => {});
   _memberSession.clear();
   window._triedAutoSignIn = true;
   if (!auto) { try { sessionStorage.setItem('soda_relogin_required', '1'); } catch (_) {} }
@@ -1655,7 +1657,7 @@ async function performMemberLogout(opts){
   // session either.
   if (_checkinCountdownTimer) { clearInterval(_checkinCountdownTimer); _checkinCountdownTimer = null; }
   STATE.authEpoch++;
-  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null }); _teamMembersAt = {}; _teamMembersFailed = {};
+  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, messages: null, page: 'home' }); _teamMembersAt = {}; _teamMembersFailed = {};
   clearCachedState();
   // Without this, an explicit logout would immediately silently sign the
   // member right back in on the next boot via tryAutoSignIn() -- Chrome
@@ -2438,8 +2440,8 @@ async function bootFromNetwork(uid){
   }
   // Same reasoning as above for the account fetch itself.
   if (r.stale || !STATE.user || STATE.user.uid !== uid) return;
-  if (r.status === 'error' && !r.code && !window._pendingLoginSuccess && /timed out|Could not reach/.test(r.message || '')) {
-    // Re-opening the app on a slow or dropped connection is not a reason to end
+  if (r.status === 'error' && !window._pendingLoginSuccess && ((!r.code && /timed out|Could not reach|Too many requests/i.test(r.message || '')) || r.code === 'AUTH_UNAVAILABLE' || r.code === 'SERVER_ERROR')) {
+    // Re-opening the app on a slow or dropped connection, a busy server (429) or a store outage (503) is not a reason to end
     // the login: show the login screen with the message and keep the session.
     // (A login the member just typed still signs out below, so a retry is clean.)
     hideLoadingScreen();
@@ -2808,10 +2810,10 @@ async function liveRefreshVisible(){
 
   // An open sheet is what the member is actually looking at, so it wins over
   // the page behind it.
-  if (sheet === 'Transaction Statement') {
+  if (sheet === 'Balance Record') {
     if (!liveDue('tx', LIVE_LIST_MS, _liveAccountMoved)) return ok;
     const r = await api('/transactions');
-    if (r.status === 'success' && _openSheetTitle === 'Transaction Statement') {
+    if (r.status === 'success' && _openSheetTitle === 'Balance Record') {
       STATE.transactions = r.transactions;
       STATE.transactionsTruncated = !!r.truncated;
       if (liveChanged('tx', r.transactions)) renderStatement();
@@ -2990,7 +2992,7 @@ function maybeShowAnnouncement(){
   if (!STATE.announcementImage) {
     // The pictures are fetched after the loading screen comes down; if they
     // have not landed yet, open the dialog the moment they do.
-    if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; maybeShowAnnouncement(); }); }
+    if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }); }
     return;
   }
   const bg = $('annBg'), sheet = $('annSheet');
@@ -3194,6 +3196,11 @@ function patchHomeBalances(){
     const el = $(id);
     if (el) el.textContent = fmtUGX(account[key]);
   }
+  // The figures the current screens actually show: My (balance), Income (total earnings) and the Balance Record header.
+  for (const [id, key] of [['myBalance','walletBalance'], ['incomeTotal','totalEarned'], ['recBalance','walletBalance']]) {
+    const el = $(id);
+    if (el) el.textContent = vMoney2(account[key]);
+  }
 }
 // THE single place this app works out what a product pays. /public/products
 // already sends resolved expectedReturn/cycle/dailyPayout figures computed
@@ -3250,13 +3257,19 @@ function startProductCountdowns(){
     });
     if (due) {
       clearInterval(_openCountdownTimer); _openCountdownTimer = null;
-      refreshCatalogNow();
+      // A phone clock that runs ahead of the server would make this fire again at once after every refresh (the server still says
+      // "not open yet"): ask again at most every 30 s.
+      const wait = 30000 - (Date.now() - _catalogRefreshedAt);
+      if (wait > 0) { if (!_catalogRetryTimer) _catalogRetryTimer = setTimeout(() => { _catalogRetryTimer = null; refreshCatalogNow(); }, wait); }
+      else refreshCatalogNow();
     }
   };
   tick();
   _openCountdownTimer = setInterval(tick, 1000);
 }
+var _catalogRefreshedAt = 0, _catalogRetryTimer = null;
 async function refreshCatalogNow(){
+  _catalogRefreshedAt = Date.now();
   const r = await api('/public/products');
   if (r.status === 'success') {
     STATE.products = r.products;
@@ -4241,7 +4254,7 @@ window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
   // Good news gets the tick, everything else (errors and "please do this first")
   // the circled cross, as in the screens.
-  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong/i.test(String(message || ''));
+  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong/i.test(String(message || ''));
   const ic = $('notifyIc');
   if (ic) { ic.innerHTML = good ? VI.okCircle : VI.errCircle; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
@@ -4251,7 +4264,7 @@ window.notify = function(message, onClose){
   // card's own onclick, which clears this same timer first.
   if (_notifyTimer) clearTimeout(_notifyTimer);
   // A longer message (two lines) stays a little longer so it can be read.
-  _notifyTimer = setTimeout(closeNotify, String(message || '').length > 45 ? 2600 : 1400);
+  _notifyTimer = setTimeout(closeNotify, String(message || '').length > 80 ? 4800 : String(message || '').length > 45 ? 2600 : 1400);   // a long message (the withdrawal summary) needs time to be read
 };
 window.closeNotify = function(){
   if (_notifyTimer) { clearTimeout(_notifyTimer); _notifyTimer = null; }
@@ -4670,6 +4683,8 @@ var _openSheetTitle = null;
 // while the announcement's own wait was still in flight -- none of those
 // are page navigations (STATE.page stays 'home' throughout), so
 // _openSheetTitle alone isn't enough on its own.
+// 30000 -> 30,000 (thousands separators for whole amounts printed inside a sentence); anything that is not a plain number is left as it is.
+function vGroup(n){ const x = Number(n); return Number.isFinite(x) ? x.toLocaleString('en-US') : String(n); }
 function isAnyOverlayOpen(){
   return !!(_openSheetTitle
     || ($('msgDetailBg') && $('msgDetailBg').classList.contains('show'))
@@ -4938,7 +4953,7 @@ function openDepositFormSheet(){
       <ol>
         <li>Recharge time: 7*24 hours.</li>
         <li>If deposit is not received, please contact TG customer service.</li>
-        <li>Minimum deposit amount: ${esc(cur())}${min}</li>
+        <li>Minimum deposit amount: ${esc(cur())}${vGroup(min)}</li>
         <li>Please do not save old account recharge.</li>
       </ol>
     </div>
@@ -5504,7 +5519,7 @@ function paintWithdrawSheet(s){
       <h3>Withdrawal Instructions</h3>
       <ol>
         <li>Fee: ${fee}%</li>
-        <li>Withdrawal amounts should be between ${min}${max ? ' and ' + max : ' and your available balance'}${mult ? ', in multiples of ' + mult : ''}.</li>
+        <li>Withdrawal amounts should be between ${vGroup(min)}${max ? ' and ' + vGroup(max) : ' and your available balance'}${mult ? ', in multiples of ' + vGroup(mult) : ''}.</li>
         <li>${perDay ? 'You can make up to ' + perDay + ' withdrawals per day.' : 'One cash-out at a time. Wait for a pending request to finish before the next.'}</li>
         <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}</li>
       </ol>
