@@ -3461,11 +3461,19 @@ function drFailFrame(kit, main, t) {
   }
 }
 var _drToken = 0;
+// A failed payment: once the cross has been drawn it shakes and the phone buzzes (once per drawing).
+function failShake(box, tok){
+  if (tok !== _drToken || !box.classList) return;
+  box.classList.remove('dep-shake'); void box.offsetWidth; box.classList.add('dep-shake');
+  try { if (navigator.vibrate) navigator.vibrate([90, 50, 90, 50, 160]); } catch (e) {}
+}
 function playStatusIcon(box, kind){
-  var tok = ++_drToken, ok = kind === 'ok', still = ok ? PAY_OK_STATIC : PAY_FAIL_STATIC, END = ok ? 1560 : 1000;
-  function finish(){ if (tok === _drToken && box.firstChild && box.firstChild.tagName === 'CANVAS') box.innerHTML = still; }
+  var tok = ++_drToken, ok = kind === 'ok', still = ok ? PAY_OK_STATIC : PAY_FAIL_STATIC, END = ok ? 1560 : 1000, shook = false;
+  box.classList.remove('dep-shake');
+  function drawn(){ if (!ok && !shook) { shook = true; failShake(box, tok); } }
+  function finish(){ if (tok === _drToken && box.firstChild && box.firstChild.tagName === 'CANVAS') box.innerHTML = still; drawn(); }
   try {
-    if (typeof Path2D !== 'function') { box.innerHTML = still; return; }
+    if (typeof Path2D !== 'function') { box.innerHTML = still; drawn(); return; }
     var dpr = Math.min(window.devicePixelRatio || 1, 3), size = Math.round(120 * dpr);   // the mark is 120 CSS pixels (see .dep-status-icon>canvas)
     var cv = document.createElement('canvas'); cv.width = cv.height = size; cv.className = 'dr-canvas'; cv.setAttribute('aria-hidden', 'true');
     var main = cv.getContext('2d'), kit = drCanvasKit(size), art = ok ? new Path2D(PAY_OK_ART) : null;
@@ -3483,7 +3491,7 @@ function playStatusIcon(box, kind){
     };
     requestAnimationFrame(step);
     setTimeout(finish, END + 1500);
-  } catch (e) { box.innerHTML = still; }
+  } catch (e) { box.innerHTML = still; drawn(); }
 }
 // Waiting for the payment: a dot travels from the phone to the wallet (nothing rotates).
 var DEPOSIT_POLL_FLOW = '<div class="dep-flow" role="img" aria-label="Processing payment">'

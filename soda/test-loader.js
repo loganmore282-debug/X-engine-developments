@@ -50,4 +50,22 @@ ok(/function drOkFrame\(/.test(mod) && /function drFailFrame\(/.test(mod) && /re
 ok(/#42af3c/.test(mod) && /M316\.5 694\.5C292\.9 692\.3/.test(mod) && /<rect x="81\.5" y="141\.5" width="150" height="30" rx="7" transform="rotate\(45 156\.5 156\.5\)"/.test(mod), 'and the artwork itself is the owner\'s traced tick and cross, untouched (masks only reveal it)');
 ok(!/\.notify-ic svg (circle|path)\{[^}]*animation/.test(html), 'the notice cards keep their plain icons (only the deposit result tick and cross animate)');
 ok(/It plays even when the phone asks for reduced motion/.test(mod) && !/prefers-reduced-motion[^{]*\{[^}]*dep-status-icon/.test(html), 'the draw plays on phones that ask for reduced motion too (the owner wants it everywhere)');
+{ // failed deposit: the cross shakes and the phone buzzes once it is drawn; success never does
+  const vm = require('vm');
+  const a = mod.indexOf('var _drToken = 0;'), b = mod.indexOf('// Waiting for the payment: a dot travels');
+  const buzz = [];
+  const mkBox = () => { const cl = new Set(); return { firstChild: null, offsetWidth: 1, classList: { add: c => cl.add(c), remove: c => cl.delete(c), has: c => cl.has(c) }, set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h || ''; } }; };
+  const ctx = { PAY_OK_STATIC: '<svg ok/>', PAY_FAIL_STATIC: '<svg fail/>', navigator: { vibrate: p => { buzz.push(p); return true; } }, setTimeout: () => 0 };
+  vm.createContext(ctx); vm.runInContext(mod.slice(a, b), ctx);   // no Path2D here: the plain finished mark is drawn at once
+  const bad = mkBox(), good = mkBox();
+  ctx.playStatusIcon(bad, 'fail');
+  ok(buzz.length === 1 && Array.isArray(buzz[0]) && buzz[0].length >= 3 && bad.classList.has('dep-shake'), 'a failed deposit: the cross shakes and the phone vibrates once');
+  ctx.playStatusIcon(good, 'ok');
+  ok(buzz.length === 1 && !good.classList.has('dep-shake'), 'a successful deposit never shakes or vibrates');
+  ctx.playStatusIcon(bad, 'fail');
+  ok(buzz.length === 2 && bad.classList.has('dep-shake'), 'a second failure shakes and vibrates again');
+  ctx.navigator.vibrate = undefined; ctx.playStatusIcon(mkBox(), 'fail');
+  ok(true, 'a phone with no vibration support just shakes (no error)');
+  ok(/\.dep-status-icon\.dep-shake\{animation:depShake/.test(html) && /@keyframes depShake/.test(html), 'the shake animation exists in the page CSS');
+}
 console.log(`PASS: loader and page bottom (${n} checks${built ? ', built bundle' : ''})`);
