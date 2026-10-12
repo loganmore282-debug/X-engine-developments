@@ -320,30 +320,38 @@ ck(/app\.get\('\/admin\/brand-assets'[\s\S]{0,120}verifyAdmin\(req\)/.test(src),
   // an uploaded icon changed one of the two and the owner reasonably read
   // that as the upload not working. Serving the bytes correctly is only half
   // the feature; these check the other half, in every file that names an icon.
-  console.log('\n— every surface points at the uploaded icon —');
+  console.log('\n— the member app follows the upload; the admin panel keeps its own built-in icon —');
   const ICON192 = `${BACKEND}/public/app-icon-192.png`;
   const ICON512 = `${BACKEND}/public/app-icon-512.png`;
   const read = (p) => fs.readFileSync(__dirname + '/' + p, 'utf8');
-  for (const [file, want] of [
-    ['user/manifest.json', [ICON192, ICON512]],
-    ['admin/manifest.json', [ICON192, ICON512]],
-  ]) {
-    const m = JSON.parse(read(file));
+  {
+    const m = JSON.parse(read('user/manifest.json'));
     const srcs = (m.icons || []).map(i => i.src);
-    ck(want.every(u => srcs.includes(u)),
-       `${file} installs with the uploaded icon, not a local file (${srcs.join(', ')})`);
+    ck([ICON192, ICON512].every(u => srcs.includes(u)),
+       `user/manifest.json installs with the uploaded icon, not a local file (${srcs.join(', ')})`);
+    const a = JSON.parse(read('admin/manifest.json'));
+    const asrcs = (a.icons || []).map(i => i.src);
+    ck(asrcs.length > 0 && asrcs.every(u => /^icon-(192|512)\.png$/.test(u)),
+       `admin/manifest.json installs with the built-in icon files, never the upload (${asrcs.join(', ')})`);
   }
-  for (const file of ['user-src/index.html', 'admin-src/index.html']) {
-    const html = read(file);
+  {
+    const html = read('user-src/index.html');
+    const links = [...html.matchAll(/<link[^>]*rel="(?:apple-touch-)?icon"[^>]*>/g)].map(m => m[0]);
+    ck(links.length > 0, 'user-src/index.html declares an icon link at all');
+    ck(links.every(l => l.includes(ICON192)),
+       `user-src/index.html's icon links all point at the uploaded icon (${links.length} link${links.length === 1 ? '' : 's'})`);
+  }
+  for (const file of ['admin-src/index.html', 'admin/index.html']) {
+    const html = read(file).replace(/<!--[\s\S]*?-->/g, '');
     const links = [...html.matchAll(/<link[^>]*rel="(?:apple-touch-)?icon"[^>]*>/g)].map(m => m[0]);
     ck(links.length > 0, `${file} declares an icon link at all`);
-    ck(links.every(l => l.includes(ICON192)),
-       `${file}'s icon links all point at the uploaded icon (${links.length} link${links.length === 1 ? '' : 's'})`);
+    ck(links.every(l => l.includes('href="icon-192.png"')) && !html.includes('/public/app-icon-'),
+       `${file}'s icon links point at the built-in icon and nothing in it asks for the uploaded one`);
   }
   // The admin service worker shows the icon on background push notifications.
   const asw = read('admin/sw.js');
-  ck(asw.includes(ICON192) && !/icon:\s*'\/icon-192\.png'/.test(asw),
-     "the admin service worker's push notifications use it too");
+  ck(/const BRAND_ICON = new URL\('icon-192\.png'/.test(asw) && !asw.includes('/public/app-icon-'),
+     "the admin service worker's push notifications use the built-in icon too");
 
   console.log(bad ? `\n${bad} FAILED` : '\nbrand assets: all cases pass');
   process.exit(bad ? 1 : 0);

@@ -44,14 +44,10 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="theme-color" content="#1739b8">
 <link rel="manifest" href="manifest.json">
-<!-- Same server-hosted brand asset the user app installs with, NOT a local
-     /icon-192.png. Uploading an icon in Admin -> Brand rewrote the one the
-     members' app installs with while the admin panel kept showing the file
-     that shipped in the repo, so the icon "never changed" here no matter how
-     many times it was replaced. One source of truth now: whatever
-     /admin/app-icon/set last wrote. -->
-<link rel="icon" href="/k7x2/public/app-icon-192.png">
-<link rel="apple-touch-icon" href="/k7x2/public/app-icon-192.png">
+<!-- The admin panel always uses its OWN built-in icon (the files next to this
+     page). The icon uploaded in Admin -> Brand is for the members' app only. -->
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 window._adminInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window._adminInstallPrompt = e;
@@ -2803,7 +2799,7 @@ async function renderBanners(){
 
     <h2 class="sec">App icon</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The home-screen and browser-tab icon. Square PNG, 1024&times;1024 (transparency kept, corners rounded for you).</p>
+      <p class="muted" style="margin-top:0">The member app icon (home screen and browser tab). Square PNG, 1024&times;1024 (transparency kept, corners rounded for you). The admin panel always keeps its own built-in icon.</p>
       <div class="banner-row">
         ${appIconImage?`<img class="img-thumb" style="border-radius:22%" src="${esc(appIconImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:22%"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${appIconCustom?'Custom icon':'<span class="muted">Built-in app icon</span>'}</div>

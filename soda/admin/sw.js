@@ -1,16 +1,12 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'soda-admin-shell-v104';
+const CACHE = 'soda-admin-shell-v105';
 // The panel lives under a secret path on the SAME host as the member app, so
 // everything it owns is addressed relative to this worker (never from '/'),
 // and its cache name has its own prefix so neither worker ever clears the
 // other's cache.
 const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'vendor/firebase-app-compat.js', 'vendor/firebase-messaging-compat.js'];
-// The uploaded icon, served by Soda backend. manifest.json and index.html's
-// <link rel="icon"> point here too; the local /icon-*.png above stay only as
-// the offline shell copy. Before this, the admin panel read the PNG that
-// shipped in the repo, so replacing the icon in Admin -> Brand changed the
-// members' app and left the admin's own icon untouched forever.
-const BRAND_ICON = '/k7x2/public/app-icon-192.png';
+// The admin panel's own built-in icon (never the one uploaded for the members' app).
+const BRAND_ICON = new URL('icon-192.png', self.location.href).href;
 
 // Firebase Messaging background handler -- shows a notification for pushes
 // that arrive while the admin panel tab isn't open/focused. Foreground

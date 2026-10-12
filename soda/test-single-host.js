@@ -33,11 +33,10 @@ ok(!/gstatic\.com\/firebasejs|firebase-app\.js/.test(read('user-src/index.html')
   const want = {
     'user-src/original_module.js': [`var API_BASE = '/${PREFIX}';`],
     'user-src/index.html': [`const SODA_AUTH_API = '/${PREFIX}';`, `/${PREFIX}/public/loader-image`, `/${PREFIX}/public/app-icon-192.png`],
-    'admin-src/index.html': [`const SERVER = '/${PREFIX}';`, `/${PREFIX}/public/app-icon-192.png`],
+    'admin-src/index.html': [`const SERVER = '/${PREFIX}';`],
     'user/sw.js': [`const API_ORIGIN = '/${PREFIX}';`, `'/${PREFIX}/'`],
-    'admin/sw.js': [`'/${PREFIX}'`, `'/${PREFIX}/'`, `/${PREFIX}/public/app-icon-192.png`],
+    'admin/sw.js': [`'/${PREFIX}'`, `'/${PREFIX}/'`],
     'user/manifest.json': [`/${PREFIX}/public/app-icon-512.png`],
-    'admin/manifest.json': [`/${PREFIX}/public/app-icon-512.png`],
   };
   for (const [f, needles] of Object.entries(want)) {
     const src = read(f);
@@ -91,7 +90,7 @@ for (const args of [['dev', 'Panel7x9k'], ['prod', 'mysoda.example.com', 'Panel7
 // 3. the two service workers share a host without trampling each other
 function boot(file, scope) {
   const L = {}, cacheOps = { deleted: [] }; let responded = 0, respondedWith;
-  const self = { location: { origin: 'https://h.example' }, registration: { scope }, addEventListener: (t, f) => { L[t] = f; }, skipWaiting() {}, clients: { claim: async () => {}, matchAll: async () => [] } };
+  const self = { location: { origin: 'https://h.example', href: scope + 'sw.js' }, registration: { scope }, addEventListener: (t, f) => { L[t] = f; }, skipWaiting() {}, clients: { claim: async () => {}, matchAll: async () => [] } };
   const ctx = { self, importScripts() {}, URL, Response, fetch: async () => new Response('net'), console, Promise, JSON, Date,
     caches: { open: async () => ({ addAll: async () => {}, put: async () => {}, match: async () => undefined }), keys: async () => cacheOps.keys, delete: async k => { cacheOps.deleted.push(k); return true; }, match: async () => undefined },
     firebase: { initializeApp() {}, messaging: () => ({ onBackgroundMessage() {} }) } };

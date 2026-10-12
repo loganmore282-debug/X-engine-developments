@@ -177,7 +177,7 @@ async function swTests() {
     const clientsList = { list: [] };
     const self = { addEventListener: (t, f) => { listeners[t] = f; }, skipWaiting() {}, clients: { claim() { return Promise.resolve(); }, matchAll: async () => clientsList.list,
         openWindow: async u => { opened.push(u); } },
-      location: { origin: 'https://app.example' },
+      location: { origin: 'https://app.example', href: 'https://app.example/panel/sw.js' },
       registration: { scope: 'https://app.example/panel/', showNotification: async (title, o) => { shown.push({ title, ...o }); } } };
     const ctx = { self, importScripts() {}, URL, fetch: fetchImpl || (async () => { throw new Error('no network'); }), caches: { open: async () => ({ addAll: async () => {}, put: async () => {} }), keys: async () => [], match: async () => undefined }, console, Promise, JSON, Date,
       firebase: { initializeApp() {}, messaging: () => ({ onBackgroundMessage: f => { bg = f; } }) } };
@@ -192,7 +192,7 @@ async function swTests() {
   eq(w.shown.length, 1, 'exactly one notification');
   eq([w.shown[0].title, w.shown[0].body, w.shown[0].tag], ['New withdrawal request', 'UGX 5,000 requested via MTN', 'wd-W1']);
   eq(w.shown[0].actions, [{ action: 'approve', title: 'Approve' }], 'owner device: Approve button');
-  ok(w.shown[0].requireInteraction, 'stays until acted on'); ok(/app-icon-192\.png$/.test(w.shown[0].icon), 'brand icon');
+  ok(w.shown[0].requireInteraction, 'stays until acted on'); ok(w.shown[0].icon === 'https://app.example/panel/icon-192.png', "the admin panel's own built-in icon (never the uploaded member-app icon)");
   w = boot(); await w.push({ data: { title: 'New withdrawal request', body: 'b', type: 'withdrawal', withdrawalId: 'W1' } });
   eq(w.shown.length, 1); ok(!w.shown[0].actions, 'staff device: no button');
   w = boot(); await w.push({ data: { title: 'T', body: 'b', type: 'withdrawal', withdrawalId: 'W1', quickApprove: '1', pushToken: 'devA' } });
