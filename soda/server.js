@@ -13,7 +13,6 @@ const helmet      = require('helmet');
 const compression = require('compression');
 const rateLimit   = require('express-rate-limit');
 const { execFile } = require('child_process'); // used by the auto-deploy webhook, see /deploy/webhook below
-const PDFDocument = require('pdfkit'); // used by GET /statement/pdf below
 if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
 process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:', reason));
@@ -3179,7 +3178,7 @@ async function settleAllForUser(userId) {
   // all paying their daily figure together): each one paid its own ~4-round-
   // trip settlement one after another instead of together. Found while
   // investigating "statement download takes long on a powerful VPS" -- this
-  // runs at the top of both /account and GET /statement/pdf, so every load
+  // runs at the top of /account, so every load
   // was paying that serial cost for exactly that member shape. Safe to run
   // in parallel: each investment settles under its OWN 'payout:<id>' lock
   // (see settleInvestmentIfDue()), and the actual wallet credit inside it is
@@ -7436,238 +7435,6 @@ app.get('/transactions', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your records' }); }
 });
 
-// ── DOWNLOAD STATEMENT (server-generated PDF) ──
-// Owner: "put a server side advanced feature called download statement, so
-// it downloads statement of the account as pdf very well organized
-// statement with all data... check how the statement looks you can check
-// the branch of voltrapower, it was downloading a good account statement so
-// do it." Voltra's own equivalent (original_module.js's downloadStatement)
-// builds the PDF client-side with jsPDF loaded from a CDN -- the owner
-// explicitly asked for this one server-side instead, so the PDF bytes are
-// generated here with `pdfkit` (pure JS, no native deps, no browser needed)
-// and streamed back as a real file download; the client only triggers the
-// request and saves the blob, per doDownloadStatement() in
-// user-src/original_module.js.
-//
-// Category labels/status text are a deliberate re-implementation of the
-// same logic the in-app Transaction Statement screen already uses
-// (statementDescription()/statementStatus() in original_module.js) --
-// duplicated on purpose, same "must match" precedent as phoneToEmail()
-// elsewhere in this file, so a PDF and the in-app screen never disagree
-// about what a given transaction type is called.
-function statementRowLabel(t, brand) {
-  const type = t.type;
-  if (type === 'deposit') return 'Recharge';
-  if (type === 'withdraw') return 'Withdraw';
-  if (type === 'cashback') return 'Daily Income';
-  if (type === 'commission') return 'Referral Commission';
-  if (type === 'promocode') return 'Gift Code';
-  if (type === 'checkin') return 'Check-in Reward';
-  if (type === 'welcome_bonus') return 'Welcome Bonus';
-  if (type === 'team_reward') return 'Team Reward';
-  if (type === 'mission_salary') return 'Mission Salary';
-  if (type === 'mission_deposit_reward') return 'Mission Reward';
-  if (type === 'turntable' || type === 'spin' || type === 'spin_bonus') return 'Reward';
-  if (type === 'admin_credit') return brand + ' Credit';
-  if (type === 'admin_debit') return brand + ' Adjustment';
-  return 'Transaction';
-}
-function statementRowStatus(t) {
-  const raw = (String(t.status || '').toLowerCase() + ' ' + String(t.description || '').toLowerCase());
-  if (/fail|declin|reject|cancel|error/.test(raw)) return 'Failed';
-  if (/pend|process|await|initiating/.test(raw)) return 'Pending';
-  return 'Completed';
-}
-app.get('/statement/pdf', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    await settleAllForUser(uid);
-    // settleAllForUser() must finish first (it can change the wallet total
-    // and add a fresh transaction row) -- but everything below only depends
-    // on ITS result, not on each other, so they no longer wait in a line.
-    // This was the real cause of "why does downloading a statement take a
-    // few seconds on a powerful VPS" -- four independent round trips
-    // (user doc, settings, up to 2000 transactions, the logo image) were
-    // running one after another instead of together.
-    const STATEMENT_TX_LIMIT = 2000; // same cap as GET /transactions above
-    const [userSnap, sett, snap, logoDataUri] = await Promise.all([
-      db.collection('users').doc(uid).get(),
-      getSettings(),
-      db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(STATEMENT_TX_LIMIT).get(),
-      getSodaImage('logo'),
-    ]);
-    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    const u = userSnap.data();
-    if (u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended.' });
-    const brand = sett.brandName || 'Soda';
-    const currency = currentRegion().currency || 'UGX';
-    const rows = snap.docs.map(d => ({ id: d.id, ...d.data(), statementId: statementIdFor(d) }));
-    // Same admin-uploaded 'logo' slot the app itself shows on Home/Account/
-    // Auth (STATE.brandLogo) -- so uploading a logo once already covers the
-    // PDF too, no separate upload needed. Stored as a data: URI (same shape
-    // an <img src> takes client-side); pdfkit's doc.image() wants real
-    // bytes, so it's decoded here rather than trusting doc.image() to
-    // understand a data: URI string across every pdfkit version.
-    let logoBuf = null;
-    if (logoDataUri) {
-      const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(logoDataUri);
-      if (m) { try { logoBuf = Buffer.from(m[1], 'base64'); } catch (_) { logoBuf = null; } }
-    }
-
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    const chunks = [];
-    doc.on('data', c => chunks.push(c));
-    const done = new Promise((resolve, reject) => {
-      doc.on('end', resolve);
-      doc.on('error', reject);
-    });
-
-    const PAGE_W = doc.page.width;
-    const RED = '#e30613', GOLD = '#f5a000', INK = '#25262b', MUTED = '#6b6d76';
-    const GREEN = '#1a7a3e', ROSE = '#b10510';
-    const COL = { id: 40, date: 150, desc: 235, status: 375, amt: 430 };
-    const AMT_W = PAGE_W - 40 - COL.amt;
-
-    function drawHeader() {
-      doc.rect(0, 0, PAGE_W, 92).fill(RED);
-      doc.rect(0, 88, PAGE_W, 4).fill(GOLD);
-      // Same admin-uploaded logo the app shows everywhere else -- text
-      // shifts right to make room for it only when one is actually set, so
-      // a fresh deploy with no logo uploaded yet still looks intentional.
-      let textX = 40;
-      if (logoBuf) {
-        try { doc.image(logoBuf, 40, 22, { fit: [48, 48] }); textX = 98; } catch (_) { textX = 40; }
-      }
-      doc.fillColor('#fff').font('Helvetica-Bold').fontSize(22).text(brand.toUpperCase(), textX, 28);
-      doc.font('Helvetica').fontSize(11).text('Financial Statement', textX, 56);
-      doc.fillColor(INK);
-    }
-    function drawColumnHeads(y) {
-      doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED);
-      doc.text('REFERENCE', COL.id, y);
-      doc.text('DATE / TIME', COL.date, y);
-      doc.text('DESCRIPTION', COL.desc, y);
-      doc.text('STATUS', COL.status, y);
-      doc.text('AMOUNT', COL.amt, y, { width: AMT_W, align: 'right' });
-      doc.moveTo(40, y + 12).lineTo(PAGE_W - 40, y + 12).strokeColor('#dcdde0').lineWidth(0.5).stroke();
-    }
-    drawHeader();
-    let y = 112;
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(INK);
-    // Owner: "remove stuffs for account ids everywhere" -- Account ID
-    // dropped. "Statement should be EAST AFRICAN TIME" -- eatNow() is the
-    // same region-wall-clock helper every stored transaction date/time on
-    // this statement was already written against (see its own comment
-    // above), so the generated-at stamp now uses the identical clock as
-    // every row beneath it instead of a separate UTC one.
-    const genAt = eatNow();
-    const padGen = n => String(n).padStart(2, '0');
-    // Owner: "Generated Sep 28, 2026 at 11:12 EAT" -- month name, no
-    // leading zeros on day/year, seconds dropped. Same eatNow() clock as
-    // every row on the statement, just formatted for a human to read
-    // rather than sorted by a machine.
-    const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const generatedStr = MONTH_NAMES[genAt.getUTCMonth()] + ' ' + genAt.getUTCDate() + ', ' + genAt.getUTCFullYear()
-      + ' at ' + padGen(genAt.getUTCHours()) + ':' + padGen(genAt.getUTCMinutes()) + ' EAT';
-    // Owner: "put also document reference bro" -- a per-download reference
-    // distinct from each row's own statementId (the unrelated "B2<16
-    // digits>" ledger format below) and deliberately NOT shaped like the
-    // owner's own example (a giant raw timestamp + date + random tail).
-    // Three short groups from the same unambiguous alphabet already used
-    // for gift/referral codes -- easy to read aloud, and its 3-3-3 shape
-    // (vs. gift codes' 4-4-4 and referral codes' flat 5) keeps it from
-    // being mistaken for either. Purely a display label for this one PDF,
-    // not looked up anywhere, so no uniqueness check is needed.
-    const docRef = 'REF-' + randFromAlphabet(GIFTCODE_CHARS, 3) + '-' + randFromAlphabet(GIFTCODE_CHARS, 3) + '-' + randFromAlphabet(GIFTCODE_CHARS, 3);
-    const meta = [
-      ['Reference', docRef],
-      ['Account holder', u.phone || '-'],
-      ['Wallet balance', fmtMoney(u.walletBalance || 0, currency)],
-      ['Total topped up', fmtMoney(u.totalDeposited || 0, currency)],
-      ['Total cashed out', fmtMoney(u.totalWithdrawn || 0, currency)],
-      ['Generated', generatedStr],
-    ];
-    meta.forEach(([label, value]) => {
-      doc.font('Helvetica-Bold').fontSize(9).fillColor(MUTED).text(label + ':', 40, y, { continued: false });
-      doc.font('Helvetica').fontSize(9).fillColor(INK).text(String(value), 175, y);
-      y += 15;
-    });
-    y += 8;
-    drawColumnHeads(y);
-    y += 20;
-
-    let totalIn = 0, totalOut = 0;
-    if (!rows.length) {
-      doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No transactions yet.', 40, y);
-      y += 16;
-    }
-    rows.forEach(t => {
-      if (y > doc.page.height - 90) {
-        doc.addPage();
-        y = 40;
-        drawColumnHeads(y);
-        y += 20;
-      }
-      const amt = Number(t.amount) || 0;
-      if (amt >= 0) totalIn += amt; else totalOut += -amt;
-      const label = statementRowLabel(t, brand);
-      const status = statementRowStatus(t);
-      const dateTime = (t.date || '') + (t.time ? ' ' + t.time : '');
-      doc.font('Helvetica').fontSize(7.5).fillColor(MUTED).text(String(t.statementId || t.id || '-').slice(0, 20), COL.id, y, { width: COL.date - COL.id - 6 });
-      doc.font('Helvetica').fontSize(8.5).fillColor(INK).text(dateTime, COL.date, y, { width: COL.desc - COL.date - 6 });
-      doc.font('Helvetica').fontSize(8.5).fillColor(INK).text(label.slice(0, 26), COL.desc, y, { width: COL.status - COL.desc - 6 });
-      doc.font('Helvetica').fontSize(8.5).fillColor(status === 'Failed' ? ROSE : status === 'Pending' ? GOLD : GREEN).text(status, COL.status, y, { width: COL.amt - COL.status - 6 });
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(amt >= 0 ? GREEN : ROSE)
-        .text((amt >= 0 ? '+' : '-') + fmtMoney(Math.abs(amt), currency), COL.amt, y, { width: AMT_W, align: 'right' });
-      y += 16;
-    });
-
-    if (y > doc.page.height - 120) { doc.addPage(); y = 40; }
-    y += 6;
-    doc.moveTo(40, y).lineTo(PAGE_W - 40, y).strokeColor('#dcdde0').lineWidth(0.5).stroke();
-    y += 14;
-    const summary = [
-      ['Total received', '+' + fmtMoney(totalIn, currency), GREEN],
-      ['Total paid out', '-' + fmtMoney(totalOut, currency), ROSE],
-      ['Current wallet balance', fmtMoney(u.walletBalance || 0, currency), INK],
-    ];
-    summary.forEach(([label, value, color]) => {
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text(label, 40, y);
-      doc.font('Helvetica-Bold').fontSize(10).fillColor(color).text(value, COL.amt, y, { width: AMT_W, align: 'right' });
-      y += 16;
-    });
-    doc.font('Helvetica').fontSize(8).fillColor(MUTED)
-      .text(brand + ' — Clean Energy, Green Development', 40, doc.page.height - 50, { width: PAGE_W - 80, align: 'center' });
-
-    doc.end();
-    await done;
-    const buffer = Buffer.concat(chunks);
-    const filename = brand + '-Statement-' + genAt.getUTCFullYear() + padGen(genAt.getUTCMonth() + 1) + padGen(genAt.getUTCDate()) + '.pdf';
-    // Owner: "the statement should be saved in admin panel under
-    // transactions so as l see the downloaded statements and their
-    // references" -- a record of the download itself, separate from the
-    // `transactions` money ledger (it isn't a wallet movement and must
-    // never be summed into totalIn/totalOut or any other money figure).
-    // phone/ref denormalized onto the row at write time so the admin list
-    // below never needs a per-row user lookup. Never lets a logging
-    // failure block a member's own already-generated PDF.
-    // Fire-and-forget: this is a log write, not part of the PDF the member
-    // is waiting on. Awaiting it here would make every download pay for a
-    // write round trip it doesn't need -- the try/catch above this comment
-    // already established a logging failure must never block the download,
-    // so it must not be allowed to slow it down either.
-    db.collection('statementDownloads').add({
-      userId: uid, phone: u.phone || '', ref: docRef, createdAt: FieldValue.serverTimestamp(),
-    }).catch(logErr => console.error('statementDownloads log failed:', logErr.message));
-    res.set('Content-Type', 'application/pdf');
-    res.set('Content-Disposition', 'attachment; filename="' + filename.replace(/[^A-Za-z0-9_.-]/g, '') + '"');
-    res.send(buffer);
-  } catch (e) {
-    console.error('Statement PDF failed:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not generate your statement right now.' });
-  }
-});
 app.get('/deposits', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -9985,24 +9752,6 @@ app.post('/admin/transactions/list', async (req, res) => {
     const want = adminRegionFilter(req);
     const transactions = scopeRowsToRegion(raw, want, want ? await adminUserRegions() : null);
     res.json({ status: 'success', transactions, truncated, regionKey: want || 'all' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-// Owner: "the statement should be saved in admin panel under transactions
-// so as l see the downloaded statements and their references" -- lists
-// `statementDownloads` rows (written by GET /statement/pdf above), same
-// shape/cap convention as /admin/transactions/list. Kept as its own
-// endpoint/collection rather than folded into `transactions` itself: a
-// statement download is not a wallet movement, and mixing it into the
-// money ledger would risk it getting summed into totalIn/totalOut
-// somewhere down the line.
-app.post('/admin/statements/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const requested = parseInt(req.body.limit, 10);
-    const LIST_LIMIT = Number.isFinite(requested) ? Math.min(5000, Math.max(50, requested)) : 300;
-    const snap = await db.collection('statementDownloads').orderBy('createdAt', 'desc').limit(LIST_LIMIT).get();
-    const statements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    res.json({ status: 'success', statements, truncated: statements.length >= LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/referrals/list', async (req, res) => {

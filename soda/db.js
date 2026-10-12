@@ -108,8 +108,8 @@ async function ensureIndexes() {
     ['investments',     { userId: 1, createdAt: -1 }],
     ['investments',     { userId: 1, isFirstInvestment: 1 }],
     // Follow-up 43 (soda/CLAUDE.md) -- settleAllForUser()'s own query
-    // (userId + status:'active') runs at the top of BOTH /account and
-    // GET /statement/pdf, so it's one of the hottest reads in the app; the
+    // (userId + status:'active') runs at the top of
+    // /account, so it's one of the hottest reads in the app; the
     // plain {userId:1} index above still worked (Mongo just filters status
     // in memory after it), but as a member accumulates matured/legacy
     // investments over time this compound index keeps that filter at the
@@ -184,7 +184,6 @@ async function ensureIndexes() {
     ['turntableSpins',  { userId: 1, used: 1, createdAt: 1 }],
     ['promoRedemptions',{ userId: 1, code: 1 }],
     ['messageReads',    { userId: 1 }],
-    ['statementDownloads', { createdAt: -1 }],
     // OTP verification (registration / password reset / bank-account
     // linking) -- consumeOtpTicket()'s lookup, and otpSendLog's daily
     // rate-limit counter is already keyed by its own deterministic doc id
