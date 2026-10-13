@@ -175,7 +175,7 @@ ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
 ` : ''}    location /${API}/ {
-        limit_req zone=soda_api burst=40 nodelay;
+        limit_req zone=soda_api burst=200 nodelay;
 ${hdr(MEMBER_CSP, ['add_header X-Robots-Tag "noindex, nofollow" always;'])}
 ${proxy()}
     }
@@ -245,7 +245,7 @@ upstream soda_node {
     keepalive 32;
 }
 
-limit_req_zone $binary_remote_addr zone=soda_api:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=soda_api:10m rate=100r/s;
 limit_req_zone $binary_remote_addr zone=soda_hook:10m rate=50r/s;
 limit_req_zone $binary_remote_addr zone=soda_admin_login:10m rate=1r/s;
 limit_req_zone $binary_remote_addr zone=soda_member_login:10m rate=3r/s;

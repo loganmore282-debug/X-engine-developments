@@ -515,7 +515,7 @@ app.use((req, res, next) => {
 });
 
 // ── MAINTENANCE GATE ──
-const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team'];
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/register', '/bank', '/team', '/redeem', '/turntable'];
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback', '/pesajet/webhook']);
 // The platform's name, as the owner last set it in Admin -> Settings. Every
 // server-side string that names the app goes through here rather than
@@ -764,7 +764,11 @@ async function getSettings() {
     refreshHostPolicy(_settingsCache);
     _settingsCacheTs = Date.now();
     return _settingsCache;
-  } catch (_) { return _settingsCache || DEFAULT_SETTINGS; }
+  } catch (_) {
+    // A failed read must not be retried by every request (each would wait out the database's own timeout): serve what we hold and try again in about 5 s.
+    _settingsCacheTs = Date.now() - 55 * 1000;
+    return _settingsCache || DEFAULT_SETTINGS;
+  }
 }
 // Normalizes a raw stored depositMethod/withdrawMethod value to one of
 // 'marzpay' | 'pesajet' | 'manual'. 'automatic' is a legacy literal (still
@@ -3475,7 +3479,14 @@ app.get('/public/settings', async (req, res) => {
     // allowedOrigins is operator configuration, not app content -- there is
     // no reason to hand every member's phone the list of domains that can
     // reach this backend, so it is dropped here alongside maintenanceMsg.
-    const { maintenanceMsg, allowedOrigins, ...rest } = s;
+    const { maintenanceMsg, allowedOrigins, ...rest0 } = s;
+    // Operator settings the app never reads stay on the server: the automatic-withdrawal limits (a member could keep a request just under the
+    // automatic cap), the payment-rail choice, the reference prefix and the host policy.
+    const rest = {};
+    for (const k of Object.keys(rest0)) {
+      if (/^autoApprove/.test(k) || ['depositMethod', 'withdrawMethod', 'referencePrefix', 'parkedHosts', 'baseDomain'].includes(k)) continue;
+      rest[k] = rest0[k];
+    }
     // referralRequired is the RESOLVED answer (setting AND "a member already
     // exists"), not the raw setting -- same reasoning as the resolved product
     // figures below. The Sign Up screen shows the field as required or
@@ -3607,17 +3618,22 @@ function publicProductView(p, sett) {
 //
 // The browser only revalidates an HTTP/1.1 response, which is fine here and
 // was a real trap in the harness -- see test-boot-speed.py's own note.
-function publicJson(req, res, body, cacheControl) {
-  let raw;
-  try { raw = JSON.stringify(body); } catch (_) { return res.json(body); }
-  const etag = 'W/"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '"';
+function publicJson(req, res, body, cacheControl, prebuilt) {
+  let raw, etag;
+  if (prebuilt) { raw = prebuilt.raw; etag = prebuilt.etag; }
+  else {
+    try { raw = JSON.stringify(body); } catch (_) { return res.json(body); }
+    etag = 'W/"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '"';
+  }
   res.set('Cache-Control', cacheControl || 'no-cache');
   res.set('ETag', etag);
   // Vary on Origin: the CORS headers differ per origin and these replies are
   // per REGION, which is resolved from the hostname -- without this a shared
   // cache could hand one country's prices to another.
   res.vary('Origin');
-  if (req.headers['if-none-match'] === etag) return res.status(304).end();
+  // Any tag in the browser's list, weak or strong, that names this body.
+  const inm = String(req.headers['if-none-match'] || '');
+  if (inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) return res.status(304).end();
   res.set('Content-Type', 'application/json; charset=utf-8');
   return res.send(raw);
 }
@@ -3630,9 +3646,18 @@ app.get('/public/products', async (req, res) => {
     const [products, sett] = await Promise.all([getProducts(), getSettings()]);
     // Prices: revalidated every time, so a change is never served stale --
     // but unchanged prices cost a 304 instead of every product photo again.
-    publicJson(req, res, { status: 'success', products: products.map(p => publicProductView(p, sett)) });
+    // The product list (with every picture, megabytes of base64) is serialised and hashed once per change, not once per poll: the key is
+    // when the product cache, the settings cache and the clock-driven open/closed states last changed.
+    const states = products.map(p => { const st = productOpenState(p, Date.now()); return (st.open ? 1 : 0) + ':' + (st.mode || ''); }).join(',');
+    const key = _productsCacheTs + '|' + _settingsCacheTs + '|' + states;
+    if (!_publicProductsBuilt || _publicProductsBuilt.key !== key) {
+      const raw = JSON.stringify({ status: 'success', products: products.map(p => publicProductView(p, sett)) });
+      _publicProductsBuilt = { key, raw, etag: 'W/"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 22) + '"' };
+    }
+    publicJson(req, res, null, null, _publicProductsBuilt);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+let _publicProductsBuilt = null;
 
 app.get('/public/banner', async (req, res) => {
   try { publicJson(req, res, { status: 'success', ...(await getHomeBanner()) }, IMAGE_CACHE); }
@@ -6612,9 +6637,10 @@ async function recordLoginFailure(id) {
 // Brute-force limits: this per-IP ceiling on top of the per-phone lockout in
 // the document (which survives a restart). Generous because many members share
 // one mobile-carrier address.
-const memberAuthLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+// Only FAILED attempts count: many honest members share one carrier address, and a correct login must never use up the allowance.
+const memberAuthLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true,
   message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
-const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+const memberSignupLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 150, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Please wait a few minutes and try again.' } });
 const sessionReply = (res, uid, sess) => res.json({ status: 'success', token: sess.token, uid, authTime: sess.authTime, expiresAt: sess.expiresAt });
 app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
@@ -10079,6 +10105,18 @@ connectMongo(MONGODB_URI)
     // under nginx's feet and now and then turn a request into a 502.
     httpServer.keepAliveTimeout = 65 * 1000;
     httpServer.headersTimeout = 66 * 1000;
+    // A redeploy (pm2 restart on every push) stops taking new requests, lets the ones in flight finish (up to 10 s), then exits: members no
+    // longer get a cut-off request in the middle of a purchase or withdrawal.
+    let _stopping = false;
+    const gracefulStop = sig => {
+      if (_stopping) return; _stopping = true;
+      console.log(sig + ': finishing the requests in flight, then stopping');
+      httpServer.close(() => process.exit(0));
+      if (httpServer.closeIdleConnections) httpServer.closeIdleConnections();
+      setTimeout(() => process.exit(0), 10000).unref();
+    };
+    process.on('SIGTERM', () => gracefulStop('SIGTERM'));
+    process.on('SIGINT', () => gracefulStop('SIGINT'));
     seedStarterAssetsOnce().then(n => { if (n) console.log(`Created ${n} starter assets (Soda A to J)`); }).catch(e => console.error('Starter assets:', e.message));
     setInterval(runReconciler, 30 * 1000);
     setTimeout(runReconciler, 15 * 1000);

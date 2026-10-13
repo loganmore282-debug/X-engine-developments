@@ -44,9 +44,12 @@ module.exports = {
         NODE_ENV: 'production',
         ...secrets,
       },
-      max_restarts: 10,
+      // A database outage at start-up must not make pm2 give up after a couple of minutes: keep trying, a little slower each time (up to ~15 s apart).
+      max_restarts: 200,
       min_uptime: '15s',
-      restart_delay: 2000,
+      exp_backoff_restart_delay: 1000,
+      // Room for the graceful stop in server.js (requests in flight finish, up to 10 s) before pm2 forces the process down.
+      kill_timeout: 12000,
       out_file: '/root/.pm2/logs/soda-server-out.log',
       error_file: '/root/.pm2/logs/soda-server-error.log',
       time: true,

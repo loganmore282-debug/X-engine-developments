@@ -456,12 +456,18 @@ class DocumentReference {
   // retry from another process cannot reset a spin that was already used.
   async createIfAbsent(data) {
     const plain = resolveFieldValues(data);
-    const result = await _mdb.collection(this._col).updateOne(
-      { _id: this.id },
-      { $setOnInsert: { ...plain, _id: this.id } },
-      { upsert: true }
-    );
-    return result.upsertedCount > 0;
+    try {
+      const result = await _mdb.collection(this._col).updateOne(
+        { _id: this.id },
+        { $setOnInsert: { ...plain, _id: this.id } },
+        { upsert: true }
+      );
+      return result.upsertedCount > 0;
+    } catch (e) {
+      // Two requests racing to create the same document: on MongoDB the loser can get a duplicate-key error instead of a quiet no-op.
+      if (e && e.code === 11000) return false;
+      throw e;
+    }
   }
 }
 
