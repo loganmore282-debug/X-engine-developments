@@ -3325,7 +3325,11 @@ app.post('/team/task/claim', async (req, res) => {
       if (!applied) return { code: 409, body: { status: 'error', code: 'ALREADY_CLAIMED', message: 'Already claimed' } };
       // The money is already in the wallet. If only the history row fails to write, say success (a retry repairs the row)
       // instead of telling the member it failed.
-      await ledger().catch(e => console.error('Task reward ledger row failed (credit is applied, a retry repairs it):', e.message));
+      try { await ledger(); }
+      catch (e1) {
+        // The app shows 'Claimed' and never asks again, so repair the history row here, once, rather than waiting for a retry.
+        try { await ledger(); } catch (e2) { console.error('Task reward ledger row failed (credit is applied, a retry repairs it):', e2.message); }
+      }
       return { code: 200, body: { status: 'success', amount: row.reward, walletBalance: balance, message: `${fmtMoney(row.reward)} added to your wallet` } };
     });
     res.status(out.code).json(out.body);
@@ -7484,7 +7488,13 @@ app.post('/admin/tasks/save', async (req, res) => {
     const ref = sanitizeTaskRows(req.body.referrals, 'count', hist.count), dep = sanitizeTaskRows(req.body.deposits, 'deposit', hist.deposit);
     if (ref.error || dep.error) return res.status(400).json({ status: 'error', message: ref.error || dep.error });
     // Remember every target's id for good (a removed task keeps its id on record), so a task typed again later is the same task.
-    const remember = (old, rows) => { const m = Object.assign({}, old); for (const r of rows) m[String(r.target)] = r.id; return m; };
+    const remember = (old, rows) => {
+      const m = Object.assign({}, old);
+      // A row moved to a new target keeps its id, so the old target must stop pointing at it: otherwise a task typed
+      // again later for the old target would inherit an id members already claimed under another target.
+      for (const r of rows) { for (const k of Object.keys(m)) if (m[k] === r.id && k !== String(r.target)) delete m[k]; m[String(r.target)] = r.id; }
+      return m;
+    };
     await db.collection('settings').doc('main').set({
       taskReferrals: ref.rows, taskDeposits: dep.rows,
       taskIdByTarget: { count: remember(hist.count, ref.rows), deposit: remember(hist.deposit, dep.rows) },
@@ -9263,7 +9273,7 @@ app.get('/admin/integrity', async (req, res) => {
 // earned" label is a real misnomer -- this field is cashback PLUS
 // referral commission PLUS checkin/gift-code/Task-Center/Mission-Center
 // bonuses, all folded into one number.
-const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'];
+const EARNING_TX_TYPES = ['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward', 'turntable'];
 async function computeUserRealTotals(userId) {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
