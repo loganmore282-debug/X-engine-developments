@@ -2834,11 +2834,19 @@ async function liveRefreshVisible(){
 
   if (STATE.page === 'home' && !sheet) {
     if (!liveDue('inv', LIVE_LIST_MS, _liveAccountMoved)) return ok;
-    const r = await api('/investments');
+    const [pr, r] = await Promise.all([api('/public/products'), api('/investments')]);
     if (r.status === 'success' && Array.isArray(r.investments)) {
       STATE.investments = r.investments;
       _investmentsLoadFailed = false;
-      if (!_openSheetTitle && STATE.page === 'home' && liveChanged('investments', r.investments)) paintMyAssetsInner();
+    } else ok = false;
+    // The product list on Home follows the admin's changes (price, order, switched off) without the member reloading.
+    if (pr.status === 'success') {
+      STATE.products = pr.products;
+      if (!_openSheetTitle && STATE.page === 'home' && liveChanged('products', pr.products) && $('homeProducts')) {
+        const list = (STATE.products || []).filter(p => p.active !== false);
+        $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : '<div class="v-empty">No products yet.</div>';
+        startProductCountdowns();
+      }
     } else ok = false;
   } else if (STATE.page === 'assets') {
     if (!liveDue('inv', LIVE_LIST_MS, _liveAccountMoved)) return ok;
@@ -3336,7 +3344,11 @@ function statementStampMs(ms){
 }
 function paintAssets(){
   const a = STATE.account || {};
-  const owned = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured');
+  // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
+  const owned = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured').sort((x, y) =>
+    (x.status === 'active' ? 0 : 1) - (y.status === 'active' ? 0 : 1)
+    || (new Date(y.createdAt || 0).getTime() || 0) - (new Date(x.createdAt || 0).getTime() || 0)
+    || String(x.id || '').localeCompare(String(y.id || '')));
   const html = `
 <div class="v-page v-income">
   ${vBannerHtml()}
@@ -5710,7 +5722,8 @@ window.openInvestConfirm = function(tierKey, btn){
   actionBtn.onclick = async () => {
     if (actionBtn.disabled) return;
     actionBtn.disabled = true; actionBtn.textContent = 'Buying…';
-    const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey }) });
+    const result = await api('/invest/create', { method:'POST', body:JSON.stringify({ tierKey, expectedPrice: Number(p.price) || 0 }) });
+    if (result.status === 'error' && result.code === 'PRICE_CHANGED') { try { refreshCatalogNow(); } catch (_) {} }
     if (result.status !== 'success') {
       actionBtn.disabled = false; actionBtn.textContent = 'Buy Product';
       const short = result.code === 'INSUFFICIENT_BALANCE' || /^Need .*, have /.test(String(result.message || ''));

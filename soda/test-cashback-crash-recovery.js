@@ -91,11 +91,11 @@ async function main() {
   const { state, c } = harness();
   await assert.rejects(c.settleInvestmentIfDue(await c.db.collection('investments').doc('inv1').get()), /SIMULATED_PROCESS_CRASH_AFTER_WALLET_WRITE/);
   assert.equal(state.investments.inv1.status, 'active', 'the payout cursor is still retryable');
-  assert.equal(state.users.member.walletBalance, 2000, 'the atomic wallet credit landed before the process stopped');
+  assert.equal(state.users.member.walletBalance, 1000, 'the atomic credit of the first day landed before the process stopped');
   await c.reconcileCashback();
   assert.equal(state.investments.inv1.status, 'matured', 'the reconciler advances the cursor on retry');
-  assert.equal(state.users.member.walletBalance, 2000, 'the retry does not double-credit the wallet');
-  assert.equal(Object.keys(state.transactions).length, 1, 'the retry creates one durable cashback ledger row');
+  assert.equal(state.users.member.walletBalance, 2000, 'the retry does not double-credit day 1 and the second day is paid once');
+  assert.equal(Object.keys(state.transactions).length, 2, 'one durable cashback ledger row per day paid');
   console.log('PASS: crash after wallet credit is retried once; maturity and ledger recover without a duplicate credit');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

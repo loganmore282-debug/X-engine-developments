@@ -2873,7 +2873,18 @@ const _creditingPayouts = new Set();
 // transaction carries a money amount. Run in the OWNER's region so the
 // figure is labelled in the currency that member actually holds.
 async function settleInvestmentIfDue(doc) {
-  return _settleDueInvestmentNow(doc);
+  // One day is paid per pass, so a crash-and-retry always pays the SAME day under the same token (a retry that came after another
+  // midnight used to pay for two days under a new token while the first day's credit was already in the wallet). A member who is
+  // several days behind (a restart, a deploy) is caught up by repeating the pass right here.
+  let paidAny = false;
+  for (let i = 0; i < 400; i++) {
+    if (!(await _settleDueInvestmentNow(doc))) break;
+    paidAny = true;
+    const fresh = await doc.ref.get();
+    if (!fresh.exists || fresh.data().status !== 'active') break;
+    doc = fresh;
+  }
+  return paidAny;
 }
 async function _settleDueInvestmentNow(doc) {
   const inv = doc.data();
@@ -2893,6 +2904,7 @@ async function _settleDueInvestmentNow(doc) {
   }
   if (_creditingPayouts.has(doc.id)) return false;
   _creditingPayouts.add(doc.id);
+  let paid = false;
   try {
     await withLock('payout:' + doc.id, async () => {
       const fresh = await doc.ref.get();
@@ -2920,13 +2932,13 @@ async function _settleDueInvestmentNow(doc) {
       const fTotal = Number(f.payoutsTotal) || 0;
       const fDue = payoutsDueCount(tsMillis(f.createdAt) || Date.now(), Date.now(), fTotal) - fMade;
       if (fDue <= 0) return;
-      const newMade = fMade + fDue;
+      const newMade = fMade + 1;
       const willComplete = newMade >= fTotal;
       const fExpected = Number(f.expectedReturn) || 0;
       const fPaidOut = Number(f.paidOut) || 0;
       const target = Math.round(fExpected * newMade / fTotal);
       const amount = Math.max(0, target - fPaidOut);
-      if (amount <= 0 && !willComplete) return;
+      // (amount can be 0 for a tiny payout: the day still counts, so the cursor moves on below without a credit.)
       // Credit first with a deterministic per-investment payout token in the
       // same atomic user-document update. If the process stops after the
       // wallet write but before the investment cursor advances, the active
@@ -2972,9 +2984,9 @@ async function _settleDueInvestmentNow(doc) {
         });
       });
       if (payoutBlocked) return;
-      if (amount <= 0) return;
+      paid = true;
     });
-    return true;
+    return paid;
   } finally { _creditingPayouts.delete(doc.id); }
 }
 async function settleAllForUser(userId) {
@@ -4453,6 +4465,12 @@ app.post('/invest/create', async (req, res) => {
           limErr.code = 'PURCHASE_LIMIT';
           throw limErr;
         }
+      }
+      // The price the member was shown must be the price charged: an admin may have changed it while the card was on screen.
+      if (req.body.expectedPrice != null && Number(req.body.expectedPrice) !== liveTier.price) {
+        const priceErr = new Error(`The price of this product is now ${fmtMoney(liveTier.price)}. Nothing was charged; please check and try again.`);
+        priceErr.code = 'PRICE_CHANGED';
+        throw priceErr;
       }
       // Carries a code so the app can react to this specific failure (send
       // the member to Deposit) instead of string-matching the message.
@@ -7278,7 +7296,7 @@ function sanitizeProductInput(p, fallbackOrder, out) {
   if (!(promised >= 1) || promised > MAX_MONEY_AMOUNT)
     return refuse(multiplier != null ? 'Multiplier (×)' : 'Total payout', `must give a total payout between 1 and ${MAX_MONEY_AMOUNT} (price x multiplier is ${Number.isFinite(promised) ? promised : 'not a number'})`);
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
-  const order = p?.order != null ? Number(p.order) : fallbackOrder;
+  const order = (p?.order != null && p.order !== '') ? Number(p.order) : fallbackOrder;
   // How many of this asset one member may own (the "0/3" badge on the card). 0 or blank = no limit.
   let buyLimit = 0;
   if (p?.buyLimit != null && p.buyLimit !== '') {
@@ -8322,6 +8340,14 @@ app.post('/admin/ban', async (req, res) => {
       status: isBan ? 'banned' : 'active', banReason: isBan ? (reason || 'Policy violation') : null, bannedAt: isBan ? FieldValue.serverTimestamp() : null
     });
     if (isBan) await sessionPolicy.revokeAllMemberSessions(db, userId).catch(e => console.error('Ban: could not end sessions:', e.message));
+    if (!isBan) {
+      // The sweep looks at a banned member's due products again only every 10 minutes; on unban bring that forward so the
+      // days missed meanwhile are paid at once.
+      try {
+        const held = await db.collection('investments').where('userId', '==', userId).where('status', '==', 'active').get();
+        for (const d of held.docs) await d.ref.update({ nextPayoutAt: new Date() });
+      } catch (e) { console.error('Unban: could not bring payouts forward:', e.message); }
+    }
     logAdminAction(req, isBan ? 'user_banned' : 'user_unbanned', { userId, reason });
     res.json({ status: 'success' });
   } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }

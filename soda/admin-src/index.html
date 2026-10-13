@@ -2146,7 +2146,7 @@ async function renderProducts(){
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
         </div>
       </div>`).join(''):'<div class="empty">No products yet. The app catalogue reverts to defaults until you add one.</div>'}</div>`;
-  $('newProd').addEventListener('click',()=>editProduct(null,list.length));
+  $('newProd').addEventListener('click',()=>editProduct(null, list.reduce((m,x)=>Math.max(m, Number(x.order)||0), -1)+1));
   $('addStarters').addEventListener('click',async()=>{
     if(!confirm('Create the ten products Soda A to Soda J that are missing? Products that already exist are not changed. Their prices are placeholders: edit them afterwards.'))return;
     const b=$('addStarters'); b.disabled=true; b.textContent='Adding…';
@@ -2188,7 +2188,7 @@ function editProduct(p, order){
     <label>Purchase limit per member (0 = no limit)</label><input id="pLimit" type="number" min="0" step="1" value="${p.buyLimit>0?p.buyLimit:''}" placeholder="0">
     <p class="muted" style="margin:-4px 0 10px;font-size:11.5px">Members see it on the card as owned/limit, for example 0/3.</p>
     <div class="row">
-      <div><label>Display position (lower appears first)</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
+      <div><label>Display position (lower appears first)</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order!=null?order:0)}"></div>
     </div>
     <label>Product image <span class="muted" style="font-weight:400">— shown whole, in its own shape (up to 900 px)</span></label>
     <div class="img-picker">
@@ -2300,6 +2300,7 @@ function editProduct(p, order){
     if (body.openFrom && body.openFrom === body.openTo)
       return toast('A daily window cannot start and end at the same minute','err');
     if(!parseFloat(body.price)) return toast('Enter a price','err');
+    if(String(body.order).trim()==='') return toast('Enter a display position (a number; lower shows first)','err');
     const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';
     const d=await api('/admin/products/save', { products:[body] });
     $('pSave').disabled=false; $('pSave').textContent=restore;
