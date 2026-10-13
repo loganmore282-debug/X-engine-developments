@@ -1845,7 +1845,7 @@ async function renderDeposits(){
   if(loadFailed(r,'deposits')) return;
   _deps = r.deposits||[];
   const grp = k => _deps.filter(d=>depIn(d,k)).length;
-  const subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
+  const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
   const dpbd = r.processedByDay||[];
   const dMaxP = Math.max(1, ...dpbd.map(d=>d.count));
   const dRows = dpbd.slice().reverse();

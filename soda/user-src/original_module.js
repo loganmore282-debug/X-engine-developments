@@ -3664,7 +3664,7 @@ function renderTeamMembers(level){
   if (!members.length) { box.innerHTML = '<div class="v-empty">No members at this level yet.</div>'; return; }
   box.innerHTML = members.map(m => `
   <div class="v-member">
-    <div class="v-member-top"><span class="v-mphone">${esc(maskPhone(m.phone))}</span><b>${esc(vMoney2(m.invested))}</b></div>
+    <div class="v-member-top"><span class="v-mphone">${esc(m.phoneMasked || maskPhone(m.phone))}</span><b>${esc(vMoney2(m.invested))}</b></div>
     <div class="v-member-join">Joined ${esc(joinedStamp(m.createdAt))}</div>
   </div>`).join('');
 }
@@ -4333,7 +4333,9 @@ function statementDescription(t){
 // red when it failed. A finished credit shows a plain blue description line
 // instead (the screens do the same for "Daily Earnings").
 function statementChip(t){
-  const raw = String(t.status || '').toLowerCase() + ' ' + String(t.description || '').toLowerCase();
+  // The words in a free-text description only describe a deposit or a withdrawal; on a credit or a gift they are the admin's note.
+  const describes = t.type === 'deposit' || t.type === 'withdraw';
+  const raw = String(t.status || '').toLowerCase() + (describes ? ' ' + String(t.description || '').toLowerCase() : '');
   if (/fail|declin|reject|cancel|error/.test(raw)) return { text: 'Failed', cls: 'bad' };
   if (/pend|process|await|initiating|creating|sending/.test(raw)) return { text: t.type === 'deposit' ? 'Pending Deposit' : t.type === 'withdraw' ? 'Processing Payment' : 'Pending', cls: 'wait' };
   if (t.type === 'withdraw') return { text: 'Paid', cls: 'ok' };
@@ -4914,7 +4916,7 @@ var _checkinCountdownTimer = null;
 
 function recordsRowAmount(t){
   if (t.displayAmount !== undefined && t.displayAmount !== null) return Number(t.displayAmount) || 0;
-  if ((Number(t.amount) || 0) === 0 && t.description) {
+  if ((Number(t.amount) || 0) === 0 && t.description && (t.type === 'deposit' || t.type === 'withdraw')) {
     // The currency label the SERVER wrote into this description, which is
     // the member's own region's -- "UGX" for Uganda, "KES" for Kenya. Any
     // 2-to-6-letter label is accepted rather than only the region's current

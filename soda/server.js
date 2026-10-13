@@ -3210,7 +3210,7 @@ app.get('/team/members', async (req, res) => {
       snap.forEach(d => {
         const v = d.data();
         nextIds.push(d.id);
-        rows.push({ id: d.id, phone: v.phone || '', createdAt: v.createdAt || null, invested: finiteMoney(v.totalInvested) });
+        rows.push({ id: d.id, phoneMasked: maskDownlinePhone(v.phone), createdAt: v.createdAt || null, invested: finiteMoney(v.totalInvested) });
       });
       members = rows;
       parentIds = nextIds;
@@ -3909,10 +3909,13 @@ async function completeRegistrationCore(userId, referralCode, pin, phone) {
     _anyMemberExists = true;
     if (WELCOME > 0) {
       const { date, time } = nowStr();
-      await db.collection('transactions').add({
+      // A fixed document id (one welcome gift per member, ever) so a repeat can never write a second row, and one
+      // retry because the wallet is already paid: a missing row would show up as a wallet/ledger mismatch.
+      const welcomeRow = () => db.collection('transactions').doc('welcome:' + userId).createIfAbsent({
         userId, statementId: newStatementId(), type: 'welcome_bonus', description: 'Welcome gift',
         amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
+      try { await welcomeRow(); } catch (e1) { await welcomeRow(); }
     }
     return { code: 200, body: { status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode, publicId: myPublicId } };
   });
@@ -4013,7 +4016,7 @@ app.get('/account', async (req, res) => {
     }, region: publicRegionView() });
   } catch (e) {
     console.error('Account error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not load your account' });
+    res.status(500).json({ status: 'error', code: 'SERVER_ERROR', message: 'Could not load your account' });
   }
 });
 // The daily check-in claim (/checkin) is removed: no screen calls it and it paid money.
@@ -4272,6 +4275,7 @@ app.post('/turntable/spin', async (req, res) => {
       if (!snap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
       const u = snap.data();
       if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      if (u.registrationDone === false) { result = { code: 403, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } }; return; }
 
       const now = Date.now();
       const todayKey = eatDayKey(new Date(now));
@@ -4449,6 +4453,7 @@ app.post('/invest/create', async (req, res) => {
       const fresh = await uRef.get();
       if (!fresh.exists) throw new Error('User not found');
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
+      if (fresh.data().registrationDone === false) { const regErr = new Error('Finish signing up before buying.'); regErr.code = 'REGISTRATION_REQUIRED'; throw regErr; }
       const bal = fresh.data().walletBalance || 0;
       // Per-member purchase limit (admin-set per asset; 0 = none). Counted inside the
       // balance lock, from the investments themselves, so two quick taps cannot both pass.
@@ -6265,6 +6270,7 @@ app.post('/redeem', async (req, res) => {
       const userSnap = await db.collection('users').doc(userId).get();
       if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
       if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      if (userSnap.data().registrationDone === false) { result = { code: 403, body: { status: 'error', code: 'REGISTRATION_REQUIRED', message: 'Finish signing up first.' } }; return; }
       // Matched via codeLower (case-insensitive by construction, and
       // already the field the promoCodes uniqueness index enforces on) --
       // this reads correctly regardless of which case a given code
@@ -6634,18 +6640,26 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
     if (ipLeft) return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: Math.ceil(ipLeft / 1000),
       message: `Too many wrong attempts from this network. Try again in ${Math.ceil(ipLeft / 60000)} minutes.` });
     const id = memberAccountId(phone);
-    const snap = await db.collection('authAccounts').doc(id).get();
-    const acct = snap.exists ? snap.data() : null;
-    if (acct && acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now()) {
-      const wait = Math.ceil((tsMillis(acct.lockedUntil) - Date.now()) / 1000);
-      return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: wait,
-        message: `Too many wrong attempts. Try again in ${Math.ceil(wait / 60)} minute${wait > 60 ? 's' : ''}.` });
-    }
-    // The dummy hash makes an unknown phone cost the same as a wrong password,
-    // so the answer's timing cannot be used to find which numbers have accounts.
-    const ok = await scryptVerifyAsync(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
-    if (!acct || !ok) { memberLoginIpGuard.fail(req.ip); if (acct) await recordLoginFailure(id); return bad(); }
-    if (Number(acct.failCount) > 0) await snap.ref.update({ failCount: 0 }).catch(() => {});
+    // One guess at a time per login: the lock check, the password check and the failure count must not interleave, or a burst
+    // of parallel guesses is all checked before the first failure is counted and the lockout never bites.
+    const outcome = await withLock('loginflow:' + id, async () => {
+      const snap = await db.collection('authAccounts').doc(id).get();
+      const acct = snap.exists ? snap.data() : null;
+      if (acct && acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now()) {
+        const wait = Math.ceil((tsMillis(acct.lockedUntil) - Date.now()) / 1000);
+        return { locked: wait };
+      }
+      // The dummy hash makes an unknown phone cost the same as a wrong password,
+      // so the answer's timing cannot be used to find which numbers have accounts.
+      const ok = await scryptVerifyAsync(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
+      if (!acct || !ok) { memberLoginIpGuard.fail(req.ip); if (acct) await recordLoginFailure(id); return { bad: true }; }
+      if (Number(acct.failCount) > 0) await snap.ref.update({ failCount: 0 }).catch(() => {});
+      return { acct };
+    });
+    if (outcome.locked) return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: outcome.locked,
+      message: `Too many wrong attempts. Try again in ${Math.ceil(outcome.locked / 60)} minute${outcome.locked > 60 ? 's' : ''}.` });
+    if (outcome.bad) return bad();
+    const acct = outcome.acct;
     sessionReply(res, acct.uid, await sessionPolicy.createMemberSession(db, acct.uid, acct.phone));
   } catch (e) {
     console.error('Login error:', e.message);
@@ -8279,6 +8293,14 @@ app.post('/admin/debit', async (req, res) => {
     res.json({ status: 'success', message: `Removed ${fmtMoney(amt)}. New balance ${fmtMoney(newBal)}`, newBalance: newBal });
   } catch (e) { res.status(/^Cannot debit/.test(e.message) ? 400 : adminFailCode(e)).json({ status: 'error', message: e.message }); }
 });
+// A downline member's number as the member app prints it ("706****1455"): the server does the hiding, so the full
+// number of a level 2 or level 3 stranger is never sent to a phone at all.
+function maskDownlinePhone(phone) {
+  let d = String(phone || '').replace(/\D/g, '');
+  if (d.startsWith('256')) d = d.slice(3);
+  d = d.replace(/^0+/, '');
+  return d.length < 7 ? '' : d.slice(0, 3) + '****' + d.slice(-4);
+}
 // An admin action aimed at something that does not exist is a "not found", not a server error.
 const adminFailCode = e => /matched no document|not found/i.test(String((e && e.message) || '')) ? 404 : 500;
 app.post('/admin/ban', async (req, res) => {
@@ -8290,6 +8312,7 @@ app.post('/admin/ban', async (req, res) => {
     await db.collection('users').doc(userId).update({
       status: isBan ? 'banned' : 'active', banReason: isBan ? (reason || 'Policy violation') : null, bannedAt: isBan ? FieldValue.serverTimestamp() : null
     });
+    if (isBan) await sessionPolicy.revokeAllMemberSessions(db, userId).catch(e => console.error('Ban: could not end sessions:', e.message));
     logAdminAction(req, isBan ? 'user_banned' : 'user_unbanned', { userId, reason });
     res.json({ status: 'success' });
   } catch (e) { res.status(adminFailCode(e)).json({ status: 'error', message: e.message }); }
