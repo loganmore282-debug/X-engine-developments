@@ -1,0 +1,30 @@
+// The referral-chain PDF: built by the admin panel's own small writer (no library). Runs the real source and checks the file is structurally sound.
+const fs = require('fs'), assert = require('assert');
+const src = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8');
+const a = src.indexOf('// ── Referral chain as a PDF ──'), b = src.indexOf('async function openReferralChain(uid){');
+assert(a > 0 && b > a, 'the PDF writer is in the admin panel');
+const ctx = {}; const fn = new Function('Blob', src.slice(a, b) + '\nreturn { chainPdfBlob, pdfWidth, pdfAscii };');
+class FakeBlob { constructor(parts, o) { this.text = parts.join(''); this.type = o.type; } }
+const { chainPdfBlob, pdfWidth, pdfAscii } = fn(FakeBlob);
+let n = 0; const ok = (c, m) => { assert(c, m); n++; };
+ok(Math.abs(pdfWidth('Hello', 10, false) - 22.78) < 0.05, 'Helvetica widths are right (Hello at 10 pt = 22.78)');
+ok(pdfAscii('a→b · é') === 'a->b - ?', 'non-ASCII becomes plain ASCII');
+const mk = i => ({ id: 'u' + i, phone: '+25677' + String(1000000 + i), referralCode: 'c' + i, status: i % 7 === 0 ? 'banned' : 'active', totalInvested: i * 1000, totalDeposited: i * 2000, totalWithdrawn: 0, totalEarned: i * 10, walletBalance: 5000, createdAt: 1790000000000 + i * 3600000, level: 1 + (i % 4), referredByPhone: '+25677000000' });
+const r = { user: { ...mk(0), referredByPhone: '' }, commission: { l1: 1, l2: 2, l3: 3, total: 6, count: 3 }, root: mk(0), upline: [mk(900), mk(901)], teamDeposits: 123456, downline: Array.from({ length: 400 }, (_, i) => mk(i + 1)), downlineTruncated: false, cycleDetected: false };
+const { pdf, total } = chainPdfBlob(r);
+const blob = pdf.build('Test');
+const t = blob.text;
+ok(blob.type === 'application/pdf' && t.startsWith('%PDF-1.4') && t.trimEnd().endsWith('%%EOF'), 'a PDF header and trailer');
+ok(total >= 8, 'a team of 400 spans several pages (' + total + ')');
+const sx = Number(/startxref\n(\d+)/.exec(t)[1]);
+ok(t.slice(sx, sx + 4) === 'xref', 'startxref points at the cross-reference table');
+const count = Number(/xref\n0 (\d+)/.exec(t)[1]);
+const offs = [...t.slice(sx).matchAll(/(\d{10}) 00000 n/g)].map(m => Number(m[1]));
+ok(offs.length === count - 1, 'one offset per object');
+ok(offs.every((o, i) => t.slice(o, o + String(i + 1).length + 6) === (i + 1) + ' 0 obj'), 'every offset lands on its object');
+ok((t.match(/\/Type \/Page /g) || []).length === total, 'one page object per page');
+ok(/Page 1 of /.test(t) && new RegExp('Page ' + total + ' of ' + total).test(t), 'every page has its footer');
+ok(/\+25677000000/.test(t) && /bvm|c1\b/.test(t), 'member data is printed');
+const empty = chainPdfBlob({ user: mk(0), root: mk(0), upline: [], downline: [], teamDeposits: 0 }).pdf.build('E').text;
+ok(/No referrer: this account is the root\./.test(empty) && /No members in this team yet\./.test(empty), 'an account with no upline and no team still makes a report');
+console.log('chain pdf: ' + n + ' checks passed');

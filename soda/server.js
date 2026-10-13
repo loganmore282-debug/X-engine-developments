@@ -8787,10 +8787,15 @@ app.post('/admin/user/referral-chain', async (req, res) => {
   try {
     const startSnap = await db.collection('users').doc(userId).get();
     if (!startSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    // Everything the chain view and its PDF print about one member. (createdAt is an epoch in milliseconds, 0 when unknown.)
     const brief = (id, d) => ({
       id, phone: d.phone || '', referralCode: d.referralCode || '',
       status: d.status || 'active', totalInvested: finiteMoney(d.totalInvested),
+      totalDeposited: finiteMoney(d.totalDeposited), totalWithdrawn: finiteMoney(d.totalWithdrawn),
+      totalEarned: finiteMoney(d.totalEarned), walletBalance: finiteMoney(d.walletBalance),
+      createdAt: tsMillis(d.createdAt) || 0,
     });
+    const phoneById = new Map([[userId, startSnap.data().phone || '']]);
 
     // Upline: walk referredBy repeatedly up to the root. Cycle-guarded --
     // attach-referrer's own cycle-check (Round 17) already prevents a real
@@ -8807,6 +8812,7 @@ app.post('/admin/user/referral-chain', async (req, res) => {
       const s = await db.collection('users').doc(cursor).get();
       if (!s.exists) break;
       upline.push(brief(s.id, s.data()));
+      phoneById.set(s.id, s.data().phone || '');
       cursor = s.data().referredBy || null;
     }
     const root = upline.length ? upline[upline.length - 1] : brief(startSnap.id, startSnap.data());
@@ -8838,7 +8844,8 @@ app.post('/admin/user/referral-chain', async (req, res) => {
         if (seenDown.has(d.id)) { downlineCycleDetected = true; return; }
         seenDown.add(d.id);
         nextIds.push(d.id);
-        if (downline.length < DOWNLINE_CAP) downline.push({ ...brief(d.id, d.data()), level, referredBy: d.data().referredBy });
+        phoneById.set(d.id, d.data().phone || '');
+        if (downline.length < DOWNLINE_CAP) downline.push({ ...brief(d.id, d.data()), level, referredBy: d.data().referredBy, referredByPhone: phoneById.get(d.data().referredBy) || '' });
       });
       parentIds = nextIds;
     }
@@ -8855,10 +8862,22 @@ app.post('/admin/user/referral-chain', async (req, res) => {
     // a new, wider "every downline level" total that would disagree with
     // it and confuse anyone comparing the two screens).
     const teamDeposits = await wholeTeamDeposits(userId);
+    // What this member has earned FROM the team, by level (the ledger's commission rows), for the PDF report.
+    const commission = { l1: 0, l2: 0, l3: 0, total: 0, count: 0 };
+    try {
+      const cs = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'commission').limit(50000).get();
+      cs.forEach(d => {
+        const t = d.data(), amt = finiteMoney(t.amount), lv = Number(t.commissionLevel);
+        commission.total += amt; commission.count++;
+        if (lv === 1) commission.l1 += amt; else if (lv === 2) commission.l2 += amt; else if (lv === 3) commission.l3 += amt;
+      });
+    } catch (_) { /* the report still prints without it */ }
+    const upPhone = upline.length ? upline[0].phone : '';
 
     res.json({
       status: 'success',
-      user: brief(startSnap.id, startSnap.data()),
+      user: { ...brief(startSnap.id, startSnap.data()), referredByPhone: upPhone },
+      commission,
       root, upline, cycleDetected, teamDeposits,
       downline, downlineCountByLevel, downlineTruncated: downline.length >= DOWNLINE_CAP, downlineCycleDetected,
     });

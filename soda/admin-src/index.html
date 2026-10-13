@@ -1543,6 +1543,181 @@ async function quietRefreshUsers(){
 // from the "Team L1/L2/L3" counts shown in openUser() itself, which are
 // deliberately capped at the 3 commission levels. Owner: "track all roots
 // or chains of referral codes and referrals and all that chain."
+// ── Referral chain as a PDF ──
+// A small PDF writer with no library (the panel loads no outside scripts): A4 landscape pages, the two built-in fonts (Helvetica and
+// Helvetica-Bold), text, filled boxes and lines. Text is plain ASCII, so the file is exactly what is written here.
+const PDF_W_REG = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+const PDF_W_BOLD = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+function pdfAscii(s){ return String(s == null ? '' : s).replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/→/g, '->').replace(/·/g, '-').replace(/[^\x20-\x7e]/g, '?'); }
+function pdfWidth(s, size, bold){ const w = bold ? PDF_W_BOLD : PDF_W_REG; let t = 0; for (const ch of pdfAscii(s)) t += w[ch.charCodeAt(0) - 32] || 556; return t * size / 1000; }
+function pdfFit(s, size, bold, maxW){ s = pdfAscii(s); if (pdfWidth(s, size, bold) <= maxW) return s; while (s.length > 1 && pdfWidth(s + '...', size, bold) > maxW) s = s.slice(0, -1); return s + '...'; }
+function makePdf(){
+  const W = 842, H = 595;                         // A4 landscape, in points
+  const pages = []; let cur = null;
+  const esc = s => pdfAscii(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  const num = n => (Math.round(n * 100) / 100).toString();
+  const api_ = {
+    W, H,
+    newPage(){ cur = []; pages.push(cur); return pages.length; },
+    get pageCount(){ return pages.length; },
+    toPage(n){ cur = pages[n - 1]; },
+    color(r, g, b, stroke){ cur.push(`${num(r)} ${num(g)} ${num(b)} ${stroke ? 'RG' : 'rg'}`); },
+    rect(x, y, w, h, fill){ if (fill) api_.color(fill[0], fill[1], fill[2]); cur.push(`${num(x)} ${num(H - y - h)} ${num(w)} ${num(h)} re f`); },
+    line(x1, y1, x2, y2, col, width){ api_.color(col[0], col[1], col[2], true); cur.push(`${num(width || 0.5)} w ${num(x1)} ${num(H - y1)} m ${num(x2)} ${num(H - y2)} l S`); },
+    // y is the TOP of the text line measured from the top of the page; align: 'l' | 'r' | 'c'
+    text(x, y, str, size, bold, align, col){
+      const t = pdfAscii(str); if (!t) return;
+      const w = pdfWidth(t, size, bold);
+      const px = align === 'r' ? x - w : align === 'c' ? x - w / 2 : x;
+      const c = col || [0.1, 0.12, 0.2];
+      cur.push(`BT /${bold ? 'F2' : 'F1'} ${num(size)} Tf ${num(c[0])} ${num(c[1])} ${num(c[2])} rg ${num(px)} ${num(H - y - size * 0.85)} Td (${esc(t)}) Tj ET`);
+    },
+    build(title){
+      const parts = []; const offsets = []; let len = 0;
+      const put = s => { parts.push(s); len += s.length; };
+      const objs = [];                               // objs[i] = body of object i+1
+      objs.push('<< /Type /Catalog /Pages 2 0 R >>');
+      const kids = pages.map((_, i) => `${5 + i * 2} 0 R`).join(' ');
+      objs.push(`<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`);
+      objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+      objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+      pages.forEach((ops, i) => {
+        const stream = ops.join('\n');
+        objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${6 + i * 2} 0 R >>`);
+        objs.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+      });
+      objs.push(`<< /Title (${esc(title)}) /Producer (Soda admin) >>`);
+      put('%PDF-1.4\n');
+      objs.forEach((body, i) => { offsets.push(len); put(`${i + 1} 0 obj\n${body}\nendobj\n`); });
+      const xref = len;
+      put(`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`);
+      offsets.forEach(o => put(String(o).padStart(10, '0') + ' 00000 n \n'));
+      put(`trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info ${objs.length} 0 R >>\nstartxref\n${xref}\n%%EOF`);
+      return new Blob([parts.join('')], { type: 'application/pdf' });
+    },
+  };
+  return api_;
+}
+function pdfMoney(n){ return Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function pdfDay(ms){ if (!ms) return '-'; const d = new Date(Number(ms) + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`; }
+function pdfStamp(){ const d = new Date(Date.now() + 3 * 3600 * 1000); const p = x => String(x).padStart(2, '0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} (Uganda time)`; }
+function chainPdfBlob(r){
+  const pdf = makePdf(), M = 36, W = pdf.W, H = pdf.H, BOT = H - 40;
+  const INK = [0.1, 0.12, 0.2], MUTED = [0.45, 0.5, 0.6], BLUE = [0.09, 0.22, 0.72], LINE = [0.82, 0.85, 0.93], HEAD = [0.92, 0.94, 0.99], GOOD = [0.1, 0.55, 0.3], BAD = [0.8, 0.15, 0.2];
+  const u = r.user, downline = (r.downline || []).slice().sort((a, b) => a.level - b.level || (a.createdAt || 0) - (b.createdAt || 0));
+  let y = 0;
+  const pageTop = (first) => {
+    pdf.newPage();
+    pdf.rect(0, 0, W, first ? 64 : 34, BLUE);
+    if (first) {
+      pdf.text(M, 14, 'REFERRAL CHAIN REPORT', 19, true, 'l', [1, 1, 1]);
+      pdf.text(M, 41, `${u.phone || u.id}   -   code ${u.referralCode || 'not set'}`, 11, false, 'l', [0.86, 0.9, 1]);
+      pdf.text(W - M, 20, 'Generated', 8, false, 'r', [0.78, 0.84, 1]);
+      pdf.text(W - M, 32, pdfStamp(), 9, true, 'r', [1, 1, 1]);
+      y = 80;
+    } else {
+      pdf.text(M, 11, `Referral chain  -  ${u.phone || u.id}`, 10.5, true, 'l', [1, 1, 1]);
+      y = 46;
+    }
+  };
+  const need = h => { if (y + h > BOT) pageTop(false); };
+  const heading = (t, sub) => { need(40); pdf.text(M, y, t, 12.5, true, 'l', BLUE); if (sub) pdf.text(W - M, y + 2, sub, 8.5, false, 'r', MUTED); y += 18; pdf.line(M, y - 3, W - M, y - 3, LINE, 0.8); y += 4; };
+  // table: cols = [{h, w, k(row)->text, r (right aligned), color(row)}]
+  const table = (cols, rows, opt) => {
+    opt = opt || {}; const RH = opt.rh || 15; const total = cols.reduce((s, c) => s + c.w, 0); const scale = (W - 2 * M) / total;
+    const xs = []; let x = M; cols.forEach(c => { xs.push(x); x += c.w * scale; });
+    const head = () => { pdf.rect(M, y - 2, W - 2 * M, RH, HEAD); cols.forEach((c, i) => { const cx = c.r ? xs[i] + c.w * scale - 5 : xs[i] + 5; pdf.text(cx, y + 1.5, c.h, 8, true, c.r ? 'r' : 'l', INK); }); y += RH; };
+    need(RH * 3); head();
+    rows.forEach((row, ri) => {
+      if (y + RH > BOT) { pageTop(false); head(); }
+      if (opt.zebra !== false && ri % 2) pdf.rect(M, y - 2, W - 2 * M, RH, [0.975, 0.98, 1]);
+      cols.forEach((c, i) => {
+        const raw = c.k(row, ri); const col = c.color ? c.color(row) : (row._bold ? INK : INK);
+        const cx = c.r ? xs[i] + c.w * scale - 5 : xs[i] + 5;
+        pdf.text(cx, y + 1.5, pdfFit(raw, 8.2, !!row._bold, c.w * scale - 10), 8.2, !!row._bold, c.r ? 'r' : 'l', col);
+      });
+      y += RH;
+    });
+    pdf.line(M, y - 2, W - M, y - 2, LINE, 0.8); y += 6;
+  };
+  pageTop(true);
+  // 1. The member
+  heading('1. The member');
+  const kv = (label, value, x, w) => { pdf.text(x, y, label, 8, false, 'l', MUTED); pdf.text(x, y + 10, value, 11, true, 'l', INK); };
+  const colW = (W - 2 * M) / 4;
+  [['Phone', u.phone || '-'], ['Referral code', u.referralCode || 'not set'], ['Status', String(u.status || 'active')], ['Joined', pdfDay(u.createdAt)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  y += 30;
+  [['Referred by', u.referredByPhone || 'nobody (this is a root account)'], ['Wallet balance', 'UGX ' + pdfMoney(u.walletBalance)], ['Total deposited', 'UGX ' + pdfMoney(u.totalDeposited)], ['Total invested', 'UGX ' + pdfMoney(u.totalInvested)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  y += 30;
+  [['Total withdrawn', 'UGX ' + pdfMoney(u.totalWithdrawn)], ['Total earned (all sources)', 'UGX ' + pdfMoney(u.totalEarned)], ['Team members (all levels)', pdfMoney(downline.length) + (r.downlineTruncated ? '+' : '')], ["Team's recharges (L1-L3)", 'UGX ' + pdfMoney(r.teamDeposits)]].forEach((p, i) => kv(p[0], p[1], M + i * colW));
+  y += 34;
+  if (r.cycleDetected || r.downlineCycleDetected) { pdf.text(M, y, 'Warning: a cycle was found in the referral data; the walk stopped early.', 9, true, 'l', BAD); y += 16; }
+  // 2. Team by level
+  const levels = Array.from(new Set(downline.map(d => d.level))).sort((a, b) => a - b);
+  const agg = lv => { const rows = downline.filter(d => d.level === lv); const sum = k => rows.reduce((s, d) => s + (Number(d[k]) || 0), 0); return { _lv: lv, n: rows.length, banned: rows.filter(d => d.status === 'banned').length, dep: sum('totalDeposited'), inv: sum('totalInvested'), wd: sum('totalWithdrawn'), earn: sum('totalEarned'), payers: rows.filter(d => (Number(d.totalDeposited) || 0) > 0).length }; };
+  const lvRows = levels.map(agg);
+  if (lvRows.length) {
+    const tot = { _bold: true, _lv: 'Total', n: downline.length, banned: lvRows.reduce((s, x) => s + x.banned, 0), dep: lvRows.reduce((s, x) => s + x.dep, 0), inv: lvRows.reduce((s, x) => s + x.inv, 0), wd: lvRows.reduce((s, x) => s + x.wd, 0), earn: lvRows.reduce((s, x) => s + x.earn, 0), payers: lvRows.reduce((s, x) => s + x.payers, 0) };
+    heading('2. Team by level', 'figures are the members\' own lifetime totals, in UGX');
+    table([
+      { h: 'Level', w: 70, k: x => x._lv === 'Total' ? 'Total' : 'Level ' + x._lv }, { h: 'Members', w: 70, r: 1, k: x => pdfMoney(x.n) }, { h: 'Have deposited', w: 90, r: 1, k: x => pdfMoney(x.payers) },
+      { h: 'Banned', w: 60, r: 1, k: x => pdfMoney(x.banned) }, { h: 'Deposited', w: 105, r: 1, k: x => pdfMoney(x.dep) }, { h: 'Invested', w: 105, r: 1, k: x => pdfMoney(x.inv) },
+      { h: 'Withdrawn', w: 105, r: 1, k: x => pdfMoney(x.wd) }, { h: 'Earned', w: 105, r: 1, k: x => pdfMoney(x.earn) },
+    ], lvRows.concat([tot]));
+  }
+  // 3. Commission
+  if (r.commission) {
+    heading('3. Commission this member earned from the team', `${pdfMoney(r.commission.count)} commission payment${r.commission.count === 1 ? '' : 's'}`);
+    table([{ h: 'Level 1', w: 100, r: 1, k: x => pdfMoney(x.l1) }, { h: 'Level 2', w: 100, r: 1, k: x => pdfMoney(x.l2) }, { h: 'Level 3', w: 100, r: 1, k: x => pdfMoney(x.l3) }, { h: 'Total (UGX)', w: 120, r: 1, k: x => pdfMoney(x.total) }], [r.commission], { zebra: false });
+  }
+  // 4. Upline
+  heading('4. Upline (direct referrer to root)', `${(r.upline || []).length} link${(r.upline || []).length === 1 ? '' : 's'}`);
+  if ((r.upline || []).length) {
+    table([
+      { h: '#', w: 28, k: (x, i) => String(i + 1) }, { h: 'Position', w: 110, k: (x, i) => i === 0 ? 'Direct referrer' : (i === r.upline.length - 1 ? 'Root' : 'Level ' + (i + 1) + ' up') },
+      { h: 'Phone', w: 120, k: x => x.phone }, { h: 'Code', w: 80, k: x => x.referralCode || '-' }, { h: 'Status', w: 60, k: x => x.status, color: x => x.status === 'banned' ? BAD : GOOD },
+      { h: 'Joined', w: 75, k: x => pdfDay(x.createdAt) }, { h: 'Deposited', w: 90, r: 1, k: x => pdfMoney(x.totalDeposited) }, { h: 'Invested', w: 90, r: 1, k: x => pdfMoney(x.totalInvested) },
+    ], r.upline);
+  } else { pdf.text(M, y, 'No referrer: this account is the root.', 9.5, false, 'l', MUTED); y += 18; }
+  // 5. Downline, level by level
+  heading('5. Downline, level by level', `${pdfMoney(downline.length)}${r.downlineTruncated ? '+' : ''} members`);
+  const dcols = [
+    { h: '#', w: 28, k: (x, i) => String(i + 1) }, { h: 'Phone', w: 105, k: x => x.phone }, { h: 'Code', w: 72, k: x => x.referralCode || '-' }, { h: 'Referred by', w: 105, k: x => x.referredByPhone || '-' },
+    { h: 'Status', w: 52, k: x => x.status, color: x => x.status === 'banned' ? BAD : GOOD }, { h: 'Joined', w: 68, k: x => pdfDay(x.createdAt) },
+    { h: 'Deposited', w: 78, r: 1, k: x => pdfMoney(x.totalDeposited) }, { h: 'Invested', w: 78, r: 1, k: x => pdfMoney(x.totalInvested) },
+    { h: 'Withdrawn', w: 78, r: 1, k: x => pdfMoney(x.totalWithdrawn) }, { h: 'Earned', w: 78, r: 1, k: x => pdfMoney(x.totalEarned) },
+  ];
+  if (!downline.length) { pdf.text(M, y, 'No members in this team yet.', 9.5, false, 'l', MUTED); y += 18; }
+  levels.forEach(lv => {
+    const rows = downline.filter(d => d.level === lv); const a = agg(lv);
+    need(60);
+    pdf.rect(M, y - 2, W - 2 * M, 17, [0.85, 0.9, 1]);
+    pdf.text(M + 6, y + 1.5, `Level ${lv}  -  ${pdfMoney(rows.length)} member${rows.length === 1 ? '' : 's'}`, 9.5, true, 'l', BLUE);
+    pdf.text(W - M - 6, y + 2, `deposited ${pdfMoney(a.dep)}   invested ${pdfMoney(a.inv)}   (UGX)`, 8.5, false, 'r', INK);
+    y += 21;
+    table(dcols, rows);
+  });
+  if (r.downlineTruncated) { need(20); pdf.text(M, y, 'The list stops at 5,000 members; the level totals above cover only the members listed.', 8.5, false, 'l', MUTED); y += 14; }
+  // footers
+  const total = pdf.pageCount;
+  for (let i = 1; i <= total; i++) {
+    pdf.toPage(i);
+    pdf.line(M, H - 30, W - M, H - 30, LINE, 0.6);
+    pdf.text(M, H - 24, `Referral chain  -  ${u.phone || u.id}`, 7.5, false, 'l', MUTED);
+    pdf.text(W - M, H - 24, `Page ${i} of ${total}`, 7.5, false, 'r', MUTED);
+  }
+  return { pdf, total };
+}
+function downloadChainPdf(r){
+  const { pdf } = chainPdfBlob(r);
+  const blob = pdf.build('Referral chain ' + (r.user.phone || r.user.id));
+  const safe = String(r.user.phone || r.user.id).replace(/[^0-9A-Za-z]+/g, '');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `referral-chain-${safe}-${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
 async function openReferralChain(uid){
   const r = await api('/admin/user/referral-chain',{ userId:uid });
   if(r.status!=='success'){ toast(r.message||'Could not load referral chain','err'); return; }
@@ -1566,6 +1741,7 @@ async function openReferralChain(uid){
   openModal(`
     <h3>Referral chain</h3>
     <div class="muted" style="margin-bottom:10px">${esc(r.user.phone||r.user.id)}${r.cycleDetected?' <span class="pill-tag t-bad">Cycle detected in data -- stopped early</span>':''}</div>
+    <button class="btn sky sm" id="chainPdfBtn" style="margin-bottom:10px">Download PDF</button>
     <div class="kv"><span class="k">Team L1/L2/L3 members</span><span>${r.downlineCountByLevel[1]||0} / ${r.downlineCountByLevel[2]||0} / ${r.downlineCountByLevel[3]||0}</span></div>
     <div class="kv"><span class="k">Team's total recharges</span><b>${ugx(r.teamDeposits)}</b></div>
     <h4 style="margin:10px 0 6px;font-size:13px">Root</h4>
@@ -1575,6 +1751,7 @@ async function openReferralChain(uid){
     <h4 style="margin:14px 0 6px;font-size:13px">Downline (this member's own team), ${r.downline.length}${r.downlineTruncated?'+':''} total -- ${esc(levelSummary)}</h4>
     ${r.downline.length ? `<div class="table-scroll" style="max-height:260px">${downlineRows}</div>${r.downlineTruncated?'<p class="muted" style="font-size:11.5px;margin:6px 0 0">List capped at 5,000 nodes -- the level counts above still cover everyone.</p>':''}` : '<p class="muted" style="margin:0">This user has not referred anyone.</p>'}
   `);
+  $('chainPdfBtn')?.addEventListener('click',()=>{ try { downloadChainPdf(r); toast('PDF ready','ok'); } catch(e){ toast('Could not make the PDF: '+e.message,'err'); } });
   $('modalRoot').querySelectorAll('[data-uid]').forEach(el=>el.addEventListener('click',()=>{ closeModal(); openUser(el.dataset.uid); }));
 }
 async function openUser(uid){
