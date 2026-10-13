@@ -3218,7 +3218,7 @@ function patchHomeBalances(){
     if (el) el.textContent = fmtUGX(account[key]);
   }
   // The figures the current screens actually show: My (balance), Income (total earnings) and the Balance Record header.
-  for (const [id, key] of [['myBalance','walletBalance'], ['incomeTotal','totalEarned'], ['recBalance','walletBalance']]) {
+  for (const [id, key] of [['myBalance','walletBalance'], ['incomeTotal','totalEarned'], ['recBalance','walletBalance'], ['witBalance','walletBalance']]) {
     const el = $(id);
     if (el) el.textContent = vMoney2(account[key]);
   }
@@ -4287,7 +4287,7 @@ window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
   // Good news gets the tick, everything else (errors and "please do this first")
   // the circled cross, as in the screens.
-  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|status changed|bind it|add a payout/i.test(String(message || ''));
+  const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|already|status changed|bind it|add a payout/i.test(String(message || ''));
   const ic = $('notifyIc');
   if (ic) { ic.innerHTML = good ? VI.okCircle : VI.errCircle; ic.className = 'notify-ic ' + (good ? 'ok' : 'err'); }
   _notifyOnClose = typeof onClose === 'function' ? onClose : null;
@@ -4875,11 +4875,17 @@ function anyDialogOpen(){
     || ($('dlBg') && $('dlBg').classList.contains('show'))
     || ($('helpBg') && $('helpBg').classList.contains('show'))
     || ($('confirmBg') && $('confirmBg').classList.contains('show'))
-    || ($('annBg') && $('annBg').classList.contains('show')));
+    || ($('annBg') && $('annBg').classList.contains('show'))
+    // The payment status page owns a history entry too: without it here, one Back left the page showing and the next left the app mid-payment.
+    || ($('depStatusBg') && $('depStatusBg').classList.contains('show')));
 }
 function _dlgIgnore(){ _dlgIgnorePop = true; setTimeout(() => { _dlgIgnorePop = false; }, 700); }
 function resetOverlayState(){
   document.body.classList.remove('deposit-status-open', 'sheet-open');
+  // A session that ends (or a logout) takes every popup with it: the Buy confirm, Help, announcement, download and the win card used to stay
+  // on top of the Login screen (the win card even showed the previous member's New Balance).
+  ['confirmBg', 'helpBg', 'annBg', 'dlBg'].forEach(id => { const el = $(id); if (el) el.classList.remove('show'); });
+  const win = $('chestWinBg'); if (win) win.remove();
   _openSheetTitle = null; _depActiveDepositId = null; _withdrawSubmitting = false;
   if (_depSuccessRedirectTimer) { clearInterval(_depSuccessRedirectTimer); _depSuccessRedirectTimer = null; }
 }
@@ -5597,7 +5603,7 @@ function paintWithdrawSheet(s){
   const min = Number(s.minWithdraw) || 0, max = Number(s.maxWithdraw) || 0, mult = Number(s.withdrawMultiple) || 0;
   const perDay = Number(s.maxWithdrawalsPerDay) || 0;
   $('sheetBody').innerHTML = `<div class="v-form">
-    <div class="v-bal"><span>AVAILABLE BALANCE</span><b>${esc(vMoney2(balance))}</b></div>
+    <div class="v-bal"><span>AVAILABLE BALANCE</span><b id="witBalance">${esc(vMoney2(balance))}</b></div>
     <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>
     <div class="v-sec"><span class="bar"></span><h2>Withdrawal Wallet</h2></div>
     <div id="witWalletBlock">${witWalletBlockHtml(s)}</div>
@@ -5763,6 +5769,9 @@ window.openInvestConfirm = function(tierKey, btn){
     <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;">Buy Product</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;" onclick="closeConfirm()">Cancel</button>`;
   const actionBtn = $('confirmActionBtn');
+  // A double tap on BUY NOW lands its second tap where this button appears: it is dead for the first 600 ms so nothing is bought unseen.
+  actionBtn.disabled = true;
+  setTimeout(() => { if (actionBtn.isConnected && actionBtn.textContent === 'Buy Product') actionBtn.disabled = false; }, 600);
   actionBtn.onclick = async () => {
     if (actionBtn.disabled) return;
     actionBtn.disabled = true; actionBtn.textContent = 'Buying…';
