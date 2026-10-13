@@ -3215,19 +3215,7 @@ app.get('/team/members', async (req, res) => {
       members = rows;
       parentIds = nextIds;
     }
-    // "active"/"inactive" per member, for the All Referrals list -- whether
-    // this downline member currently has a live investment running, the
-    // one status a referrer actually cares about (an inactive member pays
-    // no ongoing commission). One extra query against the target level's
-    // own ids only, never per intermediate level.
-    if (members.length) {
-      const activeSnap = await db.collection('investments')
-        .where('userId', 'in', members.map(m => m.id))
-        .where('status', '==', 'active').get();
-      const activeIds = new Set();
-      activeSnap.forEach(d => activeIds.add(d.data().userId));
-      members = members.map(m => ({ ...m, active: activeIds.has(m.id) }));
-    }
+    // (The old per-member 'active' flag was dropped: no screen reads it, and it cost a query on every 15-second refresh.)
     res.json({ status: 'success', level, members });
   } catch (e) {
     console.error('Team members error:', e.message);
@@ -7541,7 +7529,7 @@ app.post('/admin/promocodes/generate', async (req, res) => {
   if (!Number.isFinite(minReward) || minReward <= 0 || minReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Enter a valid minimum reward amount' });
   if (!Number.isFinite(maxReward) || maxReward < minReward || maxReward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Maximum reward must be a valid amount, at least the minimum' });
   if (maxUses !== null && (!Number.isFinite(maxUses) || maxUses <= 0)) return res.status(400).json({ status: 'error', message: 'Max uses must be a positive number' });
-  if (durationSeconds !== null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0)) return res.status(400).json({ status: 'error', message: 'Duration must be a positive number of seconds' });
+  if (durationSeconds !== null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 315360000)) return res.status(400).json({ status: 'error', message: 'Duration must be a positive number of seconds, at most 10 years' });
   try {
     const code = await generateUniqueGiftCode();
     const doc = {
