@@ -23,7 +23,7 @@ ok(admin.indexOf('Each product has its OWN multiplier') < admin.indexOf('<label>
   ok(/const more = true;/.test(mod) && /window\.statementLoadMore = async function/.test(mod), 'Load More always sits under the Balance Record list and asks the server when nothing more is held');
   ok(/\.v-me-bal\{[^}]*font-size:28\.5px/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'the My balance is 28.5 px, as measured from the owner screenshot'); }
 { const idx = fs.readFileSync(__dirname + '/user-src/index.html', 'utf8');
-  const rules = idx.match(/[^{}]*\.prov-list[^{}]*\{[^}]*\}/g) || [];
+  const rules = (idx.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]*\.prov-list[^{}]*\{[^}]*\}/g) || []);
   ok(rules.length > 0 && rules.every(r => !/overflow:\s*hidden/.test(r)), 'the wallet provider / bank list never switches scrolling off (a later rule used to set overflow:hidden)');
   ok(/\.v-edit \.prov-list\{[^}]*overflow-y:auto/.test(idx), 'the bank list inside the wallet form scrolls'); }
 console.log('test-layout: ' + n + ' checks passed');
