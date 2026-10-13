@@ -952,10 +952,19 @@ function closeLangPicker(){
   const bg = $('langSheetBg');
   if (bg) bg.classList.remove('show');
 }
+// Thousands commas and the decimal point are written here, never left to the phone's own locale (an older phone browser without full
+// language data prints 970130.00 or 970 130,00 for the same number). cents=true always shows two decimals.
+function numGroup(n, cents){
+  let v = Number(n); if (!Number.isFinite(v)) v = 0;
+  const neg = v < 0; v = Math.abs(v);
+  const fixed = cents ? (Math.round(v * 100) / 100).toFixed(2) : String(Math.round(v));
+  const parts = fixed.split('.');
+  return (neg ? '-' : '') + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (parts[1] ? '.' + parts[1] : '');
+}
 function fmtUGX(n){
   const v = Number(n)||0;
   const hasCents = Math.round(v*100)%100 !== 0;
-  return cur() + ' ' + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
+  return cur() + ' ' + numGroup(v, hasCents);
 }
 // Keep investment and payout amounts on the same cents-aware formatter.
 function fmtUGXCents(n){ return fmtUGX(n); }
@@ -977,11 +986,11 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&am
 function vMoney(n){
   const v = Number(n) || 0;
   const hasCents = Math.round(v * 100) % 100 !== 0;
-  return cur() + v.toLocaleString('en-UG', hasCents ? {minimumFractionDigits:2,maximumFractionDigits:2} : {});
+  return cur() + numGroup(v, hasCents);
 }
 // Long money figures (nine digits and more) step the font down in two sizes so they stay on one line inside their box.
 function vFit(text, a, b){ var n = String(text).length; return n > b ? 'v-fit2' : n > a ? 'v-fit1' : ''; }
-function vMoney2(n){ return cur() + (Number(n) || 0).toLocaleString('en-UG', {minimumFractionDigits:2,maximumFractionDigits:2}); }
+function vMoney2(n){ return cur() + numGroup(n, true); }
 // Icons traced from the owner's screenshots live in a square box 288 units wide drawn 1:1 with a 22 px picture (13.1 units = 1 px); the stroke sits on the <g> so a bigger/smaller box keeps the same proportions.
 function vSvgT(cx, cy, sw, body, size){ size = size || 288; var h = size / 2; return '<svg viewBox="' + (cx - h) + ' ' + (cy - h) + ' ' + size + ' ' + size + '" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g stroke-width="' + sw + '">' + body + '</g></svg>'; }
 function vSvg(body, extra){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + body + '</svg>'; }
@@ -4022,7 +4031,7 @@ async function renderAccount(){
   <div class="v-me">
     <div class="v-me-top">
       <div class="v-avatar">${avatar}</div>
-      <div class="v-me-id"><div class="v-me-phone">${esc(walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone))}</div><span class="v-vip">VIP ${Number(a.vipLevel) || 0}</span></div>
+      <div class="v-me-id"><div class="v-me-phone">${esc(localDigits(a.phone) || walletLocalPhone(a.phone) || formatPhoneDisplay(a.phone))}</div><span class="v-vip">VIP ${Number(a.vipLevel) || 0}</span></div>
     </div>
     <div class="v-me-line"></div>
     <div class="v-me-lbl">TOTAL BALANCE</div>
@@ -4355,8 +4364,15 @@ function statementChip(t){
   return null;
 }
 function statementDate(t){
-  const d = String(t.date || '');
-  return (d + (t.time ? ' ' + t.time : '')).trim();
+  // "25/09/2026 10:57": day first and no seconds, as on the owner's Balance Record. The moment comes from the row's own
+  // timestamp (read on the member's clock like the Income dates); a row without one falls back to the stored text,
+  // which the server writes month-first, turned round here.
+  const pad = n => String(n).padStart(2, '0');
+  const ms = t.createdAt ? new Date(t.createdAt).getTime() : NaN;
+  if (Number.isFinite(ms)) { const d = new Date(ms); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+  const m = String(t.date || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const day = m ? `${m[2]}/${m[1]}/${m[3]}` : String(t.date || '');
+  return (day + (t.time ? ' ' + String(t.time).slice(0, 5) : '')).trim();
 }
 function statementAmountText(t){
   const amt = recordsRowAmount(t);
@@ -4368,7 +4384,9 @@ function renderStatement(){
   const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
   if (!all.length) { body.innerHTML = '<div class="v-empty">No records yet.</div>'; return; }
   const rows = all.slice(0, _statementShown);
-  const more = all.length > rows.length;
+  // The Load More button always sits under the list (as on the owner's Balance Record, even with two rows): it shows the next ten, or, when
+  // everything held is already on screen, asks the server again for anything newer or older.
+  const more = true;
   body.innerHTML = rows.map(t => {
     const title = statementDescription(t);
     const chip = statementChip(t);
@@ -4383,7 +4401,21 @@ function renderStatement(){
       </article>`;
   }).join('') + (more ? '<div class="v-more"><button type="button" onclick="statementLoadMore()">Load More</button></div>' : '');
 }
-window.statementLoadMore = function(){ _statementShown += 10; renderStatement(); };
+var _statementMoreBusy = false;
+window.statementLoadMore = async function(){
+  const held = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t)).length;
+  if (_statementShown < held) { _statementShown += 10; renderStatement(); return; }
+  if (_statementMoreBusy) return;
+  _statementMoreBusy = true;
+  try {
+    const r = await api('/transactions');
+    if (r.status === 'success' && _openSheetTitle === 'Balance Record') {
+      STATE.transactions = r.transactions;
+      STATE.transactionsTruncated = !!r.truncated;
+      renderStatement();
+    }
+  } finally { _statementMoreBusy = false; }
+};
 window.switchStatementCategory = function(cat){
   if (!['all','deposit','withdraw','turntable','fruit'].includes(cat)) return;
   _statementCat = cat; _statementShown = 10;
@@ -4701,7 +4733,7 @@ var _openSheetTitle = null;
 // are page navigations (STATE.page stays 'home' throughout), so
 // _openSheetTitle alone isn't enough on its own.
 // 30000 -> 30,000 (thousands separators for whole amounts printed inside a sentence); anything that is not a plain number is left as it is.
-function vGroup(n){ const x = Number(n); return Number.isFinite(x) ? x.toLocaleString('en-US') : String(n); }
+function vGroup(n){ const x = Number(n); return Number.isFinite(x) ? numGroup(x, false) : String(n); }
 function isAnyOverlayOpen(){
   return !!(_openSheetTitle
     || ($('msgDetailBg') && $('msgDetailBg').classList.contains('show'))
@@ -5077,7 +5109,7 @@ function depositChipsHtml(s, inputId){
     .slice(0, 6);
   const chosen = _chosenAmountFor(inputId);
   return amounts.map(a =>
-    `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${Number(a).toLocaleString('en-US')}</button>`
+    `<button type="button" class="dep-chip${a === chosen ? ' sel' : ''}" data-amt="${a}" onclick="pickDepositAmount(${a},'${inputId}')">${numGroup(a, false)}</button>`
   ).join('');
 }
 function _chosenAmountFor(inputId){

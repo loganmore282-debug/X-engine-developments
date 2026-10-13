@@ -18,4 +18,8 @@ ok(admin.indexOf('Each product has its OWN multiplier') < admin.indexOf('<label>
   ok(m && (Number(m[2]) + Number(m[1])) < 82 - 4, 'the Total Team rings end above the divider line instead of crossing it'); }
 { const m = /input:-webkit-autofill,[^{]*\{[^}]*transition:background-color 600000s 0s/.exec(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8'));
   ok(!!m, 'a field Chrome autofills keeps no pale sheet behind the typed number'); }
+{ const mod = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
+  ok(!/toLocaleString\('en-UG'/.test(mod) && /function numGroup\(/.test(mod), 'money commas are written by the app itself (numGroup), not left to the phone locale');
+  ok(/const more = true;/.test(mod) && /window\.statementLoadMore = async function/.test(mod), 'Load More always sits under the Balance Record list and asks the server when nothing more is held');
+  ok(/\.v-me-bal\{[^}]*font-size:28\.5px/.test(fs.readFileSync(__dirname + '/user-src/index.html', 'utf8')), 'the My balance is 28.5 px, as measured from the owner screenshot'); }
 console.log('test-layout: ' + n + ' checks passed');
