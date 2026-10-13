@@ -359,6 +359,16 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   r = await run(st, { ...REQ, amount: 1000 });
   ck(r.code === 400 && r.replied.code !== 'WINDOW_CLOSED', `an unrestricted member still meets the minimum (${r.code} ${r.replied && r.replied.code})`);
 
+  // The same mark lifts the daily number of withdrawals.
+  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
+  st.user.withdrawAnytime = true;
+  r = await run(st, REQ);
+  ck(r.code === 200, `an unrestricted member is not held to the daily number (${r.code} ${r.replied && r.replied.message})`);
+  st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'processed', amount: 20000, date: '15/01/2026' }] });
+  st.user.withdrawAnytime = false;
+  r = await run(st, REQ);
+  ck(r.code === 400, `without the mark the same request meets the daily number (${r.code})`);
+
   console.log('\n— the daily limit counts payouts, not refunded failures —');
   st = fresh({ settings: { maxWithdrawalsPerDay: 1 }, wits: [{ id: 'w0', userId: 'u1', status: 'declined', amount: 20000, date: '15/01/2026' }] });
   r = await run(st, REQ);

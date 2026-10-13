@@ -5601,7 +5601,8 @@ function paintWithdrawSheet(s){
   const win = (STATE.account && STATE.account.withdrawAnytime) ? { enabled: false, open: true } : withdrawWindow(s);
   const secs = v => v ? v + ':00' : '';
   const min = Number(s.minWithdraw) || 0, max = Number(s.maxWithdraw) || 0, mult = Number(s.withdrawMultiple) || 0;
-  const perDay = Number(s.maxWithdrawalsPerDay) || 0;
+  // An unrestricted member has no daily number either (the server skips it for them).
+  const perDay = (STATE.account && STATE.account.withdrawAnytime) ? 0 : (Number(s.maxWithdrawalsPerDay) || 0);
   $('sheetBody').innerHTML = `<div class="v-form">
     <div class="v-bal"><span>AVAILABLE BALANCE</span><b id="witBalance">${esc(vMoney2(balance))}</b></div>
     <div class="v-amtrow"><span>${esc(cur())}</span><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0.00" oninput="this.value=this.value.replace(/[\s,]/g,'');syncWithdrawReceiveAmt()" autocomplete="off"></div>

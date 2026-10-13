@@ -5230,11 +5230,10 @@ app.post('/withdraw/request', async (req, res) => {
     const win = withdrawWindowState(sett, Date.now());
     // A member the owner has marked "withdraw any time" (Admin > Users > the member) is not held to the hours. Read only
     // when the window is actually closed, so ordinary requests cost no extra read.
-    let anyTime = false;
-    if (win.enabled && !win.open) {
-      const flag = await db.collection('users').doc(userId).get();
-      anyTime = flag.exists && flag.data().withdrawAnytime === true;
-    }
+    // The same mark also lifts the daily number of withdrawals (the owner's "unrestricted" member), so it is read for every request.
+    const anyFlagSnap = await db.collection('users').doc(userId).get();
+    const unrestricted = anyFlagSnap.exists && anyFlagSnap.data().withdrawAnytime === true;
+    const anyTime = win.enabled && !win.open ? unrestricted : false;
     if (win.enabled && !win.open && !anyTime)
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
         message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
@@ -5303,7 +5302,7 @@ app.post('/withdraw/request', async (req, res) => {
         e.code = 'WITHDRAW_PENDING';
         throw e;
       }
-      const maxPerDay = Number(sett.maxWithdrawalsPerDay) || 0;
+      const maxPerDay = unrestricted ? 0 : (Number(sett.maxWithdrawalsPerDay) || 0);   // an unrestricted member has no daily number
       if (maxPerDay > 0) {
         const today = nowStr().date;
         const todaySnap = await db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today).get();
