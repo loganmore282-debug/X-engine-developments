@@ -2009,7 +2009,11 @@ function logSecurityEvent(userId, type, meta) {
 }
 async function markDepositFailed(depRef, userId, reason) {
   try { return await _markDepositFailedNow(depRef, userId, reason); }
-  finally { if (typeof _notifyDeposit === 'function') _notifyDeposit(depRef.id); }   // wake a held status request (see waitDepositSettled)
+  finally {
+    if (typeof _notifyDeposit === 'function') _notifyDeposit(depRef.id);   // wake a held status request (see waitDepositSettled)
+    // The member may try again at once: a failed payment is not an "already being processed" one and must not count as an abusive attempt.
+    if (userId) { _depCreateDebounce.delete(userId); const a = _depAttempts.get(userId); if (a && a.length) a.pop(); }
+  }   // wake a held status request (see waitDepositSettled)
 }
 async function _markDepositFailedNow(depRef, userId, reason) {
   // subagent-audit-caught HIGH bug: this used to overwrite status:'failed'
@@ -4642,10 +4646,12 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (Date.now() - lastDep < 7000)
       return res.status(429).json({ status: 'error', message: 'A recharge is already being processed. Please wait a moment.' });
 
+    // Too many attempts in a minute with none completed: slow the member down, never ban them. A member whose payments keep failing (a wrong
+    // number, the gateway down, a provider that refuses) used to be banned by this on the fifth tap.
     const attemptCount = recordDepositAttempt(userId);
     if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
-      await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
-      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+      logSecurityEvent(userId, 'deposit_attempts', { count: attemptCount });
+      return res.status(429).json({ status: 'error', message: 'Too many deposit attempts. Please wait a minute and try again.' });
     }
     _depCreateDebounce.set(userId, Date.now());
 
@@ -6178,9 +6184,11 @@ const MAX_SAVED_PAYOUT_ACCOUNTS = 1; // one wallet per member; /bank/save edits 
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const holder = stripHtml(req.body.holder);
+  const holder = stripHtml(req.body.holder).trim();
   const rawNetwork = String(req.body.network || '').trim();
   if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
+  // A holder name is a name: at most 60 characters and at least one letter (a 300-character or all-digit holder broke the Wallet card).
+  if (holder.length > 60 || !/\p{L}/u.test(holder)) return res.status(400).json({ status: 'error', message: 'Enter the account holder name (letters, up to 60 characters).' });
   const isMobileMoney = NETWORK_NAMES.has(rawNetwork);
   // Owner: "so some bank account exceed character limit so no capping of
   // characters please" -- cleanPhone() enforces this region's phone SHAPE

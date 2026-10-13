@@ -976,7 +976,8 @@ function fmtUGXCents(n){ return fmtUGX(n); }
 // nonsensical "Minimum amount is UGX 30,000" rejection right next to an
 // input that visibly still reads "30,000". Strips thousands separators
 // before parsing.
-function parseMoneyInput(v){ return parseInt(String(v||'').replace(/,/g,''), 10); }
+// Whole numbers only: "20000.5" or "2e4" used to be read as 20000 and 2 (parseInt stops at the first non-digit); now they are not numbers.
+function parseMoneyInput(v){ const s = String(v||'').replace(/[,\s]/g,''); return /^\d+$/.test(s) ? parseInt(s, 10) : NaN; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ── Soda v2 design helpers ──
@@ -4147,10 +4148,19 @@ function walRowsHtml(){
 }
 // The one saved wallet is edited in place: its provider, number and holder
 // fill the form (only into empty fields, so nothing the member typed is lost).
+// The Account Number box is a phone box for mobile money and a plain text box for a bank (letters allowed).
+function applyWalDestKind(nowBank){
+  const dest = $('walPhone'); if (!dest) return;
+  dest.type = nowBank ? 'text' : 'tel';
+  dest.inputMode = nowBank ? 'text' : 'numeric';
+  dest.autocomplete = nowBank ? 'off' : 'tel';
+  dest.placeholder = nowBank ? 'Account number' : phoneHintBody();
+}
 function prefillWallet(){
   const w = currentWallet(); if (!w) return;
   const prov = $('walProvider'), ph = $('walPhone'), holder = $('walHolder');
   if (prov && !prov.value) { prov.value = walShort(w.network); prov.dataset.network = w.network; }
+  applyWalDestKind(!isMobileMoneyNetwork(w.network));
   if (ph && !ph.value) ph.value = walletDestDisplay(w);
   if (holder && !holder.value) holder.value = String(w.holder || '').toUpperCase();
 }
@@ -4177,7 +4187,7 @@ function renderWalletSheet(){
         <label class="v-flabel" for="walPhone">Account Number</label>
         <div class="v-uline"><input id="walPhone" type="tel" inputmode="numeric" autocomplete="tel" enterkeyhint="next" placeholder="${esc(phoneHintBody())}" oninput="handleWalDestInput(this)"></div>
         <label class="v-flabel" for="walHolder">Account Holder Name</label>
-        <div class="v-uline"><input id="walHolder" type="text" autocomplete="name" enterkeyhint="done" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
+        <div class="v-uline"><input id="walHolder" type="text" maxlength="60" autocomplete="name" enterkeyhint="done" value="${w ? esc(String(w.holder || '').toUpperCase()) : ''}"></div>
         <div class="v-two"><button class="v-ghost" type="button" onclick="closeSheet()">Cancel</button><button class="v-solid" id="walSaveBtn" type="button" onclick="submitWallet()">Submit</button></div>
       </div>
       <div id="walYours" style="${(STATE.bankAccounts || []).length ? '' : 'display:none'}">
@@ -4207,18 +4217,17 @@ window.pickProvider = function(name){
   const nowBank = !isMobileMoneyNetwork(name);
   const dest = $('walPhone');
   if (dest) {
-    dest.type = nowBank ? 'text' : 'tel';
-    dest.inputMode = nowBank ? 'text' : 'numeric';
-    dest.autocomplete = nowBank ? 'off' : 'tel';
-    dest.placeholder = nowBank ? 'Account number' : phoneHintBody();
-    // Crossing the mobile-money/bank boundary clears what was typed: a phone number is never a bank account number.
-    const wasBank = prev ? !isMobileMoneyNetwork(prev) : nowBank;
-    if (wasBank !== nowBank) dest.value = '';
+    applyWalDestKind(nowBank);
+    // Crossing the mobile-money/bank boundary clears what was typed: a phone number is never a bank account number. With no provider
+    // chosen yet nothing says what the box held, so a number that looks like a phone number is cleared when a bank is picked.
+    const wasBank = prev ? !isMobileMoneyNetwork(prev) : false;
+    if (prev ? wasBank !== nowBank : (nowBank && /^0?7\d{8}$/.test(String(dest.value).replace(/\D/g, '')))) dest.value = '';
   }
 };
 window.handleWalDestInput = function(el){
   if (isMobileMoneyNetwork(walNetwork())) { sanitizePhoneInput(el); return; }
-  if (/\s/.test(el.value)) el.value = el.value.replace(/\s+/g, '');
+  // A bank account number is letters and digits only (what the server accepts); anything else typed is dropped as it is typed.
+  if (/[^A-Za-z0-9]/.test(el.value)) el.value = el.value.replace(/[^A-Za-z0-9]/g, '');
 };
 // Tapping anywhere else closes it, the way a real picker behaves. Bound once
 // on the document rather than per-render so repainting the panel cannot leave
@@ -5651,6 +5660,9 @@ window.submitWithdraw = async function(){
   // Mirrors the server's rule so the member is told BEFORE a round trip.
   // The server checks it again -- this is a courtesy, not the enforcement.
   const wMult = Math.max(0, Math.floor(Number((STATE.settings || {}).withdrawMultiple) || 0));
+  const wMin = Number((STATE.settings || {}).minWithdraw) || 0;
+  // The minimum is checked first, as the server does, so the suggestions below can never be amounts under it.
+  if (wMin > 0 && amount < wMin) return notify(`Minimum withdraw is ${fmtUGX(wMin)}.`);
   if (wMult > 0 && amount % wMult !== 0) {
     const low = Math.floor(amount / wMult) * wMult, high = low + wMult;
     return notify(`Withdraw must be a multiple of ${fmtUGX(wMult)}. Try ${fmtUGX(low || high)} or ${fmtUGX(high)}.`);
