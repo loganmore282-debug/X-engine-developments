@@ -2242,6 +2242,7 @@ function editProduct(p, order){
     const price = parseFloat($('pPrice').value), ret = parseFloat($('pRet').value);
     if(price > 0 && ret > 0) $('pMult').value = Math.round((ret / price) * 100) / 100;
     _syncing = false;
+    _retIsTruth = true;   // the Multiplier box now only shows a rounded view of the typed total
   };
   // The daily payout is total payout / cycle days, shown read-only and refreshed whenever any of them changes.
   const syncDaily = ()=>{
@@ -2290,6 +2291,8 @@ function editProduct(p, order){
     // the old key. Omitted whenever the key didn't change, so an ordinary
     // save of an existing asset behaves exactly as it always has.
     if (p.key && key !== p.key) body.oldKey = p.key;
+    // A brand-new product must never land on a key that already exists (typing a name such as "Soda A" slugs to a starter's key).
+    if (!p.key) body.isNew = true;
     // Both ends or neither -- half a window would read as "opens at 14:00" and
     // then never close.
     if (!!body.openFrom !== !!body.openTo)

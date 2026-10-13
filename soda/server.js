@@ -7179,14 +7179,19 @@ function sanitizeProductInput(p, fallbackOrder, out) {
   const key = String(p?.key || '').trim();
   if (!key || key.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(key))
     return refuse('Key', 'must be 1-64 characters, letters/numbers/hyphen/underscore only');
+  const plain = v => typeof v === 'string' || typeof v === 'number';
+  if (p?.name != null && typeof p.name !== 'string') return refuse('Name', 'must be text');
   const name = String(p?.name || '').trim().slice(0, 100);
   if (!name) return refuse('Name', 'cannot be blank');
-  const price = Math.round(Number(p?.price));
+  if (!plain(p?.price)) return refuse('Price', 'must be a number');
+  const priceRaw = Number(p?.price);
+  const price = Math.round(priceRaw);
   if (!Number.isFinite(price) || price < 1 || price > MAX_MONEY_AMOUNT)
     return refuse('Price', `must be a number between 1 and ${MAX_MONEY_AMOUNT}`);
+  if (priceRaw !== price) return refuse('Price', 'must be a whole number of shillings');
   let cycle = null;
   if (p?.cycle != null && p.cycle !== '') {
-    cycle = Number(p.cycle);
+    cycle = plain(p.cycle) ? Number(p.cycle) : NaN;
     if (!Number.isFinite(cycle) || cycle <= 0 || cycle > 3650 || !Number.isInteger(cycle))
       return refuse('Cycle (days)', 'must be a whole number of days between 1 and 3650');
   }
@@ -7268,6 +7273,10 @@ function sanitizeProductInput(p, fallbackOrder, out) {
   // x30 over 150 days and promise the member a payout nobody chose.
   if (cycle == null) return refuse('Cycle (days)', 'is required');
   if (multiplier == null && expectedReturn == null) return refuse('Multiplier (×)', 'or the total payout is required');
+  // The payout the member is promised must be a real amount: at least 1 shilling and inside the same ceiling as a typed total.
+  const promised = multiplier != null ? Math.round(price * multiplier) : expectedReturn;
+  if (!(promised >= 1) || promised > MAX_MONEY_AMOUNT)
+    return refuse(multiplier != null ? 'Multiplier (×)' : 'Total payout', `must give a total payout between 1 and ${MAX_MONEY_AMOUNT} (price x multiplier is ${Number.isFinite(promised) ? promised : 'not a number'})`);
   const image = typeof p?.image === 'string' ? p.image.slice(0, 2_800_000) : '';
   const order = p?.order != null ? Number(p.order) : fallbackOrder;
   // How many of this asset one member may own (the "0/3" badge on the card). 0 or blank = no limit.
@@ -7360,6 +7369,10 @@ app.post('/admin/products/save', async (req, res) => {
         return res.status(400).json({ status: 'error', message: `${who}: ${what}. Nothing was saved.`, field: why.field || '' });
       }
       const oldKey = String(list[i]?.oldKey || '').trim();
+      if (list[i]?.isNew === true) {
+        const exists = await db.collection('products').doc(clean.key).get();
+        if (exists.exists && !exists.data().deleted) return res.status(400).json({ status: 'error', message: `"${clean.key}" is already another product's key. Choose a different name or key.`, field: 'Key' });
+      }
       if (oldKey && oldKey !== clean.key) {
         if (!/^[a-zA-Z0-9_-]+$/.test(oldKey))
           return res.status(400).json({ status: 'error', message: `"${oldKey}" is not a real existing key.` });
@@ -7387,6 +7400,14 @@ app.post('/admin/products/save', async (req, res) => {
       }
     });
     await batch.commit();
+    // Products already bought point at the product by its key: a renamed key must carry them along, or their owners lose the VIP
+    // number, the purchase-limit count, the picture and the name.
+    for (const { oldKey, newKey } of renames) {
+      try {
+        const owned = await db.collection('investments').where('tierKey', '==', oldKey).get();
+        for (const d of owned.docs) await d.ref.update({ tierKey: newKey });
+      } catch (e) { console.error('Product rename: could not move investments from ' + oldKey + ' to ' + newKey + ':', e.message); }
+    }
     _productsCacheTs = 0; _vipCache.clear();
     logAdminAction(req, 'products_saved', { count: sanitized.length });
     res.json({ status: 'success' });
