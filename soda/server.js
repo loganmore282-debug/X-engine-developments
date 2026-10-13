@@ -8326,7 +8326,7 @@ app.post('/admin/deposit', async (req, res) => {
     }));
     logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Credited ${fmtMoney(amt)}` });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { _adminCreditDebounce.delete(userId); res.status(500).json({ status: 'error', message: e.message }); }   // nothing was credited: the corrected retry may go straight away
 });
 app.post('/admin/debit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -8352,7 +8352,7 @@ app.post('/admin/debit', async (req, res) => {
     }));
     logAdminAction(req, 'manual_debit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Removed ${fmtMoney(amt)}. New balance ${fmtMoney(newBal)}`, newBalance: newBal });
-  } catch (e) { res.status(/^Cannot debit/.test(e.message) ? 400 : adminFailCode(e)).json({ status: 'error', message: e.message }); }
+  } catch (e) { _adminDebitDebounce.delete(userId); res.status(/^Cannot debit/.test(e.message) ? 400 : adminFailCode(e)).json({ status: 'error', message: e.message }); }   // nothing was debited: a corrected retry may go straight away
 });
 // A downline member's number as the member app prints it ("706****1455"): the server does the hiding, so the full
 // number of a level 2 or level 3 stranger is never sent to a phone at all.

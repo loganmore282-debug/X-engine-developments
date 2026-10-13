@@ -373,6 +373,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
         <button class="tab" data-tab="promocodes" id="promocodesTab">Gift Codes</button>
+        <button class="tab" data-tab="messages" id="messagesTab">Messages</button>
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
@@ -966,7 +967,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('mess
 });
 
 // ── TABS ──
-const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','banners','admins','auditlog']);
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','messages','transactions','referrals','settings','banners','admins','auditlog']);
 let _tab='dashboard', _tabSequence=0;
 function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ if (_tab !== t.dataset.tab) switchTab(t.dataset.tab); }));
@@ -979,7 +980,7 @@ function switchTab(name){
   c.inert = true; c.setAttribute('aria-busy','true');
   const spinnerTimer = setTimeout(() => { if (sequence === _tabSequence) c.innerHTML=spinnerHtml(); }, 120);
   const fn = ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
-     products:renderProducts, promocodes:renderPromoCodes, transactions:renderTransactions,
+     products:renderProducts, promocodes:renderPromoCodes, messages:renderMessages, transactions:renderTransactions,
      referrals:renderReferrals, settings:renderSettings, banners:renderBanners, admins:renderAdmins, auditlog:renderAuditLog }[name]);
   // The switch lives in the topbar, OUTSIDE #content, so a tab render can
   // never take it with it -- which is why this no longer waits for the tab
@@ -1051,7 +1052,8 @@ function withTabBusy(promise) {
   const safety = setTimeout(finish, 45000);
   return Promise.resolve(promise).finally(() => { clearTimeout(safety); finish(); });
 }
-const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','promocodes','transactions','referrals','settings','admins','auditlog']);
+// Settings, Gift Codes and Admins are forms: a refresh every 30 s wiped what the owner was typing (once the keyboard closed and no field had focus), so they are not live tabs.
+const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','transactions','referrals','auditlog']);
 // The list-style tabs (Users, Deposits, Withdrawals, Transactions,
 // Referrals) get their OWN quiet*() function here instead of the full
 // render*() -- those only refetch data and patch the table body + subtab
@@ -1633,7 +1635,7 @@ async function openUser(uid){
     <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">This account signed up (Firebase login works) but never finished registering -- no referral code, no welcome bonus. Finish it for them: pick their Trade Password and, if you know who invited them, their referrer's code.</div>
     <div class="row">
       <div><input id="completeRegPin" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit trade password"></div>
-      <div style="flex:2"><input id="completeRegCode" type="text" placeholder="Referrer's code (optional)"></div>
+      <div style="flex:2"><input id="completeRegCode" type="text" placeholder="Referrer's code"></div>
       <button class="btn sky sm" id="completeRegBtn">Complete</button>
     </div>`:''}
     ${!u.referredBy?`<label style="margin-top:14px">Attach referrer</label>
@@ -2654,7 +2656,7 @@ function drawRefs(){
     // (real team member numbers + the aggregate team-deposits figure) --
     // that's literally what this search exists for, so no extra click
     // through a plain profile modal first.
-    const matches = _refAllUsers.filter(u => (u.phone||'').toLowerCase().includes(raw) || (u.referralCode||'').toLowerCase().includes(raw));
+    const matches = _refAllUsers.filter(u => (phoneCore(raw).length>=3 && phoneCore(u.phone).includes(phoneCore(raw))) || (u.phone||'').toLowerCase().includes(raw) || (u.referralCode||'').toLowerCase().includes(raw));
     if (hint) hint.textContent = `${matches.length} match${matches.length===1?'':'es'} -- tap one to see its team's phone numbers and total deposits.`;
     wrap.innerHTML = `<div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Team L1/L2/L3</th><th>Status</th></tr></thead>
       <tbody>${matches.length?matches.map(u=>`<tr class="clickable" data-chain-uid="${esc(u.id)}"><td><b>${esc(u.phone||'')}</b></td><td>${esc(u.referralCode||'Not set')}</td><td>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</td><td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No matching member</td></tr>'}</tbody></table></div>`;
@@ -2930,6 +2932,7 @@ function wireBannerHandlers(){
   wireSodaImageSlot('logo', 'brandLogoFile', 'brandLogoClear', 'Brand logo saved', 'Brand logo removed');
   const saveLoaderBg = $('saveLoaderBg');
   if (saveLoaderBg) saveLoaderBg.addEventListener('click', async()=>{
+    if ($('loaderBgOp').value.trim()==='' || $('loaderBgBlur').value.trim()==='') return toast('Fill in both Opacity and Blur','err');
     const nums = { loaderBgOpacity:+$('loaderBgOp').value, loaderBgBlur:+$('loaderBgBlur').value };
     for (const [k,val] of Object.entries(nums)) {
       const max = k.endsWith('Blur') ? 40 : 100;
@@ -2941,6 +2944,7 @@ function wireBannerHandlers(){
   });
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{
+    if (['authHeroOp','authHeroBlur','authCardOp','authCardBlur'].some(id => $(id).value.trim()==='')) return toast('Fill in every Opacity and Blur box','err');
     const nums = { authHeroOpacity:+$('authHeroOp').value, authHeroBlur:+$('authHeroBlur').value,
       authCardOpacity:+$('authCardOp').value, authCardBlur:+$('authCardBlur').value };
     for (const [k,val] of Object.entries(nums)) {
