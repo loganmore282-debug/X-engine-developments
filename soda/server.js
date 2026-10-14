@@ -9155,6 +9155,52 @@ app.post('/admin/analytics', async (req, res) => {
       else schedule.overdueNowAmount += day.overdue;
     });
     activeInvestors = activeMemberIds.size;
+    // Withdrawals that can be processed today, worked out with the live withdrawal rules (Admin > Settings): the requests already waiting,
+    // and the most members could still request today. A member counts only if they pass the same checks /withdraw/request makes:
+    // not banned, a product bought when that is required, no unpaid request already open, today's number of withdrawals not used up
+    // (unless marked unrestricted), and a balance that reaches the minimum once cut down to the allowed multiple and the maximum.
+    const wSett = await getSettings();
+    const wMin = Number(wSett.minWithdraw) || 0, wMax = Number(wSett.maxWithdraw) || 0, wMult = Math.max(0, Math.floor(Number(wSett.withdrawMultiple) || 0));
+    const wFee = Number(wSett.withdrawFeePct) || 0, wPerDay = Number(wSett.maxWithdrawalsPerDay) || 0, wNeedProduct = wSett.requireInvestToWithdraw !== false;
+    const todayStartMs = eatNextMidnight(nowMs) - 86400000;
+    const runningUsers = new Set(); activeInvSnap.forEach(d => runningUsers.add(d.data().userId));
+    const openUsers = new Set(), usedToday = new Map();
+    const bannedIds = new Set(); usersSnap.forEach(d => { if (d.data().status === 'banned') bannedIds.add(d.id); });
+    const waiting = { count: 0, net: 0, heldCount: 0, heldNet: 0 };
+    witSnap.forEach(d => {
+      const w = d.data(); if (!mine(w)) return;
+      if (['creating', 'pending', 'sending', 'processing'].includes(w.status)) openUsers.add(w.userId);
+      const ms = tsMillis(w.createdAt);
+      if (ms >= todayStartMs && w.status !== 'declined') usedToday.set(w.userId, (usedToday.get(w.userId) || 0) + 1);
+      if (w.status === 'pending') {
+        const a = w.net == null ? finiteMoney(w.amount) : finiteMoney(w.net);
+        if (bannedIds.has(w.userId)) { waiting.heldCount++; waiting.heldNet += a; } else { waiting.count++; waiting.net += a; }
+      }
+    });
+    const canDo = { count: 0, gross: 0, net: 0, runningCount: 0, runningNet: 0 };
+    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, dailyUsed: 0, belowMin: 0 };
+    usersSnap.forEach(d => {
+      const u = d.data();
+      if (!mine({ userId: d.id, regionKey: u.regionKey })) return;
+      const bal = round2(finiteMoney(u.walletBalance));
+      if (bal <= 0 || bal < wMin) return;                                  // could not withdraw anything anyway
+      if (u.registrationDone === false) return;
+      if (u.status === 'banned') { blocked.banned++; return; }
+      if (wNeedProduct && !(finiteMoney(u.totalInvested) > 0)) { blocked.noProduct++; return; }
+      if (openUsers.has(d.id)) { blocked.hasRequest++; return; }
+      if (wPerDay > 0 && u.withdrawAnytime !== true && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
+      let amt = Math.min(bal, wMax > 0 ? wMax : bal);
+      amt = wMult > 0 ? Math.floor(amt / wMult) * wMult : Math.floor(amt);
+      if (amt < wMin || amt <= 0) { blocked.belowMin++; return; }
+      const net = amt - Math.round(amt * wFee / 100);
+      canDo.count++; canDo.gross += amt; canDo.net += net;
+      if (runningUsers.has(d.id)) { canDo.runningCount++; canDo.runningNet += net; }
+    });
+    const withdrawToday = {
+      waiting, canDo, blocked,
+      rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
+        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
+    };
     const truncated = depSnap.docs.length >= 10000 || witSnap.docs.length >= 10000 || usersSnap.docs.length >= 10000 || activeInvSnap.docs.length >= 10000 || contractSnap.docs.length >= 10000 || rewardsTruncated;
 
     res.json({
@@ -9166,7 +9212,7 @@ app.post('/admin/analytics', async (req, res) => {
         investedAmount, commissionsPaid, teamRewardsPaid
       },
       byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand,
-      today, selectedDay: dayTotals, schedule, openRequests, runningProducts: Object.values(runningProducts).sort((a, b) => b.invested - a.invested), truncated, rewardsUnavailable, staffApprovals,
+      today, selectedDay: dayTotals, schedule, openRequests, withdrawToday, runningProducts: Object.values(runningProducts).sort((a, b) => b.invested - a.invested), truncated, rewardsUnavailable, staffApprovals,
       topReferrers: referrers.slice(0, 10), topDepositors: depositors.slice(0, 10), biggestWithdrawals: bigWits.slice(0, 10)
     });
   } catch (e) { console.error('Analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }

@@ -1248,6 +1248,7 @@ async function renderAnalytics(silent){
   const selected=a.selectedDay||{};
   const schedule=a.schedule||{};
   const open=a.openRequests||{};
+  const wt=a.withdrawToday||{waiting:{},canDo:{},blocked:{},rules:{}};
   const running=a.runningProducts||[];
   const runningRows=running.length?running.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${p.count}</td><td>${ugx(p.invested)}</td><td>${ugx(p.paidOut)}</td><td>${ugx(p.remainingPayout)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No active product contracts.</td></tr>';
   const sa=a.staffApprovals||{byStaff:[],timeline:[]};
@@ -1352,6 +1353,17 @@ async function renderAnalytics(silent){
         <div class="stat"><div class="n">${ugx(schedule.overdueNowAmount)}</div><div class="l">Cashback due now, awaiting settlement (eligible accounts)</div></div>
         <div class="stat"><div class="n">${ugx(schedule.pausedOverdueAmount)}</div><div class="l">Cashback due on banned or unavailable accounts</div></div>
       </div><p class="muted">Open requests can complete, fail or be cancelled; no completion date is guaranteed. Cashback due and withdrawal requests are separate figures and must not be added as a prediction of today's withdrawals. All withdrawal amounts shown are net payouts.</p>
+    </div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Withdrawals to be processed today</h2>
+      <p class="muted">Follows your withdrawal rules (Settings): ${wt.rules.needProduct?'a member must have bought a product, ':''}minimum ${ugx(wt.rules.min)}${wt.rules.multiple?', multiples of '+ugx(wt.rules.multiple):''}${wt.rules.max?', at most '+ugx(wt.rules.max)+' each':''}, fee ${wt.rules.feePct||0}%, ${wt.rules.perDay?wt.rules.perDay+' withdrawal'+(wt.rules.perDay===1?'':'s')+' a day':'no daily limit'}, one unpaid request at a time${wt.rules.hours?', open '+esc(wt.rules.hours):''}. Banned members and unrestricted members are handled as the server handles them.</p>
+      <div class="cards">
+        <div class="stat"><div class="n">${ugx(wt.waiting.net)}</div><div class="l">Requests waiting to be paid today, net (${wt.waiting.count||0})</div></div>
+        <div class="stat"><div class="n">${ugx(wt.canDo.net)}</div><div class="l">Most that could still be requested today, net payout (${wt.canDo.count||0} members)</div></div>
+        <div class="stat"><div class="n">${ugx(wt.canDo.runningNet)}</div><div class="l">Of that, members with a running product (${wt.canDo.runningCount||0})</div></div>
+        <div class="stat"><div class="n">${ugx(wt.canDo.gross)}</div><div class="l">Same members, wallet amount before the fee</div></div>
+      </div>
+      <p class="muted">Not counted because a rule stops them: ${wt.blocked.noProduct||0} with no product bought, ${wt.blocked.hasRequest||0} with a request already waiting, ${wt.blocked.dailyUsed||0} who used today's number of withdrawals, ${wt.blocked.belowMin||0} below the minimum once cut to the allowed multiple, ${wt.blocked.banned||0} banned.${wt.waiting.heldCount?` ${wt.waiting.heldCount} waiting request(s) (${ugx(wt.waiting.heldNet)}) belong to banned members.`:''}</p>
+      <p class="muted">The second figure is a ceiling, not a forecast: it assumes every member who is allowed to withdraw asks for the most they can, once, today.</p>
     </div>
     ${a.truncated?'<p class="muted" style="color:var(--gold)">Some totals may be incomplete because an analytics scan reached its record limit. Use transaction records and database reconciliation for a complete total.</p>':''}
     <div class="cards">
