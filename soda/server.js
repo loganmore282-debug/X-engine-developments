@@ -1380,6 +1380,21 @@ function phoneToEmail(phone, region) {
 // passed the 6-digit PIN check). These accept only what a real client sends.
 function textOf(v) { return typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''); }
 function passwordOf(v) { return typeof v === 'string' ? v : ''; }
+// A password pasted from WhatsApp or a note often carries a space, a line break or an invisible character at either end, and some
+// keyboards add one after a suggestion. The exact text is always tried first; this gives the same text without those edges (and in
+// the composed Unicode form) as a second try at login, so a correct password is not refused for something nobody can see.
+const _pwEdge = /^[\s\u00a0\u200b-\u200d\u2060\ufeff]+|[\s\u00a0\u200b-\u200d\u2060\ufeff]+$/g;
+function tidyPassword(p) { return String(p || '').replace(_pwEdge, ''); }   // what is stored when a password is created: no stray edge characters
+function passwordRetries(p) {
+  const out = []; const add = x => { if (x && x !== p && !out.includes(x)) out.push(x); };
+  const t = p.replace(_pwEdge, ''); add(t); try { add(t.normalize('NFC')); add(p.normalize('NFC')); } catch (_) {}
+  return out;
+}
+// Failed sign-ins are logged with WHY (never the password, and only the last three digits of the number), so the owner can tell a
+// mistyped password from an unknown number from a blocked request: pm2 logs soda-server | grep "Login failed".
+function logLoginFailure(reason, phone, extra) {
+  console.warn(`Login failed (${reason}) number ***${String(phone || '').slice(-3)}${extra ? ' ' + extra : ''}`);
+}
 function cleanPhone(raw, region) {
   const r = region || currentRegion();
   // A number may be typed with spaces, dashes, dots, brackets and a leading +, but not with other text around it ("0770000001; drop" was
@@ -6654,7 +6669,7 @@ app.post('/auth/signup', memberSignupLimiter, async (req, res) => {
   try {
     const phone = cleanPhone(textOf(req.body.phone));
     if (!phone) return res.status(400).json({ status: 'error', code: 'INVALID_PHONE', message: badPhoneMessage() });
-    const password = passwordOf(req.body.password);
+    const password = tidyPassword(passwordOf(req.body.password));
     if (password.length < MEMBER_PASSWORD_MIN || password.length > MEMBER_PASSWORD_MAX)
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
     if (weakPasswordReason(password, phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
@@ -6674,7 +6689,7 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
     const phone = cleanPhone(textOf(req.body.phone));
     const password = passwordOf(req.body.password);
     const bad = () => res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Incorrect phone number or password.' });
-    if (!phone || !password || password.length > MEMBER_PASSWORD_MAX) return bad();
+    if (!phone || !password || password.length > MEMBER_PASSWORD_MAX) { logLoginFailure(!phone ? 'not a valid number' : !password ? 'empty password' : 'password too long', phone || textOf(req.body.phone).slice(-3)); return bad(); }
     const ipLeft = memberLoginIpGuard.locked(req.ip);
     if (ipLeft) return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', retryAfterSec: Math.ceil(ipLeft / 1000),
       message: `Too many wrong attempts from this network. Try again in ${Math.ceil(ipLeft / 60000)} minutes.` });
@@ -6690,8 +6705,18 @@ app.post('/auth/login', memberAuthLimiter, async (req, res) => {
       }
       // The dummy hash makes an unknown phone cost the same as a wrong password,
       // so the answer's timing cannot be used to find which numbers have accounts.
-      const ok = await scryptVerifyAsync(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
-      if (!acct || !ok) { memberLoginIpGuard.fail(req.ip); if (acct) await recordLoginFailure(id); return { bad: true }; }
+      let ok = await scryptVerifyAsync(password, acct ? acct.passwordHash : DUMMY_MEMBER_HASH);
+      let retried = false;
+      if (acct && !ok) {
+        for (const alt of passwordRetries(password)) { if (await scryptVerifyAsync(alt, acct.passwordHash)) { ok = true; retried = true; break; } }
+      }
+      if (retried) console.warn(`Login ok after tidying the password (stray space or invisible character at an end) number ***${phone.slice(-3)}`);
+      if (!acct || !ok) {
+        memberLoginIpGuard.fail(req.ip);
+        if (acct) await recordLoginFailure(id);
+        logLoginFailure(acct ? 'wrong password' : 'no account for this number', phone, acct ? `(attempt ${(Number(acct.failCount) || 0) + 1}, length ${password.length}${/^\s|\s$/.test(password) ? ', space at an end' : ''})` : '');
+        return { bad: true };
+      }
       if (Number(acct.failCount) > 0) await snap.ref.update({ failCount: 0 }).catch(() => {});
       return { acct };
     });
@@ -6709,7 +6734,7 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
   try {
     const decoded = await _decodeAuth(req);
     if (!decoded) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-    const oldPassword = passwordOf(req.body.oldPassword), newPassword = passwordOf(req.body.newPassword);
+    const oldPassword = passwordOf(req.body.oldPassword), newPassword = tidyPassword(passwordOf(req.body.newPassword));
     if (newPassword.length < MEMBER_PASSWORD_MIN || newPassword.length > MEMBER_PASSWORD_MAX)
       return res.status(400).json({ status: 'error', code: 'WEAK_PASSWORD', message: `Password must be ${MEMBER_PASSWORD_MIN} to ${MEMBER_PASSWORD_MAX} characters.` });
     const acct = await findAccountByUid(decoded.uid);
@@ -6717,7 +6742,9 @@ app.post('/auth/password/change', memberAuthLimiter, async (req, res) => {
     if (weakPasswordReason(newPassword, acct.phone)) return res.status(400).json({ status: 'error', code: 'COMMON_PASSWORD', message: WEAK_PASSWORD_MESSAGE });
     if (acct.lockedUntil && tsMillis(acct.lockedUntil) > Date.now())
       return res.status(429).json({ status: 'error', code: 'TOO_MANY_ATTEMPTS', message: 'Too many wrong attempts. Try again in a few minutes.' });
-    if (!(await scryptVerifyAsync(oldPassword, acct.passwordHash))) {
+    let oldOk = await scryptVerifyAsync(oldPassword, acct.passwordHash);
+    if (!oldOk) { for (const alt of passwordRetries(oldPassword)) { if (await scryptVerifyAsync(alt, acct.passwordHash)) { oldOk = true; break; } } }
+    if (!oldOk) {
       await recordLoginFailure(acct.id);
       return res.status(401).json({ status: 'error', code: 'INVALID_CREDENTIAL', message: 'Your current password is incorrect.' });
     }
@@ -7827,7 +7854,7 @@ app.post('/admin/user/remove-product', async (req, res) => {
 app.post('/admin/user/reset-password', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
-  const newPassword = passwordOf(req.body.newPassword);
+  const newPassword = tidyPassword(passwordOf(req.body.newPassword));
   if (!userId || newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'userId and a password of at least 6 characters required' });
   try {
     await setMemberPassword(userId, newPassword);

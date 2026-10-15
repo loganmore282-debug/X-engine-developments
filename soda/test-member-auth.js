@@ -11,8 +11,10 @@ const hashSrc = cut('function scryptHash(password) {', 'const _loginFails = new 
 const lockSrc = cut('function withLock(key, fn) {', 'const _userBeingDeleted');
 const authSrc = cut('async function _decodeAuth(req) {', 'function paymentAmount(value) {');
 const loginSrc = cut('const LOGIN_MAX_FAILS = 6;', "app.post('/auth/session/activity'");
+const helpSrc = cut('const _pwEdge', 'function cleanPhone(raw, region)');
 
 const DEL = { __del: 1 };
+const warnings = [];
 function makeEnv() {
   const store = { authAccounts: new Map(), memberSessions: new Map() };
   const clone = v => structuredClone(v);
@@ -33,9 +35,9 @@ function makeEnv() {
   let failStore = false;
   const dbProxy = new Proxy(db, { get: (t, k) => k === 'collection' ? col => { if (failStore && col === 'memberSessions') throw new Error('mongo down'); return t.collection(col); } : t[k] });
   const fn = new Function('textOf', 'passwordOf', 'weakPasswordReason', 'WEAK_PASSWORD_MESSAGE', 'memberLoginIpGuard', 'app', 'db', 'crypto', 'sessionPolicy', 'FieldValue', 'cleanPhone', 'badPhoneMessage', 'tsMillis', 'rateLimit', 'console',
-    'const _lockTails = new Map();\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
+    'const _lockTails = new Map();\n' + helpSrc + '\n' + hashSrc.replace("const _loginFails", "") + '\n' + lockSrc + '\n' + authSrc + '\n' + loginSrc + '\nreturn { _decodeAuth, verifyAuth, verifyAuthWithEmail, setMemberPassword, deleteMemberLogin, findAccountByUid };')
     (v => typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v) ? String(v) : ''), v => typeof v === 'string' ? v : '', () => '', '', { locked: () => false, fail() {}, clear() {} }, app, dbProxy, crypto, sessionPolicy, { serverTimestamp: () => new Date(), delete: () => DEL }, p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? d : ''; }, () => 'bad phone',
-      v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {} });
+      v => v instanceof Date ? v.getTime() : Number(v) || 0, lim, { error() {}, warn: (...m) => warnings.push(m.join(' ')) });
   const call = async (path, body, headers = {}) => { const res = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };
     await handlers[path]({ body, headers, path, ip: '1.1.1.1' }, res); return res; };
   return { store, call, fn, setFail: v => { failStore = v; } };
@@ -63,6 +65,18 @@ const bearer = t => ({ authorization: 'Bearer ' + t });
   // ── login ──
   r = await E.call('/auth/login', { phone: '0770000001', password: 'abcdef7391xy' });
   ok(r.code === 200 && r.body.uid === acct.uid, 'login with the right password'); const good = r.body;
+  // A password with a stray space, a line break or an invisible character at an end (pasted from WhatsApp) still signs in; a really
+  // wrong one does not, and the failure is logged with its reason and only the last three digits of the number.
+  for (const decorated of [' abcdef7391xy', 'abcdef7391xy ', 'abcdef7391xy\n', '\u200babcdef7391xy\u00a0']) {
+    r = await E.call('/auth/login', { phone: '0770000001', password: decorated });
+    ok(r.code === 200 && r.body.uid === acct.uid, 'login with the right password plus a stray character at an end: ' + JSON.stringify(decorated));
+  }
+  ok(warnings.some(w => /Login ok after tidying the password/.test(w) && /\*\*\*001/.test(w) && !/abcdef/.test(w)), 'the tidied sign-in is logged without the password');
+  warnings.length = 0;
+  r = await E.call('/auth/login', { phone: '0770000001', password: 'abcdef7391xz ' });
+  ok(r.code === 401 && warnings.some(w => /Login failed \(wrong password\)/.test(w) && /space at an end/.test(w) && !/abcdef/.test(w)), 'a wrong password is still refused, and logged with its reason but never its text');
+  r = await E.call('/auth/login', { phone: '0770009999', password: 'whatever12345' });
+  ok(r.code === 401 && warnings.some(w => /no account for this number/.test(w) && /\*\*\*999/.test(w)), 'an unknown number is logged as such');
   const wrong = await E.call('/auth/login', { phone: '0770000001', password: 'nope123' });
   const unknown = await E.call('/auth/login', { phone: '0770009999', password: 'nope123' });
   eq([wrong.code, wrong.body.code, wrong.body.message], [unknown.code, unknown.body.code, unknown.body.message], 'a wrong password and an unknown phone are indistinguishable');

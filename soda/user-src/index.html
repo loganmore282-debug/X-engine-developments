@@ -2268,7 +2268,7 @@ window.createSodaIdleSession = function(key, onExpire, onActivity){
       } finally { clearTimeout(timer); }
     } catch (_) { throw { code: 'auth/network-request-failed', message: 'network' }; }
     if (resp.ok && data && data.status === 'success') return data;
-    const code = CODES[data && data.code] || (resp.status === 429 ? 'auth/too-many-requests' : resp.status >= 500 || resp.status === 503 ? 'auth/internal-error' : 'auth/invalid-credential');
+    const code = CODES[data && data.code] || (resp.status === 429 ? 'auth/too-many-requests' : resp.status === 401 ? 'auth/invalid-credential' : 'auth/internal-error');   // only a real 401 means "wrong": a blocked or odd answer (403, 404, a proxy page) is not blamed on the password
     throw { code, message: (data && data.message) || 'Request failed' };
   }
   const phoneOf = email => String(email || '').split('@')[0];
