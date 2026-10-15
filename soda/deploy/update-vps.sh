@@ -12,6 +12,9 @@ SODA=$SRC/soda
 APP_HOST=${SODA_APP_HOST:-app.p-colasoda.com}
 ADMIN_HOST=${SODA_ADMIN_HOST:-sv37ah.p-colasoda.com}
 ADMIN_PATH=${SODA_ADMIN_PATH:-Panel7x9k}
+# The admin path can be changed with deploy/change-admin-path.sh: the new one is kept in a file (never in git) so later updates keep it.
+ADMIN_PATH_FILE=${SODA_ADMIN_PATH_FILE:-/srv/soda-secrets/admin-path}
+[ -s "$ADMIN_PATH_FILE" ] && ADMIN_PATH=$(tr -d '[:space:]' < "$ADMIN_PATH_FILE")
 CONF=${SODA_NGINX_CONF:-/etc/nginx/conf.d/soda.conf}
 BAK=/root/soda.conf.bak
 
