@@ -1707,7 +1707,10 @@ window.doRegister = async function(){
 // ── FORGOT PASSWORD: phone -> OTP -> new password, one screen ──
 window.doLogout = function(opts){
   if (window._logoutPromise) return window._logoutPromise;
-  window._logoutPromise = performMemberLogout(opts).finally(() => { window._logoutPromise = null; });
+  // Signing out by hand shows the loading box until the server has really ended the session and the member is back at Login.
+  const manual = !(opts && opts.auto);
+  if (manual) ckLoadBegin();
+  window._logoutPromise = performMemberLogout(opts).finally(() => { window._logoutPromise = null; if (manual) ckLoadEnd(); });
   return window._logoutPromise;
 };
 async function performMemberLogout(opts){
@@ -1734,11 +1737,13 @@ async function performMemberLogout(opts){
   // Revoke the captured session without delaying the UI sign-out. The normal
   // api() epoch guard would intentionally cancel this call during logout.
   const leavingUser = window.fbAuth && window.fbAuth.currentUser;
-  if (leavingUser) leavingUser.getIdToken().then(token => {
+  const serverEnded = leavingUser ? leavingUser.getIdToken().then(token => {
     // AbortSignal.timeout() does not exist on older phones: a throw here would skip the server logout and leave the token valid for hours.
     const ac = new AbortController(); setTimeout(() => ac.abort(), 5000);
     return fetch(API_BASE + '/auth/session/logout', { method:'POST', headers:{Authorization:'Bearer ' + token}, signal: ac.signal });
-  }).catch(() => {});
+  }).catch(() => {}) : Promise.resolve();
+  // A sign-out the member asked for waits (at most 5 seconds) for the server to end the session, so the loading box is a real wait.
+  if (!auto) { try { await serverEnded; } catch (_) {} }
   _memberSession.clear();
   resetOverlayState();
   window._triedAutoSignIn = true;
