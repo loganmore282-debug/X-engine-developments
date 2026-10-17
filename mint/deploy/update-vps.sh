@@ -42,6 +42,8 @@ HOOK_HOST_FILE=${MINT_HOOK_HOST_FILE:-/srv/mint-secrets/hook-host}
 if [ -s "$HOOK_FILE" ]; then MINT_HOOK_TOKEN=$(tr -d '[:space:]' < "$HOOK_FILE"); export MINT_HOOK_TOKEN; echo "    (secret PesaJet webhook address is ON)"; fi
 if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then MINT_HOOK_HOST=$(tr -d '[:space:]' < "$HOOK_HOST_FILE"); export MINT_HOOK_HOST; echo "    (webhook-only host: $MINT_HOOK_HOST)"; fi
 
+# The temporary IP preview (deploy/preview.sh) defines the same rate-limit names, so it must go before the real file is written.
+rm -f /etc/nginx/conf.d/mint-preview.conf
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
 if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/mint.conf.new) && cp /tmp/mint.conf.new "$CONF" && nginx -t >/tmp/mint.nginxtest 2>&1; then
