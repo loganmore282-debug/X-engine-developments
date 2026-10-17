@@ -2848,6 +2848,13 @@ async function renderBanners(){
       <button class="btn block" id="saveBannerSpeed" style="margin-top:10px">Save slide speed</button>
     </div>
 
+    <h2 class="sec">Balance count-up speed</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">When a member opens Deposit or Withdraw, the Available / Balance figure counts up to the real amount. How many seconds that takes.</p>
+      <label>Seconds (1&ndash;15)</label><input id="balCountSecs" type="number" min="1" max="15" step="1" value="${esc(v('balanceCountSeconds',3))}">
+      <button class="btn block" id="saveBalCount" style="margin-top:10px">Save count-up speed</button>
+    </div>
+
     <h2 class="sec">Announcement banner</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">The banner at the top of the announcement pop-up (for example Chat with Us / Customer Service). Wide, about 720&times;190. The lines under it come by themselves from Settings (withdrawal hours, minimum withdrawal, fee).</p>
@@ -3094,6 +3101,13 @@ function wireBannerHandlers(){
   wireCookieImageSlot('avatar', 'avatarFile', 'avatarClear', 'Member picture saved', 'Member picture removed');
   wireCookieImageSlot('recthumb', 'recThumbFile', 'recThumbClear', 'Records picture saved', 'Records picture removed');
   wireCookieImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
+  const saveBalCount = $('saveBalCount');
+  if (saveBalCount) saveBalCount.addEventListener('click', async()=>{
+    const n = +$('balCountSecs').value;
+    if (!Number.isFinite(n) || n < 1 || n > 15) return toast('Seconds must be between 1 and 15','err');
+    const d = await api('/admin/settings/update', { settings: { balanceCountSeconds: Math.round(n) } });
+    toast(d.status==='success'?'Count-up speed saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
   const saveBannerSpeed = $('saveBannerSpeed');
   if (saveBannerSpeed) saveBannerSpeed.addEventListener('click', async()=>{
     const n = +$('bannerSlideSecs').value;

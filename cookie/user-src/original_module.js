@@ -1242,6 +1242,8 @@ function ckTween(el, to, fmt, ms){
   };
   el._raf = requestAnimationFrame(step);
 }
+// How long the Available / Balance figure takes to count up: the admin's setting (seconds), 3 by default.
+function ckBalanceMs(){ return Math.min(15000, Math.max(1000, (Number((STATE.settings || {}).balanceCountSeconds) || 3) * 1000)); }
 var _apiPending = new Map();
 function api(path, opts){
   const tracked = Date.now() < _ckLoadUntil && !(opts && (opts.body || opts.signal || (opts.method && opts.method !== 'GET')));
@@ -5395,7 +5397,7 @@ function openDepositFormSheet(){
     </div>
   </div>`);
   $('sheetBg').classList.add('ck-dep-page');
-  { const b = $('depBalance'); if (b) { b._v = 0; ckTween(b, Number(bal) || 0, v => numGroup(v, true), 900); } }
+  { const b = $('depBalance'); if (b) { b._v = 0; ckTween(b, Number(bal) || 0, v => numGroup(v, true), ckBalanceMs()); } }
 }
 // PAY-A / PAY-B / PAY-C are one gateway, three labels: the choice is only
 // the highlight, nothing else reads it.
@@ -5896,7 +5898,7 @@ window.openWithdrawSheet = async function(){
   // left a transparent-looking empty sheet over Home on a cold open.
   paintWithdrawSheet(s);
   $('sheetBg').classList.add('ck-wd-page');
-  { const b = $('witBalance'); if (b) { b._v = 0; ckTween(b, Number((STATE.account || {}).walletBalance) || 0, v => numGroup(v, true), 900); } }
+  { const b = $('witBalance'); if (b) { b._v = 0; ckTween(b, Number((STATE.account || {}).walletBalance) || 0, v => numGroup(v, true), ckBalanceMs()); } }
   const amountField = $('witAmount');
   const r = await api('/bank/list');
   if (_openSheetTitle !== 'Withdraw' || $('witAmount') !== amountField) return;

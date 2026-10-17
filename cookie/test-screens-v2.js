@@ -50,6 +50,7 @@ function runStats(rows) {
   // 3. the announcement text and the About us text are admin settings that members receive
   ok(/aboutText: ''/.test(src) && /bannerSlideSeconds: 5/.test(src), 'aboutText and the banner slide speed are real settings');
   ok(!/id="sAnnTitle"/.test(adm) && /id="sAboutText"/.test(adm) && /id="saveBannerSpeed"/.test(adm) && /bannerSlideSeconds: Math\.round\(n\)/.test(adm), 'the admin saves them; the announcement text is no longer hand-written there');
+  ok(/balanceCountSeconds: 3/.test(src) && /balanceCountSeconds: \[1, 15\]/.test(src) && /id="saveBalCount"/.test(adm), 'the balance count-up speed is a real setting the admin can change');
   // 5. production hygiene
   ok(/const DEFAULT_PRODUCTS = \[\];/.test(src), 'no built-in placeholder assets: members only see what the admin created');
   const cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
