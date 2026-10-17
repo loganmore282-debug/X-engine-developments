@@ -1445,10 +1445,15 @@ function showAuthTab(tab){
 // action, so `busy` is a required argument, not a default: adding a new
 // loading button and forgetting the label is now a visible blank rather than
 // a silent fall back to the wrong words.
+// The button keeps its own word (LOGIN / REGISTER) and is only dimmed; the loading box shows over the page while the answer is awaited.
+var _ckAuthBox = false;
+function ckAuthBoxEnd(){ if (_ckAuthBox) { _ckAuthBox = false; ckLoadEnd(); } }
 function setBtnLoading(id, loading, label, busy){
   const btn = $(id);
   btn.disabled = loading;
-  btn.textContent = loading ? (busy || '') : label;
+  btn.textContent = label;
+  if (loading && !_ckAuthBox) { _ckAuthBox = true; ckLoadBegin(); }
+  else if (!loading) ckAuthBoxEnd();
 }
 function fbErrMsg(e){
   const code = e && e.code || '';
@@ -2220,7 +2225,7 @@ function referralIsRequired(){
 // to discover it by being rejected. Runs whenever the auth screen paints.
 function updateReferralFieldHint(){
   const input = $('regReferral');
-  if (input) input.placeholder = 'Invitation Code';
+  if (input) input.placeholder = 'Enter Invitation Code';
 }
 
 // Owner: "let's establish a timer ie like saying snow opening in
@@ -2456,6 +2461,7 @@ async function enterApp(){
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
   window._pendingLoginSuccess = false;   // signing in says nothing: the Home page simply opens
+  ckAuthBoxEnd();
   refreshAppDataInBackground(uid);
 }
 // Shared by both bootFromNetwork() branches below -- retries /register,
@@ -2608,7 +2614,8 @@ async function bootFromNetwork(uid){
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
+  ckAuthBoxEnd();
+  if (signupFlow) { window._pendingLoginSuccess = false; ckSuccessToast('Success'); }
   else window._pendingLoginSuccess = false;
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
@@ -3125,13 +3132,24 @@ window.closeAnnouncement = function(){
 // The announcement is one portrait picture (uploaded in the admin panel) with
 // Join Channel and Close under it. Join Channel opens the Telegram group link,
 // or the WhatsApp group link when no Telegram group is set.
+// The announcement waits for the loading box to finish, then appears 1.5 seconds later.
+var _annPending = false;
 function maybeShowAnnouncement(){
+  if (_annPending) return;
+  _annPending = true;
+  const go = () => {
+    if (_ckLoadCount > 0 || _ckLoadHideTimer || Date.now() < _ckLoadUntil) { setTimeout(go, 120); return; }
+    setTimeout(() => { _annPending = false; if (!isAnyOverlayOpen()) showAnnouncementNow(); }, 1500);
+  };
+  go();
+}
+function showAnnouncementNow(){
   const s = STATE.settings || {};
   const title = String(s.annTitle || '').trim(), body = String(s.annBody || '').trim();
   if (!STATE.announcementImage && !title && !body) {
     // The pictures are fetched after the loading screen comes down; if they
     // have not landed yet, open the dialog the moment they do.
-    if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) maybeShowAnnouncement(); }); }
+    if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) showAnnouncementNow(); }); }
     return;
   }
   const bg = $('annBg'), sheet = $('annSheet');
@@ -3463,11 +3481,9 @@ async function renderAssets(){
 }
 // One card per asset the member owns. Expiry is the purchase moment plus the
 // asset's own cycle length (the same planStats() figure every progress bar uses).
-function incomeDueMs(inv){
-  const t = inv.nextPayoutAt;
-  const ms = t && typeof t === 'object' && (t.seconds || t._seconds) ? (t.seconds || t._seconds) * 1000 : new Date(t || 0).getTime();
-  if (ms && !isNaN(ms)) return ms;
-  const off = tzOffMs(); // no stored time: the next local midnight
+// Cashback is credited at midnight, so the settlement countdown always counts down to the next midnight of the member's own clock.
+function nextMidnightMs(){
+  const off = tzOffMs();
   return Math.floor((Date.now() + off) / 86400000) * 86400000 + 86400000 - off;
 }
 function vOwnedCardHtml(inv){
@@ -3486,29 +3502,27 @@ function vOwnedCardHtml(inv){
       </dl>
       <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}<em class="ck-oc-st${st.matured ? ' done' : ''}">${st.matured ? 'Completed' : 'Running'}</em><span class="ck-oc-name">${esc(name)}</span></div>
     </div>
-    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-at="${incomeDueMs(inv)}">${fmtCountdown(incomeDueMs(inv) - Date.now())}</b></div>`}
+    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-mid="1">${fmtCountdown(nextMidnightMs() - Date.now())}</b></div>`}
   </article>`;
 }
 // The settlement countdown on each running card ticks every second; when one reaches zero the list is read again (the payout has just landed).
-var _incTimer = null, _incRefetchAt = 0;
+var _incTimer = null, _incLeft = 0;
 function startIncomeCountdowns(){
   if (_incTimer) { clearInterval(_incTimer); _incTimer = null; }
+  _incLeft = 0;
   const tick = () => {
-    const nodes = document.querySelectorAll('[data-pay-at]');
+    const nodes = document.querySelectorAll('[data-pay-mid]');
     if (!nodes.length || STATE.page !== 'assets') { clearInterval(_incTimer); _incTimer = null; return; }
-    let due = false;
-    nodes.forEach(el => {
-      const left = Number(el.getAttribute('data-pay-at')) - Date.now();
-      if (left <= 0) due = true;
-      el.textContent = fmtCountdown(left);
-    });
-    if (due && Date.now() - _incRefetchAt > 30000) {
-      _incRefetchAt = Date.now();
+    const left = nextMidnightMs() - Date.now();
+    nodes.forEach(el => { el.textContent = fmtCountdown(left); });
+    // Midnight just passed (the clock jumped back to a full day): the day's cashback has landed, so read the list again.
+    if (_incLeft && left > _incLeft + 1000) {
       setTimeout(async () => {
         const r = await api('/investments');
         if (r.status === 'success' && Array.isArray(r.investments)) { STATE.investments = r.investments; if (STATE.page === 'assets') paintAssets(); }
       }, 4000);
     }
+    _incLeft = left;
   };
   _incTimer = setInterval(tick, 1000);
 }

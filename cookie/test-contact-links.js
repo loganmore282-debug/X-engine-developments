@@ -20,6 +20,10 @@ let n = 0; const eq2 = (a, b, m) => { n++; assert.equal(a, b, m); }; const ok = 
   await new Promise(r => setTimeout(r, 30));
   w.eval('STATE.page="home";STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings={annTitle:"Hello",annBody:"Body",whatsappGroup:"https://chat.whatsapp.com/abc",telegramGroup:"https://t.me/grp",supportTelegram:"https://t.me/agent",supportEmail:"help@x.com",supportHours:"8-5"}');
   w.maybeShowAnnouncement();
+  ok(!d.getElementById('annBg').classList.contains('show'), 'the dialog does not appear at once: it waits for the loading box and then 1.5 seconds');
+  await new Promise(r => setTimeout(r, 1000));
+  ok(!d.getElementById('annBg').classList.contains('show'), 'still waiting 1 second in');
+  await new Promise(r => setTimeout(r, 1100));
   const sheet = d.getElementById('annSheet');
   ok(d.getElementById('annBg').classList.contains('show'), 'dialog opens with an admin picture');
   ok(sheet.querySelector('img.ck-ann-img') && sheet.querySelector('img').getAttribute('src') === 'data:image/png;base64,AAAA', 'the banner is the admin upload');
@@ -28,16 +32,16 @@ let n = 0; const eq2 = (a, b, m) => { n++; assert.equal(a, b, m); }; const ok = 
   eq2(sheet.querySelector('.ck-ann-join').getAttribute('href'), 'https://t.me/grp', 'Join Group = Telegram group');
   ok(!!sheet.querySelector('.ck-ann-x'), 'the red close cross is there');
   ok(!/mailto|Email|WhatsApp/i.test(sheet.innerHTML), 'no email or WhatsApp button');
-  w.eval('STATE.settings.telegramGroup=""'); w.maybeShowAnnouncement();
+  w.eval('STATE.settings.telegramGroup=""'); w.showAnnouncementNow();
   eq2(d.querySelector('#annSheet .ck-ann-join').getAttribute('href'), 'https://chat.whatsapp.com/abc', 'no Telegram group -> WhatsApp group');
-  w.eval('STATE.settings.whatsappGroup=""'); w.maybeShowAnnouncement();
+  w.eval('STATE.settings.whatsappGroup=""'); w.showAnnouncementNow();
   ok(!d.querySelector('#annSheet .ck-ann-join'), 'no link -> no Join Group button');
   // the text: lines before the first blank line are the boxed rows, the rest is the paragraph
-  w.eval('STATE.settings.annBody="Row one\\nRow two\\n\\nThe paragraph."'); w.maybeShowAnnouncement();
+  w.eval('STATE.settings.annBody="Row one\\nRow two\\n\\nThe paragraph."'); w.showAnnouncementNow();
   ok(d.querySelectorAll('#annSheet .ck-ann-t div').length === 2 && /paragraph/.test(d.querySelector('#annSheet .ck-ann-p').textContent), 'boxed rows, then the paragraph');
   w.closeAnnouncement();
   ok(!d.getElementById('annBg').classList.contains('show'), 'the cross hides it');
-  w.eval('STATE.announcementImage=null;STATE.settings.annTitle="";STATE.settings.annBody=""'); d.getElementById('annSheet').innerHTML = ''; w.maybeShowAnnouncement();
+  w.eval('STATE.announcementImage=null;STATE.settings.annTitle="";STATE.settings.annBody=""'); d.getElementById('annSheet').innerHTML = ''; w.showAnnouncementNow();
   ok(!d.getElementById('annBg').classList.contains('show'), 'nothing written and no picture -> no dialog');
   ok(typeof w.openSupportSheet === 'undefined', 'the old Support page is gone (Help dialog replaces it)');
   console.log(`PASS: announcement dialog (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);

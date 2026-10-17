@@ -56,7 +56,7 @@ async function main(){
   assert.equal(d.querySelectorAll('.ck-inc-tabs button').length,2,'Income has the two tabs Daily Income and Daily wage');
   assert.equal(d.querySelectorAll('#ownedAssets .ck-oc').length,2,'Income lists every running product');
   assert.match(d.querySelector('#ownedAssets .ck-oc').textContent,/Running/);assert.match(d.querySelector('#ownedAssets .ck-oc').textContent,/Settlement countdown/);
-  assert.equal(d.querySelectorAll('#ownedAssets [data-pay-at]').length,2,'each running card counts down to its next settlement');
+  assert.equal(d.querySelectorAll('#ownedAssets [data-pay-mid]').length,2,'each running card counts down to midnight');
   w.eval('STATE.page="account"');await w.renderAccount();
   assert.equal(d.querySelector('#myBalance').textContent,'70,000');assert.match(d.querySelector('.ck-vip').textContent,/VIP0/);
   assert.deepEqual([...d.querySelectorAll('.ck-row-t')].map(e=>e.textContent),['Messages','Personal information','Income details','Deposit details','Withdrawal details','About us','Download','Language','Sign out']);

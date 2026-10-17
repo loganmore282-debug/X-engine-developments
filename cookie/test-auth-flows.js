@@ -94,7 +94,7 @@ function fakeServer(w, handle) {
   return calls;
 }
 const okAccount = { status: 'success', account: { phone: '+256771234567', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, team: { l1: 0, l2: 0, l3: 0, commission: 0 } }, region: {} };
-const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t; };
+const toasts = w => { const t = []; w.notify = m => t.push(String(m)); w.ckSuccessToast = m => t.push('BOX:' + String(m)); return t; };
 
 (async () => {
   // ─── 0. Auth screens use the approved blue frosted-card design ───
@@ -317,7 +317,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     eq(shown(w, 'app'), true, 'corrected code: app open'); eq(shown(w, 'authScreen'), false); eq(shown(w, 'loadingScreen'), false);
     eq(log.signOuts, 0, 'the recovery never signs the member out');
     ok(!t.some(m => /Session changed|went wrong|not a function/.test(m)), 'no stray errors: ' + JSON.stringify(t));
-    ok(t.some(m => /Registration successful/.test(m)), 'says it worked');
+    ok(t.some(m => m === 'BOX:Success'), 'registration shows the Success box');
     eq(w.eval('window._pendingRegPhone'), '', 'staged state cleared after success');
     await closeSoon(dom);
   }
@@ -331,7 +331,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
     $(w, 'regPhone').value = '0771234567'; $(w, 'regPassword').value = 'secret1secret1'; $(w, 'regPassword2').value = 'secret1secret1'; $(w, 'regTradePin').value = '123456';
     await w.doRegister(); await sleep(120);
     eq(shown(w, 'app'), true); eq(shown(w, 'authScreen'), false); eq(shown(w, 'loadingScreen'), false);
-    ok(t.some(m => /Registration successful/.test(m)) && !t.some(m => /Login successful/.test(m)), 'sign-up toast, not login toast: ' + JSON.stringify(t));
+    ok(t.some(m => m === 'BOX:Success') && !t.some(m => /Login successful/.test(m)), 'sign-up Success box, not a login toast: ' + JSON.stringify(t));
     eq(log.signOuts, 0);
     ok(!calls.some(p => p.startsWith('/auth/otp/')), 'registration sends no OTP requests even when the setting is enabled');
     await closeSoon(dom);
