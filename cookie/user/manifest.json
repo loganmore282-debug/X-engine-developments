@@ -1,0 +1,24 @@
+{
+  "name": "Cookie",
+  "short_name": "Cookie",
+  "description": "Cookie — invest, earn daily income, and grow your team.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f7ff",
+  "theme_color": "#f3f7ff",
+  "icons": [
+    {
+      "src": "/k7x2/public/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/k7x2/public/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
