@@ -4740,6 +4740,8 @@ function balTitle(t){
   if (t.type === 'withdraw') return balIsFail(t) ? 'Withdrawal Failed' : balIsWait(t) ? 'Withdrawal Processing' : 'Withdrawal Successful';
   if (t.type === 'cashback') return 'Device Profit';
   if (t.type === 'commission') { const n = Number(t.commissionLevel); return 'Lower ' + ((Number.isFinite(n) ? n : 0) + 1) + ' Buy Rewards'; }
+  // A product the admin activated for the member: "Free ( Gold )", with nothing taken from the balance.
+  if (t.type === 'investment' && /activated$/i.test(String(t.description || ''))) return 'Free ( ' + String(t.description).replace(/\s*activated$/i, '').trim() + ' )';
   return statementDescription(t);
 }
 // Newest first, each row with the wallet balance right after it (worked back from the balance the member has now).
@@ -4764,7 +4766,7 @@ function balRowsHtml(){
     return rows.map(({ t, after }) => {
       let amt = recordsRowAmount(t);
       if (t.type === 'withdraw' && balIsFail(t)) amt = Math.abs(amt);
-      return `<article class="ck-br"><b class="ck-br-t">${esc(balTitle(t))}</b><span class="ck-br-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</span><span class="ck-br-a">${amt < 0 ? '-' : '+'} ${esc(balNum(Math.abs(amt)))}</span><span class="ck-br-b">Balance : ${esc(balNum(after))}</span></article>`;
+      return `<article class="ck-br"><b class="ck-br-t">${esc(balTitle(t))}</b><span class="ck-br-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</span><span class="ck-br-a">${(amt < 0 || (amt === 0 && t.type === 'investment')) ? '-' : '+'} ${esc(balNum(Math.abs(amt)))}</span><span class="ck-br-b">Balance : ${esc(balNum(after))}</span></article>`;
     }).join('');
   }
   const thumb = STATE.recThumb ? ` style="background-image:url('${esc(STATE.recThumb)}')"` : '';
