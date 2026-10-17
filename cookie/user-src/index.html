@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=390, user-scalable=no, viewport-fit=cover">
 <title>Cookie</title>
 <!-- The SAME policy nginx sends as a header, carried in the file itself too.
      A host header cannot follow a file to another host, so this meta tag is
@@ -2238,14 +2238,13 @@ body{background-attachment:fixed;}
 @keyframes ckFadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes ckSlideUp{from{transform:translateY(100%);}to{transform:none;}}
 @keyframes ckPop{0%{transform:scale(.55);opacity:.4;}60%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
-#pageHost>.ck-in{animation:ckPageIn .34s cubic-bezier(.22,1,.36,1) both;}
 .pay-page.show,.msg-detail-bg.show{animation:ckFadeIn .25s ease-out both;}
 .va-pane{animation:ckPageIn .32s cubic-bezier(.22,1,.36,1) both;}
 #authScreen,#app{animation:ckFadeIn .4s ease-out both;}
 .ck-langpop{animation:ckFadeIn .2s ease-out both;}
 .ck-langcard{animation:ckSlideUp .28s cubic-bezier(.22,1,.36,1) both;}
 #loadingScreen.ld-out{opacity:0;transition:opacity .3s ease-out;}
-@media (prefers-reduced-motion:reduce){#pageHost>.ck-in,.sheet-bg.show,.pay-page.show,.msg-detail-bg.show,.va-pane,#authScreen,#app,.ck-langpop,.ck-langcard,.navitem.active .nav-ic{animation:none !important;}}
+@media (prefers-reduced-motion:reduce){#pageHost .ck-rise,#sheetBody .ck-rise,.sheet-bg.show,.pay-page.show,.msg-detail-bg.show,.va-pane,#authScreen,#app,.ck-langpop,.ck-langcard,.navitem.active .nav-ic{animation:none !important;}}
 /* ── Loading box, "No more data" box (measured from the owner's screen recordings) ── */
 .ck-box{position:fixed;left:50%;top:42.5%;z-index:445;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:7px;background:#525154;color:#fff;opacity:0;pointer-events:none;transform:translate(-50%,-50%) scale(.94);transition:opacity .2s ease,transform .2s ease;font-family:Roboto,'Segoe UI',system-ui,sans-serif;}
 .ck-box.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
@@ -2288,8 +2287,38 @@ body{background-attachment:fixed;}
 .navitem.nav-tap .nav-ic::after{animation:ckRipple .32s ease-out;}
 .navitem.nav-tap .nav-ic svg{animation:none;}
 @keyframes ckPageIn{from{opacity:0;transform:translateY(22px);}to{opacity:1;transform:none;}}
-#pageHost .ck-in,#sheetBody .ck-in{animation:ckPageIn .3s cubic-bezier(.2,.8,.3,1) backwards;}
+#pageHost .ck-rise,#sheetBody .ck-rise{animation:ckPageIn .3s cubic-bezier(.2,.8,.3,1) backwards;}
 @media (prefers-reduced-motion:reduce){.navitem.active .nav-ic,.navitem.active .nav-ic svg,.navitem.nav-tap .nav-ic::after{animation:none !important;}}
+/* ── Home, measured from the owner's Galaxy A07 screenshots (1 screenshot pixel = 0.5417 px; the page is laid out 390 px wide and scaled to the phone) ── */
+#pageHost .v-home{padding:14px 15.2px 8px;}
+#pageHost .home-banner{height:182.5px;border-radius:9px;}
+.hb-bars{position:absolute;left:50%;bottom:10px;z-index:3;display:flex;transform:translateX(-50%);pointer-events:none;}
+.hb-bars i{display:block;width:22.2px;height:4.3px;border-radius:2.2px;background:rgba(255,255,255,.4);}
+.hb-bars i+i{margin-left:-.5px;}
+.hb-bars i.on{background:#fff;z-index:1;transition:background .3s;}
+.ck-quick{margin:10.3px 0 0;padding:10.3px 5.4px 13px;border-radius:13px;box-shadow:0 6px 20px -10px rgba(50,60,140,.28);}
+#pageHost .ck-quick button{gap:6.5px;}
+.ck-quick .ck-ic{width:46.6px;height:46.6px;box-shadow:0 5px 12px -3px var(--c);}
+.ck-quick .ck-ic svg{width:39px;height:39px;}
+#pageHost .ck-quick b{font-size:12.8px;font-weight:500;letter-spacing:0;line-height:15px;color:#111;}
+.ck-tabs{margin:10.8px 0 0;height:49.8px;padding:5.4px;border:1px solid #2d62b0;border-radius:12px;box-sizing:border-box;}
+.ck-tabs button{height:38.9px;border-radius:7.5px;font-size:12.7px;color:#2060b4;}
+.ck-tabs button.on{background:#095ae7;color:#f1f5ff;}
+#pageHost #homeProducts{margin-top:10.3px;}
+#pageHost .v-card{margin:0 0 10.3px;padding:10px;border-radius:11px;box-shadow:0 4px 14px -10px rgba(20,40,110,.25);}
+#pageHost .v-card-b{gap:10.6px;}
+#pageHost .v-card-img,#pageHost .v-card.v-flat .v-card-img{flex:0 0 145.2px;width:145.2px;height:145.2px;border-radius:7.5px;background:linear-gradient(135deg,#0a56e3,#5b91ee);}
+#pageHost .v-badge{height:24px;line-height:24px;padding:0 10.3px;border-radius:7.5px 0 7.5px 0;background:rgba(21,98,229,.94);font-size:10px;letter-spacing:.01em;}
+#pageHost .v-pname{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:14px 10px 7px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.78));color:#fff;font:400 14.8px/18px Roboto,'Segoe UI',system-ui,sans-serif;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#pageHost .v-card-img img+.v-badge+.v-pname,#pageHost .v-card-img .v-pname{pointer-events:none;}
+#pageHost .v-rows{flex:1 1 0;height:145.2px;max-height:145.2px;align-self:flex-start;}
+#pageHost .v-rows>div{flex:0 0 28.4px;height:28.4px;min-height:0;padding:0 10.3px;border-radius:5.5px;background:#f4f8fc;}
+#pageHost .v-rows dt{font-size:13.8px;color:#1b1c20;}
+#pageHost .v-rows dd{font-size:14.4px;color:#0a5ae0;}
+#pageHost .v-card-f{margin:10px 0 0;}
+#pageHost .v-buy{height:32.2px;border-radius:4.3px;background:#0b5be6;background-size:auto;font-size:12.6px;font-weight:400;letter-spacing:.02em;animation:none;}
+#pageHost .v-buy span,#pageHost .v-buy.v-soon span,#pageHost .v-buy:disabled span{font-size:12.6px;font-weight:400;letter-spacing:.02em;}
+#pageHost .v-buy.v-soon,#pageHost .v-buy:disabled{background:linear-gradient(90deg,#9fbaf4 0%,#5a8ce9 100%);color:rgba(255,255,255,.88);}
 </style>
 
 <script data-cookie-idle>

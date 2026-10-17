@@ -28,7 +28,7 @@ ok(/var NAV_LOADER = '<span class="nav-loading">Loading\.\.\.<\/span>'/.test(mod
 ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
 ok(/\.ck-ann-img\{[^}]*width:100%/.test(html), 'the announcement banner fills the width of the dialog');
-ok(/function vFitCard\(img\)/.test(mod) && /onload="vFitCard\(this\)"/.test(mod) && /#pageHost \.v-card-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures fill their square frame on the card');
+ok(/function vFitCard\(img\)/.test(mod) && /class="v-pname"/.test(mod) && /#pageHost \.v-card-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures fill their square frame on the card');
 ok(!/fileToFramedDataUrl|PRODUCT_IMG_W/.test(admin) && /fileToDataUrl\(f,900,0\.82\)/.test(admin), 'the admin no longer crops asset pictures to 16:9');
 ok(/\.v-card-img,#pageHost \.v-card\.v-flat \.v-card-img\{[^}]*flex:0 0 146px/.test(html), 'the picture frame is 146 px square, as in the screenshots');
 ok(/<script data-cookie-loader>/.test(html) && /localStorage\.getItem\(KEY\)/.test(html) && /bg\.style\.backgroundImage = layer\(kept\)/.test(html) && /window\._cookieLoaderStart = Date\.now\(\)/.test(html), 'the kept loading picture is painted inline on the first frame, before any network request');

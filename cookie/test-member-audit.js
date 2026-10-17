@@ -46,7 +46,7 @@ async function main(){
   assert.match(d.querySelector('#homeProducts').textContent,/Test Asset|NO DATA/,'Home lists the catalogue');
   w.eval('STATE.products=[{key:"a1",name:"Test Asset",price:15000,cycle:30,expectedReturn:45000,dailyPayout:1500,isOpen:true}]');w.paintHome();
   assert.match(d.querySelector('.v-card-img').textContent,/Test Asset/,'a product with no picture shows its name in the picture frame');
-  assert.match(d.querySelector('.v-rows').textContent,/UGX15,000/,'prices read UGX15,000 with no space');
+  assert.match(d.querySelector('.v-rows').textContent,/UGX 15000/,'prices read as on the owner screens: the currency, a space, the plain number');
   assert.equal(d.querySelectorAll('.v-quick button').length,4,'Home has Deposit, Withdraw, Service and Group');
   assert.equal(d.querySelectorAll('.bottom-nav .navitem').length,5,'five tabs: Home, Income, Team, Share, My');
   assert.deepEqual([...d.querySelectorAll('.bottom-nav .lbl')].map(e=>e.textContent),['Home','Income','Team','Share','My']);
