@@ -42,6 +42,8 @@ HOOK_HOST_FILE=${COOKIE_HOOK_HOST_FILE:-/srv/cookie-secrets/hook-host}
 if [ -s "$HOOK_FILE" ]; then COOKIE_HOOK_TOKEN=$(tr -d '[:space:]' < "$HOOK_FILE"); export COOKIE_HOOK_TOKEN; echo "    (secret PesaJet webhook address is ON)"; fi
 if [ -s "$HOOK_FILE" ] && [ -s "$HOOK_HOST_FILE" ]; then COOKIE_HOOK_HOST=$(tr -d '[:space:]' < "$HOOK_HOST_FILE"); export COOKIE_HOOK_HOST; echo "    (webhook-only host: $COOKIE_HOOK_HOST)"; fi
 
+# The temporary IP preview (deploy/preview.sh) defines the same rate-limit names, so it must go before the real file is written.
+rm -f /etc/nginx/conf.d/cookie-preview.conf
 say "3/7  nginx: new walls (the old file is kept at $BAK and put back if the new one is refused)"
 [ -f "$CONF" ] && cp "$CONF" "$BAK"
 if (umask 077; node deploy/make-nginx.js prod "$APP_HOST" "$ADMIN_PATH" "$ADMIN_HOST" ${ALSO_HOSTS:+--also="$ALSO_HOSTS"} > /tmp/cookie.conf.new) && cp /tmp/cookie.conf.new "$CONF" && nginx -t >/tmp/cookie.nginxtest 2>&1; then
