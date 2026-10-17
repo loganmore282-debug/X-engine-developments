@@ -25,7 +25,7 @@ ok(/setTimeout\(startArtwork, 8000\)/.test(mod) && !/_artPromise = Promise\.all\
 ok(/const s = await pSettings;/.test(mod) && !/Promise\.all\(\[ pSettings, pProducts, pBanner \]\)/.test(mod), 'the loading screen waits for the settings only, not for the asset pictures or the banner');
 ok(!/fileToLogoPng|background connected to the image edge/.test(admin) && !/brandLogoFile/.test(admin), 'the admin panel has no brand logo box and no background removal');
 ok(/var NAV_LOADER = '<span class="nav-loading">Loading\.\.\.<\/span>'/.test(mod) && /\.nav-loading\{[^}]*font-size:15px[^}]*letter-spacing:\.03em/.test(html) && !/MINI_RING_LOADER|mini-ring-loader|ringSweep/.test(html + mod), 'pages show a small "Loading..." word while data arrives, no ring spinner is left');
-ok((mod.match(/NAV_LOADER/g) || []).length >= 6, 'Income, Team, Team members, Balance Record and Messages all use it');
+ok((mod.match(/NAV_LOADER/g) || []).length >= 2, 'Messages and the other small lists use it (pages open as a header with the loader box instead)');
 ok(/showAuthTab\('login'\);\n  stopLiveRefresh\(\);/.test(mod), 'signing out always lands on Login, not on a Sign Up form left open');
 ok(/\.ck-ann-img\{[^}]*width:100%/.test(html), 'the announcement banner fills the width of the dialog');
 ok(/function vFitCard\(img\)/.test(mod) && /class="v-pname"/.test(mod) && /#pageHost \.v-card-img img\{[^}]*object-fit:cover/.test(html), 'asset pictures fill their square frame on the card');

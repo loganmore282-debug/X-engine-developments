@@ -53,10 +53,10 @@ async function main(){
   const originalBanner=d.querySelector('.home-banner');await w.liveRefreshVisible();
   assert.equal(d.querySelector('.home-banner'),originalBanner,'balance refresh must not rebuild Home');
   w.eval('STATE.page="assets"');w.eval('STATE.investments=[{status:"active",tierKey:"a1",tierLabel:"Test Asset",amount:15000,payoutsTotal:30,payoutsMade:3,dailyPayout:1500,expectedReturn:45000,paidOut:4500,createdAt:new Date().toISOString()},{status:"active",tierKey:"a1",tierLabel:"Gifted",amount:0,payoutsTotal:30,payoutsMade:1,dailyPayout:1500,expectedReturn:45000,paidOut:0,createdAt:new Date().toISOString(),granted:true}]');w.paintAssets();
-  assert.match(d.querySelector('.v-total').textContent,/Total Earnings/);assert.match(d.querySelector('#incomeTotal').textContent,/UGX700\.00/);
-  assert.equal(d.querySelectorAll('#ownedAssets .v-card').length,2,'Income lists every owned asset');
-  assert(d.querySelector('#ownedAssets .v-gift .v-ribbon'),'a gifted asset carries the GIFT ribbon');
-  assert.equal(d.querySelectorAll('#ownedAssets .v-dates').length,2,'each owned card shows Purchase and Expire');
+  assert.equal(d.querySelectorAll('.ck-inc-tabs button').length,2,'Income has the two tabs Daily Income and Daily wage');
+  assert.equal(d.querySelectorAll('#ownedAssets .ck-oc').length,2,'Income lists every running product');
+  assert.match(d.querySelector('#ownedAssets .ck-oc').textContent,/Running/);assert.match(d.querySelector('#ownedAssets .ck-oc').textContent,/Settlement countdown/);
+  assert.equal(d.querySelectorAll('#ownedAssets [data-pay-at]').length,2,'each running card counts down to its next settlement');
   w.eval('STATE.page="account"');await w.renderAccount();
   assert.equal(d.querySelector('#myBalance').textContent,'70,000');assert.match(d.querySelector('.ck-vip').textContent,/VIP0/);
   assert.deepEqual([...d.querySelectorAll('.ck-row-t')].map(e=>e.textContent),['Messages','Personal information','Income details','Deposit details','Withdrawal details','About us','Download','Language','Sign out']);

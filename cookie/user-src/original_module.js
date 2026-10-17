@@ -1886,11 +1886,14 @@ function ckStagger(root){
 (function(){
   if (!window.MutationObserver) return;
   const host = document.getElementById('pageHost'), body = document.getElementById('sheetBody');
-  let lastPage = null, lastSeq = -1, pageAt = 0;
+  let lastPage = null, lastSeq = -1, lastShell = false;
+  // A page that has to read from the database first opens as its header alone (.ck-shell); the finished page then rises ONCE.
+  // A page replacing a finished page (a quiet refresh) never plays it again.
   if (host) new MutationObserver(() => {
-    if (STATE.page !== lastPage) { lastPage = STATE.page; pageAt = Date.now(); ckStagger(host); return; }
-    // The page painted a second time right after opening (its data arrived): play again only if the first paint was replaced.
-    if (Date.now() - pageAt < 900 && !host.querySelector('.ck-rise')) ckStagger(host);
+    const shell = !!host.querySelector('.ck-shell');
+    if (STATE.page !== lastPage) { lastPage = STATE.page; lastShell = shell; ckStagger(host); return; }
+    if (lastShell && !shell) ckStagger(host);
+    lastShell = shell;
   }).observe(host, { childList: true });
   if (body) new MutationObserver(() => {
     if (window._sheetSeq === lastSeq) return;
@@ -3447,8 +3450,7 @@ async function refreshCatalogNow(){
 
 async function renderAssets(){
   const hadCache = Array.isArray(STATE.investments);
-  if (hadCache) paintAssets();
-  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
+  ckShell('Income');
   const [pr, ir, ar] = await Promise.all([api('/public/products'), api('/investments'), api('/account')]);
   if (pr.status === 'success' && Array.isArray(pr.products)) STATE.products = pr.products;
   if (ir.status === 'success' && Array.isArray(ir.investments)) STATE.investments = ir.investments;
@@ -3459,40 +3461,56 @@ async function renderAssets(){
 }
 // One card per asset the member owns. Expiry is the purchase moment plus the
 // asset's own cycle length (the same planStats() figure every progress bar uses).
+function incomeDueMs(inv){
+  const t = inv.nextPayoutAt;
+  const ms = t && typeof t === 'object' && (t.seconds || t._seconds) ? (t.seconds || t._seconds) * 1000 : new Date(t || 0).getTime();
+  if (ms && !isNaN(ms)) return ms;
+  const off = tzOffMs(); // no stored time: the next local midnight
+  return Math.floor((Date.now() + off) / 86400000) * 86400000 + 86400000 - off;
+}
 function vOwnedCardHtml(inv){
   const st = planStats(inv);
   const p = (STATE.products || []).find(x => x.key === inv.tierKey) || {};
   const name = inv.tierLabel || p.name || 'Product';
-  const initial = esc(String(name || '?').trim()[0] || '?');
-  // Fenced: the picture lives in a fixed-size frame (see .v-owned .v-card-img) and is scaled to fit
-  // inside it, so its shape or load time can never move the figures or spill over the card.
-  const img = p.image
-    ? `<img src="${esc(p.image)}" alt="" onerror="vNoPicture(this,'${initial}')">`
-    : `<span class="v-glyph">${initial}</span>`;
-  const startMs = st.createdMs;
-  const endMs = startMs + st.total * 86400000;
-  const two = ms => { const t = statementStampMs(ms).split(' '); return esc(t[0] || '') + '<br>' + esc(t[1] || ''); };
+  const img = p.image ? `<img src="${esc(p.image)}" alt="" onerror="this.remove()">` : '';
   return `
-  <article class="v-card v-owned${inv.granted ? ' v-gift' : ''}">
-    <h3 class="v-card-h">${esc(name)}</h3>
-    ${inv.granted ? '<i class="v-ribbon"><b>GIFT</b></i>' : ''}
-    <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' v-fence' : ''}">${img}<em class="v-badge">${st.matured ? 'Completed' : 'Earning'}</em></div>
-      <div class="v-side">
-        <dl class="v-rows">
-          <div><dt>Price</dt><dd>${esc(vMoney(st.amount))}</dd></div>
-          <div><dt>Days</dt><dd>${st.total}</dd></div>
-          <div><dt>Daily</dt><dd>${esc(vMoney(st.daily))}</dd></div>
-          <div><dt>Total</dt><dd>${esc(vMoney(st.expected))}</dd></div>
-        </dl>
-        <div class="v-dates">
-          <div><span>Purchase</span><b>${two(startMs)}</b></div>
-          <div><span>Expire</span><b>${two(endMs)}</b></div>
-        </div>
-      </div>
+  <article class="ck-oc">
+    <div class="ck-oc-b">
+      <dl class="ck-oc-rows">
+        <div><dt>Price</dt><dd>${esc(ckMoney(st.amount))}</dd></div>
+        <div><dt>Daily profit</dt><dd>${esc(ckMoney(st.daily))}</dd></div>
+        <div><dt>Days</dt><dd>${st.total}</dd></div>
+        <div><dt>Total profit</dt><dd>${esc(ckMoney(st.expected))}</dd></div>
+      </dl>
+      <div class="ck-oc-img${p.image ? ' has-img' : ''}">${img}<em class="ck-oc-st${st.matured ? ' done' : ''}">${st.matured ? 'Completed' : 'Running'}</em><span class="ck-oc-name">${esc(name)}</span></div>
     </div>
+    ${st.matured ? '' : `<div class="ck-oc-cd"><span>Settlement countdown</span><b data-pay-at="${incomeDueMs(inv)}">${fmtCountdown(incomeDueMs(inv) - Date.now())}</b></div>`}
   </article>`;
 }
+// The settlement countdown on each running card ticks every second; when one reaches zero the list is read again (the payout has just landed).
+var _incTimer = null, _incRefetchAt = 0;
+function startIncomeCountdowns(){
+  if (_incTimer) { clearInterval(_incTimer); _incTimer = null; }
+  const tick = () => {
+    const nodes = document.querySelectorAll('[data-pay-at]');
+    if (!nodes.length || STATE.page !== 'assets') { clearInterval(_incTimer); _incTimer = null; return; }
+    let due = false;
+    nodes.forEach(el => {
+      const left = Number(el.getAttribute('data-pay-at')) - Date.now();
+      if (left <= 0) due = true;
+      el.textContent = fmtCountdown(left);
+    });
+    if (due && Date.now() - _incRefetchAt > 30000) {
+      _incRefetchAt = Date.now();
+      setTimeout(async () => {
+        const r = await api('/investments');
+        if (r.status === 'success' && Array.isArray(r.investments)) { STATE.investments = r.investments; if (STATE.page === 'assets') paintAssets(); }
+      }, 4000);
+    }
+  };
+  _incTimer = setInterval(tick, 1000);
+}
+window.setIncomeTab = function(t){ STATE.incomeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'assets') paintAssets(); };
 function statementStampMs(ms){
   const d = new Date(ms);
   if (isNaN(d.getTime())) return '—';
@@ -3500,21 +3518,24 @@ function statementStampMs(ms){
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function paintAssets(){
-  const a = STATE.account || {};
+  const tab = STATE.incomeTab === 'wage' ? 'wage' : 'income';
   // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
-  const owned = (STATE.investments || []).filter(i => i.status === 'active' || i.status === 'matured').sort((x, y) =>
+  const owned = (STATE.investments || []).filter(i => (i.status === 'active' || i.status === 'matured')
+    && (((STATE.products || []).find(x => x.key === i.tierKey) || {}).category === 'wage' ? 'wage' : 'income') === tab).sort((x, y) =>
     (x.status === 'active' ? 0 : 1) - (y.status === 'active' ? 0 : 1)
     || (new Date(y.createdAt || 0).getTime() || 0) - (new Date(x.createdAt || 0).getTime() || 0)
     || String(x.id || '').localeCompare(String(y.id || '')));
   const html = `
 <div class="ck-sub ck-income v-income">
   ${ckHeader('Income')}
-  <div class="v-page">
-    ${owned.length || Number(a.totalEarned) > 0 ? `<div class="v-total"><span>Total Earnings</span><b id="incomeTotal">${esc(vMoney2(a.totalEarned))}</b></div>` : ''}
-    <div id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty ck-nodata">NO DATA</div>'}</div>
+  <div class="ck-tabs ck-inc-tabs" role="tablist">
+    <button type="button" role="tab" class="${tab === 'income' ? 'on' : ''}" onclick="setIncomeTab('income')">Daily Income</button>
+    <button type="button" role="tab" class="${tab === 'wage' ? 'on' : ''}" onclick="setIncomeTab('wage')">Daily wage</button>
   </div>
+  <div class="ck-inc-list" id="ownedAssets">${owned.length ? owned.map(vOwnedCardHtml).join('') : '<div class="v-empty ck-nodata">NO DATA</div>'}</div>
 </div>`;
   $('pageHost').innerHTML = html;
+  startIncomeCountdowns();
 }
 // ── REFERRAL (own tab) ──
 // Owner: "introduce a new nav icon just between my products and team, it is
@@ -3785,9 +3806,10 @@ window.switchTeamLevel = async function(level){
 
   document.querySelectorAll('.v-level').forEach(el => el.classList.toggle('on', Number(el.dataset.level) === level));
   const held = !!STATE.teamMembers[level];
-  if (held) renderTeamMembers(level);
-  else { const box = $('teamMembersBox'); if (box) box.innerHTML = teamLoadingHtml(); }
-  if (held && Date.now() - (_teamMembersAt[level] || 0) < TEAM_LIST_FRESH_MS) return;
+  const fresh = held && Date.now() - (_teamMembersAt[level] || 0) < TEAM_LIST_FRESH_MS;
+  // A list read a moment ago shows at once; an older one waits for the new read and appears once, not twice.
+  if (fresh) { renderTeamMembers(level); return; }
+  { const box = $('teamMembersBox'); if (box) box.innerHTML = teamLoadingHtml(); }
   const r = await api('/team/members?level=' + level);
   if (r.status === 'success') { STATE.teamMembers[level] = r.members; _teamMembersAt[level] = Date.now(); _teamMembersFailed[level] = false; }
   else _teamMembersFailed[level] = true;
@@ -3845,7 +3867,7 @@ function renderTeamMembers(level){
     <span class="ck-mem-av${STATE.avatarImg ? ' has-img' : ''}"${pic}></span>
     <div class="ck-mem-body">
       <div class="ck-mem-top"><b>Mobile： ${esc(m.phoneRef || m.phoneMasked || maskPhone(m.phone))}</b>${bought ? '<em>Purchased</em>' : ''}</div>
-      <div class="ck-mem-mid"><span class="${bought ? 'g' : ''}">Deposit： ${esc(ckNum(m.deposited))}</span><span>Withdraw： ${esc(ckNum(m.withdrawn))}</span></div>
+      <div class="ck-mem-mid"><span class="${bought ? 'g' : ''}">Deposit： ${esc(ckNum(m.deposited))}</span><span class="${Number(m.withdrawn) > 0 ? 'r' : ''}">Withdraw： ${esc(ckNum(m.withdrawn))}</span></div>
       <div class="ck-mem-time">Time : ${esc(ckStamp(m.createdAt))}</div>
     </div>
   </div>`;
@@ -3998,26 +4020,29 @@ window.claimTask = async function(type, id, btn){
   if (_openSheetTitle === 'Task Center') paintTaskCenter();
 };
 async function renderNetwork(){
+  // One load: the header shows while the member's own figures and list are read, then the whole page appears once.
   const hadCache = !!STATE.teamStats;
-  if (hadCache) paintNetwork();
-  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
-  const r = await api('/team/stats');
+  const level = _activeTeamLevel || 1;
+  ckShell('Team LV.' + level);
+  const [r, m] = await Promise.all([ api('/team/stats'), api('/team/members?level=' + level) ]);
   if (r.status === 'success') STATE.teamStats = r;
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0, levelCommission:{l1:0,l2:0,l3:0} };
+  if (m.status === 'success') { STATE.teamMembers[level] = m.members; _teamMembersAt[level] = Date.now(); _teamMembersFailed[level] = false; }
+  else _teamMembersFailed[level] = true;
   if (STATE.page !== 'network') return;
   paintNetwork();
 }
 // ── SHARE ── the invitation link, the invitation code and what each level earns (the figures come from /team/stats).
 async function renderShare(){
   const hadCache = !!STATE.teamStats;
-  if (hadCache) paintShare();
-  else $('pageHost').innerHTML = '<div style="min-height:55vh;display:flex;align-items:center;justify-content:center;">' + NAV_LOADER + '</div>';
+  ckShell('Share');
   const r = await api('/team/stats');
   if (r.status === 'success') STATE.teamStats = r;
   else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:0,l2:0,l3:0}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0, levelCommission:{l1:0,l2:0,l3:0} };
   if (STATE.page !== 'share') return;
   paintShare();
 }
+function ckShell(title){ $('pageHost').innerHTML = '<div class="ck-sub ck-shell">' + ckHeader(title) + '</div>'; }
 function ckHeader(title, back){
   return `<header class="ck-hd">${back ? `<button class="ck-back" type="button" aria-label="Back" onclick="${back}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5 7.5 12l7.5 7.5"/></svg></button>` : ''}<h1>${esc(title)}</h1></header>`;
 }
