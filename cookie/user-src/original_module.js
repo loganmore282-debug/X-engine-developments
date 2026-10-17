@@ -3375,7 +3375,8 @@ function vProductCardHtml(p){
 // disabled button, the glow is for the one that can be bought.
 function vBuyHtml(p){
   const limit = Number(p.buyLimit) || 0;
-  if (limit > 0 && vOwnedCount(p.key) >= limit) return '<button class="v-buy" disabled><span>Buy now</span></button>';
+  // At the purchase limit the button looks the same as any other; tapping it says so (the server refuses a purchase over the limit as well).
+  if (limit > 0 && vOwnedCount(p.key) >= limit) return `<button class="v-buy" type="button" onclick="notify('Investment Limit...')"><span>Buy now</span></button>`;
   const open = p.isOpen !== false && !p.comingSoon;
   if (open) return `<button class="v-buy" onclick="openInvestConfirm('${esc(p.key)}',this)"><span>Buy now</span></button>`;
   const at = Number(p.opensAt) || 0;

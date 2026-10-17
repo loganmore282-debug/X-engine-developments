@@ -29,4 +29,5 @@ ok(!/data-move/.test(adm), 'no manual moving: the category decides itself');
 ok(/p\.category = \(p\.category === 'wage' \|\| Number\(p\.price\) === 0\) \? 'wage' : 'income'/.test(src), 'the server always decides the category: a task product, or anything free, is Daily wage');
 ok(/function ckIsWage\(p\)/.test(cli) && !/p\.category === 'wage' \? 'wage'/.test(cli), 'the app uses that same rule for Daily income / Daily wage');
 ok(/const list = homeTabProducts\(\);\n\s+\$\('homeProducts'\)\.innerHTML/.test(cli), 'the live refresh of Home keeps only the open tab\'s products (it used to put every product back, mixing the two)');
+ok(/vOwnedCount\(p\.key\) >= limit\) return `<button class="v-buy" type="button" onclick="notify\('Investment Limit\.\.\.'\)"/.test(cli), 'at the purchase limit the Buy now button stays blue and says "Investment Limit..."');
 console.log(`PASS: task products (${n} checks)`);
