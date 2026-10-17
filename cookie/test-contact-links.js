@@ -18,14 +18,17 @@ for (const s of d.scripts) {
 let n = 0; const eq2 = (a, b, m) => { n++; assert.equal(a, b, m); }; const ok = (c, m) => { n++; assert.ok(c, m); };
 (async () => {
   await new Promise(r => setTimeout(r, 30));
-  w.eval('STATE.page="home";STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings={annTitle:"Hello",annBody:"Body",whatsappGroup:"https://chat.whatsapp.com/abc",telegramGroup:"https://t.me/grp",supportTelegram:"https://t.me/agent",supportEmail:"help@x.com",supportHours:"8-5"}');
+  w.eval('_artLanded=true;STATE.page="home";STATE.announcementImage="data:image/png;base64,AAAA";STATE.settings={minWithdraw:20000,withdrawFeePct:15,withdrawWindowEnabled:true,withdrawOpenFrom:"07:00",withdrawOpenTo:"17:00",whatsappGroup:"https://chat.whatsapp.com/abc",telegramGroup:"https://t.me/grp",supportTelegram:"https://t.me/agent",supportEmail:"help@x.com",supportHours:"8-5"}');
   w.ckExpectLoad(); w.maybeShowAnnouncement();
   ok(!d.getElementById('annBg').classList.contains('show'), 'the dialog waits for the loading box to finish');
   await new Promise(r => setTimeout(r, 1300));
   const sheet = d.getElementById('annSheet');
   ok(d.getElementById('annBg').classList.contains('show'), 'dialog opens with an admin picture');
   ok(sheet.querySelector('img.ck-ann-img') && sheet.querySelector('img').getAttribute('src') === 'data:image/png;base64,AAAA', 'the banner is the admin upload');
-  eq2(sheet.querySelector('.ck-ann-h').textContent, 'Hello', 'the title is the one the admin wrote');
+  ok(/^Welcome to the .+ App$/.test(sheet.querySelector('.ck-ann-h').textContent), 'the title welcomes to the app by its name');
+  const rowsTxt = [...sheet.querySelectorAll('.ck-ann-t div')].map(x => x.textContent);
+  eq2(rowsTxt.join('|'), 'Daily income, daily withdrawal|Earnings at 00:00 AM|Withdrawal hours: 07:00\u201317:00|Minimum withdrawal: UGX 20,000|Taxes and fees: 15%', 'the lines come from the settings (hours, minimum, one fee)');
+  ok(/never proactively ask for your password/.test(sheet.querySelector('.ck-ann-p').textContent), 'the closing sentence is there');
   eq2(sheet.querySelector('.ck-ann-join').textContent.trim(), 'Join Group', 'the button says Join Group');
   eq2(sheet.querySelector('.ck-ann-join').getAttribute('href'), 'https://t.me/grp', 'Join Group = Telegram group');
   ok(!!sheet.querySelector('.ck-ann-x'), 'the red close cross is there');
@@ -34,13 +37,10 @@ let n = 0; const eq2 = (a, b, m) => { n++; assert.equal(a, b, m); }; const ok = 
   eq2(d.querySelector('#annSheet .ck-ann-join').getAttribute('href'), 'https://chat.whatsapp.com/abc', 'no Telegram group -> WhatsApp group');
   w.eval('STATE.settings.whatsappGroup=""'); w.showAnnouncementNow();
   ok(!d.querySelector('#annSheet .ck-ann-join'), 'no link -> no Join Group button');
-  // the text: lines before the first blank line are the boxed rows, the rest is the paragraph
-  w.eval('STATE.settings.annBody="Row one\\nRow two\\n\\nThe paragraph."'); w.showAnnouncementNow();
-  ok(d.querySelectorAll('#annSheet .ck-ann-t div').length === 2 && /paragraph/.test(d.querySelector('#annSheet .ck-ann-p').textContent), 'boxed rows, then the paragraph');
+  w.eval('STATE.settings.withdrawWindowEnabled=false;STATE.settings.minWithdraw=30000;STATE.settings.withdrawFeePct=10'); w.showAnnouncementNow();
+  eq2([...d.querySelectorAll('#annSheet .ck-ann-t div')].slice(2).map(x => x.textContent).join('|'), 'Withdrawal hours: 24 hours|Minimum withdrawal: UGX 30,000|Taxes and fees: 10%', 'changed settings change the lines');
   w.closeAnnouncement();
   ok(!d.getElementById('annBg').classList.contains('show'), 'the cross hides it');
-  w.eval('STATE.announcementImage=null;STATE.settings.annTitle="";STATE.settings.annBody=""'); d.getElementById('annSheet').innerHTML = ''; w.showAnnouncementNow();
-  ok(!d.getElementById('annBg').classList.contains('show'), 'nothing written and no picture -> no dialog');
   ok(typeof w.openSupportSheet === 'undefined', 'the old Support page is gone (Help dialog replaces it)');
   console.log(`PASS: announcement dialog (${n} checks${built ? ', built bundle' : ''})`); process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

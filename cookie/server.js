@@ -591,6 +591,8 @@ const DEFAULT_SETTINGS = {
   loaderBgOpacity: 100, loaderBgBlur: 0,
   // My page picture (Admin > Banners > My page background): 100 = as uploaded; blur in px.
   myHeroOpacity: 100, myHeroBlur: 6,
+  // Seconds each Home banner stays before the next one slides in (Admin > Banners > Home banner slide speed).
+  bannerSlideSeconds: 5,
   // Background treatment for signed-in Home/Assets/Network/Profile and
   // secondary pages. Authentication screens keep their own controls above.
   innerBgOpacity: 100, innerBgBlur: 0,
@@ -6964,6 +6966,7 @@ const SETTINGS_CRITICAL_RANGES = {
   authCardOpacity: [0, 100], authCardBlur: [0, 40],
   loaderBgOpacity: [0, 100], loaderBgBlur: [0, 40],
   myHeroOpacity: [0, 100], myHeroBlur: [0, 40],
+  bannerSlideSeconds: [2, 60],
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };

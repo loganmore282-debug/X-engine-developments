@@ -3139,34 +3139,36 @@ function maybeShowAnnouncement(){
   _annPending = true;
   const go = () => {
     if (_ckLoadCount > 0 || _ckLoadHideTimer || Date.now() < _ckLoadUntil) { setTimeout(go, 120); return; }
-    _annPending = false; if (!isAnyOverlayOpen()) showAnnouncementNow();
+    const fire = () => { _annPending = false; if (!isAnyOverlayOpen()) showAnnouncementNow(); };
+    if (_artLanded) fire(); else startArtwork().then(fire);   // the banner picture is fetched behind the loading screen: wait for it so the dialog opens whole
   };
   go();
 }
 function showAnnouncementNow(){
   const s = STATE.settings || {};
-  const title = String(s.annTitle || '').trim(), body = String(s.annBody || '').trim();
-  if (!STATE.announcementImage && !title && !body) {
-    // The pictures are fetched after the loading screen comes down; if they
-    // have not landed yet, open the dialog the moment they do.
-    if (!_artLanded && !_annWaiting) { _annWaiting = true; startArtwork().then(() => { _annWaiting = false; if (!isAnyOverlayOpen()) showAnnouncementNow(); }); }
-    return;
-  }
   const bg = $('annBg'), sheet = $('annSheet');
   if (!bg || !sheet) return;
   const link = s.telegramGroup || s.whatsappGroup || '';
-  // The text is written in Admin > Settings: the lines before the first blank line become the boxed rows, the lines after it the paragraph.
-  const parts = body.split(/\n\s*\n/);
-  const rows = (parts.shift() || '').split('\n').map(x => x.trim()).filter(Boolean);
-  const para = parts.join('\n\n').trim();
+  // Nothing is written by hand: the lines come from the settings the admin already controls (withdrawal hours, minimum withdrawal, fee).
+  const money = n => cur() + ' ' + Number(n || 0).toLocaleString('en-US');
+  const hours = s.withdrawWindowEnabled && s.withdrawOpenFrom && s.withdrawOpenTo ? s.withdrawOpenFrom + '\u2013' + s.withdrawOpenTo : '24 hours';
+  const rows = [
+    'Daily income, daily withdrawal',
+    'Earnings at 00:00 AM',
+    'Withdrawal hours: ' + hours,
+    'Minimum withdrawal: ' + money(s.minWithdraw),
+    'Taxes and fees: ' + (Number(s.withdrawFeePct) || 0) + '%'
+  ];
+  const title = 'Welcome to the ' + brandName() + ' App';
+  const para = 'Official customer service will never proactively ask for your password or screenshots of your deposits; please remain vigilant.';
   sheet.className = 'ann-sheet ck-ann';
   sheet.innerHTML = `
     <button class="ck-ann-x" type="button" aria-label="Close" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <div class="ck-ann-in">
     ${STATE.announcementImage ? `<img class="ck-ann-img" src="${esc(STATE.announcementImage)}" alt="">` : ''}
-    ${title ? `<h2 class="ck-ann-h">${esc(title)}</h2>` : ''}
-    ${rows.length ? `<div class="ck-ann-t">${rows.map(r => `<div>${esc(r)}</div>`).join('')}</div>` : ''}
-    ${para ? `<p class="ck-ann-p">${esc(para)}</p>` : ''}
+    <h2 class="ck-ann-h">${esc(title)}</h2>
+    <div class="ck-ann-t">${rows.map(r => `<div>${esc(r)}</div>`).join('')}</div>
+    <p class="ck-ann-p">${esc(para)}</p>
     ${link ? `<a class="ck-ann-join" href="${esc(link)}" target="_blank" rel="noopener" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.6 3.2 2.9 10.4c-.9.35-.9 1.1-.15 1.35l4.7 1.5 1.8 5.5c.2.6.75.75 1.2.3l2.6-2.4 4.6 3.4c.85.5 1.5.25 1.7-.8l3-15.1c.3-1.2-.45-1.7-1.5-1.3ZM8.6 12.9l10.3-6.5c.5-.3.95-.15.55.2l-8.5 7.7-.35 3.7-2-5.1Z"/></svg>Join Group</a>` : ''}
     </div>`;
   bg.classList.add('show');
@@ -3272,7 +3274,7 @@ function startHomeCarousel(){
     };
     preload.onerror = () => { _homeCarouselIdx = nextIdx; };
     preload.src = slides[nextIdx];
-  }, 4500);
+  }, Math.min(60000, Math.max(2000, (Number((STATE.settings || {}).bannerSlideSeconds) || 5) * 1000)));
 }
 // An asset picture is shown whole, in its own shape (nothing cropped). A portrait picture sits in
 // the left column; a square or wide one goes across the top of the card with the figures below.

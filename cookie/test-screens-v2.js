@@ -48,8 +48,8 @@ function runStats(rows) {
   ok(!/checkinBannerFile/.test(adm), 'the removed Check-in banner upload is gone from admin');
 
   // 3. the announcement text and the About us text are admin settings that members receive
-  ok(/annTitle: '', annBody: ''/.test(src) && /aboutText: ''/.test(src), 'annTitle, annBody and aboutText are real settings');
-  ok(/id="sAnnTitle"/.test(adm) && /annTitle:\$\('sAnnTitle'\)\.value\.trim\(\)/.test(adm) && /id="sAboutText"/.test(adm), 'the admin saves them');
+  ok(/aboutText: ''/.test(src) && /bannerSlideSeconds: 5/.test(src), 'aboutText and the banner slide speed are real settings');
+  ok(!/id="sAnnTitle"/.test(adm) && /id="sAboutText"/.test(adm) && /id="saveBannerSpeed"/.test(adm) && /bannerSlideSeconds: Math\.round\(n\)/.test(adm), 'the admin saves them; the announcement text is no longer hand-written there');
   // 5. production hygiene
   ok(/const DEFAULT_PRODUCTS = \[\];/.test(src), 'no built-in placeholder assets: members only see what the admin created');
   const cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');

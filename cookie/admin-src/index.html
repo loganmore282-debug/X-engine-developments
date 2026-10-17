@@ -2841,9 +2841,16 @@ async function renderBanners(){
       <label class="btn block file-btn" style="margin-top:10px">Upload slide 2 image<input type="file" id="homeSlide2File" accept="image/*" hidden></label>
     </div>
 
+    <h2 class="sec">Home banner slide speed</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">How many seconds each Home banner stays before the next one slides in.</p>
+      <label>Seconds (2&ndash;60)</label><input id="bannerSlideSecs" type="number" min="2" max="60" step="1" value="${esc(v('bannerSlideSeconds',5))}">
+      <button class="btn block" id="saveBannerSpeed" style="margin-top:10px">Save slide speed</button>
+    </div>
+
     <h2 class="sec">Announcement banner</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">The banner at the top of the announcement pop-up (for example Chat with Us / Customer Service). Wide, about 720&times;190.</p>
+      <p class="muted" style="margin-top:0">The banner at the top of the announcement pop-up (for example Chat with Us / Customer Service). Wide, about 720&times;190. The lines under it come by themselves from Settings (withdrawal hours, minimum withdrawal, fee).</p>
       <div class="banner-row">
         ${announcementImage?`<img class="img-thumb" src="${esc(announcementImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${announcementImage?'Custom image':'<span class="muted">Not set</span>'}</div>
@@ -3087,6 +3094,13 @@ function wireBannerHandlers(){
   wireCookieImageSlot('avatar', 'avatarFile', 'avatarClear', 'Member picture saved', 'Member picture removed');
   wireCookieImageSlot('recthumb', 'recThumbFile', 'recThumbClear', 'Records picture saved', 'Records picture removed');
   wireCookieImageSlot('profilelogo', 'profileLogoFile', 'profileLogoClear', 'Profile logo saved, live for every member', 'Profile logo removed');
+  const saveBannerSpeed = $('saveBannerSpeed');
+  if (saveBannerSpeed) saveBannerSpeed.addEventListener('click', async()=>{
+    const n = +$('bannerSlideSecs').value;
+    if (!Number.isFinite(n) || n < 2 || n > 60) return toast('Seconds must be between 2 and 60','err');
+    const d = await api('/admin/settings/update', { settings: { bannerSlideSeconds: Math.round(n) } });
+    toast(d.status==='success'?'Slide speed saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
   const saveMyHero = $('saveMyHero');
   if (saveMyHero) saveMyHero.addEventListener('click', async()=>{
     if ($('myHeroOp').value.trim()==='' || $('myHeroBlur').value.trim()==='') return toast('Fill in both Opacity and Blur','err');
@@ -3213,14 +3227,6 @@ async function renderSettings(){
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
 
-    <h2 class="sec">Announcement (the pop-up when the app opens)</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">The picture is set in Banners. Write the title, then the boxed lines (one per line); leave one blank line, then the closing paragraph. The Join Group button uses the Telegram group above (or the WhatsApp group).</p>
-      <label>Title</label><input id="sAnnTitle" maxlength="120" value="${esc(v('annTitle',''))}" placeholder="Welcome to the Cookie App">
-      <label>Text</label><textarea id="sAnnBody" rows="9" maxlength="1500" placeholder="Daily income, daily withdrawal&#10;Earnings at 12:00 AM&#10;Withdrawal hours: 07:00-17:00&#10;&#10;Official customer service will never ask for your password.">${esc(v('annBody',''))}</textarea>
-      <button class="btn block" id="saveAnn" style="margin-top:10px">Save announcement</button>
-    </div>
-
     <h2 class="sec">About us (Rules page)</h2>
     <div class="panel-card">
       <label>Text</label><textarea id="sAboutText" rows="8" maxlength="6000" placeholder="What members read when they open My &rarr; About us">${esc(v('aboutText',''))}</textarea>
@@ -3302,10 +3308,6 @@ async function renderSettings(){
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(), telegramGroup:$('spTgGroup').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveAnn').addEventListener('click', async()=>{
-    const upd = { annTitle:$('sAnnTitle').value.trim(), annBody:$('sAnnBody').value.replace(/\r/g,'').trim() };
-    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveAbout').addEventListener('click', async()=>{
     const d=await api('/admin/settings/update', { settings: { aboutText:$('sAboutText').value.replace(/\r/g,'').trim() } }); toast(d.status==='success'?'About us saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
