@@ -3004,8 +3004,9 @@ async function liveRefreshVisible(){
     if (pr.status === 'success') {
       STATE.products = pr.products;
       if (!_openSheetTitle && STATE.page === 'home' && liveChanged('products', pr.products) && $('homeProducts')) {
-        const list = (STATE.products || []).filter(p => p.active !== false);
-        $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : '<div class="v-empty">No products yet.</div>';
+        // The same list as the page itself: only the products of the tab that is open (Daily income or Daily wage).
+        const list = homeTabProducts();
+        $('homeProducts').innerHTML = list.length ? list.map(vProductCardHtml).join('') : '<div class="v-empty">NO DATA</div>';
         startProductCountdowns();
       }
     } else ok = false;
@@ -3410,13 +3411,17 @@ document.addEventListener('visibilitychange', () => {
   if (STATE.incomeTab === 'wage') { STATE.incomeTab = 'income'; if (STATE.page === 'assets' && $('pageHost') && $('pageHost').querySelector('.ck-income')) paintAssets(); }
 });
 // A task product (Daily wage) is one saved as such, or any product that costs nothing.
+function homeTabProducts(){
+  const tab = STATE.homeTab === 'wage' ? 'wage' : 'income';
+  return (STATE.products || []).filter(p => p.active !== false && (ckIsWage(p) ? 'wage' : 'income') === tab);
+}
 function ckIsWage(p){ return !!p && (p.category === 'wage' || Number(p.price) === 0); }
 function setHomeTab(t){ STATE.homeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'home') paintHome(); }
 window.setHomeTab = setHomeTab;
 function paintHome(){
   const tab = STATE.homeTab === 'wage' ? 'wage' : 'income';
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
-  const products = (STATE.products || []).filter(p => p.active !== false && (ckIsWage(p) ? 'wage' : 'income') === tab);
+  const products = homeTabProducts();
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}
