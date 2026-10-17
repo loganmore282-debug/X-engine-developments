@@ -869,6 +869,8 @@ async function getProductsRaw() {
     const touchedKeys = new Set(saved.map(p => p.key));
     const merged = saved.filter(p => !p.deleted)
       .concat(DEFAULT_PRODUCTS.filter(p => !touchedKeys.has(p.key)));
+    // The category is never left to chance: a product saved as a task product is Daily wage, and so is any product that costs nothing.
+    merged.forEach(p => { p.category = (p.category === 'wage' || Number(p.price) === 0) ? 'wage' : 'income'; });
     merged.sort((a, b) => (a.order || 0) - (b.order || 0) || (a.price || 0) - (b.price || 0));
     _productsCache = merged;
   } catch (_) { _productsCache = _productsCache || DEFAULT_PRODUCTS.slice(); }

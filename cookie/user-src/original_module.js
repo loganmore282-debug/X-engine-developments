@@ -3358,7 +3358,7 @@ function vProductCardHtml(p){
   return `
   <article class="v-card">
     <div class="v-card-b">
-      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${(limit > 0 || p.category === 'wage') ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
+      <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${(limit > 0 || ckIsWage(p)) ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
       <dl class="v-rows${[ckMoney(p.price), ckMoney(daily), ckMoney(expected)].some(v => v.length > 11) ? ' tight' : ''}">
         ${ckRow('Price', ckMoney(p.price))}
         ${ckRow('Daily profit', ckMoney(daily))}
@@ -3409,12 +3409,14 @@ document.addEventListener('visibilitychange', () => {
   if (STATE.homeTab === 'wage') { STATE.homeTab = 'income'; if (STATE.page === 'home' && $('pageHost') && $('pageHost').querySelector('.v-home')) paintHome(); }
   if (STATE.incomeTab === 'wage') { STATE.incomeTab = 'income'; if (STATE.page === 'assets' && $('pageHost') && $('pageHost').querySelector('.ck-income')) paintAssets(); }
 });
+// A task product (Daily wage) is one saved as such, or any product that costs nothing.
+function ckIsWage(p){ return !!p && (p.category === 'wage' || Number(p.price) === 0); }
 function setHomeTab(t){ STATE.homeTab = t === 'wage' ? 'wage' : 'income'; if (STATE.page === 'home') paintHome(); }
 window.setHomeTab = setHomeTab;
 function paintHome(){
   const tab = STATE.homeTab === 'wage' ? 'wage' : 'income';
   // A product the admin switched off (Active unticked) is not offered on Home; owners still see it on Income.
-  const products = (STATE.products || []).filter(p => p.active !== false && (p.category === 'wage' ? 'wage' : 'income') === tab);
+  const products = (STATE.products || []).filter(p => p.active !== false && (ckIsWage(p) ? 'wage' : 'income') === tab);
   const html = `
 <div class="v-page v-home">
   ${vBannerHtml()}
@@ -3595,7 +3597,7 @@ function paintAssets(){
   const tab = STATE.incomeTab === 'wage' ? 'wage' : 'income';
   // Running products first, newest first inside each group; the id is the last tie-break so the order never shuffles between refreshes.
   const owned = (STATE.investments || []).filter(i => (i.status === 'active' || i.status === 'matured')
-    && (((STATE.products || []).find(x => x.key === i.tierKey) || {}).category === 'wage' ? 'wage' : 'income') === tab).sort((x, y) =>
+    && (ckIsWage((STATE.products || []).find(x => x.key === i.tierKey)) ? 'wage' : 'income') === tab).sort((x, y) =>
     (x.status === 'active' ? 0 : 1) - (y.status === 'active' ? 0 : 1)
     || (new Date(y.createdAt || 0).getTime() || 0) - (new Date(x.createdAt || 0).getTime() || 0)
     || String(x.id || '').localeCompare(String(y.id || '')));

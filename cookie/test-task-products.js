@@ -20,10 +20,12 @@ ok(/if \(!isTask\) await uRef\.update\(\{ totalInvested/.test(src), 'a free task
 // the admin panel and the app
 const adm = fs.readFileSync(__dirname + '/admin-src/index.html', 'utf8'), cli = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
 ok(/id="newTask"/.test(adm) && /category: task\?'wage':'income'/.test(adm), 'the admin has a separate Task products section');
-ok(/p\.category === 'wage'\) \? `<em class="v-badge">Times/.test(cli), 'task products always show Times 0/0');
+ok(/ckIsWage\(p\)\) \? `<em class="v-badge">Times/.test(cli), 'task products always show Times 0/0');
 ok(/result\.code === 'SOLD_OUT'\) closeConfirm\(\)/.test(cli) && /ckLoadBegin\(\);\n    try \{ result = await api\('\/invest\/create'/.test(cli), 'the purchase waits behind the loading box and a sold-out answer closes the dialog');
 ok(/activated\$\/i\.test\(String\(t\.description/.test(cli) && /return 'Free \( '/.test(cli), 'an activated task product reads "Free ( Gold )" in Balance Details');
 ok(/amt === 0 && t\.type === 'investment'\)\) \? '-'/.test(cli), 'with "- 0.00", as in the screenshot');
 ok(/if \(name === 'home' && prevPage !== 'home'\) STATE\.homeTab = 'income'/.test(cli) && /STATE\.homeTab === 'wage'\) \{ STATE\.homeTab = 'income'/.test(cli), 'Home always opens on Daily income, also after leaving the app and coming back');
-ok(/data-move/.test(adm) && /Move to Daily wage/.test(adm) && /Move to Daily income/.test(adm), 'a product can be moved to the other category from the admin list');
+ok(!/data-move/.test(adm), 'no manual moving: the category decides itself');
+ok(/p\.category = \(p\.category === 'wage' \|\| Number\(p\.price\) === 0\) \? 'wage' : 'income'/.test(src), 'the server always decides the category: a task product, or anything free, is Daily wage');
+ok(/function ckIsWage\(p\)/.test(cli) && !/p\.category === 'wage' \? 'wage'/.test(cli), 'the app uses that same rule for Daily income / Daily wage');
 console.log(`PASS: task products (${n} checks)`);
