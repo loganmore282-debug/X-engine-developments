@@ -3277,9 +3277,8 @@ function vNoPicture(img, initial){
 window.vFitCard = vFitCard; window.vNoPicture = vNoPicture;
 function vOwnedCount(key){ return (STATE.investments || []).filter(i => i.tierKey === key).length; }
 function homeSignature(){ return JSON.stringify(STATE.products || []) + '|' + (STATE.investments || []).map(i => i.tierKey).join(','); }
-// One figure row of a product card: always one line, label then value. A long pair (7-digit amounts) is set a little smaller so it still fits.
+// One figure row of a product card: always one line, label then value, the same size and weight for every row and every amount.
 function ckRow(label, value){ return `<div><dt>${label}</dt><dd>${esc(value)}</dd></div>`; }
-function ckRowsTight(pairs){ return pairs.some(([l, v]) => l.length + String(v).length > 21) ? ' tight' : ''; }
 function vProductCardHtml(p){
   const { cycle, daily, expected } = planFigures(p);
   const img = p.image
@@ -3290,7 +3289,7 @@ function vProductCardHtml(p){
   <article class="v-card">
     <div class="v-card-b">
       <div class="v-card-img${p.image ? ' has-img' : ''}">${img}${limit > 0 ? `<em class="v-badge">Times ${vOwnedCount(p.key)}/${limit}</em>` : ''}<span class="v-pname">${esc(p.name || '')}</span></div>
-      <dl class="v-rows${ckRowsTight([['Price', ckMoney(p.price)], ['Daily profit', ckMoney(daily)], ['Days', String(cycle)], ['Total profit', ckMoney(expected)]])}">
+      <dl class="v-rows">
         ${ckRow('Price', ckMoney(p.price))}
         ${ckRow('Daily profit', ckMoney(daily))}
         ${ckRow('Days', String(cycle))}
@@ -3479,7 +3478,7 @@ function vOwnedCardHtml(inv){
   return `
   <article class="ck-oc">
     <div class="ck-oc-b">
-      <dl class="ck-oc-rows${ckRowsTight([['Price', ckMoney(st.amount)], ['Daily profit', ckMoney(st.daily)], ['Days', String(st.total)], ['Total profit', ckMoney(st.expected)]])}">
+      <dl class="ck-oc-rows">
         ${ckRow('Price', ckMoney(st.amount))}
         ${ckRow('Daily profit', ckMoney(st.daily))}
         ${ckRow('Days', String(st.total))}
