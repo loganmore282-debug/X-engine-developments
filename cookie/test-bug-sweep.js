@@ -24,7 +24,7 @@ ok(/provider_reference/.test(server), 'the MarzPay payout webhook also matches o
 ok(/_retIsTruth/.test(admin) && /multiplier:_retIsTruth\?'':\$\('pMult'\)\.value/.test(admin), 'a typed total payout is saved as typed (not rounded through the 2-decimal multiplier)');
 ok(/m\.field==='walletBalance'&&m\.diff<0/.test(admin), 'Repair wallet is offered where the server will repair (stored below real)');
 ok(/function loadFailed\(/.test(admin) && (admin.match(/loadFailed\(/g) || []).length >= 6, 'a failed fetch is never drawn as an empty list');
-ok(/codes\.join\('\\n'\)/.test(admin) && !/codes\.join\('\\\\n'\)/.test(admin), 'Copy all puts one gift code per line');
+ok(!/renderPromoCodes|data-tab="promocodes"/.test(admin), 'the admin panel has no gift code screen any more');
 ok(/cannot be blank/.test(admin), 'a blank number in Settings is refused instead of saved as 0');
 ok(/phoneCore\(w\.accountPhone/.test(admin), 'withdrawal search also matches the login phone');
 ok(/x\.classList\.toggle\('active',x\.dataset\.df===_depFilter\)/.test(admin) && /x\.classList\.toggle\('active',x\.dataset\.wf===_witFilter\)/.test(admin), 'Deposits / Withdrawals subtab highlight follows the click');

@@ -1850,7 +1850,7 @@ input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus
 </style>
 <style id="cookie-skin">
 /* ═══ COOKIE SKIN (built from the owner's screenshots; later blocks win over the inherited rules above) ═══ */
-:root{--ck-blue:#0759e3;--ck-blue-2:#0a5ae6;--ck-blue-lt:#5a91ec;--ck-grad:linear-gradient(135deg,#0a56e3 0%,#2f72ea 55%,#5b91ee 100%);
+:root{--ck-blue:#095ae7;--ck-blue-2:#0a5ae6;--ck-blue-lt:#5a91ec;--ck-grad:linear-gradient(135deg,#0a56e3 0%,#2f72ea 55%,#5b91ee 100%);
   --ck-bg1:#f3f3fd;--ck-bg2:#ececec;--ck-auth:#accfe5;--ck-card:#f0f7fd;--ck-ink:#14161c;--ck-line:#0759e3;
   --ck-serif:'Noto Serif','Droid Serif',Georgia,'DejaVu Serif','Times New Roman',serif;}
 /* ── Loading screen: round picture, thin progress bar, percent ── */
@@ -2037,15 +2037,15 @@ body{background-attachment:fixed;}
 .sheet-bg.ck-rules-page{background:linear-gradient(180deg,#f2f2fe 0%,#ececec 100%);}
 .sheet-bg.ck-pi-page{background:#fff;}
 .sheet-bg.ck-bind-page{background:linear-gradient(180deg,#f2f2fe 0%,#ececec 100%);}
-.ck-pi-art{display:flex;align-items:flex-start;justify-content:center;padding-top:11px;box-sizing:border-box;height:304px;background:var(--ck-blue);}
-.ck-pi-art svg{width:250px;height:auto;}
+.ck-pi-art{display:block;overflow:hidden;box-sizing:border-box;height:304px;background:#095ae7;}
+.ck-pi-art svg{display:block;width:100%;height:auto;margin-top:-8px;}
 .ck-pi-card{margin:10px 10px 0;padding:0 8px;border-radius:18px;background:#fff;box-shadow:0 12px 30px -18px rgba(20,40,110,.4);}
 .ck-pi-row{display:flex;align-items:center;gap:12px;width:100%;height:53px;padding:0 6px;border:0;background:none;font:inherit;text-align:left;color:#14161c;cursor:pointer;}
 .ck-pi-row+.ck-pi-row{border-top:1px solid #eceef3;}
 .ck-pi-row b{flex:1;font-size:17px;font-weight:400;}
 .ck-pi-row svg{width:18px;height:18px;color:#9aa0ad;}
 .ck-pi-ic{flex:0 0 28px;width:28px;height:26px;display:flex;align-items:center;justify-content:center;}
-.ck-pi-ic svg{width:100%;height:100%;color:inherit;}
+.ck-pi-ic svg{width:auto;height:auto;max-height:100%;color:inherit;}
 .ck-rule{display:block;width:calc(100% - 30px);margin:15px;padding:0;border:0;border-radius:14px;overflow:hidden;background:var(--ck-blue);box-shadow:0 12px 26px -16px rgba(7,60,180,.6);cursor:pointer;text-align:left;}
 .ck-rule-img{display:block;height:148px;background:linear-gradient(135deg,#0a56e3,#5b91ee) center/cover no-repeat;}
 .ck-rule-lbl{display:block;padding:0 14px;height:34px;line-height:34px;color:#fff;font-size:13px;letter-spacing:.04em;}
@@ -2057,7 +2057,7 @@ body{background-attachment:fixed;}
 .ck-chip{position:absolute;top:24px;right:24px;width:42px;height:34px;border-radius:9px;background:#f4c20a;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,1fr);gap:2px;padding:3px;box-shadow:inset 0 0 0 1.5px #5a4300;}
 .ck-chip i{background:#ffd23d;border-radius:3px;box-shadow:inset 0 0 0 1px #6b5000;}
 .ck-bcard-n{padding-bottom:22px;font-size:17px;color:#fff;letter-spacing:.01em;text-shadow:0 1px 2px rgba(0,0,0,.6);}
-.ck-lab{display:block;margin:15px 0 8px;font-size:16px;font-weight:700;color:#555a66;}
+.ck-lab{display:block;margin:15px 0 8px;font-size:16px;font-weight:700;color:#5a5b60;}
 .ck-in{display:block;height:43px;border:1.5px solid #cfe0fb;border-radius:13px;background:#fff;box-shadow:0 0 6px rgba(80,130,240,.14);}
 .ck-in input{width:100%;height:40px;padding:0 14px;border:0;outline:0;background:transparent;font:inherit;font-size:16px;color:#14161c;}
 .ck-in input::placeholder{color:#8d9098;}
@@ -2198,11 +2198,14 @@ body{background-attachment:fixed;}
 /* ── Change Password ── */
 .sheet-bg.ck-pw-page{background:linear-gradient(180deg,#f2f2fe 0%,#ececec 100%);}
 .ck-pw-page #sheetBody{padding:0;max-width:none;}
-.ck-pw .ck-pi-art{height:298px;}
+.ck-pw .ck-pi-art{height:282px;}
 .ck-pw-card{margin:14px 15px 96px;padding:16px 15px 24px;border-radius:12px;background:#fff;}
 .ck-pw-card .ck-lab:first-child{margin-top:0;}
 /* ── Wallet card ── */
 #walCardBox{padding:0;}
+.ck-in{border:1.2px solid #c3d3ef;box-shadow:inset 0 3px 6px -3px rgba(90,135,235,.55),0 0 5px rgba(80,130,240,.1);}
+.ck-in input{padding:0 11px;}
+.ck-in input::placeholder{color:#7d7d7d;font-weight:500;}
 #walFormGroup .ck-lab:first-child{margin-top:10px;}
 #walHolder{color:#0b57d0;font-weight:700;text-transform:uppercase;}
 .ck-bind .prov-input.ck-in{height:46px;border:2px solid #1259c8;border-radius:5px;box-shadow:none;}
