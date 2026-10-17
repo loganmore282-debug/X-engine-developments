@@ -6107,8 +6107,12 @@ window.openInvestConfirm = function(tierKey, btn){
 // keeps the document's scroll lock active, which traps the member on screen.
 window.closeConfirm = function(){
   $('confirmBg').classList.remove('show'); dlgClosed();
-  $('confirmSheet').innerHTML = '';
-  $('confirmSheet').classList.remove('ck-prompt');
+  // The card sinks away smoothly; its contents are cleared only once it is gone (and only if no new dialog has opened meanwhile).
+  setTimeout(() => {
+    if ($('confirmBg').classList.contains('show')) return;
+    $('confirmSheet').innerHTML = '';
+    $('confirmSheet').classList.remove('ck-prompt');
+  }, 450);
   if (!isScrollLockOverlayOpen()) unlockBodyScroll();
 };
 

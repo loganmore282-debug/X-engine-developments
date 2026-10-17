@@ -2387,6 +2387,16 @@ body{background-attachment:fixed;}
 .ck-oc-rows>div{gap:4px;}
 .ck-oc-rows dt,.ck-oc-rows dd{font-size:10.2px;}
 .ck-oc-cd span,.ck-oc-cd b{font-size:10.2px;}
+
+/* ── Dialogs: pushed out from below, spreading to the middle; leaving, they sink and shrink away slowly ── */
+.confirm-bg,.ann-bg,.v-help-bg,.v-dl-bg{display:flex !important;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .45s ease,visibility 0s linear .47s;}
+.confirm-bg.show,.ann-bg.show,.v-help-bg.show,.v-dl-bg.show{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .22s ease,visibility 0s;}
+.confirm-sheet,.ann-sheet,.v-help-wrap,.v-dl-card{transform-origin:50% 100%;transform:translateY(64px) scale(.5);opacity:0;transition:transform .46s cubic-bezier(.4,0,.7,.4),opacity .42s ease-in;}
+.confirm-bg.show .confirm-sheet,.ann-bg.show .ann-sheet,.v-help-bg.show .v-help-wrap,.v-dl-bg.show .v-dl-card{transform:none;opacity:1;transition:transform .55s cubic-bezier(.18,1.2,.34,1),opacity .24s ease;}
+.notify-card{transform-origin:50% 100%;transform:translateY(34px) scale(.6);transition:transform .34s cubic-bezier(.5,0,.75,.4),opacity .26s ease;}
+.notify-bg.show .notify-card{transform:none;transition:transform .42s cubic-bezier(.18,1.2,.34,1),opacity .2s ease;}
+.notify-bg{transition:opacity .3s ease,visibility 0s linear .3s;}
+.notify-bg.show{transition:opacity .16s ease,visibility 0s;}
 </style>
 
 <script data-cookie-idle>
