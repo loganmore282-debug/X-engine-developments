@@ -149,7 +149,7 @@ const toasts = w => { const t = []; w.notify = m => t.push(String(m)); return t;
   {
     const dom = load(w => { w._FIREBASE_WATCHDOG_MS = 60; w._FIREBASE_READY_MS = 120; }), w = dom.window; await sleep(20);
     const t = toasts(w);
-    await sleep(200);
+    await sleep(520);   // the loading screen fades for 300 ms before it is taken down
     eq(shown(w, 'loadingScreen'), false, 'watchdog takes the spinner down');
     eq(shown(w, 'authScreen'), true, 'watchdog shows the login screen');
     // Timing-proof: whether the watchdog fired before or after toasts() swapped notify for a collector, the message is either recorded or on screen.

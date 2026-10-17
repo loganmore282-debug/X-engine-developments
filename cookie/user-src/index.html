@@ -2230,6 +2230,25 @@ body{background-attachment:fixed;}
 .ck-share,.ck-sub{min-height:100vh;}
 .ck-row-ic{flex:0 0 40.8px;width:40.8px;height:auto;justify-content:center;align-items:center;color:#050505;}
 .ck-row-ic svg{width:auto;height:auto;}
+/* ── Announcement close button, as in the owner's close-up ── */
+.ck-ann-x{top:-12px;right:-12px;width:35px;height:35px;border:2px solid #fff;background:linear-gradient(160deg,#f65858 0%,#dc1717 100%);box-shadow:-3px 5px 12px rgba(235,60,70,.5);}
+.ck-ann-x svg{width:24px;height:24px;color:rgba(255,255,255,.95);}
+/* ── Appearing animations: pages, full pages, dialogs, the language sheet, the tab pill, the app after the loader ── */
+@keyframes ckPageIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+@keyframes ckSheetIn{from{opacity:0;transform:translateX(26px);}to{opacity:1;transform:none;}}
+@keyframes ckFadeIn{from{opacity:0;}to{opacity:1;}}
+@keyframes ckSlideUp{from{transform:translateY(100%);}to{transform:none;}}
+@keyframes ckPop{0%{transform:scale(.55);opacity:.4;}60%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);}}
+#pageHost>.ck-in{animation:ckPageIn .34s cubic-bezier(.22,1,.36,1) both;}
+.sheet-bg.show{animation:ckSheetIn .3s cubic-bezier(.22,1,.36,1) both;}
+.pay-page.show,.msg-detail-bg.show{animation:ckFadeIn .25s ease-out both;}
+.va-pane{animation:ckPageIn .32s cubic-bezier(.22,1,.36,1) both;}
+#authScreen,#app{animation:ckFadeIn .4s ease-out both;}
+.ck-langpop{animation:ckFadeIn .2s ease-out both;}
+.ck-langcard{animation:ckSlideUp .28s cubic-bezier(.22,1,.36,1) both;}
+.navitem.active .nav-ic{animation:ckPop .32s cubic-bezier(.22,1,.36,1);}
+#loadingScreen.ld-out{opacity:0;transition:opacity .3s ease-out;}
+@media (prefers-reduced-motion:reduce){#pageHost>.ck-in,.sheet-bg.show,.pay-page.show,.msg-detail-bg.show,.va-pane,#authScreen,#app,.ck-langpop,.ck-langcard,.navitem.active .nav-ic{animation:none !important;}}
 </style>
 
 <script data-cookie-idle>

@@ -1789,7 +1789,7 @@ async function performMemberLogout(opts){
 // The loading screen stays for at least LOADER_MIN_MS from the moment the page began (owner: "let it take
 // about 3 seconds, then open the page"). Everything that used to hide it immediately goes through here; the
 // app is built underneath while it waits, and the pictures start loading straight away.
-var LOADER_MIN_MS = 2500, _ldTimer = null;
+var LOADER_MIN_MS = 2500, _ldTimer = null, _ldOutTimer = null;
 function hideLoadingScreen(){
   const ls = $('loadingScreen'); if (!ls) return;
   try { startArtwork(); } catch (_) {}
@@ -1797,14 +1797,34 @@ function hideLoadingScreen(){
   const minMs = typeof window._cookieLoaderMinMs === 'number' ? window._cookieLoaderMinMs : LOADER_MIN_MS;
   const wait = began ? Math.max(0, minMs - (Date.now() - began)) : 0;
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
-  const done = () => { try { if (typeof window._ckLoaderDone === 'function') window._ckLoaderDone(); } catch (_) {} ls.style.display = 'none'; };
+  const done = () => {
+    try { if (typeof window._ckLoaderDone === 'function') window._ckLoaderDone(); } catch (_) {}
+    // The loading screen fades away instead of vanishing.
+    ls.classList.add('ld-out');
+    if (_ldOutTimer) clearTimeout(_ldOutTimer);
+    _ldOutTimer = setTimeout(() => { _ldOutTimer = null; ls.style.display = 'none'; ls.classList.remove('ld-out'); }, 300);
+  };
   if (!wait) { done(); return; }
   _ldTimer = setTimeout(() => { _ldTimer = null; done(); }, wait);
 }
 function showLoadingScreen(){
   if (_ldTimer) { clearTimeout(_ldTimer); _ldTimer = null; }
+  if (_ldOutTimer) { clearTimeout(_ldOutTimer); _ldOutTimer = null; }
+  $('loadingScreen').classList.remove('ld-out');
   $('loadingScreen').style.display = 'flex';
 }
+// Each tab (Home, Income, Team, Share, My) fades and rises in when it is opened. Only a change of tab plays it, so the quiet
+// refreshes that repaint the same page never replay it.
+(function(){
+  const host = document.getElementById('pageHost');
+  if (!host || !window.MutationObserver) return;
+  let last = null;
+  new MutationObserver(() => {
+    if (STATE.page === last) return;
+    last = STATE.page;
+    Array.from(host.children).forEach(k => { k.classList.remove('ck-in'); void k.offsetWidth; k.classList.add('ck-in'); });
+  }).observe(host, { childList: true });
+})();
 var _artPromise = null, _artLanded = false, _annWaiting = false;
 function startArtwork(){
   if (_artPromise) return _artPromise;
@@ -3048,7 +3068,7 @@ function maybeShowAnnouncement(){
   const para = parts.join('\n\n').trim();
   sheet.className = 'ann-sheet ck-ann';
   sheet.innerHTML = `
-    <button class="ck-ann-x" type="button" aria-label="Close" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+    <button class="ck-ann-x" type="button" aria-label="Close" onclick="closeAnnouncement()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <div class="ck-ann-in">
     ${STATE.announcementImage ? `<img class="ck-ann-img" src="${esc(STATE.announcementImage)}" alt="">` : ''}
     ${title ? `<h2 class="ck-ann-h">${esc(title)}</h2>` : ''}
