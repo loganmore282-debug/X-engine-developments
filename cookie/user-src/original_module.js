@@ -1176,8 +1176,60 @@ var _memberSession = window.createCookieIdleSession('cookie_member_session', fun
   notify(window._sessionFailureMessage || 'Your session ended. Please log in again. If this repeats, check automatic date and time on your phone.');
   window._sessionFailureMessage = '';
 }, () => post('/auth/session/activity', {}));
+// ── The dark "Loading" box (spinning rings) and the "No more data" tick box ──
+// A page or full page that is opened asks for data; any read that starts in the next 0.9 s shows the box, which stays at least 0.45 s.
+var _ckLoadUntil = 0, _ckLoadCount = 0, _ckLoadShownAt = 0, _ckLoadHideTimer = null, _ckOkTimer = null;
+function ckExpectLoad(){ _ckLoadUntil = Date.now() + 900; }
+function ckBox(){
+  let b = document.getElementById('ckBox');
+  if (!b) { b = document.createElement('div'); b.id = 'ckBox'; b.className = 'ck-box'; document.body.appendChild(b); }
+  return b;
+}
+function ckLoadBegin(){
+  _ckLoadCount++;
+  if (_ckLoadCount !== 1) return;
+  if (_ckLoadHideTimer) { clearTimeout(_ckLoadHideTimer); _ckLoadHideTimer = null; }
+  if (_ckOkTimer) { clearTimeout(_ckOkTimer); _ckOkTimer = null; }
+  const b = ckBox(); b.className = 'ck-box ck-box-load'; b.innerHTML = '<span class="ck-spin"></span>';
+  void b.offsetWidth; b.classList.add('show'); _ckLoadShownAt = Date.now();
+}
+function ckLoadEnd(){
+  _ckLoadCount = Math.max(0, _ckLoadCount - 1);
+  if (_ckLoadCount) return;
+  const left = Math.max(0, 450 - (Date.now() - _ckLoadShownAt));
+  _ckLoadHideTimer = setTimeout(() => {
+    _ckLoadHideTimer = null;
+    const b = document.getElementById('ckBox');
+    if (!_ckLoadCount && b && b.classList.contains('ck-box-load')) b.classList.remove('show');
+  }, left);
+}
+var _ckOkPending = null, _ckOkPoll = null;
+// The tick box waits until every read that the page asked for has finished, then shows once.
+window.ckSuccessToast = function(text){
+  _ckOkPending = text;
+  if (_ckOkPoll) return;
+  const tick = () => {
+    _ckOkPoll = null;
+    if (_ckLoadCount > 0 || Date.now() < _ckLoadUntil) { _ckOkPoll = setTimeout(tick, 120); return; }
+    const t = _ckOkPending; _ckOkPending = null; if (!t) return;
+    const b = ckBox();
+    b.className = 'ck-box ck-box-ok';
+    b.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 21.5 16.5 31 34 11" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>' + esc(t) + '</span>';
+    void b.offsetWidth; b.classList.add('show');
+    if (_ckOkTimer) clearTimeout(_ckOkTimer);
+    _ckOkTimer = setTimeout(() => { _ckOkTimer = null; b.classList.remove('show'); }, 2000);
+  };
+  _ckOkPoll = setTimeout(tick, 120);
+};
 var _apiPending = new Map();
 function api(path, opts){
+  const tracked = Date.now() < _ckLoadUntil && !(opts && (opts.body || opts.signal || (opts.method && opts.method !== 'GET')));
+  if (tracked) ckLoadBegin();
+  const pr = apiShared(path, opts);
+  if (tracked) pr.then(ckLoadEnd, ckLoadEnd);
+  return pr;
+}
+function apiShared(path, opts){
   opts = opts || {};
   // Share only concurrent reads. Payments and all other writes always run once
   // per explicit call, and reads are never cached across account changes.
@@ -2942,6 +2994,7 @@ window.navigatePage = function(name){
   return showPage(name);
 };
 window.showPage = async function(name){
+  ckExpectLoad();
   // The page being left, captured before STATE.page is overwritten below --
   // maybeAnnounceAfterHomeNav() needs to know what tab a member is arriving
   // at Home FROM (Assets/Network/Account), not just that they landed on it.
@@ -3706,6 +3759,8 @@ var TEAM_LIST_FRESH_MS = 15000;
 // for the rest of the session after one dropped connection.
 window.switchTeamLevel = async function(level){
   _activeTeamLevel = level;
+  ckExpectLoad();
+  { const lt = document.querySelector('.ck-lvtabs'); if (lt) lt.style.setProperty('--i', String(level - 1)); }
   const hd = document.querySelector('.ck-team .ck-hd h1'); if (hd) hd.textContent = 'Team LV.' + level;
 
   document.querySelectorAll('.v-level').forEach(el => el.classList.toggle('on', Number(el.dataset.level) === level));
@@ -3719,7 +3774,7 @@ window.switchTeamLevel = async function(level){
   if (_activeTeamLevel === level && STATE.page === 'network') renderTeamMembers(level);
 };
 // The "Loading . . ." word, centred, while a list is in flight.
-function teamLoadingHtml(){ return '<div class="list-loading">' + NAV_LOADER + '</div>'; }
+function teamLoadingHtml(){ return ''; }
 // The small "Loading..." word shown inside a page while its data arrives (same word and
 // font as the start-up loader, bouncing a little).
 var NAV_LOADER = '<span class="nav-loading">Loading...</span>';
@@ -3982,7 +4037,7 @@ function paintNetwork(){
     <div><span>Deposit</span><b>${esc(vMoney(t.teamDeposits))}</b></div>
     <div><span>Team size</span><b>${Number(t.totalTeam) || 0}</b></div>
   </div>
-  <div class="ck-lvtabs">${tabs}</div>
+  <div class="ck-lvtabs" style="--i:${level - 1}"><i class="ck-lvpill"></i>${tabs}</div>
   <div id="teamMembersBox"></div>
 </div>`;
   $('pageHost').innerHTML = html;
@@ -4172,7 +4227,7 @@ async function renderAccount(){
   <div class="ck-menu">
     ${ckMenuRow('mail', 'Messages', 'openMessagesSheet()')}
     ${ckMenuRow('person', 'Personal information', 'openPersonalInfo()')}
-    ${ckMenuRow('income', 'Income details', "openTransactionStatement('income')")}
+    ${ckMenuRow('income', 'Income details', "openIncomeDetails()")}
     ${ckMenuRow('deposit', 'Deposit details', "openTransactionStatement('deposit')")}
     ${ckMenuRow('withdraw', 'Withdrawal details', "openTransactionStatement('withdraw')")}
     ${ckMenuRow('about', 'About us', 'openRulesPage()')}
@@ -4607,6 +4662,35 @@ window.switchStatementCategory = function(cat){
   renderStatement();
 };
 var STATEMENT_TITLES = { income: 'Income Records', deposit: 'Deposit Records', withdraw: 'Withdrawal Records' };
+// Income details (from My): two tabs, "My Income" (what the member earned) and "Subordinate Income" (referral commission).
+var _incTab = 'mine';
+function incRowsHtml(){
+  const list = (STATE.transactions || []).filter(t => _incTab === 'sub' ? t.type === 'commission' : (statementCategoryMatch('income', t) && t.type !== 'commission'));
+  if (!list.length) return '<div class="v-empty ck-inc-empty">NO DATA</div>';
+  const thumb = STATE.recThumb ? ` style="background-image:url('${esc(STATE.recThumb)}')"` : '';
+  return list.slice(0, 40).map(t => {
+    const st = statementStatus(t);
+    return `<article class="ck-rec"><span class="ck-rec-img${STATE.recThumb ? ' has-img' : ''}"${thumb}></span><div class="ck-rec-body"><b class="ck-rec-t">${esc(statementDescription(t))}</b><b class="ck-rec-a">${esc(ckMoney(Math.abs(recordsRowAmount(t))))}</b><small class="ck-rec-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</small><small class="ck-rec-s ${st.cls}">${esc(st.text)}</small></div></article>`;
+  }).join('');
+}
+window.switchIncomeTab = function(tab){
+  _incTab = tab === 'sub' ? 'sub' : 'mine';
+  document.querySelectorAll('#incSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === _incTab));
+  const body = $('incBody'); if (body) body.innerHTML = incRowsHtml();
+};
+window.openIncomeDetails = async function(){
+  _incTab = 'mine';
+  const hadCache = Array.isArray(STATE.transactions);
+  openSheet('Income details', `<div class="ck-inc"><div class="ck-incbox">
+    <div class="ck-seg" id="incSeg"><button type="button" class="on" data-t="mine" onclick="switchIncomeTab('mine')">My Income</button><button type="button" data-t="sub" onclick="switchIncomeTab('sub')">Subordinate Income</button></div>
+    <div id="incBody"></div></div></div>`);
+  $('sheetBg').classList.add('ck-inc-page');
+  if (hadCache) switchIncomeTab('mine');
+  const r = await api('/transactions');
+  if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
+  else if (!hadCache) STATE.transactions = [];
+  if (_openSheetTitle === 'Income details') { switchIncomeTab(_incTab); ckSuccessToast('No more data'); }
+};
 window.openTransactionStatement = async function(cat){
   _statementCat = ['income','deposit','withdraw'].includes(cat) ? cat : 'income';
   _statementShown = 10;
@@ -4627,7 +4711,7 @@ window.openTransactionStatement = async function(cat){
   } else if (!hadCache) {
     STATE.transactions = [];
   }
-  if (_openSheetTitle === 'Balance Record') renderStatement();
+  if (_openSheetTitle === 'Balance Record') { renderStatement(); ckSuccessToast('No more data'); }
 };
 // Compatibility for post-withdraw flows and any stale call sites.
 window.openBalanceRecordSheet = function(tab){
@@ -5001,7 +5085,8 @@ function maybeAnnounceOnEntry(){
 }
 function openSheet(title, bodyHtml){
   dismissNotify();
-  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page', 'ck-dep-page', 'ck-wd-page', 'ck-rec-page', 'ck-pw-page');
+  ckExpectLoad();
+  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page', 'ck-dep-page', 'ck-wd-page', 'ck-rec-page', 'ck-pw-page', 'ck-inc-page');
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
