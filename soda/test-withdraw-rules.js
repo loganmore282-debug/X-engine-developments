@@ -243,6 +243,7 @@ function run(state, body) {
     const tsMillis = n => Number(n) || 0;
     const tzOffMs = () => 180 * 60000;
     const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+    ${fnSource('eatWeekday')}
     ${fnSource('statementStamp')}
     ${fnSource('newStatementId')}
     ${fnSource('paymentAmount')}
@@ -260,7 +261,7 @@ function fresh(extra = {}) {
   return {
     settings: { minWithdraw: 5000, withdrawFeePct: 15, withdrawMultiple: 5000,
                 requireInvestToWithdraw: false, maxWithdrawalsPerDay: 0,
-                withdrawWindowEnabled: false, ...(extra.settings || {}) },
+                withdrawWindowEnabled: false, weekendWithdrawBlock: false, ...(extra.settings || {}) },
     user: { walletBalance: 100000, totalInvested: 50000, status: 'active' },
     banks: [{ id: 'b1', userId: 'u1', network: 'MTN Mobile Money', phone: '0770000001', holder: 'A B' }],
     wits: extra.wits || [], tx: [], seq: 0, now: Date.now(),
@@ -275,6 +276,15 @@ const REQ = { amount: 10000, network: 'MTN Mobile Money', phone: '0770000001', p
   ck(st.wits.length === 1, `and recorded (${st.wits.length})`);
   ck(st.user.walletBalance === 90000, `wallet debited once (${st.user.walletBalance})`);
 
+  // Weekend rule: judged on the real clock, so the expectation follows today's weekday (Saturday or Sunday in Uganda = closed).
+  const weekendNow = [0, 6].includes(new Date(Date.now() + 3 * 3600000).getUTCDay());
+  st = fresh({ settings: { weekendWithdrawBlock: true } });
+  r = await run(st, REQ);
+  ck(weekendNow ? (r.code === 400 && r.replied.code === 'WEEKEND_CLOSED' && st.wits.length === 0 && st.user.walletBalance === 100000) : r.code === 200,
+     `weekend rule ${weekendNow ? 'refuses today (a weekend) and charges nothing' : 'lets a weekday request through'} (${r.code} ${r.replied && r.replied.code})`);
+  st = fresh({ settings: { weekendWithdrawBlock: true } }); st.user.withdrawAnytime = true;
+  r = await run(st, REQ);
+  ck(r.code === 200, `an unrestricted member is not held to the weekend rule (${r.code})`);
   st = fresh(); st.failLedger = true;
   r = await run(st, REQ);
   ck(r.code === 503 && r.replied.code === 'WITHDRAWAL_RECOVERY_PENDING', 'ledger outage returns a recovery notice');

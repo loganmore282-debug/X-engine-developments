@@ -21,7 +21,7 @@ for(const s of d.scripts){
 }
 const tick=()=>new Promise(r=>setTimeout(r,5));
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}}
-function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
+function setState(){w.eval('STATE.page="home"; STATE.account={walletBalance:50000,totalEarned:100,totalDeposited:20000,totalWithdrawn:5000}; STATE.settings={minDeposit:15000,minWithdraw:5000,withdrawFeePct:0,weekendWithdrawBlock:false}; STATE.investments=[]; STATE.bankAccounts=[{id:"wallet",network:"MTN Mobile Money",phone:"256771234567",holder:"Test Member"}];')}
 async function main(){
   await tick();setState();
   const request=w.api, originalFetch=w.fetch;

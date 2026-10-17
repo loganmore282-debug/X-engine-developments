@@ -5582,6 +5582,13 @@ function withdrawWindow(s){
   const open = from < to ? (now >= from && now < to) : (now >= from || now < to);
   return { enabled: true, open, from: witClock(s.withdrawOpenFrom), to: witClock(s.withdrawOpenTo) };
 }
+// Saturday and Sunday in the region's own clock: no withdrawal requests (the server decides; this only tells the member first).
+function weekendWithdrawShut(s){
+  if (s && s.weekendWithdrawBlock === false) return false;
+  if (STATE.account && STATE.account.withdrawAnytime) return false;
+  const wd = new Date(Date.now() + tzOffMs()).getUTCDay();
+  return wd === 0 || wd === 6;
+}
 // The one wallet card and the Bind Wallet button (one wallet per member; the
 // Wallet page edits it in place). Isolated so openWithdrawSheet()'s post-fetch
 // update can repaint only this block, never #witAmount.
@@ -5619,7 +5626,7 @@ function paintWithdrawSheet(s){
         <li>Fee: ${fee}%</li>
         <li>Withdrawal amounts should be between ${vGroup(min)}${max ? ' and ' + vGroup(max) : ' and your available balance'}${mult ? ', in multiples of ' + vGroup(mult) : ''}.</li>
         <li>${perDay ? 'You can make up to ' + perDay + ' withdrawals per day.' : 'One cash-out at a time. Wait for a pending request to finish before the next.'}</li>
-        <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}</li>
+        <li>${win.enabled ? 'Withdrawal time: ' + esc(secs(win.from)) + ' - ' + esc(secs(win.to)) + '.' : 'Withdrawals can be requested at any time of day.'}${(s.weekendWithdrawBlock !== false && !(STATE.account && STATE.account.withdrawAnytime)) ? ' Withdrawals are closed on Saturday and Sunday.' : ''}</li>
       </ol>
     </div>
   </div>`;
@@ -5683,6 +5690,7 @@ window.submitWithdraw = async function(){
   if (!acct) return notify('Please add a payout wallet before withdrawing.');
   // Same courtesy for the hours: told here so the member is not asked to
   // wait on a request the server will refuse anyway.
+  if (weekendWithdrawShut(STATE.settings || {})) return notify('Withdrawals are closed on Saturday and Sunday. Please come back on Monday.');
   const win = withdrawWindow(STATE.settings || {});
   if (win.enabled && !win.open && !(STATE.account && STATE.account.withdrawAnytime))
     return notify(`Withdraw is open from ${win.from} to ${win.to}. Please come back then.`);

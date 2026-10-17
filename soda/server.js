@@ -663,6 +663,10 @@ const DEFAULT_SETTINGS = {
   // Off by default: a fresh install must not lock withdraw behind hours
   // nobody has set yet.
   withdrawWindowEnabled: false, withdrawOpenFrom: '09:00', withdrawOpenTo: '17:00',
+  // WEEKENDS. Owner: products rest on Saturday and Sunday (no cashback is credited for those two days) and nobody can request a withdrawal on
+  // either day. Cashback is credited at local midnight for the day that just ended, so Friday's is credited at 00:00 Saturday, and the next
+  // credit is at 00:00 Tuesday (for Monday). Both are ON by default and can be switched off in Admin > Settings.
+  weekendCashbackPause: true, weekendWithdrawBlock: true,
   // What every NEW mobile-money recharge / withdrawal reference starts with (soda2610111048053568). Admin > Settings; existing references never change.
   referencePrefix: 'S',
   // AUTOMATIC WITHDRAWALS (Admin > Settings > Withdrawals). Off by default. Requests always arrive as 'pending' as usual; only while this is
@@ -1241,11 +1245,38 @@ function eatNextMidnight(ts) {
 // The k-th payment (k = 1..total) is due at the first local midnight AFTER the purchase, plus (k-1) days. A product bought
 // at 15:00 therefore pays at 00:00 the next night, then every night at 00:00, `total` payments in all; the last one
 // is the maturity payment. Uganda has no daylight saving, so the day length is a constant 86,400,000 ms.
-function payoutDueAtMs(createdMs, k) { return eatNextMidnight(createdMs) + (k - 1) * 86400000; }
+// WEEKEND REST. A midnight credits the day that has just ended, so the credit at 00:00 Sunday (for Saturday) and at 00:00 Monday (for
+// Sunday) are skipped while weekendCashbackPause is on: the product pays Tuesday to Saturday at 00:00 (for Monday to Friday) and then waits.
+// A skipped midnight is not lost money: the instalment simply falls on the next working midnight, so the cycle gets longer by the weekend.
+function weekendCashbackPaused() { const st = _settingsCache || DEFAULT_SETTINGS; return st.weekendCashbackPause !== false; }
+function midnightPays(t, paused) {
+  if (!paused) return true;
+  const wd = new Date(t + tzOffMs()).getUTCDay();   // the local weekday that STARTS at this midnight (0 = Sunday)
+  return wd !== 0 && wd !== 1;
+}
+// Local weekday now (0 = Sunday ... 6 = Saturday), in the region's own clock.
+function eatWeekday(ts) { return new Date((ts || Date.now()) + tzOffMs()).getUTCDay(); }
+function payoutDueAtMs(createdMs, k) {
+  const paused = weekendCashbackPaused();
+  let t = eatNextMidnight(createdMs), n = 0;
+  for (let i = 0; i < 5000; i++, t += 86400000) {
+    if (!midnightPays(t, paused)) continue;
+    if (++n >= k) return t;
+  }
+  return t;
+}
 function payoutsDueCount(createdMs, now, total) {
-  const first = eatNextMidnight(createdMs);
-  if (!(now >= first)) return 0;
-  return Math.min(total, Math.floor((now - first) / 86400000) + 1);
+  const paused = weekendCashbackPaused();
+  let t = eatNextMidnight(createdMs), n = 0;
+  while (t <= now && n < total) { if (midnightPays(t, paused)) n++; t += 86400000; }
+  return n;
+}
+// The instants of the first `total` payments, in one pass (analytics asks for every contract).
+function payoutInstants(createdMs, total) {
+  const paused = weekendCashbackPaused(), out = [];
+  let t = eatNextMidnight(createdMs);
+  for (let i = 0; i < 5000 && out.length < total; i++, t += 86400000) if (midnightPays(t, paused)) out.push(t);
+  return out;
 }
 function eatParts(ts) {
   const ms = tsMillis(ts) || Date.now();
@@ -4535,7 +4566,7 @@ app.post('/invest/create', async (req, res) => {
       try {
         await invRef.set({
           userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
-          status: 'active', nextPayoutAt: new Date(eatNextMidnight(Date.now())), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+          status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
           isFirstInvestment, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -5249,6 +5280,10 @@ app.post('/withdraw/request', async (req, res) => {
     const anyFlagSnap = await db.collection('users').doc(userId).get();
     const unrestricted = anyFlagSnap.exists && anyFlagSnap.data().withdrawAnytime === true;
     const anyTime = win.enabled && !win.open ? unrestricted : false;
+    // Saturday and Sunday (the region's own days): no withdrawal requests, unless the owner marked this member unrestricted.
+    if (sett.weekendWithdrawBlock !== false && !unrestricted && [0, 6].includes(eatWeekday(Date.now())))
+      return res.status(400).json({ status: 'error', code: 'WEEKEND_CLOSED',
+        message: 'Withdrawals are closed on Saturday and Sunday. Please come back on Monday.' });
     if (win.enabled && !win.open && !anyTime)
       return res.status(400).json({ status: 'error', code: 'WINDOW_CLOSED',
         message: `Withdraw is open from ${win.from} to ${win.to}. Please come back then.` });
@@ -6926,7 +6961,7 @@ const SETTINGS_CRITICAL_RANGES = {
   // Signed-in member pages only. These do NOT affect Login/Sign Up/Forgot.
   innerBgOpacity: [0, 100], innerBgBlur: [0, 40],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'blockRootDomain'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'openingCountdownEnabled', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled', 'turntableEnabled', 'requireReferralCode', 'withdrawWindowEnabled', 'weekendCashbackPause', 'weekendWithdrawBlock', 'blockRootDomain'];
 // subagent-audit-caught XSS: these free-text fields are rendered straight
 // into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
 // OK button) in user-src/original_module.js. esc() only HTML-escapes
@@ -7923,7 +7958,7 @@ app.post('/admin/user/grant-asset', async (req, res) => {
       const { date, time } = nowStr();
       const created = await invRef.createIfAbsent({
         userId, tierKey: tier.key, tierLabel: tier.name, amount: price, cycle, expectedReturn,
-        status: 'active', nextPayoutAt: new Date(eatNextMidnight(Date.now())), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+        status: 'active', nextPayoutAt: new Date(payoutDueAtMs(Date.now(), 1)), dailyPayout: Math.round(expectedReturn / cycle), payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment: false, commissionBasis: 'deposit', commissionPaidLevels: [], commissionPending: false,
         granted: true, grantedBy: (req.adminUser && req.adminUser.username) || 'owner', requestId,
         date, time, createdAt: FieldValue.serverTimestamp()
@@ -8948,24 +8983,27 @@ function bandOf(h) {
 // "created + k days" equal the k-th payment's instant, so the rest of the maths reads the same as before.
 function analyticsContractDay(inv, start, end, now) {
   const created0 = tsMillis(inv.createdAt);
-  const created = created0 ? eatNextMidnight(created0) - 86400000 : 0;
   const total = Number(inv.payoutsTotal);
   const expected = Number(inv.expectedReturn);
   const made = Number(inv.payoutsMade);
   const paid = Number(inv.paidOut);
-  if (!created || !Number.isInteger(total) || total <= 0 ||
+  if (!created0 || !Number.isInteger(total) || total <= 0 ||
       !Number.isFinite(expected) || expected < 0 || !Number.isInteger(made) ||
       made < 0 || made > total || !Number.isFinite(paid) || paid < 0) return null;
   const target = n => Math.round(expected * n / total);
-  const first = Math.max(1, Math.ceil((start - created) / 86400000));
-  const last = Math.min(total, Math.ceil((end - created) / 86400000) - 1);
+  // t[k-1] is the instant of the k-th payment (weekend midnights are skipped, see midnightPays).
+  const t = payoutInstants(created0, total);
+  let first = 1, last = 0, due = 0;
+  while (first <= total && t[first - 1] < start) first++;      // first payment at or after `start`
+  last = first - 1;
+  while (last < total && t[last] < end) last++;                // last payment before `end`
+  while (due < total && t[due] <= now) due++;                  // payments already due
   const scheduled = last >= first ? target(last) - target(first - 1) : 0;
   const unpaidFirst = Math.max(first, made + 1);
   const unpaid = inv.status === 'active' && last >= unpaidFirst
     ? Math.max(0, target(last) - Math.max(paid, target(unpaidFirst - 1))) : 0;
-  const due = Math.max(0, Math.min(total, Math.floor((now - created) / 86400000)));
   const overdue = inv.status === 'active' && due > made ? Math.max(0, target(due) - paid) : 0;
-  const maturity = created + total * 86400000;
+  const maturity = t[total - 1];
   return { scheduled, unpaid, overdue, matures: maturity >= start && maturity < end };
 }
 app.post('/admin/analytics', async (req, res) => {
@@ -9205,7 +9243,8 @@ app.post('/admin/analytics', async (req, res) => {
       }
     });
     const canDo = { count: 0, gross: 0, net: 0, runningCount: 0, runningNet: 0 };
-    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, dailyUsed: 0, belowMin: 0 };
+    const blocked = { banned: 0, noProduct: 0, hasRequest: 0, dailyUsed: 0, belowMin: 0, weekend: 0 };
+    const weekendShut = wSett.weekendWithdrawBlock !== false && [0, 6].includes(eatWeekday(nowMs));   // Saturday / Sunday: no requests
     usersSnap.forEach(d => {
       const u = d.data();
       if (!mine({ userId: d.id, regionKey: u.regionKey })) return;
@@ -9214,6 +9253,7 @@ app.post('/admin/analytics', async (req, res) => {
       if (u.registrationDone === false) return;
       if (u.status === 'banned') { blocked.banned++; return; }
       if (wNeedProduct && !(finiteMoney(u.totalInvested) > 0)) { blocked.noProduct++; return; }
+      if (weekendShut && u.withdrawAnytime !== true) { blocked.weekend++; return; }
       if (openUsers.has(d.id)) { blocked.hasRequest++; return; }
       if (wPerDay > 0 && u.withdrawAnytime !== true && (usedToday.get(d.id) || 0) >= wPerDay) { blocked.dailyUsed++; return; }
       let amt = Math.min(bal, wMax > 0 ? wMax : bal);
@@ -9226,7 +9266,7 @@ app.post('/admin/analytics', async (req, res) => {
     const withdrawToday = {
       waiting, canDo, blocked,
       rules: { min: wMin, max: wMax, multiple: wMult, feePct: wFee, perDay: wPerDay, needProduct: wNeedProduct,
-        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '' },
+        hours: wSett.withdrawWindowEnabled ? `${wSett.withdrawOpenFrom || ''} to ${wSett.withdrawOpenTo || ''}` : '', weekendShut },
     };
     const truncated = depSnap.docs.length >= 10000 || witSnap.docs.length >= 10000 || usersSnap.docs.length >= 10000 || activeInvSnap.docs.length >= 10000 || contractSnap.docs.length >= 10000 || rewardsTruncated;
 

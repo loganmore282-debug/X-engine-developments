@@ -1355,14 +1355,14 @@ async function renderAnalytics(silent){
       </div><p class="muted">Open requests can complete, fail or be cancelled; no completion date is guaranteed. Cashback due and withdrawal requests are separate figures and must not be added as a prediction of today's withdrawals. All withdrawal amounts shown are net payouts.</p>
     </div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Withdrawals to be processed today</h2>
-      <p class="muted">Follows your withdrawal rules (Settings): ${wt.rules.needProduct?'a member must have bought a product, ':''}minimum ${ugx(wt.rules.min)}${wt.rules.multiple?', multiples of '+ugx(wt.rules.multiple):''}${wt.rules.max?', at most '+ugx(wt.rules.max)+' each':''}, fee ${wt.rules.feePct||0}%, ${wt.rules.perDay?wt.rules.perDay+' withdrawal'+(wt.rules.perDay===1?'':'s')+' a day':'no daily limit'}, one unpaid request at a time${wt.rules.hours?', open '+esc(wt.rules.hours):''}. Banned members and unrestricted members are handled as the server handles them.</p>
+      <p class="muted">Follows your withdrawal rules (Settings): ${wt.rules.needProduct?'a member must have bought a product, ':''}minimum ${ugx(wt.rules.min)}${wt.rules.multiple?', multiples of '+ugx(wt.rules.multiple):''}${wt.rules.max?', at most '+ugx(wt.rules.max)+' each':''}, fee ${wt.rules.feePct||0}%, ${wt.rules.perDay?wt.rules.perDay+' withdrawal'+(wt.rules.perDay===1?'':'s')+' a day':'no daily limit'}, one unpaid request at a time${wt.rules.hours?', open '+esc(wt.rules.hours):''}${wt.rules.weekendShut?'. <b>Today is a weekend and withdrawals are closed</b>':''}. Banned members and unrestricted members are handled as the server handles them.</p>
       <div class="cards">
         <div class="stat"><div class="n">${ugx(wt.waiting.net)}</div><div class="l">Requests waiting to be paid today, net (${wt.waiting.count||0})</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.net)}</div><div class="l">Most that could still be requested today, net payout (${wt.canDo.count||0} members)</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.runningNet)}</div><div class="l">Of that, members with a running product (${wt.canDo.runningCount||0})</div></div>
         <div class="stat"><div class="n">${ugx(wt.canDo.gross)}</div><div class="l">Same members, wallet amount before the fee</div></div>
       </div>
-      <p class="muted">Not counted because a rule stops them: ${wt.blocked.noProduct||0} with no product bought, ${wt.blocked.hasRequest||0} with a request already waiting, ${wt.blocked.dailyUsed||0} who used today's number of withdrawals, ${wt.blocked.belowMin||0} below the minimum once cut to the allowed multiple, ${wt.blocked.banned||0} banned.${wt.waiting.heldCount?` ${wt.waiting.heldCount} waiting request(s) (${ugx(wt.waiting.heldNet)}) belong to banned members.`:''}</p>
+      <p class="muted">Not counted because a rule stops them: ${wt.blocked.noProduct||0} with no product bought, ${wt.blocked.hasRequest||0} with a request already waiting, ${wt.blocked.dailyUsed||0} who used today's number of withdrawals, ${wt.blocked.belowMin||0} below the minimum once cut to the allowed multiple, ${wt.blocked.banned||0} banned${wt.blocked.weekend?', '+wt.blocked.weekend+' because withdrawals are closed at the weekend':''}.${wt.waiting.heldCount?` ${wt.waiting.heldCount} waiting request(s) (${ugx(wt.waiting.heldNet)}) belong to banned members.`:''}</p>
       <p class="muted">The second figure is a ceiling, not a forecast: it assumes every member who is allowed to withdraw asks for the most they can, once, today.</p>
     </div>
     ${a.truncated?'<p class="muted" style="color:var(--gold)">Some totals may be incomplete because an analytics scan reached its record limit. Use transaction records and database reconciliation for a complete total.</p>':''}
@@ -3194,6 +3194,11 @@ async function renderSettings(){
            country". -->
       <p class="muted" style="margin:6px 0 0">Uganda time. Members can withdraw only between these two times, for example 6:00 AM to 4:00 PM. One withdrawal at a time per member, always.</p>
       <p class="muted" id="witNow" style="margin:6px 0 0;font-weight:600"></p>
+      <!-- Weekends: products rest on Saturday and Sunday (no cashback credited for those two days) and members cannot request a withdrawal on either day. -->
+      <div class="switch-row" style="margin-top:14px"><span><b>Rest products at the weekend</b> <span class="muted">(no cashback for Saturday or Sunday; it pays again from Monday's earnings, credited at 00:00 Tuesday)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sWeekendCash" ${s.weekendCashbackPause!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>No withdrawals on Saturday and Sunday</b> <span class="muted">(members marked unrestricted are not held to this)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sWeekendWit" ${s.weekendWithdrawBlock!==false?'checked':''} style="width:auto"></label></div>
       <!-- Automatic withdrawals: requests still arrive as Pending; only while this is ON does the VPS send each one after its own random wait. -->
       <div class="switch-row" style="margin-top:14px"><span><b>Automatic withdrawals</b> <span class="muted">(the VPS sends them; requests still arrive as Pending)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAutoWit" ${s.autoApproveWithdrawalsEnabled===true?'checked':''} style="width:auto"></label></div>
@@ -3310,6 +3315,7 @@ async function renderSettings(){
       referencePrefix:$('sRefPrefix').value.trim(),
       requireInvestToWithdraw:$('sReqInvest').checked, requireReferralCode:$('sReqReferral').checked,
       withdrawWindowEnabled:$('sWitWindow').checked,
+      weekendCashbackPause:$('sWeekendCash').checked, weekendWithdrawBlock:$('sWeekendWit').checked,
       withdrawOpenFrom:$('sWitFrom').value, withdrawOpenTo:$('sWitTo').value,
       // Sent as raw text; the server splits, validates and de-duplicates it,
       // and rejects the whole save naming the bad line rather than silently

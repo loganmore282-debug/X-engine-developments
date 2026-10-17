@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const acorn = require('acorn');
 const src = fs.readFileSync(__dirname + '/server.js', 'utf8');
 const ast = acorn.parse(src, { ecmaVersion: 'latest' });
-const names = ['tsMillis', 'eatDayKey', 'eatNextMidnight', 'eatParts', 'bandOf', 'finiteMoney', 'analyticsContractDay'];
+const names = ['tsMillis', 'eatDayKey', 'eatNextMidnight', 'weekendCashbackPaused', 'midnightPays', 'eatWeekday', 'payoutInstants', 'eatParts', 'bandOf', 'finiteMoney', 'round2', 'analyticsContractDay'];
 const helpers = names.map(name => {
   const n = ast.body.find(n => n.type === 'FunctionDeclaration' && n.id.name === name);
   assert.ok(n, name); return src.slice(n.start, n.end);
@@ -31,7 +31,9 @@ const db = { collection(name) {
 let handler;
 new Function('app', 'db', 'Date', 'console', `
 const tzOffMs = () => 180 * 60000;
+let _settingsCache = { weekendCashbackPause: false }; const DEFAULT_SETTINGS = {};
 const DEFAULT_REGION_KEY = 'ug';
+const getSettings = async () => ({ weekendWithdrawBlock: false });
 const verifyAdmin = req => req.authorized !== false;
 const adminRegionFilter = () => null;
 const rowRegionKey = () => 'ug';
@@ -96,7 +98,7 @@ async function read(body = {}, authorized = true) {
   await read({}, false);
   now = Date.parse('2026-10-04T21:00:00Z');
   assert.equal((await read()).selectedDay.day, '2026-10-05');
-  const contractDay = new Function(`const tzOffMs = () => 10800000; ${helpers}; return analyticsContractDay;`)();
+  const contractDay = new Function(`const tzOffMs = () => 10800000; let _settingsCache = { weekendCashbackPause: false }; const DEFAULT_SETTINGS = {}; ${helpers}; return analyticsContractDay;`)();
   const start = Date.parse('2026-10-03T21:00:00Z');
   const end = start + 86400000;
   const base = { status: 'active', userId: '0', tierKey: 'p1', createdAt: at('2026-10-02T21:00:00Z'), payoutsTotal: 3, payoutsMade: 0, expectedReturn: 100, paidOut: 0 };
