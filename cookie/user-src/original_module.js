@@ -2028,7 +2028,7 @@ function applyBootArtwork(ai, ci){
     if ($('app') && $('app').style.display !== 'none') {
       if (STATE.page === 'home') paintHome();
       else if (STATE.page === 'share') paintShare();
-      else if (STATE.page === 'account') renderAccount();
+      else if (STATE.page === 'account') paintAccount();
       else if (STATE.page === 'network') paintNetwork();
     }
   } catch (_) {}
@@ -4307,6 +4307,14 @@ function ckMenuRow(icon, label, action, badge){
   return `<button class="ck-row" type="button" onclick="${action}"><span class="ck-row-ic">${CK_MENU_ICONS[icon]}</span><span class="ck-row-t">${esc(label)}</span>${badge ? `<em class="ck-row-badge">${badge}</em>` : ''}<span class="ck-row-go">${CK_MENU_ICONS.chev}</span></button>`;
 }
 async function renderAccount(){
+  // The loading box shows while the member's own figures are read from the database; the page then appears once.
+  $('pageHost').innerHTML = '<div class="ck-sub ck-my ck-shell"></div>';
+  const r = await api('/account');
+  if (r.status === 'success' && r.account) STATE.account = r.account;
+  if (STATE.page !== 'account') return;
+  paintAccount();
+}
+function paintAccount(){
   const a = STATE.account || {};
   const avatar = STATE.profileLogo
     ? `<img src="${esc(STATE.profileLogo)}" alt="" onerror="this.style.display='none'">`
@@ -5061,7 +5069,7 @@ async function refreshAfterWin(){
     if (acc.status === 'success') STATE.account = acc.account;
     await refreshTransactionsCache();
     if (STATE.page === 'home') renderHome();
-    if (STATE.page === 'account') renderAccount();
+    if (STATE.page === 'account') paintAccount();
   } catch (_) { /* STATE.account is already correct from the redeem response */ }
 }
 
@@ -6126,7 +6134,7 @@ async function refreshAfterWithdraw(){
     if (acc.status === 'success') STATE.account = acc.account;
     await refreshTransactionsCache();
     if (STATE.page === 'home') renderHome();
-    if (STATE.page === 'account') renderAccount();
+    if (STATE.page === 'account') paintAccount();
   } catch (_) { /* the figure on screen is already the post-debit one */ }
 }
 
