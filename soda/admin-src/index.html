@@ -3280,10 +3280,13 @@ async function renderSettings(){
     const m=x=>{const r=/^(\d{1,2}):(\d{2})/.exec(x||'');return r?(+r[1])*60+(+r[2]):null;};
     const d=new Date(Date.now()+3*3600000), now=d.getUTCHours()*60+d.getUTCMinutes(), a=m(f), b=m(t);
     const clock=String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
-    if(!on){ el.textContent='Switch is off: members can withdraw at any hour.'; return; }
+    const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()];
+    const weekendShut=!!($('sWeekendWit')&&$('sWeekendWit').checked)&&(d.getUTCDay()===0||d.getUTCDay()===6);
+    if(weekendShut){ el.textContent='Right now it is '+dayName+' '+clock+' Uganda time: withdrawing is CLOSED (weekend).'; return; }
+    if(!on){ el.textContent='Right now it is '+dayName+' '+clock+' Uganda time. The hours switch is off: members can withdraw at any hour (Monday to Friday'+($('sWeekendWit')&&$('sWeekendWit').checked?'':', and weekends too')+').'; return; }
     if(a==null||b==null||a===b){ el.textContent='Pick two different times.'; return; }
     const open=a<b?(now>=a&&now<b):(now>=a||now<b);
-    el.textContent='Right now it is '+clock+' Uganda time: withdrawing is '+(open?'OPEN.':'CLOSED.');
+    el.textContent='Right now it is '+dayName+' '+clock+' Uganda time: withdrawing is '+(open?'OPEN.':'CLOSED.');
   }
   const refreshAutoNote=()=>{
     const on=$('sAutoWit').checked, lo=$('sAutoMin').value.trim(), hi=$('sAutoMax').value.trim(), cap=+$('sAutoCap').value||0, n=$('autoWitNote');
@@ -3294,7 +3297,7 @@ async function renderSettings(){
   };
   ['sAutoWit','sAutoMin','sAutoMax','sAutoCap'].forEach(id=>{ $(id).addEventListener('input',refreshAutoNote); $(id).addEventListener('change',refreshAutoNote); });
   refreshAutoNote();
-  ['sWitWindow','sWitFrom','sWitTo'].forEach(id=>{ const e=$(id); if(e){ e.addEventListener('change',refreshWitNow); e.addEventListener('input',refreshWitNow); } });
+  ['sWitWindow','sWitFrom','sWitTo','sWeekendWit'].forEach(id=>{ const e=$(id); if(e){ e.addEventListener('change',refreshWitNow); e.addEventListener('input',refreshWitNow); } });
   refreshWitNow();
   { const px=$('sRefPrefix'), pv=$('sRefPrefixPreview');
     const showRef=()=>{ const t=px.value.trim(); const ok=/^[A-Za-z][A-Za-z0-9]{0,11}$/.test(t); pv.textContent = ok ? 'New payments will look like: '+t+'2610111048053568' : 'Use 1 to 12 letters or digits, starting with a letter (for example soda)'; pv.style.color = ok ? '' : '#c0392b'; };
@@ -3553,7 +3556,6 @@ const ADMIN_LANG_ROWS = [
   ['Integrity audit', 'Okukebera obutuufu', 'Ukaguzi wa usahihi', 'Audit d\'intégrité', 'Igenzura ry\'ukuri', 'Okucondooza obwesigwa'],
   ['Recalculate totals', 'Ddamu obale omugatte', 'Hesabu upya jumla', 'Recalculer les totaux', 'Kongera kubara ibiteranyo', 'Garuka obare omugatte'],
   ['Shorten account ids', 'Kendeeza namba z\'akawunti', 'Fupisha vitambulisho vya akaunti', 'Raccourcir les identifiants', 'Kugabanya indangamuntu za konti', 'Kyeeneza namba za akaunti'],
-  ['Reset password', 'Kyusa ekisumuluzo', 'Weka upya nenosiri', 'Réinitialiser le mot de passe', 'Guhindura ijambobanga', 'Hindura ekisumuruzo'],
   ['Correct phone number', 'Tereeza namba y\'essimu', 'Rekebisha namba ya simu', 'Corriger le numéro de téléphone', 'Gukosora nomero ya telefone', 'Gyerurura namba ya esimu'],
   ['Save phone', 'Tereka essimu', 'Hifadhi simu', 'Enregistrer le téléphone', 'Bika telefone', 'Biika esimu'],
   ['Looks malformed', 'Kirabika tekituufu', 'Inaonekana si sahihi', 'Semble mal formé', 'Bisa nk\'aho ari bibi', 'Nikireebeka kitahikire'],
