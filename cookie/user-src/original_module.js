@@ -4755,10 +4755,12 @@ function balRowsHtml(){
     return `<article class="ck-rc"><span class="ck-rc-img${STATE.recThumb ? ' has-img' : ''}"${thumb}></span><div class="ck-rc-in"><b class="ck-rc-t">${_balTab === 'deposit' ? 'Deposit' : 'Withdraw'}</b><b class="ck-rc-a">${esc(ckMoney(Math.abs(recordsRowAmount(t))))}</b><span class="ck-rc-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</span><b class="ck-rc-s ${st.cls}">${st.text}</b></div></article>`;
   }).join('');
 }
-function balPaint(){
+function balPaint(animate){
   const list = $('balList'); if (!list) return;
   const html = balRowsHtml();
   list.innerHTML = html || '<div class="v-empty ck-nodata-bd">NO DATA</div>';
+  // The records rise into place one after another when they arrive (not on the quiet refreshes).
+  if (animate) Array.from(list.children).forEach((k, i) => { k.style.animationDelay = Math.min(i, 9) * 70 + 'ms'; void k.offsetWidth; k.classList.add('ck-rise'); });
 }
 function balNoMore(){
   const sb = $('sheetBg'); if (!sb || _openSheetTitle !== 'Balance Record' || Date.now() - _balToastAt < 2600) return;
@@ -4774,7 +4776,7 @@ async function balLoad(){
   if (seq !== _balSeq || _openSheetTitle !== 'Balance Record') return;
   if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
   else if (!Array.isArray(STATE.transactions)) STATE.transactions = [];
-  balPaint();
+  balPaint(true);
   setTimeout(balNoMore, 450);
 }
 function balShell(){
