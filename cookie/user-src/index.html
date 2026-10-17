@@ -2108,7 +2108,8 @@ body{background-attachment:fixed;}
 .ck-pays{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:15px;padding:15px;}
 .ck-pays button{position:relative;display:flex;align-items:center;justify-content:center;height:45px;padding:0 8px;border:0;border-radius:23px;background:#eef5fd;color:#1253c2;font:700 15px Roboto,'Segoe UI',system-ui,sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;}
 .ck-pays button.on{background:var(--ck-grad);color:#fff;}
-.ck-pays .ck-hot{position:absolute;left:7px;top:9px;width:27px;height:27px;}
+.ck-pays .ck-hot{position:absolute;left:19.0px;top:50%;width:23.1px;height:22.7px;margin-top:-11.4px;}
+.ck-pays button.on{padding-left:34px;}
 .ck-pay{display:block;width:100%;height:49px;margin-top:15px;border:0;border-radius:25px;background:var(--ck-grad);color:#fff;font:500 18px/49px Roboto,'Segoe UI',system-ui,sans-serif;letter-spacing:.06em;box-shadow:0 9px 16px -8px rgba(7,89,227,.55);cursor:pointer;}
 .ck-pay:disabled{opacity:.7;}
 .ck-notes{margin-top:55px;}
@@ -2212,6 +2213,20 @@ body{background-attachment:fixed;}
 .ck-bcard-w{font-size:17px;line-height:23px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);}
 .ck-bcard-w:empty{display:none;}
 .ck-bcard-n{margin-top:48px;padding-bottom:0;line-height:23px;}
+
+/* ── Bottom bar and menu icons: sizes measured from the owner's close-ups (1 screenshot pixel = 0.361 px) ── */
+.bottom-nav,body.sheet-open .bottom-nav{background:rgba(255,255,255,.78);}
+.navitem{padding:9px 0 0;gap:2px;color:#878787;}
+.navitem .nav-ic{width:48.7px;height:28.9px;border-radius:15px;color:#8a8a8a;}
+.navitem .nav-ic svg{width:auto;height:auto;flex:0 0 auto;}
+.navitem.active .nav-ic{background:linear-gradient(100deg,#1a64e6 0%,#2d74ea 50%,#5b90ee 100%);color:#fff;box-shadow:0 6px 10px -4px rgba(7,89,227,.5);}
+.navitem .lbl{font-size:12.7px;line-height:15px;letter-spacing:0;color:#878787;}
+.navitem.active .lbl{color:#0c5ae2;}
+.navitem::before{height:3px;border-radius:3px 3px 0 0;background:#0c5ae2;}
+.ck-row{padding:0 14px 0 0;gap:0;}
+.ck-share,.ck-sub{min-height:100vh;}
+.ck-row-ic{flex:0 0 40.8px;width:40.8px;height:auto;justify-content:center;align-items:center;color:#050505;}
+.ck-row-ic svg{width:auto;height:auto;}
 </style>
 
 <script data-cookie-idle>
