@@ -2455,7 +2455,7 @@ async function enterApp(){
   $('app').style.display = '';
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
-  if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
+  window._pendingLoginSuccess = false;   // signing in says nothing: the Home page simply opens
   refreshAppDataInBackground(uid);
 }
 // Shared by both bootFromNetwork() branches below -- retries /register,
@@ -2609,7 +2609,7 @@ async function bootFromNetwork(uid){
   showPage(STATE.page || 'home');
   maybeAnnounceOnEntry();
   if (signupFlow) { window._pendingLoginSuccess = false; notify(t('Registration successful ✓')); }
-  else if (window._pendingLoginSuccess) { window._pendingLoginSuccess = false; notify(t('Login successful ✓')); }
+  else window._pendingLoginSuccess = false;
   // The invite-address pool, fetched behind the app rather than in front of
   // it, so even the FIRST open of the Referral screen has an address ready
   // and costs no round trip. Tiny (a few hostnames), un-awaited, and a
@@ -4755,13 +4755,12 @@ function renderStatement(){ balPaint(); }
 // Real inbox, backed by /messages (admin-authored broadcasts) with per-
 // member read state. Snow has no equivalent -- see CLAUDE.md.
 window.openMessagesSheet = async function(){
-  const hadCache = Array.isArray(STATE.messages);
+  // Opens as the header alone with the loading box, then the list (or NO DATA) appears once.
+  ckExpectLoad();
   openSheet('Messages', '<div id="msgBody"></div>');
-  if (hadCache) renderMessagesList();
-  else $('msgBody').innerHTML = '<div class="list-loading">' + NAV_LOADER + '</div>';
   const r = await api('/messages');
   if (r.status === 'success') STATE.messages = r.messages;
-  else if (!hadCache) STATE.messages = [];
+  else if (!Array.isArray(STATE.messages)) STATE.messages = [];
   if (_openSheetTitle === 'Messages') renderMessagesList();
   updateMessageBadge();
 };
@@ -4773,7 +4772,7 @@ function renderMessagesList(){
   const box = $('msgBody');
   if (!box) return;
   const list = STATE.messages || [];
-  if (!list.length) { box.innerHTML = `<div class="v-nomsg"><span>${VI.bottle}</span><p>No messages</p></div>`; return; }
+  if (!list.length) { box.innerHTML = '<div class="v-empty ck-nodata">NO DATA</div>'; return; }
   box.innerHTML = '<div class="reveal-in">' + list.map((m, i) => `
     <button class="msg-row${m.read ? ' read' : ''}" onclick="openMessageDetail(${i})">
       <span class="av">${VI.bottle}</span>
@@ -6095,7 +6094,7 @@ window.openInvestConfirm = function(tierKey, btn){
     }
     closeConfirm();
     showPage('home');
-    notify(`${p.name} is now running. See it under Income.`);
+    ckSuccessToast('Success');
   };
   $('confirmBg').classList.add('show');
   lockBodyScroll(); dlgOpened();
