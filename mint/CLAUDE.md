@@ -35,7 +35,10 @@ Never run `pm2 reload all`, `pm2 restart all` or `pm2 delete all` on this VPS: i
    It installs packages, asks (hidden) for the MongoDB connection string and CHECKS it connects, asks for the admin password, writes
    `/srv/mint-secrets/secrets.local.js`, starts pm2 `mint-server`, and tests `/health`.
 3. Later, updates until Mint has its own domain: `bash /srv/mint-src/mint/deploy/quick-update.sh` (restarts only Mint).
-4. **Domain `dble-mint.com` (bought by the owner).** Same layout as Soda: the root domain is parked (`baseDomain` + `blockRootDomain`), the member app is on **`app.dble-mint.com`**, the hidden admin panel on **`r8tq2w.dble-mint.com/Desk4mx9/`**, the future PesaJet-only host `h3v9k.dble-mint.com` (set up with `deploy/make-hook-url.sh h3v9k`). DNS: A records `app` and `r8tq2w` -> 179.198.197.114 (no apex, no www). Then on the VPS: `bash /srv/mint-src/mint/deploy/update-vps.sh` (nginx file `mint.conf`, HTTPS certificate named `app.dble-mint.com`, restart of Mint only, hardening). Afterwards: GitHub webhook to `https://app.dble-mint.com/k7x2/deploy/webhook` with `DEPLOY_WEBHOOK_SECRET` from `/srv/mint-secrets/secrets.local.js`; secret `PUBLIC_URL=https://app.dble-mint.com/k7x2` (payment callbacks).
+4. With a domain: `deploy/update-vps.sh` (nginx + HTTPS + hardening), `deploy/make-hook-url.sh` (PesaJet webhook), and the GitHub
+   webhook to `https://<app host>/k7x2/deploy/webhook` with `DEPLOY_WEBHOOK_SECRET` from the secrets file. Hosts are placeholders
+   (`app.mint.example.com`, `admin.mint.example.com`, `hook.mint.example.com`) until the owner buys the domain; admin path `Desk4mx9`.
+   Set real hosts via `MINT_APP_HOST` / `MINT_ADMIN_HOST` (see `update-vps.sh`) or `deploy/change-app-host.sh`.
 
 ## Status
 1. (done) Copied from Soda, renamed to Mint, ports 3002/8092/8093, own secrets/process/fail2ban/nginx names, placeholder hosts, new admin path.

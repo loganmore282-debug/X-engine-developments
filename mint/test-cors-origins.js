@@ -20,8 +20,8 @@ const originFn = eval(`(() => { ${consts}\n return function(origin){ let out; co
 // CORS_ALLOWED_ORIGINS, plus localhost/127.0.0.1 for local dev, checked
 // unconditionally by the real code regardless of the suffix list.
 const cases = [
-  ['https://dble-mint.com',           true,  'the live app domain'],
-  ['https://www.dble-mint.com',       true,  'the live app domain, www'],
+  ['https://mint-platform.com',           true,  'the live app domain'],
+  ['https://www.mint-platform.com',       true,  'the live app domain, www'],
   ['http://179.198.197.114:8092',          true,  'direct VPS frontend, port 8080'],
   ['http://179.198.197.114:3002',          false, 'the VPS backend origin itself is not a frontend'],
   ['http://localhost:3000',                true,  'local dev'],
@@ -29,8 +29,8 @@ const cases = [
   [undefined,                              true,  'same-origin / no Origin header'],
   ['https://chn-snow2beer.com',            false, "Snow's live site (must NOT reach Mint)"],
   ['https://evil-attacker.com',            false, 'random attacker'],
-  ['https://dble-mint.com.evil.test', false, 'suffix-spoofing attacker on the real domain'],
-  ['https://notdble-mint.com',        false, 'lookalike domain'],
+  ['https://mint-platform.com.evil.test', false, 'suffix-spoofing attacker on the real domain'],
+  ['https://notmint-platform.com',        false, 'lookalike domain'],
   // No PaaS platform suffix should match anything anymore -- these must all
   // be refused now that CORS_ALLOWED_SUFFIXES is empty. If any of these
   // start passing, something re-added a platform suffix that has no

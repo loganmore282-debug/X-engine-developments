@@ -241,7 +241,7 @@ async function pageTests() {
   let html = fs.readFileSync(__dirname + (built ? '/admin/index.html' : '/admin-src/index.html'), 'utf8');
   if (built) html = html.replace(/<script data-nx-core>([\s\S]*?)<\/script>/, (_, loader) =>
     '<script>' + zlib.inflateSync(Buffer.from(loader.match(/atob\("([A-Za-z0-9+/=]+)"\)/)[1], 'base64')).toString() + '</script>');
-  async function page({ url = 'https://dble-mint.com/admin/', permission = 'default', stored = {}, token = 'tok1', role = 'owner', swReady, fastTimers } = {}) {
+  async function page({ url = 'https://mint-platform.com/admin/', permission = 'default', stored = {}, token = 'tok1', role = 'owner', swReady, fastTimers } = {}) {
     const errors = [], vc = new VirtualConsole(); vc.on('jsdomError', e => errors.push(e.message));
     const S = { calls: [], messageHandlers: {}, onMessage: null, perm: permission, registerReply: { status: 'success', quickApprove: role === 'owner' } };
     const dom = new JSDOM(html, { url, runScripts: 'dangerously', virtualConsole: vc, beforeParse(w) {
@@ -323,9 +323,9 @@ async function pageTests() {
   P = await page(); const before = P.calls.length; P.messageHandlers.message({ data: { type: 'mint-admin-open', tab: 'withdrawals' } }); await sleep(100);
   eq(P.calls.length, before, 'signed-out panel ignores it'); P.w.close();
   // opened from a tapped notification: straight to the tab, once
-  P = await page({ url: 'https://dble-mint.com/admin/?tab=withdrawals' }); await P.login();
+  P = await page({ url: 'https://mint-platform.com/admin/?tab=withdrawals' }); await P.login();
   eq(P.tab(), 'withdrawals', 'opens on the tab the alert was about'); eq(P.w.location.search, '', 'and does not repeat on reload'); P.w.close();
-  P = await page({ url: 'https://dble-mint.com/admin/?tab=bogus' }); await P.login(); eq(P.tab(), 'dashboard', 'a bad ?tab= is ignored'); P.w.close();
+  P = await page({ url: 'https://mint-platform.com/admin/?tab=bogus' }); await P.login(); eq(P.tab(), 'dashboard', 'a bad ?tab= is ignored'); P.w.close();
 }
 
 (async () => {

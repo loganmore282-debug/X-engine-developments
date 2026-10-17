@@ -9,8 +9,8 @@ say() { printf '\n==> %s\n' "$*"; }
 [ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
 SRC=${MINT_SRC:-/srv/mint-src}
 MINT=$SRC/mint
-APP_HOST=${MINT_APP_HOST:-app.dble-mint.com}
-ADMIN_HOST=${MINT_ADMIN_HOST:-r8tq2w.dble-mint.com}
+APP_HOST=${MINT_APP_HOST:-app.mint.example.com}
+ADMIN_HOST=${MINT_ADMIN_HOST:-admin.mint.example.com}
 ADMIN_PATH=${MINT_ADMIN_PATH:-Desk4mx9}
 CONF=${MINT_NGINX_CONF:-/etc/nginx/conf.d/mint.conf}
 BAK=/root/mint.conf.bak
@@ -65,11 +65,11 @@ if [ -n "$SKIPPED" ]; then
   echo "       Check the A record in Hostinger, wait a few minutes and run this again. The other addresses are not affected."
 fi
 if [ "${#CERT_ARGS[@]}" -gt 0 ]; then
-  certbot --nginx --cert-name "${MINT_CERT_NAME:-app.dble-mint.com}" --expand "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
+  certbot --nginx --cert-name "${MINT_CERT_NAME:-app.mint.example.com}" --expand "${CERT_ARGS[@]}" --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall 2>&1 | tail -3
 fi
 # An address that was dropped (deploy/change-app-host.sh drop-old) must also leave the certificate, or the certificate could not be renewed once its
 # DNS record is deleted. Names the certificate has but we no longer serve are removed by re-issuing it for exactly the wanted names.
-CERT_NAME=${MINT_CERT_NAME:-app.dble-mint.com}
+CERT_NAME=${MINT_CERT_NAME:-app.mint.example.com}
 HAVE=$(certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | sed -n 's/^ *Domains: //p' | head -1)
 WANT=" $APP_HOST $ADMIN_HOST ${ALSO_HOSTS//,/ } ${MINT_HOOK_HOST:-} "
 EXTRA=""; for H in $HAVE; do case "$WANT" in *" $H "*) ;; *) EXTRA="$EXTRA $H" ;; esac; done

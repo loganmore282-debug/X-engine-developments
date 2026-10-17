@@ -2639,7 +2639,7 @@ async function renderPromoCodes(){
 // ── COUNTRIES (REGIONS) ──
 //
 // Owner: "l wanted other subdomain to fetch other country code and
-// currency, ie fgdr.dble-mint.com in ugx, and country code changeable
+// currency, ie fgdr.mint-platform.com in ugx, and country code changeable
 // to other country or created, and another can be sfhd.mint-platform in
 // KES shs, or any country created."
 //
@@ -2648,7 +2648,7 @@ async function renderPromoCodes(){
 // and number shape its members type, and the clock its withdraw hours and
 // product windows are judged against. Its RATES and its PRODUCT PRICES are
 // edited on the Settings and Products tabs, with this country picked there.
-var ADMIN_BASE_DOMAIN = 'dble-mint.com';
+var ADMIN_BASE_DOMAIN = 'mint-platform.com';
 async function renderAdmins(){
   const r = await api('/admin/admins/list');
   if(staleTab('admins')) return;
@@ -3215,8 +3215,8 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
       <label style="margin-top:14px">Allowed website domains</label>
-      <textarea id="sAllowedOrigins" rows="4" placeholder="dble-mint.com&#10;www.dble-mint.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. dble-mint.com and this VPS's own address are always allowed.</p>
+      <textarea id="sAllowedOrigins" rows="4" placeholder="mint-platform.com&#10;www.mint-platform.com">${esc((s.allowedOrigins||[]).join('\n'))}</textarea>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Only these domains may reach the backend &mdash; one per line, include www. mint-platform.com and this VPS's own address are always allowed.</p>
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 

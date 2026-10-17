@@ -6,7 +6,7 @@ const { JSDOM } = require('jsdom');
 const built = process.argv.includes('--built');
 const html = fs.readFileSync(__dirname + (built ? '/user/index.html' : '/user-src/index.html'), 'utf8');
 const source = fs.readFileSync(__dirname + '/user-src/original_module.js', 'utf8');
-const dom = new JSDOM(html, { url: 'https://app.dble-mint.com/', runScripts: 'outside-only', pretendToBeVisual: true });
+const dom = new JSDOM(html, { url: 'https://mymint.mint.example.com/', runScripts: 'outside-only', pretendToBeVisual: true });
 const w = dom.window, d = w.document;
 const scrolls = []; w.scrollTo = (x, y) => scrolls.push([x, y]); w.HTMLElement.prototype.scrollIntoView = () => {}; w.matchMedia = () => ({ matches: true, addListener() {}, removeListener() {} });
 w.fetch = async () => ({ json: async () => ({ status: 'success', settings: {}, products: [], messages: [], accounts: [] }) }); w.open = () => null;

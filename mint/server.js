@@ -216,7 +216,7 @@ app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 // Snow's own live domain (chn-snow2beer.com) was deliberately dropped from
 // this copy -- it has no business reaching Mint's database.
 const CORS_ALLOWED_ORIGINS = new Set([
-  'https://dble-mint.com', 'https://www.dble-mint.com',
+  'https://mint-platform.com', 'https://www.mint-platform.com',
   // The real domain the owner actually bought (2026-09-29). app./qumx.
   // are the two frontend subdomains nginx-mint.conf.template serves;
   // api. itself never needs to be in this list (a same-origin API call
@@ -226,10 +226,10 @@ const CORS_ALLOWED_ORIGINS = new Set([
   // (see nginx-mint.conf.template's matching comment); if it's ever
   // regenerated, this entry, the template, and the live certbot cert all
   // have to agree.
-  // The live address (owner, 2026-10-07): app.dble-mint.com. mymint. was the planned name and stays allowed.
-  'https://app.dble-mint.com', 'https://app.dble-mint.com',
-  // Owner, 2026-10-11: the member app moved to app.dble-mint.com (app. stays as an extra address of the same app).
-  'https://app.dble-mint.com',
+  // The live address (owner, 2026-10-07): app.mint.example.com. mymint. was the planned name and stays allowed.
+  'https://app.mint.example.com', 'https://mymint.mint.example.com',
+  // Owner, 2026-10-11: the member app moved to app.mint.example.com (app. stays as an extra address of the same app).
+  'https://app.mint.example.com',
   // Direct VPS frontend used while Mint is served/tested on port 8080.
   // Different ports are different browser origins, so without this exact
   // entry the member page loads but every API call to :3000 is blocked by CORS.
@@ -254,8 +254,8 @@ const CORS_ALLOWED_SUFFIXES = [];
 // undo it is... the admin panel. The baseline guarantees a way back in.
 let _corsExtraHosts = [];
 // One hostname, as the CORS check will compare it: lowercased, scheme and any
-// path/port stripped, so the owner can paste "https://dble-mint.com/" or
-// type "dble-mint.com" and get the same result.
+// path/port stripped, so the owner can paste "https://mint-platform.com/" or
+// type "mint-platform.com" and get the same result.
 // Matching is EXACT hostname only -- no wildcards, no suffix matching. A
 // suffix entry typed as ".com" would hand every site on the internet access
 // to this backend, and there is no phrasing of that field that makes the
@@ -264,11 +264,11 @@ function normalizeAllowedHost(raw) {
   let s = String(raw == null ? '' : raw).trim().toLowerCase();
   if (!s) return { skip: true };
   s = s.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
-  if (!s) return { error: 'Enter a domain such as dble-mint.com' };
+  if (!s) return { error: 'Enter a domain such as mint-platform.com' };
   if (s.length > 253) return { error: `"${raw}" is too long to be a domain.` };
   if (s.includes('*')) return { error: `Wildcards are not allowed ("${raw}"). Add each domain on its own line.` };
   const labels = s.split('.');
-  if (labels.length < 2) return { error: `"${raw}" is not a full domain. Use something like dble-mint.com.` };
+  if (labels.length < 2) return { error: `"${raw}" is not a full domain. Use something like mint-platform.com.` };
   if (!labels.every(l => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(l)))
     return { error: `"${raw}" is not a valid domain name.` };
   return { host: s };
@@ -304,8 +304,8 @@ function sanitizeAllowedOrigins(raw) {
 // So a host the owner allowed now covers its SUBDOMAINS too. That is the
 // whole premise of a wildcard DNS record: every label under his domain is
 // his. Matched on '.' + domain, which cannot be spoofed from outside --
-// "dble-mint.com.evil.com" ends with ".evil.com", not
-// ".dble-mint.com".
+// "mint-platform.com.evil.com" ends with ".evil.com", not
+// ".mint-platform.com".
 //
 // Deliberately NOT dependent on the base domain being set correctly: that
 // is a separate setting for a separate job (deciding which COUNTRY a label
@@ -445,7 +445,7 @@ const DEFAULT_REGION = Object.freeze({
   active: true, isDefault: true, languages: ['en'], defaultLang: 'en',
 });
 let _mainAllowedHosts = [];
-let _baseDomain = 'dble-mint.com';
+let _baseDomain = 'mint-platform.com';
 let _blockRootDomain = true;
 let _parkedHosts = [];
 function refreshCorsSnapshot() {
@@ -630,7 +630,7 @@ const DEFAULT_SETTINGS = {
   // LABELS ('g26e', 'shy') and the server builds the hostname from them and
   // this, so adding an address is four characters typed, not a full domain
   // spelled out in two places.
-  baseDomain: 'dble-mint.com',
+  baseDomain: 'mint-platform.com',
   // The bare domain and its www. form serve nobody: every member arrives on
   // their own country's subdomain. With this on, a request from the root
   // domain is refused with HOST_PARKED and the app shows a short notice
@@ -1399,7 +1399,7 @@ function regionUsesBareLocal(region) {
 function phoneToEmail(phone, region) {
   const r = region || currentRegion();
   const local = localDigits(phone, r) || String(phone).replace(/\D/g, '').replace(/^0+/, '');
-  return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@dble-mint.com';
+  return (regionUsesBareLocal(r) ? local : String(r.dialCode || '') + local) + '@mint-platform.com';
 }
 // STRICT on purpose — for Uganda every real mobile number is 256 + exactly 9
 // digits starting with 7, and each other region declares its own length and
