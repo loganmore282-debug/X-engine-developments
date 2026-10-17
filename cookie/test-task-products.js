@@ -25,4 +25,5 @@ ok(/result\.code === 'SOLD_OUT'\) closeConfirm\(\)/.test(cli) && /ckLoadBegin\(\
 ok(/activated\$\/i\.test\(String\(t\.description/.test(cli) && /return 'Free \( '/.test(cli), 'an activated task product reads "Free ( Gold )" in Balance Details');
 ok(/amt === 0 && t\.type === 'investment'\)\) \? '-'/.test(cli), 'with "- 0.00", as in the screenshot');
 ok(/if \(name === 'home' && prevPage !== 'home'\) STATE\.homeTab = 'income'/.test(cli) && /STATE\.homeTab === 'wage'\) \{ STATE\.homeTab = 'income'/.test(cli), 'Home always opens on Daily income, also after leaving the app and coming back');
+ok(/data-move/.test(adm) && /Move to Daily wage/.test(adm) && /Move to Daily income/.test(adm), 'a product can be moved to the other category from the admin list');
 console.log(`PASS: task products (${n} checks)`);
