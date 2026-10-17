@@ -1185,8 +1185,12 @@ function ckBox(){
   if (!b) { b = document.createElement('div'); b.id = 'ckBox'; b.className = 'ck-box'; document.body.appendChild(b); }
   return b;
 }
+var _ckLoadGuard = null;
 function ckLoadBegin(){
   _ckLoadCount++;
+  // A read that never answers (no signal, server down) must not leave the box on screen: it goes after 12 seconds.
+  if (_ckLoadGuard) clearTimeout(_ckLoadGuard);
+  _ckLoadGuard = setTimeout(() => { _ckLoadGuard = null; _ckLoadCount = 0; const b = document.getElementById('ckBox'); if (b && b.classList.contains('ck-box-load')) b.classList.remove('show'); }, 12000);
   if (_ckLoadCount !== 1) return;
   if (_ckLoadHideTimer) { clearTimeout(_ckLoadHideTimer); _ckLoadHideTimer = null; }
   if (_ckOkTimer) { clearTimeout(_ckOkTimer); _ckOkTimer = null; }
@@ -1196,6 +1200,7 @@ function ckLoadBegin(){
 function ckLoadEnd(){
   _ckLoadCount = Math.max(0, _ckLoadCount - 1);
   if (_ckLoadCount) return;
+  if (_ckLoadGuard) { clearTimeout(_ckLoadGuard); _ckLoadGuard = null; }
   const left = Math.max(0, 450 - (Date.now() - _ckLoadShownAt));
   _ckLoadHideTimer = setTimeout(() => {
     _ckLoadHideTimer = null;
@@ -1214,7 +1219,7 @@ window.ckSuccessToast = function(text){
     const t = _ckOkPending; _ckOkPending = null; if (!t) return;
     const b = ckBox();
     b.className = 'ck-box ck-box-ok';
-    b.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 21.5 16.5 31 34 11" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>' + esc(t) + '</span>';
+    b.innerHTML = '<svg viewBox="14 12 93 68" aria-hidden="true"><path fill="#fff" d="M41.3 79.0C40.9 78.9 40.6 78.7 40.2 78.3C39.5 77.7 34.6 72.9 32.2 70.3C31.4 69.6 28.6 66.7 25.8 63.9C23.1 61.0 20.1 58.0 19.3 57.2C18.4 56.3 17.0 54.8 16.1 53.9C14.4 52.2 14.3 52.1 13.8 50.9C13.2 49.8 13.2 49.8 13.2 48.4C13.2 47.0 13.2 46.9 13.5 46.4C13.7 46.0 13.9 45.5 14.0 45.2C14.6 43.6 16.6 42.6 17.7 43.4C17.9 43.5 18.3 43.7 18.6 43.9C19.0 44.0 19.4 44.3 19.7 44.5C19.9 44.7 20.3 45.0 20.5 45.1C20.7 45.2 20.9 45.4 21.0 45.5C21.1 45.6 21.3 45.8 21.6 45.9C21.8 46.0 22.2 46.3 22.5 46.6C22.8 46.8 23.0 47.0 23.1 47.0C23.2 47.0 23.4 47.2 23.7 47.4C24.0 47.7 24.4 47.9 24.6 48.0C24.7 48.1 25.0 48.3 25.1 48.5C25.2 48.6 25.6 48.8 25.8 49.0C26.1 49.1 26.5 49.4 26.7 49.6C27.0 49.8 27.3 50.0 27.3 50.0C27.4 50.0 27.6 50.2 27.8 50.3C28.0 50.5 28.4 50.8 28.7 51.0C29.0 51.2 29.3 51.4 29.4 51.5C29.5 51.6 29.8 51.8 30.1 52.0C30.5 52.2 30.7 52.4 30.8 52.5C30.8 52.5 31.1 52.8 31.4 52.9C31.7 53.1 32.0 53.4 32.2 53.5C32.3 53.6 32.5 53.8 32.7 53.9C32.9 54.0 33.3 54.3 33.5 54.5C33.8 54.7 34.2 55.0 34.3 55.1C34.5 55.2 34.8 55.4 35.0 55.6C35.2 55.7 35.6 56.0 35.8 56.1C36.0 56.2 36.2 56.4 36.3 56.5C36.4 56.6 36.7 56.8 37.0 57.0C37.2 57.1 37.6 57.4 37.8 57.6C38.0 57.7 38.3 58.0 38.5 58.1C38.7 58.2 39.0 58.4 39.2 58.5C39.4 58.7 40.0 59.1 40.6 59.4C42.0 60.1 42.7 60.2 43.6 59.6C43.8 59.5 44.3 59.2 44.6 59.1C45.0 59.0 45.5 58.7 45.7 58.4C46.0 58.2 46.2 58.0 46.3 58.0C46.3 58.0 46.6 57.8 46.9 57.5C47.2 57.3 47.7 56.8 48.0 56.5C48.4 56.2 48.9 55.8 49.2 55.5C49.4 55.3 49.8 55.1 49.9 55.0C50.1 54.9 50.4 54.6 50.7 54.4C51.0 54.1 51.5 53.7 51.8 53.5C52.8 52.7 53.6 51.9 54.0 51.6C54.2 51.4 54.5 51.2 54.6 51.1C54.7 51.0 55.1 50.8 55.4 50.5C56.6 49.4 57.0 49.1 57.3 48.9C57.5 48.8 57.8 48.5 58.0 48.4C58.3 48.1 59.1 47.4 60.1 46.6C60.4 46.3 60.9 45.9 61.1 45.7C61.4 45.5 61.7 45.2 62.0 45.0C62.2 44.9 62.5 44.6 62.8 44.4C63.0 44.2 63.5 43.8 63.8 43.5C64.7 42.8 65.7 42.0 66.1 41.6C66.3 41.4 66.7 41.1 66.9 40.9C67.2 40.8 67.4 40.5 67.5 40.4C67.6 40.4 67.8 40.2 68.0 40.0C68.2 39.9 68.6 39.6 68.9 39.4C69.2 39.1 69.7 38.7 69.9 38.5C70.1 38.3 70.6 37.9 71.0 37.6C71.3 37.3 71.8 36.9 72.0 36.7C72.3 36.4 72.7 36.1 72.9 36.0C73.1 35.9 73.4 35.6 73.7 35.4C73.9 35.2 74.4 34.8 74.7 34.5C75.1 34.2 75.7 33.7 76.0 33.5C76.2 33.3 76.8 32.8 77.1 32.5C77.4 32.3 77.9 31.9 78.2 31.6C78.4 31.4 78.8 31.1 79.0 31.0C79.3 30.8 79.6 30.5 79.9 30.3C80.1 30.1 80.6 29.7 80.9 29.4C81.8 28.7 82.6 28.1 83.1 27.6C83.4 27.4 83.7 27.1 83.8 27.0C84.1 26.9 84.5 26.5 85.6 25.5C85.8 25.3 86.2 25.0 86.4 24.9C86.5 24.8 86.8 24.6 87.0 24.4C87.1 24.3 87.6 23.9 87.9 23.6C88.3 23.3 88.8 22.9 89.1 22.6C89.3 22.4 89.7 22.1 89.9 22.0C90.1 21.9 90.5 21.6 90.7 21.4C91.0 21.1 91.5 20.7 91.8 20.4C92.6 19.8 93.5 19.0 94.0 18.6C94.3 18.4 94.6 18.1 94.8 17.9C95.1 17.8 95.3 17.6 95.4 17.5C95.5 17.4 95.7 17.1 96.0 17.0C96.5 16.6 97.3 16.0 97.7 15.6C97.9 15.4 98.2 15.1 98.5 15.0C98.7 14.8 98.9 14.6 98.9 14.5C99.0 14.5 99.2 14.3 99.4 14.2C99.6 14.1 99.9 13.8 100.2 13.6C101.4 12.4 102.6 11.9 104.4 12.0C105.7 12.1 105.9 12.2 106.2 13.2C106.8 15.3 106.6 15.9 103.5 19.0C102.2 20.4 99.3 23.3 97.1 25.5C94.9 27.8 91.5 31.2 89.6 33.1C86.4 36.4 81.0 41.8 77.6 45.2C76.8 46.1 73.7 49.3 70.6 52.4C67.6 55.5 64.3 58.9 63.3 59.9C62.3 60.8 60.7 62.5 59.7 63.5C58.8 64.5 55.9 67.4 53.4 69.9C46.7 76.7 45.4 78.0 45.3 78.0C45.3 78.0 45.0 78.2 44.8 78.4C44.5 78.6 44.1 78.8 43.9 78.9C43.6 79.0 43.3 79.0 43.1 79.1C42.6 79.2 42.0 79.2 41.3 79.0Z"/></svg><span>' + esc(t) + '</span>';
     void b.offsetWidth; b.classList.add('show');
     if (_ckOkTimer) clearTimeout(_ckOkTimer);
     _ckOkTimer = setTimeout(() => { _ckOkTimer = null; b.classList.remove('show'); }, 2000);
@@ -4242,9 +4247,9 @@ async function renderAccount(){
   <div class="ck-menu">
     ${ckMenuRow('mail', 'Messages', 'openMessagesSheet()')}
     ${ckMenuRow('person', 'Personal information', 'openPersonalInfo()')}
-    ${ckMenuRow('income', 'Income details', "openIncomeDetails()")}
-    ${ckMenuRow('deposit', 'Deposit details', "openTransactionStatement('deposit')")}
-    ${ckMenuRow('withdraw', 'Withdrawal details', "openTransactionStatement('withdraw')")}
+    ${ckMenuRow('income', 'Income details', "openBalanceDetails('income')")}
+    ${ckMenuRow('deposit', 'Deposit details', "openBalanceDetails('deposit')")}
+    ${ckMenuRow('withdraw', 'Withdrawal details', "openBalanceDetails('withdraw')")}
     ${ckMenuRow('about', 'About us', 'openRulesPage()')}
     ${ckMenuRow('download', 'Download', 'promptInstallApp()')}
     ${ckMenuRow('language', 'Language', 'openLangPicker()')}
@@ -4569,8 +4574,6 @@ window.closeHelpDialog = function(){
 // One professional statement surface. Categories stay horizontal at the top;
 // no balance hero, avatar discs, record cards or separate deposit/withdraw/
 // earnings screens.
-var _statementCat = 'all';
-var _statementShown = 10;
 var STATEMENT_TURNTABLE_TYPES = new Set(['turntable','spin','spin_bonus']);
 var STATEMENT_FRUIT_TYPES = new Set(['fruit','fruit_win','fruit_bet']);
 var STATEMENT_NOT_INCOME = new Set(['deposit','admin_credit','withdraw','invest','investment','investment_refund']);
@@ -4622,117 +4625,106 @@ function statementDate(t){
   const day = m ? `${m[2]}/${m[1]}/${m[3]}` : String(t.date || '');
   return (day + (t.time ? ' ' + String(t.time).slice(0, 5) : '')).trim();
 }
-function statementAmountText(t){
-  const amt = recordsRowAmount(t);
-  return (amt < 0 ? '-' : '+') + vMoney2(Math.abs(amt));
+// ── BALANCE DETAILS: Income details / Deposit Records / Withdrawal Records ──
+// One page with three tabs. Every time it opens (or a tab is tapped) it starts empty ("NO DATA"), the dark loading box asks the
+// server for this member's own records, and only then are the rows shown. "No more data" appears when the end of the list is reached.
+var _balTab = 'income', _balSub = 'mine', _balSeq = 0, _balToastAt = 0;
+var BAL_TITLES = { income: 'Balance Details', deposit: 'Deposit Records', withdraw: 'Withdrawal Records' };
+function balNum(n){ return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2); }
+function balIsFail(t){ const c = statementChip(t); return !!(c && c.cls === 'bad'); }
+function balIsWait(t){ const c = statementChip(t); return !!(c && c.cls === 'wait'); }
+function balTitle(t){
+  if (t.type === 'deposit' || t.type === 'admin_credit') return 'Recharge';
+  if (t.type === 'withdraw') return balIsFail(t) ? 'Withdrawal Failed' : balIsWait(t) ? 'Withdrawal Processing' : 'Withdrawal Successful';
+  if (t.type === 'cashback') return 'Device Profit';
+  if (t.type === 'commission') { const n = Number(t.commissionLevel); return 'Lower ' + ((Number.isFinite(n) ? n : 0) + 1) + ' Buy Rewards'; }
+  return statementDescription(t);
 }
-// One card per record: a square picture (Admin > Pictures), the title and amount, the date, and the status.
-function statementStatus(t){
-  const chip = statementChip(t);
-  if (!chip) return { text: 'Success', cls: 'ok' };
-  return { text: chip.cls === 'bad' ? 'Failed' : chip.cls === 'wait' ? 'Pending' : 'Success', cls: chip.cls };
+// Newest first, each row with the wallet balance right after it (worked back from the balance the member has now).
+function balLedger(){
+  let run = Number((STATE.account || {}).walletBalance) || 0;
+  const out = [];
+  for (const t of (STATE.transactions || [])) {
+    out.push({ t, after: run });
+    run = Math.round((run - (Number(t.amount) || 0)) * 100) / 100;
+  }
+  return out;
 }
-function renderStatement(){
-  const body = $('statementBody');
-  if (!body) return;
-  const all = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t));
-  if (!all.length) { body.innerHTML = '<div class="v-empty">NO DATA</div>'; return; }
-  const rows = all.slice(0, _statementShown);
+function balRecStatus(t){
+  if (balIsFail(t)) return { text: 'Failure', cls: 'bad' };
+  if (balIsWait(t)) return { text: t.type === 'deposit' ? 'Pending Payment' : 'Processing', cls: 'wait' };
+  return { text: 'Success', cls: 'ok' };
+}
+function balRowsHtml(){
+  const led = balLedger();
+  if (_balTab === 'income') {
+    const rows = led.filter(x => _balSub === 'sub' ? x.t.type === 'commission' : x.t.type !== 'commission');
+    return rows.map(({ t, after }) => {
+      let amt = recordsRowAmount(t);
+      if (t.type === 'withdraw' && balIsFail(t)) amt = Math.abs(amt);
+      return `<article class="ck-br"><b class="ck-br-t">${esc(balTitle(t))}</b><span class="ck-br-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</span><span class="ck-br-a">${amt < 0 ? '-' : '+'} ${esc(balNum(Math.abs(amt)))}</span><span class="ck-br-b">Balance : ${esc(balNum(after))}</span></article>`;
+    }).join('');
+  }
   const thumb = STATE.recThumb ? ` style="background-image:url('${esc(STATE.recThumb)}')"` : '';
-  body.innerHTML = rows.map(t => {
-    const st = statementStatus(t);
-    return `
-      <article class="ck-rec">
-        <span class="ck-rec-img${STATE.recThumb ? ' has-img' : ''}"${thumb}></span>
-        <div class="ck-rec-body">
-          <b class="ck-rec-t">${esc(statementDescription(t))}</b>
-          <b class="ck-rec-a">${esc(ckMoney(Math.abs(recordsRowAmount(t))))}</b>
-          <small class="ck-rec-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</small>
-          <small class="ck-rec-s ${st.cls}">${esc(st.text)}</small>
-        </div>
-      </article>`;
-  }).join('') + (all.length > rows.length ? '<div class="ck-more"><button type="button" onclick="statementLoadMore()">Load More</button></div>' : '');
-}
-var _statementMoreBusy = false;
-window.statementLoadMore = async function(){
-  const held = (STATE.transactions || []).filter(t => statementCategoryMatch(_statementCat, t)).length;
-  if (_statementShown < held) { _statementShown += 10; renderStatement(); return; }
-  if (_statementMoreBusy) return;
-  _statementMoreBusy = true;
-  try {
-    const r = await api('/transactions');
-    if (r.status === 'success' && _openSheetTitle === 'Balance Record') {
-      STATE.transactions = r.transactions;
-      STATE.transactionsTruncated = !!r.truncated;
-      renderStatement();
-    }
-  } finally { _statementMoreBusy = false; }
-};
-window.switchStatementCategory = function(cat){
-  if (!['income','deposit','withdraw'].includes(cat)) return;
-  _statementCat = cat; _statementShown = 10;
-  const tabs = $('statementTabs');
-  if (tabs) tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
-  const ttl = $('sheetTitle'); if (ttl) ttl.textContent = STATEMENT_TITLES[cat];
-  renderStatement();
-};
-var STATEMENT_TITLES = { income: 'Income Records', deposit: 'Deposit Records', withdraw: 'Withdrawal Records' };
-// Income details (from My): two tabs, "My Income" (what the member earned) and "Subordinate Income" (referral commission).
-var _incTab = 'mine';
-function incRowsHtml(){
-  const list = (STATE.transactions || []).filter(t => _incTab === 'sub' ? t.type === 'commission' : (statementCategoryMatch('income', t) && t.type !== 'commission'));
-  if (!list.length) return '<div class="v-empty ck-inc-empty">NO DATA</div>';
-  const thumb = STATE.recThumb ? ` style="background-image:url('${esc(STATE.recThumb)}')"` : '';
-  return list.slice(0, 40).map(t => {
-    const st = statementStatus(t);
-    return `<article class="ck-rec"><span class="ck-rec-img${STATE.recThumb ? ' has-img' : ''}"${thumb}></span><div class="ck-rec-body"><b class="ck-rec-t">${esc(statementDescription(t))}</b><b class="ck-rec-a">${esc(ckMoney(Math.abs(recordsRowAmount(t))))}</b><small class="ck-rec-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</small><small class="ck-rec-s ${st.cls}">${esc(st.text)}</small></div></article>`;
+  return led.filter(x => _balTab === 'deposit' ? (x.t.type === 'deposit' || x.t.type === 'admin_credit') : x.t.type === 'withdraw').map(({ t }) => {
+    const st = balRecStatus(t);
+    return `<article class="ck-rc"><span class="ck-rc-img${STATE.recThumb ? ' has-img' : ''}"${thumb}></span><div class="ck-rc-in"><b class="ck-rc-t">${_balTab === 'deposit' ? 'Deposit' : 'Withdraw'}</b><b class="ck-rc-a">${esc(ckMoney(Math.abs(recordsRowAmount(t))))}</b><span class="ck-rc-d">${esc(ckStamp(t.createdAt) || statementDate(t))}</span><b class="ck-rc-s ${st.cls}">${st.text}</b></div></article>`;
   }).join('');
 }
-window.switchIncomeTab = function(tab){
-  _incTab = tab === 'sub' ? 'sub' : 'mine';
-  document.querySelectorAll('#incSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === _incTab));
-  const body = $('incBody'); if (body) body.innerHTML = incRowsHtml();
-};
-window.openIncomeDetails = async function(){
-  _incTab = 'mine';
-  const hadCache = Array.isArray(STATE.transactions);
-  openSheet('Income details', `<div class="ck-inc"><div class="ck-incbox">
-    <div class="ck-seg" id="incSeg"><button type="button" class="on" data-t="mine" onclick="switchIncomeTab('mine')">My Income</button><button type="button" data-t="sub" onclick="switchIncomeTab('sub')">Subordinate Income</button></div>
-    <div id="incBody"></div></div></div>`);
-  $('sheetBg').classList.add('ck-inc-page');
-  if (hadCache) switchIncomeTab('mine');
+function balPaint(){
+  const list = $('balList'); if (!list) return;
+  const html = balRowsHtml();
+  list.innerHTML = html || '<div class="v-empty ck-nodata-bd">NO DATA</div>';
+}
+function balNoMore(){
+  const sb = $('sheetBg'); if (!sb || _openSheetTitle !== 'Balance Record' || Date.now() - _balToastAt < 2600) return;
+  const atEnd = sb.scrollHeight - sb.scrollTop - sb.clientHeight < 40;
+  if (!atEnd) return;
+  _balToastAt = Date.now(); ckSuccessToast('No more data');
+}
+async function balLoad(){
+  const seq = ++_balSeq;
+  const list = $('balList'); if (list) list.innerHTML = '<div class="v-empty ck-nodata-bd">NO DATA</div>';
+  ckExpectLoad();
   const r = await api('/transactions');
+  if (seq !== _balSeq || _openSheetTitle !== 'Balance Record') return;
   if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
-  else if (!hadCache) STATE.transactions = [];
-  if (_openSheetTitle === 'Income details') { switchIncomeTab(_incTab); ckSuccessToast('No more data'); }
+  else if (!Array.isArray(STATE.transactions)) STATE.transactions = [];
+  balPaint();
+  setTimeout(balNoMore, 450);
+}
+function balShell(){
+  const tabs = ['income', 'deposit', 'withdraw'].map(k => `<button type="button" data-cat="${k}" class="${_balTab === k ? 'on' : ''}" onclick="balSwitch('${k}')">${k === 'income' ? 'Income details' : k === 'deposit' ? 'Deposit' : 'Withdraw'}</button>`).join('');
+  const body = _balTab === 'income'
+    ? `<div class="ck-bd-card"><div class="ck-seg" id="incSeg"><button type="button" data-t="mine" class="${_balSub === 'mine' ? 'on' : ''}" onclick="balSub('mine')">My Income</button><button type="button" data-t="sub" class="${_balSub === 'sub' ? 'on' : ''}" onclick="balSub('sub')">Subordinate Income</button></div><div id="balList"></div></div>`
+    : `<div class="ck-bd-recs"><div id="balList"></div></div>`;
+  return `<div class="ck-bd"><div class="ck-bd-tabs" id="statementTabs">${tabs}</div>${body}</div>`;
+}
+window.balSwitch = function(tab){
+  if (!['income', 'deposit', 'withdraw'].includes(tab) || tab === _balTab) return;
+  _balTab = tab;
+  const ttl = $('sheetTitle'); if (ttl) ttl.textContent = BAL_TITLES[tab];
+  $('sheetBody').innerHTML = balShell();
+  balLoad();
 };
-window.openTransactionStatement = async function(cat){
-  _statementCat = ['income','deposit','withdraw'].includes(cat) ? cat : 'income';
-  _statementShown = 10;
-  const hadCache = Array.isArray(STATE.transactions);
-  openSheet('Balance Record', `
-    <div class="ck-rectabs" id="statementTabs">
-      ${[['income','Income details'],['deposit','Deposit'],['withdraw','Withdraw']].map(([k, l]) => `<button data-cat="${k}" class="${_statementCat === k ? 'on' : ''}" onclick="switchStatementCategory('${k}')">${l}</button>`).join('')}
-    </div>
-    <div id="statementBody"></div>`);
-  $('sheetBg').classList.add('ck-rec-page');
-  { const ttl = $('sheetTitle'); if (ttl) ttl.textContent = STATEMENT_TITLES[_statementCat]; }
-  if (hadCache) renderStatement();
-  else $('statementBody').innerHTML = '<div class="list-loading">' + NAV_LOADER + '</div>';
-  const r = await api('/transactions');
-  if (r.status === 'success') {
-    STATE.transactions = r.transactions;
-    STATE.transactionsTruncated = !!r.truncated;
-  } else if (!hadCache) {
-    STATE.transactions = [];
-  }
-  if (_openSheetTitle === 'Balance Record') { renderStatement(); ckSuccessToast('No more data'); }
+window.balSub = function(sub){
+  _balSub = sub === 'sub' ? 'sub' : 'mine';
+  document.querySelectorAll('#incSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === _balSub));
+  balLoad();
 };
-// Compatibility for post-withdraw flows and any stale call sites.
-window.openBalanceRecordSheet = function(tab){
-  const cat = tab === 'deposit' ? 'deposit' : tab === 'withdraw' ? 'withdraw' : 'income';
-  return openTransactionStatement(cat);
+window.openBalanceDetails = function(tab){
+  _balTab = ['income', 'deposit', 'withdraw'].includes(tab) ? tab : 'income'; _balSub = 'mine';
+  openSheet('Balance Record', balShell());
+  $('sheetBg').classList.add('ck-bd-page');
+  { const ttl = $('sheetTitle'); if (ttl) ttl.textContent = BAL_TITLES[_balTab]; }
+  const sb = $('sheetBg'); if (sb && !sb._balScroll) { sb._balScroll = true; sb.addEventListener('scroll', balNoMore, { passive: true }); }
+  balLoad();
 };
+// The older entry points still work.
+window.openIncomeDetails = function(){ return openBalanceDetails('income'); };
+window.openTransactionStatement = function(cat){ return openBalanceDetails(cat === 'deposit' ? 'deposit' : cat === 'withdraw' ? 'withdraw' : 'income'); };
+window.openBalanceRecordSheet = function(tab){ return openBalanceDetails(tab); };
+function renderStatement(){ balPaint(); }
 
 // ── MESSAGES (MessagesList.dc.html / Messages.dc.html) ──
 // Real inbox, backed by /messages (admin-authored broadcasts) with per-
@@ -5102,7 +5094,7 @@ function openSheet(title, bodyHtml){
   dismissNotify();
   ckExpectLoad();
   window._sheetSeq = (window._sheetSeq || 0) + 1;
-  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page', 'ck-dep-page', 'ck-wd-page', 'ck-rec-page', 'ck-pw-page', 'ck-inc-page');
+  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page', 'ck-dep-page', 'ck-wd-page', 'ck-rec-page', 'ck-pw-page', 'ck-inc-page', 'ck-bd-page');
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
