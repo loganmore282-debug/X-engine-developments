@@ -73,7 +73,7 @@ say "6/6  Health check"
 OK=""
 for i in 1 2 3 4 5 6 7 8 9 10; do
   H=$(curl -s -m 5 "http://127.0.0.1:$PORT_WANTED/health" || true)
-  case "$H" in *'"ok":true'*) OK=1; break ;; esac
+  case "$H" in *'"status":"ok"'*|*'"ok":true'*) OK=1; break ;; esac
   sleep 2
 done
 echo "    /health -> ${H:-(no answer)}"
