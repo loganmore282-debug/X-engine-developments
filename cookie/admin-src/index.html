@@ -3028,6 +3028,11 @@ async function renderBanners(){
         ${myHeroImage?`<button class="btn danger sm" id="myHeroClear">Remove</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="myHeroFile" accept="image/*" hidden></label>
+      <div class="row" style="margin-top:10px">
+        <div><label>Opacity (0&ndash;100%)</label><input id="myHeroOp" type="number" min="0" max="100" value="${esc(v('myHeroOpacity',100))}"></div>
+        <div><label>Blur (0&ndash;40 px)</label><input id="myHeroBlur" type="number" min="0" max="40" value="${esc(v('myHeroBlur',6))}"></div>
+      </div>
+      <button class="btn block" id="saveMyHero" style="margin-top:14px">Save My page picture appearance</button>
     </div>
 
     <h2 class="sec">Rules page picture (About us)</h2>
@@ -3198,6 +3203,18 @@ function wireBannerHandlers(){
     }
     const d = await api('/admin/settings/update', { settings: nums });
     toast(d.status==='success'?'Loading screen appearance saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  const saveMyHero = $('saveMyHero');
+  if (saveMyHero) saveMyHero.addEventListener('click', async()=>{
+    if ($('myHeroOp').value.trim()==='' || $('myHeroBlur').value.trim()==='') return toast('Fill in both Opacity and Blur','err');
+    const nums = { myHeroOpacity:+$('myHeroOp').value, myHeroBlur:+$('myHeroBlur').value };
+    for (const [k,val] of Object.entries(nums)) {
+      const max = k.endsWith('Blur') ? 40 : 100;
+      if (!Number.isFinite(val) || val < 0 || val > max)
+        return toast(`${k.endsWith('Blur')?'Blur':'Opacity'} must be between 0 and ${max}`,'err');
+    }
+    const d = await api('/admin/settings/update', { settings: nums });
+    toast(d.status==='success'?'My page picture appearance saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   const saveAuthBg = $('saveAuthBg');
   if (saveAuthBg) saveAuthBg.addEventListener('click', async()=>{

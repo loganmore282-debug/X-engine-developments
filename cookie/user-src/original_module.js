@@ -31,7 +31,7 @@ var API_BASE = '/k7x2';
 // The values below are Uganda's, and they are also what an offline first
 // paint uses -- so a cold start with no network still formats money and
 // validates a phone number the way it always did.
-var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true, languages: ['en','lg','sw','fr','rw','nyn'], defaultLang: 'en' };
+var REGION = { key: 'ug', name: 'Uganda', currency: 'UGX', dialCode: '256', localLength: 9, prefixes: ['7'], utcOffsetMin: 180, isDefault: true, languages: ['en'], defaultLang: 'en' };
 function cur(){ return (REGION && REGION.currency) || 'UGX'; }
 function regionName(){ return (REGION && REGION.name) || 'Uganda'; }
 // "7XXXXXXXX" for Uganda -- the region's first allowed prefix padded out to
@@ -1477,7 +1477,7 @@ window.doLogin = async function(){
   if (window._logoutPromise) await window._logoutPromise;
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
-  if (!phone) return notify('Enter a valid ' + regionName() + ' mobile number.');
+  if (!phone) return notify('Please enter a valid phone number');
   if (!pass) return notify('Enter your password.');
   setBtnLoading('loginBtn', true, 'Login', 'Logging in…');
   window._pendingLoginSuccess = true;
@@ -1549,7 +1549,7 @@ window.doRegister = async function(){
   // whether that's the link's code, untouched, or something typed by hand.
   // Cookie makes it REQUIRED (Snow allowed skipping it) -- see CLAUDE.md.
   const referral = $('regReferral').value.trim();
-  if (!phone) return regError('Enter a valid ' + regionName() + ' mobile number.');
+  if (!phone) return regError('Please enter a valid phone number');
   if (!pass || pass.length < 10) return regError('Password must be at least 10 characters.');
   if (pass !== pass2) return regError('The two passwords do not match.');
   if (needPin && !/^\d{6}$/.test(tradePin)) return regError('Trade Password must be exactly 6 digits.');
@@ -2007,6 +2007,9 @@ function applyAuthBackgrounds(){
       (Number.isFinite(bl) ? Math.min(40, Math.max(0, bl)) : 0) + 'px');
   }
   set('hero', STATE.authHeroImage, s.authHeroOpacity, s.authHeroBlur);
+  { const mo = Number(s.myHeroOpacity), mb = Number(s.myHeroBlur);
+    root.style.setProperty('--ck-me-op', String(Number.isFinite(mo) ? Math.min(100, Math.max(0, mo)) / 100 : 1));
+    root.style.setProperty('--ck-me-blur', (Number.isFinite(mb) ? Math.min(40, Math.max(0, mb)) : 6) + 'px'); }
   const cardOpacity = Number(s.authCardOpacity);
   const cardBlur = Number(s.authCardBlur);
   root.style.setProperty('--auth-card-opacity',
@@ -3220,8 +3223,8 @@ function vBannerHtml(){
     : '<div class="home-banner v-banner-empty"></div>';
 }
 var CK_ICONS = {
-  deposit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 19.5h15"/></svg>',
-  withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="12" rx="2.4"/><path d="M3 10h18M12 21h8M17.5 18.5 20 21l-2.5 2.5" transform="translate(0 -2)"/></svg>',
+  deposit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 4.2h8a3.2 3.2 0 0 1 3.2 3.2v3.6M3 7.4A3.2 3.2 0 0 1 6.2 4.2M3 7.4v6.8a3.2 3.2 0 0 0 3.2 3.2h3.8" stroke-width="1.3"/><path d="M6.8 8.4h7M6.8 11.2h7M6.8 14h3.4" stroke-width="1.2"/><circle cx="16.3" cy="16.6" r="4.1" stroke-width="1.3"/><path d="M16.3 14.2v2.6l1.7 1" stroke-width="1.2"/></svg>',
+  withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.4 5H5.2a1.2 1.2 0 0 0-1.2 1.2v14.1a1.2 1.2 0 0 0 1.2 1.2h12.6a1.2 1.2 0 0 0 1.2-1.2v-3.3M19 5.4V3.8M16.6 5H19" stroke-width="1.35"/><rect x="8.2" y="2.4" width="7.2" height="3.4" rx="1" stroke-width="1.35"/><path d="M8 10.2h7M8 13.6h4.5" stroke-width="1.35"/><path d="M14.6 19.2h6.4m-2.4-2.4 2.4 2.4-2.4 2.4" stroke-width="1.35"/></svg>',
   service: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 14v-2.5a7.5 7.5 0 0 1 15 0V14"/><rect x="3" y="13" width="4.2" height="6" rx="1.6"/><rect x="16.8" y="13" width="4.2" height="6" rx="1.6"/><path d="M19 19c0 1.6-1.6 2.5-4 2.5h-2"/></svg>',
   group: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.6 3.2 2.9 10.4c-.9.35-.9 1.1-.15 1.35l4.7 1.5 1.8 5.5c.2.6.75.75 1.2.3l2.6-2.4 4.6 3.4c.85.5 1.5.25 1.7-.8l3-15.1c.3-1.2-.45-1.7-1.5-1.3Z"/></svg>',
 };
@@ -4112,13 +4115,13 @@ function vTileHtml(icon, label, onclick, tone){
   return `<button class="v-tile" onclick="${onclick}"><span class="v-tile-ic ${tone || ''}">${icon}</span><b>${label}</b></button>`;
 }
 var CK_MENU_ICONS = {
-  mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="1.5"/><path d="m3 6 9 7 9-7"/></svg>',
-  person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="1.8"/><circle cx="8.3" cy="10.6" r="2"/><path d="M5 16c.3-1.8 1.6-2.7 3.3-2.7S11.3 14.2 11.6 16M14 9.5h5M14 12.5h5M14 15.5h3.5"/></svg>',
-  income: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h12v8M5 3v17h8"/><path d="M8.5 8h6M8.5 11.5h3M8.5 15h2.5"/><circle cx="16.5" cy="16.5" r="3.4"/><path d="m19 19 2.4 2.4"/></svg>',
+  mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.6" y="5" width="18.8" height="14" rx="1.5" stroke-width="2.1"/><path d="m3.2 6.3 8.8 7 8.8-7" stroke-width="2.1"/></svg>',
+  person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2.2" stroke-width="1.15"/><circle cx="7.4" cy="10" r="1.7" stroke-width="1.05"/><path d="M5 15c.5-2 4.3-2 4.8 0" stroke-width="1.05"/><path d="M12.5 9h6.5M12.5 11.6h6.5M12.5 14.2h6.5" stroke-width="1.05"/><path d="M4 17.2h16" stroke-width=".9" opacity=".7"/></svg>',
+  income: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3h15.2v17.4H3.5z" stroke-width="2.3"/><rect x="7" y="6.4" width="8.2" height="2.7" stroke-width="1.6"/><path d="M7 12.2h1.2M10.2 12.2h5M7 15.4h1.2M10.2 15.4h2.6" stroke-width="1.5"/><circle cx="16.8" cy="17" r="3.3" fill="#fff" stroke-width="2.1"/><path d="m19.3 19.6 2.4 2.4" stroke-width="2.4"/></svg>',
   deposit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v7M6 3v18h6"/><path d="M9 8h6M9 11.5h3M9 15h2"/><circle cx="16.5" cy="17" r="4"/><path d="M16.5 14.9v2.3l1.5 1"/></svg>',
   withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4V2.5h8V4M5 4h14v6M5 4v17h6"/><path d="M9 9h6M9 12.5h4"/><path d="M13 18h8m-3-3 3 3-3 3"/></svg>',
-  about: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 3l9 8"/><path d="M5.5 10v9.5h13V10"/><rect x="10.5" y="12" width="3" height="3" fill="currentColor" stroke="none"/><path d="M2 17.5c4 3 12 3.5 20-1" stroke-width="2.2"/></svg>',
-  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5H6.5A4.5 4.5 0 0 1 6 9.6 6 6 0 0 1 17.6 8.4 4.1 4.1 0 0 1 17.5 18.5H17"/><path d="M12 10.5v9M8.8 16.5l3.2 3.2 3.2-3.2"/></svg>',
+  about: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2.6 2 9.3v1.6h2v6.6h14V10.9h2.1V9.1l-1.6-1.2V4.6h-2.1v1.8z" fill="#000"/><path d="M8.2 13.2h2v2.4h-2zM12.4 13.2h2v2.4h-2z" fill="#fff"/><path d="M2.4 18.6c4.2 3.4 12 2.6 19.2-1.8-4.4 2.6-11.8 3.8-19.2 1.8z" fill="#000" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.4 17.4a4.3 4.3 0 0 1-.7-8.5 5.9 5.9 0 0 1 11.3 1.2 3.9 3.9 0 0 1-.6 7.3" stroke-width="1.9"/><path d="M12 10.8v10M8.6 17.8 12 21.2l3.4-3.4" stroke-width="1.9"/></svg>',
   language: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 9.5v7.5M15 12.5c-.8-1.8-2.4-2.5-4-2.2-1.9.4-2.9 2-2.5 3.7.4 1.7 2 2.5 3.6 2.2 1.1-.2 2.1-1 2.9-2.2"/></svg>',
   gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="11" rx="1.5"/><path d="M2.5 6.5h19V9h-19zM12 6.5V20M12 6.5C10 3 7 3.5 7.5 5.5c.3 1 2.5 1 4.5 1Zm0 0c2-3.5 5-3 4.5-1-.3 1-2.5 1-4.5 1Z"/></svg>',
   task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1.5A3.5 3.5 0 0 0 7.5 11M17 6h3v1.5A3.5 3.5 0 0 1 16.5 11M12 14v4M8.5 20.5h7M9.5 18h5"/></svg>',
@@ -4160,35 +4163,37 @@ async function renderAccount(){
 </div>`;
   $('pageHost').innerHTML = html;
 }
-// Language: a small card with one row per language this app offers.
+// Language: a white sheet from the bottom with one line per language this app offers (English only).
 window.openLangPicker = function(){
   closeCkLang();
   const wrap = document.createElement('div'); wrap.id = 'ckLangPop'; wrap.className = 'ck-langpop';
   wrap.onclick = e => { if (e.target === wrap) closeCkLang(); };
-  wrap.innerHTML = `<div class="ck-langcard"><h3>Language</h3>${LANG_ALLOWED.map(c => `<button type="button" class="${c === LANG ? 'on' : ''}" onclick="pickLang('${c}')">${esc(langMeta(c).native)}</button>`).join('')}</div>`;
+  wrap.innerHTML = `<div class="ck-langcard">${LANG_ALLOWED.map(c => `<button type="button" class="${c === LANG ? 'on' : ''}" onclick="pickLang('${c}')">${esc(langMeta(c).native)}</button>`).join('')}</div>`;
   document.body.appendChild(wrap);
 };
 function closeCkLang(){ const w = $('ckLangPop'); if (w) w.remove(); }
 window.pickLang = function(c){ try { setLang(c, {}); } catch (_) {} closeCkLang(); };
 // Personal information: the wallet, the login password and the trade password, in one place.
+var CK_PW_ART = `<svg viewBox="0 0 680 710" aria-hidden="true"><defs><pattern id="ckdots" width="9" height="9" patternUnits="userSpaceOnUse"><circle cx="4.5" cy="4.5" r="1.7" fill="#2a2a2a"/></pattern><linearGradient id="ckdf" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient><mask id="ckdm"><rect x="60" y="460" width="150" height="90" fill="url(#ckdf)"/></mask></defs>
+<ellipse cx="340" cy="662" rx="168" ry="27" fill="#ececec"/>
+<g stroke="#000" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round">
+<path d="M28 268C28 244 40 230 62 218L376 38C412 18 456 40 456 80V392L206 506 150 592 130 560 98 566C48 560 28 544 28 520Z" fill="#d4d7d8"/>
+<path d="M62 296 456 66V394L206 508 150 592 100 568C72 560 62 546 62 524Z" fill="#fff"/>
+<path d="M62 296 456 66V162L62 372Z" fill="#000"/>
+<path d="M100 566 150 592V538Z" fill="#000"/>
+<path d="M150 592 206 508 150 538Z" fill="#fff"/>
+<path transform="translate(24 -12)" d="M392 238 620 366Q632 372 632 386V546L586 576 560 546 424 462Q378 440 378 410V252Q378 232 392 238Z" fill="#d4d7d8"/>
+<path d="M392 238 620 366Q632 372 632 386V546L586 576 560 546 424 462Q378 440 378 410V252Q378 232 392 238Z" fill="#fff"/>
+</g>
+<circle cx="103" cy="283" r="12" fill="#d4d7d8"/><circle cx="142" cy="261" r="12" fill="#d4d7d8"/><circle cx="181" cy="238" r="12" fill="#d4d7d8"/>
+<path d="M200 350 378 246M200 410 350 324" stroke="#d4d7d8" stroke-width="30" stroke-linecap="round" fill="none"/>
+<path d="M108 380 157 366V426L108 440Z" fill="#d4d7d8"/>
+<rect x="60" y="460" width="150" height="90" fill="url(#ckdots)" mask="url(#ckdm)"/>
+<rect x="478" y="344" width="30" height="62" rx="15" fill="#000"/>
+<path d="M466 386a27 27 0 0 0 54 0M493 414v38M478 462h30" fill="none" stroke="#000" stroke-width="7" stroke-linecap="round"/></svg>`;
 window.openPersonalInfo = function(){
   openSheet('Personal Information', `
-    <div class="ck-pi-art" aria-hidden="true"><svg viewBox="0 0 330 270"><ellipse cx="170" cy="236" rx="82" ry="12" fill="#d7dadb"/>
-      <g stroke="#000" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
-        <path d="M44 106 154 38l8 4v118l-8 5-110 66-8-5z" fill="#d4d7d8"/>
-        <path d="M54 104 154 44v124L54 228z" fill="#fff"/>
-        <path d="M54 104 154 44l8-2v28L62 128z" fill="#000" stroke="none"/>
-        <path d="M54 104 154 44v26L54 130z" fill="#000"/>
-        <circle cx="76" cy="107" r="6" fill="#fff" stroke="none"/><circle cx="98" cy="94" r="6" fill="#fff" stroke="none"/><circle cx="120" cy="81" r="6" fill="#fff" stroke="none"/>
-        <path d="M86 156l58-34M86 182l58-34" stroke="#d4d7d8" stroke-width="13"/>
-        <path d="M70 146v28l22-13z" fill="#d4d7d8" stroke="none"/>
-        <path d="M168 112l68-40 52 31v84l-52 30-68-40z" fill="#d4d7d8"/>
-        <path d="M168 112l68-40 52 31-68 40z" fill="#fff"/>
-        <path d="M168 112v90l52 31v-86z" fill="#fff"/>
-        <path d="M288 104v84l-52 30" fill="none"/>
-      </g>
-      <rect x="215" y="124" width="24" height="46" rx="12" fill="#000"/><path d="M204 150a23 23 0 0 0 46 0M227 174v16m-13 0h26" fill="none" stroke="#000" stroke-width="5.5" stroke-linecap="round"/>
-      <path d="M262 214l30 6-14-26z" fill="#d4d7d8" stroke="#000" stroke-width="3.4" stroke-linejoin="round"/></svg></div>
+    <div class="ck-pi-art" aria-hidden="true">${CK_PW_ART}</div>
     <div class="ck-pi-card">
       <button class="ck-pi-row" type="button" onclick="openWalletSheet()"><span class="ck-pi-ic"><svg viewBox="0 0 32 26"><rect x="1" y="1" width="22" height="16" rx="3" fill="#7c4de0"/><rect x="5" y="6" width="26" height="18" rx="3.5" fill="#ff7a3a"/><rect x="5" y="11" width="26" height="4" fill="#fff" opacity=".9"/><rect x="9" y="18" width="8" height="2.5" rx="1.2" fill="#fff"/></svg></span><b>Bind Wallet Card</b>${CK_MENU_ICONS.chev}</button>
       <button class="ck-pi-row" type="button" onclick="openChangeLoginPasswordSheet()"><span class="ck-pi-ic"><svg viewBox="0 0 24 28"><path d="M6.5 12V8.5a5.5 5.5 0 0 1 11 0V12" fill="none" stroke="#3fc58b" stroke-width="3"/><rect x="2" y="11" width="20" height="16" rx="4" fill="#3fc58b"/><circle cx="12" cy="18" r="2.4" fill="#fff"/><rect x="11" y="19" width="2" height="4.5" rx="1" fill="#fff"/></svg></span><b>Change Password</b>${CK_MENU_ICONS.chev}</button>
@@ -4267,9 +4272,11 @@ function maskedTail(phone){
   const d = String(phone || '').replace(/\D/g, '');
   return d ? '****' + d.slice(-4) : '****';
 }
+var CK_CHIP = '<svg viewBox="0 0 44 36" aria-hidden="true"><rect x="1.2" y="1.2" width="41.6" height="33.6" rx="7" fill="#ffc107" stroke="#1a1a1a" stroke-width="1.8"/><path d="M1.2 12.5h12.5M1.2 23.5h12.5M30.3 12.5h12.5M30.3 23.5h12.5" stroke="#1a1a1a" stroke-width="1.8"/><rect x="13.7" y="4.5" width="16.6" height="27" rx="8" fill="none" stroke="#1a1a1a" stroke-width="1.8"/><path d="M13.7 18h16.6" stroke="#1a1a1a" stroke-width="1.8"/></svg>';
 function vWalletCardHtml(w){
   return `<div class="ck-bcard">
-    <span class="ck-chip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+    <span class="ck-chip" aria-hidden="true">${CK_CHIP}</span>
+    <div class="ck-bcard-w">${w ? esc(walShort(w.network)) : ''}</div>
     <div class="ck-bcard-n">Real Name : ${w ? esc(String(w.holder || '').toUpperCase()) : ''}</div>
   </div>`;
 }
@@ -4344,6 +4351,7 @@ function renderWalletSheet(){
   </div>`;
   prefillWallet();
 }
+window.walCardWallet = function(name){ const n = document.querySelector('#walCardBox .ck-bcard-w'); if (n) n.textContent = walShort(name || ''); };
 window.walCardName = function(v){ const n = document.querySelector('#walCardBox .ck-bcard-n'); if (n) n.textContent = 'Real Name : ' + String(v || '').toUpperCase(); };
 window.openProviderList = function(){ const box = $('walProviderPick'); if (box) box.classList.add('open'); };
 window.filterProviders = function(){
@@ -4358,6 +4366,7 @@ window.pickProvider = function(name){
   const inp = $('walProvider');
   const prev = inp ? (inp.dataset.network || inp.dataset.lastNetwork || walFull(inp.value)) : '';
   if (inp) { inp.value = walShort(name); inp.dataset.network = name; inp.dataset.lastNetwork = name; }
+  walCardWallet(name);
   const box = $('walProviderPick');
   if (box) box.classList.remove('open');
   document.querySelectorAll('#walProviderList .prov-opt').forEach(b => { b.style.display = ''; });
@@ -4387,7 +4396,9 @@ window.submitWallet = async function(){
   const network = walNetwork();
   const phone = $('walPhone').value;
   const holder = $('walHolder').value.trim();
+  if (holder.split(/\s+/).filter(Boolean).length < 2) return notify('Your real name should be in the format: FirstName LastName');
   if (!network) return notify('Select your wallet provider.');
+  if (!String(phone).trim()) return notify('Enter Wallet Account');
   // Mobile money keeps its own digit-count check; a bank account number is
   // never phone-shaped, so it only needs to be present and a plausible
   // length -- never capped tighter than that (see handleWalDestInput()'s
@@ -4398,7 +4409,6 @@ window.submitWallet = async function(){
   } else if (String(phone).trim().length < 4) {
     return notify('Enter a valid bank account number.');
   }
-  if (!holder) return notify('Enter the account holder name.');
   const btn = $('walSaveBtn');
   btn.disabled = true; btn.textContent = 'Saving…';
   const r = await post('/bank/save', { holder, network, phone });
@@ -4432,7 +4442,12 @@ function dismissNotify(){
 }
 window.notify = function(message, onClose){
   $('notifyMsg').textContent = String(message || '');
-  { const card = $('notifyMsg').parentNode; if (card && card.classList) card.classList.toggle('long', String(message || '').length > 60); }
+  { const card = $('notifyMsg').parentNode;
+    if (card && card.classList) {
+      card.classList.toggle('long', String(message || '').length > 60);
+      const au = $('authScreen');
+      card.classList.toggle('authtoast', !!(au && au.style.display !== 'none' && au.offsetParent !== null));
+    } }
   // Good news gets the tick, everything else (errors and "please do this first")
   // the circled cross, as in the screens.
   const good = /success|✓|copied|saved|done|now running|redeemed|submitted|sent|changed|processing|updated|claimed|unlocked|bound/i.test(String(message || '')) && !/not |fail|could not|cannot|insufficient|invalid|incorrect|wrong|isn't|already|status changed|bind it|add a payout/i.test(String(message || ''));
@@ -4706,18 +4721,22 @@ function vPwBox(id, placeholder, pin){
   return `<div class="v-pbox"><input id="${id}" type="text" placeholder="${esc(placeholder)}"${pin ? ' inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : ' autocomplete="off"'}></div>`;
 }
 window.openChangeLoginPasswordSheet = function(){
-  openSheet('Change Login Password', `<div class="v-form reveal-in"><div class="v-edit">
-    <label class="v-flabel" for="lpOld">Old Password</label>${vPwBox('lpOld', 'Enter old password')}
-    <label class="v-flabel" for="lpNew">New Password</label>${vPwBox('lpNew', 'Enter new password (at least 10 characters)')}
-    <label class="v-flabel" for="lpNew2">Confirm New Password</label>${vPwBox('lpNew2', 'Confirm new password')}
-    <button class="v-cta" id="lpSaveBtn" onclick="submitLoginPasswordChange()">Change Password</button>
-  </div></div>`);
+  openSheet('Change Password', `<div class="ck-pw">
+    <div class="ck-pi-art" aria-hidden="true">${CK_PW_ART}</div>
+    <div class="ck-pw-card">
+      <label class="ck-lab" for="lpOld">Old Password</label><div class="ck-in"><input id="lpOld" type="password" placeholder="Please enter your old password" autocomplete="off"></div>
+      <label class="ck-lab" for="lpNew">New Password</label><div class="ck-in"><input id="lpNew" type="password" placeholder="Please new password" autocomplete="off"></div>
+      <label class="ck-lab" for="lpNew2">New Password 2</label><div class="ck-in"><input id="lpNew2" type="password" placeholder="Please new password again" autocomplete="off"></div>
+      <button class="ck-confirm" id="lpSaveBtn" type="button" onclick="submitLoginPasswordChange()">Confirm</button>
+    </div>
+  </div>`);
+  $('sheetBg').classList.add('ck-pw-page');
 };
 window.submitLoginPasswordChange = async function(){
   const oldPass = $('lpOld').value;
   const newPass = $('lpNew').value;
   const confirm = $('lpNew2').value;
-  if (!oldPass) return notify('Enter your current login password.');
+  if (!oldPass) return notify('Old password must be entered');
   if (!newPass || newPass.length < 10) return notify('Your new password must be at least 10 characters.');
   if (newPass !== confirm) return notify('The two new passwords do not match.');
   if (newPass === oldPass) return notify('Your new password must be different from the old one.');
@@ -4978,7 +4997,7 @@ function maybeAnnounceOnEntry(){
 }
 function openSheet(title, bodyHtml){
   dismissNotify();
-  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page', 'ck-dep-page', 'ck-wd-page', 'ck-rec-page');
+  $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page', 'ck-dep-page', 'ck-wd-page', 'ck-rec-page', 'ck-pw-page');
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
   // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
