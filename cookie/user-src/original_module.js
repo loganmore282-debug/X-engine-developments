@@ -1865,17 +1865,32 @@ function showLoadingScreen(){
   $('loadingScreen').classList.remove('ld-out');
   $('loadingScreen').style.display = 'flex';
 }
-// Each tab (Home, Income, Team, Share, My) fades and rises in when it is opened. Only a change of tab plays it, so the quiet
-// refreshes that repaint the same page never replay it.
+// A page's blocks (cards, tabs, lists, rows) fade in and rise about 22 px one after another, the way the owner's recording shows.
+// Only a change of tab, or opening a full page, plays it; the quiet refreshes that repaint the same page never replay it.
+function ckStagger(root){
+  let n = 0;
+  Array.from(root.children).forEach(k => {
+    if (k.classList.contains('ck-hd') || k.tagName === 'HEADER') return;
+    const kids = k.classList && (k.classList.contains('ck-sub') || k.classList.contains('v-page') || k.classList.contains('ck-pw') || k.classList.contains('ck-wd') || k.classList.contains('ck-dep') || k.classList.contains('ck-inc') || k.classList.contains('ck-bind')) ? Array.from(k.children) : [k];
+    kids.forEach(x => {
+      if (x.classList.contains('ck-hd') || x.tagName === 'HEADER') return;
+      x.classList.remove('ck-in'); x.style.animationDelay = Math.min(n, 6) * 80 + 'ms'; void x.offsetWidth; x.classList.add('ck-in'); n++;
+    });
+  });
+}
 (function(){
-  const host = document.getElementById('pageHost');
-  if (!host || !window.MutationObserver) return;
-  let last = null;
-  new MutationObserver(() => {
-    if (STATE.page === last) return;
-    last = STATE.page;
-    Array.from(host.children).forEach(k => { k.classList.remove('ck-in'); void k.offsetWidth; k.classList.add('ck-in'); });
+  if (!window.MutationObserver) return;
+  const host = document.getElementById('pageHost'), body = document.getElementById('sheetBody');
+  let lastPage = null, lastSeq = -1, pageAt = 0;
+  if (host) new MutationObserver(() => {
+    if (STATE.page !== lastPage) { lastPage = STATE.page; pageAt = Date.now(); ckStagger(host); return; }
+    // The page painted a second time right after opening (its data arrived): play again only if the first paint was replaced.
+    if (Date.now() - pageAt < 900 && !host.querySelector('.ck-in')) ckStagger(host);
   }).observe(host, { childList: true });
+  if (body) new MutationObserver(() => {
+    if (window._sheetSeq === lastSeq) return;
+    lastSeq = window._sheetSeq; ckStagger(body);
+  }).observe(body, { childList: true });
 })();
 var _artPromise = null, _artLanded = false, _annWaiting = false;
 function startArtwork(){
@@ -5086,6 +5101,7 @@ function maybeAnnounceOnEntry(){
 function openSheet(title, bodyHtml){
   dismissNotify();
   ckExpectLoad();
+  window._sheetSeq = (window._sheetSeq || 0) + 1;
   $('sheetBg').classList.remove('v-rec-page', 'ck-pi-page', 'ck-rules-page', 'ck-bind-page', 'ck-dep-page', 'ck-wd-page', 'ck-rec-page', 'ck-pw-page', 'ck-inc-page');
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;

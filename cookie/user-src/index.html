@@ -2257,7 +2257,7 @@ body{background-attachment:fixed;}
 .ck-spin::before{content:'';position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 22deg,#7a5198 22deg 150deg,#5ea8fb 150deg 255deg,transparent 255deg);-webkit-mask:radial-gradient(circle,transparent 6.8px,#000 7.2px);mask:radial-gradient(circle,transparent 6.8px,#000 7.2px);animation:ckLdSpin .62s linear infinite;}
 .ck-spin::after{content:'';position:absolute;left:6.5px;top:6.5px;width:11px;height:11px;border-radius:50%;background:conic-gradient(from 200deg,#ee4d9b 0 80deg,#7a5198 80deg 145deg,transparent 145deg);animation:ckLdSpin 2.1s linear infinite reverse;}
 /* ── Sheets only fade in; the tab pill grows from a dot; the Team level pill slides ── */
-.sheet-bg.show{animation:ckFadeIn .28s ease-out both;}
+.sheet-bg.show{animation:ckFadeIn .12s ease-out both;}
 .ck-row:active{background:#e6e6ea;}
 .ck-lvtabs{position:relative;}
 .ck-lvtabs .ck-lvpill{position:absolute;top:6px;bottom:6px;left:6px;width:calc((100% - 12px)/3);border-radius:11px;background:#fff;transform:translateX(calc(var(--i,0)*100%));transition:transform .32s cubic-bezier(.4,0,.2,1);}
@@ -2288,7 +2288,7 @@ body{background-attachment:fixed;}
 .navitem.nav-tap .nav-ic::after{animation:ckRipple .32s ease-out;}
 .navitem.nav-tap .nav-ic svg{animation:none;}
 @keyframes ckPageIn{from{opacity:0;transform:translateY(22px);}to{opacity:1;transform:none;}}
-#pageHost>.ck-in{animation:ckPageIn .27s cubic-bezier(.2,.8,.3,1) both;}
+#pageHost .ck-in,#sheetBody .ck-in{animation:ckPageIn .3s cubic-bezier(.2,.8,.3,1) backwards;}
 @media (prefers-reduced-motion:reduce){.navitem.active .nav-ic,.navitem.active .nav-ic svg,.navitem.nav-tap .nav-ic::after{animation:none !important;}}
 </style>
 
